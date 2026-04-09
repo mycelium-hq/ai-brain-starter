@@ -742,7 +742,123 @@ Then add routing to the user's CLAUDE.md so `/weekly` and `/monthly` work as sla
 When the user types `/weekly` or `/monthly`, invoke the Skill tool with `skill: "insights"` before doing anything else.
 ```
 
-Tell the user: "Done — type /weekly or /monthly anytime. Weekly covers Monday–Sunday of the calendar week, monthly covers the 1st through last day. If it's early in the period, it'll default to the previous one so you have enough data. Over time, these build a record of your growth that you can look back on."
+Then ask: "Want these to run automatically? I can set up a cron job so your weekly insight generates every Monday morning and your monthly insight on the 2nd of each month — no typing required."
+
+If yes, set up automatic generation:
+
+### Mac / Linux
+
+Create the script at `[vault]/⚙️ Meta/scripts/run-insights.sh`:
+
+```bash
+#!/bin/bash
+# run-insights.sh — Generate weekly or monthly journal insight reports via Claude Code CLI
+# Usage: ./run-insights.sh weekly   (Monday mornings via cron)
+#        ./run-insights.sh monthly  (2nd of each month via cron)
+
+PERIOD="${1:-weekly}"
+VAULT_DIR="$HOME/Desktop/Adelaida Notes"  # ← update to user's vault path
+LOG_FILE="$VAULT_DIR/⚙️ Meta/scripts/.insights-cron.log"
+
+# Find the Claude CLI (path changes with version updates)
+CLAUDE_BASE="$HOME/Library/Application Support/Claude/claude-code"
+CLAUDE_BIN=$(find "$CLAUDE_BASE" -name "claude" -path "*/MacOS/claude" 2>/dev/null | sort -V | tail -1)
+
+# Linux fallback
+if [ -z "$CLAUDE_BIN" ]; then
+  CLAUDE_BIN=$(command -v claude 2>/dev/null)
+fi
+
+if [ -z "$CLAUDE_BIN" ]; then
+  echo "$(date): ERROR — Claude CLI not found" >> "$LOG_FILE"
+  exit 1
+fi
+
+echo "$(date): Starting $PERIOD insights generation..." >> "$LOG_FILE"
+
+cd "$VAULT_DIR" || exit 1
+
+"$CLAUDE_BIN" --print \
+  --model claude-sonnet-4-6 \
+  --allowedTools "Read,Write,Edit,Glob,Grep,Bash" \
+  --permission-mode acceptEdits \
+  "Run the /insights skill for a $PERIOD report. Read the skill at ~/.claude/skills/insights/SKILL.md first, then follow its instructions exactly. Read all journal entries for the $PERIOD calendar period and generate the full report. Save it to the correct folder." \
+  >> "$LOG_FILE" 2>&1
+
+EXIT_CODE=$?
+echo "$(date): Finished $PERIOD insights (exit code: $EXIT_CODE)" >> "$LOG_FILE"
+```
+
+Make it executable: `chmod +x "[vault]/⚙️ Meta/scripts/run-insights.sh"`
+
+Then add cron jobs. Ask the user their timezone and convert to UTC:
+
+```bash
+# Example for America/Bogota (UTC-5): 9am local = 14:00 UTC
+crontab -e
+# Add these lines:
+# Weekly insights — every Monday at 9am local
+0 14 * * 1 /bin/bash "/path/to/vault/⚙️ Meta/scripts/run-insights.sh" weekly
+# Monthly insights — 2nd of each month at 9am local
+0 14 2 * * /bin/bash "/path/to/vault/⚙️ Meta/scripts/run-insights.sh" monthly
+```
+
+### Windows
+
+Create `run-insights.ps1` in the vault's `⚙️ Meta/scripts/` folder:
+
+```powershell
+# run-insights.ps1 — Generate weekly or monthly journal insight reports via Claude Code CLI
+# Usage: .\run-insights.ps1 -Period weekly
+#        .\run-insights.ps1 -Period monthly
+param([string]$Period = "weekly")
+
+$VaultDir = "$env:USERPROFILE\Documents\Adelaida Notes"  # ← update to user's vault path
+$LogFile = "$VaultDir\⚙️ Meta\scripts\.insights-cron.log"
+
+# Find Claude CLI (Windows)
+$ClaudeBin = Get-ChildItem "$env:LOCALAPPDATA\AnthropicClaude\claude-code" -Recurse -Filter "claude.exe" -ErrorAction SilentlyContinue |
+  Sort-Object FullName | Select-Object -Last 1
+
+if (-not $ClaudeBin) {
+  $ClaudeBin = Get-Command claude -ErrorAction SilentlyContinue
+}
+
+if (-not $ClaudeBin) {
+  Add-Content $LogFile "$(Get-Date): ERROR — Claude CLI not found"
+  exit 1
+}
+
+Add-Content $LogFile "$(Get-Date): Starting $Period insights generation..."
+Set-Location $VaultDir
+
+& $ClaudeBin.FullName --print `
+  --model claude-sonnet-4-6 `
+  --allowedTools "Read,Write,Edit,Glob,Grep,Bash" `
+  --permission-mode acceptEdits `
+  "Run the /insights skill for a $Period report. Read the skill at ~/.claude/skills/insights/SKILL.md first, then follow its instructions exactly. Read all journal entries for the $Period calendar period and generate the full report. Save it to the correct folder." `
+  2>&1 | Add-Content $LogFile
+
+Add-Content $LogFile "$(Get-Date): Finished $Period insights (exit code: $LASTEXITCODE)"
+```
+
+Then set up Windows Task Scheduler:
+
+```powershell
+# Weekly — every Monday at 9am
+$WeeklyAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-File `"C:\path\to\vault\⚙️ Meta\scripts\run-insights.ps1`" -Period weekly"
+$WeeklyTrigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday -At 9am
+Register-ScheduledTask -TaskName "AI Brain Weekly Insights" -Action $WeeklyAction -Trigger $WeeklyTrigger -Description "Generate weekly journal insights"
+
+# Monthly — 2nd of each month at 9am
+$MonthlyAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-File `"C:\path\to\vault\⚙️ Meta\scripts\run-insights.ps1`" -Period monthly"
+$MonthlyTrigger = New-ScheduledTaskTrigger -Once -At 9am -RepetitionInterval (New-TimeSpan -Days 30)
+# Note: For exact "2nd of month" scheduling, use Task Scheduler GUI or schtasks:
+# schtasks /create /tn "AI Brain Monthly Insights" /tr "powershell -File \"C:\path\to\vault\run-insights.ps1\" -Period monthly" /sc monthly /d 2 /st 09:00
+Register-ScheduledTask -TaskName "AI Brain Monthly Insights" -Action $MonthlyAction -Trigger $MonthlyTrigger -Description "Generate monthly journal insights"
+```
+
+Tell the user which option was set up and confirm the schedule: "Your weekly insight will generate automatically every Monday at [time] and your monthly on the 2nd at [time]. You can also run /weekly or /monthly manually anytime. Check the log at `⚙️ Meta/scripts/.insights-cron.log` if you ever want to verify it ran."
 
 ## Phase 19: First Test Drive
 
