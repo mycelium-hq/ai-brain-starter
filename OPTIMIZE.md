@@ -522,3 +522,4 @@ Save to `Meta/Vault Health Report.md`.
 - **Don't touch journal content.** Journals are sacred. Add frontmatter, create summaries, add wikilinks — but never edit the actual journal text.
 - **Adapt to their vault.** Not everyone has journals. Not everyone has a CRM. Skip phases that don't apply and suggest what would be most impactful for their specific vault.
 - **Save progress.** After each phase, update Last Session.md so they (and you) know what was done if the session ends.
+- **NEVER FAIL SILENTLY.** After every file write, verify the file exists. After every install, verify it worked. If ANYTHING fails — wrong path, missing folder, permission error — TELL THE USER IMMEDIATELY, then FIX IT. Create the missing folder, correct the path, retry. Don't just report problems; solve them. People's data is sacred.

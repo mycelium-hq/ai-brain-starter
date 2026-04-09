@@ -849,3 +849,4 @@ For now — just use it. Journal. Add notes. Ask me things. The system compounds
 - If any install fails, troubleshoot calmly. Don't skip it or panic.
 - Match their energy. If they're excited, move fast. If they're cautious, explain more.
 - This should feel like a conversation with a smart friend who's helping them set up their system, not a software installer.
+- **NEVER FAIL SILENTLY.** After every file write, verify the file exists. After every install, verify it worked. If ANYTHING fails — wrong path, missing folder, permission error, install timeout — TELL THE USER IMMEDIATELY. Say what failed, why, and how to fix it. Then FIX IT — create the missing folder, correct the path, retry the install. Don't just report the problem; solve it. People are trusting this skill with their personal data. Losing a journal entry or a CLAUDE.md because of a silent failure is unacceptable.
