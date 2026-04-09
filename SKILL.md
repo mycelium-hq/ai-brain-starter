@@ -11,6 +11,53 @@ Your tone: warm, clear, encouraging. They might not be technical. Explain things
 
 **Update check:** Before starting, check if this skill is up to date by running `cd ~/.claude/skills/ai-brain-starter && git log --oneline -1` and comparing to the latest on GitHub. If it's behind, tell the user: "There's a newer version of this skill available. Want me to update it first? Just takes a second." If yes, run `git pull`, then read CHANGELOG.md and tell the user in plain English what's new and why it was added. Keep it conversational — "They added book notes import so your Kindle highlights connect to your vault" not "Added Phase 12 with Readwise integration."
 
+## Phase 0: Install Efficiency Tools First
+
+**Do this silently before the conversation starts.** These tools reduce token usage for the entire setup, so they should be running before anything else.
+
+Check what's already installed, then install what's missing. Run these in the background — don't overwhelm the user with terminal output. Just do it.
+
+```
+# Check and install Homebrew (Mac only)
+if ! command -v brew &>/dev/null; then
+  # Ask the user: "I need to install a couple of tools first that will make this whole setup faster and cheaper. It requires your Mac password — I'll walk you through it."
+  # Then: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+fi
+
+# Check and install Python 3.10+ (needed for Graphify)
+if ! python3 -c "import sys; assert sys.version_info >= (3,10)" 2>/dev/null; then
+  brew install python@3.12
+  brew install pipx
+  pipx ensurepath
+fi
+
+# Check and install Node.js (needed for Claude-Mem)
+if ! command -v node &>/dev/null; then
+  brew install node
+fi
+
+# Install Graphify — knowledge graph reduces token usage by ~70% on vault queries
+if ! command -v graphify &>/dev/null; then
+  pipx install graphifyy
+  graphify install
+fi
+
+# Install Claude-Mem — session memory reduces re-explaining by ~30-40%
+# Check if already installed via plugin list
+npx claude-mem install 2>/dev/null
+
+# Install Humanizer — de-AI writing
+if [ ! -d ~/.claude/skills/humanizer ]; then
+  git clone https://github.com/blader/humanizer.git ~/.claude/skills/humanizer
+fi
+```
+
+**If any install requires user interaction (like Homebrew needing a password):** explain clearly what's happening and why. "This tool makes everything we're about to do use less of your Claude subscription. It needs your Mac password to install — you won't see characters when you type, that's normal."
+
+**If an install fails:** don't stop the whole setup. Note it and continue. Offer to retry at the end.
+
+After Phase 0 completes, tell the user: "I installed a few tools in the background that make everything faster and more efficient. Now let's get started with you."
+
 ## Phase 1: Welcome & Discovery
 
 Start with:
@@ -330,63 +377,26 @@ attendees: []
 
 Tell them: "Templates are set up. When you create a new note in Obsidian, Templater can auto-apply these."
 
-## Phase 9: Install Power Tools
+## Phase 9: Additional Skills (if not already installed in Phase 0)
 
-"Now let's install some tools that make Claude Code significantly smarter. These require the terminal — I'll walk you through each one."
+Phase 0 already installed Homebrew, Python, Graphify, Claude-Mem, and Humanizer. This phase catches anything that was skipped or failed, plus optional tools.
 
-Check what's already installed before suggesting installs:
+Check what's missing and install:
 
-### Homebrew (Mac only)
-"Open Terminal (Cmd+Space, type Terminal). Paste this:"
-```
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-```
-"It'll ask for your password. Type it — you won't see characters, that's normal. Wait for 'Installation successful.' Then paste the PATH commands it shows you."
-
-### Python 3.12 + pipx
-```
-brew install python@3.12
-brew install pipx
-pipx ensurepath
-```
-
-### Node.js (if needed)
-```
-brew install node
-```
-
-### Claude Code CLI
-```
-npm install -g @anthropic-ai/claude-code
-```
-
-### Humanizer — de-AI your writing
-```
-git clone https://github.com/blader/humanizer.git ~/.claude/skills/humanizer
-```
-"Type /humanizer on any text to strip AI patterns. Essential for anything you publish."
-
-### Graphify — knowledge graph
-```
-pipx install graphifyy
-graphify install
-```
-"Type /graphify . to build a map of your vault. Claude queries the map instead of reading every file."
-
-### Claude-Mem — session memory
-```
-npx claude-mem install
-```
-"This is automatic — it remembers what we worked on across sessions."
-
-### NotebookLM integration (if they use it)
+### NotebookLM integration
 Ask: "Do you use Google's NotebookLM?"
 If yes:
 ```
 git clone https://github.com/PleasePrompto/notebooklm-skill.git ~/.claude/skills/notebooklm
 ```
 
-After each install, confirm it worked before moving on. Don't rush.
+### Verify Phase 0 installs
+Quickly check that everything from Phase 0 is working:
+- `graphify --version` — if missing, retry: `pipx install graphifyy && graphify install`
+- `ls ~/.claude/skills/humanizer` — if missing, retry: `git clone https://github.com/blader/humanizer.git ~/.claude/skills/humanizer`
+- Claude-Mem — if not in plugin list, retry: `npx claude-mem install`
+
+Tell the user what's installed: "You have [X] power tools running. Here's what each one does:" and give a one-line explanation of each.
 
 ## Phase 10: Set Up Daily Journaling
 
