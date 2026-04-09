@@ -17,8 +17,11 @@ Weekly and monthly insights now use calendar periods instead of rolling windows.
 ### /weekly and /monthly routing fix
 The setup now adds routing to your CLAUDE.md so `/weekly` and `/monthly` work as direct slash commands. Previously only `/insights` was recognized.
 
+### Full advisory panel with voice descriptions
+Every advisor on the panel now has a description of who they are, what they're known for, and how they speak — so Claude actually sounds like them instead of giving generic advice. 50+ voices across 8 categories: wealth & strategy (Naval, Buffett, Dalio, Hormozi, Andreessen, and Colombian founders like Vélez, Borrero, Moreno), leadership (Sandberg, Rabois, Collison), psychology (Brené Brown, Gabor Maté, Jungian/CBT/existential/inner child voices), relationships (Perel, Gottmans, Terry Real, Sue Johnson), health (Attia, van der Kolk, Stacy Sims), wisdom (Thich Nhat Hanh, Marcus Aurelius, Maya Angelou), and creativity (Rick Rubin, Elizabeth Gilbert, Twyla Tharp). Each one challenges you differently.
+
 ### Richer insight reports
-The weekly/monthly insight skill now includes: a full advisory panel (50+ voices across wealth, leadership, psychology, relationships, health, wisdom, and creativity), a "Wins to Celebrate" section so good days don't get overlooked, habit tracking in the frontmatter (gym count, average bedtime), and a "never fail silently" rule — if the report fails to save, Claude tells you immediately instead of losing it.
+The weekly/monthly insight skill now includes: a "Wins to Celebrate" section so good days don't get overlooked, habit tracking in the frontmatter (gym count, average bedtime), and a "never fail silently" rule — if the report fails to save, Claude tells you immediately instead of losing it.
 
 ### Automatic insight generation (cron / Task Scheduler)
 The setup now offers to schedule your weekly and monthly insights to run automatically — no typing required. On Mac/Linux it sets up a cron job; on Windows it creates a Task Scheduler entry. Weekly runs every Monday morning, monthly on the 2nd. Logs to `⚙️ Meta/scripts/.insights-cron.log` so you can verify it ran. You can still run /weekly or /monthly manually anytime.
