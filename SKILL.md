@@ -674,6 +674,7 @@ When the user types /weekly or /monthly, generate an insight report from their r
 - How many entries (and any gaps — remember, gaps often mean good stretches)
 - Floor distribution: how many entries on each floor, with the primary floor for the period
 - Floor trend: moving up, down, or holding steady vs. last week/month
+- Habit tracking summary: gym count, average bedtime, scroll incidents (if tracked in entries)
 - Average floor compared to their historical average (if enough data exists)
 
 ### 2. What Stood Out
@@ -696,9 +697,22 @@ Gentler. Curious. Things like:
 - "Your highest-floor entry this week was [entry]. What was different about that day?"
 
 ### 5. Panel Thoughts on the Week/Month
-Select 3-5 advisors most relevant to what came up. Each gives 1-2 sentences of pushback, perspective, or encouragement. Keep it tight and in-character.
+Select 3-5 advisors most relevant to what came up. 1-2 sentences each, in character. Challenge assumptions, don't just validate.
 
-### 6. One Question to Sit With
+Use the full advisory panel:
+- Wealth & Strategy: Naval, Buffett, Dalio, Hormozi, Wheelwright, Vélez, Borrero, Moreno, Andreessen, Schwarzman, Marks, Zell, Kiyosaki, Griffin, Sarmiento
+- Leadership: Sandberg, Rabois, Collison, Hoffman, Grant, Robbins, Branson
+- Gatherings: Priya Parker
+- Psychology: Brené Brown, Greene, Ford, Maté, Seligman, Jung analyst, CBT, Existential, Inner Child, Anhalt
+- Relationships: Perel, Tatkin, Gottmans, Real, Johnson, Solomon, de Botton, Hussey, Ury, Shettys
+- Health: Attia, Sims, Briden, Winter, Braddock, Patrick, Levine, van der Kolk
+- Wisdom: Thich Nhat Hanh, Marcus Aurelius, Harari, Gawdat, Goodall, Eisenstein, Kimmerer, Angelou, Oprah
+- Creativity: Rubin, Gilbert, Tharp
+
+### 6. Wins to Celebrate
+Things that went well that might get overlooked. Good days matter MORE to document than bad ones.
+
+### 7. One Question to Sit With
 End with ONE question — not homework, not an action item. Just a question worth thinking about based on what the data showed.
 
 ## Save the Report
@@ -719,19 +733,24 @@ date_range: [start] to [end]
 entries_analyzed: [X]
 primary_floor: [Floor]
 floor_trend: [up/down/stable]
+gym_total: [X]
+avg_bedtime: [time]
 ---
 
-[The full report as written above]
+[Full report]
+
+*Primary floor: [[Floor]] · [[Level Floors]]*
 ```
 
-## Important Notes
+## Rules
 - Read EVERY journal entry in the period. Don't skip or skim.
-- Be specific — use their words, reference specific entries, name specific people and situations.
-- The life coach section should be direct. The therapist section should be gentle. Both should be honest.
-- If there aren't enough entries for a meaningful analysis (fewer than 3), say so: "You only journaled [X] times this week. Here's what I can see, but the data is thin."
-- Compare to previous weeks/months if the data exists. Trends matter more than snapshots.
-- The panel should actually react to what happened, not give generic advice.
-- The closing question should be specific to THEIR week, not a fortune cookie.
+- Be specific — use their words, reference entries by name, name people and situations.
+- Life coach = direct. Therapist = gentle. Both = honest.
+- Compare to previous weeks/months if data exists. Trends > snapshots.
+- The panel should react to what actually happened, not give generic advice.
+- If fewer than 3 entries, say so: "You only journaled [X] times. Here's what I can see, but the data is thin."
+- The closing question should land. Make them think.
+- **NEVER fail silently.** After saving any file, verify it exists. If the save fails, TELL THE USER IMMEDIATELY. Never let an insight report be lost.
 ```
 
 Then add routing to the user's CLAUDE.md so `/weekly` and `/monthly` work as slash commands:

@@ -17,6 +17,9 @@ Weekly and monthly insights now use calendar periods instead of rolling windows.
 ### /weekly and /monthly routing fix
 The setup now adds routing to your CLAUDE.md so `/weekly` and `/monthly` work as direct slash commands. Previously only `/insights` was recognized.
 
+### Richer insight reports
+The weekly/monthly insight skill now includes: a full advisory panel (50+ voices across wealth, leadership, psychology, relationships, health, wisdom, and creativity), a "Wins to Celebrate" section so good days don't get overlooked, habit tracking in the frontmatter (gym count, average bedtime), and a "never fail silently" rule — if the report fails to save, Claude tells you immediately instead of losing it.
+
 ### Automatic insight generation (cron / Task Scheduler)
 The setup now offers to schedule your weekly and monthly insights to run automatically — no typing required. On Mac/Linux it sets up a cron job; on Windows it creates a Task Scheduler entry. Weekly runs every Monday morning, monthly on the 2nd. Logs to `⚙️ Meta/scripts/.insights-cron.log` so you can verify it ran. You can still run /weekly or /monthly manually anytime.
 
