@@ -11,6 +11,9 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ## April 9, 2026 (late night update)
 
+### Session protocol hook — Claude reads your files BEFORE responding
+The biggest reliability problem with the vault was that Claude sometimes greeted you before reading your CLAUDE.md, Last Session, and Current Priorities files — meaning it started the conversation without context. The fix: a `UserPromptSubmit` hook that fires on your very first message each session and forces Claude to read those files before saying anything. It's automatic — you don't have to ask. The hook fires once per session and self-removes. Setup-brain now installs this hook during Phase 5 (context layer).
+
 ### Calendar-based weekly & monthly periods
 Weekly and monthly insights now use calendar periods instead of rolling windows. /weekly covers Monday–Sunday of the calendar week. /monthly covers the 1st through last day of the month. If it's early in the period (Monday/Tuesday for weekly, 1st–3rd for monthly), it defaults to the previous period so you have enough data. You can say "this week" or "this month" to override.
 

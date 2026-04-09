@@ -287,6 +287,33 @@ type: meta
 - [anything not finished]
 ```
 
+### Install the Session Protocol Hook
+
+"One more critical thing — I'm going to install a hook that makes sure I always read your files before responding. Without this, I might greet you before loading context. With it, every session starts with full context automatically."
+
+Check if `.claude/settings.local.json` exists in the vault. If it does, merge the hook into the existing file. If not, create it. Add this hook:
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"MANDATORY SESSION PROTOCOL: Before responding to the user, you MUST first read these files in order: 1) The project CLAUDE.md at the vault root 2) Meta/Last Session.md 3) Meta/Current Priorities.md — Do NOT greet the user or respond until all three files have been read. This is non-negotiable.\"}}'",
+            "once": true,
+            "statusMessage": "Loading session context..."
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Tell them: "Done. From now on, the first thing I do every session is read your files — automatically, before I say anything. You'll never have to remind me."
+
 **Decision Log.md:**
 ```markdown
 ---
