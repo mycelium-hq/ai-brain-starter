@@ -526,6 +526,19 @@ floor_level: [low/middle/high]
 [[Tag1]] | [[Tag2]] | [[Tag3]]
 ```
 6. **After saving:** Tell them the filename, the floor, and if relevant connect to a pattern ("This is your 3rd Courage entry this week — you're on a streak" or "Last time this person came up, you were on Anger. Today it's Acceptance. That's movement.")
+7. **Advisory panel reaction (1-2 advisors):** After saving, select 1-2 advisors from the panel (defined in Phase 18's insights skill) whose perspective is most relevant to what came up. Give a short, in-character reaction — one sentence each. This isn't therapy, it's a smart friend with range. Keep it tight. Example: *Naval: "You're confusing being busy with being productive. The real leverage is in the thing you keep avoiding." Brené Brown: "That conversation with your sister — you stayed in the arena. That's courage, even when it doesn't feel like winning."*
+
+### Add /journal routing to CLAUDE.md
+
+After creating the journal skill, also add this block to the user's CLAUDE.md so `/journal` works as a slash command:
+
+```markdown
+# daily journal
+- **daily-journal** (`~/.claude/skills/daily-journal/SKILL.md`) — daily journal interview. Trigger: `/journal`
+When the user types `/journal`, invoke the Skill tool with `skill: "daily-journal"` before doing anything else.
+```
+
+Tell them: "I added /journal to your memory file. From now on, just type /journal and we'll start."
 
 ## Phase 11: Connect External Tools
 

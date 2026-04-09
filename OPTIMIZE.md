@@ -28,9 +28,8 @@ Here's what we can do. Each phase is independent — pick the ones that matter t
 7. **Dashboards** — build live Dataview queries for contacts, tasks, projects (15-20 min)
 8. **Wikilink Audit** — scan for people, concepts, and themes that should be linked but aren't (20 min)
 9. **About Me / Then vs Now** — build a self-portrait from your data (15 min)
-10. **Vault Health Report** — final audit with stats and recommendations (10 min)
-8. **About Me / Then vs Now** — build a self-portrait from your data (15 min)
-9. **Vault Health Report** — final audit with stats and recommendations (10 min)
+10. **Skill & Routing Health Check** — verify all skills work, paths resolve, CLAUDE.md routing is complete (10 min)
+11. **Vault Health Report** — final audit with stats and recommendations (10 min)
 
 Which ones do you want to tackle? Or want to start from the top and do them all?"
 
@@ -476,7 +475,79 @@ last_updated: [today]
 
 ---
 
-## Phase 10: Vault Health Report
+## Phase 10: Skill & Routing Health Check
+
+"Let me make sure all your skills are working and your CLAUDE.md has the right routing entries."
+
+### Step 1: Verify skill paths
+Check that every skill file referenced in CLAUDE.md actually exists:
+
+```bash
+# Check each skill directory
+ls ~/.claude/skills/daily-journal/SKILL.md
+ls ~/.claude/skills/humanizer/SKILL.md
+ls ~/.claude/skills/graphify/SKILL.md
+ls ~/.claude/skills/insights/SKILL.md
+ls ~/.claude/skills/ai-brain-starter/SKILL.md
+```
+
+For any missing skill, offer to reinstall it.
+
+### Step 2: Verify save paths in skills
+Read each skill file and check that any file paths it references (journal save path, insight save path, etc.) resolve to real folders. Common bug: double "Desktop" in paths, missing emoji prefixes on folders.
+
+```bash
+# Example: check if the journal save folder exists
+ls "/path/from/skill/Journals/"
+```
+
+If a path is broken, fix it and tell the user what was wrong.
+
+### Step 3: Verify CLAUDE.md routing
+Check that the user's CLAUDE.md has routing entries for all installed skills:
+
+- `/journal` → daily-journal skill
+- `/weekly` and `/monthly` → insights skill
+- `/graphify` → graphify skill
+- `/humanizer` → humanizer skill
+- `/setup-brain` → ai-brain-starter skill
+
+For any missing routing, add it:
+
+```markdown
+# [skill name]
+- **[skill-name]** (`~/.claude/skills/[skill-name]/SKILL.md`) — [description]. Trigger: `/[command]`
+When the user types `/[command]`, invoke the Skill tool with `skill: "[skill-name]"` before doing anything else.
+```
+
+### Step 4: Verify session protocol hook
+Check if the UserPromptSubmit hook is installed in `.claude/settings.local.json`:
+
+```bash
+cat .claude/settings.local.json | grep -q "UserPromptSubmit" && echo "Hook installed" || echo "MISSING"
+```
+
+If missing, install it (see Phase 5 of setup-brain for the hook JSON).
+
+### Step 5: Check insights skill references advisory panel
+Read the insights skill and verify it has the full advisory panel with voice descriptions. If it's using a generic "select relevant advisors" instruction without actual names, flag it.
+
+### Step 6: Check daily journal references advisory panel
+Read the daily journal skill and verify it includes the advisory panel step after saving. If missing, add it (1-2 advisors, in-character, one sentence each).
+
+Report:
+```
+Skill Health Check:
+- Skills found: [X] of [Y] expected
+- Broken paths fixed: [X]
+- Missing routing entries added: [X]
+- Session hook: [installed/missing]
+- Advisory panel: [in insights: Y/N] [in journal: Y/N]
+```
+
+---
+
+## Phase 11: Vault Health Report
 
 "Final audit. Here's the state of your vault after optimization."
 

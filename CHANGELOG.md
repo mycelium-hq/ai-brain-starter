@@ -9,6 +9,22 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 10, 2026
+
+### Advisory panel reactions in daily journal
+Your daily journal entries now get 1-2 advisor reactions after saving — short, in-character sentences from the same 50+ voice panel used in weekly/monthly insights. Instead of just saving and moving on, Claude picks the 1-2 advisors most relevant to what came up and gives you a quick outside perspective. It's like having Naval or Brene Brown read your journal entry and give you one sentence back.
+
+### Example outputs added
+New file: EXAMPLES.md. Shows exactly what a daily journal entry and a weekly insight report look like — full frontmatter, raw first-person journaling, floor tags, advisor reactions, life coach flags, therapist observations, and the closing question. Fictional but realistic. If you're wondering "what does this actually produce?" — now you can see it before committing to the setup.
+
+### /journal routing in CLAUDE.md
+The setup now adds `/journal` routing to your CLAUDE.md so it works as a slash command, just like `/weekly` and `/monthly` already do. Previously you had to remember to type the full skill name or hope Claude figured it out.
+
+### Skill & routing health check in /optimize-brain
+New Phase 10 in the optimization skill: verifies all your skills exist, all file paths resolve to real folders (catches the common double-Desktop bug), all slash commands are routed in CLAUDE.md, the session protocol hook is installed, and the advisory panel is present in both the journal and insights skills. Also fixed duplicate numbering in the phase list.
+
+---
+
 ## April 9, 2026 (late night update)
 
 ### Session protocol hook — Claude reads your files BEFORE responding
