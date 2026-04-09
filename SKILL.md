@@ -410,12 +410,11 @@ Run the journal interview. Save the entry. Show them the file in their vault.
 - A daily journal routine
 - Accountability rules so I push back, not just agree
 
-Here's what we can do next (in future sessions):
-- **/optimize-brain** — deep optimization: compress your archive into summaries, clean up your graph, build dashboards, standardize all your contacts
-- Import more files from other sources
-- Build domain summaries for each area of your life
-- Set up Dataview dashboards
-- Connect more external tools
+Ready for the next level? The deep optimization pass is already installed. It'll compress your archives into summaries, standardize all your contacts into a queryable CRM, clean up your graph, build live dashboards, and more.
+
+Just type: **/optimize-brain**
+
+That's a weekend project, not an afternoon one — but it's where the real magic happens. Your vault goes from organized to intelligent.
 
 For now — just use it. Journal. Add notes. Ask me things. The system compounds over time."
 

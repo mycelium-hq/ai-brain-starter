@@ -98,8 +98,17 @@ These require Homebrew + Python 3.12 + Node.js. The setup walks you through inst
 - Type `/journal` for daily journal interviews
 - Type `/humanizer` on any draft before publishing
 
-### Deep optimization (coming soon)
-- `/optimize-brain` — compress archives into summaries, clean up your graph, build dashboards, standardize contacts, create domain summaries
+### Deep optimization
+Type `/optimize-brain` when you're ready for the weekend pass:
+- **File audit** — scan vault, report stats, find the mess
+- **CRM standardization** — turn people mentions into queryable contacts
+- **Journal compression** — monthly summaries from your entries
+- **Domain summaries** — one compressed note per life area
+- **Graph cleanup** — fix broken links, connect orphans, enrich dead ends
+- **Dashboards** — live Dataview queries for contacts, tasks, projects
+- **Wikilink audit** — find and link unlinked mentions across the vault
+- **About Me** — self-portrait built from your data
+- **Vault health report** — final audit with stats and recommendations
 
 ---
 
