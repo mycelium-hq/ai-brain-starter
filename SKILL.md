@@ -230,6 +230,26 @@ Ask: "Earlier you mentioned you have notes in [whatever they said]. Want to impo
 - **Scattered files:** "Drop them all in one folder, I'll sort them."
 - **Old journals:** "These are gold. Even 10 entries give me patterns to work with. Import as many as you can."
 
+**AI chat exports — ask about this specifically:**
+
+"Do you have conversations saved in ChatGPT, Claude, Gemini, or any other AI tool? Those are some of your most valuable notes — they contain your thinking, your decisions, your brainstorming, your questions. Most people don't realize how much context is buried in their AI chat history."
+
+Walk them through exporting:
+- **ChatGPT:** Settings → Data Controls → Export data. You'll get a zip file with all conversations as JSON. Drop the zip in the vault, I'll convert them to markdown.
+- **Claude (claude.ai):** Go to Settings → Account → Export Data. Same process — zip file, I'll convert.
+- **Google Gemini:** Go to gemini.google.com → Activity → Download. Or use Google Takeout.
+- **Other AI tools:** Check settings for an export/download option. Most have one.
+
+Once imported, explain: "Not every AI chat is worth keeping. The ones where you brainstormed a business idea, processed a decision, worked through a problem, had a deep personal conversation — those are gold. The ones where you asked how to convert a PDF or fix a CSS bug? We can delete those."
+
+**AI chat cleanup pass:**
+After importing, scan the AI chats and categorize:
+- **Keep and organize:** Chats with real thinking, decisions, brainstorming, personal processing, strategy discussions. Move to an `AI Chats/` folder with descriptive names.
+- **Delete:** Trivial utility chats (tech support, quick lookups, "how do I do X" one-offs). Ask before bulk-deleting: "I found [X] chats that look like quick utility questions — things like 'how to resize an image' or 'what's the weather.' Want me to delete those and keep the meaningful ones?"
+- **Extract and merge:** Some chats have one great insight buried in a long conversation. Extract the insight into a proper note, then archive or delete the chat.
+
+Report: "Imported [X] AI chats. Kept [Y] meaningful ones, deleted [Z] utility chats, extracted [W] insights into standalone notes."
+
 If they import files, do a basic standardization pass:
 - Add YAML frontmatter (creationDate, type) to each file
 - Move files to the right folders

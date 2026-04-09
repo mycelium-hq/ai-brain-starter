@@ -101,6 +101,7 @@ These require Homebrew + Python 3.12 + Node.js. The setup walks you through inst
 ### Deep optimization
 Type `/optimize-brain` when you're ready for the weekend pass:
 - **File audit** — scan vault, report stats, find the mess
+- **AI chat import & cleanup** — export ChatGPT/Claude/Gemini history, keep the gold, delete the noise
 - **CRM standardization** — turn people mentions into queryable contacts
 - **Journal compression** — monthly summaries from your entries
 - **Domain summaries** — one compressed note per life area

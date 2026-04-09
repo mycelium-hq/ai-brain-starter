@@ -20,12 +20,15 @@ Start with:
 Here's what we can do. Each phase is independent — pick the ones that matter to you, or we can do them all:
 
 1. **File Audit** — scan your vault, report what's there, find the mess (10 min)
-2. **CRM Standardization** — turn scattered people mentions into queryable contacts (30-60 min)
-3. **Journal Compression** — create monthly summaries from your journal entries (30-60 min)
-4. **Domain Summaries** — one compressed note per life area (20-30 min)
-5. **Graph Cleanup** — fix broken links, connect orphans, add missing links (20-30 min)
-6. **Dashboards** — build live Dataview queries for contacts, tasks, projects (15-20 min)
-7. **Wikilink Audit** — scan for people, concepts, and themes that should be linked but aren't (20 min)
+2. **AI Chat Import & Cleanup** — export and import your ChatGPT/Claude/Gemini history, keep the gold, delete the noise (30-60 min)
+3. **CRM Standardization** — turn scattered people mentions into queryable contacts (30-60 min)
+4. **Journal Compression** — create monthly summaries from your journal entries (30-60 min)
+5. **Domain Summaries** — one compressed note per life area (20-30 min)
+6. **Graph Cleanup** — fix broken links, connect orphans, add missing links (20-30 min)
+7. **Dashboards** — build live Dataview queries for contacts, tasks, projects (15-20 min)
+8. **Wikilink Audit** — scan for people, concepts, and themes that should be linked but aren't (20 min)
+9. **About Me / Then vs Now** — build a self-portrait from your data (15 min)
+10. **Vault Health Report** — final audit with stats and recommendations (10 min)
 8. **About Me / Then vs Now** — build a self-portrait from your data (15 min)
 9. **Vault Health Report** — final audit with stats and recommendations (10 min)
 
@@ -72,7 +75,48 @@ Ask: "Anything here surprise you? Want me to clean up any of these issues before
 
 ---
 
-## Phase 2: CRM Standardization
+## Phase 2: AI Chat Import & Cleanup
+
+"Your AI chat history is some of the most valuable data you have. Every conversation where you brainstormed an idea, processed a decision, worked through a problem — that's your thinking captured in real time. Let's get it into your vault."
+
+### Step 1: Export
+Walk them through exporting from each platform they use:
+- **ChatGPT:** Settings → Data Controls → Export data → zip file with all conversations
+- **Claude (claude.ai):** Settings → Account → Export Data → zip file
+- **Google Gemini:** gemini.google.com → Activity → Download, or Google Takeout
+- **Other AI tools:** Check settings for export/download
+
+### Step 2: Import and convert
+Convert exported JSON/HTML files to markdown. Add basic frontmatter (creationDate, type: ai-chat). Place in an `AI Chats/` folder.
+
+### Step 3: Triage
+Scan all imported chats and categorize:
+
+**Keep and organize:**
+- Chats with real thinking — business strategy, personal processing, creative brainstorming, decision-making
+- Rename with descriptive titles based on content (not "Chat from March 15")
+
+**Delete:**
+- Quick utility chats: "how do I resize an image," "what's the capital of," "fix this CSS," "should I buy this milk," "how do I make the elevator work"
+- One-line lookups with no lasting value
+
+Ask before bulk-deleting: "I found [X] chats that look like quick utility questions. Want me to delete those and keep the meaningful ones?"
+
+**Extract and archive:**
+- Some long chats have one great insight buried in a rambling conversation. Extract the insight into a proper standalone note, then archive the chat.
+
+### Step 4: Report
+```
+AI Chat Import Complete:
+- Total chats imported: [X]
+- Kept (meaningful): [Y]
+- Deleted (utility): [Z]
+- Insights extracted to standalone notes: [W]
+```
+
+---
+
+## Phase 3: CRM Standardization
 
 "Let me find every person mentioned in your vault and turn them into queryable contacts."
 
@@ -152,7 +196,7 @@ If yes, run the audit and report findings. Let them decide what to fix.
 
 ---
 
-## Phase 3: Journal Compression
+## Phase 4: Journal Compression
 
 "If you have a lot of journal entries, reading them all every time is impossible. I'll create monthly summaries that compress each month into one note."
 
@@ -209,7 +253,7 @@ Save to `Journals/Monthly Summaries/YYYY-MM Monthly Summary.md`
 
 ---
 
-## Phase 4: Domain Summaries
+## Phase 5: Domain Summaries
 
 "Every major area of your life gets one compressed summary note. These let me understand a whole domain from 400 words instead of scanning dozens of files."
 
@@ -254,7 +298,7 @@ Add links to domain summaries from CLAUDE.md and 00 Start Here if they aren't al
 
 ---
 
-## Phase 5: Graph Cleanup
+## Phase 6: Graph Cleanup
 
 "Now let's fix the connections. A disconnected graph means I (and you) can't follow threads."
 
@@ -301,7 +345,7 @@ Graph Cleanup Complete:
 
 ---
 
-## Phase 6: Dashboards
+## Phase 7: Dashboards
 
 "Let's build some live dashboards using Dataview. These update automatically as your vault changes."
 
@@ -357,7 +401,7 @@ Build custom Dataview queries based on their answer.
 
 ---
 
-## Phase 7: Wikilink Audit
+## Phase 8: Wikilink Audit
 
 "I'm going to scan every file for names, concepts, and themes that should be wikilinked but aren't. This makes your graph denser and more navigable."
 
@@ -387,7 +431,7 @@ For each file, show what would change, then apply with confirmation.
 
 ---
 
-## Phase 8: About Me / Then vs Now
+## Phase 9: About Me / Then vs Now
 
 "Let's build a self-portrait from your data. This isn't a resume — it's who you are, based on what you've written."
 
@@ -432,7 +476,7 @@ last_updated: [today]
 
 ---
 
-## Phase 9: Vault Health Report
+## Phase 10: Vault Health Report
 
 "Final audit. Here's the state of your vault after optimization."
 
