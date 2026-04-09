@@ -396,15 +396,153 @@ If yes, ask:
 
 Create a basic journal skill customized to their answers. Save it to ~/.claude/skills/daily-journal/SKILL.md.
 
-## Phase 11: Connect External Tools (Optional)
+## Phase 11: Connect External Tools
 
-Ask: "Do you want Claude to be able to read your email, calendar, or other tools? This is optional but powerful."
+"Let's connect Claude to the tools you actually use. This is where the vault becomes an operating system, not just a notebook."
 
-If yes, walk them through connecting MCPs:
-- "Go to Claude settings → Connectors and connect the ones you want."
-- Gmail, Google Calendar, Slack, etc.
+### Email & Calendar
+Ask: "Do you use Gmail? Google Calendar? Outlook?"
+- "In Claude Code, go to Settings → Connectors. Connect Gmail and Google Calendar. Once connected, I can search your email, draft replies with full context, check your schedule, and create events."
+- If they use Outlook/Microsoft 365: "Same thing — connect Microsoft 365 from the connectors page."
 
-## Phase 12: First Test Drive
+### Communication
+Ask: "Do you use Slack?"
+- "Connect Slack from Settings → Connectors. I'll be able to search messages, read channels, and draft messages with your vault context."
+
+### CRM & Sales
+Ask: "Do you use HubSpot, Apollo, or any CRM tool?"
+- "Connect it. Then your Obsidian CRM and your actual sales CRM stay in sync. I can look up contacts, check deal status, and draft outreach from your vault."
+
+### Meeting Notes
+Ask: "Do you record meetings? (Granola, Otter, Fireflies, Zoom transcripts, etc.)"
+- If yes: "We can set up auto-import so your meeting notes land in the vault automatically, formatted with frontmatter, attendee lists, and action items. No manual copying."
+- Walk them through setting up the import (varies by tool — Granola has an API, others export to folders)
+
+### Design & Creative
+Ask: "Do you use Canva, Figma, or any design tools?"
+- "Connect Canva or Figma from connectors. I can search your designs, generate new ones from vault context, and pull brand assets."
+
+### Project Management
+Ask: "Do you use Linear, Notion, Asana, or any project tracker?"
+- "If it's in the connectors list, connect it. If not, we can set up periodic imports."
+
+Tell them: "You don't have to connect everything now. Start with email and calendar — those give the biggest boost. You can add more anytime."
+
+## Phase 12: Import Book Notes & Highlights
+
+Ask: "Do you read books and highlight? (Kindle, Apple Books, Readwise, physical books with notes?)"
+
+If yes, explain: "Your book highlights are some of the most valuable notes you have — they're the ideas that resonated enough to mark. Let's get them in."
+
+Walk through each source:
+- **Kindle:** "Go to read.amazon.com → Notes & Highlights → export. Or if you use Readwise, it's even easier."
+- **Readwise:** "Export as markdown — Readwise has an Obsidian plugin that syncs automatically. Install it from Community Plugins."
+- **Apple Books:** "This one's harder. You can copy highlights manually, or use a tool like Bookfusion to export."
+- **Physical books:** "Take photos of your margin notes. I can transcribe them."
+- **PDF annotations:** "Drop the PDFs in the vault. I can extract highlighted text and annotations."
+
+After import:
+- Create a `Books/` folder if it doesn't exist
+- One note per book with: title, author, key highlights, personal reflections
+- Add wikilinks to concepts that match existing vault notes
+- "Your reading and your thinking are now connected. When you write about a topic, your book highlights surface as context."
+
+## Phase 13: Health & Habit Tracking (Optional)
+
+Ask: "Do you want to track any habits or health data? (gym, sleep, mood, water, meditation, anything?)"
+
+If yes, ask what they want to track. Common ones:
+- Gym (days per week, what they did)
+- Sleep (bedtime, hours)
+- Mood or energy level
+- Meditation or mindfulness
+- Screen time / scrolling
+
+Build the tracking into their journal skill: "I'll ask about these at the end of each journal entry and include them as a quick line. Not a spreadsheet — just a note at the bottom like: **Gym:** 3/4 this week · **Sleep:** 11pm · **Mood:** good."
+
+If they have Apple Health, Fitbit, Garmin, or Oura data: "We can import your health data and cross-reference it with your journal entries. Imagine asking 'what do my best weeks have in common?' and getting back: gym 4x, sleep before midnight, no social media after 9pm."
+
+## Phase 14: Build Your Concept Taxonomy
+
+Ask: "Do you have a framework you think about life through? (Values, principles, categories, a personal philosophy?) Or do you want to build one?"
+
+Not everyone has a framework like the High-Rise. But everyone has recurring themes. Help them identify theirs:
+
+"Let me scan what you've already written — journals, notes, whatever's in the vault — and pull out the themes that keep coming up."
+
+Scan for recurring concepts across their notes. Report the top 15-20 themes.
+
+Then ask: "These are the ideas your brain keeps returning to. Want me to create a concept note for each one? Each note becomes a hub — everything you've ever written about that topic links through it."
+
+For each concept note:
+```markdown
+---
+creationDate: [today]
+type: concept
+---
+
+[Brief description of what this concept means to them]
+
+## Connected
+[[Related Concept 1]] | [[Related Concept 2]] | [[Related Concept 3]]
+
+## All entries mentioning this concept
+[Dataview query pulling all files that link to this note]
+```
+
+This is what turns a vault from a filing system into a thinking system. The concepts are the nodes. The links are the edges. The graph becomes navigable.
+
+## Phase 15: Backup & Sync Setup
+
+Ask: "How do you want to back up your vault? (Google Drive, iCloud, Dropbox, Git, or just local?)"
+
+**Important:** "Your vault is just a folder of files. If that folder disappears, everything is gone. Let's make sure it's backed up."
+
+Options:
+- **Google Drive / Dropbox / iCloud:** "Move your vault folder into your cloud sync folder. It'll back up automatically. This also lets you access it from multiple devices."
+- **Git:** "If you're comfortable with git, we can initialize a repo and push to GitHub (private). This gives you version history — you can undo any change."
+- **Just local:** "At minimum, set a reminder to copy the vault folder to an external drive once a week."
+
+If they want to share the vault with a team: "Google Drive is the best option for team vaults. Everyone installs Google Drive for Desktop, opens the vault in Obsidian, and the files sync. I can help you set up a separate team vault later."
+
+## Phase 16: Add Obsidian Power Rules to CLAUDE.md
+
+"Last thing — let me add some rules to your memory file that make every future session smarter."
+
+Add these to their CLAUDE.md under a new section:
+
+```markdown
+## Obsidian Rules
+
+1. Always wikilink. First occurrence per file. Use alias syntax: [[Concept|natural text]]
+2. YAML frontmatter on every note. Minimum: creationDate. Add type: (concept/journal/person/article) where applicable
+3. Aliases in frontmatter for flexible linking: aliases: [nickname, abbreviation]
+4. New concepts get their own note. In the right folder with a description and connected concepts.
+5. Descriptive file names. When importing files, rename cryptic names to descriptive ones.
+6. Never duplicate the title. Obsidian shows the filename as the page title — don't repeat it with a # heading.
+7. Idea quarantine. New business ideas or shiny distractions go to an Idea Quarantine note, not into action.
+8. CRM on import. When importing anything that mentions people, create or update their CRM entry.
+9. Catch content ideas. If a sharp insight comes up during conversation, save it to a Content Drafts note.
+10. Log decisions. When you make a decision during conversation, append it to a Decision Log with what, why, and date.
+
+## Auto-Capture Rules
+
+1. Content ideas → Content Drafts.md (batch at end of session, don't interrupt)
+2. Decisions → Decision Log.md (what, why, date — leave outcome blank for later)
+3. Vault improvements → Vault Changelog.md (what was done, why, impact)
+```
+
+Create the Content Drafts, Decision Log, and Vault Changelog files if they don't exist.
+
+## Phase 17: Connect External Tools Check
+
+After all the installs and imports, quickly verify: "Let's make sure everything is connected. What can you see?"
+- Test email: "Search your email for [recent term]"
+- Test calendar: "What's on your calendar this week?"
+- Test journal: "Let's do a quick /journal test"
+- Test vault search: "Ask me something about your notes"
+
+## Phase 18: First Test Drive
 
 "Everything is set up. Let's test it."
 
@@ -420,7 +558,7 @@ Run the journal interview. Save the entry. Show them the file in their vault.
 
 "That's your first entry. The vault is alive now. Every conversation from here makes it smarter."
 
-## Phase 13: What's Next
+## Phase 19: What's Next
 
 "Here's what you have now:
 - A memory file that loads every session
