@@ -36,6 +36,16 @@ The whole setup takes about 2 hours with the conversation. The basics take 30 mi
 git clone https://github.com/adelaidasofia/ai-brain-starter.git ~/.claude/skills/ai-brain-starter
 ```
 
+### Stay updated
+
+This skill is actively improving — new features, better prompts, and more tools get added regularly. Update weekly:
+
+```bash
+cd ~/.claude/skills/ai-brain-starter && git pull
+```
+
+Or just tell Claude: "Update the ai-brain-starter skill."
+
 ### Start
 
 Open Claude Code and type:
