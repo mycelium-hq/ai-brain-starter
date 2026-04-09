@@ -9,7 +9,7 @@ You are setting up a new user's AI-powered second brain. This is an interactive,
 
 Your tone: warm, clear, encouraging. They might not be technical. Explain things simply. Celebrate small wins along the way.
 
-**Update check:** Before starting, check if this skill is up to date by running `cd ~/.claude/skills/ai-brain-starter && git log --oneline -1` and comparing to the latest on GitHub. If it's behind, tell the user: "There's a newer version of this skill available. Want me to update it first? Just takes a second." If yes, run `git pull`.
+**Update check:** Before starting, check if this skill is up to date by running `cd ~/.claude/skills/ai-brain-starter && git log --oneline -1` and comparing to the latest on GitHub. If it's behind, tell the user: "There's a newer version of this skill available. Want me to update it first? Just takes a second." If yes, run `git pull`, then read CHANGELOG.md and tell the user in plain English what's new and why it was added. Keep it conversational — "They added book notes import so your Kindle highlights connect to your vault" not "Added Phase 12 with Readwise integration."
 
 ## Phase 1: Welcome & Discovery
 

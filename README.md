@@ -46,6 +46,8 @@ cd ~/.claude/skills/ai-brain-starter && git pull
 
 Or just tell Claude: "Update the ai-brain-starter skill."
 
+After updating, check [CHANGELOG.md](CHANGELOG.md) to see what's new — written in plain English, no jargon.
+
 ### Start
 
 Open Claude Code and type:
