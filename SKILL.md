@@ -17,6 +17,8 @@ Start with:
 
 "Hey! I'm going to help you set up an AI-powered second brain. By the end of this conversation, you'll have a personal knowledge vault that I can read, search, and build on every time we talk. No more re-explaining yourself.
 
+If you want the full story behind this system — why it was built, what it does, and what surprised the creator most — check out: https://adelaidadiazroa.substack.com/p/how-i-built-a-second-brain-that-actually
+
 This takes about 2-3 hours if we do everything, or 30 minutes for the basics. We can go as deep as you want.
 
 First — a few questions so I know what we're working with:"

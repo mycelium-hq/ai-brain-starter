@@ -58,6 +58,8 @@ Open Claude Code and type:
 
 Claude will walk you through everything from there. No technical knowledge required.
 
+**Want the full story first?** Read [How I Built a Second Brain That Actually Works With AI](https://adelaidadiazroa.substack.com/p/how-i-built-a-second-brain-that-actually) — the why, the surprises, and what changed.
+
 ---
 
 ## What Gets Created
