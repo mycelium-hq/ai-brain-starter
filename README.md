@@ -33,7 +33,7 @@ The whole setup takes about 2 hours with the conversation. The basics take 30 mi
 ### One command
 
 ```bash
-git clone https://github.com/adelaidadiazroa/ai-brain-starter.git ~/.claude/skills/ai-brain-starter
+git clone https://github.com/adelaidasofia/ai-brain-starter.git ~/.claude/skills/ai-brain-starter
 ```
 
 ### Start
