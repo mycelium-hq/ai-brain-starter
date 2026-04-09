@@ -1,0 +1,148 @@
+# AI Brain Starter
+
+**Turn any folder of notes into an AI-powered second brain in one conversation.**
+
+One command to install. One command to start. Claude does the rest.
+
+---
+
+## What This Does
+
+You type `/setup-brain` in Claude Code. Claude interviews you about your life, work, and goals — then builds a complete Obsidian knowledge vault around your answers:
+
+- **Memory file** (CLAUDE.md) — Claude reads this automatically every session. No more re-explaining yourself.
+- **Folder structure** — organized by how you think, not how software thinks
+- **Contact cards** (CRM) — every person in your life becomes queryable
+- **Context layer** — priorities, open loops, last session, decision log
+- **Templates** — for journals, meetings, and contacts
+- **Daily journal** — Claude interviews you, saves the entry, tracks patterns over time
+- **Accountability rules** — Claude pushes back on bad ideas, checks your ego, calls you out when you're avoiding something
+- **Power tools** — Graphify (knowledge graphs), Humanizer (de-AI your writing), Claude-Mem (session memory), NotebookLM (query your Google notebooks)
+
+The whole setup takes about 2 hours with the conversation. The basics take 30 minutes.
+
+---
+
+## Install
+
+### Prerequisites
+
+- [Obsidian](https://obsidian.md) (free)
+- [Claude Code](https://claude.ai/code) (desktop app or CLI)
+
+### One command
+
+```bash
+git clone https://github.com/adelaidadiazroa/ai-brain-starter.git ~/.claude/skills/ai-brain-starter
+```
+
+### Start
+
+Open Claude Code and type:
+
+```
+/setup-brain
+```
+
+Claude will walk you through everything from there. No technical knowledge required.
+
+---
+
+## What Gets Created
+
+```
+Your Vault/
+  CLAUDE.md                    # Your memory file — Claude reads this every session
+  Meta/
+    00 Start Here.md           # Session routing
+    Current Priorities.md      # Your top 5 right now
+    Open Loops.md              # What's unresolved
+    Last Session.md            # What happened last time
+    Decision Log.md            # Decisions tracked over time
+    Templates/
+      Template - Journal Entry.md
+      Template - CRM Entry.md
+      Template - Meeting Note.md
+  Journals/                    # Daily entries
+    Monthly Summaries/         # Compressed by month
+  CRM/                         # People cards with live queries
+  Home/                        # Personal goals, habits, health
+  Work/                        # Your projects and career
+  Writing/                     # Anything you create
+  Books/                       # Book notes
+  Psychology/                  # Inner work, therapy, growth
+```
+
+Plus any custom folders based on your life.
+
+---
+
+## Power Tools (Installed During Setup)
+
+| Tool | What it does | Command |
+|------|-------------|---------|
+| **Humanizer** | Strips AI patterns from your writing | `/humanizer` |
+| **Graphify** | Builds a knowledge graph of your vault | `/graphify .` |
+| **Claude-Mem** | Remembers past sessions automatically | automatic + `/mem-search` |
+| **NotebookLM** | Queries your Google NotebookLM notebooks | `/notebooklm` |
+
+These require Homebrew + Python 3.12 + Node.js. The setup walks you through installing them.
+
+---
+
+## After Setup
+
+### Daily use
+- Open Obsidian for visual navigation
+- Open Claude Code in your vault for AI-powered work
+- Type `/journal` for daily journal interviews
+- Type `/humanizer` on any draft before publishing
+
+### Deep optimization (coming soon)
+- `/optimize-brain` — compress archives into summaries, clean up your graph, build dashboards, standardize contacts, create domain summaries
+
+---
+
+## The Accountability Rules
+
+Every CLAUDE.md created by this skill includes these rules. Claude is not a yes-machine — it's a thinking partner.
+
+1. Correct me if I'm wrong.
+2. Stop me if I'm gossiping.
+3. Check me when I'm stubborn.
+4. Tell me the truth even when it hurts.
+5. Tell me when I'm self-sabotaging.
+6. Call me out when I'm making excuses.
+7. Remind me who I said I wanted to be.
+8. Don't let me settle just because it's easier.
+9. Check my ego every time.
+10. Tell me when I'm overthinking everything.
+11. Call me out if I'm playing the victim.
+12. Don't let me stay comfortable if it's keeping me stuck.
+13. Tell me when I'm the problem.
+14. Call me out when I'm avoiding what I need to face.
+15. Tell me when I'm out of alignment with my values.
+
+---
+
+## Who This Is For
+
+- Founders who use AI daily and want it to actually know them
+- Writers who have years of notes scattered everywhere
+- Anyone who journals (or wants to start)
+- People who've tried Notion, Roam, Apple Notes, and none of it stuck
+- Non-technical people — the setup is a conversation, not a config file
+
+---
+
+## Background
+
+This system was built by [Adelaida Diaz-Roa](https://adelaidadiazroa.substack.com), founder of Onde, across a week of intensive Obsidian + Claude Code optimization. 5,000 notes, 12 years of journals, two books in progress, a startup to raise for — all connected, compressed, and navigable.
+
+Read the full story: [How I Built a Second Brain That Actually Works With AI](https://adelaidadiazroa.substack.com)
+
+---
+
+## License
+
+MIT — use it, fork it, make it yours.
