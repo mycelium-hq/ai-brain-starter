@@ -9,6 +9,25 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 9, 2026 (evening update)
+
+### Efficiency tools install FIRST (Phase 0)
+The setup now installs Graphify and Claude-Mem before the conversation starts, not after. This means the entire setup process uses fewer tokens — saving you money and making everything faster. Previously these were installed at Phase 9, after the vault was already built. Now they're running from the start.
+
+### Windows + Linux support
+Phase 0 now detects your operating system and gives the right install commands. Previously it was Mac-only. If you're on Windows, it walks you through downloading Python and Node.js. If you're on Linux, it uses your package manager.
+
+### Obsidian CLI setup
+If you're on Mac or Linux with Obsidian 1.12.7+, the setup now tries to enable the Obsidian CLI. This lets Claude search your vault, check backlinks, and find broken links much faster. If it's not available (Windows or older Obsidian), it skips silently — everything still works.
+
+### Emotional floor tagging in the journal
+Your daily journal entries now get tagged with an emotional "floor" — a level from 1 (Shame) to 16 (Peace). Over time this builds a map of your emotional patterns: which people, activities, and decisions put you on which floors. If you don't want it, just tell Claude "turn off floor tagging." Learn more about the framework: https://adelaidadiazroa.substack.com/p/the-internal-high-rise-peace-is-a
+
+### Journal saves now include floor in YAML frontmatter
+Each journal entry saves the floor name and level (low/middle/high) in the file metadata, so you can query across entries: "show me all my Love entries" or "what was my average floor this month."
+
+---
+
 ## April 9, 2026
 
 ### AI chat export & cleanup

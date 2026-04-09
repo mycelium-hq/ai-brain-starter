@@ -15,46 +15,96 @@ Your tone: warm, clear, encouraging. They might not be technical. Explain things
 
 **Do this silently before the conversation starts.** These tools reduce token usage for the entire setup, so they should be running before anything else.
 
-Check what's already installed, then install what's missing. Run these in the background — don't overwhelm the user with terminal output. Just do it.
+First, detect the platform: Mac, Windows, or Linux. Then check what's already installed and install what's missing. Don't overwhelm the user with terminal output — just do it quietly.
 
+Tell the user: "I need to install a couple of tools first that will make this whole setup faster and use less of your subscription. This takes a few minutes."
+
+### Mac
 ```
-# Check and install Homebrew (Mac only)
+# Homebrew
 if ! command -v brew &>/dev/null; then
-  # Ask the user: "I need to install a couple of tools first that will make this whole setup faster and cheaper. It requires your Mac password — I'll walk you through it."
-  # Then: /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  # Ask for password: "It needs your Mac password — you won't see characters when you type, that's normal."
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 fi
 
-# Check and install Python 3.10+ (needed for Graphify)
+# Python 3.10+
 if ! python3 -c "import sys; assert sys.version_info >= (3,10)" 2>/dev/null; then
-  brew install python@3.12
-  brew install pipx
-  pipx ensurepath
+  brew install python@3.12 && brew install pipx && pipx ensurepath
 fi
 
-# Check and install Node.js (needed for Claude-Mem)
-if ! command -v node &>/dev/null; then
-  brew install node
-fi
+# Node.js
+if ! command -v node &>/dev/null; then brew install node; fi
 
-# Install Graphify — knowledge graph reduces token usage by ~70% on vault queries
-if ! command -v graphify &>/dev/null; then
-  pipx install graphifyy
-  graphify install
-fi
+# Graphify — ~70% fewer tokens on vault queries
+if ! command -v graphify &>/dev/null; then pipx install graphifyy && graphify install; fi
 
-# Install Claude-Mem — session memory reduces re-explaining by ~30-40%
-# Check if already installed via plugin list
+# Claude-Mem — ~30-40% fewer tokens on session starts
 npx claude-mem install 2>/dev/null
 
-# Install Humanizer — de-AI writing
+# Humanizer — de-AI writing
 if [ ! -d ~/.claude/skills/humanizer ]; then
   git clone https://github.com/blader/humanizer.git ~/.claude/skills/humanizer
 fi
 ```
 
-**If any install requires user interaction (like Homebrew needing a password):** explain clearly what's happening and why. "This tool makes everything we're about to do use less of your Claude subscription. It needs your Mac password to install — you won't see characters when you type, that's normal."
+### Windows
+```
+# Check for Python 3.10+
+python --version
+# If missing or below 3.10: "Download Python from https://www.python.org/downloads/ — make sure to check 'Add to PATH' during install."
 
-**If an install fails:** don't stop the whole setup. Note it and continue. Offer to retry at the end.
+# Check for Node.js
+node --version
+# If missing: "Download Node.js from https://nodejs.org/ — the LTS version."
+
+# After Python is installed:
+pip install pipx
+pipx ensurepath
+pipx install graphifyy
+graphify install --platform windows
+
+# Claude-Mem
+npx claude-mem install
+
+# Humanizer
+git clone https://github.com/blader/humanizer.git %USERPROFILE%\.claude\skills\humanizer
+```
+
+### Linux
+```
+# Most Linux distros have Python 3.10+. Check:
+python3 --version
+
+# If missing: sudo apt install python3 python3-pip (Ubuntu/Debian) or equivalent
+# Node.js: sudo apt install nodejs npm
+
+# Then same as Mac:
+pip install pipx && pipx ensurepath
+pipx install graphifyy && graphify install
+npx claude-mem install
+git clone https://github.com/blader/humanizer.git ~/.claude/skills/humanizer
+```
+
+**If any install requires user interaction (like Homebrew needing a password or Windows needing a download):** explain clearly what's happening and why. Keep it simple: "This makes everything we're about to do cheaper and faster."
+
+**If an install fails:** don't stop the setup. Note it, continue, offer to retry at the end.
+
+### Obsidian CLI (Mac/Linux only, Obsidian 1.12.7+)
+
+Check if the Obsidian CLI is available:
+```
+/usr/local/bin/obsidian version 2>/dev/null || obsidian version 2>/dev/null
+```
+
+If not found, check if Obsidian is installed and try to symlink:
+```
+# Mac
+sudo ln -sf /Applications/Obsidian.app/Contents/MacOS/obsidian-cli /usr/local/bin/obsidian
+```
+
+If available, add to the CLAUDE.md rules later: "Use Obsidian CLI for fast vault queries: search, backlinks, unresolved links, orphans, dead ends."
+
+If not available (Windows, or older Obsidian): skip silently. The vault works fine without it — Claude just uses file search instead.
 
 After Phase 0 completes, tell the user: "I installed a few tools in the background that make everything faster and more efficient. Now let's get started with you."
 
@@ -408,7 +458,47 @@ If yes, ask:
 3. "Do you want me to track anything? (gym, sleep, mood, habits?)"
 4. "How raw do you want the entries? (polished or stream-of-consciousness?)"
 
-Create a basic journal skill customized to their answers. Save it to ~/.claude/skills/daily-journal/SKILL.md.
+### Emotional floor tagging
+
+"One more thing — each journal entry gets tagged with an emotional 'floor.' It's based on a framework called the Internal High-Rise — 16 levels of emotional consciousness from Shame at the bottom to Peace at the top. It helps you see patterns over time: which people put you on which floors, what your average floor is this month vs. last, whether you're trending up or down.
+
+Here's a quick overview:
+
+**Low Floors:** Shame, Guilt, Apathy, Grief, Fear, Desire, Anger, Pride
+**Middle Floors:** Courage, Neutrality, Willingness, Acceptance, Reason
+**High Floors:** Love, Joy, Peace
+
+If you want to understand the framework deeper: https://adelaidadiazroa.substack.com/p/the-internal-high-rise-peace-is-a
+
+After each journal conversation, I'll identify which floor you're on and tag the entry. Over weeks and months, this becomes incredibly powerful — you can literally see your emotional patterns in data.
+
+If this isn't your thing, just tell me 'turn off floor tagging' and I'll skip it."
+
+### Building the journal skill
+
+Create a journal skill customized to their answers. Save it to ~/.claude/skills/daily-journal/SKILL.md.
+
+The journal skill should include:
+1. **Opening question** — warm, casual, matched to time of day
+2. **Follow-up questions** (2-4) — dig deeper, don't accept "fine" or "good"
+3. **Habit tracking** — whatever they said they want to track (gym, sleep, mood, etc.)
+4. **Floor identification** — identify the primary emotional floor and tag the entry
+5. **Save format:**
+```markdown
+---
+creationDate: YYYY-MM-DDTHH:MM
+floor: [Floor name]
+floor_level: [low/middle/high]
+[any habit fields they requested, e.g. gym: 3/4, sleep: 11pm]
+---
+[Journal entry in first person, their voice, stream of consciousness]
+
+*Floor: [[{Floor}]] · [[{Level} Floors]]*
+
+## Concepts
+[[Tag1]] | [[Tag2]] | [[Tag3]]
+```
+6. **After saving:** Tell them the filename, the floor, and if relevant connect to a pattern ("This is your 3rd Courage entry this week — you're on a streak" or "Last time this person came up, you were on Anger. Today it's Acceptance. That's movement.")
 
 ## Phase 11: Connect External Tools
 
