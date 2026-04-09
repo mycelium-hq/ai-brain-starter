@@ -99,6 +99,8 @@ Plus any custom folders based on your life.
 | **Graphify** | Builds a knowledge graph of your vault | `/graphify .` |
 | **Claude-Mem** | Remembers past sessions automatically | automatic + `/mem-search` |
 | **NotebookLM** | Queries your Google NotebookLM notebooks | `/notebooklm` |
+| **Weekly Insights** | Pattern recognition from your journal week | `/weekly` |
+| **Monthly Insights** | Deeper trends, therapist + coach observations | `/monthly` |
 
 These require Homebrew + Python 3.12 + Node.js. The setup walks you through installing them.
 

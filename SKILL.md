@@ -646,7 +646,97 @@ After all the installs and imports, quickly verify: "Let's make sure everything 
 - Test journal: "Let's do a quick /journal test"
 - Test vault search: "Ask me something about your notes"
 
-## Phase 18: First Test Drive
+## Phase 18: Weekly & Monthly Insights
+
+"One more thing — and this might be the most powerful part. I can generate a weekly and monthly reflection from your journal entries. Not just a summary of what happened, but pattern recognition: what floors you've been on, what's shifting, what a life coach would push you on, what a therapist would want you to sit with."
+
+Ask: "Want me to set up weekly and monthly insight reports? Every Sunday (weekly) and the 1st of each month (monthly), you type /weekly or /monthly and I'll analyze your entries and give you a reflection."
+
+If yes, create the skill file at `~/.claude/skills/insights/SKILL.md`:
+
+```markdown
+---
+name: insights
+description: Weekly and monthly journal insights — pattern recognition, floor trends, life coach pushback, therapist observations, and advisory panel thoughts. Use /weekly for the past 7 days, /monthly for the past 30.
+---
+
+# Insights — Weekly & Monthly Reflection
+
+When the user types /weekly or /monthly, generate an insight report from their recent journal entries.
+
+## For /weekly — read all journal entries from the past 7 days
+
+## For /monthly — read all journal entries from the past 30 days
+
+## Report Structure
+
+### 1. The Week/Month at a Glance
+- How many entries (and any gaps — remember, gaps often mean good stretches)
+- Floor distribution: how many entries on each floor, with the primary floor for the period
+- Floor trend: moving up, down, or holding steady vs. last week/month
+- Average floor compared to their historical average (if enough data exists)
+
+### 2. What Stood Out
+- The 2-3 most significant moments, themes, or shifts from the entries
+- Any recurring people, topics, or triggers
+- What they said they'd do vs. what actually happened (accountability check)
+
+### 3. Patterns a Life Coach Would Flag
+Be direct. Coach energy, not therapist energy. Things like:
+- "You mentioned [person] three times this week and each time your floor dropped. That's data."
+- "You set a gym goal of 4x. You hit 2. Two weeks in a row. What's actually in the way?"
+- "You had three great days in a row and then didn't journal for 4 days. The good streak disappeared because you didn't document it."
+- "You're spending a lot of mental energy on [thing] that isn't in your current priorities. Is it time to add it or let it go?"
+
+### 4. Patterns a Therapist Would Explore
+Gentler. Curious. Things like:
+- "There's a thread of [emotion] running through several entries this week that you haven't named directly."
+- "You mentioned [person/situation] casually but it appeared in 4 out of 7 entries. It might be taking up more space than you realize."
+- "The gap between what you say you want and what you're doing about it showed up again this week. Not as a failure — as information."
+- "Your highest-floor entry this week was [entry]. What was different about that day?"
+
+### 5. Panel Thoughts on the Week/Month
+Select 3-5 advisors most relevant to what came up. Each gives 1-2 sentences of pushback, perspective, or encouragement. Keep it tight and in-character.
+
+### 6. One Question to Sit With
+End with ONE question — not homework, not an action item. Just a question worth thinking about based on what the data showed.
+
+## Save the Report
+
+Save to the vault:
+- Weekly: `Journals/Weekly Insights/YYYY-WXX Weekly Insight.md` (e.g., 2026-W15)
+- Monthly: `Journals/Monthly Insights/YYYY-MM Monthly Insight.md` (e.g., 2026-04)
+
+Create the folders if they don't exist.
+
+Format:
+```
+---
+creationDate: [today]
+type: insight
+period: weekly OR monthly
+date_range: [start] to [end]
+entries_analyzed: [X]
+primary_floor: [Floor]
+floor_trend: [up/down/stable]
+---
+
+[The full report as written above]
+```
+
+## Important Notes
+- Read EVERY journal entry in the period. Don't skip or skim.
+- Be specific — use their words, reference specific entries, name specific people and situations.
+- The life coach section should be direct. The therapist section should be gentle. Both should be honest.
+- If there aren't enough entries for a meaningful analysis (fewer than 3), say so: "You only journaled [X] times this week. Here's what I can see, but the data is thin."
+- Compare to previous weeks/months if the data exists. Trends matter more than snapshots.
+- The panel should actually react to what happened, not give generic advice.
+- The closing question should be specific to THEIR week, not a fortune cookie.
+```
+
+Tell the user: "Done — type /weekly on Sundays and /monthly on the 1st. Over time, these build a record of your growth that you can look back on. It's like having a therapist, life coach, and advisory board review your week — on demand."
+
+## Phase 19: First Test Drive
 
 "Everything is set up. Let's test it."
 
@@ -662,15 +752,84 @@ Run the journal interview. Save the entry. Show them the file in their vault.
 
 "That's your first entry. The vault is alive now. Every conversation from here makes it smarter."
 
-## Phase 19: What's Next
+## Phase 20: Team Vault (Optional)
+
+Ask: "Do you have a team — cofounders, employees, contractors, collaborators? Want to set up a shared vault they can all access, synced from your personal one?"
+
+If yes:
+
+"Here's how it works: you keep your personal vault as your primary workspace. We create a SEPARATE vault for your team — synced through Google Drive, Dropbox, or whatever your team uses. Business-related files sync automatically. Personal stuff (journals, inner work, personal reflections) stays private."
+
+### Step 1: Create the team vault
+"Create a new folder for the team vault — on Google Drive if you want it shared, or just on your desktop for now."
+
+Ask: "What's your company/project called? I'll name the vault after it."
+
+Create the vault with this structure:
+```
+[Team Name]/
+  CLAUDE.md           # Team context — company, team, priorities
+  Meta/
+    00 Start Here.md
+    Current Priorities.md
+    Open Loops.md
+    Last Session.md
+    Decision Log.md
+    First Time Setup.md  # Instructions for team members
+    Vault Changelog.md
+  Strategy/
+  Meeting Notes/
+  Documents/
+  CRM/
+  Sales/
+  Product/
+```
+
+### Step 2: Build the team CLAUDE.md
+Interview them about their business:
+1. "What's the company? One paragraph."
+2. "What are the top 3 priorities for the business right now?"
+3. "Who's on the team? Name and role for each person."
+4. "Any key terms, clients, or projects I should know about?"
+
+Build a CLAUDE.md with: company overview, team, priorities, session protocol, and the accountability rules.
+
+### Step 3: Set up sync rules
+Add a rule to their PERSONAL vault's CLAUDE.md:
+
+```markdown
+## Team Vault Sync
+A shared team vault lives at [path]. Rules:
+- On session end: If we created/modified any business files, sync to the team vault.
+- What to sync: strategy docs, meeting notes, CRM contacts, sales materials, product docs.
+- What NOT to sync: journals, AI chats, personal notes, personal reflections.
+- Batch at session end — don't interrupt work to sync.
+```
+
+### Step 4: Team member instructions
+Create a `First Time Setup.md` in the team vault's Meta folder that tells team members:
+1. Install Obsidian (link)
+2. Install plugins (Dataview, Templater, Tasks)
+3. Open the shared folder as a vault
+4. Install Claude Code
+5. Install the AI Brain Starter skill:
+   > Please install the ai-brain-starter skill from https://github.com/adelaidasofia/ai-brain-starter
+6. The team vault has its own CLAUDE.md — Claude will know the business context automatically
+7. For personal use, set up their own vault with /setup-brain
+
+Tell the user: "Your team vault is ready. Share the Google Drive folder with your team and send them the First Time Setup note. They'll have full context from day one."
+
+## Phase 21: What's Next
 
 "Here's what you have now:
 - A memory file that loads every session
 - Context notes so I never ask 'what are we working on?'
 - Templates for journals, people, and meetings
 - Power tools for efficiency
-- A daily journal routine
+- A daily journal with floor tagging and habit tracking
+- Weekly and monthly insight reports (/weekly and /monthly)
 - Accountability rules so I push back, not just agree
+- A team vault synced from your personal one (if you set it up)
 
 Ready for the next level? The deep optimization pass is already installed. It'll compress your archives into summaries, standardize all your contacts into a queryable CRM, clean up your graph, build live dashboards, and more.
 

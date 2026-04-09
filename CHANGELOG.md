@@ -9,6 +9,16 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 9, 2026 (night update)
+
+### Weekly & Monthly Insight Reports
+Type /weekly on Sundays and /monthly on the 1st. Claude reads all your journal entries for the period and gives you: floor trends (are you moving up or down?), patterns a life coach would flag ("you mentioned this person 4 times and each time your floor dropped"), observations a therapist would explore ("there's a thread of guilt running through this week you haven't named"), advisory panel thoughts on your week, and one question to sit with. Saves as a note so you can look back over months. It's like a therapist session, a life coach check-in, and a board meeting — on demand, from your own data.
+
+### Team Vault Setup
+If you have a team, Claude now walks you through creating a separate shared vault (synced through Google Drive or similar) that stays connected to your personal vault. Business files sync automatically. Personal stuff stays private. Team members get their own First Time Setup instructions. You work from your personal vault (which knows your whole life), they work from the team vault (which knows the business). No double-entry, no drift.
+
+---
+
 ## April 9, 2026 (evening update)
 
 ### Efficiency tools install FIRST (Phase 0)
