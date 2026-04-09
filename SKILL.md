@@ -650,23 +650,23 @@ After all the installs and imports, quickly verify: "Let's make sure everything 
 
 "One more thing — and this might be the most powerful part. I can generate a weekly and monthly reflection from your journal entries. Not just a summary of what happened, but pattern recognition: what floors you've been on, what's shifting, what a life coach would push you on, what a therapist would want you to sit with."
 
-Ask: "Want me to set up weekly and monthly insight reports? Every Sunday (weekly) and the 1st of each month (monthly), you type /weekly or /monthly and I'll analyze your entries and give you a reflection."
+Ask: "Want me to set up weekly and monthly insight reports? You type /weekly or /monthly anytime and I'll analyze your entries for that calendar period and give you a reflection."
 
 If yes, create the skill file at `~/.claude/skills/insights/SKILL.md`:
 
 ```markdown
 ---
 name: insights
-description: Weekly and monthly journal insights — pattern recognition, floor trends, life coach pushback, therapist observations, and advisory panel thoughts. Use /weekly for the past 7 days, /monthly for the past 30.
+description: Weekly and monthly journal insights — pattern recognition, floor trends, life coach pushback, therapist observations, and advisory panel thoughts. Use /weekly for the current calendar week, /monthly for the current calendar month.
 ---
 
 # Insights — Weekly & Monthly Reflection
 
 When the user types /weekly or /monthly, generate an insight report from their recent journal entries.
 
-## For /weekly — read all journal entries from the past 7 days
+## For /weekly — read all journal entries from the current calendar week (Monday–Sunday). If today is Monday or Tuesday, default to the previous week (since there's barely any data yet). The user can specify "this week" to override.
 
-## For /monthly — read all journal entries from the past 30 days
+## For /monthly — read all journal entries from the current calendar month (1st–last day). If today is the 1st–3rd, default to the previous month. The user can specify "this month" to override.
 
 ## Report Structure
 
@@ -734,7 +734,15 @@ floor_trend: [up/down/stable]
 - The closing question should be specific to THEIR week, not a fortune cookie.
 ```
 
-Tell the user: "Done — type /weekly on Sundays and /monthly on the 1st. Over time, these build a record of your growth that you can look back on. It's like having a therapist, life coach, and advisory board review your week — on demand."
+Then add routing to the user's CLAUDE.md so `/weekly` and `/monthly` work as slash commands:
+
+```markdown
+# insights (weekly / monthly)
+- **insights** (`~/.claude/skills/insights/SKILL.md`) - journal pattern recognition. Triggers: `/weekly`, `/monthly`, `/insights`
+When the user types `/weekly` or `/monthly`, invoke the Skill tool with `skill: "insights"` before doing anything else.
+```
+
+Tell the user: "Done — type /weekly or /monthly anytime. Weekly covers Monday–Sunday of the calendar week, monthly covers the 1st through last day. If it's early in the period, it'll default to the previous one so you have enough data. Over time, these build a record of your growth that you can look back on."
 
 ## Phase 19: First Test Drive
 

@@ -9,10 +9,20 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 9, 2026 (late night update)
+
+### Calendar-based weekly & monthly periods
+Weekly and monthly insights now use calendar periods instead of rolling windows. /weekly covers Monday–Sunday of the calendar week. /monthly covers the 1st through last day of the month. If it's early in the period (Monday/Tuesday for weekly, 1st–3rd for monthly), it defaults to the previous period so you have enough data. You can say "this week" or "this month" to override.
+
+### /weekly and /monthly routing fix
+The setup now adds routing to your CLAUDE.md so `/weekly` and `/monthly` work as direct slash commands. Previously only `/insights` was recognized.
+
+---
+
 ## April 9, 2026 (night update)
 
 ### Weekly & Monthly Insight Reports
-Type /weekly on Sundays and /monthly on the 1st. Claude reads all your journal entries for the period and gives you: floor trends (are you moving up or down?), patterns a life coach would flag ("you mentioned this person 4 times and each time your floor dropped"), observations a therapist would explore ("there's a thread of guilt running through this week you haven't named"), advisory panel thoughts on your week, and one question to sit with. Saves as a note so you can look back over months. It's like a therapist session, a life coach check-in, and a board meeting — on demand, from your own data.
+Type /weekly or /monthly anytime. Claude reads all your journal entries for that calendar period and gives you: floor trends (are you moving up or down?), patterns a life coach would flag ("you mentioned this person 4 times and each time your floor dropped"), observations a therapist would explore ("there's a thread of guilt running through this week you haven't named"), advisory panel thoughts on your week, and one question to sit with. Saves as a note so you can look back over months. It's like a therapist session, a life coach check-in, and a board meeting — on demand, from your own data.
 
 ### Team Vault Setup
 If you have a team, Claude now walks you through creating a separate shared vault (synced through Google Drive or similar) that stays connected to your personal vault. Business files sync automatically. Personal stuff stays private. Team members get their own First Time Setup instructions. You work from your personal vault (which knows your whole life), they work from the team vault (which knows the business). No double-entry, no drift.
