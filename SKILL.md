@@ -1893,7 +1893,22 @@ This vault is business-only. The following must NEVER appear in any file:
 - Personal reflections, emotions, or vulnerability
 - Personal CRM context (relationships, personal notes about people)
 If content touches both personal and business, it belongs in the personal vault, NOT here. When in doubt, keep it out.
+
+**Wikilinks:** Cross-vault wikilinks (to personal concepts) are allowed — they're valuable for the vault owner's pattern recognition and weekly/monthly reviews. They show as unresolved in the team vault. The graph view hides them via `hideUnresolved: true` + path filters.
 ```
+
+### Step 3c: Configure team vault graph to hide personal nodes
+Set up the team vault's `.obsidian/graph.json` so personal concepts don't clutter the graph for team members:
+
+```json
+{
+  "hideUnresolved": true,
+  "search": "-path:\"Journals\" -path:\"Writing\" -path:\"Psychology\" -path:\"AI Chats\" -path:\"Floor Tracking\"",
+  "showOrphans": false
+}
+```
+
+This keeps wikilinks intact for pattern recognition while hiding personal nodes from the team's graph view.
 
 ### Step 4: Team member instructions
 Create a `First Time Setup.md` in the team vault's Meta folder that tells team members:
