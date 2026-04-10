@@ -1288,6 +1288,20 @@ Over time, clicking `[[Fear]]` won't show a textbook definition — it'll show Y
 
 **For monthly insights:** Do a deeper review. Read ALL accumulated personal patterns and update, merge, or retire stale ones.
 
+## After Floor Notes: Auto-Wikilink Check & Graph Integration
+
+After updating floor notes, scan this week's journal entries for missing wikilinks:
+
+1. Read the Wikilink Reference file
+2. For each journal entry from this period, check if key concepts mentioned in plain text have matching entries in the Wikilink Reference that aren't wikilinked
+3. Add `[[wikilinks]]` where missing (first occurrence per file only, use alias syntax)
+4. Don't over-link — only link concepts that are actual vault notes
+
+**If a graphify graph exists** (`graphify-out/graph.json`):
+- Check for high-degree concepts that appear 10+ times but have no vault note — flag them as candidates for new concept notes
+- Check for graph edges suggesting connections not yet captured in wikilinks — if the graph knows a relationship between two concepts and a journal entry mentions both without linking them, add the link
+- Run `graphify --update` on new entries to keep the graph current
+
 ## Rules
 - Read EVERY journal entry in the period. Don't skip or skim.
 - Be specific — use their words, reference entries by name, name people and situations.
