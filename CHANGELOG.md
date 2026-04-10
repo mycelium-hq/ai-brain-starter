@@ -26,6 +26,18 @@ Counters the natural bias toward only journaling when things are hard. One quick
 ### New: Idea quarantine for entrepreneurs
 If you're building something, the journal skill now catches side ideas mid-conversation and parks them in Business/Idea Quarantine.md instead of letting them derail your focus. Also flags escape patterns: "Is this real inspiration or escape from the hard thing?"
 
+### Auto-update check on every session start
+The skill now checks for updates automatically via a session hook — not just when you run /setup-brain. If a newer version exists on GitHub, Claude tells you and offers to update with one command. No manual checking needed.
+
+### Vault Changelog, Content Drafts, and Idea Quarantine created during setup
+Phase 5 now creates Vault Changelog.md (tracks what you build), Content Drafts.md (auto-captures sharp insights from conversations), and Idea Quarantine.md (parks business ideas so they don't derail your main focus). Previously these were referenced in the rules but never actually created.
+
+### "Never fail silently" rule added to generated CLAUDE.md
+Rule 11 in the Obsidian Rules section. If anything fails — file save, install, path issue — Claude must tell you immediately and fix it.
+
+### Journal index for fast date lookups
+New Python script at Meta/scripts/build-journal-index.py creates a JSON index of all journal entries by date. The insights skill reads this index instead of grepping hundreds of files — fixes the bug where /weekly and /monthly found wrong entry counts or timed out on large vaults.
+
 ### New: Living floor notes — updated by weekly/monthly insights
 Floor concept notes now grow over time. After each /weekly or /monthly insight report, the insights skill checks if any floor that appeared 2+ times has a new personal pattern worth capturing — triggers, movement strategies, person-floor correlations, surprises. Appends them under a `## Personal Patterns` section on the floor note. Monthly insights do a deeper review and can update, merge, or retire stale patterns. Over time, clicking [[Fear]] shows YOUR fear patterns, not a textbook definition.
 

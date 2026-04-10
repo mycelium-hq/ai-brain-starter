@@ -321,7 +321,34 @@ Check if `.claude/settings.local.json` exists in the vault. If it does, merge th
 }
 ```
 
-Tell them: "Done. From now on, the first thing I do every session is read your files — automatically, before I say anything. You'll never have to remind me."
+Also add a weekly auto-update check hook. Create or update `.claude/settings.local.json` to include a second hook that checks for skill updates once per session:
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"MANDATORY SESSION PROTOCOL: Before responding to the user, you MUST first read these files in order: 1) The project CLAUDE.md at the vault root 2) Meta/Last Session.md 3) Meta/Current Priorities.md — Do NOT greet the user or respond until all three files have been read. This is non-negotiable.\"}}'",
+            "once": true,
+            "statusMessage": "Loading session context..."
+          },
+          {
+            "type": "command",
+            "command": "cd ~/.claude/skills/ai-brain-starter 2>/dev/null && git fetch origin main --quiet 2>/dev/null && if [ \"$(git rev-parse HEAD 2>/dev/null)\" != \"$(git rev-parse origin/main 2>/dev/null)\" ]; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"AI Brain Starter skill has an update available. Tell the user: There is a newer version of the AI Brain Starter skill. Want me to update? If yes, run git pull in ~/.claude/skills/ai-brain-starter and read CHANGELOG.md to tell them what is new.\"}}'; else echo '{\"continue\":true,\"suppressOutput\":true}'; fi",
+            "once": true,
+            "statusMessage": "Checking for skill updates..."
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Tell them: "Done. From now on, the first thing I do every session is read your files — automatically, before I say anything. And once a week, I'll check if there are updates to the skill and let you know. You'll never have to remind me."
 
 **Decision Log.md:**
 ```markdown
@@ -334,6 +361,50 @@ type: meta
 | Date | Decision | Why | Outcome |
 |------|----------|-----|---------|
 | [today] | Set up AI-powered vault | Want a connected second brain | In progress |
+```
+
+**Vault Changelog.md:**
+```markdown
+---
+creationDate: [today]
+type: meta
+---
+# Vault Changelog
+
+*Everything we've built, improved, or automated — in order. Check here before building something new.*
+
+## [today's date] — Initial Setup
+- Created vault structure with [X] folders
+- Built CLAUDE.md with personal context
+- Set up context layer (priorities, open loops, session tracking)
+- Installed session protocol hook
+- **Impact:** AI orients itself in 10 seconds instead of 15 minutes
+```
+
+**Content Drafts.md** (for auto-capture of sharp insights during conversations):
+```markdown
+---
+creationDate: [today]
+type: meta
+---
+# Content Drafts
+
+*Sharp insights, standalone observations, and ideas that surface during conversations. Batch-captured at end of sessions.*
+
+## Ready to Use
+```
+
+**Idea Quarantine.md** (only create if the user has a business/project):
+```markdown
+---
+creationDate: [today]
+type: meta
+---
+# Idea Quarantine
+
+*New ideas go here to cool off before getting attention. Main project first. Ideas are welcome — but they go in quarantine, not into action.*
+
+## Ideas
 ```
 
 ## Phase 6: Tool Routing
@@ -897,6 +968,15 @@ Add these to their CLAUDE.md under a new section:
 8. CRM on import. When importing anything that mentions people, create or update their CRM entry.
 9. Catch content ideas. If a sharp insight comes up during conversation, save it to a Content Drafts note.
 10. Log decisions. When you make a decision during conversation, append it to a Decision Log with what, why, and date.
+11. NEVER fail silently. If a file save fails, a path doesn't exist, or ANYTHING doesn't work — tell the user immediately and fix it.
+
+## Auto-Update Check
+
+On every session start, check if the ai-brain-starter skill has updates:
+```bash
+cd ~/.claude/skills/ai-brain-starter && git fetch origin main --quiet 2>/dev/null && [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ] && echo "UPDATE AVAILABLE" || echo "UP TO DATE"
+```
+If an update is available, tell the user: "There's a newer version of the AI Brain Starter skill. Want me to update? (`git pull` — takes 2 seconds)." If yes, run `git pull`, read CHANGELOG.md, and tell them what's new in plain English. If they say no, don't ask again this session.
 
 ## Auto-Capture Rules
 
