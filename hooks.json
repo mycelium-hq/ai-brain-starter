@@ -37,6 +37,19 @@
           }
         ]
       }
+    ],
+
+    "PostToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash '[VAULT_PATH]/Meta/scripts/originals-hook.sh'",
+            "statusMessage": "Checking for Originals capture..."
+          }
+        ]
+      }
     ]
   },
 

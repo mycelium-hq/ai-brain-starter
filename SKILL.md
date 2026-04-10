@@ -447,6 +447,73 @@ Also add a weekly auto-update check hook. Create or update `.claude/settings.loc
 
 Tell them: "Done. From now on, the first thing I do every session is read your files — automatically, before I say anything. And once a week, I'll check if there are updates to the skill and let you know. You'll never have to remind me."
 
+Also create the **session-end-hook.sh** script that hardens the Stop hook — it guarantees a timestamp is always saved even if Claude doesn't write the full update:
+
+```bash
+#!/bin/bash
+# Save to: [VAULT_PATH]/Meta/scripts/session-end-hook.sh
+# chmod +x this file after creating it
+
+VAULT="[VAULT_PATH]"
+LAST_SESSION="$VAULT/Meta/Last Session.md"
+SESSION_LOG="$VAULT/Meta/Session Log.md"
+DATE=$(date +%Y-%m-%d)
+TIME=$(date +%H:%M)
+
+# Step 1: Always write a timestamp entry to Session Log (guaranteed, no Claude involvement)
+echo "- $DATE $TIME — session ended" >> "$SESSION_LOG"
+
+# Step 2: Append a stub to Last Session.md if today's date isn't already there
+if [ -f "$LAST_SESSION" ]; then
+  if ! grep -q "^**Date:** $DATE" "$LAST_SESSION" 2>/dev/null; then
+    printf "\n\n---\n*Session ended: $DATE $TIME — update pending*\n" >> "$LAST_SESSION"
+  fi
+fi
+
+# Step 3: Ask Claude to fill in the full update
+echo "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"additionalContext\":\"SESSION ENDING ($DATE $TIME): Update Last Session.md at '$LAST_SESSION' — write today's date, what was done, what's pending. Also: batch any Substack Notes, decision log entries, or vault changelog items.\"}}"
+```
+
+Also create the **originals-hook.sh** script that fires after every Write tool call and reminds Claude to update Wikilink Reference when a new Originals/ file is created:
+
+```bash
+#!/bin/bash
+# Save to: [VAULT_PATH]/Meta/scripts/originals-hook.sh
+# chmod +x this file after creating it
+
+INPUT=$(cat)
+FILE_PATH=$(echo "$INPUT" | python3 -c "
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    path = d.get('tool_input', {}).get('file_path', '')
+    print(path)
+except:
+    print('')
+" 2>/dev/null)
+
+if echo "$FILE_PATH" | grep -q "Originals/"; then
+  BASENAME=$(basename "$FILE_PATH" .md)
+  echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"New Originals file saved: '$BASENAME'. Update Wikilink Reference.md immediately to add this concept and any aliases. Do this before continuing.\"}}"
+else
+  echo "{}"
+fi
+```
+
+Replace the Stop hook path in `.claude/settings.local.json` to point to this script:
+```json
+"Stop": [{"hooks": [{"type": "command", "command": "bash '[VAULT_PATH]/Meta/scripts/session-end-hook.sh'", "statusMessage": "Saving session context..."}]}]
+```
+
+And add the PostToolUse hook for Originals/ protection:
+```json
+"PostToolUse": [{"matcher": "Write", "hooks": [{"type": "command", "command": "bash '[VAULT_PATH]/Meta/scripts/originals-hook.sh'", "statusMessage": "Checking for Originals capture..."}]}]
+```
+
+After creating both scripts, run: `chmod +x "[VAULT_PATH]/Meta/scripts/session-end-hook.sh" "[VAULT_PATH]/Meta/scripts/originals-hook.sh"`
+
+The full hook template (UserPromptSubmit + Stop + PreCompact + PostToolUse) is in `hooks.json` at the repo root. After any `git pull`, compare it to your `.claude/settings.local.json` to see if hooks have been updated.
+
 **Decision Log.md:**
 ```markdown
 ---
@@ -1835,6 +1902,46 @@ Just type: **/optimize-brain**
 That's a weekend project, not an afternoon one — but it's where the real magic happens. Your vault goes from organized to intelligent.
 
 For now — just use it. Journal. Add notes. Ask me things. The system compounds over time."
+
+## Phase 22: Instinct Engine — /patterns skill
+
+"Last thing — and this might be the most underrated part. Every time we have a deep session, patterns form. A metaphor you use twice. A framework you keep reaching for. A decision logic that repeats. Without a capture habit, they evaporate. The Instinct Engine fixes that."
+
+Ask: "Do you want to set up a `/patterns` command that extracts recurring patterns from your sessions and turns them into captures — Originals files, new CLAUDE.md rules, concept notes?"
+
+If yes:
+
+Create `~/.claude/skills/patterns/` and copy the skill template from this repo:
+```bash
+mkdir -p ~/.claude/skills/patterns
+cp [REPO_PATH]/skills/patterns/SKILL.md ~/.claude/skills/patterns/SKILL.md
+```
+
+Then replace the `[VAULT]` placeholder with their actual vault path:
+```bash
+sed -i '' "s|\[VAULT\]|[VAULT_PATH]|g" ~/.claude/skills/patterns/SKILL.md
+```
+
+Add the `/patterns` routing to their CLAUDE.md (global at `~/.claude/CLAUDE.md` if it exists, or the vault root):
+
+```markdown
+# patterns (Instinct Engine)
+- **patterns** (`~/.claude/skills/patterns/SKILL.md`) — extract recurring patterns from sessions and turn them into captures (Originals/, CLAUDE.md rules, concept notes, skill improvements). Trigger: `/patterns`
+When the user types `/patterns`, invoke the Skill tool with `skill: "patterns"` before doing anything else.
+```
+
+Also add to their vault CLAUDE.md Efficiency Rules:
+```
+- Run `/patterns` after `/weekly` or any deep session to capture recurring patterns before they evaporate.
+```
+
+Tell the user: "Now when you notice a pattern forming — a phrase you keep using, a framework you keep reaching for, a decision loop you keep hitting — type `/patterns`. It scans your recent sessions and surfaces up to 5 proposals. You confirm which ones to capture. Five minutes. Nothing gets lost."
+
+**How to use it:**
+- After `/weekly` — surface what the week's entries reveal about recurring patterns
+- After a heavy journaling session — capture frameworks that surfaced
+- Whenever a theme keeps coming up — "I keep saying [X]" → run `/patterns`
+- Monthly: review what's hardening into real belief vs. what was just a phase
 
 ## Important Notes for Claude
 

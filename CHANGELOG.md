@@ -9,6 +9,19 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 10, 2026 (second session)
+
+### New: /patterns — Instinct Engine
+The biggest gap in most second brains: patterns form during sessions, then evaporate. The Instinct Engine fixes this. Type `/patterns` after `/weekly` or any heavy session and it scans your recent journals, decisions, and drafts for recurring themes, frameworks, metaphors, and behavioral loops. It surfaces up to 5 proposals — Originals/ captures, new CLAUDE.md rules, concept notes — and executes the ones you confirm. Added as Phase 22 in setup. Skill template lives at `skills/patterns/SKILL.md` — setup copies and configures it for your vault path.
+
+### New: Hardened Stop hook + session-end-hook.sh
+The Stop hook now runs a bash script instead of just echoing a prompt. The script writes a guaranteed timestamp to `Meta/Session Log.md` every session (no Claude involvement) and appends a stub to `Last Session.md` so the date is always saved even if Claude doesn't complete the full update. Phase 5 now includes instructions to create and chmod this script.
+
+### New: PostToolUse hook for Originals/ protection
+A new PostToolUse hook fires after every Write tool call. If the written file is inside `Originals/`, it immediately prompts Claude to update Wikilink Reference.md before doing anything else. Closes the gap where Originals/ captures were saved but not linked. The hook script (`originals-hook.sh`) is created during Phase 5 setup. Also added to `hooks.json`.
+
+---
+
 ## April 10, 2026
 
 ### New: hooks.json — updatable hook templates
