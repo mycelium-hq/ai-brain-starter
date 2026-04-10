@@ -26,6 +26,9 @@ Counters the natural bias toward only journaling when things are hard. One quick
 ### New: Idea quarantine for entrepreneurs
 If you're building something, the journal skill now catches side ideas mid-conversation and parks them in Business/Idea Quarantine.md instead of letting them derail your focus. Also flags escape patterns: "Is this real inspiration or escape from the hard thing?"
 
+### New: /team-weekly — operational digest for team vaults
+If you set up a team vault (Phase 20), the setup now creates a /team-weekly skill that generates a weekly operational digest: meetings, pipeline, sales, product updates, decisions, and open loops. Scans all files modified in the past 7 days across the team vault. Saves to both team and personal vault. Business only — no journals or personal content.
+
 ### Auto-update check on every session start
 The skill now checks for updates automatically via a session hook — not just when you run /setup-brain. If a newer version exists on GitHub, Claude tells you and offers to update with one command. No manual checking needed.
 

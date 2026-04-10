@@ -1506,7 +1506,72 @@ Create a `First Time Setup.md` in the team vault's Meta folder that tells team m
 6. The team vault has its own CLAUDE.md — Claude will know the business context automatically
 7. For personal use, set up their own vault with /setup-brain
 
-Tell the user: "Your team vault is ready. Share the Google Drive folder with your team and send them the First Time Setup note. They'll have full context from day one."
+### Step 5: Create /team-weekly skill
+
+Create a team weekly digest skill at `~/.claude/skills/team-weekly/SKILL.md`:
+
+```markdown
+---
+name: team-weekly
+description: Weekly operational digest for the team. Scans meeting notes, CRM changes, strategy updates, sales activity, and decisions from the past week. Use /team-weekly to generate.
+---
+
+# Team Weekly Digest
+
+Generate a weekly operational report by scanning all changes across the team vault in the past 7 days.
+
+## How to Find Recent Files
+
+Use `find "[TEAM_VAULT_PATH]" -name "*.md" -mtime -7` to get files modified in the past 7 days. Read only those files.
+
+## Report Structure
+
+### 1. This Week at a Glance
+- Date range (Mon–Sun)
+- Files modified, meetings held, new contacts
+- One-line summary
+
+### 2. Meetings & Conversations
+For each meeting note: who, what, decisions, action items (done vs. open)
+
+### 3. Pipeline & Sales
+New leads, outreach sent, deals moved, revenue updates
+
+### 4. Product & Team
+What was shipped, blockers, team changes
+
+### 5. Decisions Made
+From Decision Log — business decisions this week
+
+### 6. Open Loops
+Unresolved heading into next week
+
+### 7. Next Week Focus
+Top 3 priorities for next week
+
+## Save Location
+- Team vault: `[TEAM_VAULT_PATH]/Strategy/Weekly Digests/YYYY-WXX Team Weekly.md`
+- Personal vault: `[PERSONAL_VAULT_PATH]/[PROJECT_FOLDER]/Weekly Digests/YYYY-WXX Team Weekly.md`
+
+## Rules
+- Business only — no personal journal content or floor tags
+- Name people, meetings, amounts — be specific
+- Compare to last week when data exists
+- Flag risks: overdue follow-ups, stalled deals, missed deadlines
+- NEVER fail silently. Verify both saves.
+```
+
+Replace `[TEAM_VAULT_PATH]`, `[PERSONAL_VAULT_PATH]`, and `[PROJECT_FOLDER]` with the user's actual paths.
+
+Add routing to the user's CLAUDE.md:
+
+```markdown
+# team weekly
+- **team-weekly** (`~/.claude/skills/team-weekly/SKILL.md`) — weekly team operational digest. Trigger: `/team-weekly`
+When the user types `/team-weekly`, invoke the Skill tool with `skill: "team-weekly"` before doing anything else.
+```
+
+Tell the user: "Your team vault is ready. Share the Google Drive folder with your team and send them the First Time Setup note. They'll have full context from day one. Type `/team-weekly` anytime to get a digest of what happened this week across the team."
 
 ## Phase 21: What's Next
 
@@ -1517,6 +1582,7 @@ Tell the user: "Your team vault is ready. Share the Google Drive folder with you
 - Power tools for efficiency
 - A daily journal with floor tagging and habit tracking
 - Weekly and monthly insight reports (/weekly and /monthly)
+- A team weekly digest (/team-weekly) if you have a team vault
 - Accountability rules so I push back, not just agree
 - A team vault synced from your personal one (if you set it up)
 
