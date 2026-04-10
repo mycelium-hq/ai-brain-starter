@@ -9,7 +9,30 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
-## April 10, 2026
+## April 10, 2026 (evening)
+
+### Journal skill completely rewritten — the biggest update yet
+The journal skill template was a skeleton — it told Claude "include habit tracking" but didn't specify HOW. Now it's fully prescriptive with 8 explicit steps: opening question, deep follow-up logic, abundance/gratitude check, accountability check with pushback loops, idea quarantine for entrepreneurs, floor identification with all 16 floors defined, 3-4 advisory panel reactions (up from 1-2) with the full panel built into the skill, and post-save verification so entries never get lost silently.
+
+### New: Accountability check in journal
+During setup, you're now asked: "Do you want me to hold you accountable on anything?" with examples like gym consistency, sleep time, scrolling habits, and spending patterns. Whatever you choose gets built into your journal skill with specific pushback logic — not just "did you work out?" but "You're at 2/4 this week. When are you going tomorrow?"
+
+### New: 19 floor concept notes created during setup
+When you opt into floor tagging, the setup now creates a concept note for each of the 16 floors plus 3 tier notes (Low, Middle, High Floors). Each floor note explains what it feels like, lists signals, suggests how to move up, and links back to the Substack article "The Internal High-Rise — Peace Is a Place You Can Live." Click [[Fear]] in a journal entry and you land on a page that shows you every entry you've ever written from that floor.
+
+### New: Abundance/gratitude check in every journal entry
+Counters the natural bias toward only journaling when things are hard. One quick question: "What's one thing you have right now that you're grateful for?" The answer gets woven into the entry naturally.
+
+### New: Idea quarantine for entrepreneurs
+If you're building something, the journal skill now catches side ideas mid-conversation and parks them in Business/Idea Quarantine.md instead of letting them derail your focus. Also flags escape patterns: "Is this real inspiration or escape from the hard thing?"
+
+### Setup no longer stops mid-flow
+Previously, Claude might stop after the journal phase and wait for you to ask "what's next?" Now it automatically continues through all 21 phases unless you explicitly say to pause.
+
+### Phase 13 streamlined
+Health & Habit Tracking was redundant with the journal skill. Now Phase 13 only covers importing external health data (Apple Health, Fitbit, etc.). Basic habit tracking is handled in Phase 10.
+
+---
 
 ### Advisory panel reactions in daily journal
 Your daily journal entries now get 1-2 advisor reactions after saving — short, in-character sentences from the same 50+ voice panel used in weekly/monthly insights. Instead of just saving and moving on, Claude picks the 1-2 advisors most relevant to what came up and gives you a quick outside perspective. It's like having Naval or Brene Brown read your journal entry and give you one sentence back.

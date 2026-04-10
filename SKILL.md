@@ -479,11 +479,14 @@ Tell the user what's installed: "You have [X] power tools running. Here's what e
 
 Ask: "Want to set up a daily journal routine? Here's how it works: you type /journal, I ask you about your day, we talk for a few minutes, and I save the entry to your vault automatically. Over time it builds a map of your patterns, emotions, and growth."
 
-If yes, ask:
+If yes, ask these questions one at a time (conversational, not a form):
 1. "What time of day would you usually journal? (morning reflection or evening wind-down?)"
 2. "What do you want me to ask about? (work, emotions, relationships, health, all of it?)"
-3. "Do you want me to track anything? (gym, sleep, mood, habits?)"
+3. "Do you want me to track any habits? Things like gym days, sleep time, mood, water intake, meditation, screen time? I'll ask about them each session and log them in the entry."
 4. "How raw do you want the entries? (polished or stream-of-consciousness?)"
+5. "Do you want me to hold you accountable on anything? For example: gym consistency ('you said 4x/week, you're at 2'), sleep time ('that's the late-bed spiral again'), scrolling habits ('any scroll holes today?'), spending patterns, or anything else you tend to let slide. I'll check in on these during each journal session — coach energy, not parent energy. What matters to you?"
+
+Save their answers — you'll use ALL of them when building the journal skill below.
 
 ### Emotional floor tagging
 
@@ -501,32 +504,250 @@ After each journal conversation, I'll identify which floor you're on and tag the
 
 If this isn't your thing, just tell me 'turn off floor tagging' and I'll skip it."
 
+### Create floor concept notes
+
+If the user opts in to floor tagging, create a concept note for each of the 16 floors in their vault. These notes serve two purposes: (1) when they click a floor wikilink like `[[Fear]]` in a journal entry, they see what that floor means and all their entries tagged with it, and (2) each note links back to the Substack article for deeper reading.
+
+Save each floor note to `[VAULT_PATH]/Notes/` (or whatever their concept folder is called). Create all 16:
+
+```markdown
+---
+creationDate: [today]
+type: concept
+floor_tier: [low/middle/high]
+floor_number: [1-16]
+aliases: [lowercase version, e.g. "fear", "fearful"]
+---
+
+**Floor [number] of 16** · [[{Level} Floors]]
+
+[2-3 sentence description of what this floor feels like. Write it in second person — "You feel..." Make it recognizable, not clinical.]
+
+**Signals:** [3-5 common signs you're on this floor — thoughts, behaviors, body sensations]
+
+**Movement:** To move up from here, [1-2 sentences on what helps]
+
+**Read more:** [The Internal High-Rise — Peace Is a Place You Can Live](https://adelaidadiazroa.substack.com/p/the-internal-high-rise-peace-is-a)
+
+## All entries on this floor
+
+```dataview
+TABLE creationDate as Date, floor_level as Level
+FROM "Journals"
+WHERE floor = "[Floor Name]"
+SORT creationDate DESC
+```
+```
+
+**The 16 floors (create one note each):**
+1. **Shame** (low) — Self-disgust, hiding, "I am the problem." The lowest floor. Everything feels broken and it's your fault.
+2. **Guilt** (low) — "I should be doing more." Not enough. Letting people down. Productive self-blame.
+3. **Apathy** (low) — "Nothing matters." Checked out, numb, Netflix spiral. The floor where you stop trying.
+4. **Grief** (low) — Loss, sadness, missing. Something was taken or ended. The floor of letting go.
+5. **Fear** (low) — Anxiety, "what if," imposter feelings. The floor that keeps you from starting.
+6. **Desire** (low) — Wanting, craving, reaching. Ambition mixed with lack. "If I just had X, then..."
+7. **Anger** (low) — Frustration, injustice, someone not matching effort. Energy that needs direction.
+8. **Pride** (low) — Proving something, competitive, needing external validation. The top of the low floors.
+9. **Courage** (middle) — Taking action despite fear. Showing up. The floor where everything changes.
+10. **Neutrality** (middle) — Calm observation. "It is what it is." Processing without emotional charge.
+11. **Willingness** (middle) — Open, optimistic restart. "I'm getting back on track."
+12. **Acceptance** (middle) — Making peace with reality. Letting go of control. Not resignation — release.
+13. **Reason** (middle) — Clear-headed, analytical, strategic. The thinking floor.
+14. **Love** (high) — Connection, gratitude, warmth. Giving freely. The floor where relationships transform.
+15. **Joy** (high) — Delight, laughter, alive. "Best day ever" energy. Rare in journals — capture it when it shows up.
+16. **Peace** (high) — Stillness, presence, nothing to fix. Enough as-is. The top floor. Not happiness — something deeper.
+
+Also create three tier notes:
+- `Low Floors.md` — Floors 1-8, the reactive floors. "You're responding to the world, not choosing."
+- `Middle Floors.md` — Floors 9-13, the transitional floors. "You're starting to choose how you respond."
+- `High Floors.md` — Floors 14-16, the generative floors. "You're creating, not reacting."
+
+Each tier note should include a Dataview query showing recent journal entries on that tier and a link to the Substack article.
+
 ### Building the journal skill
 
-Create a journal skill customized to their answers. Save it to ~/.claude/skills/daily-journal/SKILL.md.
+Create a journal skill customized to their answers. Save it to `~/.claude/skills/daily-journal/SKILL.md`.
 
-The journal skill should include:
-1. **Opening question** — warm, casual, matched to time of day
-2. **Follow-up questions** (2-4) — dig deeper, don't accept "fine" or "good"
-3. **Habit tracking** — whatever they said they want to track (gym, sleep, mood, etc.)
-4. **Floor identification** — identify the primary emotional floor and tag the entry
-5. **Save format:**
+**IMPORTANT: The skill you generate must be PRESCRIPTIVE and COMPLETE. Do NOT generate a skeleton that relies on Claude's judgment at runtime. Every step, every question, every format must be spelled out explicitly in the skill file. A vague instruction like "ask about habits" will produce inconsistent results. Instead write the exact questions, the exact follow-up logic, and the exact format. The skill file IS the specification — if it's not in the file, it won't happen.**
+
+The journal skill MUST include ALL of the following steps, in this order:
+
+#### Step 1: Opening question
+Warm, casual, matched to time of day. ONE question, don't overwhelm.
+- Morning: "Hey! How are you waking up today? What's on your mind?"
+- Afternoon: "How's the day going so far? Anything standing out?"
+- Evening: "How was today? What's sitting with you right now?"
+
+#### Step 2: Follow the thread (2-4 follow-up questions)
+Based on their answer, dig deeper. Be curious, not clinical. Include these specific behaviors in the skill:
+- If they mention **work**: "How does that make you feel about where things are headed?" or "Is that exciting or stressful or both?"
+- If they mention **a person**: "What floor did that interaction put you on?" or "How did you feel after?"
+- If they mention **feeling good**: "What specifically made it good? I want to capture this one." (Most people document bad days in detail but skip over good ones — push here.)
+- If they mention **feeling bad**: "Is this a familiar pattern or something new?" or "What would the High-Rise say about where you are right now?"
+- If they seem surface-level: "What's underneath that?" or "If you were writing this at 1am with no filter, what would you actually say?"
+- Don't let them off the hook with "I'm fine" — gently dig.
+- Use their language back to them.
+- Celebrate wins they'd normally skip over.
+
+#### Step 2.5: Abundance / gratitude check
+Ask ONE quick question about present abundance:
+- "What's one thing you have right now — financially, personally, anything — that you're grateful for?"
+- Even "I had a great dinner" or "I can pay my rent" counts.
+- This counters the natural bias toward only journaling when things are hard. The good stuff is there — it just doesn't get written down. Include the answer naturally in the entry.
+
+#### Step 3: Accountability check
+Based on what the user said they want to be held accountable on (question 5 from setup), build a SPECIFIC accountability check into the skill. For each item they chose, include:
+
+**The pattern:** What to ask, what a good answer looks like, what a bad answer looks like, and what to say for each.
+
+Example structures (adapt to whatever they actually asked for):
+
+**Gym / exercise:**
+- "Did you hit the gym today?" or "How many gym days this week so far?"
+- If below their target: "You're at [X] for the week. You said [target]. When are you going tomorrow?"
+- If on track: "Nice. That's [X] this week. The streak is building."
+- Log the count in the entry.
+
+**Sleep:**
+- "What time did you go to bed last night?"
+- If past their target: "That's the late bed -> tired tomorrow -> unproductive -> guilt spiral pattern. Phone in another room tonight?"
+- If reasonable: Note it positively.
+
+**Scrolling / screen time:**
+- "Any scroll holes or binge sessions today?"
+- If yes: Flag the pattern without judgment. "That's the crash after a sprint. Normal. But let's not let it become a streak."
+
+**Spending / money:**
+- If they mentioned spending: "Can you afford that without it stinging after?"
+
+**Other habits:** Follow the same structure — ask, compare to their stated goal, push gently if behind, celebrate if on track.
+
+**Key principle: Coach energy, not parent energy.** Direct but not nagging. Track the data. Name the patterns. Don't lecture.
+
+#### Step 3.5: Idea quarantine check (for entrepreneurs/builders)
+If the user mentioned during setup that they're working on a business or project, include this step in the skill:
+- If a new business idea or "what if I built..." moment comes up during the conversation, DON'T let it derail. Note it, and after saving the journal entry, append it to an `Idea Quarantine` section in their vault (create `Business/Idea Quarantine.md` if it doesn't exist).
+- Format: `- **[YYYY-MM-DD]** — [the idea, 1-2 sentences] *(from journal)*`
+- Tell the user: "I caught an idea in there — parked it in Idea Quarantine so it doesn't distract but doesn't get lost."
+- If they're excited about a side idea during a hard stretch on their main project, name it: "Is this real inspiration or escape from the hard thing?"
+
+Skip this step entirely for users who aren't building something.
+
+#### Step 4: Identify the floor
+Based on everything they said, identify the PRIMARY floor:
+
+**Low Floors:**
+- Shame — "I'm such an idiot," self-disgust, hiding
+- Guilt — "I should be doing more," not enough, letting people down
+- Apathy — "Nothing matters," checked out, numb, Netflix spiral
+- Grief — Loss, sadness, missing someone/something, killed mood
+- Fear — Anxiety, "what if," scared, uncertain, imposter feelings
+- Desire — Wanting, craving, reaching, ambition mixed with lack
+- Anger — Frustration, someone not matching effort, disrespect
+- Pride — Proving something, competitive, need for external validation
+
+**Middle Floors:**
+- Courage — Taking action despite fear, showing up, doing the hard thing
+- Neutrality — Calm observation, "it is what it is," processing without charge
+- Willingness — "Getting back on track," optimistic restart, open to trying
+- Acceptance — Making peace with reality, letting go of control
+- Reason — Analytical, strategic, clear-headed problem solving
+
+**High Floors:**
+- Love — Connection, gratitude, warmth, feeling held, giving freely
+- Joy — Delight, fun, laughter, alive, "best day ever" energy
+- Peace — Stillness, presence, nothing to fix, enough as-is
+
+#### Step 5: Advisory panel (3-4 advisors)
+Select the **3-4 most relevant advisors** from the panel below based on what came up in the conversation. Give a brief, in-character perspective — 1-2 sentences per advisor, in their authentic voice. Not a full panel discussion, just the sharpest insight each would offer on today's situation.
+
+**The Advisory Panel:**
+
+*Wealth & Strategy:*
+Naval Ravikant (leverage, freedom-through-clarity) · Warren Buffett (patience, circle of competence) · Ray Dalio (principles, macro cycles) · Alex Hormozi (execution, offers, scaling) · Marc Andreessen (tech thesis, founder empathy) · Howard Marks (risk, second-level thinking)
+
+*Leadership & Execution:*
+Sheryl Sandberg (org scale, people systems) · Keith Rabois (execution, cadence) · Patrick Collison (speed + quality) · Reid Hoffman (network strategy, blitzscaling) · Adam Grant (org psych, generosity) · Tony Robbins (state management, peak performance)
+
+*Psychology & Inner Work:*
+Brene Brown (vulnerability, shame research, courage) · Robert Greene (power dynamics, strategy) · Gabor Mate (root wounds, compassion-led healing) · Martin Seligman (strengths, flourishing) · Dr. Emily Anhalt (emotional fitness for founders)
+
+*Relationships:*
+Esther Perel (erotic intelligence, polarity) · Alain de Botton (love as education) · Terry Real (empowered love, boundaries)
+
+*Health & Body:*
+Dr. Peter Attia (longevity, metric-driven protocols) · Dr. Chris Winter (sleep architecture) · Dr. Rhonda Patrick (micronutrients, cellular health)
+
+*Wisdom & Meaning:*
+Thich Nhat Hanh (mindful presence, compassion) · Marcus Aurelius (agency, serenity, controllables) · Mo Gawdat (happiness as OS) · Maya Angelou (purpose, grace, authentic voice)
+
+*Creativity:*
+Rick Rubin (presence, subtractive genius) · Elizabeth Gilbert (creative courage, fear alchemy)
+
+**Panel rules:**
+- Select 3-4 most relevant based on what came up today
+- Each speaks in their authentic voice, 1-2 sentences
+- Challenge assumptions where useful — not consensus for its own sake
+- Keep it tight. This is a daily nudge, not a full session.
+
+#### Step 6: Confirm and save
+Tell the user: "Okay, I've got your entry. Here's what I'm hearing — [brief summary]. I'd tag this as [Floor]. The panel says [1-line summary]. Sound right?"
+
+If they confirm (or adjust), save the entry.
+
+#### Step 7: Save the journal entry
+
+**File location:** `[VAULT_PATH]/Journals/` — use the vault path from setup. This MUST be the user's actual vault path, verified during Phase 3.
+
+**Filename format:** Descriptive title from the content (5-8 words, Title Case):
+- "Great Meeting Feeling Momentum.md"
+- "Hard Conversation Stayed Calm.md"
+- "Low Energy But Got Through It.md"
+
+**Entry format:**
+
 ```markdown
 ---
 creationDate: YYYY-MM-DDTHH:MM
 floor: [Floor name]
 floor_level: [low/middle/high]
-[any habit fields they requested, e.g. gym: 3/4, sleep: 11pm]
+[any habit fields they requested, e.g. gym_count: 3, sleep_time: 11pm]
 ---
-[Journal entry in first person, their voice, stream of consciousness]
+[The journal entry — written in FIRST PERSON as the user, in their voice. Stream of consciousness, casual, honest. Include the details they shared. Don't clean it up too much — journals should be raw and real. But DO capture insights that surfaced during the conversation that they wouldn't have written on their own.]
+
+[Include the abundance/gratitude note naturally woven in.]
+
+[Accountability tracking line, e.g.:]
+**Gym:** [X]/[target] this week · **Sleep:** [time to bed] · **Scroll check:** [clean/flagged]
+
+**Panel insight:** [The 1-2 best lines from the advisory panel today]
 
 *Floor: [[{Floor}]] · [[{Level} Floors]]*
 
 ## Concepts
 [[Tag1]] | [[Tag2]] | [[Tag3]]
 ```
-6. **After saving:** Tell them the filename, the floor, and if relevant connect to a pattern ("This is your 3rd Courage entry this week — you're on a streak" or "Last time this person came up, you were on Anger. Today it's Acceptance. That's movement.")
-7. **Advisory panel reaction (1-2 advisors):** After saving, select 1-2 advisors from the panel (defined in Phase 18's insights skill) whose perspective is most relevant to what came up. Give a short, in-character reaction — one sentence each. This isn't therapy, it's a smart friend with range. Keep it tight. Example: *Naval: "You're confusing being busy with being productive. The real leverage is in the thing you keep avoiding." Brené Brown: "That conversation with your sister — you stayed in the arena. That's courage, even when it doesn't feel like winning."*
+
+**CRITICAL — Post-save verification:**
+After writing the file, VERIFY it exists and is not empty. Use the Read tool to confirm the file was saved. If the save fails for any reason (wrong path, missing folder, permissions), TELL THE USER IMMEDIATELY. Say what failed and offer to retry. **Never let a journal entry be lost.**
+
+#### Step 8: After saving
+Tell them the file name and floor. Connect to patterns when possible:
+- "This is your 3rd Courage entry this month — you're on a streak."
+- "Last time that person came up, you were on Anger. Today it's Acceptance. That's movement."
+- "You mentioned money stress + a new idea in the same breath. Classic escape pattern. Just flagging it."
+- If an idea was quarantined: "Parked [idea] in Idea Quarantine. Main project first. But it's saved."
+- Habit count: "You're at [X]/[target] this week. [Encouragement or push as appropriate.]"
+
+**Important principles for the generated skill:**
+- Write the entry AS the user, not about them
+- Keep their voice — people write journals in long flowing paragraphs, thinking out loud
+- Include specific details (names, places, what happened)
+- If they surfaced something new in the conversation that surprised them, make sure it lands in the entry
+- Don't over-polish. The best entries are messy and real.
+- The floor tag goes before ## Concepts
+- Use `[[wikilinks]]` for all concept references
+- **Good days matter.** Most people only journal in detail when things are bad. Push for detail on good days too — these are the entries they'll want to read later.
 
 ### Add /journal routing to CLAUDE.md
 
@@ -591,20 +812,19 @@ After import:
 - Add wikilinks to concepts that match existing vault notes
 - "Your reading and your thinking are now connected. When you write about a topic, your book highlights surface as context."
 
-## Phase 13: Health & Habit Tracking (Optional)
+## Phase 13: Health Data Import (Optional)
 
-Ask: "Do you want to track any habits or health data? (gym, sleep, mood, water, meditation, anything?)"
+**Note:** Basic habit tracking (gym, sleep, mood, scrolling) is already built into the journal skill from Phase 10. This phase is ONLY for importing external health data sources.
 
-If yes, ask what they want to track. Common ones:
-- Gym (days per week, what they did)
-- Sleep (bedtime, hours)
-- Mood or energy level
-- Meditation or mindfulness
-- Screen time / scrolling
+Ask: "Do you use any health tracking devices or apps? (Apple Health, Fitbit, Garmin, Oura, Whoop?)"
 
-Build the tracking into their journal skill: "I'll ask about these at the end of each journal entry and include them as a quick line. Not a spreadsheet — just a note at the bottom like: **Gym:** 3/4 this week · **Sleep:** 11pm · **Mood:** good."
+If yes: "We can import your health data and cross-reference it with your journal entries. Imagine asking 'what do my best weeks have in common?' and getting back: gym 4x, sleep before midnight, no social media after 9pm. The habit tracking from your journal gives you the subjective data — this gives you the objective data."
 
-If they have Apple Health, Fitbit, Garmin, or Oura data: "We can import your health data and cross-reference it with your journal entries. Imagine asking 'what do my best weeks have in common?' and getting back: gym 4x, sleep before midnight, no social media after 9pm."
+Walk through their specific source:
+- **Apple Health:** Export via Apple Health app → Share → Export All Health Data. Creates a zip with XML. We can parse steps, sleep, heart rate, workouts into YAML frontmatter on journal entries.
+- **Fitbit / Garmin / Oura / Whoop:** Check if they have API access or export options. Some have Obsidian community plugins.
+
+If they don't have any health devices, skip this phase entirely — Phase 10 already handles the habit tracking.
 
 ## Phase 14: Build Your Concept Taxonomy
 
@@ -1097,11 +1317,15 @@ For now — just use it. Journal. Add notes. Ask me things. The system compounds
 ## Important Notes for Claude
 
 - GO SLOW. Wait for answers. Don't dump instructions.
-- If they seem overwhelmed, say: "We can stop here and pick up the rest tomorrow. What we've done so far is already working."
+- **NEVER STOP MID-SETUP.** After completing each phase, ALWAYS continue to the next phase automatically. Do not wait for the user to ask "what's next?" — tell them what's coming and proceed. The only reasons to pause are: (1) the user explicitly says "let's stop here" or "I need a break," (2) a critical install failed and needs manual intervention, or (3) the user asks a question that needs answering before continuing. After the journal phase especially — there are 10+ more phases. Don't stop there.
+- At the start of each phase, briefly tell the user where they are: "Phase [X] of 21: [Name]. This is where we [one sentence]."
+- If context gets compressed mid-setup (long session), re-read SKILL.md to pick up where you left off. Check which phases are done by looking at what exists in the vault (folders, CLAUDE.md, skills, templates).
+- If they seem overwhelmed, say: "We can stop here and pick up the rest tomorrow. What we've done so far is already working." But default is to KEEP GOING.
 - Adapt the folder structure to their life, not a template.
 - If they're not technical, explain terminal commands step by step. "Open Terminal. That's the app with the black screen icon."
 - Celebrate milestones: "Your CLAUDE.md is done — that's the biggest piece."
 - If any install fails, troubleshoot calmly. Don't skip it or panic.
 - Match their energy. If they're excited, move fast. If they're cautious, explain more.
 - This should feel like a conversation with a smart friend who's helping them set up their system, not a software installer.
+- **NEVER FAIL SILENTLY.** If any file save, install, or operation fails — tell the user immediately. Say what failed, why, and offer to fix it.
 - **NEVER FAIL SILENTLY.** After every file write, verify the file exists. After every install, verify it worked. If ANYTHING fails — wrong path, missing folder, permission error, install timeout — TELL THE USER IMMEDIATELY. Say what failed, why, and how to fix it. Then FIX IT — create the missing folder, correct the path, retry the install. Don't just report the problem; solve it. People are trusting this skill with their personal data. Losing a journal entry or a CLAUDE.md because of a silent failure is unacceptable.
