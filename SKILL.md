@@ -463,7 +463,7 @@ if [ -f "$LAST_SESSION" ]; then
 fi
 
 # Step 3: Ask Claude to fill in the full update
-echo "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"additionalContext\":\"SESSION ENDING ($DATE $TIME): Update Last Session.md at '$LAST_SESSION' — write today's date, what was done, what's pending. Also: batch any Substack Notes, decision log entries, or vault changelog items.\"}}"
+echo "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"additionalContext\":\"SESSION ENDING ($DATE $TIME): Update Last Session.md at '$LAST_SESSION' — write today's date, what was done, what's pending. VERBATIM RULE: For any commitments made during this session, capture the EXACT words used (e.g. 'I will send this today' not 'committed to sending'). Same for key decisions — preserve the reasoning in original phrasing. Also save any non-obvious technical discoveries as memory files (type: discovery). Also: batch any Substack Notes, decision log entries, or vault changelog items.\"}}"
 ```
 
 Also create the **write-hook.sh** script that fires after every Write tool call. It auto-triggers meeting-todos extraction when a meeting note is saved:
@@ -1271,7 +1271,7 @@ Add these to their CLAUDE.md under a new section:
 
 1. Always wikilink. First occurrence per file. Use alias syntax: [[Concept|natural text]]
 2. Block references for quotes. Never copy-paste text between notes. Use ^block-id at end of source paragraph + ![[File#^block-id]] to embed. This keeps a single source of truth.
-3. YAML frontmatter on every note. Minimum: creationDate. Add type: (concept/journal/person/article) where applicable
+3. YAML frontmatter on every note. Minimum: creationDate. Add type: (concept/journal/person/article/discovery) where applicable
 4. Aliases in frontmatter for flexible linking: aliases: [nickname, abbreviation]
 5. New concepts get their own note. In the right folder with a description and connected concepts.
 6. Descriptive file names. When importing files, rename cryptic names to descriptive ones. No source prefixes ("Slack - ", "Google Drive - ").
@@ -1289,7 +1289,8 @@ Add these to their CLAUDE.md under a new section:
 1. Scripts over agents for bulk/mechanical operations. 10+ similar edits → one script.
 2. Read files once. Work from memory after first read.
 3. Batch auto-captures. Content ideas, decisions, vault improvements — batch at end of session, don't interrupt the conversation to log them.
-4. Don't do things without confirming first.
+4. Save discoveries. When you figure out something non-obvious through debugging or investigation (an API that behaves unexpectedly, a tool quirk, a pattern that doesn't work as expected), save it as a memory file with type: discovery. Lead with the fact, then Why it matters and Source. This prevents future sessions from re-learning the same thing.
+5. Don't do things without confirming first.
 5. Route to the right tool. Check the Tool Routing table. Don't burn Claude tokens when another tool is faster.
 
 ## Auto-Update Check

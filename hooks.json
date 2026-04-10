@@ -20,7 +20,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"additionalContext\":\"SESSION ENDING. Before you stop: update Meta/Last Session.md with what was done, what is pending, and any decisions made. If you modified any Onde-related files, also sync to the team vault. Do not skip this — it is the only handoff to the next session.\"}}'",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"additionalContext\":\"SESSION ENDING. Before you stop: update Meta/Last Session.md with what was done, what is pending, and any decisions made. VERBATIM RULE: For any commitments made during this session, capture the EXACT words used (e.g. I will send this today not committed to sending). Same for key decisions — preserve the reasoning in original phrasing. Also save any non-obvious technical discoveries as memory files (type: discovery). Do not skip this — it is the only handoff to the next session.\"}}'",
             "statusMessage": "Saving session context..."
           }
         ]
@@ -32,7 +32,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreCompact\",\"additionalContext\":\"BEFORE COMPACTING: You are about to lose context. Before compaction proceeds, write a brief summary of this session to Meta/Last Session.md including: what was done, what is pending, any decisions made, and any file paths or details you will need after compaction.\"}}'",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreCompact\",\"additionalContext\":\"BEFORE COMPACTING: You are about to lose context. Before compaction proceeds, update Meta/Last Session.md with: what was done, what is pending, and any decisions made. VERBATIM RULE: For commitments (by anyone), preserve EXACT words used — not summaries. For key decisions, keep the original reasoning phrasing. Also preserve file paths and specific details you will need after compaction. Save any non-obvious technical discoveries as memory files (type: discovery).\"}}'",
             "statusMessage": "Preserving session context before compaction..."
           }
         ]
