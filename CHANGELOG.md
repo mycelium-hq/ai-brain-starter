@@ -9,6 +9,31 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 10, 2026 (sixth session — graphify cost optimization)
+
+### Big: graphify wrapper scripts (cut LLM cost by 80–92%)
+Running `/graphify` on a notes vault used to be expensive. A naive run on a ~1,500-file vault would burn ~10M LLM tokens because the upstream graphify skill re-extracts every wikilink the LLM finds, and many vaults have hidden duplicates from prior incomplete runs. A 566-file optimized run on Adelaida's vault produced **3,734 nodes / 13,699 edges** (vs the previous 812 nodes / 206 edges) at roughly one-eighth the naive cost.
+
+What's new in `skills/graphify/`:
+- **`OPTIMIZATIONS.md`** — read this BEFORE running graphify on anything bigger than 50 files. Step-by-step optimized pipeline.
+- **`scripts/graphify_prep.py`** — runs BEFORE the LLM extraction. Two-pass dedupe (` 2.md` siblings + cross-directory copies) + regex preflight that pulls every `[[wikilink]]` and floor frontmatter tag as a free EXTRACTED edge. Typical: 30–60% file reduction.
+- **`scripts/graphify_chunk.py`** — word-balanced bin-packing chunker (vs alphabetical). Skips files <500 words and `[AI Extract]` files (low inference yield). Targets 12 chunks of ~50 files each instead of 25-30 small chunks; cuts prompt-instruction overhead by ~60%.
+- **`scripts/graphify_canonicalize.py`** — runs AFTER the LLM extraction. Collapses per-file scoped IDs into canonical labels (62% node reduction in testing), strips invalid `file_type` values agents invent, and **`--cache` writes results to `graphify-out/cache/` via `save_semantic_cache`** so the next `--update` run is FREE for unchanged files.
+- **SKILL.md updated** with a TL;DR pointer at the top of the file.
+
+The cache integration is the single most important addition. Without it, every weekly `/graphify` run repays the entire LLM cost. With it, subsequent runs only pay for genuinely new files.
+
+Lessons baked in (read OPTIMIZATIONS.md for the full list):
+- Always run prep before extraction
+- Always run canonicalize + cache after extraction
+- Always use word-balanced chunks of ~50 files (not alphabetical chunks of 20)
+- The LLM should not re-extract wikilinks — only do INFERRED / semantic / rationale work
+- Schema violations (invented `file_type` values) are common; canonicalize auto-fixes them
+- Parallel subagent cap is ~10-12; for >12 chunks, dispatch in waves
+- First Python `detect()` call sometimes hangs; wrap with a 90s timeout
+
+---
+
 ## April 10, 2026 (fifth session)
 
 ### Breaking: Originals/ folder removed

@@ -9,6 +9,8 @@ argument-hint: "[subfolder path like 🚀 Onde/ or 📝 Notes/ — avoid running
 
 Turn any folder of files into a navigable knowledge graph with community detection, an honest audit trail, and three outputs: interactive HTML, GraphRAG-ready JSON, and a plain-language GRAPH_REPORT.md.
 
+> ⚡ **Before running on a corpus larger than ~50 files, READ [OPTIMIZATIONS.md](./OPTIMIZATIONS.md).** The wrapper scripts in `scripts/` (dedupe, regex preflight, word-balanced chunking, label canonicalization, cache integration) typically cut LLM token cost by 80–92% and produce a higher-quality graph. The single most important step is calling `graphify_canonicalize.py --cache` after merging — without it, the next `--update` run repays the entire cost. Skip these wrappers and a 1,500-file vault will burn ~10M LLM tokens for the same graph that costs ~1M with them.
+
 ## Usage
 
 ```
