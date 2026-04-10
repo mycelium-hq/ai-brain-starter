@@ -1,0 +1,279 @@
+/*===============================================================
+  AI Brain Starter — Warm Earth Theme
+  ------------------------------------
+  Clean cream aesthetic with warm accent colors.
+  Works as a CSS snippet on top of any base theme, or standalone.
+
+  Light: warm cream backgrounds, forest green text, coral accents.
+  Dark: walnut brown-blacks, sage greens, ember coral.
+
+  To customize: change the accent color variables below.
+  Default accent: coral (#FF7A59). Try your brand color instead.
+===============================================================*/
+
+/* ===== COLOR VARIABLES ===== */
+:root {
+  /* Accent palette — CHANGE THESE to your brand color */
+  --accent-main: #FF7A59;
+  --accent-light: #FF9A80;
+  --accent-dim: #E6664A;
+  --accent-muted: #FFB8A8;
+  --accent-bg: #FFF0EC;
+
+  /* Forest green palette */
+  --forest-green: #2D5F2D;
+  --forest-green-light: #3D7A3D;
+  --forest-green-dim: #1E4A1E;
+  --forest-green-muted: #5A8A5A;
+  --forest-green-soft: #E8F0E8;
+
+  /* Warm cream neutrals */
+  --cream-bg: #FAF9F7;
+  --cream-bg-secondary: #F5F3EF;
+  --cream-bg-tertiary: #EDEAE4;
+  --cream-surface: #FFFFFF;
+  --cream-border: #E8E4DD;
+  --cream-border-light: #F0ECE6;
+  --cream-text: #2D5F2D;
+  --cream-text-secondary: #5A7A5A;
+  --cream-text-muted: #8A9A8A;
+  --cream-text-faint: #AABCAA;
+}
+
+/* ===== LIGHT MODE ===== */
+.theme-light {
+  /* Backgrounds */
+  --background-primary: var(--cream-bg) !important;
+  --background-primary-alt: var(--cream-bg-secondary) !important;
+  --background-secondary: var(--cream-bg-secondary) !important;
+  --background-secondary-alt: var(--cream-bg-tertiary) !important;
+  --background-modifier-border: var(--cream-border) !important;
+  --background-modifier-border-hover: var(--cream-border) !important;
+  --background-modifier-border-focus: var(--accent-muted) !important;
+
+  /* Text — forest green instead of black */
+  --text-normal: var(--forest-green) !important;
+  --text-muted: var(--cream-text-secondary) !important;
+  --text-faint: var(--cream-text-muted) !important;
+  --text-on-accent: #FFFFFF !important;
+
+  /* Accent */
+  --text-accent: var(--accent-main) !important;
+  --text-accent-hover: var(--accent-dim) !important;
+  --interactive-accent: var(--accent-main) !important;
+  --interactive-accent-hover: var(--accent-dim) !important;
+
+  /* Headers — forest green */
+  --h1-color: var(--forest-green-dim) !important;
+  --h2-color: var(--forest-green) !important;
+  --h3-color: var(--forest-green-light) !important;
+  --h4-color: var(--forest-green-muted) !important;
+  --h5-color: var(--forest-green-muted) !important;
+  --h6-color: var(--cream-text-secondary) !important;
+
+  /* Links */
+  --link-color: var(--accent-main) !important;
+  --link-color-hover: var(--accent-dim) !important;
+  --link-unresolved-color: var(--accent-muted) !important;
+  --link-external-color: var(--accent-main) !important;
+
+  /* Tags */
+  --tag-color: var(--accent-main) !important;
+  --tag-background: var(--accent-bg) !important;
+
+  /* Sidebar */
+  --nav-item-color: var(--forest-green) !important;
+  --nav-item-color-hover: var(--accent-main) !important;
+  --nav-item-color-active: var(--accent-dim) !important;
+  --nav-item-background-hover: var(--cream-bg-tertiary) !important;
+  --nav-item-background-active: var(--accent-bg) !important;
+
+  /* Scrollbar */
+  --scrollbar-bg: transparent !important;
+  --scrollbar-thumb-bg: var(--cream-border) !important;
+  --scrollbar-active-thumb-bg: var(--accent-muted) !important;
+
+  /* Code */
+  --code-background: var(--cream-bg-secondary) !important;
+  --code-normal: var(--forest-green) !important;
+
+  /* Typography */
+  --bold-color: var(--forest-green-dim) !important;
+  --italic-color: var(--forest-green-light) !important;
+  --checkbox-color: var(--accent-main) !important;
+  --checkbox-color-hover: var(--accent-dim) !important;
+
+  /* Tabs */
+  --tab-text-color: var(--cream-text-secondary) !important;
+  --tab-text-color-active: var(--forest-green) !important;
+  --tab-text-color-focused-active: var(--accent-main) !important;
+
+  /* Font */
+  --font-text-size: 16px;
+  --line-height-normal: 1.65;
+  --p-spacing: 0.8em;
+}
+
+/* Light typography */
+.theme-light .markdown-rendered h1 {
+  font-weight: 700;
+  margin-top: 2em;
+  margin-bottom: 0.6em;
+  border-bottom: 2px solid var(--cream-border);
+  padding-bottom: 0.3em;
+  letter-spacing: -0.01em;
+}
+
+.theme-light .markdown-rendered h2 {
+  font-weight: 600;
+  margin-top: 1.6em;
+  margin-bottom: 0.5em;
+  letter-spacing: -0.01em;
+}
+
+.theme-light .markdown-rendered blockquote {
+  border-left: 3px solid var(--accent-main) !important;
+  background-color: var(--accent-bg) !important;
+  padding: 0.8em 1.2em !important;
+  border-radius: 0 6px 6px 0;
+}
+
+.theme-light .markdown-rendered code {
+  border-radius: 4px;
+  padding: 0.15em 0.4em;
+  font-size: 0.9em;
+}
+
+.theme-light .markdown-rendered pre {
+  border-radius: 8px;
+  border: 1px solid var(--cream-border);
+}
+
+.theme-light .markdown-rendered a.internal-link {
+  text-decoration: none;
+  border-bottom: 1px solid var(--accent-muted);
+  transition: border-color 0.15s ease;
+}
+
+.theme-light .markdown-rendered a.internal-link:hover {
+  border-bottom-color: var(--accent-main);
+}
+
+/* Light graph */
+.theme-light .graph-view.color-fill { color: var(--accent-main) !important; }
+.theme-light .graph-view.color-fill-focused { color: var(--accent-dim) !important; }
+.theme-light .graph-view.color-fill-attachment { color: var(--forest-green-muted) !important; }
+.theme-light .graph-view.color-fill-tag { color: var(--forest-green-light) !important; }
+.theme-light .graph-view.color-line { color: var(--cream-border) !important; }
+
+/* Light workspace */
+.theme-light .workspace-tab-header-container { background-color: var(--cream-bg-secondary) !important; border-bottom: 1px solid var(--cream-border) !important; }
+.theme-light .workspace-tab-header.is-active { background-color: var(--cream-bg) !important; }
+.theme-light .status-bar { background-color: var(--cream-bg-secondary) !important; border-top: 1px solid var(--cream-border) !important; color: var(--cream-text-muted) !important; }
+.theme-light .workspace-ribbon { background-color: var(--cream-bg-secondary) !important; }
+.theme-light .tooltip { background-color: var(--forest-green) !important; color: white !important; border-radius: 6px; }
+.theme-light ::selection { background-color: var(--accent-muted) !important; color: var(--forest-green-dim) !important; }
+.theme-light *:focus-visible { box-shadow: 0 0 0 2px var(--accent-muted) !important; }
+.theme-light .mod-cta { background-color: var(--accent-main) !important; color: white !important; border-radius: 6px !important; }
+.theme-light .mod-cta:hover { background-color: var(--accent-dim) !important; }
+
+/* ===== DARK MODE — Warm walnut sanctuary ===== */
+.theme-dark {
+  /* Backgrounds — warm brown-blacks */
+  --background-primary: #1C1917 !important;
+  --background-primary-alt: #211F1B !important;
+  --background-secondary: #161412 !important;
+  --background-secondary-alt: #121010 !important;
+  --background-modifier-border: #2E2A25 !important;
+  --background-modifier-border-hover: #3A3530 !important;
+  --background-modifier-border-focus: rgba(255, 122, 89, 0.4) !important;
+
+  /* Text — warm parchment */
+  --text-normal: #D4CBBF !important;
+  --text-muted: #9A8F82 !important;
+  --text-faint: #6B6058 !important;
+  --text-on-accent: #FFFFFF !important;
+
+  /* Accent */
+  --text-accent: var(--accent-main) !important;
+  --text-accent-hover: #FF9478 !important;
+  --interactive-accent: var(--accent-main) !important;
+  --interactive-accent-hover: #FF9478 !important;
+
+  /* Headings — sage greens */
+  --h1-color: #A8C4A0 !important;
+  --h2-color: #8FB087 !important;
+  --h3-color: #7A9D73 !important;
+  --h4-color: #6B8C64 !important;
+  --h5-color: #6B8C64 !important;
+  --h6-color: #9A8F82 !important;
+
+  /* Links */
+  --link-color: var(--accent-main) !important;
+  --link-color-hover: #FF9478 !important;
+  --link-unresolved-color: #CC6248 !important;
+  --link-external-color: var(--accent-main) !important;
+
+  /* Tags */
+  --tag-color: var(--accent-main) !important;
+  --tag-background: #2D1F1A !important;
+
+  /* Code */
+  --code-background: #231F1B !important;
+  --code-normal: #C4B8A8 !important;
+
+  /* Nav */
+  --nav-item-color: #D4CBBF !important;
+  --nav-item-color-hover: var(--accent-main) !important;
+  --nav-item-color-active: #FF9478 !important;
+  --nav-item-background-hover: #211F1B !important;
+  --nav-item-background-active: #2D1F1A !important;
+
+  /* Scrollbar */
+  --scrollbar-bg: transparent !important;
+  --scrollbar-thumb-bg: #2E2A25 !important;
+  --scrollbar-active-thumb-bg: #3A3530 !important;
+
+  /* Typography */
+  --bold-color: #D4CBBF !important;
+  --italic-color: #C4B8A8 !important;
+  --checkbox-color: var(--accent-main) !important;
+  --checkbox-color-hover: #FF9478 !important;
+
+  /* Tabs */
+  --tab-text-color: #9A8F82 !important;
+  --tab-text-color-active: #D4CBBF !important;
+  --tab-text-color-focused-active: var(--accent-main) !important;
+}
+
+/* Dark typography */
+.theme-dark .markdown-rendered h1 { font-weight: 700; margin-top: 2em; margin-bottom: 0.6em; border-bottom: 2px solid #2E2A25; padding-bottom: 0.3em; letter-spacing: -0.01em; }
+.theme-dark .markdown-rendered h2 { font-weight: 600; margin-top: 1.6em; margin-bottom: 0.5em; letter-spacing: -0.01em; }
+.theme-dark .markdown-rendered blockquote { border-left: 3px solid var(--accent-main) !important; background-color: #231A17 !important; padding: 0.8em 1.2em !important; border-radius: 0 6px 6px 0; }
+.theme-dark .markdown-rendered code { border-radius: 4px; padding: 0.15em 0.4em; font-size: 0.9em; }
+.theme-dark .markdown-rendered pre { border-radius: 8px; border: 1px solid #2E2A25; }
+.theme-dark .markdown-rendered a.internal-link { text-decoration: none; border-bottom: 1px solid rgba(255, 122, 89, 0.3); transition: border-color 0.15s ease; }
+.theme-dark .markdown-rendered a.internal-link:hover { border-bottom-color: var(--accent-main); }
+
+/* Dark graph */
+.theme-dark .graph-view.color-fill { color: var(--accent-main) !important; }
+.theme-dark .graph-view.color-fill-focused { color: #FF9478 !important; }
+.theme-dark .graph-view.color-fill-attachment { color: #7A9D73 !important; }
+.theme-dark .graph-view.color-fill-tag { color: #8FB087 !important; }
+.theme-dark .graph-view.color-line { color: #2E2A25 !important; }
+
+/* Dark workspace */
+.theme-dark .workspace-tab-header-container { background-color: #161412 !important; border-bottom: 1px solid #2E2A25 !important; }
+.theme-dark .workspace-tab-header.is-active { background-color: #1C1917 !important; }
+.theme-dark .status-bar { background-color: #161412 !important; border-top: 1px solid #2E2A25 !important; color: #6B6058 !important; }
+.theme-dark .workspace-ribbon { background-color: #161412 !important; }
+.theme-dark .tooltip { background-color: #2A2521 !important; color: #D4CBBF !important; border-radius: 6px; }
+.theme-dark ::selection { background-color: rgba(255, 122, 89, 0.2) !important; }
+.theme-dark *:focus-visible { box-shadow: 0 0 0 2px rgba(255, 122, 89, 0.4) !important; }
+.theme-dark .mod-cta { background-color: var(--accent-main) !important; color: white !important; border-radius: 6px !important; }
+.theme-dark .mod-cta:hover { background-color: #FF9478 !important; }
+
+/* ===== GRAPH LINES — Soft taupe ===== */
+body { --graph-line: #C6AC8E; --graph-line-highlight: #D1B284; }
+.graph-view .links line { stroke: #C6AC8E !important; opacity: 0.12; }
+.graph-view-container line { stroke: #C6AC8E !important; }

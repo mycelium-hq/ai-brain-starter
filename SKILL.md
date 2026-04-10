@@ -2038,21 +2038,30 @@ Tell the user: "Now when you notice a pattern forming — a phrase you keep usin
 
 Ask: "Want me to install a theme to make your vault look better? A clean theme makes the vault feel like a real product, not a folder of text files."
 
-If yes, recommend **AnuPpuccin** — a polished, customizable theme with great readability, multiple color schemes, and support for rainbow folders:
+If yes, offer two options:
+
+**Option A: Warm Earth theme (included in this repo)**
+A CSS snippet with warm cream backgrounds, forest green text, and coral accents. Full light + dark mode. Works on top of any base theme.
 
 ```bash
-# Clone the theme into Obsidian's themes folder
-mkdir -p "[VAULT_PATH]/.obsidian/themes/AnuPpuccin"
+# Copy the theme snippet into the vault
+mkdir -p "[VAULT_PATH]/.obsidian/snippets"
+cp "$(dirname "$(realpath "$0")")/themes/warm-earth/theme.css" "[VAULT_PATH]/.obsidian/snippets/warm-earth.css"
 ```
 
-Then navigate to Obsidian → Settings → Appearance → Themes → Browse → search "AnuPpuccin" → Install. Or install it via the command above by downloading from GitHub.
+If the repo path isn't available, download it:
+```bash
+curl -sL "https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main/themes/warm-earth/theme.css" -o "[VAULT_PATH]/.obsidian/snippets/warm-earth.css"
+```
 
-After install:
-1. Go to Settings → Appearance → select AnuPpuccin
-2. Install the Style Settings plugin (Settings → Community plugins → Browse → "Style Settings")
-3. In Style Settings, customize: color scheme, heading sizes, folder colors, accent color
+Then in Obsidian: Settings → Appearance → CSS snippets → enable "warm-earth".
 
-Tell the user: "Your vault now has a proper look. You can tweak colors and fonts anytime in Settings → Style Settings."
+To customize the accent color, open the CSS file and change `--accent-main: #FF7A59` to any hex color (your brand color works great).
+
+**Option B: Community theme**
+Go to Settings → Appearance → Themes → Browse and pick one. Good ones: AnuPpuccin, Minimal, Things.
+
+Tell the user: "Your vault has a proper look now. The Warm Earth theme has both light and dark mode — try both. If you want to tweak the accent color to match your brand, I can do that for you."
 
 ---
 
