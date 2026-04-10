@@ -1858,16 +1858,41 @@ Interview them about their business:
 
 Build a CLAUDE.md with: company overview, team, priorities, session protocol, and the accountability rules.
 
-### Step 3: Set up sync rules
-Add a rule to their PERSONAL vault's CLAUDE.md:
+### Step 3: Set up symlink for live sync
+Instead of copy-based sync, create a symlink from the personal vault INTO the team vault. This gives the user cross-vault wikilinks, unified search, and Graphify across both vaults — with zero manual sync.
+
+**Direction matters:** Always symlink the team vault INTO the personal vault (not the other way around). If you symlink personal into team (on Google Drive), personal content like journals would be exposed to the team.
+
+```bash
+# Mac
+ln -s "/path/to/team/vault" "/path/to/personal/vault/Team Name"
+
+# Windows (PowerShell, run as admin)
+New-Item -ItemType Junction -Path "PERSONAL_VAULT\Team Name" -Target "TEAM_VAULT_PATH"
+```
+
+Add this rule to their PERSONAL vault's CLAUDE.md:
 
 ```markdown
 ## Team Vault Sync
-A shared team vault lives at [path]. Rules:
-- On session end: If we created/modified any business files, sync to the team vault.
-- What to sync: strategy docs, meeting notes, CRM contacts, sales materials, product docs.
-- What NOT to sync: journals, AI chats, personal notes, personal reflections.
-- Batch at session end — don't interrupt work to sync.
+The shared team vault is symlinked at vault root: `Team Name/` → `[TEAM_VAULT_PATH]`. Changes are live — no copy step needed. Rules:
+- All business content lives in `Team Name/` — strategy, meeting notes, sales, product, raise materials, brand assets, documents.
+- Wikilinks work across the vault. Any personal note can link to team vault files and they resolve.
+- CRM separation: People in both contexts get two CRM cards — one personal (full context), one team (professional only).
+- What NEVER goes in `Team Name/`: Journals, AI chats, personal notes, floor tags, personal reflections. The team vault is business-only. No exceptions.
+```
+
+### Step 3b: Add personal content protection to team CLAUDE.md
+Add this to the team vault's CLAUDE.md:
+
+```markdown
+## Personal Content Protection — NON-NEGOTIABLE
+This vault is business-only. The following must NEVER appear in any file:
+- Personal journal entries or emotional tags
+- AI chat logs
+- Personal reflections, emotions, or vulnerability
+- Personal CRM context (relationships, personal notes about people)
+If content touches both personal and business, it belongs in the personal vault, NOT here. When in doubt, keep it out.
 ```
 
 ### Step 4: Team member instructions
@@ -1959,7 +1984,7 @@ Tell the user: "Your team vault is ready. Share the Google Drive folder with you
 - Weekly and monthly insight reports (/weekly and /monthly)
 - A team weekly digest (/team-weekly) if you have a team vault
 - Accountability rules so I push back, not just agree
-- A team vault synced from your personal one (if you set it up)
+- A team vault symlinked into your personal one (if you set it up) — live sync, cross-vault wikilinks, personal content protection
 
 Ready for the next level? The deep optimization pass is already installed. It'll compress your archives into summaries, standardize all your contacts into a queryable CRM, clean up your graph, build live dashboards, and more.
 
@@ -2008,6 +2033,28 @@ Tell the user: "Now when you notice a pattern forming — a phrase you keep usin
 - After a heavy journaling session — capture frameworks that surfaced
 - Whenever a theme keeps coming up — "I keep saying [X]" → run `/patterns`
 - Monthly: review what's hardening into real belief vs. what was just a phase
+
+## Phase 23: Theme & Appearance (Optional)
+
+Ask: "Want me to install a theme to make your vault look better? A clean theme makes the vault feel like a real product, not a folder of text files."
+
+If yes, recommend **AnuPpuccin** — a polished, customizable theme with great readability, multiple color schemes, and support for rainbow folders:
+
+```bash
+# Clone the theme into Obsidian's themes folder
+mkdir -p "[VAULT_PATH]/.obsidian/themes/AnuPpuccin"
+```
+
+Then navigate to Obsidian → Settings → Appearance → Themes → Browse → search "AnuPpuccin" → Install. Or install it via the command above by downloading from GitHub.
+
+After install:
+1. Go to Settings → Appearance → select AnuPpuccin
+2. Install the Style Settings plugin (Settings → Community plugins → Browse → "Style Settings")
+3. In Style Settings, customize: color scheme, heading sizes, folder colors, accent color
+
+Tell the user: "Your vault now has a proper look. You can tweak colors and fonts anytime in Settings → Style Settings."
+
+---
 
 ## Important Notes for Claude
 
