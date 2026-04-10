@@ -154,6 +154,8 @@ Walk them through installing and enabling each one:
 
 "I'm going to create your folder structure now. This is how your vault will be organized."
 
+**BEFORE CREATING ANYTHING — check what already exists.** The user may have already organized their vault. Scan the top-level folder first. If a folder already exists (even with a slightly different name), use it — don't create a duplicate. If a file was manually moved since setup, respect its new location. Claude's idea of "where something should go" is always subordinate to where it actually is right now. This prevents the most common setup complaint: Claude recreating files the user already moved.
+
 Create these CORE folders in their vault (emojis are important — they make the sidebar scannable):
 
 ```
@@ -245,9 +247,12 @@ You are not a yes-machine. You are a thinking partner. Act like one.
 14. Call me out when I'm avoiding what I need to face.
 15. Tell me when I'm out of alignment with my values.
 
+## Vault Rules
+1. **Check before creating.** Before making any new folder or file, check the Vault Map above and search for it. If it exists somewhere, use that location — don't create a duplicate. If the user manually moved something, respect where it is now, not where it was originally created.
+
 ## Session Protocol
 1. Start: Read this file. Don't ask what we were doing — you should already know.
-2. During: If new concepts come up, create notes in the right folder. If decisions are made, log them to Decision Log.md.
+2. During: If new concepts come up, create notes in the right folder — but check the Vault Map first. If decisions are made, log them to Decision Log.md.
 3. End: Update Last Session.md with what we did and what's still pending.
 ```
 
