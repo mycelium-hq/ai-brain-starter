@@ -591,7 +591,7 @@ Here's a quick overview:
 **Middle Floors:** Courage, Neutrality, Willingness, Acceptance, Reason
 **High Floors:** Love, Joy, Peace
 
-If you want to understand the framework deeper: https://adelaidadiazroa.substack.com/p/the-internal-high-rise-peace-is-a
+If you want to understand the framework deeper: [Internal Design — The High-Rise Model on Substack](https://adelaidadiazroa.substack.com/s/internal-design)
 
 After each journal conversation, I'll identify which floor you're on and tag the entry. Over weeks and months, this becomes incredibly powerful — you can literally see your emotional patterns in data.
 
@@ -620,7 +620,7 @@ aliases: [lowercase version, e.g. "fear", "fearful"]
 
 **Movement:** To move up from here, [1-2 sentences on what helps]
 
-**Read more:** [The Internal High-Rise — Peace Is a Place You Can Live](https://adelaidadiazroa.substack.com/p/the-internal-high-rise-peace-is-a)
+**Read more:** [Internal Design — The High-Rise Model on Substack](https://adelaidadiazroa.substack.com/s/internal-design)
 
 ## All entries on this floor
 
@@ -655,7 +655,9 @@ Also create three tier notes:
 - `Middle Floors.md` — Floors 9-13, the transitional floors. "You're starting to choose how you respond."
 - `High Floors.md` — Floors 14-16, the generative floors. "You're creating, not reacting."
 
-Each tier note should include a Dataview query showing recent journal entries on that tier and a link to the Substack article.
+Each tier note should include a Dataview query showing recent journal entries on that tier and this link to the Substack series:
+
+**Read more:** [Internal Design — The High-Rise Model on Substack](https://adelaidadiazroa.substack.com/s/internal-design)
 
 ### Building the journal skill
 
