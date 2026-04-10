@@ -9,6 +9,26 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 10, 2026 (fifth session)
+
+### Breaking: Originals/ folder removed
+Originals/ was solving a problem that doesn't exist. Most of your content is already original — journals, writing drafts, concept notes. Having a separate folder for "extra original" ideas was just adding a sorting decision that helped no one. The /patterns skill already surfaces recurring ideas automatically. Writing/Drafts/ is where ideas get developed.
+
+What changed:
+- Originals/ removed from folder structure (Phase 3)
+- RESOLVER for Originals/ removed
+- Originals/ → Writing pipeline docs removed (was just added last session — killed immediately)
+- write-hook.sh no longer watches for Originals/ saves
+- /patterns skill now proposes writing seeds in Writing/Drafts/ instead of Originals/
+- CLAUDE.md rule changed from "protect Originals/" to "original ideas live where they happen"
+
+If you have an existing Originals/ folder, you can keep it — nothing will break. But new setups won't create one. Consider moving any files from Originals/ into Notes/ or Writing/Drafts/ where they fit better.
+
+### Fix: Auto-update now actually applies changes
+Previously the auto-update hook would detect a new version and ask "Want me to update?" — requiring the user to understand what that means. Now: the hook runs `git pull` automatically, copies any updated skill files, syncs hooks.json to settings.local.json, and tells the user in plain English what changed. Zero manual steps.
+
+---
+
 ## April 10, 2026 (fourth session)
 
 ### Fix: /weekly + /patterns now run automatically together

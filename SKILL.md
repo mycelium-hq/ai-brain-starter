@@ -219,12 +219,9 @@ Create these CORE folders in their vault (emojis are important — they make the
 📚 Books/
 📝 Notes/
 🧠 Psychology/
-💡 Originals/
 ⚙️ Meta/
 ⚙️ Meta/scripts/
 ```
-
-**💡 Originals/ — special rules:** This folder is for the user's own frameworks, theses, metaphors, and original ideas — captured verbatim in their exact phrasing. Never paraphrase. Never merge into a generic concept note. File names = the idea itself. This is the highest-value content in the vault. If something the user says could be cited, it belongs here.
 
 **Conditional folders — only create if relevant based on what they told you in Phase 1:**
 - `✍️ Writing/` — only if they said they write (blog, book, newsletter, journal publicly). Don't create this for everyone.
@@ -253,37 +250,12 @@ After creating folders, create a RESOLVER.md in each key directory. This is a sh
 ```markdown
 # Does this live in Notes/?
 
-1. Is this your own original idea, framework, or thesis? → NO: 💡 Originals/
-2. Is this from a book you read? → NO: 📚 Books/
-3. Is this a psychology/behavioral concept? → Maybe: 🧠 Psychology/ if that folder exists
-4. Is this an article, course, or how-to you learned from? → YES: create here
-5. Is this a concept that belongs to a specific project? → NO: that project's folder
+1. Is this from a book you read? → NO: 📚 Books/
+2. Is this a psychology/behavioral concept? → Maybe: 🧠 Psychology/ if that folder exists
+3. Is this an article, course, or how-to you learned from? → YES: create here
+4. Is this a concept that belongs to a specific project? → NO: that project's folder
+5. Is this your own original framework or thesis? → If short/raw, it can stay here or in a journal. If you're developing it into something, start a draft in Writing/.
 ```
-
-**💡 Originals/RESOLVER.md:**
-```markdown
-# Does this live in Originals/?
-
-1. Is this a framework, metaphor, or thesis you originated? → YES
-2. Did you read this somewhere else, even if you agree with it? → NO: Notes/ or Books/
-3. Is this a synthesis of other people's ideas? → Borderline — only if the synthesis itself is original
-4. Would you be the one cited if someone referenced this? → YES: belongs here
-```
-
-**The Originals → Writing → Publishing pipeline:**
-
-Originals/, Writing/, and any writing output (Substack, blog, newsletter) are three stages of the same thing — not competing folders:
-
-- **`Originals/`** — raw idea, captured verbatim in your exact words the moment it surfaces. A single sentence, a paragraph, a framework name. Protected, never paraphrased. Think: "the seed."
-- **`✍️ Writing/Substack Drafts/`** (or `Writing/Drafts/`) — the developed version. When you're ready to turn an Originals/ seed into an article, you start a draft here that *links back* to the Originals/ file. Think: "the plant."
-- **Published** — Substack, blog, wherever. Done.
-
-CLAUDE.md should include this rule (add it automatically if the user has a Writing folder):
-```
-- When developing any writing piece, check Originals/ first for seeds. Link the draft to the source Originals/ file. Never rewrite an Originals/ entry — develop from it.
-```
-
-So if someone has a Substack: their sharp observation goes in `Originals/` first (exact words), then when they sit down to write, they open that file, create `Writing/Substack Drafts/Article Title.md`, and write from the seed. The Originals/ file never gets edited — it stays as the original capture forever.
 
 ## Phase 4: Build Their CLAUDE.md
 
@@ -357,7 +329,7 @@ You are not a yes-machine. You are a thinking partner. Act like one.
 
 ## Vault Rules
 1. **Check before creating.** Before making any new folder or file, check the Vault Map above and search for it. If it exists somewhere, use that location — don't create a duplicate. If the user manually moved something, respect where it is now, not where it was originally created.
-2. **Originals folder is protected.** When [user] expresses an original framework, metaphor, or thesis — in conversation, in a journal entry, anywhere — capture it verbatim in 💡 Originals/ immediately. Use their exact phrasing. Never paraphrase. File name = the idea itself. This is the highest-value content in the vault.
+2. **Original ideas live where they happen.** If someone says something sharp in a journal entry, it stays in the journal. If they develop it into a piece of writing, it goes in Writing/Drafts/. The `/patterns` skill surfaces recurring ideas automatically — no separate capture folder needed.
 3. **Use RESOLVER.md before creating files.** Each key folder has a RESOLVER.md with a decision tree. Check it before creating any note to confirm it belongs there.
 
 ## Session Protocol
@@ -438,7 +410,7 @@ Check if `.claude/settings.local.json` exists in the vault. If it does, merge th
 }
 ```
 
-Also add a weekly auto-update check hook. Create or update `.claude/settings.local.json` to include a second hook that checks for skill updates once per session:
+Also add an auto-update hook that pulls updates and applies them automatically once per session. Create or update `.claude/settings.local.json` to include a second hook:
 
 ```json
 {
@@ -454,7 +426,7 @@ Also add a weekly auto-update check hook. Create or update `.claude/settings.loc
           },
           {
             "type": "command",
-            "command": "cd ~/.claude/skills/ai-brain-starter 2>/dev/null && git fetch origin main --quiet 2>/dev/null && if [ \"$(git rev-parse HEAD 2>/dev/null)\" != \"$(git rev-parse origin/main 2>/dev/null)\" ]; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"AI Brain Starter skill has an update available. Tell the user: There is a newer version of the AI Brain Starter skill. Want me to update? If yes, run git pull in ~/.claude/skills/ai-brain-starter and read CHANGELOG.md to tell them what is new.\"}}'; else echo '{\"continue\":true,\"suppressOutput\":true}'; fi",
+            "command": "cd ~/.claude/skills/ai-brain-starter 2>/dev/null && git fetch origin main --quiet 2>/dev/null && if [ \"$(git rev-parse HEAD 2>/dev/null)\" != \"$(git rev-parse origin/main 2>/dev/null)\" ]; then git pull --quiet origin main 2>/dev/null && CHANGES=$(git log --oneline HEAD@{1}..HEAD 2>/dev/null) && echo \"{\\\"hookSpecificOutput\\\":{\\\"hookEventName\\\":\\\"UserPromptSubmit\\\",\\\"additionalContext\\\":\\\"AI Brain Starter was auto-updated. Changes: $CHANGES. Now: 1) Copy any updated skills from ~/.claude/skills/ai-brain-starter/skills/ to ~/.claude/skills/ (overwrite existing). 2) Read CHANGELOG.md and tell the user in 1-2 plain sentences what changed and why. 3) Check if hooks.json differs from .claude/settings.local.json — if so, update settings.local.json to match. Keep it casual, not a changelog dump.\\\"}}\"; else echo '{\"continue\":true,\"suppressOutput\":true}'; fi",
             "once": true,
             "statusMessage": "Checking for skill updates..."
           }
@@ -465,7 +437,7 @@ Also add a weekly auto-update check hook. Create or update `.claude/settings.loc
 }
 ```
 
-Tell them: "Done. From now on, the first thing I do every session is read your files — automatically, before I say anything. And once a week, I'll check if there are updates to the skill and let you know. You'll never have to remind me."
+Tell them: "Done. From now on, the first thing I do every session is read your files — automatically, before I say anything. If there's an update to the skill, I'll pull it and apply it automatically — you'll just see a quick note about what changed."
 
 Also create the **session-end-hook.sh** script that hardens the Stop hook — it guarantees a timestamp is always saved even if Claude doesn't write the full update:
 
@@ -494,9 +466,7 @@ fi
 echo "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"additionalContext\":\"SESSION ENDING ($DATE $TIME): Update Last Session.md at '$LAST_SESSION' — write today's date, what was done, what's pending. Also: batch any Substack Notes, decision log entries, or vault changelog items.\"}}"
 ```
 
-Also create the **write-hook.sh** script that fires after every Write tool call. It handles two automatic behaviors:
-1. When a file is saved to `Originals/` — prompts Claude to update Wikilink Reference immediately
-2. When a file is saved to a Meeting Notes folder — prompts Claude to run meeting-todos extraction automatically
+Also create the **write-hook.sh** script that fires after every Write tool call. It auto-triggers meeting-todos extraction when a meeting note is saved:
 
 ```bash
 #!/bin/bash
@@ -514,10 +484,7 @@ except:
     print('')
 " 2>/dev/null)
 
-if echo "$FILE_PATH" | grep -q "Originals/"; then
-  BASENAME=$(basename "$FILE_PATH" .md)
-  echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"New Originals file saved: '$BASENAME'. Update Wikilink Reference.md immediately to add this concept and any aliases. Do this before continuing.\"}}"
-elif echo "$FILE_PATH" | grep -qi "Meeting Notes/\|Meeting-Notes/"; then
+if echo "$FILE_PATH" | grep -qi "Meeting Notes/\|Meeting-Notes/"; then
   BASENAME=$(basename "$FILE_PATH" .md)
   echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"Meeting note saved: '$BASENAME'. Run /meeting-todos on this file now — extract action items, show the user a preview, and add confirmed tasks to the to-do file. Do this automatically without waiting to be asked.\"}}"
 else
@@ -1692,7 +1659,7 @@ cd "$VAULT_DIR" || exit 1
   --model claude-sonnet-4-6 \
   --allowedTools "Read,Write,Edit,Glob,Grep,Bash" \
   --permission-mode acceptEdits \
-  "Run the /insights skill for a $PERIOD report. Read the skill at ~/.claude/skills/insights/SKILL.md first, then follow its instructions exactly. Read all journal entries for the $PERIOD calendar period and generate the full report. Save it to the correct folder. After the report is saved, run /patterns in auto mode: read ~/.claude/skills/patterns/SKILL.md, scan for patterns, then automatically capture all findings without asking for confirmation — this is a headless cron run with no user present. Add '(auto-captured from $PERIOD patterns run — review and edit)' to any new Originals/ files created." \
+  "Run the /insights skill for a $PERIOD report. Read the skill at ~/.claude/skills/insights/SKILL.md first, then follow its instructions exactly. Read all journal entries for the $PERIOD calendar period and generate the full report. Save it to the correct folder. After the report is saved, run /patterns in auto mode: read ~/.claude/skills/patterns/SKILL.md, scan for patterns, then automatically capture all findings without asking for confirmation — this is a headless cron run with no user present. Save pattern captures as concept notes, CLAUDE.md rules, or writing seeds — wherever they fit best." \
   >> "$LOG_FILE" 2>&1
 
 EXIT_CODE=$?
@@ -1746,7 +1713,7 @@ Set-Location $VaultDir
   --model claude-sonnet-4-6 `
   --allowedTools "Read,Write,Edit,Glob,Grep,Bash" `
   --permission-mode acceptEdits `
-  "Run the /insights skill for a $Period report. Read the skill at ~/.claude/skills/insights/SKILL.md first, then follow its instructions exactly. Read all journal entries for the $Period calendar period and generate the full report. Save it to the correct folder. After the report is saved, run /patterns in auto mode: read ~/.claude/skills/patterns/SKILL.md, scan for patterns, then automatically capture all findings without asking for confirmation — this is a headless cron run with no user present. Add '(auto-captured from $Period patterns run — review and edit)' to any new Originals/ files created." `
+  "Run the /insights skill for a $Period report. Read the skill at ~/.claude/skills/insights/SKILL.md first, then follow its instructions exactly. Read all journal entries for the $Period calendar period and generate the full report. Save it to the correct folder. After the report is saved, run /patterns in auto mode: read ~/.claude/skills/patterns/SKILL.md, scan for patterns, then automatically capture all findings without asking for confirmation — this is a headless cron run with no user present. Save pattern captures as concept notes, CLAUDE.md rules, or writing seeds — wherever they fit best." `
   2>&1 | Add-Content $LogFile
 
 Add-Content $LogFile "$(Get-Date): Finished $Period insights (exit code: $LASTEXITCODE)"
@@ -1962,7 +1929,7 @@ Add the `/patterns` routing to their CLAUDE.md (global at `~/.claude/CLAUDE.md` 
 
 ```markdown
 # patterns (Instinct Engine)
-- **patterns** (`~/.claude/skills/patterns/SKILL.md`) — extract recurring patterns from sessions and turn them into captures (Originals/, CLAUDE.md rules, concept notes, skill improvements). Trigger: `/patterns`
+- **patterns** (`~/.claude/skills/patterns/SKILL.md`) — extract recurring patterns from sessions and turn them into captures (CLAUDE.md rules, concept notes, writing seeds, skill improvements). Trigger: `/patterns`
 When the user types `/patterns`, invoke the Skill tool with `skill: "patterns"` before doing anything else.
 ```
 
