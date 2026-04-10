@@ -159,9 +159,38 @@ If not available (Windows, or older Obsidian): skip silently. The vault works fi
 
 After Phase 0 completes, tell the user: "I installed a few tools in the background that make everything faster and more efficient. Now let's get started with you."
 
-## Phase 1: Welcome & Discovery
+## Phase 1: Language & Welcome
 
-Start with:
+### Step 1.0 — Languages (ASK FIRST, BEFORE ANYTHING ELSE)
+
+Before any other question, ask **in English**:
+
+> "Quick first question: **what languages do you usually take notes and journal in?** It can be one, two, three, whatever. Some people slip into a second language for emotional content, or use one language for work and another for personal stuff — that's normal, tell me all of them.
+>
+> Then: **which one is your primary?** (The one you think and write in most.) I'll run the rest of this setup in that primary language and build everything — your CLAUDE.md, your journal prompts, your concept notes, your folder names — in it. The other languages will get added as aliases on every concept note, so wikilinks resolve no matter which language you wrote the entry in."
+
+Wait for their answer. Store it as:
+- `PRIMARY_LANGUAGE` — the one language the whole bot runs in
+- `SECONDARY_LANGUAGES` — list (possibly empty) of every other language they mentioned. These drive the alias generation later.
+
+**CRITICAL: from this point forward, conduct EVERYTHING in their primary language.** This is not "translate the questions" — it's "be a native speaker of that language for the rest of the conversation." That includes:
+
+- Every spoken/written prompt and explanation you give the user
+- All folder names where idiomatic (e.g. Spanish: `📓 Diarios/`, `🏠 Casa/`, `📚 Libros/`, `📝 Notas/`, `👤 CRM/`, `⚙️ Meta/` — keep emojis, translate words; check with the user if they prefer English folder names for tooling reasons)
+- The CLAUDE.md file content (rules, vault map, preferences — written in their language, not English)
+- Journal interview questions
+- Concept note descriptions, headings, and the floor framework labels
+- Insight reports (`/weekly`, `/monthly`)
+- Error messages and confirmations
+- The names of canonical concept notes (e.g. Spanish primary → `Miedo.md` is the canonical file, `fear` is an alias; English primary with Spanish journaling → `Fear.md` is canonical, `miedo` is an alias)
+
+If they pick a non-English primary language, do NOT default back to English mid-setup just because the SKILL.md is written in English. Translate every prompt as you go. If you don't know the idiomatic translation for a phrase, ask the user.
+
+**Substack link override (Spanish only):** the SKILL.md links to the framework article at `https://adelaidadiazroa.substack.com/s/internal-design` (English) in several places. **Only swap it if the user picks Spanish** — in that case, replace every occurrence with `https://perspectivasblog.substack.com/s/el-rascacielos` (and use the Spanish title "El Rascacielos — el modelo del diseño interno"). For every other language (including English), leave the existing English URL as-is.
+
+### Step 1.1 — Welcome (in their language)
+
+Now translate the welcome into their primary language and continue:
 
 "Hey! I'm going to help you set up an AI-powered second brain. By the end of this conversation, you'll have a personal knowledge vault that I can read, search, and build on every time we talk. No more re-explaining yourself.
 
@@ -778,6 +807,14 @@ After each journal conversation, I'll identify which floor you're on and tag the
 
 If this isn't your thing, just tell me 'turn off floor tagging' and I'll skip it."
 
+### Bilingual aliases (recap before creating floor notes)
+
+You already collected `PRIMARY_LANGUAGE` and `SECONDARY_LANGUAGES` in Phase 1 Step 1.0. Apply them now:
+
+**The rule:** treat every language they use as pointing at the same wikilink. One concept = one note. The canonical filename and body are in their primary language; every secondary language goes in the `aliases:` list. A user who writes "tengo miedo" in an otherwise-English entry should be able to wikilink `[[Fear|miedo]]` (or `[[Miedo|miedo]]` for a Spanish-primary user) and land on the same note. Never create parallel single-language notes for the same idea.
+
+This rule isn't just for floors — apply it to every concept note you create for this user going forward. If they later use a term in a secondary language that maps to an existing concept, add it to that note's aliases instead of making a new note.
+
 ### Create floor concept notes
 
 If the user opts in to floor tagging, create a concept note for each of the 16 floors in their vault. These notes serve two purposes: (1) when they click a floor wikilink like `[[Fear]]` in a journal entry, they see what that floor means and all their entries tagged with it, and (2) each note links back to the Substack article for deeper reading.
@@ -790,7 +827,9 @@ creationDate: [today]
 type: concept
 floor_tier: [low/middle/high]
 floor_number: [1-16]
-aliases: [lowercase version, e.g. "fear", "fearful"]
+aliases: [english variants + translations in every language the user journals in]
+# e.g. monolingual: [fear, fearful, afraid, scared]
+# e.g. English + Spanish: [fear, fearful, afraid, scared, miedo, temor, miedoso, asustado]
 ---
 
 **Floor [number] of 16** · [[{Level} Floors]]
@@ -830,6 +869,29 @@ SORT creationDate DESC
 14. **Love** (high) — Connection, gratitude, warmth. Giving freely. The floor where relationships transform.
 15. **Joy** (high) — Delight, laughter, alive. "Best day ever" energy. Rare in journals — capture it when it shows up.
 16. **Peace** (high) — Stillness, presence, nothing to fix. Enough as-is. The top floor. Not happiness — something deeper.
+
+**Spanish translation reference (use this if the user journals in Spanish):**
+
+| Floor | Spanish aliases to add |
+|---|---|
+| Shame | vergüenza, avergonzado, avergonzada |
+| Guilt | culpa, culpable |
+| Apathy | apatía, apático, apática, indiferencia |
+| Grief | duelo, luto, pena |
+| Fear | miedo, temor, miedoso, asustado |
+| Desire | deseo, anhelo, ansia |
+| Anger | ira, rabia, enojo, enfado, furia |
+| Pride | orgullo, orgulloso, soberbia |
+| Courage | valentía, coraje, valor, valiente |
+| Neutrality | neutralidad, neutral |
+| Willingness | disposición, voluntad, dispuesto |
+| Acceptance | aceptación, aceptar |
+| Reason | razón, razonar, racional |
+| Love | amor, amar, amando, amada |
+| Joy | alegría, gozo, alegre, dichoso |
+| Peace | paz, sereno, tranquilidad, paz interior |
+
+For other languages (French, Portuguese, German, etc.), generate the equivalents on the fly using the same pattern: the noun form, common adjective/verb forms, and any close synonyms. When in doubt, ask the user which variants they actually use.
 
 Also create three tier notes using this template (customize the description and floor list for each):
 
