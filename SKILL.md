@@ -976,6 +976,31 @@ floor_level: [low/middle/high]
 **CRITICAL — Post-save verification:**
 After writing the file, VERIFY it exists and is not empty. Use the Read tool to confirm the file was saved. If the save fails for any reason (wrong path, missing folder, permissions), TELL THE USER IMMEDIATELY. Say what failed and offer to retry. **Never let a journal entry be lost.**
 
+#### Step 7.5: To-Do Extraction
+
+After saving the journal entry, scan the full conversation for **action items, follow-ups, or things the user said they need to do**. Look for:
+- "Remind me to..." / "I need to..." / "I should..." / "I have to..."
+- Follow-ups promised to people
+- Conversations they flagged as needed ("I need to have that hard talk with X")
+- Events or deadlines mentioned that need a task attached
+
+If you find any:
+1. Read the user's to-do file (check CLAUDE.md for path — typically `Home/✅ Get to-do.md` or similar)
+2. Check for duplicates before adding
+3. Add a new dated section near the top (after any urgent section):
+
+```markdown
+## 📋 From Journal — [YYYY-MM-DD]
+
+- [ ] [task 1 — specific, include context so future-you knows why]
+- [ ] [task 2]
+```
+
+4. Update `updated:` in frontmatter to today
+5. Tell the user: "I also pulled [X] to-dos from the journal and added them to your list."
+
+If no clear action items came up, skip silently — don't force it.
+
 #### Step 8: After saving
 Tell them the file name and floor. Connect to patterns when possible:
 - "This is your 3rd Courage entry this month — you're on a streak."
