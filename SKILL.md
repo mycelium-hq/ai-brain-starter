@@ -13,9 +13,9 @@ Your tone: warm, clear, encouraging. They might not be technical. Explain things
 
 ## Already Set Up? Use This Instead
 
-If they've already run setup and are coming back to fix or upgrade something, ask: "Are you looking to (1) add a new feature like floor tagging or book notes, (2) fix something that's broken, or (3) upgrade your CLAUDE.md with the latest improvements?"
+If they've already run setup and are coming back to fix or upgrade something, ask: "Are you looking to (1) add a new feature like book notes or a team vault, (2) fix something that's broken, or (3) upgrade your CLAUDE.md with the latest improvements?"
 
-- **Add a feature:** Jump to the relevant phase. Floor tagging → Phase 6. Book notes → Phase 12. Team vault → Phase 18. Don't re-run the full setup.
+- **Add a feature:** Jump to the relevant phase. Book notes → Phase 12. Team vault → Phase 18. Don't re-run the full setup.
 - **Fix something broken:** Ask what's wrong and diagnose. Common issues:
   - Vault map empty → open their CLAUDE.md and fill in the `## Vault Map` section with their actual folder list
   - Journal skill not saving → check `~/.claude/skills/daily-journal/SKILL.md` exists
@@ -803,9 +803,7 @@ Here's a quick overview:
 
 If you want to understand the framework deeper: [Internal Design — The High-Rise Model on Substack](https://adelaidadiazroa.substack.com/s/internal-design)
 
-After each journal conversation, I'll identify which floor you're on and tag the entry. Over weeks and months, this becomes incredibly powerful — you can literally see your emotional patterns in data.
-
-If this isn't your thing, just tell me 'turn off floor tagging' and I'll skip it."
+After each journal conversation, I'll identify which floor you're on and tag the entry. Over weeks and months, this becomes incredibly powerful — you can literally see your emotional patterns in data. This is what turns your vault into a life coach."
 
 ### Bilingual aliases (recap before creating floor notes)
 
@@ -817,7 +815,7 @@ This rule isn't just for floors — apply it to every concept note you create fo
 
 ### Create floor concept notes
 
-If the user opts in to floor tagging, create a concept note for each of the 16 floors in their vault. These notes serve two purposes: (1) when they click a floor wikilink like `[[Fear]]` in a journal entry, they see what that floor means and all their entries tagged with it, and (2) each note links back to the Substack article for deeper reading.
+Create a concept note for each of the 16 floors in their vault. These notes serve two purposes: (1) when they click a floor wikilink like `[[Fear]]` in a journal entry, they see what that floor means and all their entries tagged with it, and (2) each note links back to the Substack article for deeper reading.
 
 Save each floor note to `[VAULT_PATH]/Notes/` (or whatever their concept folder is called). Create all 16:
 
@@ -972,6 +970,37 @@ SORT creationDate DESC
 LIMIT 20
 ```
 ```
+
+### Configure graph to hide floor nodes
+
+After creating the floor concept notes, configure the vault's `.obsidian/graph.json` so the graph shows life patterns (people, places, topics, decisions) instead of the framework scaffolding. The wikilinks still work — clicking `[[Fear]]` in a journal entry still opens the Fear note — but the graph stays clean.
+
+```python
+import json, os
+
+graph_path = os.path.join(VAULT_PATH, ".obsidian", "graph.json")
+os.makedirs(os.path.dirname(graph_path), exist_ok=True)
+
+# Load existing or create new
+graph = {}
+if os.path.exists(graph_path):
+    with open(graph_path) as f:
+        graph = json.load(f)
+
+# Add floor exclusion filter to search
+floors_filter = '-file:Shame -file:Guilt -file:Apathy -file:Grief -file:Fear -file:Desire -file:Anger -file:Pride -file:Courage -file:Neutrality -file:Willingness -file:Acceptance -file:Reason -file:Love -file:Joy -file:Peace -file:"Low Floors" -file:"Middle Floors" -file:"High Floors"'
+
+existing_search = graph.get("search", "")
+if "Shame" not in existing_search:
+    graph["search"] = (existing_search + " " + floors_filter).strip()
+
+graph["showOrphans"] = False
+
+with open(graph_path, "w") as f:
+    json.dump(graph, f, indent=2)
+```
+
+Tell the user: "Your graph now shows your real life patterns — people, places, topics — without the floor framework cluttering the view. The floors are still there in your notes. Click any floor wikilink and it still works."
 
 ### Building the journal skill
 
@@ -1995,7 +2024,7 @@ Tell the user: "Your team vault is ready. Share the Google Drive folder with you
 - Context notes so I never ask 'what are we working on?'
 - Templates for journals, people, and meetings
 - Power tools for efficiency
-- A daily journal with floor tagging and habit tracking
+- A daily journal with emotional floor tagging — your AI life coach tracks patterns over time
 - Weekly and monthly insight reports (/weekly and /monthly)
 - A team weekly digest (/team-weekly) if you have a team vault
 - Accountability rules so I push back, not just agree
