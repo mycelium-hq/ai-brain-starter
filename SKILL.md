@@ -1,6 +1,6 @@
 ---
 name: setup-brain
-description: Set up an AI-powered Obsidian vault from scratch. Interactive setup that interviews the user, creates their vault structure, builds their CLAUDE.md, installs tools, and gets them journaling — all in one conversation.
+description: Set up or upgrade an AI-powered Obsidian vault. Interviews you, builds your vault structure (or works with what you already have), creates your CLAUDE.md memory file, installs tools, and gets you journaling — all in one conversation. Also has a repair/upgrade path for existing users.
 ---
 
 # AI Brain Starter — Interactive Setup

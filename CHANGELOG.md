@@ -9,6 +9,22 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 9, 2026 (late session)
+
+### Floor notes now link to the Internal Design Substack series
+All 16 floor notes and 3 tier notes (Low/Middle/High Floors) now link to the full Internal Design series page instead of a single article. Plain-text URLs throughout the skill were converted to proper markdown links. The series page gives readers access to all High-Rise writing, not just one entry.
+
+### Claude won't recreate files you've manually moved
+New rule added everywhere it counts: before creating any folder or file, Claude must check the vault map and search first. If something already exists — even if you moved it — Claude uses that location instead of creating a duplicate. This fixes the most common complaint from existing users. The rule is now baked into every generated CLAUDE.md so new users get it automatically.
+
+### Four setup improvements
+- **Already Set Up?** — new section at the top for users who want to add a feature, fix something, or upgrade their CLAUDE.md without re-running the full 21-phase setup
+- **Existing vault detection** — Claude now asks "starting fresh or have existing notes?" before installing anything. Existing vaults import first, structure gets built around what's already there
+- **Vault map verification gate** — hard stop between Phase 4 and Phase 5 forces Claude to confirm the vault map is actually filled in before continuing. A blank map was causing duplicate folders in every future session
+- **Tier note templates** — Low/Middle/High Floors notes now have complete markdown templates matching the quality of individual floor notes (YAML, descriptions, floor lists, Substack link, Dataview queries)
+
+---
+
 ## April 10, 2026 (evening)
 
 ### Journal skill completely rewritten — the biggest update yet
