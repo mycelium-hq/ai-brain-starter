@@ -409,19 +409,32 @@ type: meta
 
 ## Phase 6: Tool Routing
 
-Ask: "When you need to research something online, what do you use? (Google, Perplexity, ChatGPT, etc.) And what about for design? Project management? Anything else?"
+Ask: "What tools do you already use day to day? I want to know so I route tasks to the right tool instead of doing everything here. Things like:
+- Research: Perplexity, Google, ChatGPT?
+- Design: Canva, Figma?
+- Project management: Linear, Notion, Asana?
+- CRM/Sales: HubSpot, Apollo?
+- Meetings: Granola, Otter, Fireflies?
+- Writing/websites: Framer, Substack, Ghost?
+- Anything else?"
 
-Add a Tool Routing section to their CLAUDE.md:
+Build a Tool Routing section for their CLAUDE.md based on what they use. Include ALL their tools, plus defaults for gaps:
 
 ```markdown
 ## Tool Routing — Use the right tool for the job
 
 | Task | Best Tool | Don't Do Here |
 |------|-----------|--------------|
-| Web research, fact-checking | [their answer] | Don't hallucinate answers |
-| [etc based on their tools] | | |
+| Quick web research, fact-checking | [Perplexity/their answer] | Don't hallucinate or guess |
+| Deep research + deliverables | [Manus AI / their answer] | Don't spend 30min researching here |
+| Meeting transcription | [Granola/Otter/their answer] | Don't manually transcribe |
+| Design / visuals | [Canva/Figma/their answer] | Don't describe designs in text |
+| Project management / sprints | [Linear/Notion/their answer] | Don't track sprints in markdown |
+| CRM / sales pipeline | [HubSpot/their answer] | Don't build pipeline trackers in notes |
+| Website building | [Framer/their answer] | Don't build HTML here |
+| [add rows for any other tools they mentioned] | | |
 
-When someone asks for something another tool does better, say: "This is a [Tool] task — do it there."
+**Rule:** When a task is better suited to another tool, say: "This is a [Tool] task — do it there, paste the result here if you need me to process it." Don't burn Claude tokens when another tool is faster.
 ```
 
 ## Phase 7: Import Existing Notes (if they have them)
@@ -959,16 +972,27 @@ Add these to their CLAUDE.md under a new section:
 ## Obsidian Rules
 
 1. Always wikilink. First occurrence per file. Use alias syntax: [[Concept|natural text]]
-2. YAML frontmatter on every note. Minimum: creationDate. Add type: (concept/journal/person/article) where applicable
-3. Aliases in frontmatter for flexible linking: aliases: [nickname, abbreviation]
-4. New concepts get their own note. In the right folder with a description and connected concepts.
-5. Descriptive file names. When importing files, rename cryptic names to descriptive ones.
-6. Never duplicate the title. Obsidian shows the filename as the page title — don't repeat it with a # heading.
-7. Idea quarantine. New business ideas or shiny distractions go to an Idea Quarantine note, not into action.
-8. CRM on import. When importing anything that mentions people, create or update their CRM entry.
-9. Catch content ideas. If a sharp insight comes up during conversation, save it to a Content Drafts note.
-10. Log decisions. When you make a decision during conversation, append it to a Decision Log with what, why, and date.
-11. NEVER fail silently. If a file save fails, a path doesn't exist, or ANYTHING doesn't work — tell the user immediately and fix it.
+2. Block references for quotes. Never copy-paste text between notes. Use ^block-id at end of source paragraph + ![[File#^block-id]] to embed. This keeps a single source of truth.
+3. YAML frontmatter on every note. Minimum: creationDate. Add type: (concept/journal/person/article) where applicable
+4. Aliases in frontmatter for flexible linking: aliases: [nickname, abbreviation]
+5. New concepts get their own note. In the right folder with a description and connected concepts.
+6. Descriptive file names. When importing files, rename cryptic names to descriptive ones. No source prefixes ("Slack - ", "Google Drive - ").
+7. Never duplicate the title. Obsidian shows the filename as the page title — don't repeat it with a # heading.
+8. Idea quarantine. New business ideas or shiny distractions go to an Idea Quarantine note, not into action.
+9. CRM on import. When importing anything that mentions people, create or update their CRM entry with: relationship, status, last_interaction, next_step, priority.
+10. Catch content ideas. If a sharp insight comes up during conversation, save it to a Content Drafts note.
+11. Log decisions. When you make a decision during conversation, append it to a Decision Log with what, why, and date.
+12. NEVER fail silently. If a file save fails, a path doesn't exist, or ANYTHING doesn't work — tell the user immediately and fix it.
+13. Optimize for navigation. Dense links in, dense links out. Every note should be reachable from related notes.
+14. Wikilink new content on import. When creating notes from external sources, add wikilinks inline. Check the Wikilink Reference for all linkable notes.
+
+## Efficiency Rules
+
+1. Scripts over agents for bulk/mechanical operations. 10+ similar edits → one script.
+2. Read files once. Work from memory after first read.
+3. Batch auto-captures. Content ideas, decisions, vault improvements — batch at end of session, don't interrupt the conversation to log them.
+4. Don't do things without confirming first.
+5. Route to the right tool. Check the Tool Routing table. Don't burn Claude tokens when another tool is faster.
 
 ## Auto-Update Check
 
@@ -986,6 +1010,29 @@ If an update is available, tell the user: "There's a newer version of the AI Bra
 ```
 
 Create the Content Drafts, Decision Log, and Vault Changelog files if they don't exist.
+
+### Build the Wikilink Reference
+
+After all rules are added, build a Wikilink Reference file that lists every linkable note in the vault. This helps Claude (and the user) know what can be wikilinked when writing new content.
+
+Create `[VAULT_PATH]/Meta/Wikilink Reference.md`:
+
+```markdown
+---
+creationDate: [today]
+type: meta
+---
+# Wikilink Reference
+
+*All linkable notes and their aliases. Check this before adding wikilinks to new content. Update when new concept notes are created.*
+
+Total: [count] notes
+
+## By Folder
+[For each folder, list all .md files with their aliases from frontmatter]
+```
+
+To build it, scan every .md file in the vault, extract the filename and any `aliases:` from YAML frontmatter, and list them organized by folder. This becomes the reference Claude checks before wikilinking new content — ensuring links go to real notes, not broken references.
 
 ## Phase 17: Connect External Tools Check
 
