@@ -1,0 +1,44 @@
+{
+  "_comment": "AI Brain Starter — Hook Templates. Run /setup-brain to install these, or apply manually via: claude config edit --add hooks <paste contents here>. After git pull, re-run setup or re-apply to get updated hooks.",
+
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"MANDATORY SESSION PROTOCOL: Before responding to the user, you MUST first read these files in order: 1) The project CLAUDE.md at the vault root 2) Meta/Last Session.md 3) Meta/Current Priorities.md — Do NOT greet the user or respond until all three files have been read. This is non-negotiable.\"}}'",
+            "once": true,
+            "statusMessage": "Loading session context..."
+          }
+        ]
+      }
+    ],
+
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"additionalContext\":\"SESSION ENDING. Before you stop: update Meta/Last Session.md with what was done, what is pending, and any decisions made. If you modified any Onde-related files, also sync to the team vault. Do not skip this — it is the only handoff to the next session.\"}}'",
+            "statusMessage": "Saving session context..."
+          }
+        ]
+      }
+    ],
+
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreCompact\",\"additionalContext\":\"BEFORE COMPACTING: You are about to lose context. Before compaction proceeds, write a brief summary of this session to Meta/Last Session.md including: what was done, what is pending, any decisions made, and any file paths or details you will need after compaction.\"}}'",
+            "statusMessage": "Preserving session context before compaction..."
+          }
+        ]
+      }
+    ]
+  },
+
+  "_how_to_update": "After running git pull on this repo, compare this file to your current hooks in your vault's .claude/settings.local.json. If hooks changed, update your settings manually or re-run /setup-brain — it will detect the existing vault and only update the hooks section."
+}

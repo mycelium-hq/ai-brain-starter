@@ -9,6 +9,16 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 10, 2026
+
+### New: hooks.json — updatable hook templates
+Hooks (the session protocol, stop context save, pre-compact safety net) now live in `hooks.json` at the repo root. Previously they were embedded only in SKILL.md's Phase 5 setup, so existing users couldn't update them after a `git pull`. Now: pull the repo, compare `hooks.json` to your `.claude/settings.local.json`, update if anything changed. See `migrations/2026-04-10-hooks-json-and-argument-hints.md`.
+
+### New: argument-hints on slash commands
+Skills now show inline hints in Claude Code when you type a slash command. `/meeting-todos`, `/weekly`, `/monthly`, and `/graphify` now tell you what arguments they accept before you have to look it up.
+
+---
+
 ## April 9, 2026 (meeting tools + repo infrastructure)
 
 ### New: /meeting-todos skill
