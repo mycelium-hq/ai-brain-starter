@@ -11,6 +11,20 @@ Your tone: warm, clear, encouraging. They might not be technical. Explain things
 
 **Update check:** Before starting, check if this skill is up to date by running `cd ~/.claude/skills/ai-brain-starter && git log --oneline -1` and comparing to the latest on GitHub. If it's behind, tell the user: "There's a newer version of this skill available. Want me to update it first? Just takes a second." If yes, run `git pull`, then read CHANGELOG.md and tell the user in plain English what's new and why it was added. Keep it conversational — "They added book notes import so your Kindle highlights connect to your vault" not "Added Phase 12 with Readwise integration."
 
+## Already Set Up? Use This Instead
+
+If they've already run setup and are coming back to fix or upgrade something, ask: "Are you looking to (1) add a new feature like floor tagging or book notes, (2) fix something that's broken, or (3) upgrade your CLAUDE.md with the latest improvements?"
+
+- **Add a feature:** Jump to the relevant phase. Floor tagging → Phase 6. Book notes → Phase 12. Team vault → Phase 18. Don't re-run the full setup.
+- **Fix something broken:** Ask what's wrong and diagnose. Common issues:
+  - Vault map empty → open their CLAUDE.md and fill in the `## Vault Map` section with their actual folder list
+  - Journal skill not saving → check `~/.claude/skills/daily-journal/SKILL.md` exists
+  - Insights not finding entries → check `Meta/journal-index.json` exists; if not, re-run the index generation from Phase 11
+  - Claude creating duplicate folders → vault map is missing or wrong; fix it first
+- **Upgrade CLAUDE.md:** Read their existing CLAUDE.md. Compare it to the Phase 4 template. Add any missing sections (Vault Rules, Accountability Rules, Session Protocol) without overwriting their personal content. Never replace — only add what's missing.
+
+---
+
 ## Phase 0: Install Efficiency Tools First
 
 **Do this silently before the conversation starts.** These tools reduce token usage for the entire setup, so they should be running before anything else.
@@ -222,7 +236,13 @@ Now create the CLAUDE.md at the vault root with this structure:
 [from their answer]
 
 ## Vault Map
-[List the folders you created]
+[FILL THIS IN — list the actual folders created in Phase 3, e.g.:
+- 📓 Journals/
+- 🏠 Home/
+- 👤 CRM/
+- 📝 Notes/
+- ⚙️ Meta/
+...etc. Do NOT leave this as a placeholder. A blank vault map means every future session lacks orientation and Claude will create duplicate folders.]
 
 ## Rules
 [From their behavior preferences — translate into clear instructions]
@@ -257,6 +277,8 @@ You are not a yes-machine. You are a thinking partner. Act like one.
 ```
 
 Tell them: "Your memory file is created. From now on, every Claude session in this vault starts with full context about who you are."
+
+**STOP — verify before continuing.** Open the CLAUDE.md you just created and confirm the `## Vault Map` section contains the actual folder list, not the placeholder text. If it's still a placeholder, fill it in now with the real folders from Phase 3. This is the most common setup failure — a blank vault map means Claude will create duplicate folders in every future session.
 
 ## Phase 5: Build the Context Layer
 
@@ -655,14 +677,85 @@ SORT creationDate DESC
 15. **Joy** (high) — Delight, laughter, alive. "Best day ever" energy. Rare in journals — capture it when it shows up.
 16. **Peace** (high) — Stillness, presence, nothing to fix. Enough as-is. The top floor. Not happiness — something deeper.
 
-Also create three tier notes:
-- `Low Floors.md` — Floors 1-8, the reactive floors. "You're responding to the world, not choosing."
-- `Middle Floors.md` — Floors 9-13, the transitional floors. "You're starting to choose how you respond."
-- `High Floors.md` — Floors 14-16, the generative floors. "You're creating, not reacting."
+Also create three tier notes using this template (customize the description and floor list for each):
 
-Each tier note should include a Dataview query showing recent journal entries on that tier and this link to the Substack series:
+**Low Floors.md:**
+```markdown
+---
+creationDate: [today]
+type: concept
+floor_tier: low
+aliases: [low floors, reactive floors]
+---
+
+Floors 1–8. You're responding to the world, not choosing. These are the reactive floors — shame, guilt, apathy, grief, fear, desire, anger, pride. They don't mean something is wrong with you. They mean you're human.
+
+**Floors in this tier:** [[Shame]], [[Guilt]], [[Apathy]], [[Grief]], [[Fear]], [[Desire]], [[Anger]], [[Pride]]
 
 **Read more:** [Internal Design — The High-Rise Model on Substack](https://adelaidadiazroa.substack.com/s/internal-design)
+
+## Recent entries on these floors
+
+```dataview
+TABLE creationDate as Date, floor as Floor
+FROM "Journals"
+WHERE floor_level = "low"
+SORT creationDate DESC
+LIMIT 20
+```
+```
+
+**Middle Floors.md:**
+```markdown
+---
+creationDate: [today]
+type: concept
+floor_tier: middle
+aliases: [middle floors, transitional floors]
+---
+
+Floors 9–13. You're starting to choose how you respond. These are the transitional floors — courage, neutrality, willingness, acceptance, reason. The shift from reacting to deciding happens here.
+
+**Floors in this tier:** [[Courage]], [[Neutrality]], [[Willingness]], [[Acceptance]], [[Reason]]
+
+**Read more:** [Internal Design — The High-Rise Model on Substack](https://adelaidadiazroa.substack.com/s/internal-design)
+
+## Recent entries on these floors
+
+```dataview
+TABLE creationDate as Date, floor as Floor
+FROM "Journals"
+WHERE floor_level = "middle"
+SORT creationDate DESC
+LIMIT 20
+```
+```
+
+**High Floors.md:**
+```markdown
+---
+creationDate: [today]
+type: concept
+floor_tier: high
+aliases: [high floors, generative floors]
+---
+
+Floors 14–16. You're creating, not reacting. Love, joy, peace — the generative floors. These aren't destinations you reach permanently. They're floors you visit, live in for stretches, and return to.
+
+**Floors in this tier:** [[Love]], [[Joy]], [[Peace]]
+
+**Read more:** [Internal Design — The High-Rise Model on Substack](https://adelaidadiazroa.substack.com/s/internal-design)
+
+## Recent entries on these floors
+
+```dataview
+TABLE creationDate as Date, floor as Floor
+FROM "Journals"
+WHERE floor_level = "high"
+SORT creationDate DESC
+LIMIT 20
+```
+```
 
 ### Building the journal skill
 
