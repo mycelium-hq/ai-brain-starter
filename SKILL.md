@@ -154,23 +154,32 @@ Walk them through installing and enabling each one:
 
 "I'm going to create your folder structure now. This is how your vault will be organized."
 
-Create these folders in their vault:
+Create these CORE folders in their vault (emojis are important — they make the sidebar scannable):
 
 ```
-Journals/
-Journals/Monthly Summaries/
-Home/
-CRM/
-Writing/
-Books/
-Work/
-Psychology/
-Meta/
+📓 Journals/
+📓 Journals/Monthly Summaries/
+📓 Journals/Weekly Insights/
+📓 Journals/Monthly Insights/
+🏠 Home/
+👤 CRM/
+📚 Books/
+📝 Notes/
+🧠 Psychology/
+⚙️ Meta/
+⚙️ Meta/scripts/
 ```
 
-Tell them: "Done — you should see the folders in your Obsidian sidebar now. If you have a specific area of your life that needs its own folder (a business, a creative project, school, etc.), tell me and I'll add it."
+**Conditional folders — only create if relevant based on what they told you in Phase 1:**
+- `✍️ Writing/` — only if they said they write (blog, book, newsletter, journal publicly). Don't create this for everyone.
+- `💼 Business/` — only if they have a business, startup, or side project
+- `🚀 [Project Name]/` — if they have an active project/startup, give it its own emoji folder
+- `🏫 School/` — only if they're a student
+- `🌱 Curiosities/` — for people who want a catch-all for random interests
 
-**Add any custom folders they request.**
+Tell them: "Done — you should see the folders in your Obsidian sidebar now. The emojis help you scan quickly. If you have a specific area of your life that needs its own folder (a creative project, school, etc.), tell me and I'll add it."
+
+**Add any custom folders they request. Always use emojis.**
 
 ## Phase 4: Build Their CLAUDE.md
 
@@ -912,7 +921,50 @@ After all the installs and imports, quickly verify: "Let's make sure everything 
 
 Ask: "Want me to set up weekly and monthly insight reports? You type /weekly or /monthly anytime and I'll analyze your entries for that calendar period and give you a reflection."
 
-If yes, create the skill file at `~/.claude/skills/insights/SKILL.md`:
+If yes, first create a journal index builder script at `[VAULT_PATH]/Meta/scripts/build-journal-index.py`:
+
+```python
+#!/usr/bin/env python3
+"""Build a date index of all journal entries for fast lookup."""
+import os, json
+from datetime import datetime
+
+VAULT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+JOURNAL_DIR = os.path.join(VAULT, "\U0001f4d3 Journals")
+OUTPUT = os.path.join(VAULT, "\u2699\ufe0f Meta", "journal-index.json")
+
+entries = []
+for fname in os.listdir(JOURNAL_DIR):
+    if not fname.endswith(".md") or os.path.isdir(os.path.join(JOURNAL_DIR, fname)):
+        continue
+    try:
+        with open(os.path.join(JOURNAL_DIR, fname), 'r', encoding='utf-8', errors='replace') as f:
+            in_fm, meta = False, {}
+            for i, line in enumerate(f):
+                if i == 0 and line.strip() == '---':
+                    in_fm = True; continue
+                if in_fm:
+                    if line.strip() == '---': break
+                    if ': ' in line:
+                        k, v = line.split(': ', 1)
+                        meta[k.strip()] = v.strip().strip("'\"")
+                if i > 15: break
+            if 'creationDate' in meta:
+                entry = {"file": fname, "date": meta['creationDate'][:10]}
+                if 'floor' in meta: entry["floor"] = meta["floor"]
+                if 'floor_level' in meta: entry["floor_level"] = meta["floor_level"]
+                entries.append(entry)
+    except: pass
+
+entries.sort(key=lambda x: x["date"])
+with open(OUTPUT, 'w') as f:
+    json.dump({"total": len(entries), "last_updated": datetime.now().strftime("%Y-%m-%dT%H:%M"), "entries": entries}, f, indent=2, ensure_ascii=False)
+print(f"Indexed {len(entries)} entries")
+```
+
+Run it: `python3 "[VAULT_PATH]/Meta/scripts/build-journal-index.py"`
+
+Then create the skill file at `~/.claude/skills/insights/SKILL.md`:
 
 ```markdown
 ---
@@ -927,6 +979,19 @@ When the user types /weekly or /monthly, generate an insight report from their r
 ## For /weekly — read all journal entries from the current calendar week (Monday–Sunday). If today is Monday or Tuesday, default to the previous week (since there's barely any data yet). The user can specify "this week" to override.
 
 ## For /monthly — read all journal entries from the current calendar month (1st–last day). If today is the 1st–3rd, default to the previous month. The user can specify "this month" to override.
+
+## CRITICAL: How to find entries by date
+
+**DO NOT grep the entire Journals folder.** With hundreds of entries, that times out.
+
+Instead, use the journal index at `[VAULT_PATH]/Meta/journal-index.json`. This is a JSON file mapping every journal entry to its `creationDate`, `floor`, and `floor_level`. One file read instead of hundreds.
+
+If the index doesn't exist or is stale, rebuild it:
+```bash
+python3 "[VAULT_PATH]/Meta/scripts/build-journal-index.py"
+```
+
+Filter entries by date range from the index, then read ONLY the matching files.
 
 ## Report Structure
 
