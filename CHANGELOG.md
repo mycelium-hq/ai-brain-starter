@@ -9,6 +9,21 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 10, 2026 (fourth session)
+
+### Fix: /weekly + /patterns now run automatically together
+Previously the cron script only ran `/weekly` and Phase 22 told users to manually run `/patterns` after. Now the weekly cron script chains patterns automatically — one schedule, both run. Patterns in headless/cron mode auto-captures all findings without asking for confirmation (adds "(auto-captured — review and edit)" to new Originals/ files). Mac cron + Windows Task Scheduler scripts both updated.
+
+### Fix: meeting-todos now fires automatically on meeting note save
+Previously `/meeting-todos` required manual triggering. Now: when any file is saved to a Meeting Notes folder, the PostToolUse hook fires and Claude automatically runs the todo extraction, shows a preview, and waits for confirmation before writing. No manual step needed.
+
+To upgrade from a previous install: replace `originals-hook.sh` with `write-hook.sh` in your `Meta/scripts/` folder (copy the new script from Phase 5 of setup) and update the path in `.claude/settings.local.json`. The `originals-hook.sh` behavior is preserved — `write-hook.sh` does everything it did, plus the meeting notes trigger.
+
+### Fix: Originals/ → Writing/ → Substack pipeline now documented
+The relationship between these three stages was missing. Added to Phase 3 (folder structure): Originals/ is the raw seed (verbatim, protected), Writing/Substack Drafts/ is the developed draft (links back to the seed), publishing is the final stage. A CLAUDE.md rule is now added automatically for users who have a Writing folder.
+
+---
+
 ## April 10, 2026 (third session)
 
 ### New: /graphify skill bundled in repo (`skills/graphify/SKILL.md`)

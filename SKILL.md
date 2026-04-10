@@ -270,6 +270,21 @@ After creating folders, create a RESOLVER.md in each key directory. This is a sh
 4. Would you be the one cited if someone referenced this? → YES: belongs here
 ```
 
+**The Originals → Writing → Publishing pipeline:**
+
+Originals/, Writing/, and any writing output (Substack, blog, newsletter) are three stages of the same thing — not competing folders:
+
+- **`Originals/`** — raw idea, captured verbatim in your exact words the moment it surfaces. A single sentence, a paragraph, a framework name. Protected, never paraphrased. Think: "the seed."
+- **`✍️ Writing/Substack Drafts/`** (or `Writing/Drafts/`) — the developed version. When you're ready to turn an Originals/ seed into an article, you start a draft here that *links back* to the Originals/ file. Think: "the plant."
+- **Published** — Substack, blog, wherever. Done.
+
+CLAUDE.md should include this rule (add it automatically if the user has a Writing folder):
+```
+- When developing any writing piece, check Originals/ first for seeds. Link the draft to the source Originals/ file. Never rewrite an Originals/ entry — develop from it.
+```
+
+So if someone has a Substack: their sharp observation goes in `Originals/` first (exact words), then when they sit down to write, they open that file, create `Writing/Substack Drafts/Article Title.md`, and write from the seed. The Originals/ file never gets edited — it stays as the original capture forever.
+
 ## Phase 4: Build Their CLAUDE.md
 
 "Now the most important part — your memory file. I'm going to ask you some questions, then create a file that I'll read automatically at the start of every conversation. The more specific you are, the better I get."
@@ -479,11 +494,13 @@ fi
 echo "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"additionalContext\":\"SESSION ENDING ($DATE $TIME): Update Last Session.md at '$LAST_SESSION' — write today's date, what was done, what's pending. Also: batch any Substack Notes, decision log entries, or vault changelog items.\"}}"
 ```
 
-Also create the **originals-hook.sh** script that fires after every Write tool call and reminds Claude to update Wikilink Reference when a new Originals/ file is created:
+Also create the **write-hook.sh** script that fires after every Write tool call. It handles two automatic behaviors:
+1. When a file is saved to `Originals/` — prompts Claude to update Wikilink Reference immediately
+2. When a file is saved to a Meeting Notes folder — prompts Claude to run meeting-todos extraction automatically
 
 ```bash
 #!/bin/bash
-# Save to: [VAULT_PATH]/Meta/scripts/originals-hook.sh
+# Save to: [VAULT_PATH]/Meta/scripts/write-hook.sh
 # chmod +x this file after creating it
 
 INPUT=$(cat)
@@ -500,6 +517,9 @@ except:
 if echo "$FILE_PATH" | grep -q "Originals/"; then
   BASENAME=$(basename "$FILE_PATH" .md)
   echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"New Originals file saved: '$BASENAME'. Update Wikilink Reference.md immediately to add this concept and any aliases. Do this before continuing.\"}}"
+elif echo "$FILE_PATH" | grep -qi "Meeting Notes/\|Meeting-Notes/"; then
+  BASENAME=$(basename "$FILE_PATH" .md)
+  echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"Meeting note saved: '$BASENAME'. Run /meeting-todos on this file now — extract action items, show the user a preview, and add confirmed tasks to the to-do file. Do this automatically without waiting to be asked.\"}}"
 else
   echo "{}"
 fi
@@ -510,12 +530,14 @@ Replace the Stop hook path in `.claude/settings.local.json` to point to this scr
 "Stop": [{"hooks": [{"type": "command", "command": "bash '[VAULT_PATH]/Meta/scripts/session-end-hook.sh'", "statusMessage": "Saving session context..."}]}]
 ```
 
-And add the PostToolUse hook for Originals/ protection:
+And add the PostToolUse hook:
 ```json
-"PostToolUse": [{"matcher": "Write", "hooks": [{"type": "command", "command": "bash '[VAULT_PATH]/Meta/scripts/originals-hook.sh'", "statusMessage": "Checking for Originals capture..."}]}]
+"PostToolUse": [{"matcher": "Write", "hooks": [{"type": "command", "command": "bash '[VAULT_PATH]/Meta/scripts/write-hook.sh'", "statusMessage": "Checking write triggers..."}]}]
 ```
 
-After creating both scripts, run: `chmod +x "[VAULT_PATH]/Meta/scripts/session-end-hook.sh" "[VAULT_PATH]/Meta/scripts/originals-hook.sh"`
+After creating both scripts, run: `chmod +x "[VAULT_PATH]/Meta/scripts/session-end-hook.sh" "[VAULT_PATH]/Meta/scripts/write-hook.sh"`
+
+**Note:** If the user was already set up with `originals-hook.sh`, migrate by copying its contents into `write-hook.sh` and updating the hook path in `.claude/settings.local.json`.
 
 The full hook template (UserPromptSubmit + Stop + PreCompact + PostToolUse) is in `hooks.json` at the repo root. After any `git pull`, compare it to your `.claude/settings.local.json` to see if hooks have been updated.
 
@@ -1168,7 +1190,7 @@ Ask: "Do you record meetings? (Granola, Otter, Fireflies, Zoom transcripts, etc.
 
 Then offer the meeting-todos skill:
 
-"After any meeting, type `/meeting-todos` and I'll read the transcript, pull out your action items (separate from others'), and add them to your to-do with context. You'll see a preview before anything gets written."
+"After any meeting note is saved to your Meeting Notes folder, I'll automatically pull out your action items (separate from others') and show you a preview before adding anything to your to-do. You don't have to type anything — it fires the moment the note lands in the vault. You can also trigger it manually with `/meeting-todos` anytime."
 
 Install the skill:
 
@@ -1670,11 +1692,11 @@ cd "$VAULT_DIR" || exit 1
   --model claude-sonnet-4-6 \
   --allowedTools "Read,Write,Edit,Glob,Grep,Bash" \
   --permission-mode acceptEdits \
-  "Run the /insights skill for a $PERIOD report. Read the skill at ~/.claude/skills/insights/SKILL.md first, then follow its instructions exactly. Read all journal entries for the $PERIOD calendar period and generate the full report. Save it to the correct folder." \
+  "Run the /insights skill for a $PERIOD report. Read the skill at ~/.claude/skills/insights/SKILL.md first, then follow its instructions exactly. Read all journal entries for the $PERIOD calendar period and generate the full report. Save it to the correct folder. After the report is saved, run /patterns in auto mode: read ~/.claude/skills/patterns/SKILL.md, scan for patterns, then automatically capture all findings without asking for confirmation — this is a headless cron run with no user present. Add '(auto-captured from $PERIOD patterns run — review and edit)' to any new Originals/ files created." \
   >> "$LOG_FILE" 2>&1
 
 EXIT_CODE=$?
-echo "$(date): Finished $PERIOD insights (exit code: $EXIT_CODE)" >> "$LOG_FILE"
+echo "$(date): Finished $PERIOD insights + patterns (exit code: $EXIT_CODE)" >> "$LOG_FILE"
 ```
 
 Make it executable: `chmod +x "[vault]/⚙️ Meta/scripts/run-insights.sh"`
@@ -1724,7 +1746,7 @@ Set-Location $VaultDir
   --model claude-sonnet-4-6 `
   --allowedTools "Read,Write,Edit,Glob,Grep,Bash" `
   --permission-mode acceptEdits `
-  "Run the /insights skill for a $Period report. Read the skill at ~/.claude/skills/insights/SKILL.md first, then follow its instructions exactly. Read all journal entries for the $Period calendar period and generate the full report. Save it to the correct folder." `
+  "Run the /insights skill for a $Period report. Read the skill at ~/.claude/skills/insights/SKILL.md first, then follow its instructions exactly. Read all journal entries for the $Period calendar period and generate the full report. Save it to the correct folder. After the report is saved, run /patterns in auto mode: read ~/.claude/skills/patterns/SKILL.md, scan for patterns, then automatically capture all findings without asking for confirmation — this is a headless cron run with no user present. Add '(auto-captured from $Period patterns run — review and edit)' to any new Originals/ files created." `
   2>&1 | Add-Content $LogFile
 
 Add-Content $LogFile "$(Get-Date): Finished $Period insights (exit code: $LASTEXITCODE)"

@@ -10,6 +10,8 @@ You are extracting signal before it evaporates. This skill scans recent sessions
 
 Run this after `/weekly`, after a heavy journaling session, or whenever the user says "I keep noticing..." or "this keeps coming up."
 
+**Headless/auto mode:** If you are running in a cron job, background script, or `--print` session with no interactive user, skip Step 3's confirmation. Auto-capture all findings. Add the note `(auto-captured — review and edit)` as the first line of any new Originals/ file. Proceed directly to Step 4 → Step 5.
+
 ---
 
 ## Step 1: Gather recent signal (do this silently)
