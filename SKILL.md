@@ -63,15 +63,25 @@ fi
 
 ### Windows
 ```
+# Check for winget (built into Windows 11 and recent Windows 10)
+winget --version
+
 # Check for Python 3.10+
 python --version
-# If missing or below 3.10: "Download Python from https://www.python.org/downloads/ — make sure to check 'Add to PATH' during install."
+
+# If Python is missing or below 3.10 — install it automatically via winget:
+winget install -e --id Python.Python.3.12 --accept-source-agreements --accept-package-agreements
+# After installing, restart the shell session so PATH is updated:
+refreshenv 2>/dev/null || $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 
 # Check for Node.js
 node --version
-# If missing: "Download Node.js from https://nodejs.org/ — the LTS version."
 
-# After Python is installed:
+# If Node.js is missing — install it automatically via winget:
+winget install -e --id OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements
+# Refresh PATH again after install
+
+# After Python and Node are confirmed:
 pip install pipx
 pipx ensurepath
 pipx install graphifyy
@@ -84,15 +94,37 @@ npx claude-mem install
 git clone https://github.com/blader/humanizer.git %USERPROFILE%\.claude\skills\humanizer
 ```
 
+**If winget is not available** (older Windows): install via official installers using the Bash tool to download and run them silently:
+```
+# Python silent install
+curl -o python-installer.exe https://www.python.org/ftp/python/3.12.0/python-3.12.0-amd64.exe
+Start-Process python-installer.exe -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait
+
+# Node.js silent install  
+curl -o node-installer.msi https://nodejs.org/dist/lts/node-v20-x64.msi
+Start-Process msiexec -ArgumentList "/i node-installer.msi /quiet /norestart" -Wait
+```
+Tell the user: "Installing Python and Node.js for you — this takes a minute." Do not ask them to download anything manually.
+
 ### Linux
 ```
-# Most Linux distros have Python 3.10+. Check:
+# Check Python 3.10+
 python3 --version
 
-# If missing: sudo apt install python3 python3-pip (Ubuntu/Debian) or equivalent
-# Node.js: sudo apt install nodejs npm
+# If missing or below 3.10 — install automatically:
+sudo apt-get update && sudo apt-get install -y python3 python3-pip   # Ubuntu/Debian
+# or: sudo dnf install python3 python3-pip                           # Fedora/RHEL
+# or: sudo pacman -S python python-pip                               # Arch
 
-# Then same as Mac:
+# Check Node.js
+node --version
+
+# If missing — install automatically:
+sudo apt-get install -y nodejs npm   # Ubuntu/Debian
+# or: sudo dnf install nodejs        # Fedora/RHEL
+# or: sudo pacman -S nodejs npm      # Arch
+
+# After Python and Node are confirmed:
 pip install pipx && pipx ensurepath
 pipx install graphifyy && graphify install
 npx claude-mem install
