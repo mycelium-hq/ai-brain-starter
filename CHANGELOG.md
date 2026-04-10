@@ -9,6 +9,18 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 10, 2026 (third session)
+
+### New: /graphify skill bundled in repo (`skills/graphify/SKILL.md`)
+The graphify CLI was already installed in Phase 0, but the skill file — which tells Claude *how* to run the full pipeline (parallel subagents, cache, clustering, HTML export, incremental updates) — was missing from the repo. Without it, `/graphify` does nothing. Now bundled at `skills/graphify/SKILL.md` and copied to `~/.claude/skills/graphify/` during Phase 0 and verified in Phase 9. Routing block added to CLAUDE.md in Phase 9.
+
+Also documents a critical gotcha: `graph.json` stores edges under the key `"links"` (networkx format), not `"edges"`. Any custom script loading graph.json must use `graph.get('links', graph.get('edges', []))` or it silently gets zero edges.
+
+### New: meeting-todos skill bundled in repo (`skills/meeting-todos/SKILL.md`)
+Phase 12 already told setup to `cp -r ~/.claude/skills/ai-brain-starter/meeting-todos ~/.claude/skills/meeting-todos` — but the source folder didn't exist. That cp would fail silently for everyone. Now the skill is in the repo. Generic template with `[VAULT]` path placeholder.
+
+---
+
 ## April 10, 2026 (second session)
 
 ### New: /patterns — Instinct Engine

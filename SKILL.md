@@ -51,6 +51,9 @@ if ! command -v node &>/dev/null; then brew install node; fi
 
 # Graphify — ~70% fewer tokens on vault queries
 if ! command -v graphify &>/dev/null; then pipx install graphifyy && graphify install; fi
+# Graphify Claude skill (the pipeline instructions)
+mkdir -p ~/.claude/skills/graphify
+cp ~/.claude/skills/ai-brain-starter/skills/graphify/SKILL.md ~/.claude/skills/graphify/SKILL.md
 
 # Claude-Mem — ~30-40% fewer tokens on session starts
 npx claude-mem install 2>/dev/null
@@ -86,6 +89,8 @@ pip install pipx
 pipx ensurepath
 pipx install graphifyy
 graphify install --platform windows
+mkdir -p %USERPROFILE%\.claude\skills\graphify
+copy %USERPROFILE%\.claude\skills\ai-brain-starter\skills\graphify\SKILL.md %USERPROFILE%\.claude\skills\graphify\SKILL.md
 
 # Claude-Mem
 npx claude-mem install
@@ -741,8 +746,17 @@ git clone https://github.com/PleasePrompto/notebooklm-skill.git ~/.claude/skills
 ### Verify Phase 0 installs
 Quickly check that everything from Phase 0 is working:
 - `graphify --version` — if missing, retry: `pipx install graphifyy && graphify install`
+- `ls ~/.claude/skills/graphify/SKILL.md` — if missing, retry: `mkdir -p ~/.claude/skills/graphify && cp ~/.claude/skills/ai-brain-starter/skills/graphify/SKILL.md ~/.claude/skills/graphify/SKILL.md`
 - `ls ~/.claude/skills/humanizer` — if missing, retry: `git clone https://github.com/blader/humanizer.git ~/.claude/skills/humanizer`
 - Claude-Mem — if not in plugin list, retry: `npx claude-mem install`
+
+Add graphify routing to their CLAUDE.md (global `~/.claude/CLAUDE.md` if it exists, or vault root):
+
+```markdown
+# graphify
+- **graphify** (`~/.claude/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`
+When the user types `/graphify`, invoke the Skill tool with `skill: "graphify"` before doing anything else.
+```
 
 Tell the user what's installed: "You have [X] power tools running. Here's what each one does:" and give a one-line explanation of each.
 
