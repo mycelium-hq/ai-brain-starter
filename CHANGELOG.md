@@ -9,6 +9,22 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 9, 2026 (final session — patterns borrowed from gbrain)
+
+### New: Compiled truth + timeline for CRM entries
+CRM entries now use a two-layer pattern. Above the `---` separator: 2-3 sentences synthesizing who this person is RIGHT NOW — rewritten whenever something significant changes. Below: an append-only timeline of events, never edited. This means clicking a contact gives you their current state instantly instead of scrolling through months of notes. Existing entries are unaffected until you migrate them — see `migrations/2026-04-09-compiled-truth-crm.md` for how.
+
+### New: 💡 Originals/ folder — for your own thinking
+New core folder added to every setup. Protected for the user's own frameworks, theses, metaphors, and original ideas — captured verbatim in their exact phrasing. Never paraphrased, never merged into a generic concept note. File names = the idea itself. Claude now has a rule to capture original thinking here immediately whenever it surfaces in conversation or journals. See `migrations/2026-04-09-originals-folder.md`.
+
+### New: RESOLVER.md files in key directories
+After creating folders, the setup now creates a RESOLVER.md in each key directory — a short decision tree answering "does X live here?" before any file is created. Covers CRM/, Notes/, and Originals/ by default. Prevents the slow vault decay where the same type of content ends up scattered across multiple folders because the rule was never written down. See `migrations/2026-04-09-resolver-md.md`.
+
+### New: migrations/ folder for existing users
+A `migrations/` directory now lives in the repo. Each file is a dated, plain-English guide for applying new patterns to an existing vault — what changed, why, and exactly how to apply it without re-running the full setup. The "Already Set Up?" section at the top of the skill now references these files.
+
+---
+
 ## April 9, 2026 (late session)
 
 ### Floor notes now link to the Internal Design Substack series

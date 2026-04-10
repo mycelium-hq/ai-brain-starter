@@ -182,9 +182,12 @@ Create these CORE folders in their vault (emojis are important — they make the
 📚 Books/
 📝 Notes/
 🧠 Psychology/
+💡 Originals/
 ⚙️ Meta/
 ⚙️ Meta/scripts/
 ```
+
+**💡 Originals/ — special rules:** This folder is for the user's own frameworks, theses, metaphors, and original ideas — captured verbatim in their exact phrasing. Never paraphrase. Never merge into a generic concept note. File names = the idea itself. This is the highest-value content in the vault. If something the user says could be cited, it belongs here.
 
 **Conditional folders — only create if relevant based on what they told you in Phase 1:**
 - `✍️ Writing/` — only if they said they write (blog, book, newsletter, journal publicly). Don't create this for everyone.
@@ -196,6 +199,39 @@ Create these CORE folders in their vault (emojis are important — they make the
 Tell them: "Done — you should see the folders in your Obsidian sidebar now. The emojis help you scan quickly. If you have a specific area of your life that needs its own folder (a creative project, school, etc.), tell me and I'll add it."
 
 **Add any custom folders they request. Always use emojis.**
+
+After creating folders, create a RESOLVER.md in each key directory. This is a short decision tree answering "does X live here?" — it prevents the vault from decaying into ambiguity as it grows.
+
+**👤 CRM/RESOLVER.md:**
+```markdown
+# Does this live in CRM/?
+
+1. Is this a real person you've interacted with or plan to? → YES: create [Name].md here
+2. Is it a company, org, or brand (not a specific person)? → NO: Business/ or Notes/
+3. Is it a public figure you've never met? → NO: Notes/ or Books/
+4. Is it a group you have a relationship with as a whole? → YES, if you interact with them as a unit
+```
+
+**📝 Notes/RESOLVER.md:**
+```markdown
+# Does this live in Notes/?
+
+1. Is this your own original idea, framework, or thesis? → NO: 💡 Originals/
+2. Is this from a book you read? → NO: 📚 Books/
+3. Is this a psychology/behavioral concept? → Maybe: 🧠 Psychology/ if that folder exists
+4. Is this an article, course, or how-to you learned from? → YES: create here
+5. Is this a concept that belongs to a specific project? → NO: that project's folder
+```
+
+**💡 Originals/RESOLVER.md:**
+```markdown
+# Does this live in Originals/?
+
+1. Is this a framework, metaphor, or thesis you originated? → YES
+2. Did you read this somewhere else, even if you agree with it? → NO: Notes/ or Books/
+3. Is this a synthesis of other people's ideas? → Borderline — only if the synthesis itself is original
+4. Would you be the one cited if someone referenced this? → YES: belongs here
+```
 
 ## Phase 4: Build Their CLAUDE.md
 
@@ -269,6 +305,8 @@ You are not a yes-machine. You are a thinking partner. Act like one.
 
 ## Vault Rules
 1. **Check before creating.** Before making any new folder or file, check the Vault Map above and search for it. If it exists somewhere, use that location — don't create a duplicate. If the user manually moved something, respect where it is now, not where it was originally created.
+2. **Originals folder is protected.** When [user] expresses an original framework, metaphor, or thesis — in conversation, in a journal entry, anywhere — capture it verbatim in 💡 Originals/ immediately. Use their exact phrasing. Never paraphrase. File name = the idea itself. This is the highest-value content in the vault.
+3. **Use RESOLVER.md before creating files.** Each key folder has a RESOLVER.md with a decision tree. Check it before creating any note to confirm it belongs there.
 
 ## Session Protocol
 1. Start: Read this file. Don't ask what we were doing — you should already know.
@@ -506,16 +544,30 @@ If they import files, do a basic standardization pass:
 **If they have people mentioned in their notes:**
 "I found [X] people mentioned across your notes. Want me to create a CRM folder with a contact card for each person? Each one will have their name, relationship to you, and a live query showing every note that mentions them."
 
-If yes, create CRM entries with:
-```yaml
+If yes, create CRM entries with this template:
+
+```markdown
 ---
 type: person
 aliases: [nicknames]
 relationship: [friend/family/colleague/etc]
 status: [active/inactive]
 priority: [high/medium/low]
+last_updated: [today]
 ---
+
+[2-3 sentences on who this person is RIGHT NOW — their current role, your current relationship, the most important thing about them at this moment. Rewrite this section whenever something significant changes. Never append here — synthesize.]
+
+**Next step:** [one specific action]
+
+---
+
+## Timeline
+
+- [date] — [what happened, what was said, what changed]
 ```
+
+**Rule:** Everything above `---` is synthesized current truth — rewrite it when things change. Everything below is an append-only evidence log — never edit, only add new entries. This means clicking a contact gives you their current state instantly, not a scroll through history.
 
 ## Phase 8: Templates
 
