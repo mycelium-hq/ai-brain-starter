@@ -26,6 +26,9 @@ Counters the natural bias toward only journaling when things are hard. One quick
 ### New: Idea quarantine for entrepreneurs
 If you're building something, the journal skill now catches side ideas mid-conversation and parks them in Business/Idea Quarantine.md instead of letting them derail your focus. Also flags escape patterns: "Is this real inspiration or escape from the hard thing?"
 
+### New: Living floor notes — updated by weekly/monthly insights
+Floor concept notes now grow over time. After each /weekly or /monthly insight report, the insights skill checks if any floor that appeared 2+ times has a new personal pattern worth capturing — triggers, movement strategies, person-floor correlations, surprises. Appends them under a `## Personal Patterns` section on the floor note. Monthly insights do a deeper review and can update, merge, or retire stale patterns. Over time, clicking [[Fear]] shows YOUR fear patterns, not a textbook definition.
+
 ### Setup no longer stops mid-flow
 Previously, Claude might stop after the journal phase and wait for you to ask "what's next?" Now it automatically continues through all 21 phases unless you explicitly say to pause.
 

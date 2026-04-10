@@ -1074,6 +1074,28 @@ avg_bedtime: [time]
 *Primary floor: [[Floor]] · [[Level Floors]]*
 ```
 
+## After Saving: Update Floor Notes with Personal Insights
+
+After saving the insight report, check whether any floor that appeared this period has a new personal pattern worth capturing.
+
+**For each floor that appeared 2+ times this period:**
+1. Read the floor note (e.g., `[[Fear]]`, `[[Courage]]`, `[[Joy]]`)
+2. Check if it has a `## Personal Patterns` section. If not, create one.
+3. Ask: Is there a NEW trigger, pattern, or movement insight from this period that isn't already captured?
+   - New trigger: "Fear spikes before investor meetings and when money conversations come up."
+   - New pattern: "Joy tends to follow 3+ gym days and flow states."
+   - New movement: "Moving from Anger to Acceptance happened same-day — both times after journaling the frustration out."
+   - New person-floor link: "Conversations with [person] consistently land on [floor]."
+4. If yes, append under `## Personal Patterns` with the date: `- *(Week of Apr 7, 2026)* Joy shows up after back-to-back gym days and uninterrupted creative mornings.`
+5. If nothing new, skip — don't add filler.
+
+**What's worth adding:** Triggers that appeared 2+ times, movement strategies that worked, person-floor correlations, surprises.
+**What to skip:** Generic observations already in the static description, one-off events, anything already captured.
+
+Over time, clicking `[[Fear]]` won't show a textbook definition — it'll show YOUR fear: what triggers it, who brings it, what moves you out of it, and how it's changed.
+
+**For monthly insights:** Do a deeper review. Read ALL accumulated personal patterns and update, merge, or retire stale ones.
+
 ## Rules
 - Read EVERY journal entry in the period. Don't skip or skim.
 - Be specific — use their words, reference entries by name, name people and situations.
