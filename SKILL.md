@@ -1028,6 +1028,25 @@ Ask: "Do you record meetings? (Granola, Otter, Fireflies, Zoom transcripts, etc.
 - If yes: "We can set up auto-import so your meeting notes land in the vault automatically, formatted with frontmatter, attendee lists, and action items. No manual copying."
 - Walk them through setting up the import (varies by tool — Granola has an API, others export to folders)
 
+Then offer the meeting-todos skill:
+
+"After any meeting, type `/meeting-todos` and I'll read the transcript, pull out your action items (separate from others'), and add them to your to-do with context. You'll see a preview before anything gets written."
+
+Install the skill:
+
+```bash
+# The skill is bundled in this repo
+cp -r ~/.claude/skills/ai-brain-starter/meeting-todos ~/.claude/skills/meeting-todos
+```
+
+Add routing to the user's CLAUDE.md:
+
+```markdown
+# meeting todos
+- **meeting-todos** (`~/.claude/skills/meeting-todos/SKILL.md`) — extract action items from a meeting note and add them to to-do. Trigger: `/meeting-todos`
+When the user types `/meeting-todos`, invoke the Skill tool with `skill: "meeting-todos"` before doing anything else.
+```
+
 ### Design & Creative
 Ask: "Do you use Canva, Figma, or any design tools?"
 - "Connect Canva or Figma from connectors. I can search your designs, generate new ones from vault context, and pull brand assets."

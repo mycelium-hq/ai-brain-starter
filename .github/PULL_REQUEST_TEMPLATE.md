@@ -1,0 +1,31 @@
+## What does this PR do?
+
+<!-- One sentence. Be specific: "Adds /meeting-todos skill to extract action items from meeting transcripts" -->
+
+## Which file(s) changed?
+
+- [ ] `SKILL.md`
+- [ ] `README.md`
+- [ ] `CHANGELOG.md`
+- [ ] `CONTRIBUTING.md`
+- [ ] `EXAMPLES.md`
+- [ ] `migrations/`
+- [ ] Other: 
+
+## Is this a breaking change?
+
+<!-- Would existing users need to do anything differently after pulling this? -->
+- [ ] No
+- [ ] Yes — describe what changes for existing users:
+
+## Did you update CHANGELOG.md?
+
+- [ ] Yes
+- [ ] Not needed (typo fix, README clarification, etc.)
+
+## Checklist
+
+- [ ] No personal data, vault paths, or API keys included
+- [ ] The pattern is universal (works for any user, not just one setup)
+- [ ] SKILL.md changes don't break the existing phase flow
+- [ ] Tested manually (even briefly)

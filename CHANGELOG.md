@@ -9,6 +9,16 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 9, 2026 (meeting tools + repo infrastructure)
+
+### New: /meeting-todos skill
+After any meeting, type `/meeting-todos` and Claude reads the transcript, separates your action items from everyone else's, and shows you a preview before writing anything to your to-do. Time-sensitive commitments get flagged with ⚠️. Multilingual transcripts work fine. See `meeting-todos/SKILL.md`.
+
+### New: GitHub issue templates + PR template
+Added `.github/ISSUE_TEMPLATE/bug_report.md`, `feature_request.md`, and `PULL_REQUEST_TEMPLATE.md`. When someone opens a bug or feature request on GitHub, they now get a structured form instead of a blank box. PRs get a checklist that catches "forgot to update CHANGELOG" or "included personal data" mistakes before they merge.
+
+---
+
 ## April 9, 2026 (final session — patterns borrowed from gbrain)
 
 ### New: Compiled truth + timeline for CRM entries

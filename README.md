@@ -101,6 +101,7 @@ Plus any custom folders based on your life.
 | **NotebookLM** | Queries your Google NotebookLM notebooks | `/notebooklm` |
 | **Weekly Insights** | Pattern recognition from your journal week | `/weekly` |
 | **Monthly Insights** | Deeper trends, therapist + coach observations | `/monthly` |
+| **Meeting → To-Do** | Extracts your action items from meeting notes | `/meeting-todos` |
 
 These require Homebrew + Python 3.12 + Node.js. The setup walks you through installing them.
 
