@@ -31,7 +31,17 @@ If they've already run setup and are coming back to fix or upgrade something, as
 
 First, detect the platform: Mac, Windows, or Linux. Then check what's already installed and install what's missing. Don't overwhelm the user with terminal output — just do it quietly.
 
-Tell the user: "I need to install a couple of tools first that will make this whole setup faster and use less of your subscription. This takes a few minutes."
+**FIRST-RUN PROGRESS MESSAGE** — non-technical users will think nothing is happening if Claude goes silent during installs. Before any install runs, tell the user (in their primary language once Phase 1 step 1.0 has run; before that, in English):
+
+> "Setting up the tools you'll need — give me a moment. This usually takes 2–3 minutes the first time, or just a few seconds if you've already run the bootstrap. I'll keep you posted as each piece installs."
+
+Then for each install (graphify, claude-mem, humanizer, notebooklm, granola, etc.), give a brief one-line confirmation when it completes: *"Graphify ready ✓"*, *"Claude-Mem ready ✓"*. This tells the user the system is alive and reduces the "is this thing frozen?" anxiety. Don't dump command output — one line per tool is enough.
+
+If everything installs cleanly, end Phase 0 with: *"All tools ready. Now let's get you set up."*
+
+If any tool failed, list which ones failed and offer: *"A couple of tools didn't install (listed above). I'll work around them for now and we can retry at the end. None of them are blocking what we're about to do."*
+
+The legacy intro line — *"I need to install a couple of tools first that will make this whole setup faster and use less of your subscription. This takes a few minutes."* — is acceptable if you prefer; just don't go silent for minutes.
 
 ### Mac
 ```bash
@@ -119,8 +129,13 @@ fi
 # Granola MCP — meeting notes auto-sync. The "I just had a meeting" workflow
 # rule in CLAUDE.md depends on this MCP. Without it, the rule fires but
 # can't fetch the transcript. Wire it now so the rule works on day 1.
-# (Requires a Granola account at https://granola.ai — the setup phase asks
-# the user about this.)
+#
+# IMPORTANT FOR NON-TECHNICAL USERS: registering the MCP is only HALF the
+# install. The user must ALSO have a Granola account and have signed in to
+# the Granola Mac/Web app at least once — otherwise the MCP returns "not
+# authenticated" silently and the meeting workflow fails with no obvious
+# cause. After this script runs, Claude MUST tell the user (in their primary
+# language) the post-install authorization step. See the message below.
 python3 - <<'PY'
 import json, os
 p = os.path.expanduser("~/.claude/.mcp.json")
@@ -142,15 +157,67 @@ else:
     print("granola MCP already registered")
 PY
 
-# Nano Banana — image generation via Google Gemini 3 Pro Image
-# Installed via the devon-claude-skills marketplace. Tell the user:
-# "Run /plugin marketplace add devonjones/devon-claude-skills, then
-# /plugin install nano-banana@devon-claude-skills. You'll also need a
-# GEMINI_API_KEY from https://ai.google.dev/, exported in your shell
-# profile (~/.zshrc or ~/.bash_profile) so it persists across sessions:
-#   echo 'export GEMINI_API_KEY=your_key_here' >> ~/.zshrc"
-# (Marketplace install must be done by the user from inside Claude Code; this
-# script can't run /plugin commands. Mention it explicitly so they know.)
+# POST-INSTALL: tell the user about the Granola authorization step.
+# This is REQUIRED non-tech-friendly UX — never assume they know that
+# registering an MCP isn't the same as logging in.
+#
+# Claude says: "I just wired up Granola so meeting notes can auto-sync into
+# your vault. One more step on YOUR side: Granola needs you to log in to
+# their app at least once before the connection works. Want me to walk you
+# through it?"
+#
+# If they say yes:
+#   1. "Go to https://granola.ai and click 'Download for Mac' (or Windows
+#      if/when they support it). Install it like any other app."
+#   2. "Open Granola and log in — you can use Google or email, whichever you
+#      prefer. The free plan is fine for now."
+#   3. "Once you're logged in and you see the main Granola window, you're
+#      done. Come back and tell me 'Granola is set up' and I'll verify."
+#   4. After they confirm, run a quick MCP probe to verify connectivity.
+#   5. If the probe fails, tell them: "The MCP is registered but I can't
+#      reach Granola yet — make sure you're actually logged in to the Granola
+#      app, then we'll retry."
+#
+# If they say no / "I don't use Granola":
+#   - Remove the granola entry from .mcp.json (don't leave a dead MCP wired).
+#   - Tell them: "No problem — I removed the Granola wiring. If you ever want
+#      meeting auto-sync later, we can re-wire it then."
+#   - Remember this answer — store NO_GRANOLA=true so the meeting workflow
+#     rule installs in 'manual' mode instead of expecting Granola.
+
+# Nano Banana — image generation via Google Gemini 3 Pro Image. OPTIONAL.
+# DEFERRED: do NOT install during Phase 0. The setup requires three steps that
+# all involve API jargon (marketplace add, plugin install, env var with API
+# key from a separate Google product) and the average user doesn't need image
+# generation on day 1. Defer install until the user explicitly asks ("I want
+# to generate an image", "can you make a logo", etc.). At that point Claude
+# walks them through it interactively with concrete clicks:
+#
+#   1. "We need three things: the nano-banana plugin, a Gemini API key, and
+#      one quick environment variable. I'll do the first two with you and the
+#      third one for you."
+#   2. "First, in this Claude Code window, type:
+#         /plugin marketplace add devonjones/devon-claude-skills
+#      Then press Enter and wait for it to confirm."
+#   3. "Now type:
+#         /plugin install nano-banana@devon-claude-skills
+#      Press Enter, wait for confirm."
+#   4. "Now we need a free API key from Google. I'll open the page for you —
+#      just go to https://ai.google.dev/, click 'Get API key' in the top
+#      right, sign in with a Google account if asked, click 'Create API key',
+#      and copy the key it gives you. It looks like a long string starting
+#      with 'AI'. Paste it back to me when you have it."
+#   5. After they paste the key, write it to their shell profile for them:
+#        Mac/Linux: append `export GEMINI_API_KEY="<key>"` to ~/.zshrc and
+#                   ~/.bash_profile, then source the active one.
+#        Windows:   run `setx GEMINI_API_KEY "<key>"` so it persists.
+#   6. Tell them: "Done. Try '/nano-banana create a logo of a blue mountain'
+#      to test it."
+#
+# DO NOT mention nano-banana during Phase 0 setup. DO NOT add it to the
+# Phase 0 verification block. Mentioning a feature the user didn't ask for
+# and then walking them through API key setup as a "required step" is
+# exactly the kind of friction non-technical users abandon over.
 ```
 
 ### Verification (NEVER FAIL SILENTLY — run this immediately after the Mac/Linux block above)
@@ -569,11 +636,46 @@ Then ask these ONE AT A TIME. Wait for each answer before moving on:
 
 **Store the answer as `WRITES_PUBLICLY` — true or false.** This gates whether a `✍️ Writing/` folder gets created in Phase 3, whether writing-related rules get added in Phase 4, and whether the humanizer rule fires in later sessions. Journaling does NOT count — journaling is for the user's own eyes and lives in `📓 Journals/`. Writing means content with an intended audience. If the answer is ambiguous ("kind of," "sometimes"), ask one follow-up: "Is anyone besides you reading it?" Only a clear yes creates a Writing folder.
 
-6. "Do you have Obsidian installed? (It's a free note-taking app — if not, go to https://obsidian.md and download it. I'll wait.)"
+6. **Obsidian check — DETECT FIRST, don't ask if it's already there.** The bootstrap auto-installs Obsidian, so by the time the user reaches /setup-brain it should already be present. Run the appropriate detection check FIRST and only fall through to asking if it's actually missing:
 
-**If they don't have Obsidian:** Walk them through the download. Wait until they confirm it's installed before continuing.
+```bash
+# Mac
+[[ -d "/Applications/Obsidian.app" ]] && echo "OBSIDIAN_PRESENT" || echo "OBSIDIAN_MISSING"
 
-7. "Great. Now open Obsidian and choose 'Create new vault.' Name it whatever feels right — your name, 'Brain,' 'Notes,' whatever. Put it somewhere easy to find, like your Desktop. Let me know when it's created."
+# Linux
+(command -v obsidian || [ -f "/var/lib/flatpak/exports/bin/md.obsidian.Obsidian" ] || [ -f "$HOME/.local/share/flatpak/exports/bin/md.obsidian.Obsidian" ] || [ -x "$HOME/.local/bin/obsidian" ]) && echo "OBSIDIAN_PRESENT" || echo "OBSIDIAN_MISSING"
+```
+
+```powershell
+# Windows
+$paths = @("$env:LOCALAPPDATA\Obsidian\Obsidian.exe", "$env:ProgramFiles\Obsidian\Obsidian.exe", "${env:ProgramFiles(x86)}\Obsidian\Obsidian.exe")
+if ($paths | Where-Object { Test-Path -LiteralPath $_ }) { "OBSIDIAN_PRESENT" } else { "OBSIDIAN_MISSING" }
+```
+
+**If `OBSIDIAN_PRESENT`:** Skip the question entirely. Go straight to step 7 with: *"Obsidian is already installed (the bootstrap took care of that for you). Let's create your vault now."*
+
+**If `OBSIDIAN_MISSING`** (the bootstrap was skipped or failed): install it now, automatically, without asking the user to download anything:
+
+```bash
+# Mac
+brew install --cask obsidian
+
+# Linux — try snap, flatpak, then AppImage
+sudo snap install obsidian --classic 2>/dev/null \
+  || flatpak install -y flathub md.obsidian.Obsidian 2>/dev/null \
+  || (mkdir -p "$HOME/.local/bin" && curl -fsSL -o "$HOME/.local/bin/obsidian" "$(curl -fsSL https://api.github.com/repos/obsidianmd/obsidian-releases/releases/latest | grep -oE 'https://github.com/obsidianmd/obsidian-releases/releases/download/[^"]+\.AppImage' | head -1)" && chmod +x "$HOME/.local/bin/obsidian")
+```
+
+```powershell
+# Windows
+winget install -e --id Obsidian.Obsidian --accept-source-agreements --accept-package-agreements
+```
+
+Then say: *"I just installed Obsidian for you. Let's create your vault now."*
+
+**Never** ask the user to "go download Obsidian" — that breaks the one-command promise and assumes they know what Obsidian is and how to install a desktop app.
+
+7. "Now open Obsidian and choose 'Create new vault.' Name it whatever feels right — your name, 'Brain,' 'Notes,' whatever. Put it somewhere easy to find, like your Desktop. Let me know when it's created."
 
 **Wait for confirmation before continuing.**
 
@@ -582,6 +684,101 @@ Then ask these ONE AT A TIME. Wait for each answer before moving on:
 Save the vault path — you'll use it for all file operations.
 
 ## Phase 2: Install Obsidian Plugins
+
+**AUTO-INSTALL FIRST. Don't make the user click through Obsidian's plugin browser unless the auto-install fails.** Non-technical users miss-click in the plugin UI, install the wrong plugin, or skip the "Enable" step after "Install" — these are the top three Phase 2 support requests.
+
+Tell the user: *"I'm going to install three plugins for you in the background — Dataview, Templater, and Tasks. They power live queries, templates, and task tracking across your vault. Give me a few seconds."*
+
+Then run this Python helper, substituting `[VAULT_PATH]` with the actual vault path saved in Phase 1 step 8:
+
+```bash
+python3 - <<'PY'
+import json, os, sys, urllib.request, zipfile, io, shutil
+from pathlib import Path
+
+VAULT = Path("[VAULT_PATH]")
+OBSIDIAN_DIR = VAULT / ".obsidian"
+PLUGINS_DIR = OBSIDIAN_DIR / "plugins"
+PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
+
+# Plugin id → GitHub repo (owner/repo). The release ZIP for each contains
+# main.js, manifest.json, and (sometimes) styles.css — Obsidian's plugin format.
+PLUGINS = {
+    "dataview":  "blacksmithgu/obsidian-dataview",
+    "templater-obsidian": "SilentVoid13/Templater",
+    "obsidian-tasks-plugin": "obsidian-tasks-group/obsidian-tasks",
+}
+
+def fetch_latest_release(repo):
+    url = f"https://api.github.com/repos/{repo}/releases/latest"
+    req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.load(r)
+
+def install_plugin(plugin_id, repo):
+    target = PLUGINS_DIR / plugin_id
+    if (target / "main.js").exists() and (target / "manifest.json").exists():
+        print(f"  = {plugin_id} already installed")
+        return True
+    try:
+        rel = fetch_latest_release(repo)
+        # Most plugins ship a ZIP asset; some ship loose main.js + manifest.json.
+        zip_asset = next((a for a in rel.get("assets", []) if a["name"].endswith(".zip")), None)
+        target.mkdir(parents=True, exist_ok=True)
+        if zip_asset:
+            with urllib.request.urlopen(zip_asset["browser_download_url"], timeout=60) as r:
+                buf = io.BytesIO(r.read())
+            with zipfile.ZipFile(buf) as z:
+                for name in z.namelist():
+                    if name.endswith(("main.js", "manifest.json", "styles.css")):
+                        # Strip any leading directory in the zip
+                        out_name = Path(name).name
+                        with z.open(name) as src, open(target / out_name, "wb") as dst:
+                            shutil.copyfileobj(src, dst)
+        else:
+            # Loose-asset plugins (rare): main.js + manifest.json + maybe styles.css
+            for fname in ("main.js", "manifest.json", "styles.css"):
+                asset = next((a for a in rel.get("assets", []) if a["name"] == fname), None)
+                if asset:
+                    with urllib.request.urlopen(asset["browser_download_url"], timeout=60) as r:
+                        (target / fname).write_bytes(r.read())
+        print(f"  + {plugin_id} installed")
+        return True
+    except Exception as e:
+        print(f"  ! {plugin_id} install failed: {e}", file=sys.stderr)
+        return False
+
+# Install each plugin
+installed = []
+for pid, repo in PLUGINS.items():
+    if install_plugin(pid, repo):
+        installed.append(pid)
+
+# Mark them as enabled by writing community-plugins.json (the file Obsidian
+# reads to know which community plugins to load on startup).
+cp_file = OBSIDIAN_DIR / "community-plugins.json"
+existing = []
+if cp_file.exists():
+    try:
+        existing = json.loads(cp_file.read_text())
+    except Exception:
+        existing = []
+for pid in installed:
+    if pid not in existing:
+        existing.append(pid)
+cp_file.write_text(json.dumps(existing, indent=2))
+
+print(f"\nDone. Installed {len(installed)}/{len(PLUGINS)} plugins.")
+print("If Obsidian is currently open, the user must reload it (Cmd/Ctrl+R) for plugins to activate.")
+PY
+```
+
+**After the script runs:**
+- If all 3 succeeded: tell the user *"Done — Dataview, Templater, and Tasks are installed. If Obsidian is open right now, close and reopen it (or press Cmd+R / Ctrl+R) so the plugins activate."*
+- If any plugin failed (network error, GitHub rate limit, etc.): fall back to the manual UI walkthrough for ONLY the failed plugins. Don't make the user click through plugins that already installed successfully.
+- If the auto-install fails entirely (no Python, no network, vault path wrong): fall back to the full manual UI walkthrough below.
+
+**Manual fallback (only if auto-install failed):**
 
 "Now let's install three plugins that make everything work. In Obsidian: Settings → Community Plugins → Turn on community plugins → Browse."
 

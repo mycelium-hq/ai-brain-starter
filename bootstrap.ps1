@@ -65,10 +65,43 @@ Write-Host "  After this finishes, open Claude Code and type /setup-brain."
 Write-Host ""
 Start-Sleep -Seconds 1
 
-# ─── winget check ─────────────────────────────────────────────────────────────
+# ─── winget bootstrap ─────────────────────────────────────────────────────────
+# winget ships with Windows 11 and recent Windows 10. On older Windows 10 it's
+# missing — auto-install App Installer (which provides winget) before doing
+# anything else. Never abort with "go install something from the Microsoft
+# Store yourself" — that defeats the one-command promise.
 if (-not (Have winget)) {
-    Err "winget is required (Windows 11 / recent Windows 10). Install App Installer from the Microsoft Store and re-run."
-    return
+    Hdr "Installing winget (App Installer)"
+    Log "winget is the Windows package manager we use to install everything else."
+    Log "Your Windows version is missing it — we'll install it for you now."
+
+    # Method 1: Microsoft's official MSIX bundle. URL aka.ms/getwinget always
+    # resolves to the latest stable release on GitHub.
+    $tempInstaller = "$env:TEMP\AppInstaller.msixbundle"
+    try {
+        Log "Downloading App Installer from Microsoft..."
+        Invoke-WebRequest -Uri "https://aka.ms/getwinget" -OutFile $tempInstaller -UseBasicParsing
+        Log "Installing... (a Windows install dialog may appear briefly)"
+        Add-AppxPackage -Path $tempInstaller -ErrorAction Stop
+        Remove-Item $tempInstaller -Force -ErrorAction SilentlyContinue
+    } catch {
+        Warn "Auto-install of winget failed: $_"
+        Warn "Falling back to direct MSI installs for Python/Node/Obsidian."
+    }
+
+    # Refresh PATH so winget is callable in this session
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+}
+
+if (Have winget) {
+    Ok "winget available"
+    $UseWinget = $true
+} else {
+    # Final fallback — winget could not be installed. Use direct downloads for
+    # the things we need. The user is on a very old Windows; mark $UseWinget so
+    # later sections can branch.
+    Warn "Continuing without winget — using direct installer downloads."
+    $UseWinget = $false
 }
 
 # ─── Python 3.10+ ─────────────────────────────────────────────────────────────
@@ -79,7 +112,19 @@ try {
 } catch {}
 if (-not $pythonOk) {
     Hdr "Installing Python 3.12"
-    winget install -e --id Python.Python.3.12 --accept-source-agreements --accept-package-agreements
+    if ($UseWinget) {
+        winget install -e --id Python.Python.3.12 --accept-source-agreements --accept-package-agreements
+    } else {
+        Log "winget unavailable — downloading Python installer directly."
+        $pyInstaller = "$env:TEMP\python-installer.exe"
+        try {
+            Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe" -OutFile $pyInstaller -UseBasicParsing
+            Start-Process -Wait -FilePath $pyInstaller -ArgumentList "/quiet","InstallAllUsers=1","PrependPath=1"
+            Remove-Item $pyInstaller -Force -ErrorAction SilentlyContinue
+        } catch {
+            Err "Python install failed: $_"
+        }
+    }
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 }
 if (Have python) { Ok "python $(python --version)" } else { Err "python install failed" }
@@ -87,10 +132,39 @@ if (Have python) { Ok "python $(python --version)" } else { Err "python install 
 # ─── Node.js ──────────────────────────────────────────────────────────────────
 if (-not (Have node)) {
     Hdr "Installing Node.js"
-    winget install -e --id OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements
+    if ($UseWinget) {
+        winget install -e --id OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements
+    } else {
+        Log "winget unavailable — downloading Node.js LTS installer directly."
+        $nodeInstaller = "$env:TEMP\node-installer.msi"
+        try {
+            Invoke-WebRequest -Uri "https://nodejs.org/dist/v20.18.0/node-v20.18.0-x64.msi" -OutFile $nodeInstaller -UseBasicParsing
+            Start-Process -Wait -FilePath "msiexec" -ArgumentList "/i","$nodeInstaller","/quiet","/norestart"
+            Remove-Item $nodeInstaller -Force -ErrorAction SilentlyContinue
+        } catch {
+            Err "Node install failed: $_"
+        }
+    }
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 }
 if (Have node) { Ok "node $(node --version)" } else { Err "node install failed" }
+
+# ─── Claude Code (Anthropic's CLI/desktop app — REQUIRED) ─────────────────────
+# Without this, the user has no way to actually run /setup-brain after the
+# bootstrap finishes. Distributed via npm so the install path is identical
+# across Mac, Linux, and Windows once Node is present.
+if (-not (Have claude)) {
+    Hdr "Installing Claude Code"
+    Log "Claude Code is Anthropic's developer tool that runs the AI brain skill."
+    Log "It's different from claude.ai (the chat website) — this one lives in your"
+    Log "terminal and can read and write files in your vault. Installing via npm."
+    npm install -g @anthropic-ai/claude-code 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Err "Claude Code install failed — install manually with: npm install -g @anthropic-ai/claude-code"
+    }
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+}
+if (Have claude) { Ok "Claude Code installed" }
 
 # ─── pipx ─────────────────────────────────────────────────────────────────────
 if (-not (Have pipx)) {
@@ -123,24 +197,76 @@ if (Have gh) { Ok "gh installed" } else { Warn "gh not installed — install man
 if (Have gh) {
     gh auth status 2>$null | Out-Null
     if ($LASTEXITCODE -ne 0) {
-        Hdr "GitHub authentication (one-time setup)"
-        Write-Host "  The session-end cascade can file improvement ideas as GitHub issues"
-        Write-Host "  automatically — but only if gh is authenticated to your GitHub account."
+        Hdr "GitHub login (OPTIONAL — skip with Ctrl+C)"
+        Write-Host "  This step is OPTIONAL. You only need it if you want your AI brain to"
+        Write-Host "  automatically file improvement ideas as GitHub issues for the maintainer."
         Write-Host ""
-        Write-Host "  This is a ONE-TIME setup. After this, your AI brain will silently file"
-        Write-Host "  any friction or improvement ideas to the maintainer's repo without"
-        Write-Host "  asking you to copy/paste anything."
+        Write-Host "  Do you have a GitHub account?"
+        Write-Host "     YES      -> press Enter, a browser window opens, log in, done."
+        Write-Host "     NO       -> press Ctrl+C right now to skip. Everything else still works."
+        Write-Host "     NOT SURE -> press Ctrl+C to skip. You can come back later with: gh auth login"
         Write-Host ""
-        Write-Host "  When you press Enter, gh will open a browser window for you to log in."
-        Write-Host "  Pick: GitHub.com -> HTTPS -> Login with web browser."
+        Write-Host "  (If you press Enter, you'll see options like 'GitHub.com -> HTTPS ->"
+        Write-Host "   Login with web browser.' Just pick those defaults — they're fine.)"
         Write-Host ""
-        Read-Host "  Press Enter to start (or Ctrl+C to skip — you can run 'gh auth login' later)"
+        Read-Host "  Press Enter to log in, or Ctrl+C to skip"
         gh auth login
-        if ($LASTEXITCODE -ne 0) { Warn "gh auth skipped or failed — run 'gh auth login' later to enable issue filing" }
+        if ($LASTEXITCODE -ne 0) { Warn "gh auth skipped or failed — run 'gh auth login' later if you want issue filing" }
     }
     gh auth status 2>$null | Out-Null
     if ($LASTEXITCODE -eq 0) { Ok "gh authenticated" } else { Warn "gh not authenticated (issue filing disabled until you run: gh auth login)" }
 }
+
+# ─── Obsidian — REQUIRED, the entire setup writes notes into an Obsidian vault.
+# Auto-install via winget. Never ask the user to "go download" anything — that
+# breaks the one-command promise and assumes they know what Obsidian is and
+# how to install a desktop app on Windows.
+$ObsidianInstalled = $false
+$ObsidianPaths = @(
+    "$env:LOCALAPPDATA\Obsidian\Obsidian.exe",
+    "$env:ProgramFiles\Obsidian\Obsidian.exe",
+    "${env:ProgramFiles(x86)}\Obsidian\Obsidian.exe"
+)
+foreach ($p in $ObsidianPaths) {
+    if (Test-Path -LiteralPath $p) { $ObsidianInstalled = $true; break }
+}
+
+if (-not $ObsidianInstalled) {
+    Hdr "Installing Obsidian"
+    Log "Obsidian is the note-taking app this whole setup writes into. Free, runs locally, no account."
+    if ($DryRun) {
+        Dry "would: install Obsidian via winget or direct download"
+    } else {
+        if ($UseWinget) {
+            Log "Installing via winget so you don't have to download anything yourself."
+            winget install -e --id Obsidian.Obsidian --accept-source-agreements --accept-package-agreements
+        } else {
+            Log "winget unavailable — downloading Obsidian installer directly from obsidian.md."
+            $obsInstaller = "$env:TEMP\Obsidian-Installer.exe"
+            try {
+                # Resolve latest Windows installer from Obsidian's GitHub releases.
+                $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/obsidianmd/obsidian-releases/releases/latest" -UseBasicParsing
+                $url = ($rel.assets | Where-Object { $_.name -match 'Obsidian.*\.exe$' -and $_.name -notmatch 'arm64' } | Select-Object -First 1).browser_download_url
+                if ($url) {
+                    Invoke-WebRequest -Uri $url -OutFile $obsInstaller -UseBasicParsing
+                    Start-Process -Wait -FilePath $obsInstaller -ArgumentList "/S"
+                    Remove-Item $obsInstaller -Force -ErrorAction SilentlyContinue
+                } else {
+                    Err "Could not resolve latest Obsidian installer URL — download manually from https://obsidian.md/download"
+                }
+            } catch {
+                Err "Obsidian install failed: $_ — download manually from https://obsidian.md/download and re-run this script"
+            }
+        }
+        if ($LASTEXITCODE -eq 0 -or -not $UseWinget) {
+            $script:Installed += "Obsidian"
+            foreach ($p in $ObsidianPaths) {
+                if (Test-Path -LiteralPath $p) { $ObsidianInstalled = $true; break }
+            }
+        }
+    }
+}
+if ($ObsidianInstalled) { Ok "Obsidian installed" }
 
 # ─── graphify ─────────────────────────────────────────────────────────────────
 if (-not (Have graphify)) {

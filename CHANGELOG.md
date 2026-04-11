@@ -9,6 +9,53 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 11, 2026 (twenty-third session — non-technical onboarding overhaul + automatic file drift detection)
+
+This is two things shipped together because they share the same theme: **make a non-technical user's first install (and every subsequent pull) work without them ever having to ask "why doesn't this work?"**
+
+### Part 1 — Non-technical onboarding overhaul (14 fixes)
+
+Audited the full first-install experience for someone who has never opened a terminal and doesn't know what Obsidian, Claude Code, Python, Node, or an API key is. Found 14 friction points where the setup assumed the user knew something they don't, or made them do a manual step that the bootstrap could just do for them. All 14 are fixed in this release.
+
+**Auto-installs added — you no longer have to download anything yourself:**
+
+- **Obsidian** — auto-installed by the bootstrap (Mac via `brew install --cask obsidian`, Windows via `winget install Obsidian.Obsidian`, Linux via snap → flatpak → AppImage download fallback). Previously the README mentioned Obsidian as a "prerequisite" with a one-line bullet, the bootstrap didn't touch it, and you'd hit a wall mid-setup when /setup-brain asked "do you have Obsidian?" You no longer have to think about it.
+- **Claude Code itself** — auto-installed by the bootstrap via `npm install -g @anthropic-ai/claude-code`. Previously listed as a prerequisite with no install step. Now installed automatically once Node is present, on every OS.
+- **winget on older Windows 10** — bootstrap.ps1 used to abort hard with "winget is required, install App Installer from the Microsoft Store and re-run." That sentence is opaque to a non-technical user. Now the bootstrap auto-downloads and installs App Installer from Microsoft's official URL (`aka.ms/getwinget`) before doing anything else, with a fallback to direct MSI installs of Python, Node, and Obsidian if winget can't be installed at all.
+- **Obsidian community plugins** (Dataview, Templater, Tasks) — Phase 2 of `/setup-brain` used to walk you through ~36 manual clicks across the Obsidian Community Plugins UI to install three plugins one at a time. Now Phase 2 runs a Python helper that downloads each plugin's latest release directly from GitHub, drops it into your vault's `.obsidian/plugins/` folder, and writes `.obsidian/community-plugins.json` to enable them. Manual UI walkthrough is still there as a fallback for any plugin that fails to auto-install.
+
+**Onboarding-flow clarity:**
+
+- **README install section rewritten end-to-end.** Step 1 (open your terminal — with concrete instructions for Mac, Windows, Linux including the critical "PowerShell, NOT cmd.exe" warning), Step 2 (paste the install command and watch it run), Step 3 (type `claude` then `/setup-brain`). The "Prerequisites" section is gone — replaced with one line that says "all you need is a Mac, Windows, or Linux computer; the bootstrap installs everything else." Manual `git clone` install path removed since it's confusing to non-technical readers.
+- **`/setup-brain` Phase 0 progress messaging.** Used to go silent for 2-3 minutes while installing tools, which makes non-technical users think the setup has frozen. Now Claude says "Setting up the tools you'll need — give me a moment" before starting, and gives a one-line `tool ready ✓` confirmation as each tool finishes.
+- **`/setup-brain` Phase 1 step 6 — Obsidian question rewritten.** Used to ask "Do you have Obsidian installed? If not, go to obsidian.md and download it. I'll wait." Now detects whether Obsidian is already installed (which it always should be after the bootstrap) and skips the question. If somehow it's missing, the skill auto-installs it instead of asking.
+- **Homebrew password prompt warning.** Bootstrap now prints a multi-line `⚠️ HEADS UP` block before installing Homebrew, telling you the password prompt is coming, that you won't see characters as you type, and to NOT close the window. Reduces "is this thing frozen?" anxiety.
+- **`gh auth login` framing.** Previously asked you to log in to GitHub with developer-jargon defaults ("GitHub.com → HTTPS → Login with web browser"). Now framed as OPTIONAL with explicit "if you don't have a GitHub account, press Ctrl+C to skip — everything else still works." The implicit pressure to log in is gone.
+- **Granola post-install authorization step.** Bootstrap registers the Granola MCP server but used to never tell you that the MCP only works AFTER you've signed into the Granola Mac/web app at least once. Now the install message says explicitly "I just wired up Granola — one more step on YOUR side: log in to the Granola app once before the connection works. Want me to walk you through it?" If you say "I don't use Granola," the bootstrap removes the dead MCP entry instead of leaving it stranded.
+- **Nano-banana / Gemini API key deferred.** Phase 0 used to mention setting up nano-banana with a `GEMINI_API_KEY` env var as part of the main setup. That's a 5-minute side quest involving API jargon for a feature most users don't need on day 1. Now the install is deferred entirely — nano-banana only gets installed when you explicitly ask for image generation, and Claude walks you through the API key setup interactively at that point with concrete clicks instead of CLI commands.
+
+### Part 2 — Automatic file drift detection (`drift-check.sh` + `drift-check.ps1`)
+
+`update-check.sh` only knows whether you're behind on commits. It does NOT know whether files that were already installed in a prior release have since drifted from the repo's version. That happens when a previous sync only partially landed, when you hand-edit a script in your vault, when a `git stash` recovery leaves files mixed, or when a manual cherry-pick missed something. Until now the only way to find stale files was to manually ask Claude "compare everything" — which defeats the whole point of automatic updates.
+
+**New script: `scripts/drift-check.sh` (and `drift-check.ps1` for Windows).** Runs at session start alongside `update-check.sh`, on the same once-per-day cooldown. Read-only — never modifies anything. Detects three kinds of drift:
+
+1. **Installed skills** — files under `~/.claude/skills/<skill>/` that differ from the repo's `skills/<skill>/<rel-path>`.
+2. **Vault scripts** — files under `$VAULT/⚙️ Meta/scripts/<basename>` that differ from `<starter>/scripts/<basename>`. Curated list of scripts the starter installs into vaults during /setup-brain.
+3. **Vault CLAUDE.md rule blocks** — for each `templates/rules/*.md`, finds its top-level heading inside `$VAULT/CLAUDE.md` and diffs the block underneath. Tolerates trailing `---` separators (a CLAUDE.md formatting convention, not part of any rule).
+
+**`session-start-update-check.md` rule extended with the drift-handling UX.** When drift is found, Claude walks you through it one file at a time: reads both files, shows you a `diff -u` of the changes, asks {update / skip / update all / stop}, **backs up before every single change** (no exceptions, even on "update all"), and for `vault-rule` drift, replaces only the targeted block via Edit (never the whole CLAUDE.md file). Files annotated with `note: hand-edited CONFIG block` (currently just `graph-context-hook.sh`) are never overwritten wholesale — they get cherry-pick treatment with a manual ask instead.
+
+**Why human-in-the-loop instead of auto-update:** because the drifted file might be a hand-edit you intentionally made (e.g. customizing `graph-context-hook.sh` with your vault paths and routing keywords), and an auto-replace would silently destroy your work. Backup-before-every-change is non-negotiable.
+
+### What you do
+
+Nothing — both parts apply automatically on the next bootstrap re-run or `git pull`. The drift check honors a once-per-day cooldown so it won't double-prompt during a single day.
+
+If you want to verify drift detection right now: `bash ~/.claude/skills/ai-brain-starter/scripts/drift-check.sh --vault "<your vault path>" --force` (or the `.ps1` equivalent on Windows).
+
+---
+
 ## April 11, 2026 (twenty-second session — update-check summary skips the corporate-event rule bullet)
 
 Small tone-only change to `templates/rules/session-start-update-check.md`.

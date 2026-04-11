@@ -25,32 +25,37 @@ The whole setup takes about 2 hours with the conversation. The basics take 30 mi
 
 ## Install
 
-### Prerequisites
+### What you need before starting
 
-- [Obsidian](https://obsidian.md) (free)
-- [Claude Code](https://claude.ai/code) (desktop app or CLI)
+A Mac, Windows, or Linux computer. **That's it.** The bootstrap installs everything else for you — Obsidian, Claude Code, Python, Node.js, all the tools. You don't need to download or set up anything in advance.
 
-### One command — Mac and Linux
+### Step 1 — Open your terminal
+
+The bootstrap is one command that you paste into your terminal. If you've never opened a terminal before, here's how:
+
+- **On Mac:** press `⌘ + Space`, type `Terminal`, press Enter. A black window opens. That's your terminal.
+- **On Windows:** click the Start button, type `PowerShell`, click on **Windows PowerShell** (the blue icon — NOT the black "cmd" icon). A blue window opens. That's PowerShell. **Important: this MUST be PowerShell, not cmd.exe — they look similar but cmd won't work.**
+- **On Linux:** you already know.
+
+### Step 2 — Paste and run the install command
+
+**Mac and Linux:**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main/bootstrap.sh | bash
 ```
 
-This installs everything: graphify, humanizer, claude-mem, notebooklm, meeting-todos, patterns, the Granola MCP, plus the ai-brain-starter skill itself. Takes ~5 minutes the first time, ~10 seconds on re-runs. Safe to re-run anytime — it skips anything already installed.
-
-### One command — Windows (PowerShell)
+**Windows (PowerShell — see Step 1 above):**
 
 ```powershell
 irm https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main/bootstrap.ps1 | iex
 ```
 
-### Manual install (if you prefer)
+Paste the command into your terminal window and press Enter. Then leave the window open and let it run — it takes about 5–10 minutes the first time. **Don't close the window** until you see "Done."
 
-```bash
-git clone https://github.com/adelaidasofia/ai-brain-starter.git ~/.claude/skills/ai-brain-starter
-```
+This installs everything: Obsidian, Claude Code, Python, Node.js, graphify, humanizer, claude-mem, notebooklm, meeting-todos, patterns, the Granola MCP, plus the ai-brain-starter skill itself. Safe to re-run anytime — it skips anything already installed.
 
-Then open Claude Code and type `/setup-brain` — it will install the rest.
+If you see a password prompt at any point: that's normal. Type your computer's login password and press Enter. **You won't see characters as you type — that's also normal.** Don't close the window.
 
 ### Joining an existing team vault
 
@@ -76,11 +81,15 @@ Or just tell Claude: "Update the ai-brain-starter skill."
 
 After updating, check [CHANGELOG.md](CHANGELOG.md) to see what's new — written in plain English, no jargon.
 
-### Start
+### Step 3 — Start the conversation
 
-Open Claude Code and type:
+When the bootstrap finishes, it tells you it's done. Then:
+
+1. **In the same terminal window** (Terminal on Mac/Linux, PowerShell on Windows), type `claude` and press Enter. This starts Claude Code.
+2. Once Claude Code starts, type `/setup-brain` and press Enter.
 
 ```
+claude
 /setup-brain
 ```
 

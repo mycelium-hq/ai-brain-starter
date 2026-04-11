@@ -186,7 +186,12 @@ echo
 if is_mac && ! have brew; then
   hdr "Installing Homebrew"
   log "Homebrew is the package manager Mac uses for everything else here."
-  log "It will ask for your Mac password — that's normal. You won't see characters as you type."
+  log ""
+  log "  ⚠️  HEADS UP: Homebrew will ask for your Mac password in a moment."
+  log "  ⚠️  When the prompt appears, type your password and press Enter."
+  log "  ⚠️  YOU WILL NOT SEE CHARACTERS AS YOU TYPE — that's normal Mac security."
+  log "  ⚠️  DO NOT CLOSE THIS WINDOW. The install takes ~2 minutes after the password."
+  log ""
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || err "homebrew install failed"
   # Add brew to PATH for the current session (Apple Silicon vs Intel)
   if [[ -x /opt/homebrew/bin/brew ]]; then
@@ -230,6 +235,22 @@ if ! have node; then
 fi
 have node && ok "node $(node --version)"
 have npm  && ok "npm $(npm --version)"
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Claude Code (Anthropic's CLI/desktop app — REQUIRED for /setup-brain)
+# Without this, the user has no way to actually run the skill they just installed.
+# Distributed via npm so the install path is identical on Mac, Linux, and Windows
+# once Node is present.
+# ───────────────────────────────────────────────────────────────────────────────
+
+if ! have claude; then
+  hdr "Installing Claude Code"
+  log "Claude Code is Anthropic's developer tool that runs the AI brain skill."
+  log "It's different from claude.ai (the chat website) — this one lives in your terminal"
+  log "and can read and write files in your vault. We're installing it via npm."
+  npm install -g @anthropic-ai/claude-code 2>/dev/null || err "Claude Code install failed — install manually with: npm install -g @anthropic-ai/claude-code"
+fi
+have claude && ok "claude $(claude --version 2>/dev/null | head -1 || echo installed)"
 
 # ───────────────────────────────────────────────────────────────────────────────
 # pipx (Python app installer)
@@ -276,25 +297,89 @@ if ! have gh; then
 fi
 have gh && ok "gh $(gh --version 2>/dev/null | head -1 | awk '{print $3}')"
 
-# gh authentication — required for the session-end capture cascade to file
-# improvement ideas as GitHub issues automatically. Walk the user through it
-# the first time only.
+# gh authentication — OPTIONAL. Used by the session-end cascade to file
+# improvement ideas as GitHub issues automatically. Skip cleanly if the user
+# doesn't have a GitHub account or doesn't want to set it up right now.
 if have gh && ! gh auth status >/dev/null 2>&1; then
-  hdr "GitHub authentication (one-time setup)"
-  echo "  The session-end cascade can file improvement ideas as GitHub issues"
-  echo "  automatically — but only if gh is authenticated to your GitHub account."
+  hdr "GitHub login (OPTIONAL — skip with Ctrl+C)"
+  echo "  This step is OPTIONAL. You only need it if you want your AI brain to"
+  echo "  automatically file improvement ideas as GitHub issues for the maintainer."
   echo
-  echo "  This is a ONE-TIME setup. After this, your AI brain will silently file"
-  echo "  any friction or improvement ideas to the maintainer's repo without"
-  echo "  asking you to copy/paste anything."
+  echo "  ❓ Do you have a GitHub account?"
+  echo "     YES → press Enter, a browser window opens, log in, done."
+  echo "     NO  → press Ctrl+C right now to skip. Everything else still works."
+  echo "     NOT SURE → press Ctrl+C to skip. You can come back to this later"
+  echo "                with: gh auth login"
   echo
-  echo "  When you press Enter, gh will open a browser window for you to log in."
-  echo "  Pick: GitHub.com → HTTPS → Login with web browser."
+  echo "  (If you press Enter, you'll see options like 'GitHub.com → HTTPS →"
+  echo "   Login with web browser.' Just pick those defaults — they're fine.)"
   echo
-  read -p "  Press Enter to start (or Ctrl+C to skip — you can run 'gh auth login' later): " _
-  gh auth login || warn "gh auth skipped or failed — run 'gh auth login' later to enable issue filing"
+  read -p "  Press Enter to log in, or Ctrl+C to skip: " _
+  gh auth login || warn "gh auth skipped or failed — run 'gh auth login' later if you want issue filing"
 fi
 gh auth status >/dev/null 2>&1 && ok "gh authenticated" || warn "gh not authenticated (issue filing disabled until you run: gh auth login)"
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Obsidian — REQUIRED, the entire setup writes notes into an Obsidian vault.
+# Auto-install via brew --cask (Mac) / snap or flatpak (Linux). Never ask the
+# user to "go download" anything — that breaks the one-command promise and
+# assumes they know what Obsidian is and how to install a desktop app.
+# ───────────────────────────────────────────────────────────────────────────────
+
+if is_mac; then
+  if [[ ! -d "/Applications/Obsidian.app" ]]; then
+    hdr "Installing Obsidian"
+    log "Obsidian is the note-taking app this whole setup writes into. Free, runs locally, no account."
+    log "Installing via Homebrew so you don't have to download anything yourself."
+    brew install --cask obsidian || err "Obsidian install failed — install manually from https://obsidian.md and re-run this script"
+  fi
+  if [[ -d "/Applications/Obsidian.app" ]]; then
+    ok "Obsidian installed at /Applications/Obsidian.app"
+  fi
+else
+  # Linux — try snap, then flatpak, then AppImage download. Never ask the user to
+  # download anything themselves. Order matters: snap is more common on Ubuntu,
+  # flatpak on Fedora/Arch, AppImage works literally everywhere as last resort.
+  obsidian_installed() {
+    have obsidian \
+      || [[ -f "/var/lib/flatpak/exports/bin/md.obsidian.Obsidian" ]] \
+      || [[ -f "$HOME/.local/share/flatpak/exports/bin/md.obsidian.Obsidian" ]] \
+      || [[ -x "$HOME/.local/bin/obsidian" ]]
+  }
+  if ! obsidian_installed; then
+    hdr "Installing Obsidian"
+    log "Obsidian is the note-taking app this whole setup writes into. Free, runs locally, no account."
+
+    if have snap; then
+      log "Installing via snap."
+      sudo snap install obsidian --classic 2>/dev/null || warn "snap install failed — trying flatpak"
+    fi
+    if ! obsidian_installed && have flatpak; then
+      log "Installing via flatpak."
+      flatpak install -y flathub md.obsidian.Obsidian 2>/dev/null || warn "flatpak install failed — trying AppImage"
+    fi
+    if ! obsidian_installed; then
+      log "Falling back to AppImage download (works on any Linux distro)."
+      mkdir -p "$HOME/.local/bin"
+      # Resolve the latest AppImage URL from the official GitHub releases API
+      APPIMAGE_URL="$(curl -fsSL https://api.github.com/repos/obsidianmd/obsidian-releases/releases/latest 2>/dev/null \
+        | grep -oE 'https://github.com/obsidianmd/obsidian-releases/releases/download/[^"]+\.AppImage' \
+        | head -1)"
+      if [[ -n "$APPIMAGE_URL" ]]; then
+        if curl -fsSL -o "$HOME/.local/bin/obsidian" "$APPIMAGE_URL" 2>/dev/null; then
+          chmod +x "$HOME/.local/bin/obsidian"
+          log "AppImage installed at ~/.local/bin/obsidian"
+          log "Run it with: obsidian (make sure ~/.local/bin is on your PATH)"
+        else
+          err "AppImage download failed. Manual fallback: go to https://obsidian.md/download, download the AppImage, chmod +x it, place it in ~/.local/bin/obsidian, and re-run this script."
+        fi
+      else
+        err "Could not resolve the latest Obsidian AppImage URL. Manual fallback: go to https://obsidian.md/download, download the AppImage, chmod +x it, place it in ~/.local/bin/obsidian, and re-run this script."
+      fi
+    fi
+  fi
+  obsidian_installed && ok "Obsidian installed"
+fi
 
 # ───────────────────────────────────────────────────────────────────────────────
 # graphify CLI + Python package
