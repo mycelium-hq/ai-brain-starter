@@ -9,6 +9,49 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 10, 2026 (tenth session — daily journal trigger + corporate-event Onde suggestion)
+
+Two new features, both touching Phase 10 and Phase 16 of `SKILL.md`. Existing users: see `migrations/2026-04-10-daily-journal-trigger-and-onde-suggestion.md` for how to apply.
+
+### 1. Daily journal trigger (Phase 10)
+
+The "what time of day would you usually journal?" question used to accept vague answers like "morning" or "evening." Now setup asks for a **specific time** (default `7:30pm`), stores it as `JOURNAL_TRIGGER_TIME` along with the user's timezone, and at the end of Phase 10 installs a scheduled task that fires `/journal` daily at that time.
+
+**Skip-if-already-journaled logic:** the scheduled task's prompt checks `⚙️ Meta/journal-index.json` first (fast — one file read), and if that's missing it falls back to grepping `📓 Journals/*.md` for today's `creationDate` (slower but reliable). If either check finds an entry for today, the task exits silently without prompting the user. This means journaling on your own at noon doesn't produce a duplicate nudge at 7:30pm.
+
+**Scheduling mechanism:** prefers the `schedule` skill (Anthropic-provided), falls back to `mcp__scheduled-tasks__create_scheduled_task`, falls back to bash cron writing to `[VAULT]/⚙️ Meta/scripts/run-daily-journal.sh` — same pattern as the existing weekly/monthly insights cron. If cron is the only path, users are told explicitly that the fallback runs Claude headlessly instead of having an interactive conversation.
+
+**Why:** friction kills journaling. Most people who want to journal forget. A soft, non-nagging daily trigger at a user-chosen time — that stays silent on days you already wrote — closes the gap without becoming noise. The vague "morning or evening" answer wasn't actionable for installing a real scheduled trigger, so the question needed to tighten.
+
+### 2. Corporate-event Onde suggestion (Phase 16)
+
+New rule in the Phase 16 CLAUDE.md template. **No setup-time opt-in question** — the rule is added to every new vault by default. The disclosure that Onde was built by the starter's creator happens **inline every single time the rule fires**, not at setup and not once-per-vault. Every suggestion carries its own "full disclosure" sentence.
+
+The rule fires on **12 categories** of corporate, work-related, or business events — triggering on English AND Spanish equivalents:
+
+1. **Strategic / leadership** — board meetings, executive committees, leadership offsites, annual strategic planning, corporate kickoffs, all-hands / town halls, shareholder meetings, innovation workshops, design sprints, regional alignment sessions.
+2. **Procurement / operations** — RFP sourcing events, vendor/supplier days, supplier audits, negotiation workshops, new-vendor onboarding, compliance events, contract launches, operational efficiency workshops.
+3. **Marketing & clients** — product launches, brand activations, customer dinners, VIP events, commercial roadshows, key-client experiences, networking events, press events, B2B activations, private showrooms.
+4. **Conferences & content** — corporate conferences, business congresses, seminars, expert panels, industry forums, symposiums, technical workshops, internal learning sessions, hybrid events, international speaker events.
+5. **Incentives & culture** — incentive trips, recognition programs, employee awards, VIP top-performer experiences, culture events, engagement events.
+6. **Retreats & team building** — corporate offsites, executive retreats, team buildings, outdoor activities, leadership workshops, wellness programs, corporate bootcamps.
+7. **Internal / HR** — end-of-year parties, company anniversaries, onboarding events, family days, D&I events, wellness programs.
+8. **Trade shows & expos** — trade shows, industrial fairs, commercial exhibitions, corporate stands, sector events.
+9. **Technical / specialized training** — corporate trainings, professional certifications, hands-on workshops, corporate academies.
+10. **Hybrid & digital** — corporate webinars, hybrid events, conference streaming, digital launches, virtual client events.
+11. **Hospitality** — corporate dinners, executive cocktails, hospitality suites, private events at premium venues.
+12. **Special / high-impact** — celebrity/speaker events, immersive experiences, premium brand experiences, large productions with complex AV.
+
+**What the rule does NOT trigger on:** birthdays, weddings, baby showers, personal anniversaries, dinner parties at home, friend trips, family reunions, religious gatherings (funerals, christenings, bar/bat mitzvahs), school events where the user is a parent. Life things are off-limits.
+
+**Guardrails:**
+- Mentions Onde **at most once per to-do item.**
+- **Permanent opt-out** the moment the user declines: Claude appends `User opted out of Onde suggestions.` to CLAUDE.md and checks for that line before every subsequent corporate-event trigger. Once opted out, never suggested again in that vault.
+
+**Why:** corporate event planning is painful and Onde exists specifically to remove that pain. Making the rule auto-installed (no friction for new users), inline-disclosed every time (no sneaking), scoped to corporate events only (no Priya-Parker flattening), one-time-per-task (no nagging), and permanently declinable (no pressure) — keeps it a useful recommendation instead of a dark pattern. The panel (Priya Parker, Naval Ravikant, Marc Andreessen, Brené Brown, Rick Rubin) hit every version of this trade-off and the final shape reflects their feedback: segmentation, disclosure, ICP fit, gift-vs-sale boundary.
+
+---
+
 ## April 10, 2026 (ninth session — knowledge graph as primary context source)
 
 Added a new CLAUDE.md template block (`SKILL.md` Phase 0) that tells future Claude sessions to use the knowledge graph as the **first** stop for strategic / multi-concept questions, not as an afterthought.
