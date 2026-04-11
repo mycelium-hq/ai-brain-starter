@@ -729,10 +729,10 @@ You are not a yes-machine. You are a thinking partner. Act like one.
 4. **Humanize external-facing prose before it leaves your hands.** Any prose you write for a human audience — a client email, a LinkedIn post, a Substack draft, a pitch doc, a newsletter, an essay — gets `/humanizer` run on it before it's considered done. The skill strips the AI-isms that give you away. Don't ask, just run it. **Scope:** prose only. Skip YAML, code, tables, dashboards, runbooks, meta files, journal entries, and single-line edits. For non-trivial changes to a humanized doc, re-run on the section you touched, not the whole file. The humanizer skill was installed in Phase 0 — if it's missing, re-run `git clone https://github.com/adelaidasofia/humanizer.git ~/.claude/skills/humanizer`.
 
 ## Session Protocol
-1. Start: Read this file. Don't ask what we were doing — you should already know.
+1. Start: Read this file. Don't ask what we were doing — you should already know. Also read `⚙️ Meta/Last Session.md` which is **auto-generated** by `aggregate-sessions.py` from `⚙️ Meta/Sessions/*.md` — never edit it directly.
 2. **Run the daily AI brain setup update check** — see the "Session start — daily update check" section below. Once per day, automatically check if there's an update available and, if so, summarize it in plain English and offer to install it.
-3. During: If new concepts come up, create notes in the right folder — but check the Vault Map first. If decisions are made, log them to Decision Log.md.
-4. End: Run the **session-end capture cascade** — see the "Session end — capture cascade" section below. Don't just update Last Session.md; categorize everything useful from the conversation and write it to the right destination (personal vault, team vault, or as a GitHub issue to the maintainer). Then update Last Session.md with the summary.
+3. During: If new concepts come up, create notes in the right folder — but check the Vault Map first. For decisions, create per-decision files in `⚙️ Meta/Decisions/` (see End below).
+4. End: Run the **session-end capture cascade** — see the "Session end — capture cascade" section below. **Write session content to a per-worktree file at `⚙️ Meta/Sessions/YYYY-MM-DDTHH-MM-{worktree}.md`** (the session-end hook creates a stub for you to fill in). **Write decisions to per-decision files at `⚙️ Meta/Decisions/YYYY-MM-DDTHH-MM-{slug}.md`**. Never write to `Last Session.md` or `Decision Log.md` directly — those are auto-generated aggregator views rebuilt from the per-worktree source files. Race-safe against concurrent worktrees: unique filenames eliminate write contention, aggregator output is deterministic from sorted input. See [adelaidasofia/ai-brain-starter#5](https://github.com/adelaidasofia/ai-brain-starter/issues/5) for the full design rationale.
 ```
 
 **After writing the template above, APPEND TWO MORE SECTIONS** to the user's CLAUDE.md by reading the rule files from the repo and inlining them verbatim. This keeps the rules versioned in the repo so future updates flow to users via the auto-update check, while still putting the full text in their CLAUDE.md so it's loaded at session start.
@@ -852,20 +852,32 @@ Also add an auto-update hook that pulls updates and applies them automatically o
 
 Tell them: "Done. From now on, the first thing I do every session is read your files — automatically, before I say anything. If there's an update to the skill, I'll pull it and apply it automatically — you'll just see a quick note about what changed."
 
-Also create the **session-end-hook.sh** script that hardens the Stop hook — it guarantees a timestamp is always saved even if Claude doesn't write the full update:
+Also create the **session-end-hook.sh** script. This script writes a per-worktree session stub (never to the shared `Last Session.md`) and then runs the aggregator. This design is race-safe against concurrent worktrees — see the "Why per-worktree writes" note below the script for the full explanation.
 
 ```bash
 #!/bin/bash
 # Save to: [VAULT_PATH]/⚙️ Meta/scripts/session-end-hook.sh
 # chmod +x this file after creating it
+#
+# PER-WORKTREE META WRITES:
+# Instead of writing to the shared Last Session.md (which races on
+# concurrent worktrees — last write wins, earlier sessions clobbered),
+# each session gets its own file in ⚙️ Meta/Sessions/ named by timestamp
+# + worktree. After the stub is created, the aggregator script rebuilds
+# Last Session.md from all Sessions/ files. Concurrent writes to
+# Sessions/ cannot collide (unique filenames); concurrent aggregator
+# runs produce deterministic output (same sorted input → same bytes).
+# See: https://github.com/adelaidasofia/ai-brain-starter/issues/5
 
 VAULT="[VAULT_PATH]"
 META_DIR="$VAULT/⚙️ Meta"
-LAST_SESSION="$META_DIR/Last Session.md"
+SESSIONS_DIR="$META_DIR/Sessions"
 SESSION_LOG="$META_DIR/Session Log.md"
 ERROR_LOG="$META_DIR/hook-errors.log"
+AGGREGATE_SESSIONS="$META_DIR/scripts/aggregate-sessions.py"
 DATE=$(date +%Y-%m-%d)
 TIME=$(date +%H:%M)
+TIMESTAMP_FILE=$(date +%Y-%m-%dT%H-%M)
 
 # GUARD: fail loudly, never silently. If the Meta dir doesn't exist, bubble an error
 # into the Claude hook context so the user sees it. This honors the NEVER fail silently rule.
@@ -876,21 +888,91 @@ if [ ! -d "$META_DIR" ]; then
   exit 0
 fi
 
-# Step 1: Always write a timestamp entry to Session Log (guaranteed, no Claude involvement)
-if ! echo "- $DATE $TIME — session ended" >> "$SESSION_LOG" 2>>"$ERROR_LOG"; then
+# Derive worktree name. Try three methods in order:
+#   1. pwd matches .../.claude/worktrees/{name}/... → use {name}
+#   2. Read the .git file if we're inside a git worktree
+#   3. Fall back to "main-$$" (PID) so two concurrent fallback sessions
+#      never collide on the same stub filename
+WORKTREE_NAME=""
+PWD_PATH="$(pwd)"
+case "$PWD_PATH" in
+  *"/.claude/worktrees/"*)
+    WORKTREE_NAME=$(echo "$PWD_PATH" | sed -n 's|.*/\.claude/worktrees/\([^/]*\).*|\1|p')
+    ;;
+esac
+if [ -z "$WORKTREE_NAME" ] && [ -f "$PWD_PATH/.git" ]; then
+  GITDIR=$(grep -o 'worktrees/[^ ]*' "$PWD_PATH/.git" 2>/dev/null | head -1)
+  if [ -n "$GITDIR" ]; then
+    WORKTREE_NAME=$(echo "$GITDIR" | sed 's|worktrees/||' | tr -d '[:space:]')
+  fi
+fi
+[ -z "$WORKTREE_NAME" ] && WORKTREE_NAME="main-$$"
+
+SESSION_FILE="$SESSIONS_DIR/${TIMESTAMP_FILE}-${WORKTREE_NAME}.md"
+
+# Ensure the Sessions folder exists
+mkdir -p "$SESSIONS_DIR" 2>>"$ERROR_LOG"
+
+# Step 1: Always write a timestamp entry to Session Log (guaranteed, no Claude involvement).
+# Append-only, small writes are atomic on local filesystems so this is safe under concurrency.
+if ! echo "- $DATE $TIME — session ended ($WORKTREE_NAME)" >> "$SESSION_LOG" 2>>"$ERROR_LOG"; then
   echo "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"additionalContext\":\"HOOK ERROR: Could not append to Session Log at '$SESSION_LOG'. Check '$ERROR_LOG' for details and tell the user.\"}}"
   exit 0
 fi
 
-# Step 2: Append a stub to Last Session.md if today's date isn't already there
-if [ -f "$LAST_SESSION" ]; then
-  if ! grep -q "^**Date:** $DATE" "$LAST_SESSION" 2>/dev/null; then
-    printf "\n\n---\n*Session ended: $DATE $TIME — update pending*\n" >> "$LAST_SESSION" 2>>"$ERROR_LOG"
-  fi
+# Step 2: Write a stub session file if one doesn't already exist for this session.
+# Unique filename per (minute × worktree) → no collision between concurrent worktrees.
+# If the file already exists (Claude filled it in mid-session), don't clobber it.
+if [ ! -f "$SESSION_FILE" ]; then
+  cat > "$SESSION_FILE" <<STUBEOF 2>>"$ERROR_LOG"
+---
+creationDate: ${DATE}T${TIME}
+type: session
+worktree: ${WORKTREE_NAME}
+session_date: ${DATE}
+session_label: "update pending"
+aliases: [Session ${DATE} ${WORKTREE_NAME}]
+---
+
+# Session — update pending (${DATE} ${TIME}, \`${WORKTREE_NAME}\` worktree)
+
+**Date:** ${DATE} ${TIME}
+**Session:** *stub written by session-end-hook.sh — Claude to fill in*
+
+## Status
+
+This file is a placeholder. Claude should replace the body with a full
+session summary: what was worked on, what shipped, what's pending, any
+open threads. Keep the frontmatter fields valid — \`creationDate\`,
+\`type: session\`, \`worktree\`, \`session_date\`.
+STUBEOF
 fi
 
-# Step 3: Ask Claude to fill in the full update
-echo "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"additionalContext\":\"SESSION ENDING ($DATE $TIME): Update Last Session.md at '$LAST_SESSION' — write today's date, what was done, what's pending. VERBATIM RULE: For any commitments made during this session, capture the EXACT words used (e.g. 'I will send this today' not 'committed to sending'). Same for key decisions — preserve the reasoning in original phrasing. Also save any non-obvious technical discoveries as memory files (type: discovery). Also: batch any Substack Notes, decision log entries, or vault changelog items.\"}}"
+# Step 3: Run the aggregator to refresh Last Session.md from Sessions/.
+# Deterministic output → safe even if another worktree's hook is running
+# the same aggregator at the same moment (both write identical bytes).
+if [ -f "$AGGREGATE_SESSIONS" ]; then
+  VAULT_ROOT="$VAULT" python3 "$AGGREGATE_SESSIONS" >/dev/null 2>>"$ERROR_LOG" || true
+fi
+
+# Step 4: Ask Claude to fill in the stub and log any decisions.
+cat <<EOF
+{"hookSpecificOutput":{"hookEventName":"Stop","additionalContext":"SESSION ENDING (${DATE} ${TIME}, worktree: ${WORKTREE_NAME}): A per-worktree session stub was created at '${SESSION_FILE}'. REPLACE the stub body with a full session summary — keep the frontmatter fields (creationDate, type: session, worktree, session_date) valid and update the session_label and the '# Session — ...' heading to match the real work. WRITE ONLY TO '${SESSION_FILE}' — do NOT write to Last Session.md directly (it is auto-generated from Sessions/ by aggregate-sessions.py). VERBATIM RULE: for any commitments made during this session, capture the EXACT words used (e.g. 'I will send this today' not 'committed to sending'). Same for key decisions — preserve the reasoning in original phrasing. For any decisions made, ALSO create a per-decision file at '${META_DIR}/Decisions/${TIMESTAMP_FILE}-{slug}.md' with the decision template (What/Why/Floor/Stakes/Speed/Outcome/Pattern) and frontmatter (type: decision, worktree, decision_date). Do NOT write to Decision Log.md directly — it is auto-generated by aggregate-decisions.py. After writing the session and decision files, run: VAULT_ROOT='${VAULT}' python3 '${META_DIR}/scripts/aggregate-sessions.py' && VAULT_ROOT='${VAULT}' python3 '${META_DIR}/scripts/aggregate-decisions.py'. Also save any non-obvious technical discoveries as memory files (type: discovery)."}}
+EOF
+```
+
+**Why per-worktree writes (the failure mode this design prevents):** if a user runs multiple Claude Code sessions in parallel worktrees, and each session follows the session-end cascade rule to write to the shared `Last Session.md` and `Decision Log.md`, the writes will race. Each session reads the file, constructs a new version with its entry, writes it back. Last write wins. Earlier sessions' entries are silently clobbered. The per-worktree split eliminates the race: unique filenames in `Sessions/` and `Decisions/` prevent contention at the write layer, and the aggregator scripts produce deterministic output from sorted input — so even concurrent aggregator runs can clobber each other without data loss, because they write the same bytes. Reported and fixed at [adelaidasofia/ai-brain-starter#5](https://github.com/adelaidasofia/ai-brain-starter/issues/5).
+
+**Companion scripts** (Phase 5 also installs these — see `scripts/aggregate-sessions.py` and `scripts/aggregate-decisions.py` in this repo):
+
+```bash
+# Copy the two aggregator scripts into the vault's Meta folder
+cp ~/.claude/skills/ai-brain-starter/scripts/aggregate-sessions.py "[VAULT_PATH]/⚙️ Meta/scripts/"
+cp ~/.claude/skills/ai-brain-starter/scripts/aggregate-decisions.py "[VAULT_PATH]/⚙️ Meta/scripts/"
+chmod +x "[VAULT_PATH]/⚙️ Meta/scripts/aggregate-sessions.py" "[VAULT_PATH]/⚙️ Meta/scripts/aggregate-decisions.py"
+
+# Create the source-of-truth folders
+mkdir -p "[VAULT_PATH]/⚙️ Meta/Sessions" "[VAULT_PATH]/⚙️ Meta/Decisions"
 ```
 
 Also create the **write-hook.sh** script that fires after every Write tool call. It auto-triggers meeting-todos extraction when a meeting note is saved:

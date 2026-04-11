@@ -9,6 +9,57 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 11, 2026 (twenty-first session — concurrent-worktree race fix for session-end cascade)
+
+### The bug this fixes
+
+If you run multiple Claude Code sessions at the same time in different worktrees (which you'll do if you're using the parallel-worktrees workflow for different tasks), and each session follows the session-end cascade rule — they all race on `⚙️ Meta/Last Session.md` and `⚙️ Meta/Decision Log.md`. Each session reads the file, adds its entry, writes it back. Last write wins. **Earlier sessions' entries are silently clobbered.**
+
+This isn't a bug in any one session. It's a structural race condition in the cascade rule itself. If you've been using this setup with parallel worktrees for any length of time, some of your session summaries and decisions have quietly disappeared without you knowing.
+
+I caught it live on 2026-04-11 — four concurrent worktrees wrote to the meta files in one evening; at least two decisions and one session summary were overwritten before the fix shipped. Reported and tracked in [#5](https://github.com/adelaidasofia/ai-brain-starter/issues/5).
+
+### What changed
+
+**New folder structure (created automatically on update via the session-end hook):**
+
+```
+⚙️ Meta/
+  Sessions/
+    2026-04-11T22-30-my-worktree.md          # one file per session, unique filename
+    2026-04-11T17-18-other-worktree.md
+  Decisions/
+    2026-04-11T22-30-daily-journal-redesign.md  # one file per decision, unique filename
+    2026-04-11T22-30-per-worktree-meta-writes.md
+  Last Session.md         # auto-generated from Sessions/ by aggregate-sessions.py
+  Decision Log.md         # auto-generated from Decisions/ by aggregate-decisions.py
+```
+
+Concurrent worktrees write to *different files*, so there is no contention. The shared `Last Session.md` and `Decision Log.md` are rebuilt by aggregator scripts that produce deterministic output from sorted input — so even two concurrent aggregator runs write identical bytes. The race is structurally eliminated, not papered over with locks or retries.
+
+**Two new scripts** (installed to your vault's `⚙️ Meta/scripts/`):
+
+- `aggregate-sessions.py` — rebuilds `Last Session.md` by reading `Sessions/*.md`, sorting by filename descending, concatenating the top N (default 3). Filters out stub files (unfilled placeholders) so orphaned session-end hook writes don't pollute the view.
+- `aggregate-decisions.py` — same for `Decisions/` → `Decision Log.md`, showing all decisions newest-first.
+
+Both scripts read the vault path from `$VAULT_ROOT` so you don't need to edit them for your setup — the bootstrap sets the env var for you, and the hook passes it on every run.
+
+**Updated `session-end-hook.sh`** — now detects your worktree name (three fallback methods: pwd parse → `.git` file read → PID-based unique fallback), writes a session stub to `Sessions/{timestamp}-{worktree}.md`, and runs the aggregator as the final step. The hook never writes to `Last Session.md` directly.
+
+**Updated session-end capture rule** — tells Claude to write session content to a per-worktree file (not the shared view) and to create per-decision files (not append to `Decision Log.md`). Runs the aggregators after each write. The destination table in the rule was updated to reflect the new paths.
+
+**Backwards-compatible migration.** Your existing `Last Session.md` and `Decision Log.md` are NOT touched on first run. The aggregator preserves all pre-split historical content below a `## Legacy (pre-split) historical entries` / `## Legacy (pre-split) historical decisions` header. Nothing gets deleted. You can roll back by deleting `Sessions/` and `Decisions/` and restoring from the `.bak-pre-aggregator-*` backups if anything goes wrong.
+
+**Idempotency.** The aggregators are byte-stable across runs — three consecutive runs produce identical MD5 hashes. Safe to run as many times as you want, including concurrently.
+
+### What you do (nothing, unless you want to)
+
+The update auto-installs the new scripts and updates the hook. The next time you end a session, the hook will create your first entry in `Sessions/` and rebuild `Last Session.md` as the aggregator view. If you want to manually trigger a rebuild before then: `VAULT_ROOT="<your vault path>" python3 "<vault>/⚙️ Meta/scripts/aggregate-sessions.py"`.
+
+If you've been running parallel worktrees and want to know what you may have lost, check `⚙️ Meta/Session Log.md` (the always-append log) for timestamps of ended sessions without matching entries in `Last Session.md`. That's your missing-content list.
+
+---
+
 ## April 11, 2026 (twentieth session — daily journal panel becomes a live participant, with real pushback)
 
 If you've been using `/journal` for a while, you've probably noticed the advisory panel at the end of each entry mostly cheers you on. Warm, supportive, agreeable. The problem: on good days that means *no real signal*, and on days when you're rationalizing something, it means the panel *helps you* rationalize it. The whole point of having an advisory panel is that it pushes back when you need it — and the old setup couldn't, because it ran after you'd already decided how the story goes.

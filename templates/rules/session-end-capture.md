@@ -36,10 +36,12 @@ The destination depends on the type of context AND which vault is loaded:
 
 | Type | Destination |
 |---|---|
-| **Personal** (feelings, life, relationships, goals) | Personal vault: `Last Session.md` always; `Decision Log.md` if a decision; a journal entry if reflective/emotional |
-| **Team / business** (work, strategy, customers, fundraising) | Team vault if one exists: `Last Session.md` always; `Decision Log.md` if a decision; the relevant strategy/sales/CRM doc |
+| **Personal** (feelings, life, relationships, goals) | Personal vault: a new file in `⚙️ Meta/Sessions/YYYY-MM-DDTHH-MM-{worktree}.md` (always); a new file in `⚙️ Meta/Decisions/YYYY-MM-DDTHH-MM-{slug}.md` if a decision; a journal entry if reflective/emotional |
+| **Team / business** (work, strategy, customers, fundraising) | Team vault if one exists: same per-worktree pattern — `⚙️ Meta/Sessions/` and `⚙️ Meta/Decisions/` in the team vault |
 | **Improvements to the AI brain setup** | File a GitHub issue (see Step 4) — do NOT clutter their vault with this |
-| **Anything ambiguous** | Personal vault `Last Session.md` with a note flagging it for review |
+| **Anything ambiguous** | Personal vault session file with a note flagging it for review |
+
+**Per-worktree writes (race-safety).** Write to files in `⚙️ Meta/Sessions/` and `⚙️ Meta/Decisions/`, **never** to the shared `Last Session.md` or `Decision Log.md`. Those two files are auto-generated aggregator views rebuilt from the per-worktree source files. The session-end hook creates a stub for you at `⚙️ Meta/Sessions/YYYY-MM-DDTHH-MM-{worktree}.md` — replace the stub body with the full session summary, keep the frontmatter fields valid (`creationDate`, `type: session`, `worktree`, `session_date`). For decisions, create new files at `⚙️ Meta/Decisions/YYYY-MM-DDTHH-MM-{slug}.md` with frontmatter `type: decision, worktree, decision_date, floor, stakes, speed, outcome, pattern`. After writing, run `VAULT_ROOT='...' python3 '⚙️ Meta/scripts/aggregate-sessions.py'` and the same for `aggregate-decisions.py` — or let the session-end hook run them for you. This pattern is race-safe against concurrent worktrees: unique filenames in the source folders eliminate write contention, aggregator output is deterministic from sorted input so concurrent aggregator runs can clobber each other without data loss. See [adelaidasofia/ai-brain-starter#5](https://github.com/adelaidasofia/ai-brain-starter/issues/5).
 
 **For users with both a personal vault AND a team vault** (joined via the team-vault join flow): always cascade to BOTH. Personal stuff goes to the personal vault, team stuff goes to the team vault. Never let personal stuff leak into the team vault. When ambiguous, default to personal — the team vault stays clean.
 
@@ -91,9 +93,16 @@ gh issue create --repo adelaidasofia/ai-brain-starter \
 
 Save the draft to `<vault>/💡 Improvement Ideas.md` (create the file if it doesn't exist) so they can review later. Tell them: *"Saved to your Improvement Ideas file — you can review and file them anytime."*
 
-### Step 5 — Update Last Session.md
+### Step 5 — Run the aggregators
 
-Always end with a one-paragraph summary of what was discussed and what was saved/filed. Use the format the file already uses. This is what Claude reads at the start of the next session to know where you left off.
+After all the per-worktree source files are written (session file + any decision files), run both aggregator scripts to refresh the shared `Last Session.md` and `Decision Log.md` views:
+
+```bash
+VAULT_ROOT="<absolute vault path>" python3 "<vault>/⚙️ Meta/scripts/aggregate-sessions.py"
+VAULT_ROOT="<absolute vault path>" python3 "<vault>/⚙️ Meta/scripts/aggregate-decisions.py"
+```
+
+The session-end hook also runs `aggregate-sessions.py` automatically as its final step, so this manual run is only needed if you created or edited session/decision files after the hook fired, or if you want the refreshed view immediately.
 
 ### Step 6 — Confirm with the user
 
