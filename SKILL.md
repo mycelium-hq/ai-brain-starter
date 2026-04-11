@@ -34,7 +34,7 @@ First, detect the platform: Mac, Windows, or Linux. Then check what's already in
 Tell the user: "I need to install a couple of tools first that will make this whole setup faster and use less of your subscription. This takes a few minutes."
 
 ### Mac
-```
+```bash
 # Homebrew
 if ! command -v brew &>/dev/null; then
   # Ask for password: "It needs your Mac password — you won't see characters when you type, that's normal."
@@ -49,16 +49,61 @@ fi
 # Node.js
 if ! command -v node &>/dev/null; then brew install node; fi
 
-# Graphify — ~70% fewer tokens on vault queries
-if ! command -v graphify &>/dev/null; then pipx install graphifyy && graphify install; fi
-# Graphify Claude skill — copy the FULL folder (SKILL.md + scripts/ + OPTIMIZATIONS.md)
-# The wrapper scripts in scripts/ cut LLM cost by 80–92% on large vaults.
-# Copying only SKILL.md (the old bug) left the scripts behind and optimizations never reached users.
-mkdir -p ~/.claude/skills/graphify
-cp -R ~/.claude/skills/ai-brain-starter/skills/graphify/. ~/.claude/skills/graphify/
+# bun — claude-mem's runtime. Without this, claude-mem plugin commands fail
+# because the worker service is a bun script, not a node script.
+if ! command -v bun &>/dev/null && [ ! -x ~/.bun/bin/bun ]; then
+  curl -fsSL https://bun.sh/install | bash
+fi
 
-# Claude-Mem — ~30-40% fewer tokens on session starts
-npx claude-mem install 2>/dev/null
+# gh (GitHub CLI) — needed for the session-close repo-update propagation rule,
+# and for any user who'll fork ai-brain-starter and push improvements back
+if ! command -v gh &>/dev/null; then brew install gh; fi
+
+# Graphify — ~70% fewer tokens on vault queries. CRITICAL: most of this setup
+# (the meeting workflow, the Knowledge Graph rule, /weekly insights, the
+# Decision Log queries) depends on graphify being callable. If this install
+# fails, the verification block at the end of Phase 0 catches it.
+if ! command -v graphify &>/dev/null; then pipx install graphifyy && graphify install; fi
+
+# Sub-skills bundled in this repo — copy the FULL folders so the wrapper
+# scripts come along too. (Plain `cp SKILL.md` misses the scripts/ folders
+# where the cost-cutting optimizations live.) Copy ALL three sub-skills here
+# instead of deferring to later phases — Phase 0 must leave a working stack
+# even if the user stops the conversation early.
+mkdir -p ~/.claude/skills/graphify ~/.claude/skills/meeting-todos ~/.claude/skills/patterns
+cp -R ~/.claude/skills/ai-brain-starter/skills/graphify/.       ~/.claude/skills/graphify/
+cp -R ~/.claude/skills/ai-brain-starter/skills/meeting-todos/.  ~/.claude/skills/meeting-todos/
+cp -R ~/.claude/skills/ai-brain-starter/skills/patterns/.       ~/.claude/skills/patterns/
+
+# Claude-Mem — ~30-40% fewer tokens on session starts. Two install paths:
+# (1) the marketplace plugin (preferred — wires /plugin commands and slash
+# triggers), (2) the npx install as a fallback. Do both: marketplace
+# registration is what makes /mem-search and the auto-context loader work.
+mkdir -p ~/.claude
+# Add the thedotmack marketplace to settings.json if not already there.
+# Use python (always available after Homebrew) so we don't depend on jq.
+python3 - <<'PY'
+import json, os
+p = os.path.expanduser("~/.claude/settings.json")
+try:
+    with open(p) as f:
+        s = json.load(f)
+except FileNotFoundError:
+    s = {}
+s.setdefault("extraKnownMarketplaces", {})
+if "thedotmack" not in s["extraKnownMarketplaces"]:
+    s["extraKnownMarketplaces"]["thedotmack"] = {
+        "source": {"source": "github", "repo": "thedotmack/claude-mem"}
+    }
+s.setdefault("enabledPlugins", {})
+s["enabledPlugins"]["claude-mem@thedotmack"] = True
+with open(p, "w") as f:
+    json.dump(s, f, indent=2)
+print("registered claude-mem@thedotmack marketplace + enabled plugin")
+PY
+# Also run the npx installer as a belt-and-suspenders fallback (no-op if
+# the marketplace install already completed)
+npx claude-mem install 2>/dev/null || true
 
 # Humanizer — de-AI writing
 if [ ! -d ~/.claude/skills/humanizer ]; then
@@ -71,14 +116,87 @@ if [ ! -d ~/.claude/skills/notebooklm ]; then
   git clone https://github.com/PleasePrompto/notebooklm-skill.git ~/.claude/skills/notebooklm
 fi
 
+# Granola MCP — meeting notes auto-sync. The "I just had a meeting" workflow
+# rule in CLAUDE.md depends on this MCP. Without it, the rule fires but
+# can't fetch the transcript. Wire it now so the rule works on day 1.
+# (Requires a Granola account at https://granola.ai — the setup phase asks
+# the user about this.)
+python3 - <<'PY'
+import json, os
+p = os.path.expanduser("~/.claude/.mcp.json")
+try:
+    with open(p) as f:
+        m = json.load(f)
+except FileNotFoundError:
+    m = {"mcpServers": {}}
+m.setdefault("mcpServers", {})
+if "granola" not in m["mcpServers"]:
+    m["mcpServers"]["granola"] = {
+        "type": "url",
+        "url": "https://mcp.granola.ai/mcp"
+    }
+    with open(p, "w") as f:
+        json.dump(m, f, indent=2)
+    print("registered granola MCP")
+else:
+    print("granola MCP already registered")
+PY
+
 # Nano Banana — image generation via Google Gemini 3 Pro Image
 # Installed via the devon-claude-skills marketplace. Tell the user:
 # "Run /plugin marketplace add devonjones/devon-claude-skills, then
 # /plugin install nano-banana@devon-claude-skills. You'll also need a
-# GEMINI_API_KEY from https://ai.google.dev/."
+# GEMINI_API_KEY from https://ai.google.dev/, exported in your shell
+# profile (~/.zshrc or ~/.bash_profile) so it persists across sessions:
+#   echo 'export GEMINI_API_KEY=your_key_here' >> ~/.zshrc"
 # (Marketplace install must be done by the user from inside Claude Code; this
 # script can't run /plugin commands. Mention it explicitly so they know.)
 ```
+
+### Verification (NEVER FAIL SILENTLY — run this immediately after the Mac/Linux block above)
+
+After installing everything above, run a verification block that checks every tool actually landed and reports failures explicitly. **This is non-negotiable** — silent failures mean the user thinks Phase 0 worked, then hits a broken `/graphify` or missing meeting workflow rule weeks later with no idea why.
+
+```bash
+echo "=== Phase 0 Verification ==="
+FAILED=()
+
+# CLI tools
+command -v brew >/dev/null    || FAILED+=("brew (Homebrew)")
+command -v python3 >/dev/null && python3 -c "import sys; assert sys.version_info >= (3,10)" 2>/dev/null \
+                              || FAILED+=("python3 >= 3.10")
+command -v node >/dev/null    || FAILED+=("node")
+command -v npm >/dev/null     || FAILED+=("npm")
+command -v pipx >/dev/null    || FAILED+=("pipx")
+command -v graphify >/dev/null || FAILED+=("graphify CLI")
+command -v gh >/dev/null      || FAILED+=("gh (GitHub CLI)")
+{ command -v bun >/dev/null || [ -x ~/.bun/bin/bun ]; } || FAILED+=("bun runtime (claude-mem dependency)")
+
+# Skill folders
+[ -d ~/.claude/skills/graphify ]      && [ -d ~/.claude/skills/graphify/scripts ] || FAILED+=("graphify skill folder (with scripts/)")
+[ -d ~/.claude/skills/meeting-todos ] || FAILED+=("meeting-todos skill folder")
+[ -d ~/.claude/skills/patterns ]      || FAILED+=("patterns skill folder")
+[ -d ~/.claude/skills/humanizer ]     || FAILED+=("humanizer skill folder")
+[ -d ~/.claude/skills/notebooklm ]    || FAILED+=("notebooklm skill folder")
+
+# Config files
+[ -f ~/.claude/settings.json ] && grep -q "claude-mem@thedotmack" ~/.claude/settings.json \
+                              || FAILED+=("claude-mem marketplace registration in ~/.claude/settings.json")
+[ -f ~/.claude/.mcp.json ]     && grep -q "granola" ~/.claude/.mcp.json \
+                              || FAILED+=("Granola MCP entry in ~/.claude/.mcp.json")
+
+if [ ${#FAILED[@]} -eq 0 ]; then
+  echo "✓ Phase 0 complete — every dependency installed and verified."
+else
+  echo "✗ Phase 0 finished with ${#FAILED[@]} failure(s):"
+  printf '  - %s\n' "${FAILED[@]}"
+  echo
+  echo "Tell the user EXACTLY which items failed and offer to retry each one."
+  echo "Do NOT proceed silently. The downstream phases assume these are working."
+fi
+```
+
+If anything fails, **tell the user immediately** with the exact failure list, why it matters, and the retry command. This rule exists because of a real incident: a co-founder's Phase 0 run left graphify partially installed, the team CLAUDE.md was never auto-loaded, and the broken state stayed invisible for days. Never let that happen again.
 
 ### Windows
 ```
@@ -103,14 +221,31 @@ winget install -e --id OpenJS.NodeJS.LTS --accept-source-agreements --accept-pac
 # After Python and Node are confirmed:
 pip install pipx
 pipx ensurepath
+
+# bun runtime — claude-mem dependency
+powershell -Command "irm bun.sh/install.ps1 | iex"
+
+# gh (GitHub CLI) — used by the session-close repo-update propagation rule
+winget install -e --id GitHub.cli --accept-source-agreements --accept-package-agreements
+
+# Graphify
 pipx install graphifyy
 graphify install --platform windows
-:: Copy the FULL graphify skill folder (SKILL.md + scripts\ + OPTIMIZATIONS.md)
-:: xcopy with /E (recursive incl. empty dirs), /I (assume dest is dir), /Y (overwrite without prompt)
-mkdir %USERPROFILE%\.claude\skills\graphify
-xcopy /E /I /Y %USERPROFILE%\.claude\skills\ai-brain-starter\skills\graphify\* %USERPROFILE%\.claude\skills\graphify\
 
-# Claude-Mem
+:: Copy ALL three sub-skills (graphify, meeting-todos, patterns)
+mkdir %USERPROFILE%\.claude\skills\graphify       2>nul
+mkdir %USERPROFILE%\.claude\skills\meeting-todos  2>nul
+mkdir %USERPROFILE%\.claude\skills\patterns       2>nul
+xcopy /E /I /Y %USERPROFILE%\.claude\skills\ai-brain-starter\skills\graphify\*       %USERPROFILE%\.claude\skills\graphify\
+xcopy /E /I /Y %USERPROFILE%\.claude\skills\ai-brain-starter\skills\meeting-todos\*  %USERPROFILE%\.claude\skills\meeting-todos\
+xcopy /E /I /Y %USERPROFILE%\.claude\skills\ai-brain-starter\skills\patterns\*       %USERPROFILE%\.claude\skills\patterns\
+
+# Claude-Mem — register the marketplace + enable the plugin AND run npx as fallback
+python -c "import json, os; p = os.path.expanduser('~/.claude/settings.json'); s = {}; ^
+exec('try:\n  s = json.load(open(p))\nexcept: pass'); ^
+s.setdefault('extraKnownMarketplaces', {}).setdefault('thedotmack', {'source': {'source': 'github', 'repo': 'thedotmack/claude-mem'}}); ^
+s.setdefault('enabledPlugins', {})['claude-mem@thedotmack'] = True; ^
+json.dump(s, open(p, 'w'), indent=2)"
 npx claude-mem install
 
 # Humanizer
@@ -119,12 +254,21 @@ git clone https://github.com/adelaidasofia/humanizer.git %USERPROFILE%\.claude\s
 # NotebookLM — source-grounded answers from your uploaded docs
 git clone https://github.com/PleasePrompto/notebooklm-skill.git %USERPROFILE%\.claude\skills\notebooklm
 
+# Granola MCP — meeting workflow rule depends on this
+python -c "import json, os; p = os.path.expanduser('~/.claude/.mcp.json'); m = {'mcpServers': {}}; ^
+exec('try:\n  m = json.load(open(p))\nexcept: pass'); ^
+m.setdefault('mcpServers', {}).setdefault('granola', {'type': 'url', 'url': 'https://mcp.granola.ai/mcp'}); ^
+json.dump(m, open(p, 'w'), indent=2)"
+
 # Nano Banana — image generation via Gemini 3 Pro Image
 :: Tell the user:
 :: "Run /plugin marketplace add devonjones/devon-claude-skills, then
 :: /plugin install nano-banana@devon-claude-skills. You'll also need a
-:: GEMINI_API_KEY from https://ai.google.dev/."
+:: GEMINI_API_KEY from https://ai.google.dev/, set as a Windows env var:
+:: setx GEMINI_API_KEY your_key_here"
 ```
+
+**Run the same verification block** (the Mac/Linux version) using Git Bash on Windows. PowerShell users can adapt with `Test-Path` and `Get-Command` checks; the failure list pattern stays the same.
 
 **If winget is not available** (older Windows): install via official installers using the Bash tool to download and run them silently:
 ```
@@ -158,21 +302,71 @@ sudo apt-get install -y nodejs npm   # Ubuntu/Debian
 
 # After Python and Node are confirmed:
 pip install pipx && pipx ensurepath
+
+# bun runtime — claude-mem dependency
+if ! command -v bun >/dev/null && [ ! -x ~/.bun/bin/bun ]; then
+  curl -fsSL https://bun.sh/install | bash
+fi
+
+# gh (GitHub CLI) — used by the session-close repo-update propagation rule
+if ! command -v gh >/dev/null; then
+  sudo apt-get install -y gh 2>/dev/null || sudo dnf install -y gh 2>/dev/null || sudo pacman -S --noconfirm github-cli 2>/dev/null || true
+fi
+
+# Graphify
 pipx install graphifyy && graphify install
-# Graphify Claude skill — copy the FULL folder (SKILL.md + scripts/ + OPTIMIZATIONS.md)
-mkdir -p ~/.claude/skills/graphify
-cp -R ~/.claude/skills/ai-brain-starter/skills/graphify/. ~/.claude/skills/graphify/
-npx claude-mem install
+
+# Sub-skills bundled in this repo — copy ALL three so Phase 0 leaves a working
+# stack even if the user stops the conversation early.
+mkdir -p ~/.claude/skills/graphify ~/.claude/skills/meeting-todos ~/.claude/skills/patterns
+cp -R ~/.claude/skills/ai-brain-starter/skills/graphify/.       ~/.claude/skills/graphify/
+cp -R ~/.claude/skills/ai-brain-starter/skills/meeting-todos/.  ~/.claude/skills/meeting-todos/
+cp -R ~/.claude/skills/ai-brain-starter/skills/patterns/.       ~/.claude/skills/patterns/
+
+# Claude-Mem — register the marketplace + enable the plugin AND run npx as fallback
+mkdir -p ~/.claude
+python3 - <<'PY'
+import json, os
+p = os.path.expanduser("~/.claude/settings.json")
+try:
+    with open(p) as f: s = json.load(f)
+except FileNotFoundError:
+    s = {}
+s.setdefault("extraKnownMarketplaces", {})
+if "thedotmack" not in s["extraKnownMarketplaces"]:
+    s["extraKnownMarketplaces"]["thedotmack"] = {"source": {"source": "github", "repo": "thedotmack/claude-mem"}}
+s.setdefault("enabledPlugins", {})["claude-mem@thedotmack"] = True
+with open(p, "w") as f: json.dump(s, f, indent=2)
+PY
+npx claude-mem install 2>/dev/null || true
+
+# Humanizer
 git clone https://github.com/adelaidasofia/humanizer.git ~/.claude/skills/humanizer
 
 # NotebookLM — source-grounded answers
 git clone https://github.com/PleasePrompto/notebooklm-skill.git ~/.claude/skills/notebooklm
 
+# Granola MCP — meeting workflow rule depends on this
+python3 - <<'PY'
+import json, os
+p = os.path.expanduser("~/.claude/.mcp.json")
+try:
+    with open(p) as f: m = json.load(f)
+except FileNotFoundError:
+    m = {"mcpServers": {}}
+m.setdefault("mcpServers", {})
+if "granola" not in m["mcpServers"]:
+    m["mcpServers"]["granola"] = {"type": "url", "url": "https://mcp.granola.ai/mcp"}
+    with open(p, "w") as f: json.dump(m, f, indent=2)
+PY
+
 # Nano Banana — image generation (marketplace install, user must run from inside Claude Code):
 # /plugin marketplace add devonjones/devon-claude-skills
 # /plugin install nano-banana@devon-claude-skills
-# Plus a GEMINI_API_KEY from https://ai.google.dev/
+# Plus a GEMINI_API_KEY from https://ai.google.dev/ (export in ~/.bashrc or ~/.zshrc to persist)
 ```
+
+**Run the verification block** (same as the Mac section above) immediately after the Linux install. The bash syntax is identical and the failure modes are the same.
 
 **If any install requires user interaction (like Homebrew needing a password or Windows needing a download):** explain clearly what's happening and why. Keep it simple: "This makes everything we're about to do cheaper and faster."
 
@@ -228,6 +422,103 @@ Skip this block if the user hasn't run `/graphify` yet — but mention it in the
 After Phase 0 completes, tell the user: "I installed a few tools in the background that make everything faster and more efficient. Now let's get started with you."
 
 ## Phase 1: Language & Welcome
+
+### Step 1.−1 — Detect mode: NEW PERSONAL VAULT vs JOINING EXISTING TEAM VAULT (run BEFORE the language question)
+
+Before anything else, figure out what the user is trying to do. There are three modes:
+
+**A. New personal vault** — fresh start, no existing vault. Walk through every phase.
+**B. Joining an existing team vault** — someone else already set up a team vault and they're a new member joining. Skip structure-creation entirely; just verify Phase 0 is installed, fix any cwd-mismatch (see below), wire their meeting tool, and confirm. Should take <5 minutes.
+**C. Upgrading their own existing vault** — they already ran setup once and want to add features or sync the latest CLAUDE.md template. Use the "Already Set Up?" branch at the top of this file.
+
+**Auto-detection logic:**
+
+```bash
+# Look for an existing CLAUDE.md in the cwd, parent directories (up to 4 levels),
+# and one level deep (subdirectories). The walk-down case catches the cwd-mismatch
+# bug: a team member launches Claude from the wrapper folder (e.g. a Google Drive
+# shared folder root) but the real CLAUDE.md is one level deeper, in the actual
+# vault content subfolder.
+# CLAUDE.md inside a subfolder of the launch directory.
+CWD="$(pwd)"
+FOUND_CLAUDE=""
+DETECTED_PARENT_PATH=""
+
+# Walk up
+DIR="$CWD"
+for _ in 1 2 3 4; do
+  if [[ -f "$DIR/CLAUDE.md" ]]; then FOUND_CLAUDE="$DIR/CLAUDE.md"; break; fi
+  PARENT="$(dirname "$DIR")"; [[ "$PARENT" == "$DIR" ]] && break; DIR="$PARENT"
+done
+
+# Walk one level down (catch cwd-mismatch)
+if [[ -z "$FOUND_CLAUDE" ]]; then
+  for sub in "$CWD"/*/; do
+    if [[ -f "$sub/CLAUDE.md" ]]; then
+      FOUND_CLAUDE="$sub/CLAUDE.md"
+      DETECTED_PARENT_PATH="$sub"
+      break
+    fi
+  done
+fi
+```
+
+**Decision tree:**
+
+- **Argument hint:** if the user invoked `/setup-brain join-team`, jump straight to mode B and skip the question below.
+- **No CLAUDE.md found anywhere:** → mode A (new personal vault). Continue to Step 1.0.
+- **CLAUDE.md found in cwd:** → mode C (upgrade their own vault). Use the "Already Set Up?" branch at the top of this file.
+- **CLAUDE.md found in a parent directory** (and they're working in a subfolder of an existing vault): → ask "It looks like you're inside an existing vault at `<parent>`. Are you (1) joining this as a team member, (2) just adding work in a subfolder, or (3) starting fresh somewhere else?" → answer 1 routes to mode B; answer 3 routes them to a fresh directory and mode A.
+- **CLAUDE.md found in a SUBFOLDER of the cwd** (the cwd-mismatch case): → this is a team-vault folder structure where the actual content lives one level deep — common with Google Drive / OneDrive / Dropbox shared folders that wrap a single content subfolder. Auto-fix it (next section). Then proceed to mode B.
+
+### Step 1.−1a — Cwd-mismatch auto-fix (joining a team vault where the content is one level deep)
+
+If `CLAUDE.md` was found in a subfolder of the cwd (not in the cwd itself), the user is in a team vault where the actual content folder is one level deep. This pattern is common for:
+
+- Google Drive shared folders that contain a single subfolder of vault content
+- OneDrive / Dropbox shared workspaces
+- Manually-organized team folders where a top-level wrapper folder contains the actual vault
+
+**The bug:** Claude Code only auto-loads CLAUDE.md from the cwd and walks UP, not DOWN. If the user launches Claude from the wrapper folder, the team CLAUDE.md is never loaded. Their session has no project context, the meeting workflow rule doesn't fire, the graph never gets read, and every answer is generic. The user can go DAYS without realizing.
+
+**The auto-fix:** write a thin pointer CLAUDE.md at the cwd (the wrapper folder) that says "the real CLAUDE.md is in the subfolder — please load that file." Claude Code reads this pointer at session start, reads the pointed-at file, and the user gets full project context regardless of which folder they launched from.
+
+```bash
+# Only run if a subfolder CLAUDE.md was found AND the cwd doesn't already have one
+if [[ -n "$DETECTED_PARENT_PATH" && ! -f "$CWD/CLAUDE.md" ]]; then
+  REL_PATH="${DETECTED_PARENT_PATH%/}"
+  REL_PATH="${REL_PATH##*/}"
+  cat > "$CWD/CLAUDE.md" <<EOF
+# Pointer to the real team vault CLAUDE.md
+
+The actual project CLAUDE.md lives at \`$REL_PATH/CLAUDE.md\`. **Read that file at session start.** All project rules, the team context, the Knowledge Graph rule, and the meeting workflow rule live there.
+
+This pointer file exists because Claude Code only auto-loads CLAUDE.md from the current working directory (and walks UP through parent directories). It does not walk DOWN into subfolders. The team vault's actual content lives in the \`$REL_PATH/\` subfolder, so without this pointer, every Claude session launched from this directory would miss the real CLAUDE.md and operate with no project context.
+
+**Files of note (all inside \`$REL_PATH/\`):**
+- \`CLAUDE.md\` — the real one
+- \`⚙️ Meta/graphify-out/GRAPH_REPORT.md\` — read this first for any strategy question
+- \`⚙️ Meta/graphify-out/graph.json\` — queryable knowledge graph
+
+If you're a team member joining this vault, you can leave this pointer file in place — it's part of the team setup. Don't delete it.
+EOF
+  echo "✓ Wrote pointer CLAUDE.md at $CWD/CLAUDE.md → real one at $REL_PATH/CLAUDE.md"
+fi
+```
+
+**Tell the user out loud:** "Heads up — I noticed your team vault has the real CLAUDE.md one folder deep (inside `<subfolder>`). Claude Code only loads CLAUDE.md from where you launch it, so I just wrote a tiny pointer file at the top level so every team member who runs Claude from this folder picks up the real one automatically. You won't have to think about it again."
+
+### Step 1.−1b — Mode B: Joining an existing team vault (minimal setup)
+
+If we routed to mode B (joining an existing team vault), do NOT run Phases 2, 3, 4, 5, 14, 15, 16, 19. The vault already exists; you'd just be duplicating work. Run only:
+
+1. **Phase 0** — silent install of the dependencies (graphify, humanizer, claude-mem, etc.). The user may already have some of these from earlier conversations; the install commands are idempotent.
+2. **Step 1.−1a** — write the cwd pointer if needed (above).
+3. **Phase 11 — Meeting tool selection** (the new adaptive section, see below). Ask which tool they use and wire it up.
+4. **A short verification block** — confirm the team CLAUDE.md is loadable, graphify is callable, the meeting MCP is registered if applicable, and the user's `~/.claude/settings.json` has claude-mem registered.
+5. **Hand off** — say "You're ready. The team vault is at `<path>`. Open it in Claude Code from here and the real CLAUDE.md will load automatically. Try asking a question that uses the graph (e.g. *'what does our graph say about pricing?'*) to confirm the context is loading."
+
+Don't ask the language question (1.0) or any of the personal-setup questions (1.1) — those are for new personal vaults only. The team vault already has its own CLAUDE.md with its own conventions.
 
 ### Step 1.0 — Languages (ASK FIRST, BEFORE ANYTHING ELSE)
 
@@ -1401,19 +1692,149 @@ Ask: "Do you use Slack?"
 Ask: "Do you use HubSpot, Apollo, or any CRM tool?"
 - "Connect it. Then your Obsidian CRM and your actual sales CRM stay in sync. I can look up contacts, check deal status, and draft outreach from your vault."
 
-### Meeting Notes
-Ask: "Do you record meetings? (Granola, Otter, Fireflies, Zoom transcripts, etc.)"
-- If yes: "We can set up auto-import so your meeting notes land in the vault automatically, formatted with frontmatter, attendee lists, and action items. No manual copying."
-- Walk them through setting up the import (varies by tool — Granola has an API, others export to folders)
+### Meeting Notes — adaptive setup based on the user's tool
 
-Then offer the meeting-todos skill:
+The whole "I just had a meeting" workflow rule needs to know where the transcript lives. **Ask the user which tool they use, then generate the right rule + sync wiring.** Don't assume Granola — most teams don't use it.
+
+Ask:
+
+> "Do you record / transcribe your meetings? Which tool? Pick the closest:
+>
+>   1. **Granola** — Mac app, AI-generated summaries, has an API/MCP
+>   2. **Google Meet + Gemini** — verbatim transcripts auto-generated as Google Docs in your Drive
+>   3. **Otter.ai** — transcripts in their web app, can export to Drive/Slack
+>   4. **Fireflies.ai** — same idea, transcripts in their app
+>   5. **Zoom recordings + Zoom AI Companion** — transcripts saved to Zoom cloud
+>   6. **Microsoft Teams + Copilot** — transcripts in OneDrive
+>   7. **Notion AI Notetaker** — transcripts saved as Notion pages
+>   8. **Manual notes** — I take my own notes during/after the meeting, no AI
+>   9. **Multiple tools** — different tools for different meetings
+>   10. **None / I don't record meetings** — skip this whole thing
+>
+> Tell me the number(s) and any specifics (which Drive folder, which channel, etc.)."
+
+Store the answer as `MEETING_TOOLS` (a list — could be multiple). Then for each tool, wire it up specifically:
+
+#### 1. Granola
+
+- **Wire the MCP** (already done in Phase 0 if they ran the bootstrap, but verify):
+  ```bash
+  python3 -c "import json,os; p=os.path.expanduser('~/.claude/.mcp.json'); m={'mcpServers':{}}; \
+    exec('try:\n  m=json.load(open(p))\nexcept: pass'); \
+    m.setdefault('mcpServers',{}).setdefault('granola',{'type':'url','url':'https://mcp.granola.ai/mcp'}); \
+    json.dump(m, open(p,'w'), indent=2)"
+  ```
+- **Tell them:** "I wired the Granola MCP. You'll need a Granola account at https://granola.ai — once it's recording, meeting notes auto-sync into your vault."
+- **Discovery rule for the meeting workflow CLAUDE.md section:**
+  > Search the meeting-notes folder via Glob for any file modified in the last 24 hours (Granola auto-sync drops files there). Read the freshest one fully — it's the source of truth.
+
+#### 2. Google Meet + Gemini
+
+- **No MCP install needed** — Gemini transcripts live as Google Docs in Drive, accessed via the Google Drive MCP if they have it (Phase 11 Email/Calendar section covers Google Drive).
+- **Tell them:** "Gemini auto-creates a Google Doc transcript named like 'Meeting with [Name] - YYYY/MM/DD - Transcript' and saves it to a folder called 'Meet Recordings' in your Drive. Make sure that folder is shared/accessible from Claude. If you have the Google Drive MCP installed, you're set."
+- **Ask:** "What's the name of the Drive folder where Gemini saves transcripts? (Default is 'Meet Recordings')"
+- **Store** as `MEETING_DRIVE_FOLDER`.
+- **Discovery rule for the meeting workflow CLAUDE.md section:**
+  > Use the Google Drive MCP (`mcp__google_drive__search` or equivalent) to search for transcripts by meeting title + attendee name + today's date. The folder is **`<MEETING_DRIVE_FOLDER>`**. Gemini transcripts are verbatim and timestamped — they're the source of truth. Read the full doc before answering, never skim.
+
+#### 3. Otter.ai
+
+- **Ask:** "Do you have Otter set to auto-export transcripts somewhere? (Slack, Google Drive, Dropbox, email?)"
+- **Store** the destination as `OTTER_EXPORT_PATH`.
+- **Tell them:** "Otter doesn't have an MCP yet, so we'll rely on its export. Set up auto-export in Otter Settings → Integrations to drop transcripts into a folder I can read."
+- **Discovery rule:**
+  > Check **`<OTTER_EXPORT_PATH>`** for the most recent file matching today's date. Read the full transcript (Otter exports the verbatim text) before answering.
+
+#### 4. Fireflies.ai
+
+- Same pattern as Otter — ask for the export destination and store as `FIREFLIES_EXPORT_PATH`.
+- **Discovery rule:** check `FIREFLIES_EXPORT_PATH` for the most recent file matching today's date.
+
+#### 5. Zoom recordings + Zoom AI Companion
+
+- **Ask:** "Are you using Zoom Cloud Recording (transcripts in Zoom's web portal) or Local Recording (transcripts on disk)?"
+- **If cloud:** "Set up Zoom auto-export to a Drive/Dropbox folder. Then I can read them like Otter/Fireflies. Without auto-export, I have to ask you to download each one manually."
+- **If local:** "What folder does Zoom save recordings to?" → store as `ZOOM_RECORDING_PATH`.
+- **Discovery rule:** check `ZOOM_RECORDING_PATH` for `*.vtt` or `*.txt` files matching today's date.
+
+#### 6. Microsoft Teams + Copilot
+
+- **Ask:** "What OneDrive folder do Teams transcripts land in? (Usually `<your>/Recordings/`)"
+- **Store** as `TEAMS_RECORDING_PATH`. Same discovery pattern as Zoom.
+
+#### 7. Notion AI Notetaker
+
+- **Tell them:** "Notion's AI Notetaker writes transcripts as Notion pages. We need the Notion MCP to access them. Set up the Notion MCP in Phase 11 (Project Management section) — or skip and use Notion's API directly later."
+- **Discovery rule:** use the Notion MCP to query the meetings database.
+
+#### 8. Manual notes
+
+- **No tool wiring** — the meeting-todos skill still works on hand-typed notes, just trigger it manually with `/meeting-todos` after you save the note.
+- **Discovery rule:** the user will name the meeting note file in chat — read that file directly.
+
+#### 9. Multiple tools
+
+- Walk through each one separately. The CLAUDE.md meeting workflow rule will list ALL discovery sources and tell Claude to **search them all in parallel** before reading anything. When multiple sources exist for the same meeting (e.g. Granola summary + verbatim Gemini transcript), the rule should prefer the verbatim source — see the "Source hierarchy" step below.
+
+#### 10. None
+
+- Skip the meeting workflow rule entirely. Just install the meeting-todos skill (in case they later start typing meeting notes manually) and move on.
+
+---
+
+**After collecting the answer**, generate the meeting workflow rule **adapted to their tools** and append it to their CLAUDE.md. The template (substitute the variables based on their answers):
+
+```markdown
+# Meeting workflow — "I just had a meeting" trigger
+
+When the user says any variation of "I just had a meeting", "pull meeting notes", "pull the transcript", "[name] meeting is done", or similar, run the full meeting workflow automatically. Do NOT ask for clarification.
+
+## Step 1 — Discovery: find ALL sources before reading anything
+
+This user uses: **<list of MEETING_TOOLS from the answer>**.
+
+Search each source IN PARALLEL before reading anything:
+
+<for each tool the user picked, insert the discovery rule from above>
+
+Surface every candidate file you find. Do not pick one and ignore the others.
+
+## Step 2 — Source hierarchy
+
+When multiple sources exist for the same meeting (e.g. Granola + Gemini for a Google Meet call), prefer the source with the **most verbatim** transcript:
+
+  1. **Verbatim timestamped transcripts** (Gemini Docs, Otter, Fireflies, Zoom AI, Teams Copilot) → source of truth, read 100%
+  2. **Post-processed AI summaries** (Granola summaries, Notion AI Notetaker condensed view) → useful as a backup, but NEVER skim. If a verbatim source exists, read THAT and skip the summary to save tokens.
+  3. **Hand-typed notes** → read fully
+
+If the source doc is too large for your context window, dispatch a subagent with explicit "read 100% in chunks" instructions. Never skim.
+
+## Step 3 — Full cascade (run all of it, in order)
+
+After reading the source(s) fully:
+
+1. Enrich the meeting note in the vault: TL;DR → decisions table → action items → verbatim quotes → meta-observations
+2. Cascade decisions to canonical strategy/pitch docs (with a rule-consistency scan to catch contradictions)
+3. Append high-stakes decisions to `Decision Log.md` (what / why / floor / stakes / speed; outcome and pattern blank for later)
+4. Update the CRM contact file for every attendee (read 2 adjacent CRM files first to confirm the pattern; preserve dataview blocks)
+5. Update to-dos: business items → team to-do; personal items → personal to-do. Never duplicate. Default to personal when ambiguous.
+6. Run `/humanizer` on any external-facing prose written
+7. Verify with backlinks — open the CRM file and confirm the meeting note shows up; open the personal to-do and confirm the team embed renders
+8. Report every file changed. Flag what the user should eyeball. State which sources were read with byte counts as evidence of completeness.
+```
+
+Save the variables (MEETING_TOOLS, MEETING_DRIVE_FOLDER, etc.) so future maintenance/upgrade runs can re-generate the rule if the user switches tools.
+
+---
+
+Then offer the meeting-todos skill (always, regardless of which tool they picked):
 
 "After any meeting note is saved to your Meeting Notes folder, I'll automatically pull out your action items (separate from others') and show you a preview before adding anything to your to-do. You don't have to type anything — it fires the moment the note lands in the vault. You can also trigger it manually with `/meeting-todos` anytime."
 
-Install the skill:
+The skill itself was already installed in Phase 0 (if they ran bootstrap.sh) at `~/.claude/skills/meeting-todos/`. If for any reason it's missing, copy it now:
 
 ```bash
-# The skill is bundled in this repo
+mkdir -p ~/.claude/skills/meeting-todos
 cp -R ~/.claude/skills/ai-brain-starter/skills/meeting-todos/. ~/.claude/skills/meeting-todos/
 ```
 

@@ -30,11 +30,39 @@ The whole setup takes about 2 hours with the conversation. The basics take 30 mi
 - [Obsidian](https://obsidian.md) (free)
 - [Claude Code](https://claude.ai/code) (desktop app or CLI)
 
-### One command
+### One command — Mac and Linux
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main/bootstrap.sh | bash
+```
+
+This installs everything: graphify, humanizer, claude-mem, notebooklm, meeting-todos, patterns, the Granola MCP, plus the ai-brain-starter skill itself. Takes ~5 minutes the first time, ~10 seconds on re-runs. Safe to re-run anytime — it skips anything already installed.
+
+### One command — Windows (PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main/bootstrap.ps1 | iex
+```
+
+### Manual install (if you prefer)
 
 ```bash
 git clone https://github.com/adelaidasofia/ai-brain-starter.git ~/.claude/skills/ai-brain-starter
 ```
+
+Then open Claude Code and type `/setup-brain` — it will install the rest.
+
+### Joining an existing team vault
+
+If a teammate has already set up a vault and shared it with you (Google Drive, OneDrive, Dropbox, git), you don't need to set up your own structure. Run the bootstrap above, then:
+
+```
+cd "<path to the shared vault>"
+claude
+/setup-brain join-team
+```
+
+The `join-team` mode skips structure-creation entirely — it just verifies your install, auto-fixes the directory layout if Claude can't find the team CLAUDE.md (a common issue with shared folders that wrap a single content subfolder), wires your meeting-notes tool, and confirms everything works. Takes about 5 minutes.
 
 ### Stay updated
 

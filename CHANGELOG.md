@@ -9,6 +9,136 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 11, 2026 (fifteenth session — one-command bootstrap, team-vault join mode, adaptive meeting tool selection, Phase 0 hardening)
+
+This session is about onboarding speed for entire teams. The previous session shipped the missing pieces. This one makes the install zero-friction for new users **and** for new team members joining an existing shared vault.
+
+### 1. One-command bootstrap (`bootstrap.sh` + `bootstrap.ps1`)
+
+Two new files at the repo root: a Mac/Linux bash bootstrap and a Windows PowerShell bootstrap. Both are designed to be `curl`/`irm`-piped from anywhere — you don't need to clone the repo first, you don't need to launch Claude Code first, you don't need to know which directory anything goes in.
+
+**Mac and Linux:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main/bootstrap.sh | bash
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main/bootstrap.ps1 | iex
+```
+
+Both scripts install **the entire stack** from scratch:
+- Homebrew (Mac), Python 3.10+, Node.js, npm, pipx, **bun**, **gh**
+- graphify CLI + the bundled Claude skill (with the optimization scripts)
+- meeting-todos and patterns sub-skills (previously deferred to later phases — now installed in Phase 0 alongside graphify so the user has a working stack the moment bootstrap finishes)
+- claude-mem registered via the marketplace AND via npx (belt-and-suspenders)
+- humanizer cloned from the fork
+- notebooklm cloned from upstream
+- The Granola MCP wired into `~/.claude/.mcp.json` so the meeting workflow rule works on day 1
+- The ai-brain-starter skill itself
+
+Both scripts end with a **verification block** that checks every dependency is callable and reports failures explicitly with red `✗` markers. **Never fail silently** — if something didn't install, the user is told exactly what failed and how to retry. This rule exists because of a real incident (covered below) where a team member's Phase 0 left graphify partially installed and the broken state stayed invisible for days.
+
+Both scripts are **idempotent and safe to re-run**. They skip anything already installed.
+
+### 2. Phase 0 hardened (sub-skills, bun, gh, Granola MCP, marketplace registration, verification block)
+
+The in-conversation Phase 0 of `/setup-brain` got the same treatment. Previously it installed graphify but only graphify; the other sub-skills (`meeting-todos`, `patterns`) were copied later in Phase 11/22, which meant users who stopped the conversation early ended up with broken slash commands. Now Phase 0 copies all three sub-skills together.
+
+Other Phase 0 fixes:
+
+- **`bun` runtime is now installed explicitly.** claude-mem's worker is a bun script, not a node script — without `bun`, the plugin's slash commands silently fail. This was missing from every previous Phase 0.
+- **`gh` (GitHub CLI) is now installed.** Used by the session-close repo-update propagation rule and by anyone who wants to fork the repo and push improvements back.
+- **claude-mem is registered via the marketplace AND via npx.** Previously Phase 0 only ran `npx claude-mem install`, which is a different code path from the marketplace plugin install. The repo now writes the marketplace registration directly into `~/.claude/settings.json` so `/plugin` commands work without manual setup.
+- **Granola MCP is auto-wired into `~/.claude/.mcp.json`.** The meeting workflow rule in CLAUDE.md depends on this MCP — without it, the rule fires but can't fetch the transcript. Previously users had to set this up manually. Now it's there from session 1.
+- **Verification block at the end of Phase 0.** Checks every CLI is callable, every skill folder exists, the marketplace registration is in place, and the Granola MCP is wired. Reports failures explicitly. **Never fail silently.**
+
+All three platform sections (Mac, Windows, Linux) got the updates.
+
+### 3. New mode — `/setup-brain join-team` for new team members
+
+Until now, `/setup-brain` only handled two cases: brand-new personal vault, or upgrading your own existing vault. There was no path for "I'm a new team member joining a shared vault someone else already set up." This is now a first-class mode.
+
+**Auto-detection** at the very top of Phase 1: before asking the language question, the skill walks the cwd (and parent directories, and one level deep) looking for an existing CLAUDE.md. Three outcomes:
+
+- **No CLAUDE.md anywhere** → mode A, new personal vault, walk through every phase
+- **CLAUDE.md in cwd** → mode C, upgrade your own vault, use the "Already Set Up?" branch
+- **CLAUDE.md in a parent directory** → ask whether they're joining a team or starting fresh
+- **CLAUDE.md in a SUBFOLDER of the cwd** (the cwd-mismatch case) → auto-fix it (next section), then run mode B
+
+The user can also force the mode by typing `/setup-brain join-team` directly.
+
+**In mode B, the skill skips Phases 2, 3, 4, 5, 14, 15, 16, 19** — all the structure-creation phases. The vault already exists; duplicating that work would just create conflicts. It runs only Phase 0 + the cwd auto-fix + the meeting tool selection + a verification block + a hand-off message.
+
+### 4. Cwd-mismatch auto-fix for shared team vaults
+
+This is the load-bearing fix for a class of bugs that affects every team using a shared folder service (Google Drive, OneDrive, Dropbox) that wraps the actual content in a single subfolder.
+
+**The bug:** Claude Code only auto-loads `CLAUDE.md` from the current working directory and walks **upward** through parent directories. It does **not** walk **downward** into subfolders. So if a team member launches Claude from the wrapper folder (the natural choice — that's the folder Drive/OneDrive opens by default), the team's CLAUDE.md is never loaded. Their session has zero project context. The meeting workflow rule doesn't fire. The graph never gets read. Every answer is generic. **The user can go days without realizing their setup is broken** because Claude responds normally — it just doesn't know anything about their team.
+
+**The fix:** when the join-team detection finds a CLAUDE.md in a subfolder (not in the cwd itself), it auto-writes a thin **pointer CLAUDE.md** at the cwd that says "the real CLAUDE.md is in `<subfolder>` — please load that file at session start." Claude Code reads this pointer, follows it, and loads the real one. The fix is invisible to the user from then on — every team member who runs Claude from either folder gets the same context.
+
+The pointer file is documented (it explains why it exists) so future maintainers don't accidentally delete it thinking it's stale boilerplate.
+
+This bug was the reason this session happened. A team member's session was answering strategy questions without the team's knowledge graph for days. The diagnosis took the rest of an audit session. The fix is permanent.
+
+### 5. Adaptive meeting tool selection (Phase 11)
+
+Previously the meeting workflow rule was hardcoded to assume Granola + Google Drive Gemini transcripts. Most teams don't use that exact stack. Phase 11 now asks:
+
+> Do you record / transcribe your meetings? Which tool? Pick the closest:
+>   1. Granola
+>   2. Google Meet + Gemini
+>   3. Otter.ai
+>   4. Fireflies.ai
+>   5. Zoom recordings + Zoom AI Companion
+>   6. Microsoft Teams + Copilot
+>   7. Notion AI Notetaker
+>   8. Manual notes
+>   9. Multiple tools
+>   10. None
+
+For each tool, the skill wires up the right discovery path:
+- **Granola** → registers the Granola MCP (already done in bootstrap, verified here)
+- **Gemini Docs** → uses the Google Drive MCP, asks which Drive folder they live in
+- **Otter / Fireflies** → asks where they auto-export, points discovery there
+- **Zoom / Teams** → asks for the local recording path, finds VTT files
+- **Notion** → routes through the Notion MCP
+- **Manual** → no wiring, just installs the meeting-todos skill
+- **Multiple** → walks through each one separately, generates a parallel-discovery rule
+
+After collecting the answer, the skill **generates a meeting workflow rule adapted to the user's actual tools** and appends it to their CLAUDE.md. The rule includes a "source hierarchy" step: when multiple sources exist for the same meeting (e.g. Granola summary + verbatim transcript), prefer the verbatim source and skip the summary to save tokens.
+
+### 6. Public-repo personal-context rule (`CLAUDE.md`)
+
+Added a new section to the repo's `CLAUDE.md` codifying the rule that future Claude sessions working on this repo must follow: **never hardcode personal context in new content.** No names, no company, no personal vault paths, no anecdotes that name real people. When you need to illustrate a pattern with an example, invent a fictional one. Existing files with personal references (the README's Background section, the LICENSE, the CHANGELOG narrative) are load-bearing context — don't strip them. The rule applies only to new content.
+
+The rule also requires grepping the diff for personal terms before any commit. This was added after three references slipped through in this session before the maintainer caught them — the audit step prevents that recurrence.
+
+### Why this all matters
+
+After this session, here's what onboarding looks like for a brand-new team member joining an existing shared vault:
+
+```bash
+# 1. Install Claude Code (one-time, follow the prompts at https://claude.ai/code)
+# 2. Open the shared vault folder (Google Drive, OneDrive, etc.) on your machine
+# 3. Run the bootstrap (one command, ~5 minutes)
+curl -fsSL https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main/bootstrap.sh | bash
+
+# 4. Open Claude Code in the shared folder
+cd "<path to the shared vault>"
+claude
+
+# 5. Type one command
+/setup-brain join-team
+```
+
+That's it. No CLAUDE.md editing, no manual MCP setup, no folder creation, no meeting tool guesswork, no "wait, why isn't Claude using the graph" debugging. The cwd-mismatch is auto-fixed. The meeting tool is detected and wired. The verification block tells you exactly what's working and what isn't. Five minutes from "I just joined the team" to "I have a working AI-powered vault session."
+
+For a brand-new personal vault user, the same bootstrap + `/setup-brain` (without `join-team`) walks them through the full conversational setup. Same one-command start.
+
+---
+
 ## April 11, 2026 (fourteenth session — full setup audit, graphify pipeline fix, memory system docs, power tools catalog, Dataview library)
 
 This session was a full audit comparing my private Claude Code setup against this public repo, and shipping the gaps. The repo had been quietly missing pieces I use every day. Five priorities, all shipped:
