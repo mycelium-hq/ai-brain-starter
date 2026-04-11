@@ -105,11 +105,25 @@ def parse_frontmatter(text: str) -> dict:
     return out
 
 
-def dedupe(input_dir: Path, apply: bool) -> dict:
+def is_excluded(path: Path, exclude_patterns: list[str]) -> bool:
+    """Return True if any path component matches an exclude pattern (case-insensitive substring)."""
+    if not exclude_patterns:
+        return False
+    parts_lower = [p.lower() for p in path.parts]
+    for pat in exclude_patterns:
+        pat_lower = pat.lower()
+        if any(pat_lower in part for part in parts_lower):
+            return True
+    return False
+
+
+def dedupe(input_dir: Path, apply: bool, exclude_patterns: list[str] = None) -> dict:
     """Find and (optionally) remove duplicates in two passes:
     Pass A: ' 2.md' siblings in the same directory (md5-identical → delete; different → quarantine).
     Pass B: cross-directory filename collisions (md5-identical → keep root version, delete others).
+    Skips files whose path matches any exclude_patterns (case-insensitive substring on path components).
     """
+    exclude_patterns = exclude_patterns or []
     qdir = input_dir / "_review_alternate_drafts"
     deleted_a, quarantined_a = [], []
     deleted_b, quarantined_b = [], []
@@ -117,6 +131,8 @@ def dedupe(input_dir: Path, apply: bool) -> dict:
     # Pass A: " 2.md" suffix duplicates
     for d in sorted(input_dir.rglob("* 2.md")):
         if "_review_alternate_drafts" in d.parts:
+            continue
+        if is_excluded(d, exclude_patterns):
             continue
         orig = d.parent / (d.name[:-5] + ".md")
         if not orig.exists():
@@ -140,6 +156,8 @@ def dedupe(input_dir: Path, apply: bool) -> dict:
     by_name = {}
     for f in input_dir.rglob("*.md"):
         if "_review_alternate_drafts" in f.parts:
+            continue
+        if is_excluded(f, exclude_patterns):
             continue
         by_name.setdefault(f.name, []).append(f)
 
@@ -188,8 +206,11 @@ def dedupe(input_dir: Path, apply: bool) -> dict:
     }
 
 
-def extract_structural(input_dir: Path) -> dict:
-    """Walk markdown files; pull every [[wikilink]] + frontmatter signal as nodes/edges."""
+def extract_structural(input_dir: Path, exclude_patterns: list[str] = None) -> dict:
+    """Walk markdown files; pull every [[wikilink]] + frontmatter signal as nodes/edges.
+    Skips files whose path matches any exclude_patterns (case-insensitive substring).
+    """
+    exclude_patterns = exclude_patterns or []
     nodes_by_id = {}  # canonical_id → node dict
     edges = []
     edge_keys = set()
@@ -198,16 +219,22 @@ def extract_structural(input_dir: Path) -> dict:
     for f in sorted(input_dir.rglob("*.md")):
         if "_review_alternate_drafts" in f.parts:
             continue
+        if is_excluded(f, exclude_patterns):
+            continue
         files_seen += 1
         text = f.read_text(errors="ignore")
         rel = str(f.relative_to(input_dir.parent))
         file_stem_id = "file_" + slugify(f.stem)
 
-        # File-level node
+        # File-level node. Cap display label at 60 chars with ellipsis — some filenames are
+        # long content snippets (Substack draft titles, quoted headings) that make the
+        # graph unreadable when they become god nodes. The full filename stays in source_file.
+        stem = f.stem
+        display = stem if len(stem) <= 60 else stem[:57].rstrip() + "…"
         if file_stem_id not in nodes_by_id:
             nodes_by_id[file_stem_id] = {
                 "id": file_stem_id,
-                "label": f.stem,
+                "label": display,
                 "file_type": "document",
                 "source_file": rel,
                 "is_file_node": True,
@@ -243,10 +270,11 @@ def extract_structural(input_dir: Path) -> dict:
                         "source_file": rel, "weight": 1.0,
                     })
 
-        # Wikilinks → canonical nodes + EXTRACTED edges
+        # Wikilinks → canonical nodes + EXTRACTED edges.
+        # Cap target length at 60 chars to avoid heading-as-wikilink pollution.
         for m in WIKILINK_RE.finditer(text):
             target = m.group(1).strip()
-            if not target or len(target) > 80:
+            if not target or len(target) > 60:
                 continue
             cid = canonical_id(target)
             if cid not in nodes_by_id:
@@ -317,8 +345,15 @@ on top of the structural baseline. It should focus on:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("input_dir")
-    ap.add_argument("--apply", action="store_true", help="actually delete dupes + write outputs (default: dry-run)")
+    ap.add_argument("--apply", action="store_true",
+                    help="actually delete dupes + write outputs (default: dry-run)")
     ap.add_argument("--out-dir", default="graphify-out")
+    ap.add_argument("--exclude", action="append", default=[],
+                    help="path substring to exclude (case-insensitive). Repeat for multiple. "
+                         "Example: --exclude Archive --exclude .obsidian")
+    ap.add_argument("--no-dedupe", action="store_true",
+                    help="skip the dedupe pass entirely. Use this when input is a curated/synced "
+                         "vault you should NOT modify (e.g. team Google Drive). Still writes preflight.")
     args = ap.parse_args()
 
     input_dir = Path(args.input_dir).resolve()
@@ -327,29 +362,40 @@ def main():
         sys.exit(1)
 
     out_dir = Path(args.out_dir)
-    if args.apply:
+    if args.apply or args.no_dedupe:
         out_dir.mkdir(exist_ok=True)
 
-    print(f"=== graphify_prep ({'APPLY' if args.apply else 'DRY-RUN'}) ===")
+    print(f"=== graphify_prep ({'APPLY' if args.apply else 'DRY-RUN'}{', NO-DEDUPE' if args.no_dedupe else ''}) ===")
     print(f"input: {input_dir}")
+    if args.exclude:
+        print(f"excluding: {args.exclude}")
     print()
 
-    print("[1/2] Dedupe (Pass A: ' 2.md' siblings, Pass B: cross-directory)...")
-    dedupe_stats = dedupe(input_dir, apply=args.apply)
-    print(f"    Pass A (' 2.md'): {dedupe_stats['deleted_passA_2md']} would-delete | "
-          f"{dedupe_stats['quarantined_passA_2md']} would-quarantine")
-    print(f"    Pass B (cross-dir): {dedupe_stats['deleted_passB_crossdir']} would-delete | "
-          f"{dedupe_stats['quarantined_passB_crossdir']} would-quarantine")
+    if args.no_dedupe:
+        print("[1/2] Dedupe SKIPPED (--no-dedupe set; input is treated as read-only)")
+        dedupe_stats = {
+            "deleted_passA_2md": 0, "quarantined_passA_2md": 0,
+            "deleted_passB_crossdir": 0, "quarantined_passB_crossdir": 0,
+            "qdir": "(not used)",
+        }
+    else:
+        print("[1/2] Dedupe (Pass A: ' 2.md' siblings, Pass B: cross-directory)...")
+        dedupe_stats = dedupe(input_dir, apply=args.apply, exclude_patterns=args.exclude)
+        print(f"    Pass A (' 2.md'): {dedupe_stats['deleted_passA_2md']} would-delete | "
+              f"{dedupe_stats['quarantined_passA_2md']} would-quarantine")
+        print(f"    Pass B (cross-dir): {dedupe_stats['deleted_passB_crossdir']} would-delete | "
+              f"{dedupe_stats['quarantined_passB_crossdir']} would-quarantine")
     print()
 
     print("[2/2] Structural pre-extraction...")
-    structural = extract_structural(input_dir)
+    structural = extract_structural(input_dir, exclude_patterns=args.exclude)
     print(f"    {structural['files_processed']:,} files → "
           f"{len(structural['nodes']):,} nodes, "
           f"{len(structural['edges']):,} EXTRACTED edges")
     print()
 
-    if args.apply:
+    # Always write preflight when --apply or --no-dedupe (the latter implies "I want preflight, just no destructive actions")
+    if args.apply or args.no_dedupe:
         preflight_path = out_dir / ".graphify_preflight.json"
         preflight_path.write_text(json.dumps(structural))
         report_path = out_dir / "_prep_report.md"

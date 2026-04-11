@@ -9,6 +9,27 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 10, 2026 (seventh session — graphify exclude flags + team vault support)
+
+Ran the optimized graphify pipeline on Adelaida's Onde Team vault (a separate Google Drive-synced team vault with Archive folders). This surfaced four new issues that needed fixes:
+
+1. **`--exclude` flag** on `graphify_prep.py` and `graphify_chunk.py`. Team vaults have `Archive/` folders that should not be indexed (per vault convention, archived content is historical only). Also useful for `.obsidian/`, `_review_alternate_drafts/`, etc. Multi-value flag: `--exclude Archive --exclude .obsidian`.
+
+2. **`--no-dedupe` flag** on `graphify_prep.py`. Team vaults are curated and read-only — you should NEVER run dedupe on a cloud-synced team vault because it would delete real files. `--no-dedupe` skips the dedupe pass entirely but still writes the preflight JSON so the pipeline can proceed. Use this anytime the input is a read-only source (team drives, upstream repos, etc.).
+
+3. **Label length cap of 60 chars** on file-stem labels and wikilink targets. Some journal / Substack draft filenames are long content snippets ("post to inspire others to redefine what wealth really means—it's not..."). When these become god nodes the graph is unreadable. Long labels are now truncated with ellipsis for display; full path stays in `source_file`.
+
+4. **Cache root path gotcha (documented).** When running graphify on a source outside the CWD (e.g. team vault from a local temp working dir), the `save_semantic_cache` API only stores per-file entries for files that `Path(root) / fpath` can resolve. If the extraction has relative `source_file` paths and the CWD doesn't match the vault root, cache writes silently return 0. Fix: normalize `source_file` to absolute paths before calling the cache API. See OPTIMIZATIONS.md for the snippet.
+
+Team vault run results (177 files, 4 chunks of ~30K words each, 3/4 succeeded):
+- Regex preflight: 413 nodes, 1,040 EXTRACTED edges (free)
+- LLM extraction: 342 nodes, 294 edges, 9 hyperedges (3 chunks)
+- After canonicalize: 669 nodes, 1,308 edges, 113 communities
+- Cache populated: 163 per-file entries
+- Top god nodes: Onde (61), Pitch deck (46), Colombia (30), Pitch Narrative (27), Sales Coach (27), Strategy Index (27), Raise Sprint (26), Onde Summary (26) — exactly the right central business docs
+
+---
+
 ## April 10, 2026 (sixth session — graphify cost optimization)
 
 ### Big: graphify wrapper scripts (cut LLM cost by 80–92%)

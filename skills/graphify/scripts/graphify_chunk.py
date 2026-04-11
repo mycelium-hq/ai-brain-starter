@@ -37,13 +37,30 @@ def file_word_count(path: Path) -> int:
         return 0
 
 
-def collect_files(input_dir: Path, skip_ai_extract: bool, min_words: int) -> list[tuple[Path, int]]:
+def is_excluded(path: Path, exclude_patterns: list) -> bool:
+    """Return True if any path component matches an exclude pattern (case-insensitive substring)."""
+    if not exclude_patterns:
+        return False
+    parts_lower = [p.lower() for p in path.parts]
+    for pat in exclude_patterns:
+        pat_lower = pat.lower()
+        if any(pat_lower in part for part in parts_lower):
+            return True
+    return False
+
+
+def collect_files(input_dir: Path, skip_ai_extract: bool, min_words: int,
+                  exclude_patterns: list = None) -> list:
     """Return [(file, word_count)] for files eligible for LLM extraction."""
+    exclude_patterns = exclude_patterns or []
     out = []
-    skipped_short = skipped_quarantine = skipped_ai = 0
+    skipped_short = skipped_quarantine = skipped_ai = skipped_excluded = 0
     for f in sorted(input_dir.rglob("*.md")):
         if "_review_alternate_drafts" in f.parts:
             skipped_quarantine += 1
+            continue
+        if is_excluded(f, exclude_patterns):
+            skipped_excluded += 1
             continue
         if skip_ai_extract and f.name.startswith("[AI Extract]"):
             skipped_ai += 1
@@ -53,7 +70,8 @@ def collect_files(input_dir: Path, skip_ai_extract: bool, min_words: int) -> lis
             skipped_short += 1
             continue
         out.append((f, wc))
-    print(f"  skipped: {skipped_short} short, {skipped_quarantine} quarantine, {skipped_ai} ai-extract")
+    print(f"  skipped: {skipped_short} short, {skipped_quarantine} quarantine, "
+          f"{skipped_ai} ai-extract, {skipped_excluded} excluded")
     return out
 
 
@@ -85,6 +103,9 @@ def main():
                     help=f"skip files smaller than this (default {MIN_WORDS_FOR_LLM})")
     ap.add_argument("--skip-ai-extract", action="store_true",
                     help="skip [AI Extract]-prefixed files (homogeneous LLM outputs, low inference yield)")
+    ap.add_argument("--exclude", action="append", default=[],
+                    help="path substring to exclude (case-insensitive). Repeat for multiple. "
+                         "Example: --exclude Archive --exclude .obsidian")
     args = ap.parse_args()
 
     input_dir = Path(args.input_dir).resolve()
@@ -92,7 +113,9 @@ def main():
     out_dir.mkdir(exist_ok=True)
 
     print(f"Collecting files from {input_dir}...")
-    files = collect_files(input_dir, args.skip_ai_extract, args.min_words)
+    if args.exclude:
+        print(f"  excluding: {args.exclude}")
+    files = collect_files(input_dir, args.skip_ai_extract, args.min_words, args.exclude)
     total_words = sum(wc for _, wc in files)
     print(f"  {len(files)} files, {total_words:,} words eligible for LLM extraction")
     print()
