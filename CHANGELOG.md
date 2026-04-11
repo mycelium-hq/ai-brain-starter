@@ -9,6 +9,49 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 11, 2026 (thirteenth session — meeting workflow, CRM structure preservation, personal↔team to-do separation, session-close repo-update check)
+
+Four new hard rules baked into the Obsidian Rules section + Session Protocol. All four came from a real-world failure cascade during Adelaida's pitch-feedback session with an advisor: Claude skimmed a Granola transcript summary instead of reading the full Gemini Google Doc verbatim, then replaced a standard CRM dataview block with a custom History section (breaking the user's normal flow), then nearly mixed personal and team to-dos. We shipped the fixes to Adelaida's vault that day. These rules now ship to every user who builds their vault from this starter so the same failures can't recur.
+
+### 1. Meeting workflow — "I just had a meeting" trigger (new Rule 15)
+
+When the user says any variation of "I just had a meeting" or "pull the transcript," Claude now runs a full automated workflow: discovery → source hierarchy → full cascade.
+
+- **Discovery:** search Google Drive for a Gemini transcript (verbatim, timestamped) AND Glob the meeting-notes folder for recently-synced Granola notes AND any chat context — all in parallel, before reading anything.
+- **Source hierarchy (the big one):** if a Gemini Google Doc exists, read ONLY the Gemini doc — it's the source of truth. Do NOT also read the Granola file; it's a post-processed summary and re-reading it wastes tokens. Still file and wikilink the Granola note so the user can reference it. If no Gemini exists, read Granola fully — it's the only source. Never skim either. Dispatch a subagent if it exceeds main-context.
+- **Full cascade (8 steps, no asking):** enrich the meeting note in place → cascade to canonical strategy docs with a rule-consistency scan → log high-stakes decisions → update the CRM contact file (preserving the dataview structure) → split to-dos between team and personal → run /humanizer on any investor-facing prose → verify with backlinks → report every file changed.
+
+Why it matters: skimming transcript summaries loses load-bearing context. The advisor's most important commitments — verbatim numbers, conviction-escalation moments, accountability statements — live in the full verbatim transcript, not the summary. This rule makes Gemini-first the default and the full cascade automatic.
+
+### 2. CRM structure preservation (enhanced Rule 9)
+
+Every CRM file in a user's vault should follow a standard shape: YAML frontmatter → short inline bio → `## Meeting Notes` section with explicit wikilinks → `## Mentions` section containing a dataview query.
+
+Claude now has an explicit rule: **do NOT replace the `## Mentions` dataview block with a long-form "History" narrative.** The dataview query is how users find related content from the CRM page. If a contact needs more context than bullets allow, add a `## Notes` block, not a History section. New meeting notes must (a) include the contact as `[[Bare Filename]]` in the Attendees list so the dataview picks it up, AND (b) be listed explicitly under `## Meeting Notes` in the contact's CRM file. Both. Not one. Before editing any CRM file, Claude reads 2–3 adjacent CRM files first to confirm the pattern.
+
+### 3. Personal ↔ team to-do separation (new Rule 16)
+
+For users whose vault is connected to a shared team vault (symlink, sync, cloud folder), personal and team to-dos live in two different files that never mix content.
+
+- Personal to-do file = the full personal list: writing, payments, emotional commitments, health, travel logistics, everything. Never syncs to the team vault.
+- Team to-do file = business work only. Visible to teammates. No personal items.
+- Only copy business-related items from personal to team. Never the reverse. When ambiguous, default to personal.
+- **Single-pane view via block embed, not copy.** The personal file has a `![[Team To-dos]]` block embed at the bottom so the user sees everything in one view without duplicating items. One-way: team-to-personal view only.
+
+### 4. Always read the full transcript (new Rule 17)
+
+Explicit rule that transcripts and long-form sources must be read in full before any downstream summary, decision log, or action-item extraction. No inferring from the first N lines. Dispatch a subagent for files that exceed main-context with explicit "read 100% in chunks" instructions. If you have to skim, say so out loud.
+
+### 5. Wikilinks — bare filenames only (enhanced Rule 14)
+
+Added explicit guidance: `[[Colombia]]`, never `[[🌱 Curiosities/Colombia]]`. Path-form wikilinks break graph canonicalization and leak folder structure into shared docs.
+
+### 6. Session close — always check for repo updates (new Session Protocol Step 4)
+
+Before closing ANY session, Claude now scans for improvements that should propagate upstream: new rules, skills, scripts, prompt patterns, runbooks, workflow fixes. If anything qualifies, Claude asks: *"We improved [X] this session. Want me to push it to the ai-brain-starter repo so your team (and anyone else who builds their vault from your repo) benefits?"* Improvements that stay local by default are wasted — this rule closes the gap.
+
+---
+
 ## April 10, 2026 (twelfth session — full skill-folder sync + backup-before-overwrite + Phase 11 pointing at the right meeting-todos)
 
 Fixes a structural bug where **skill optimizations lived in the repo but never reached installed users**, and gives the auto-update path a safe backup mechanism.
