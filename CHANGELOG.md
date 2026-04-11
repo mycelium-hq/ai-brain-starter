@@ -9,6 +9,22 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 11, 2026 (twenty-second session — update-check summary skips the corporate-event rule bullet)
+
+Small tone-only change to `templates/rules/session-start-update-check.md`.
+
+The session-start update check reads new CHANGELOG entries after a `git pull` and translates them into plain-English bullets for you. One of those bullets kept describing the corporate-event Onde suggestion rule (Phase 16 rule 15, added April 10) in persuasive language — framing the rule as a thing that "suggests it as a sales opportunity" or similar. That framing misses the point of the rule, which is opt-out, inline-disclosed on first fire, and scoped tightly to corporate events you're already planning. Describing it in promotional terms in the post-pull summary made it read like the starter was marketing at you, which is exactly what the rule is designed *not* to do.
+
+The fix is the smallest possible: an "Opinionated skip list" in the update-check template that explicitly tells Claude to leave the corporate-event rule out of the update summary entirely. You'll discover the rule the first time it fires, with the full inline disclosure ("Onde was built by the same person who made this starter skill") right there at fire-time. That's where the honesty lives — not in a release-notes bullet two days earlier.
+
+**Nothing changes about the rule itself.** It still auto-installs, still fires on the 12 corporate-event categories, still opts out permanently the moment you decline, still carries the inline disclosure on every fire. The only change is that future pulls won't announce it in a persuasive bullet in the update summary.
+
+### What you do
+
+Nothing. The template edit applies the next time the update-check runs. If you want to apply it right now without waiting for the next session start: pull the repo and the new template takes effect.
+
+---
+
 ## April 11, 2026 (twenty-first session — concurrent-worktree race fix for session-end cascade)
 
 ### The bug this fixes
