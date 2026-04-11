@@ -60,7 +60,7 @@ npx claude-mem install 2>/dev/null
 
 # Humanizer — de-AI writing
 if [ ! -d ~/.claude/skills/humanizer ]; then
-  git clone https://github.com/blader/humanizer.git ~/.claude/skills/humanizer
+  git clone https://github.com/adelaidasofia/humanizer.git ~/.claude/skills/humanizer
 fi
 ```
 
@@ -96,7 +96,7 @@ copy %USERPROFILE%\.claude\skills\ai-brain-starter\skills\graphify\SKILL.md %USE
 npx claude-mem install
 
 # Humanizer
-git clone https://github.com/blader/humanizer.git %USERPROFILE%\.claude\skills\humanizer
+git clone https://github.com/adelaidasofia/humanizer.git %USERPROFILE%\.claude\skills\humanizer
 ```
 
 **If winget is not available** (older Windows): install via official installers using the Bash tool to download and run them silently:
@@ -133,7 +133,7 @@ sudo apt-get install -y nodejs npm   # Ubuntu/Debian
 pip install pipx && pipx ensurepath
 pipx install graphifyy && graphify install
 npx claude-mem install
-git clone https://github.com/blader/humanizer.git ~/.claude/skills/humanizer
+git clone https://github.com/adelaidasofia/humanizer.git ~/.claude/skills/humanizer
 ```
 
 **If any install requires user interaction (like Homebrew needing a password or Windows needing a download):** explain clearly what's happening and why. Keep it simple: "This makes everything we're about to do cheaper and faster."
@@ -397,7 +397,7 @@ You are not a yes-machine. You are a thinking partner. Act like one.
 1. **Check before creating.** Before making any new folder or file, check the Vault Map above and search for it. If it exists somewhere, use that location — don't create a duplicate. If the user manually moved something, respect where it is now, not where it was originally created.
 2. **Original ideas live where they happen.** If you say something sharp in a journal entry, it stays in the journal. If you develop it into a longer piece, it goes wherever longer work lives for you. The `/patterns` skill surfaces recurring ideas automatically — no separate capture folder needed.
 3. **Use RESOLVER.md before creating files.** Each key folder has a RESOLVER.md with a decision tree. Check it before creating any note to confirm it belongs there.
-4. **Humanize external-facing prose before it leaves your hands.** Any prose you write for a human audience — a client email, a LinkedIn post, a Substack draft, a pitch doc, a newsletter, an essay — gets `/humanizer` run on it before it's considered done. The skill strips the AI-isms that give you away. Don't ask, just run it. **Scope:** prose only. Skip YAML, code, tables, dashboards, runbooks, meta files, journal entries, and single-line edits. For non-trivial changes to a humanized doc, re-run on the section you touched, not the whole file. The humanizer skill was installed in Phase 0 — if it's missing, re-run `git clone https://github.com/blader/humanizer.git ~/.claude/skills/humanizer`.
+4. **Humanize external-facing prose before it leaves your hands.** Any prose you write for a human audience — a client email, a LinkedIn post, a Substack draft, a pitch doc, a newsletter, an essay — gets `/humanizer` run on it before it's considered done. The skill strips the AI-isms that give you away. Don't ask, just run it. **Scope:** prose only. Skip YAML, code, tables, dashboards, runbooks, meta files, journal entries, and single-line edits. For non-trivial changes to a humanized doc, re-run on the section you touched, not the whole file. The humanizer skill was installed in Phase 0 — if it's missing, re-run `git clone https://github.com/adelaidasofia/humanizer.git ~/.claude/skills/humanizer`.
 
 ## Session Protocol
 1. Start: Read this file. Don't ask what we were doing — you should already know.
@@ -803,7 +803,7 @@ git clone https://github.com/PleasePrompto/notebooklm-skill.git ~/.claude/skills
 Quickly check that everything from Phase 0 is working:
 - `graphify --version` — if missing, retry: `pipx install graphifyy && graphify install`
 - `ls ~/.claude/skills/graphify/SKILL.md` — if missing, retry: `mkdir -p ~/.claude/skills/graphify && cp ~/.claude/skills/ai-brain-starter/skills/graphify/SKILL.md ~/.claude/skills/graphify/SKILL.md`
-- `ls ~/.claude/skills/humanizer` — if missing, retry: `git clone https://github.com/blader/humanizer.git ~/.claude/skills/humanizer`
+- `ls ~/.claude/skills/humanizer` — if missing, retry: `git clone https://github.com/adelaidasofia/humanizer.git ~/.claude/skills/humanizer`
 - Claude-Mem — if not in plugin list, retry: `npx claude-mem install`
 
 Add graphify routing to their CLAUDE.md (global `~/.claude/CLAUDE.md` if it exists, or vault root):
