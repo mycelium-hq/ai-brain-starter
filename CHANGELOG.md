@@ -198,6 +198,50 @@ The bootstrap.sh header now includes a 50-line "SAFETY GUARANTEES" section that 
 
 ---
 
+## April 11, 2026 (eighteenth session — adjacency-based dedupe for graphify, plus a brain-dump filename rule)
+
+`graphify_canonicalize.py` merges nodes by **normalized label only**. That works for the obvious cases (`Sales Coach` ↔ `sales-coach` ↔ `Sales coach`), but it cannot catch the case where the same conceptual file exists under two completely different labels — e.g. a brain-dump file titled by its first sentence (`What revenue do we need to hit $1M that doesn't rely on referrals….md`) plus a separately-written canonical doc (`$1M Revenue Path (Non-Referral).md`). Different labels, different source files, identical adjacency. Canonicalize had no way to merge them.
+
+We hit this on a real vault on 2026-04-11: 6 such pairs in one knowledge graph, all with adjacency Jaccard 1.0. Manual cleanup was expensive. This session ships the automatic fix.
+
+### 1. New script — `scripts/graphify_dedupe_by_adjacency.py`
+
+Runs as a post-canonicalize second pass. For every pair of nodes where both have ≥ MIN_DEGREE edges, computes adjacency Jaccard. If jaccard ≥ 0.95 AND the labels share ≥ 15% of stemmed non-stop words, treats them as duplicates. Picks the canonical winner using three rules in order: `file_*` over `c_*`, non-truncated over truncated, shorter labels. Promotes the loser's label as an alias on the canonical so any existing wikilinks still resolve, preserves the loser's source file in `merged_source_files`. Drops self-loops, dedupes redundant edges.
+
+**Why all three safety guards (jaccard, label overlap, min degree):**
+
+- **Adjacency jaccard alone is too noisy.** We hit a false positive on the test set: two unrelated low-degree concepts that both happened to be mentioned in the same 5 brain-dump files had jaccard 1.0 even though they weren't the same concept at all.
+- **The label overlap guard fixes that** — if two nodes claim to be duplicates, their labels must share at least 15% of stemmed non-stop words. Coincidental adjacency on unrelated concepts gets filtered.
+- **The min degree floor adds a second layer.** Default 8, relaxed to 5 when one side is a `file_*` node (the `file_` prefix is a strong canonical signal — those IDs come from properly-named files, so even small degree pairs are trustworthy).
+
+**Stemming and hyphen handling:** the label-overlap check collapses internal hyphens (`co-founder` → `cofounder`) and drops trailing `s` on words >3 chars before tokenizing. Without this, `CTO Cofounder Search` and `Seeking CTO & Co-Founder for Event-Tech Startup…` wouldn't share enough stems to pass the threshold.
+
+**Validation on the real test set:** caught 6 of 6 true positives, 0 false positives. Detection precision = 100%, recall = 100%.
+
+**Run it standalone:** `python3 scripts/graphify_dedupe_by_adjacency.py path/to/graph.json [--dry-run]`
+
+**Wire it into your pipeline:** add a Step 3.5 to your version of `graphify_stage_finish.py` between the canonicalize+merge step and the report regeneration step. The script provides `find_duplicate_pairs()` and `apply_merges()` as importable functions for exactly this purpose.
+
+### 2. New rule in SKILL.md — noun-phrase filenames only
+
+Some vault duplicates can be merged automatically by the new script. Some can't — specifically, the case where a brain-dump file with a sentence-as-title exists with NO canonical sister. The script can't merge what doesn't have a partner. The fix has to be upstream, at file-creation time.
+
+**New rule (Obsidian Rules 18a):** new note filenames must be a noun phrase, ≤6 words, no question marks, no `…`, no all-caps section labels, no sentence punctuation. Good: `Q3 Revenue Plan`, `Sales Coach`, `CTO Search (Dec 2024)`. Bad: `What revenue do we need to hit $1M that doesn't rely on referrals….md`. The rule includes the cleanup recipe for an existing brain-dump file — rename, preserve body, add old name as alias, run `/graphify --update`.
+
+This is mostly relevant if your vault uses `/graphify` (because the noise shows up in the GRAPH_REPORT god nodes), but the rule is good hygiene either way.
+
+### 3. The bigger lesson — don't trust a single signal for canonicalization
+
+The pattern is general: **any single signal you use to detect "this is the same as that" will have edge cases.** Label-only canonicalization missed the c_*/file_* dupes. Adjacency-only canonicalization caught false positives. The reliable approach is **layered signals with safety guards**: jaccard + label overlap + degree floor + canonical-prefix preference, applied in a defined order, with each layer narrowing the candidate set. None of the layers is sufficient on its own. All four together give you 100% precision/recall on the test set.
+
+### 4. Note for users with existing graphs
+
+If you have an existing graph.json from a previous `/graphify` run, you can run the new dedupe script against it standalone in `--dry-run` mode to see what duplicates exist before applying. If the dry-run output looks right, run again without `--dry-run`. The script writes a timestamped backup before modifying the graph, so you can always roll back.
+
+After the dedupe writes new edges, **regenerate `GRAPH_REPORT.md`** by re-running the relevant step from your graphify pipeline (or a manual recluster + report regen). The report won't auto-update from the new graph.
+
+---
+
 ## April 11, 2026 (seventeenth session — graph routing hooks so Claude actually uses your knowledge graph)
 
 If your vault has a knowledge graph (built with `/graphify`) — or several of them, like a personal graph and a separate work/team graph — you've probably noticed that Claude doesn't always remember to read it before answering. Telling Claude in CLAUDE.md "always read the graph first for strategic questions" helps some of the time, but it's a soft reminder buried in a 200-line file. In long sessions, the model drifts and starts re-reading source files instead.
