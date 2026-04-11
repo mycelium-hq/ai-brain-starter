@@ -40,13 +40,66 @@ LABEL_SUFFIX_VARIANTS = (
 )
 
 
+def strip_folder_prefix(label: str) -> str:
+    """Strip folder path prefixes from wikilink-style labels.
+
+    Lesson #37 (2026-04-11): legacy files contain path-form wikilinks like
+    [[🌱 Curiosities/Colombia]] alongside bare [[Colombia]] — the canonicalize
+    step saw these as different labels and produced duplicate god nodes.
+
+    We split on the LAST "/" and take the filename portion, matching Obsidian's
+    own bare-name resolution behavior. The CLAUDE.md "bare filenames only" rule
+    prevents new path-form wikilinks, and this function collapses the legacy
+    ones already embedded in the corpus.
+
+    Exception: if the label contains a character that suggests it's NOT a
+    wikilink (e.g. starts with http, contains a space on both sides of "/"),
+    leave it alone. Conservative: only strip when the prefix looks like a
+    folder name (ends with a slash and contains no spaces, or starts with an
+    emoji character common in the vault's folder names).
+    """
+    if not label or "/" not in label:
+        return label
+    # Leave URLs alone
+    if label.startswith(("http://", "https://", "//")):
+        return label
+    # Take the last segment (Obsidian behavior for bare-name resolution)
+    tail = label.rsplit("/", 1)[-1].strip()
+    return tail if tail else label
+
+
 def normalize_label(label: str) -> str:
-    label = (label or "").strip()
+    label = strip_folder_prefix((label or "").strip())
     for suf in LABEL_SUFFIX_VARIANTS:
         if label.endswith(suf):
             label = label[: -len(suf)]
             break
     return label.strip().lower()
+
+
+def normalize_source_file(source_file: str, root: Path = None) -> str:
+    """Normalize source_file to a usable absolute path or safe blank.
+
+    Lesson #38 (2026-04-11): the chunk 01 agent set every node's source_file
+    to "📓 Journals/" (a directory) which broke save_semantic_cache with
+    Errno 21: Is a directory. Defense-in-depth: return "" if source_file
+    points to a directory so the cache save can skip cleanly instead of
+    erroring the entire stage.
+    """
+    if not source_file:
+        return ""
+    root = root or Path.cwd()
+    p = Path(source_file)
+    if not p.is_absolute():
+        p = root / p
+    try:
+        if p.is_dir():
+            return ""  # directory is invalid, skip silently
+        if not p.suffix:  # no extension — probably invalid
+            return ""
+    except (OSError, ValueError):
+        return ""
+    return source_file
 
 
 def canonical_id(label: str) -> str:
@@ -73,6 +126,8 @@ def canonicalize(extraction: dict) -> dict:
         label = (n.get("label") or "").strip()
         if not label:
             continue
+        # Strip folder prefix BEFORE normalize so display label also loses it
+        label = strip_folder_prefix(label)
         norm = normalize_label(label)
         cid = label_to_cid.get(norm) or canonical_id(label)
         if norm not in label_to_cid:
@@ -87,7 +142,7 @@ def canonicalize(extraction: dict) -> dict:
                 "id": cid,
                 "label": display.strip(),
                 "file_type": "document",
-                "source_file": n.get("source_file", ""),
+                "source_file": normalize_source_file(n.get("source_file", "")),
             }
         id_remap[n.get("id", "")] = cid
         mention_count[cid] += 1
@@ -117,7 +172,7 @@ def canonicalize(extraction: dict) -> dict:
             "relation": rel,
             "confidence": e.get("confidence", "INFERRED"),
             "confidence_score": e.get("confidence_score", 0.7),
-            "source_file": e.get("source_file", ""),
+            "source_file": normalize_source_file(e.get("source_file", "")),
             "weight": e.get("weight", 1.0),
         })
 

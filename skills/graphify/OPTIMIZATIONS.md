@@ -2,6 +2,24 @@
 
 **Read this BEFORE running `/graphify` on a corpus larger than ~50 files.** Without these optimizations, a full graphify run on a notes/journal vault will burn 2-12× more LLM tokens than necessary and produce a worse graph.
 
+## Lessons from the 2026-04-11 Stage 1 pilot (370 files, 1.48M tokens)
+
+These 7 lessons from running /graphify on a real 2,380-file journal corpus are now baked into the scripts:
+
+1. **iCloud cold reads hang the pipeline.** On macOS, files under `~/Desktop/` or `~/Documents/` are iCloud-synced. Cold reads (files not materialized locally) take ~200ms each vs ~0.1ms warm — making bulk scans 1000x slower, looking exactly like a hang. `graphify_prep.py` now samples 40 files at startup and prints a loud warning if reads are slow, pointing users to `brctl download "<folder>"` as the fix.
+
+2. **Cache invalidation on re-root.** The semantic cache is keyed by `SHA256(content + null + resolved_path)`. If you move files from `graphify-input/` to `📓 Journals/`, the cache shows 0 hits despite identical content. Plan around this — don't re-root mid-pipeline.
+
+3. **Tool-use count is the #1 token-cost predictor.** In the Stage 1 pilot, agents that used ≤15 tool calls averaged **101K tokens/chunk**; agents that used ≥35 tool calls averaged **160K tokens/chunk** — 37% waste with zero quality gain. The extraction prompt template now explicitly tells subagents to use Grep for bulk scans instead of per-file sequential Reads, with a ≤15-tool-call target.
+
+4. **Grep > sequential Read for entity scanning.** A single Grep call over a chunk's file list finds all recurring person/place/company names faster and cheaper than 30+ sequential Read calls. Reserve Reads for the ~5 densest files where hyperedge context matters.
+
+5. **Use the right Python env.** The `graphify` package is installed via pipx as `graphifyy`, not the system Python. For any script that imports `graphify.*`, use `/Users/<you>/.local/pipx/venvs/graphifyy/bin/python3`.
+
+6. **Path-form wikilinks break canonicalization.** `[[📁 Folder/Name]]` and `[[Name]]` are treated as different labels in label-based dedup, producing duplicate god nodes. `graphify_canonicalize.py` now has `strip_folder_prefix()` that collapses path-form labels to their bare equivalents before canonicalizing. Combined with a "bare filenames only" rule in CLAUDE.md, this prevents new violations and fixes legacy ones automatically.
+
+7. **`source_file` must be a specific .md path, never a directory.** An agent setting `source_file` to `"📓 Journals/"` broke `save_semantic_cache` with `Errno 21: Is a directory`, causing the entire cache save to fail and forcing the next run to re-pay for all 370 files. `graphify_canonicalize.py` now has `normalize_source_file()` that defensively strips directory paths to `""` so the cache save can skip cleanly. The extraction prompt template also has an explicit "MUST be a specific .md path" requirement with good/bad examples.
+
 These are wrapper scripts (`scripts/graphify_prep.py`, `graphify_canonicalize.py`, `graphify_chunk.py`) that bracket the upstream graphify pipeline. They are tuned for the High-Rise framework that ai-brain-starter installs (the 16 floors from Shame to Peace). The prep step automatically picks up `dominant_floors:` / `floor:` frontmatter tags and turns each into a free EXTRACTED edge to the canonical floor node.
 
 ## TL;DR — the cost problem and the fix

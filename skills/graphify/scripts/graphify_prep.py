@@ -342,6 +342,55 @@ on top of the structural baseline. It should focus on:
 """)
 
 
+def _icloud_warmth_check(input_dir: Path, sample_size: int = 40, threshold_sec: float = 2.0):
+    """Sample-read some files to detect iCloud cold-storage demand-paging.
+
+    Lesson #32 (Stage 1 pilot, 2026-04-11): the Desktop vault is iCloud-synced.
+    Cold reads on files not materialized locally take ~200ms each (vs ~0.1ms warm),
+    making bulk scans ~1000x slower. Previously this looked exactly like a hang —
+    I killed and restarted the prep three times before diagnosing it. Now we
+    sample-read a batch and warn loudly if any read is slow, pointing to the fix.
+    """
+    import time
+    import random
+
+    # Only do this on paths under iCloud-backed Desktop/Documents. Quick heuristic.
+    ipath = str(input_dir)
+    if "/Desktop/" not in ipath and "/Documents/" not in ipath:
+        return
+
+    try:
+        files = [f for f in input_dir.rglob("*.md")][:2000]
+    except Exception:
+        return
+    if len(files) < sample_size:
+        return
+
+    # Sample from mid-to-end of the list (start is usually hot in the page cache)
+    sample = random.sample(files[len(files)//3:], min(sample_size, len(files) - len(files)//3))
+    t0 = time.time()
+    total_bytes = 0
+    slowest = 0.0
+    for f in sample:
+        t1 = time.time()
+        try:
+            total_bytes += len(f.read_bytes())
+        except Exception:
+            continue
+        slowest = max(slowest, time.time() - t1)
+    elapsed = time.time() - t0
+
+    if elapsed > threshold_sec or slowest > 0.15:
+        print()
+        print("⚠️  WARNING: iCloud cold-storage demand-paging detected")
+        print(f"    Sample read of {sample_size} files took {elapsed:.1f}s (slowest single read: {slowest*1000:.0f}ms)")
+        print(f"    This means bulk operations may hang for 5+ minutes waiting on iCloud.")
+        print(f"    FIX: run `brctl download \"{input_dir.relative_to(Path.cwd()) if Path.cwd() in input_dir.parents else input_dir}\"` first, then re-run this script.")
+        print(f"    Waiting 5s in case you want to Ctrl-C and run brctl download...")
+        print()
+        time.sleep(5)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("input_dir")
@@ -370,6 +419,11 @@ def main():
     if args.exclude:
         print(f"excluding: {args.exclude}")
     print()
+
+    # Lesson #32 (2026-04-11): macOS iCloud demand-paging can make cold bulk reads
+    # 1000x slower than warm reads. Sample a few files; if they're cold, warn the
+    # user to run `brctl download` first instead of silently hanging for 5+ minutes.
+    _icloud_warmth_check(input_dir)
 
     if args.no_dedupe:
         print("[1/2] Dedupe SKIPPED (--no-dedupe set; input is treated as read-only)")
