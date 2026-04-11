@@ -236,15 +236,19 @@ Then ask these ONE AT A TIME. Wait for each answer before moving on:
 2. "What do you do? (job, projects, passions — whatever matters to you)"
 3. "Do you already have notes somewhere? (Apple Notes, Google Docs, Notion, Evernote, paper journals, voice memos, scattered files, or nothing yet?)"
 4. "Do you journal? If so, how? (daily, occasionally, used to, never, want to start)"
-5. "Do you have Obsidian installed? (It's a free note-taking app — if not, go to https://obsidian.md and download it. I'll wait.)"
+5. "**Do you write publicly?** (Blog, book, newsletter, Substack, Medium, LinkedIn posts — anything you write *for readers*, beyond private notes.) If not, that's totally fine — just say no, and I won't create a Writing folder for you."
+
+**Store the answer as `WRITES_PUBLICLY` — true or false.** This gates whether a `✍️ Writing/` folder gets created in Phase 3, whether writing-related rules get added in Phase 4, and whether the humanizer rule fires in later sessions. Journaling does NOT count — journaling is for the user's own eyes and lives in `📓 Journals/`. Writing means content with an intended audience. If the answer is ambiguous ("kind of," "sometimes"), ask one follow-up: "Is anyone besides you reading it?" Only a clear yes creates a Writing folder.
+
+6. "Do you have Obsidian installed? (It's a free note-taking app — if not, go to https://obsidian.md and download it. I'll wait.)"
 
 **If they don't have Obsidian:** Walk them through the download. Wait until they confirm it's installed before continuing.
 
-6. "Great. Now open Obsidian and choose 'Create new vault.' Name it whatever feels right — your name, 'Brain,' 'Notes,' whatever. Put it somewhere easy to find, like your Desktop. Let me know when it's created."
+7. "Great. Now open Obsidian and choose 'Create new vault.' Name it whatever feels right — your name, 'Brain,' 'Notes,' whatever. Put it somewhere easy to find, like your Desktop. Let me know when it's created."
 
 **Wait for confirmation before continuing.**
 
-7. "Perfect. Now I need you to tell me the path to your vault. In Obsidian, go to Settings (gear icon) → About → look for 'Vault path.' Paste it here."
+8. "Perfect. Now I need you to tell me the path to your vault. In Obsidian, go to Settings (gear icon) → About → look for 'Vault path.' Paste it here."
 
 Save the vault path — you'll use it for all file operations.
 
@@ -282,12 +286,15 @@ Create these CORE folders in their vault (emojis are important — they make the
 ⚙️ Meta/scripts/
 ```
 
-**Conditional folders — only create if relevant based on what they told you in Phase 1:**
-- `✍️ Writing/` — only if they said they write (blog, book, newsletter, journal publicly). Don't create this for everyone.
+**Conditional folders — only create if relevant based on what they told you in Phase 1. These are BLOCKING conditionals, not suggestions. If the user did not explicitly opt in, DO NOT create the folder, DO NOT add it to the vault map, DO NOT reference it in their CLAUDE.md or RESOLVER files.**
+
+- `✍️ Writing/` — **ONLY if `WRITES_PUBLICLY = true` from Phase 1 question 5.** Journaling does NOT count (that's `📓 Journals/`). This folder is for content written with an audience in mind: blog posts, book drafts, newsletters, Substack, essays. If the user said no or was unclear, **skip this folder entirely**. Do not create `Writing/Drafts/`, do not add "Writing/" to the Notes RESOLVER.md decision tree, do not add writing-related rules to the Phase 4 CLAUDE.md template, do not reference Writing/ anywhere downstream. The default state for a new user is: no Writing folder.
 - `💼 Business/` — only if they have a business, startup, or side project
 - `🚀 [Project Name]/` — if they have an active project/startup, give it its own emoji folder
 - `🏫 School/` — only if they're a student
 - `🌱 Curiosities/` — for people who want a catch-all for random interests
+
+**Why this matters:** previously, Writing/ was created by default for almost everyone because the conditional was too weak. The result was vaults with empty Writing folders for users who don't write, and Claude trying to create drafts in folders that shouldn't exist. Fix: require explicit opt-in.
 
 Tell them: "Done — you should see the folders in your Obsidian sidebar now. The emojis help you scan quickly. If you have a specific area of your life that needs its own folder (a creative project, school, etc.), tell me and I'll add it."
 
@@ -313,7 +320,7 @@ After creating folders, create a RESOLVER.md in each key directory. This is a sh
 2. Is this a psychology/behavioral concept? → Maybe: 🧠 Psychology/ if that folder exists
 3. Is this an article, course, or how-to you learned from? → YES: create here
 4. Is this a concept that belongs to a specific project? → NO: that project's folder
-5. Is this your own original framework or thesis? → If short/raw, it can stay here or in a journal. If you're developing it into something, start a draft in Writing/.
+5. Is this your own original framework or thesis? → If short/raw, it can stay here or in a journal. If you're developing it into something longer, put it wherever your creative work lives. (Only mention `Writing/` here if the user has a `✍️ Writing/` folder — otherwise omit the whole sentence about drafts. Don't reference folders that don't exist in this user's vault.)
 ```
 
 ## Phase 4: Build Their CLAUDE.md
@@ -388,8 +395,9 @@ You are not a yes-machine. You are a thinking partner. Act like one.
 
 ## Vault Rules
 1. **Check before creating.** Before making any new folder or file, check the Vault Map above and search for it. If it exists somewhere, use that location — don't create a duplicate. If the user manually moved something, respect where it is now, not where it was originally created.
-2. **Original ideas live where they happen.** If someone says something sharp in a journal entry, it stays in the journal. If they develop it into a piece of writing, it goes in Writing/Drafts/. The `/patterns` skill surfaces recurring ideas automatically — no separate capture folder needed.
+2. **Original ideas live where they happen.** If you say something sharp in a journal entry, it stays in the journal. If you develop it into a longer piece, it goes wherever longer work lives for you. The `/patterns` skill surfaces recurring ideas automatically — no separate capture folder needed.
 3. **Use RESOLVER.md before creating files.** Each key folder has a RESOLVER.md with a decision tree. Check it before creating any note to confirm it belongs there.
+4. **Humanize external-facing prose before it leaves your hands.** Any prose you write for a human audience — a client email, a LinkedIn post, a Substack draft, a pitch doc, a newsletter, an essay — gets `/humanizer` run on it before it's considered done. The skill strips the AI-isms that give you away. Don't ask, just run it. **Scope:** prose only. Skip YAML, code, tables, dashboards, runbooks, meta files, journal entries, and single-line edits. For non-trivial changes to a humanized doc, re-run on the section you touched, not the whole file. The humanizer skill was installed in Phase 0 — if it's missing, re-run `git clone https://github.com/blader/humanizer.git ~/.claude/skills/humanizer`.
 
 ## Session Protocol
 1. Start: Read this file. Don't ask what we were doing — you should already know.
