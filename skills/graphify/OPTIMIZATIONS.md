@@ -171,6 +171,20 @@ A naive run that would cost ~12M LLM tokens drops to ~1M for the first run, and 
 3. **`signal.alarm()` is process-global.** Don't span a single timeout across multiple stages of a script (build + cluster + cache). Set fresh alarms per stage or skip alarms inside the cache write step.
 4. **The graphify cache uses `SHA256(file_contents + null + resolved_path)`.** This means moving a file to a new path invalidates its cache entry even if the content is identical. Plan accordingly when reorganizing.
 5. **The 16 floor names (Shame...Peace) are baked in.** They come from the High-Rise framework that ai-brain-starter installs in every vault. If you've added your own framework variants, add their lowercase names to `CANONICAL_FLOORS` in `graphify_prep.py` and to `LABEL_SUFFIX_VARIANTS` in `graphify_canonicalize.py`.
+6. **Cache root path gotcha when running from a temp CWD.** If you run graphify on a source outside the current working directory (e.g. a team Google Drive vault while your CWD is `/tmp/graphify_onde_team/`), `save_semantic_cache` will silently write 0 entries. Reason: it does `Path(root) / fpath` to resolve each file, and if `fpath` is relative and `root` doesn't match the actual vault root, the files don't exist relative to CWD and get skipped. **Fix: normalize every `source_file` in the extraction JSON to an absolute path before calling the cache API:**
+   ```python
+   VAULT_ROOT = Path("/absolute/path/to/vault")
+   for n in extraction["nodes"]:
+       sf = n.get("source_file", "")
+       if sf and not Path(sf).is_absolute():
+           for prefix in ["", "Onde Team/"]:  # try each possible prefix
+               candidate = VAULT_ROOT / (prefix + sf)
+               if candidate.exists():
+                   n["source_file"] = str(candidate)
+                   break
+   # ... then call save_semantic_cache as normal
+   ```
+7. **Dispatching subagents on a cloud-synced source is slower.** Google Drive file reads are 2-5x slower than local file reads. On a 46-file team vault run, the biggest chunk (14 files) hung past 15 minutes while the smaller ones (7-13 files) finished in 4-7 minutes. Consider smaller target-chunks when the source is cloud-synced, or run agents in waves to avoid parallel cloud read contention.
 
 ## When to update this doc
 
