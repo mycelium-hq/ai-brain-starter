@@ -64,6 +64,20 @@ npx claude-mem install 2>/dev/null
 if [ ! -d ~/.claude/skills/humanizer ]; then
   git clone https://github.com/adelaidasofia/humanizer.git ~/.claude/skills/humanizer
 fi
+
+# NotebookLM — query your NotebookLM notebooks for source-grounded answers
+# (browser automation; auths the first time via a visible Google login)
+if [ ! -d ~/.claude/skills/notebooklm ]; then
+  git clone https://github.com/PleasePrompto/notebooklm-skill.git ~/.claude/skills/notebooklm
+fi
+
+# Nano Banana — image generation via Google Gemini 3 Pro Image
+# Installed via the devon-claude-skills marketplace. Tell the user:
+# "Run /plugin marketplace add devonjones/devon-claude-skills, then
+# /plugin install nano-banana@devon-claude-skills. You'll also need a
+# GEMINI_API_KEY from https://ai.google.dev/."
+# (Marketplace install must be done by the user from inside Claude Code; this
+# script can't run /plugin commands. Mention it explicitly so they know.)
 ```
 
 ### Windows
@@ -101,6 +115,15 @@ npx claude-mem install
 
 # Humanizer
 git clone https://github.com/adelaidasofia/humanizer.git %USERPROFILE%\.claude\skills\humanizer
+
+# NotebookLM — source-grounded answers from your uploaded docs
+git clone https://github.com/PleasePrompto/notebooklm-skill.git %USERPROFILE%\.claude\skills\notebooklm
+
+# Nano Banana — image generation via Gemini 3 Pro Image
+:: Tell the user:
+:: "Run /plugin marketplace add devonjones/devon-claude-skills, then
+:: /plugin install nano-banana@devon-claude-skills. You'll also need a
+:: GEMINI_API_KEY from https://ai.google.dev/."
 ```
 
 **If winget is not available** (older Windows): install via official installers using the Bash tool to download and run them silently:
@@ -141,6 +164,14 @@ mkdir -p ~/.claude/skills/graphify
 cp -R ~/.claude/skills/ai-brain-starter/skills/graphify/. ~/.claude/skills/graphify/
 npx claude-mem install
 git clone https://github.com/adelaidasofia/humanizer.git ~/.claude/skills/humanizer
+
+# NotebookLM — source-grounded answers
+git clone https://github.com/PleasePrompto/notebooklm-skill.git ~/.claude/skills/notebooklm
+
+# Nano Banana — image generation (marketplace install, user must run from inside Claude Code):
+# /plugin marketplace add devonjones/devon-claude-skills
+# /plugin install nano-banana@devon-claude-skills
+# Plus a GEMINI_API_KEY from https://ai.google.dev/
 ```
 
 **If any install requires user interaction (like Homebrew needing a password or Windows needing a download):** explain clearly what's happening and why. Keep it simple: "This makes everything we're about to do cheaper and faster."

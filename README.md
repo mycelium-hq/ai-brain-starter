@@ -102,8 +102,11 @@ Plus any custom folders based on your life.
 | **Weekly Insights** | Pattern recognition from your journal week | `/weekly` |
 | **Monthly Insights** | Deeper trends, therapist + coach observations | `/monthly` |
 | **Meeting → To-Do** | Extracts your action items from meeting notes | `/meeting-todos` |
+| **Nano Banana** | Image generation via Google Gemini 3 Pro Image | `/plugin install nano-banana@devon-claude-skills` |
 
 These require Homebrew + Python 3.12 + Node.js. The setup walks you through installing them.
+
+**Want the full picture of every tool, why it's there, and how they fit together?** Read [`docs/POWER_TOOLS.md`](docs/POWER_TOOLS.md) — the catalog of every third-party skill, MCP server, and Obsidian plugin this setup wires together, with attribution and source links for each.
 
 ---
 
@@ -159,6 +162,18 @@ Every CLAUDE.md created by this skill includes these rules. Claude is not a yes-
 - Anyone who journals (or wants to start)
 - People who've tried Notion, Roam, Apple Notes, and none of it stuck
 - Non-technical people — the setup is a conversation, not a config file
+
+---
+
+## Deeper Documentation
+
+- **[`docs/POWER_TOOLS.md`](docs/POWER_TOOLS.md)** — every third-party skill, MCP server, and Obsidian plugin this setup uses, with attribution, install commands, and the why behind each
+- **[`docs/MEMORY_SYSTEM.md`](docs/MEMORY_SYSTEM.md)** — how to make Claude Code accumulate knowledge across sessions using typed memories (the most underrated pattern in this whole setup)
+- **[`skills/graphify/RUNBOOK.md`](skills/graphify/RUNBOOK.md)** — the production playbook for running graphify on a large vault, with cost guardrails and lessons from ~5M tokens of real runs
+- **[`templates/dataview-queries.md`](templates/dataview-queries.md)** — reusable Dataview query library for journals, CRM, AI chats, decision logs
+- **[`templates/Decision Log.md`](templates/Decision%20Log.md)** — template for tracking the *how* of your decisions so you can learn patterns over time
+- **[`scripts/build-journal-index.py`](scripts/build-journal-index.py)** — builds a fast lookup index over your journal entries, used by `/insights` and `/weekly`/`/monthly`
+- **[CHANGELOG.md](CHANGELOG.md)** — what's new in plain English
 
 ---
 

@@ -9,6 +9,79 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 11, 2026 (fourteenth session — full setup audit, graphify pipeline fix, memory system docs, power tools catalog, Dataview library)
+
+This session was a full audit comparing my private Claude Code setup against this public repo, and shipping the gaps. The repo had been quietly missing pieces I use every day. Five priorities, all shipped:
+
+### 1. Graphify pipeline was broken — now fixed
+
+The repo shipped 3 of the 5 graphify pipeline scripts. The two missing ones (`graphify_stage_select.py` and `graphify_stage_finish.py`) meant anyone trying to do a real staged graphify run on a large vault hit a dead end. They're now in `skills/graphify/scripts/`, de-personalized, with a `--vault-root` arg so they don't assume any specific vault path.
+
+Also shipped: the full **`skills/graphify/RUNBOOK.md`** — the production playbook with cost guardrails, the optimized 7-phase pipeline, and 36 lessons learned from running graphify on a 4,700-file vault across 5 sessions and ~5M LLM tokens. Every lesson is from a real failure or optimization that landed. Most important ones to know:
+
+- **Run `graphify_prep.py --apply` first** — wikilink regex pre-extraction yields more edges than the LLM does, and is free
+- **Use chunk size 50, not 20** — the per-chunk prompt overhead is the dominant cost
+- **The Grep-first prompt cuts 46% off baseline tokens** — agents that read files one at a time waste enormous amounts of tokens
+- **Cache hit detection must distinguish preflight stubs from real LLM extractions** — naive "does the cache file exist?" reports `0 tokens needed` even when the LLM layer is missing. The new `is_llm_extraction()` discriminator catches this.
+- **The wrong-root cache miss is the costliest beginner mistake** — if you suddenly see 0% cache hits on a folder you've graphified before, you're 100% running against the wrong vault root. The new stage_select.py warns when this happens.
+
+### 2. Power Tools catalog (`docs/POWER_TOOLS.md`)
+
+A new doc catalogs every third-party skill, MCP server, and Obsidian plugin this setup wires together — with attribution, install commands, source links, and the *why* behind each one. Nothing in the catalog is built by this repo; it's all open source by other people. What this repo does is install them and make them work in concert.
+
+Now properly cataloged with attribution:
+- **graphify** — knowledge graph builder
+- **humanizer** ([adelaidasofia/humanizer](https://github.com/adelaidasofia/humanizer), forked from blader/humanizer) — de-AI writing pass
+- **nano-banana** ([devonjones/devon-claude-skills](https://github.com/devonjones/devon-claude-skills) by Devon Jones) — image generation via Gemini 3 Pro Image
+- **notebooklm** ([PleasePrompto/notebooklm-skill](https://github.com/PleasePrompto/notebooklm-skill)) — query NotebookLM notebooks for source-grounded answers
+- **claude-mem** ([thedotmack/claude-mem](https://github.com/thedotmack/claude-mem)) — automatic cross-session memory
+- **Granola MCP** — meeting notes auto-sync (powers the meeting workflow rule)
+- **Obsidian plugin stack** — Dataview, Templater, Calendar, Tasks
+- **Recommended additional MCPs** — Linear, Slack, Gmail, Calendar, Drive, HubSpot, Apollo
+
+The catalog ends with a "how they fit together" section showing a full day of real workflows: morning journal → meeting → cascade → strategy question → pitch deck.
+
+### 3. Phase 0 now installs nano-banana and notebooklm too
+
+Previously only humanizer was wired into Phase 0's silent install. Now nano-banana (via the devon-claude-skills marketplace) and notebooklm (via git clone) get installed alongside, so users have the full third-party skill stack from the first session. Updated for Mac, Windows, and Linux.
+
+### 4. Memory system docs (`docs/MEMORY_SYSTEM.md`)
+
+The most underrated pattern in this whole setup: the **typed memory directory** at `~/.claude/projects/<project>/memory/` that turns Claude from a stateless assistant into a colleague who actually accumulates context across sessions.
+
+The doc explains:
+- **The 5 memory types** — `user`, `feedback`, `project`, `reference`, `discovery` — when to use each
+- **What NOT to put in memory** — not ephemeral tasks, not git history, not anything CLAUDE.md already covers
+- **Why you should save validated approaches, not just corrections** — if you only save "don't do X", Claude grows overly cautious. Save the wins too.
+- **How to structure feedback memories** — lead with the rule, then **Why:** (the reason from a past incident), then **How to apply:** (when this kicks in)
+- **Always convert relative dates to absolute when saving project memories** — "Thursday" → "2026-03-05" or the memory becomes uninterpretable in 2 weeks
+- **Quarterly memory hygiene** — open MEMORY.md, delete what's no longer true, update what's drifted
+- **Memory vs CLAUDE.md vs Tasks vs Plans** — when to use which persistence layer
+
+This pattern is what makes Claude stop making the same mistakes after ~20 sessions and start anticipating your nuances after ~50.
+
+### 5. Reusable Dataview query library + standalone build-journal-index.py + Decision Log template
+
+Three new files in `templates/` and `scripts/`:
+
+- **`templates/dataview-queries.md`** — 17 ready-to-use Dataview queries for journals, CRM, AI chats, decision logs, drafts, and cross-source searches. Copy/paste any of them into a note and they render live. Replace the folder names with yours and they work immediately.
+
+- **`scripts/build-journal-index.py`** — standalone, parameterized version of the script that builds `journal-index.json`. Powers the `/insights` and `/weekly`/`/monthly` skills. Accepts `--vault-root`, `--journal-dir`, and `--meta-dir` so it works for any vault layout. Run weekly via cron or manually.
+
+- **`templates/Decision Log.md`** — template for tracking the *how* of your decisions (what / why / floor / stakes / speed / outcome / pattern), with the philosophy of why you fill in `outcome` and `pattern` later (you can't grade your own decision from inside the moment — you need distance). Includes a fictional example so it's clear how to use it.
+
+### 6. README and CLAUDE.md updated
+
+The README has a new "Deeper Documentation" section pointing to all the new docs. The repo CLAUDE.md is updated to list the new standalone sub-skills (`patterns`, `graphify`) and the reference docs (`docs/`, `templates/`, `scripts/`).
+
+### Why this all matters
+
+If you're a stranger who just cloned this repo to set up your own AI brain, you now get **everything I actually use** — not just the parts I happened to ship in earlier sessions. The graphify pipeline is complete instead of broken. The memory system is documented instead of hidden. Every third-party tool I depend on is cataloged with attribution and install commands. The Dataview library and Decision Log template are reusable patterns, not personal artifacts.
+
+The audit found 5 high-value gaps. All five are now fixed.
+
+---
+
 ## April 11, 2026 (thirteenth session — meeting workflow, CRM structure preservation, personal↔team to-do separation, session-close repo-update check)
 
 Four new hard rules baked into the Obsidian Rules section + Session Protocol. All four came from a real-world failure cascade during Adelaida's pitch-feedback session with an advisor: Claude skimmed a Granola transcript summary instead of reading the full Gemini Google Doc verbatim, then replaced a standard CRM dataview block with a custom History section (breaking the user's normal flow), then nearly mixed personal and team to-dos. We shipped the fixes to Adelaida's vault that day. These rules now ship to every user who builds their vault from this starter so the same failures can't recur.
