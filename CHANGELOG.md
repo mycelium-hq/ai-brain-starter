@@ -9,6 +9,67 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 10, 2026 (twelfth session — full skill-folder sync + backup-before-overwrite + Phase 11 pointing at the right meeting-todos)
+
+Fixes a structural bug where **skill optimizations lived in the repo but never reached installed users**, and gives the auto-update path a safe backup mechanism.
+
+### 1. Full skill-folder sync (fresh install + auto-update)
+
+Previously, Phase 0 installed graphify with `cp SKILL.md` — only the one file. The `scripts/` folder (with `graphify_prep.py`, `graphify_chunk.py`, `graphify_canonicalize.py`, the 80–92% cost-cutting wrappers) and `OPTIMIZATIONS.md` were **never copied**. Result: every new user got a graphify skill whose SKILL.md referenced scripts they didn't have. The optimizations were silent no-ops for everyone except developers who ran `/graphify` from inside the starter repo clone.
+
+**Fixed** for all three platforms:
+- **Mac:** `cp -R ~/.claude/skills/ai-brain-starter/skills/graphify/. ~/.claude/skills/graphify/`
+- **Linux:** same pattern (Linux Phase 0 was *also* missing graphify skill install entirely — now fixed)
+- **Windows:** `xcopy /E /I /Y ...` to handle recursive folder copy on cmd/PowerShell
+
+Phase 9's "if graphify skill is missing" retry command was also updated with the `-R` pattern and a comment explaining why the `/.` suffix is critical.
+
+### 2. Phase 11 meeting-todos now points at `skills/meeting-todos/`
+
+The repo has two copies of `meeting-todos/SKILL.md`:
+- `meeting-todos/SKILL.md` at the repo root (110 lines, Apr 9 — legacy)
+- `skills/meeting-todos/SKILL.md` under the skills folder (116 lines, Apr 10 — canonical, added in `6a0edc0 add missing graphify and meeting-todos skills to repo`)
+
+Phase 11 was installing from the stale root-level copy. Fixed to install from `skills/meeting-todos/` using the same `cp -R ... /.` pattern. The legacy root-level `meeting-todos/` folder is now unused — can be removed in a future cleanup commit.
+
+### 3. New: `scripts/sync-skills.sh`
+
+Added a helper script at `scripts/sync-skills.sh` that handles the repo → install sync with backup-before-overwrite semantics. Called by the auto-update hook on session start whenever `git pull` fetched new commits.
+
+**What it does:**
+1. For every skill in `~/.claude/skills/ai-brain-starter/skills/*/`, walks every file recursively.
+2. If the corresponding file at `~/.claude/skills/<skill-name>/` doesn't exist → creates it.
+3. If it exists and matches byte-for-byte (`cmp -s`) → no-op, no noise.
+4. If it exists and differs → **backs up the current version to `<file>.bak-YYYY-MM-DD-HHMM` before overwriting with the repo version**. User's customizations are always recoverable.
+5. Writes a summary to `~/.claude/skills/ai-brain-starter/.sync.log` and prints it to stdout.
+6. Exits non-zero if any write failed, so the hook can surface it (NEVER fail silently).
+
+**Why backup + overwrite (instead of skip-on-customization):** Adelaida's call. Safer default — users never silently lose updates, but they also never silently lose their customizations. Recovery is a one-line `mv SKILL.md.bak-2026-04-10-HHMM SKILL.md`. No diff logic to get wrong.
+
+### 4. Auto-update hook now calls `sync-skills.sh`
+
+The Phase 5 auto-update hook (in `.claude/settings.local.json`) previously told Claude to "Copy any updated skills from ~/.claude/skills/ai-brain-starter/skills/ to ~/.claude/skills/ (overwrite existing)" — a vague natural-language instruction that different Claude sessions interpreted differently and that didn't preserve customizations.
+
+Now the hook runs `bash ~/.claude/skills/ai-brain-starter/scripts/sync-skills.sh` deterministically after `git pull`. Output is captured into `$SYNC_OUTPUT` and passed into the hook's additionalContext so Claude can tell the user exactly what was created, updated, or backed up.
+
+### 5. Session protocol hook path fix
+
+The same Phase 5 hook block had the session-start protocol pointing at `Meta/Last Session.md` and `Meta/Current Priorities.md` without the `⚙️` emoji. Since Phase 3 creates `⚙️ Meta/` with the emoji, the hook was sending Claude to read files that didn't exist — silent violation of the protocol. Fixed to `⚙️ Meta/Last Session.md` and `⚙️ Meta/Current Priorities.md`. Matches the fix from the eleventh session which got everywhere *except* this one hook string.
+
+### What existing users should do
+
+Re-run `/setup-brain` and say "just resync my skills." Or manually:
+```bash
+cd ~/.claude/skills/ai-brain-starter && git pull
+bash scripts/sync-skills.sh
+```
+
+If the sync output shows any `.bak-YYYY-MM-DD-HHMM` files, your local customizations are preserved there. Diff the backup against the new version and merge anything you want to keep back.
+
+Also run the same re-sync on `.claude/settings.local.json` — copy the updated hook block from `hooks.json` in the repo to pick up the new sync-skills.sh call and the ⚙️ Meta path fix.
+
+---
+
 ## April 10, 2026 (eleventh session — path fixes + honoring the NEVER-fail-silently rule)
 
 Pure bug-fix pass. No new features. Fresh pulls now install cleanly without silent path mismatches.

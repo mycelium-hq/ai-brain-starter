@@ -51,9 +51,11 @@ if ! command -v node &>/dev/null; then brew install node; fi
 
 # Graphify — ~70% fewer tokens on vault queries
 if ! command -v graphify &>/dev/null; then pipx install graphifyy && graphify install; fi
-# Graphify Claude skill (the pipeline instructions)
+# Graphify Claude skill — copy the FULL folder (SKILL.md + scripts/ + OPTIMIZATIONS.md)
+# The wrapper scripts in scripts/ cut LLM cost by 80–92% on large vaults.
+# Copying only SKILL.md (the old bug) left the scripts behind and optimizations never reached users.
 mkdir -p ~/.claude/skills/graphify
-cp ~/.claude/skills/ai-brain-starter/skills/graphify/SKILL.md ~/.claude/skills/graphify/SKILL.md
+cp -R ~/.claude/skills/ai-brain-starter/skills/graphify/. ~/.claude/skills/graphify/
 
 # Claude-Mem — ~30-40% fewer tokens on session starts
 npx claude-mem install 2>/dev/null
@@ -89,8 +91,10 @@ pip install pipx
 pipx ensurepath
 pipx install graphifyy
 graphify install --platform windows
-mkdir -p %USERPROFILE%\.claude\skills\graphify
-copy %USERPROFILE%\.claude\skills\ai-brain-starter\skills\graphify\SKILL.md %USERPROFILE%\.claude\skills\graphify\SKILL.md
+:: Copy the FULL graphify skill folder (SKILL.md + scripts\ + OPTIMIZATIONS.md)
+:: xcopy with /E (recursive incl. empty dirs), /I (assume dest is dir), /Y (overwrite without prompt)
+mkdir %USERPROFILE%\.claude\skills\graphify
+xcopy /E /I /Y %USERPROFILE%\.claude\skills\ai-brain-starter\skills\graphify\* %USERPROFILE%\.claude\skills\graphify\
 
 # Claude-Mem
 npx claude-mem install
@@ -132,6 +136,9 @@ sudo apt-get install -y nodejs npm   # Ubuntu/Debian
 # After Python and Node are confirmed:
 pip install pipx && pipx ensurepath
 pipx install graphifyy && graphify install
+# Graphify Claude skill — copy the FULL folder (SKILL.md + scripts/ + OPTIMIZATIONS.md)
+mkdir -p ~/.claude/skills/graphify
+cp -R ~/.claude/skills/ai-brain-starter/skills/graphify/. ~/.claude/skills/graphify/
 npx claude-mem install
 git clone https://github.com/adelaidasofia/humanizer.git ~/.claude/skills/humanizer
 ```
@@ -487,13 +494,13 @@ Also add an auto-update hook that pulls updates and applies them automatically o
         "hooks": [
           {
             "type": "command",
-            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"MANDATORY SESSION PROTOCOL: Before responding to the user, you MUST first read these files in order: 1) The project CLAUDE.md at the vault root 2) Meta/Last Session.md 3) Meta/Current Priorities.md — Do NOT greet the user or respond until all three files have been read. This is non-negotiable.\"}}'",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"MANDATORY SESSION PROTOCOL: Before responding to the user, you MUST first read these files in order: 1) The project CLAUDE.md at the vault root 2) ⚙️ Meta/Last Session.md 3) ⚙️ Meta/Current Priorities.md — Do NOT greet the user or respond until all three files have been read. This is non-negotiable.\"}}'",
             "once": true,
             "statusMessage": "Loading session context..."
           },
           {
             "type": "command",
-            "command": "cd ~/.claude/skills/ai-brain-starter 2>/dev/null && git fetch origin main --quiet 2>/dev/null && if [ \"$(git rev-parse HEAD 2>/dev/null)\" != \"$(git rev-parse origin/main 2>/dev/null)\" ]; then git pull --quiet origin main 2>/dev/null && CHANGES=$(git log --oneline HEAD@{1}..HEAD 2>/dev/null) && echo \"{\\\"hookSpecificOutput\\\":{\\\"hookEventName\\\":\\\"UserPromptSubmit\\\",\\\"additionalContext\\\":\\\"AI Brain Starter was auto-updated. Changes: $CHANGES. Now: 1) Copy any updated skills from ~/.claude/skills/ai-brain-starter/skills/ to ~/.claude/skills/ (overwrite existing). 2) Read CHANGELOG.md and tell the user in 1-2 plain sentences what changed and why. 3) Check if hooks.json differs from .claude/settings.local.json — if so, update settings.local.json to match. Keep it casual, not a changelog dump.\\\"}}\"; else echo '{\"continue\":true,\"suppressOutput\":true}'; fi",
+            "command": "cd ~/.claude/skills/ai-brain-starter 2>/dev/null && git fetch origin main --quiet 2>/dev/null && if [ \"$(git rev-parse HEAD 2>/dev/null)\" != \"$(git rev-parse origin/main 2>/dev/null)\" ]; then git pull --quiet origin main 2>/dev/null && CHANGES=$(git log --oneline HEAD@{1}..HEAD 2>/dev/null) && SYNC_OUTPUT=$(bash ~/.claude/skills/ai-brain-starter/scripts/sync-skills.sh 2>&1) && echo \"{\\\"hookSpecificOutput\\\":{\\\"hookEventName\\\":\\\"UserPromptSubmit\\\",\\\"additionalContext\\\":\\\"AI Brain Starter was auto-updated. Commits: $CHANGES. Skill sync result: $SYNC_OUTPUT. Any file that changed was backed up to <file>.bak-YYYY-MM-DD-HHMM before being overwritten — preserving local customizations. Now: 1) Read CHANGELOG.md and tell the user in 1-2 plain sentences what changed and why. 2) If the sync output lists backed-up files, mention it casually so they know their customizations are recoverable. 3) Check if hooks.json differs from .claude/settings.local.json — if so, update settings.local.json to match. Keep it casual, not a changelog dump.\\\"}}\"; else echo '{\"continue\":true,\"suppressOutput\":true}'; fi",
             "once": true,
             "statusMessage": "Checking for skill updates..."
           }
@@ -831,7 +838,7 @@ git clone https://github.com/PleasePrompto/notebooklm-skill.git ~/.claude/skills
 ### Verify Phase 0 installs
 Quickly check that everything from Phase 0 is working:
 - `graphify --version` — if missing, retry: `pipx install graphifyy && graphify install`
-- `ls ~/.claude/skills/graphify/SKILL.md` — if missing, retry: `mkdir -p ~/.claude/skills/graphify && cp ~/.claude/skills/ai-brain-starter/skills/graphify/SKILL.md ~/.claude/skills/graphify/SKILL.md`
+- `ls ~/.claude/skills/graphify/SKILL.md` — if missing, retry with the full folder copy: `mkdir -p ~/.claude/skills/graphify && cp -R ~/.claude/skills/ai-brain-starter/skills/graphify/. ~/.claude/skills/graphify/` (the `-R` and trailing `/.` are critical — a plain `cp SKILL.md` misses the `scripts/` folder where the cost-cutting wrappers live)
 - `ls ~/.claude/skills/humanizer` — if missing, retry: `git clone https://github.com/adelaidasofia/humanizer.git ~/.claude/skills/humanizer`
 - Claude-Mem — if not in plugin list, retry: `npx claude-mem install`
 
@@ -1375,7 +1382,7 @@ Install the skill:
 
 ```bash
 # The skill is bundled in this repo
-cp -r ~/.claude/skills/ai-brain-starter/meeting-todos ~/.claude/skills/meeting-todos
+cp -R ~/.claude/skills/ai-brain-starter/skills/meeting-todos/. ~/.claude/skills/meeting-todos/
 ```
 
 Add routing to the user's CLAUDE.md:
