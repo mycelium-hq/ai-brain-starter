@@ -9,6 +9,29 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 10, 2026 (eighth session — auto-wikilink v2: vault-scope-aware, regex bug fix)
+
+Added `scripts/auto-wikilink.py` (v2). The previous version had three critical bugs that corrupted team vault files when run against a multi-vault setup with a symlinked team folder:
+
+1. **Wrote path-form wikilinks** (`[[🌱 Curiosities/Colombia]]`) instead of bare filenames (`[[Colombia]]`). Source: it loaded canonical names from a `Wikilink Reference.md` index that had path-form entries, then wrote those literally into target files. The visible result in Obsidian was leaked personal-vault folder names showing up inside team-shared documents.
+
+2. **Reached across the team-vault symlink** when building its term list, linking team-vault files to personal-vault concept notes. This violated the team-vault firewall: team members opening the synced docs would see references to private personal-vault folders they don't have access to.
+
+3. **Substitution regex over-matched** when emoji or special characters were near a match. "A VP at Accenture" became "Curiosities/Colombiaccenture]]" because the negative lookbehind `(?<!\[\[)` only checked 2 characters back, and the lookahead `(?!\]\]|[^\[]*\]\])` was fragile around unicode.
+
+**v2 fixes all three:**
+
+- **Vault-scope-aware:** files inside the team vault only link to terms whose source files are also inside the team vault. Personal context is invisible to team files. ONE-WAY FIREWALL — personal can reach into team if you opt in, team can never reach into personal.
+- **Bare filenames + alias syntax only.** Hard guard refuses to write any wikilink containing `/` in the target. Path-form is impossible.
+- **Region-tracking substitution.** Builds a list of `[[...]]` regions in the body first, then only modifies text strictly outside those regions. Recalculates after every change. Kills the character-eating bug.
+- **Hard-blocks team-vault files** unless `--allow-team` is passed explicitly. Default is "personal vault only." You have to opt in to touch team-vault content.
+
+Additional belt-and-suspenders fix: disabled `alwaysUpdateLinks` in the team vault `.obsidian/app.json` so Obsidian's own link-rewriter stops trying to "fix" cross-vault wikilinks during file watches.
+
+If your setup has a similar multi-vault structure (personal Obsidian vault + symlinked team / shared / Google Drive folder), pull this version. The v1 bugs only manifested in multi-vault setups so single-vault users may not have noticed.
+
+---
+
 ## April 10, 2026 (seventh session — graphify exclude flags + team vault support)
 
 Ran the optimized graphify pipeline on Adelaida's Onde Team vault (a separate Google Drive-synced team vault with Archive folders). This surfaced four new issues that needed fixes:

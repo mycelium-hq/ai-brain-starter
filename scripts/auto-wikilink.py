@@ -1,0 +1,305 @@
+#!/usr/bin/env python3
+"""Auto-wikilink v2 — vault-scope-aware, regex-safe.
+
+Scans markdown files for unlinkified mentions of vault concepts and adds
+wikilinks. Replaces the v1 script which had three critical bugs:
+  1. Wrote path-form wikilinks ([[🌱 Curiosities/Colombia]]) instead of bare
+     filenames. The display in Obsidian then showed the path string as the
+     visible text, leaking personal vault folder names into team-vault files.
+  2. Reached across the team-vault symlink, linking team-vault files to
+     personal-vault concept notes. Violated the team-vault firewall rule.
+  3. The substitution regex over-matched and ate adjacent characters when
+     emoji or special characters were near a match (e.g. "A VP at Accenture"
+     became "Curiosities/Colombiaccenture]]").
+
+v2 fixes all three:
+  - Vault-scope-aware: a file inside `🚀 Onde Team/` only links to terms
+    whose source files are also inside `🚀 Onde Team/`. Personal context is
+    invisible to team files. ONE-WAY FIREWALL.
+  - Bare filenames or alias syntax only. The script REFUSES to write any
+    wikilink that contains '/' in the target. Hard guard.
+  - Region-tracking substitution: builds a list of [[...]] regions in the
+    body first, then only modifies text strictly outside those regions.
+    Recalculates after every change. Kills the character-eating bug.
+  - Hard-blocks team-vault files unless --allow-team is passed explicitly.
+    Default behavior is "personal vault only." You have to opt in to touch
+    team-vault content.
+
+Usage:
+  # Default: process journals, personal-only term scope
+  python3 "⚙️ Meta/scripts/auto-wikilink.py"
+
+  # Specific files (still personal-only by default)
+  python3 "⚙️ Meta/scripts/auto-wikilink.py" file1.md file2.md
+
+  # Dry run (show changes without writing)
+  python3 "⚙️ Meta/scripts/auto-wikilink.py" --dry-run
+
+  # Opt-in to processing team-vault files (uses team-vault terms only)
+  python3 "⚙️ Meta/scripts/auto-wikilink.py" --allow-team file_in_team_vault.md
+"""
+import os
+import re
+import sys
+
+VAULT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+TEAM_VAULT_PREFIX = os.path.join(VAULT, "🚀 Onde Team")
+JOURNAL_DIR = os.path.join(VAULT, "📓 Journals")
+
+# Concept directories scanned for the personal-scope term list
+PERSONAL_CONCEPT_DIRS = [
+    os.path.join(VAULT, "✍️ Writing", "The High-Rise", "Floors"),
+    os.path.join(VAULT, "🧠 Psychology"),
+    os.path.join(VAULT, "📝 Notes"),
+    os.path.join(VAULT, "🌱 Curiosities"),
+    os.path.join(VAULT, "👤 CRM"),
+    os.path.join(VAULT, "💼 Business"),
+]
+
+# Concept directories scanned for the team-vault scope term list
+TEAM_CONCEPT_DIRS = [
+    os.path.join(TEAM_VAULT_PREFIX, "📋 Strategy"),
+    os.path.join(TEAM_VAULT_PREFIX, "👥 CRM"),
+    os.path.join(TEAM_VAULT_PREFIX, "💰 Raise"),
+    os.path.join(TEAM_VAULT_PREFIX, "🎯 Sales"),
+    os.path.join(TEAM_VAULT_PREFIX, "🛠 Product"),
+]
+
+# Folders never scanned for terms even within their vault scope
+EXCLUDED_DIR_NAMES = {
+    "🤖 AI Chats", "graphify-input", "graphify-out", "_archive", "Archive",
+    ".obsidian", ".git", ".claude", "Templates",
+}
+
+
+def in_team_vault(filepath: str) -> bool:
+    """True if `filepath` lies inside the team vault."""
+    return os.path.abspath(filepath).startswith(os.path.abspath(TEAM_VAULT_PREFIX))
+
+
+def load_terms_for_scope(scope_dirs):
+    """Walk the given concept directories and return {lowercase_term -> bare filename}.
+
+    Canonical names are ALWAYS bare filenames (e.g. "Colombia"), never paths.
+    Filenames containing '/' are skipped defensively. Aliases are pulled from
+    YAML frontmatter on the first 20 lines of each file.
+    """
+    terms: dict[str, str] = {}
+    for cdir in scope_dirs:
+        if not os.path.exists(cdir):
+            continue
+        for root, dirs, files in os.walk(cdir):
+            # Strip excluded subfolders in-place so os.walk skips them
+            dirs[:] = [d for d in dirs if d not in EXCLUDED_DIR_NAMES]
+            for fname in files:
+                if not fname.endswith(".md"):
+                    continue
+                name = fname[:-3]
+                # Defensive: never accept a name that looks like a path
+                if "/" in name or len(name) < 3:
+                    continue
+                terms[name.lower()] = name
+
+                fpath = os.path.join(root, fname)
+                try:
+                    with open(fpath, "r", encoding="utf-8", errors="replace") as af:
+                        in_fm = False
+                        for i, line in enumerate(af):
+                            if i > 20:
+                                break
+                            if i == 0 and line.strip() == "---":
+                                in_fm = True
+                                continue
+                            if not in_fm:
+                                continue
+                            if line.strip() == "---":
+                                break
+                            if line.startswith("aliases:"):
+                                bracket_match = re.search(r"\[(.+)\]", line)
+                                if bracket_match:
+                                    for a in bracket_match.group(1).split(","):
+                                        a = a.strip().strip("\"").strip("'")
+                                        if a and len(a) > 2 and "/" not in a:
+                                            terms[a.lower()] = name
+                except Exception:
+                    pass
+    return terms
+
+
+def find_wikilink_regions(text: str):
+    """Return a list of (start, end) tuples for every [[...]] region in `text`."""
+    regions = []
+    for m in re.finditer(r"\[\[[^\[\]]*?\]\]", text):
+        regions.append((m.start(), m.end()))
+    return regions
+
+
+def is_in_region(pos: int, regions) -> bool:
+    """True if `pos` falls inside any (start, end) tuple in `regions`."""
+    for start, end in regions:
+        if start <= pos < end:
+            return True
+    return False
+
+
+def already_linked_terms(text: str):
+    """Return a set of lowercase canonical filenames already wikilinked in `text`.
+
+    Defensively strips any path prefix from the link target so we don't
+    re-link a name that's already present in path-form (legacy corruption).
+    """
+    linked = set()
+    for m in re.finditer(r"\[\[([^\[\]|]+?)(?:\|[^\[\]]*?)?\]\]", text):
+        target = m.group(1).strip()
+        if "/" in target:
+            target = target.split("/")[-1]
+        linked.add(target.lower())
+    return linked
+
+
+def add_wikilinks(filepath: str, terms, dry_run: bool = False):
+    """Add missing wikilinks to a single file. Returns (count_added, details_list)."""
+    with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+        content = f.read()
+
+    original = content
+
+    # Split frontmatter and body so we never modify YAML
+    parts = content.split("---", 2)
+    if len(parts) >= 3 and parts[0].strip() == "":
+        frontmatter = "---" + parts[1] + "---"
+        body = parts[2]
+    else:
+        frontmatter = ""
+        body = content
+
+    linked = already_linked_terms(body)
+    sorted_terms = sorted(terms.items(), key=lambda x: len(x[0]), reverse=True)
+    changes = []
+
+    for term_lower, canonical in sorted_terms:
+        if canonical.lower() in linked:
+            continue
+        if len(term_lower) < 3:
+            continue
+
+        # SAFETY: refuse to write any path-form wikilink. Hard guard.
+        if "/" in canonical:
+            continue
+
+        # Recalculate wikilink regions on every iteration — body grows after edits
+        regions = find_wikilink_regions(body)
+
+        # Find first whole-word match outside any wikilink region
+        pattern = r"\b" + re.escape(term_lower) + r"\b"
+        match = None
+        for m in re.finditer(pattern, body, re.IGNORECASE):
+            if not is_in_region(m.start(), regions):
+                match = m
+                break
+        if match is None:
+            continue
+
+        original_text = match.group(0)
+        # Use alias syntax when matched text differs from canonical filename
+        if original_text == canonical:
+            replacement = f"[[{canonical}]]"
+        else:
+            replacement = f"[[{canonical}|{original_text}]]"
+
+        body = body[: match.start()] + replacement + body[match.end():]
+        linked.add(canonical.lower())
+        changes.append(f"  {original_text} -> {replacement}")
+
+    new_content = frontmatter + body if frontmatter else body
+    if new_content != original:
+        if not dry_run:
+            with open(filepath, "w", encoding="utf-8") as f:
+                f.write(new_content)
+        return len(changes), changes
+    return 0, []
+
+
+def main():
+    args = sys.argv[1:]
+    dry_run = "--dry-run" in args
+    allow_team = "--allow-team" in args
+    specific_files = [a for a in args if not a.startswith("--")]
+
+    print(f"=== auto-wikilink v2 ({'DRY-RUN' if dry_run else 'APPLY'}) ===")
+
+    # Determine files to process
+    if specific_files:
+        files = [os.path.abspath(f) for f in specific_files if f.endswith(".md")]
+    else:
+        files = []
+        if os.path.exists(JOURNAL_DIR):
+            for fname in os.listdir(JOURNAL_DIR):
+                fpath = os.path.join(JOURNAL_DIR, fname)
+                if fname.endswith(".md") and not os.path.isdir(fpath):
+                    files.append(fpath)
+
+    # FIREWALL: split files into safe + blocked based on vault scope
+    personal_files, team_files, blocked = [], [], []
+    for fpath in files:
+        if in_team_vault(fpath):
+            if allow_team:
+                team_files.append(fpath)
+            else:
+                blocked.append(fpath)
+        else:
+            personal_files.append(fpath)
+
+    if blocked:
+        print(f"\n⚠️  BLOCKED {len(blocked)} team-vault files (pass --allow-team to override):")
+        for b in blocked[:5]:
+            print(f"  {os.path.relpath(b, VAULT)}")
+        if len(blocked) > 5:
+            print(f"  ... and {len(blocked) - 5} more")
+
+    total_changes = 0
+    files_modified = 0
+
+    # Process personal-vault files with personal-vault terms only
+    if personal_files:
+        print("\nLoading PERSONAL-vault concept terms...")
+        personal_terms = load_terms_for_scope(PERSONAL_CONCEPT_DIRS)
+        print(f"  {len(personal_terms)} terms loaded")
+        print(f"\nProcessing {len(personal_files)} personal-vault files...")
+        for fpath in personal_files:
+            count, details = add_wikilinks(fpath, personal_terms, dry_run)
+            if count > 0:
+                files_modified += 1
+                total_changes += count
+                fname = os.path.basename(fpath)
+                print(f"\n{fname} ({count} links added):")
+                for d in details[:5]:
+                    print(d)
+                if len(details) > 5:
+                    print(f"  ... and {len(details) - 5} more")
+
+    # Process team-vault files with team-vault terms only — STRICT FIREWALL
+    if team_files:
+        print("\nLoading TEAM-vault concept terms (firewall: NO personal vault terms)...")
+        team_terms = load_terms_for_scope(TEAM_CONCEPT_DIRS)
+        print(f"  {len(team_terms)} terms loaded")
+        print(f"\nProcessing {len(team_files)} team-vault files...")
+        for fpath in team_files:
+            count, details = add_wikilinks(fpath, team_terms, dry_run)
+            if count > 0:
+                files_modified += 1
+                total_changes += count
+                fname = os.path.basename(fpath)
+                print(f"\n{fname} ({count} links added):")
+                for d in details[:5]:
+                    print(d)
+                if len(details) > 5:
+                    print(f"  ... and {len(details) - 5} more")
+
+    suffix = "DRY-RUN — " if dry_run else ""
+    will = "would be " if dry_run else ""
+    print(f"\n{suffix}Summary: {total_changes} wikilinks {will}added across {files_modified} files")
+
+
+if __name__ == "__main__":
+    main()
