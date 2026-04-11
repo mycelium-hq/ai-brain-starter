@@ -9,6 +9,63 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 11, 2026 (seventeenth session — graph routing hooks so Claude actually uses your knowledge graph)
+
+If your vault has a knowledge graph (built with `/graphify`) — or several of them, like a personal graph and a separate work/team graph — you've probably noticed that Claude doesn't always remember to read it before answering. Telling Claude in CLAUDE.md "always read the graph first for strategic questions" helps some of the time, but it's a soft reminder buried in a 200-line file. In long sessions, the model drifts and starts re-reading source files instead.
+
+This session ships a fix: **two `UserPromptSubmit` hooks that put the graph routing reminder in front of Claude on every prompt.**
+
+### 1. Static hook update — graph routing in the always-on session protocol message
+
+The existing `UserPromptSubmit` hook (the one that fires the MANDATORY SESSION PROTOCOL message once per session) now includes a graph routing reminder. It tells Claude:
+
+- The path to the primary graph report (`graphify-out/GRAPH_REPORT.md`)
+- That a separate sub-folder graph (work/team area) may also exist
+- That a keyword-triggered second hook will fire freshness-aware reminders if your prompt mentions configured keywords
+
+This is the "always present" baseline. Even on the first prompt of the session, Claude knows the graph exists and roughly when to use it.
+
+### 2. New keyword-triggered hook — `scripts/graph-context-hook.sh`
+
+A new optional script. Fires on **every** `UserPromptSubmit`, reads the user's prompt from stdin, regex-matches against routing keywords, and on match injects an `additionalContext` JSON pointing the assistant at the right `GRAPH_REPORT.md` with a freshness note. Silent passthrough on no match.
+
+**Why a separate keyword hook on top of the static one:**
+
+The static hook fires once per session. The keyword hook fires every prompt — so if you're 30 minutes into a session and you ask a question that mentions a project keyword, the routing reminder is right there on that turn instead of buried in the session-start preamble.
+
+**Freshness checking — this is the part that prevents bad outputs:**
+
+The hook computes the graph report's mtime and includes one of:
+- `updated N day(s) ago` — fresh, trust it
+- `STALE — last updated N days ago, run /graphify --update on <path> before trusting it` — older than 14 days
+
+So if you've been editing a lot of notes and forgot to refresh the graph, Claude tells you the graph is stale instead of giving you stale answers from it. The 14-day threshold is configurable (`STALE_DAYS` in the script).
+
+**Why the hook does NOT pin specific god-node names:**
+
+Naming god nodes inside the hook message ("top concepts: X, Y, Z") seems helpful but it's a maintenance footgun. God-node names change every graphify run as your vault grows and concepts canonicalize. The stable signal is the **path** + **freshness date**. Let Claude open the file to see the actual current top nodes. If you want a hand-curated snapshot for human reference, put it in CLAUDE.md with an "as of YYYY-MM-DD" tag — not in the hook.
+
+**How to install:**
+
+1. Copy `scripts/graph-context-hook.sh` from this repo into your vault's `⚙️ Meta/scripts/` folder.
+2. **Edit the CONFIG block** at the top of the file: set `VAULT_ROOT`, then set `PRIMARY_GRAPH` + `PRIMARY_PATTERN` (regex of keywords for your main graph). Optionally set `SECONDARY_GRAPH` + `SECONDARY_PATTERN` for a sub-folder graph (e.g. work/team), or set `SECONDARY_GRAPH=""` if you only have one.
+3. Test with: `echo '{"hook_event_name":"UserPromptSubmit","prompt":"<test phrase>"}' | bash "[VAULT_PATH]/⚙️ Meta/scripts/graph-context-hook.sh"`. A matching prompt should print a `hookSpecificOutput` JSON; a non-matching prompt should print `{"continue":true}`.
+4. Register it as a second `UserPromptSubmit` hook entry alongside the static one in `.claude/settings.local.json` — see the new `hooks.json` template for the entry shape.
+
+**Cross-platform note:** the freshness check uses `stat -f %m` (BSD/macOS) and falls back to `stat -c %Y` (Linux). Tested on macOS; Linux should work but holler if you hit issues.
+
+### 3. SKILL.md section explaining when to install it
+
+A new optional section in SKILL.md walks through the install + customization steps the next time `/setup-brain` runs. The script only ships if the user already has `/graphify` installed — there's no point installing a graph-routing hook for a vault with no graph.
+
+### 4. The bug we caught while shipping this
+
+While building the graph routing in our own vault we wrote the wrong path in three places — a doubled folder segment that looked plausible but didn't exist. Caught it before closing because we verified the file actually existed at the path the hook was pointing at. **General lesson, applicable to anyone wiring up graph hooks:** after you write the hook, run `ls` against the path it points at. A hook that points at a missing file fails silently — Claude reads the routing reminder, tries to open the file, gets a "file not found" error, and you never know the routing layer was broken.
+
+Internalized as a setup rule: **always verify the GRAPH_REPORT.md path resolves before declaring the hook done.**
+
+---
+
 ## April 11, 2026 (sixteenth session — auto-update for non-tech users + session-end capture cascade + auto-file improvement issues)
 
 This session is about closing the loop. Sessions 13–15 made onboarding fast. This one makes the setup **self-maintaining**: users always end up on the latest version automatically, and nothing useful from any session is ever lost.

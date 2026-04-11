@@ -948,6 +948,22 @@ After creating both scripts, run: `chmod +x "[VAULT_PATH]/⚙️ Meta/scripts/se
 
 **Note:** If the user was already set up with `originals-hook.sh`, migrate by copying its contents into `write-hook.sh` and updating the hook path in `.claude/settings.local.json`.
 
+**Optional: graph-context-hook.sh (if the user has graphify installed).**
+
+If the vault uses `/graphify` to build a knowledge graph, install the **graph-context-hook.sh** companion. It's a `UserPromptSubmit` hook that fires on every prompt, regex-matches the prompt against routing keywords, and (on match) injects `additionalContext` pointing the assistant at the right `GRAPH_REPORT.md` with a freshness note. Silent passthrough on no match.
+
+Why: telling Claude in CLAUDE.md to "always read the graph first" works some of the time. Injecting a routing reminder AT the moment of the matching prompt — with the file's mtime so staleness is visible — is more reliable, especially in long sessions where the static reminder fires only once.
+
+Copy `scripts/graph-context-hook.sh` from this repo into `[VAULT_PATH]/⚙️ Meta/scripts/`, then **edit the CONFIG block at the top of the file**: set `VAULT_ROOT`, set `PRIMARY_GRAPH` and `PRIMARY_PATTERN` (regex of keywords for the main graph), and either configure `SECONDARY_GRAPH`/`SECONDARY_PATTERN` for a sub-folder graph (e.g. a separate work/team graph) or set `SECONDARY_GRAPH=""` if you only have one. Test with:
+
+```bash
+echo '{"hook_event_name":"UserPromptSubmit","prompt":"<your test phrase>"}' | bash "[VAULT_PATH]/⚙️ Meta/scripts/graph-context-hook.sh"
+```
+
+A matching prompt should print a `hookSpecificOutput` JSON; a non-matching prompt should print `{"continue":true}`. Then register it as a second `UserPromptSubmit` hook entry alongside the static MANDATORY SESSION PROTOCOL hook (see `hooks.json` for the entry shape).
+
+**Design rule:** the hook does NOT pin specific god-node names in its message text. God-node names go stale every graphify run. The stable signal is the path + freshness date — let the model open the report to see the actual current top nodes. If you need a hand-curated snapshot, put it in CLAUDE.md (with an "as of YYYY-MM-DD" tag), not in the hook.
+
 The full hook template (UserPromptSubmit + Stop + PreCompact + PostToolUse) is in `hooks.json` at the repo root. After any `git pull`, compare it to your `.claude/settings.local.json` to see if hooks have been updated.
 
 **Decision Log.md:**
