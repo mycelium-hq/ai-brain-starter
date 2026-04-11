@@ -9,6 +9,42 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 11, 2026 (twentieth session — daily journal panel becomes a live participant, with real pushback)
+
+If you've been using `/journal` for a while, you've probably noticed the advisory panel at the end of each entry mostly cheers you on. Warm, supportive, agreeable. The problem: on good days that means *no real signal*, and on days when you're rationalizing something, it means the panel *helps you* rationalize it. The whole point of having an advisory panel is that it pushes back when you need it — and the old setup couldn't, because it ran after you'd already decided how the story goes.
+
+This update restructures the journal skill so the panel works the way a real advisory board works.
+
+### What's different
+
+**1. The panel can now interrupt you mid-journal.** A new "Standing Rules" section in the journal skill has a trigger table — if you say hedge words ("I guess," "I don't know why"), drop a vague "I should" without a date, mention a new side idea during a hard stretch, brush past a missed habit, avoid naming a hard conversation, etc. — the relevant advisor pulls in with one sentence, in character, then hands the conversation back. You don't wait until the end for the panel's reaction.
+
+**2. At least one panelist must dissent on every entry.** Especially on good days. Rationalizations slip through most easily on high-floor entries, and the old "1–2 sentences per advisor, keep it tight" format couldn't force disagreement. The new rule is simple: if all 3–5 panelists agree, you have not looked hard enough. Dissent is required, not optional.
+
+**3. Panel dialogue, not parallel bullets.** Step 5 now stages an actual in-character exchange where panelists can challenge each other and you, ask you questions back, and push on what you avoided. Not a stack of isolated advisor quotes.
+
+**4. Omission pass.** Before the panel weighs in, the skill checks: *what did the user NOT say tonight that a panelist would notice?* A commitment from yesterday that vanished. A meeting tomorrow with no prep. A person they were upset with who's suddenly absent from the entry. A body signal they skipped. If an omission exists, one panelist names it in Step 5.
+
+**5. Strict voice separation in the saved entry.** This is the biggest long-term change. Every new journal entry now has two clearly-labeled sections separated by horizontal rules:
+   - `## Journal — [your name]'s voice` — your original thought only, your words, your voice. Panel lines never appear here.
+   - `## Panel dialogue (synthetic — not [your name]'s original thought)` — the AI-generated panel exchange, below a ⚠️ disclaimer.
+
+Why this matters: when you reread your journals in 6 months or 6 years, you'll be able to tell at a glance which sentences were *you* thinking and which were AI commentary. Without this separation, the two voices bleed together and the journal archive loses its value as a record of how you actually think. This was the single biggest long-term failure mode of AI-assisted journaling and it's now structurally impossible in the generated skill.
+
+**6. Panel dissents auto-log to a cross-context Panel Feedback Log.** If Step 5 produced a dissent or omission flag, the skill automatically appends it to your Panel Feedback Log (the same file that catches feedback from real human meetings). Patterns surface over time — if three different daily entries all got the same dissent, that's a real pattern to act on.
+
+**7. Full advisory roster expanded.** The panel now includes more specialized voices: female-physiology experts (Stacy Sims, Lara Briden), pelvic-floor and embodiment (Carrie Pagliano, Bonnie Bainbridge Cohen), LGBTQ+ relational voices (Alexandra Solomon, queer polarity archetypes), cross-border tax and family office archetypes, and "archetype" slots (Curious Friend, Buddhist Monk, Stoic Philosopher, CBT Therapist, Existential Psychotherapist, Inner Child Therapist) for when no specific real person fits.
+
+**8. Roster customization during setup.** When you run the setup flow, you'll now be offered the chance to customize the advisory panel — add or remove voices, swap in specific people from your own life (a mentor, a grandparent, a coach). Whatever you say gets baked into the generated skill so your daily journal uses *your* panel, not a generic one.
+
+### Why
+
+This came from noticing a real pattern: on two consecutive entries, the panel gave four affirming voices in a row and not a single piece of pushback. Nothing challenged the user's framing. On a day when the user rationalized a non-obvious decision, the panel agreed with the rationalization. That's not what an advisory board is for. The redesign fixes it at the structural level — dissent is required, the panel can interrupt mid-interview, the original voice is walled off from commentary, and patterns of pushback get logged across sessions so they don't evaporate.
+
+If you're already set up, the next time you run `/journal` the skill file will still be the old version until you tell me to regenerate it. Ask: *"regenerate my daily-journal skill with the latest panel behavior"* and I'll rebuild it using the new template, preserving your existing floor framework, habit tracking, and customizations.
+
+---
+
 ## April 11, 2026 (nineteenth session — bootstrap best practices for advanced users with custom skills + forks)
 
 Session 18 added the basic safety guarantees. This session adds the protections specifically aimed at advanced users — people who have their own forks of bundled skills, their own custom CLAUDE.md rules, their own divergent ai-brain-starter clone, or any other heavy customization. The bar: **never silently overwrite anyone's hard work, regardless of how complex their setup is.**
