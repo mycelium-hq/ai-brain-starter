@@ -9,6 +9,103 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 11, 2026 (sixteenth session — auto-update for non-tech users + session-end capture cascade + auto-file improvement issues)
+
+This session is about closing the loop. Sessions 13–15 made onboarding fast. This one makes the setup **self-maintaining**: users always end up on the latest version automatically, and nothing useful from any session is ever lost.
+
+The user request, in their own words: *"I want, for people, when they do get pulls, that it automatically installs everything, compares what they have with what we have, and tells them everything that's missing. They can just say, 'Okay, install it.' Remember, these are non-tech people that don't know anything about GitHub or commands or anything. Also, let's add a rule for everyone that when they close out a session, anything from the conversation that could be useful gets documented in whatever file makes sense so that we don't lose all of that context."*
+
+### 1. Daily session-start update check (the auto-update for non-tech users)
+
+Non-technical users will never run `git pull` themselves. So `git pull` becomes something Claude does for them, automatically, in plain English, once per day.
+
+**The mechanism:**
+
+A new script — `scripts/update-check.sh` (and the PowerShell port `scripts/update-check.ps1`) — runs at session start and outputs one of four statuses: `UP_TO_DATE`, `SKIPPED_TODAY`, `BEHIND`, or `ERROR`. When `BEHIND`, it dumps the new CHANGELOG entries since the user's current version, parsed and formatted so Claude can translate them into plain English.
+
+**The rule:**
+
+A new section in every user's CLAUDE.md (template: `templates/rules/session-start-update-check.md`) tells Claude to run that script once per day, summarize the new entries in plain English (no jargon, no commands shown), and ask:
+
+> "Hey, just a heads up — your AI brain setup has an update available. Here's what's new: [1-4 plain-English bullets]. Want me to install it? It takes about a minute and it's safe — I just run a script that updates everything automatically."
+
+If the user says yes, Claude runs `bootstrap.sh` (idempotent — only installs what's missing), parses the verification block, and reports any failures explicitly. If the user says no, Claude doesn't ask again until tomorrow (the script writes the date to a cooldown file).
+
+**What this gives every user:**
+
+- They never have to think about `git`, `pull`, `commits`, or `repos`. They never see those words.
+- They're always on the latest version — every bug fix, every new tool, every workflow improvement reaches them within 24 hours of being shipped.
+- The friction is zero: Claude does the check, Claude summarizes, Claude installs, Claude verifies. The user just says "okay" or "not now."
+- The script is safe to run on a fresh install — if the script doesn't exist (very old setup), Claude offers to do a one-time refresh that installs it.
+
+### 2. Session-end capture cascade (nothing useful from a conversation gets lost)
+
+A new rule fires automatically when the user signals the session is ending — "ok bye", "thanks, that's all", "good night", or any natural close. The user can also trigger it manually with `/wrap-up`.
+
+**The cascade:**
+
+1. **Scan the conversation** for everything worth preserving — decisions, personal context, team/business context, new facts, workflow learnings, ideas, improvements to the AI brain setup itself.
+2. **Categorize** each item: personal stuff → personal vault; team/business stuff → team vault if one exists; AI brain setup improvements → file as a GitHub issue (next step).
+3. **Write to the right vault** automatically. Don't ask the user where things go — figure it out from the existing folder structure. Personal context goes to `Last Session.md`, `Decision Log.md`, or a journal entry. Team context goes to the team vault's equivalent files. Never let personal stuff leak into the team vault — when ambiguous, default to personal. The team vault stays clean.
+4. **For repo improvements:** draft a GitHub issue and offer to file it. Title + context + suggested fix + reporter info. Show it to the user. If they say yes, run `gh issue create --repo adelaidasofia/ai-brain-starter --title ... --body ...` automatically. If `gh` isn't authenticated, walk them through the one-time `gh auth login`. If they say no, save the draft to `<vault>/💡 Improvement Ideas.md` for later review.
+5. **Update Last Session.md** with a one-paragraph summary so the next session starts with full context.
+6. **Confirm with the user** in plain language what was saved and where. Then say goodbye.
+
+**The rule explicitly tells Claude NOT to:**
+- Ask the user what to save (scan + decide + do)
+- Make it long (~30 seconds of work, not a 5-minute ceremony)
+- Write personal content to the team vault
+- File trivial issues ("I had a small problem and figured it out" is not an issue)
+- Fail silently (if a file write errors, tell the user)
+
+**The reason this matters:** without the cascade, every session ends with valuable context evaporating — a decision that didn't get logged, a friction point the maintainer never hears about, a personal insight that didn't make it into the journal. After 50 sessions that's hundreds of pieces of lost context — exactly what the AI brain setup is supposed to prevent.
+
+### 3. Auto-file GitHub issues for setup improvements (the "send it to me" loop)
+
+The user's specific ask: *"For those optimizations and recommendations, just tell them to send it to me as a request for improvement to your repo. And send it to me for them. Make it easy."*
+
+**The implementation:**
+
+- The bootstrap installs `gh` (already true since session 15)
+- The bootstrap **now also walks the user through `gh auth login`** the first time it runs. One-time browser-based GitHub authentication. After that, `gh auth status` returns clean and issue filing works forever.
+- The session-end cascade uses `gh issue create --repo <maintainer>/<fork>` to file improvement ideas as GitHub issues. The maintainer gets them in their GitHub notification feed and can triage when they're at their computer.
+- The user (the team member, not the maintainer) does nothing. Claude scans, drafts, asks once, files. The team member's only job is to say "yeah file it."
+
+**What the maintainer gets:**
+
+A queue of real, contextual improvement requests from every team member's actual sessions — the friction they hit, the missing features they wished for, the rough edges they noticed. Each issue includes the context (what they were doing when this came up), the friction itself, and a suggested fix if Claude could draft one. No more "I think a teammate mentioned something about X last week" — the issue is in the queue, dated, with full context.
+
+### 4. Both rules added to the live CLAUDE.md files in this session
+
+The two rules were appended to the maintainer's actual personal vault and team vault CLAUDE.md files in this session, so they take effect on the next session start without waiting for an update cycle. New users get them automatically via Phase 4 of `/setup-brain` (which now reads the two rule files from the repo and inlines their full contents into the generated CLAUDE.md). Existing users get them via the auto-update flow that this very session shipped — recursive bootstrapping.
+
+### 5. Phase 4 of /setup-brain now appends the rule files
+
+Previously the CLAUDE.md template was hardcoded inside Phase 4. Now the two new rules are kept as **standalone files** in `templates/rules/` and Phase 4 reads them at runtime and appends them to the user's CLAUDE.md after writing the main template. This way:
+
+- The rules stay versioned in the repo
+- Updates to the rules flow to existing users via the auto-update check
+- Users can opt into specific rules later if we add more
+
+The two rule files:
+- `templates/rules/session-start-update-check.md`
+- `templates/rules/session-end-capture.md`
+
+Both are written in plain prose with explicit "what to do for each case" sections, designed to be loaded as part of the user's CLAUDE.md and parsed by Claude at session start.
+
+### Why this all matters
+
+After session 14 the repo had everything you'd want. After session 15 the install was zero-friction. After **this** session, the setup maintains itself:
+
+- Every user is always on the latest version, automatically, in plain English.
+- Nothing useful from any session ever evaporates — it cascades into the right place.
+- The maintainer gets a real improvement queue from real sessions, not a wishlist they have to chase down.
+- The friction loop closes: a user hits friction → Claude files it → next update fixes it → next session-start check tells the user it's fixed → friction is gone for everyone.
+
+The setup is now genuinely "set it and forget it" for non-technical users. They open Claude Code in their vault, type things, and the AI brain takes care of itself in the background.
+
+---
+
 ## April 11, 2026 (fifteenth session — one-command bootstrap, team-vault join mode, adaptive meeting tool selection, Phase 0 hardening)
 
 This session is about onboarding speed for entire teams. The previous session shipped the missing pieces. This one makes the install zero-friction for new users **and** for new team members joining an existing shared vault.

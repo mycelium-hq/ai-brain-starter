@@ -76,11 +76,37 @@ if ((Have bun) -or (Test-Path "$env:USERPROFILE\.bun\bin\bun.exe")) { Ok "bun in
 
 # ─── gh (GitHub CLI) ──────────────────────────────────────────────────────────
 if (-not (Have gh)) {
-    Hdr "Installing gh"
+    Hdr "Installing gh (GitHub CLI)"
+    Log "gh lets the session-end capture cascade file improvement ideas as GitHub issues automatically."
     winget install -e --id GitHub.cli --accept-source-agreements --accept-package-agreements
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 }
 if (Have gh) { Ok "gh installed" } else { Warn "gh not installed — install manually if needed" }
+
+# gh authentication — required for the session-end capture cascade to file
+# improvement ideas as GitHub issues automatically. Walk the user through it
+# the first time only.
+if (Have gh) {
+    gh auth status 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Hdr "GitHub authentication (one-time setup)"
+        Write-Host "  The session-end cascade can file improvement ideas as GitHub issues"
+        Write-Host "  automatically — but only if gh is authenticated to your GitHub account."
+        Write-Host ""
+        Write-Host "  This is a ONE-TIME setup. After this, your AI brain will silently file"
+        Write-Host "  any friction or improvement ideas to the maintainer's repo without"
+        Write-Host "  asking you to copy/paste anything."
+        Write-Host ""
+        Write-Host "  When you press Enter, gh will open a browser window for you to log in."
+        Write-Host "  Pick: GitHub.com -> HTTPS -> Login with web browser."
+        Write-Host ""
+        Read-Host "  Press Enter to start (or Ctrl+C to skip — you can run 'gh auth login' later)"
+        gh auth login
+        if ($LASTEXITCODE -ne 0) { Warn "gh auth skipped or failed — run 'gh auth login' later to enable issue filing" }
+    }
+    gh auth status 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) { Ok "gh authenticated" } else { Warn "gh not authenticated (issue filing disabled until you run: gh auth login)" }
+}
 
 # ─── graphify ─────────────────────────────────────────────────────────────────
 if (-not (Have graphify)) {

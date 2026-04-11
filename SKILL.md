@@ -730,10 +730,26 @@ You are not a yes-machine. You are a thinking partner. Act like one.
 
 ## Session Protocol
 1. Start: Read this file. Don't ask what we were doing — you should already know.
-2. During: If new concepts come up, create notes in the right folder — but check the Vault Map first. If decisions are made, log them to Decision Log.md.
-3. End: Update Last Session.md with what we did and what's still pending.
-4. **Before closing a session, always check whether anything we built or fixed this session should be propagated upstream.** If any of the following changed — a rule, a skill, a script, a prompt pattern, a runbook, a better workflow — ask the user: "We improved [X] this session. Want me to push it to the ai-brain-starter repo so your team (and anyone else who builds their vault from your repo) benefits?" Do NOT push silently. Do NOT skip the ask. The user's own rule: improvements that stay local are wasted. The repo is at `~/Desktop/ai-brain-starter/` (or wherever the local clone lives). Only universal patterns — strip personal data, names, vault-specific paths, and anecdotes before committing.
+2. **Run the daily AI brain setup update check** — see the "Session start — daily update check" section below. Once per day, automatically check if there's an update available and, if so, summarize it in plain English and offer to install it.
+3. During: If new concepts come up, create notes in the right folder — but check the Vault Map first. If decisions are made, log them to Decision Log.md.
+4. End: Run the **session-end capture cascade** — see the "Session end — capture cascade" section below. Don't just update Last Session.md; categorize everything useful from the conversation and write it to the right destination (personal vault, team vault, or as a GitHub issue to the maintainer). Then update Last Session.md with the summary.
 ```
+
+**After writing the template above, APPEND TWO MORE SECTIONS** to the user's CLAUDE.md by reading the rule files from the repo and inlining them verbatim. This keeps the rules versioned in the repo so future updates flow to users via the auto-update check, while still putting the full text in their CLAUDE.md so it's loaded at session start.
+
+```bash
+# Append the session-start update-check rule
+cat ~/.claude/skills/ai-brain-starter/templates/rules/session-start-update-check.md >> [VAULT_PATH]/CLAUDE.md
+
+# Append the session-end capture cascade rule
+cat ~/.claude/skills/ai-brain-starter/templates/rules/session-end-capture.md >> [VAULT_PATH]/CLAUDE.md
+```
+
+(On Windows: `Get-Content "$env:USERPROFILE\.claude\skills\ai-brain-starter\templates\rules\session-start-update-check.md" | Add-Content [VAULT_PATH]\CLAUDE.md` and same for the second file.)
+
+These two rules together make the setup self-maintaining: users always end up on the latest version without needing to know what `git` is, AND nothing useful from any session ever gets lost — it cascades into the right vault file automatically, with workflow improvements going straight to the maintainer's issue queue.
+
+**Phase 4 must inline the actual content of those two rule files**, not the placeholders above. Read `~/.claude/skills/ai-brain-starter/templates/rules/session-start-update-check.md` and `~/.claude/skills/ai-brain-starter/templates/rules/session-end-capture.md` and append them verbatim to the user's CLAUDE.md, replacing the bracketed placeholders. This way the rules stay versioned in the repo and any improvements flow to users via the auto-update check.
 
 Tell them: "Your memory file is created. From now on, every Claude session in this vault starts with full context about who you are."
 

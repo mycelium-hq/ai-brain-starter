@@ -145,7 +145,7 @@ fi
 
 if ! have gh; then
   hdr "Installing gh (GitHub CLI)"
-  log "gh is used by the session-close repo-update propagation rule and any user who'll fork this repo."
+  log "gh lets the session-end capture cascade file improvement ideas as GitHub issues automatically."
   if is_mac; then
     brew install gh || err "gh install failed"
   else
@@ -156,6 +156,26 @@ if ! have gh; then
   fi
 fi
 have gh && ok "gh $(gh --version 2>/dev/null | head -1 | awk '{print $3}')"
+
+# gh authentication — required for the session-end capture cascade to file
+# improvement ideas as GitHub issues automatically. Walk the user through it
+# the first time only.
+if have gh && ! gh auth status >/dev/null 2>&1; then
+  hdr "GitHub authentication (one-time setup)"
+  echo "  The session-end cascade can file improvement ideas as GitHub issues"
+  echo "  automatically — but only if gh is authenticated to your GitHub account."
+  echo
+  echo "  This is a ONE-TIME setup. After this, your AI brain will silently file"
+  echo "  any friction or improvement ideas to the maintainer's repo without"
+  echo "  asking you to copy/paste anything."
+  echo
+  echo "  When you press Enter, gh will open a browser window for you to log in."
+  echo "  Pick: GitHub.com → HTTPS → Login with web browser."
+  echo
+  read -p "  Press Enter to start (or Ctrl+C to skip — you can run 'gh auth login' later): " _
+  gh auth login || warn "gh auth skipped or failed — run 'gh auth login' later to enable issue filing"
+fi
+gh auth status >/dev/null 2>&1 && ok "gh authenticated" || warn "gh not authenticated (issue filing disabled until you run: gh auth login)"
 
 # ───────────────────────────────────────────────────────────────────────────────
 # graphify CLI + Python package
