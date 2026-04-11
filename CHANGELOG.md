@@ -9,6 +9,51 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 11, 2026 (eighteenth session — bootstrap safety hardening for users with custom integrations)
+
+The auto-update flow shipped in session 16 needs to be safe to run on top of any existing setup, including ones with heavy custom integrations. This session adds explicit safety guarantees to the bootstrap so users (and you) can run it without worrying about losing custom config, custom skills, or local edits.
+
+### What's now protected
+
+The bootstrap script (both bash and PowerShell versions) now treats every existing file like it might have something the user wants to keep:
+
+1. **`~/.claude/settings.json`** — backed up to `settings.json.bak-YYYY-MM-DD-HHMM` before edit. The edit only ADDS the thedotmack marketplace and the claude-mem enabledPlugin entry. Existing custom marketplaces, plugins, MCP servers, permissions, env vars, and any other keys are preserved (`setdefault()` never overwrites existing values).
+
+2. **`~/.claude/.mcp.json`** — backed up to `.mcp.json.bak-YYYY-MM-DD-HHMM` before edit. Only adds the granola MCP entry if not already present. Custom MCP servers (Linear, Slack, Notion, anything else the user wired themselves) are preserved.
+
+3. **`~/.claude/skills/ai-brain-starter`** — if the local clone has uncommitted changes, the bootstrap **stashes them** (`git stash push -u`) before the git pull, so the user's work is recoverable via `git stash pop`. The script tells the user exactly how to recover.
+
+4. **`~/.claude/skills/{graphify,meeting-todos,patterns}`** — synced via the existing `sync-skills.sh` script which already implements backup-before-overwrite. Any installed file that differs from the repo version is backed up to `<file>.bak-YYYY-MM-DD-HHMM` before being replaced. Local customizations are recoverable.
+
+5. **`~/.claude/skills/{humanizer,notebooklm}`** — installed only if the folder doesn't exist (idempotent git clone). **NEVER** touched on re-run, so user forks, customizations, or local edits to these skills are 100% safe.
+
+6. **`~/.claude/skills/{anything else}`** — NOT TOUCHED. Custom skills the user installed themselves (daily-journal, their own forks, third-party skills from other marketplaces) are completely untouched.
+
+7. **The user's vault `CLAUDE.md`** — NOT TOUCHED by the bootstrap. The bootstrap doesn't know where the user's vault is and doesn't modify any vault files. The new session-start update check rule and session-end capture rule are added to the user's vault CLAUDE.md ONLY when they explicitly run `/setup-brain` (new vault) or `/setup-brain upgrade` (existing vault).
+
+8. **`gh` authentication** — only prompts if `gh auth status` reports unauthed. Existing gh logins are preserved.
+
+9. **Homebrew, Python, Node, pipx, bun, gh, graphifyy** — all installed only if missing. Existing versions are kept as-is.
+
+### Recovery
+
+Every backup is timestamped and recoverable. If something goes wrong, look for `*.bak-YYYY-MM-DD-HHMM` files in `~/.claude/` and the affected skill folders. To restore: `mv <file>.bak-YYYY-MM-DD-HHMM <file>`. To recover stashed local changes to the ai-brain-starter clone: `cd ~/.claude/skills/ai-brain-starter && git stash list && git stash pop`.
+
+### What this means in practice
+
+If you have a heavily customized setup — maybe you've added your own MCP servers, your own marketplaces, your own forks of bundled skills, your own hand-edited plugin configs — running the bootstrap on top of it will:
+
+- **Add** the things that are missing (the new sub-skills, the bun runtime, gh, the Granola MCP, etc.)
+- **Update** the bundled skills (graphify, meeting-todos, patterns) — but back up your local edits first
+- **Preserve** literally everything else
+- **Recover** anything that gets surprised — every overwrite has a `.bak-` file you can restore from
+
+The recovery story is the safety net. The bootstrap can't know in advance what every user has customized, so it just assumes everything might be precious and backs it all up. Worst case: a few extra `.bak-` files cluttering your `~/.claude/` directory, which you can clean up later.
+
+The bootstrap.sh header now includes a 50-line "SAFETY GUARANTEES" section that lists every file the script touches and what protection applies to each. Users (or their Claude session) can read it before running. The same guarantees apply to bootstrap.ps1.
+
+---
+
 ## April 11, 2026 (seventeenth session — graph routing hooks so Claude actually uses your knowledge graph)
 
 If your vault has a knowledge graph (built with `/graphify`) — or several of them, like a personal graph and a separate work/team graph — you've probably noticed that Claude doesn't always remember to read it before answering. Telling Claude in CLAUDE.md "always read the graph first for strategic questions" helps some of the time, but it's a soft reminder buried in a 200-line file. In long sessions, the model drifts and starts re-reading source files instead.

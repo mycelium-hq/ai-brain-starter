@@ -23,7 +23,62 @@
 # What it does NOT install (because it requires manual steps inside Claude Code):
 #     - nano-banana (image generation) — instructions printed at the end
 #
-# Safe to re-run. Skips anything already installed.
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# SAFETY GUARANTEES — for users with existing setups + custom integrations
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#
+# This script is safe to run on top of an existing setup. Specifically:
+#
+#   1. ~/.claude/settings.json — backed up to settings.json.bak-YYYY-MM-DD-HHMM
+#      before edit. The edit only ADDS the thedotmack marketplace and the
+#      claude-mem enabledPlugin entry. Existing custom marketplaces, plugins,
+#      MCP servers, permissions, env vars, and any other keys are preserved
+#      (setdefault() never overwrites existing values).
+#
+#   2. ~/.claude/.mcp.json — backed up to .mcp.json.bak-YYYY-MM-DD-HHMM before
+#      edit. Only adds the granola MCP entry if not already present. Custom
+#      MCP servers (Linear, Slack, Notion, anything else you wired yourself)
+#      are preserved.
+#
+#   3. ~/.claude/skills/ai-brain-starter — if there are local uncommitted
+#      changes to your clone, they're stashed (git stash push -u) BEFORE the
+#      git pull, so your work is recoverable via `git stash pop`. The script
+#      tells you exactly how to recover.
+#
+#   4. ~/.claude/skills/{graphify,meeting-todos,patterns} — synced via
+#      sync-skills.sh which implements backup-before-overwrite. Any installed
+#      file that differs from the repo version is backed up to
+#      <file>.bak-YYYY-MM-DD-HHMM before being replaced. Local customizations
+#      are recoverable.
+#
+#   5. ~/.claude/skills/{humanizer,notebooklm} — installed only if the folder
+#      doesn't exist (idempotent git clone). NEVER touched on re-run, so your
+#      forks, customizations, or local edits to these skills are 100% safe.
+#
+#   6. ~/.claude/skills/{anything else} — NOT TOUCHED. Custom skills you
+#      installed yourself (daily-journal, your own forks, third-party skills
+#      from other marketplaces) are completely untouched.
+#
+#   7. ~/.claude/.mcp.json custom MCP servers — preserved (see #2).
+#
+#   8. Your vault's CLAUDE.md — NOT TOUCHED by this script. The bootstrap
+#      doesn't know where your vault is and doesn't modify any vault files.
+#      The new session-start update check rule and session-end capture rule
+#      are added to your vault CLAUDE.md only when you explicitly run
+#      /setup-brain (new vault) or /setup-brain upgrade (existing vault).
+#
+#   9. gh authentication — only prompts if `gh auth status` reports unauthed.
+#      Existing gh logins are preserved.
+#
+#   10. Homebrew, Python, Node, pipx, bun, gh, graphifyy — all installed only
+#       if missing. Existing versions are kept as-is.
+#
+# IF SOMETHING DOES GO WRONG — every backup is timestamped and recoverable.
+# Look for *.bak-YYYY-MM-DD-HHMM files in ~/.claude/ and the affected skill
+# folders. To restore: `mv <file>.bak-YYYY-MM-DD-HHMM <file>`.
+#
+# Safe to re-run anytime. Skips anything already installed and only updates
+# what's actually behind.
 
 set -euo pipefail
 
@@ -191,34 +246,59 @@ have graphify && ok "graphify $(graphify --version 2>/dev/null | head -1 || echo
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Clone or update the ai-brain-starter skill
+# (SAFETY: detects local uncommitted changes and stashes them before pulling,
+#  so users who hand-edited their local clone don't lose work.)
 # ───────────────────────────────────────────────────────────────────────────────
 
 hdr "Installing the ai-brain-starter skill"
 mkdir -p "$HOME/.claude/skills"
 if [[ -d "$SKILL_DIR/.git" ]]; then
-  log "Already installed, pulling latest..."
-  (cd "$SKILL_DIR" && git pull --quiet) || warn "git pull failed — using existing version"
+  log "Already installed — checking for updates..."
+  cd "$SKILL_DIR"
+  # Detect uncommitted local changes (working tree OR staged)
+  if ! git diff --quiet --ignore-submodules HEAD 2>/dev/null; then
+    STASH_MSG="bootstrap auto-stash $(date +%Y-%m-%d-%H%M)"
+    log "Detected local changes in your ai-brain-starter clone — stashing them as: $STASH_MSG"
+    log "Recover them later with: cd $SKILL_DIR && git stash list && git stash pop"
+    git stash push -u -m "$STASH_MSG" >/dev/null 2>&1 || warn "stash failed — pulling anyway, your changes may be preserved by git"
+  fi
+  git pull --quiet 2>/dev/null || warn "git pull failed — using existing version (network issue or local conflict)"
+  cd - >/dev/null
 else
   git clone --quiet "$REPO_URL" "$SKILL_DIR" || err "ai-brain-starter clone failed"
 fi
 [[ -f "$SKILL_DIR/SKILL.md" ]] && ok "ai-brain-starter skill at $SKILL_DIR"
 
 # ───────────────────────────────────────────────────────────────────────────────
-# Copy bundled sub-skills to ~/.claude/skills/
+# Install bundled sub-skills via sync-skills.sh
+# (SAFETY: sync-skills.sh implements backup-before-overwrite. Any installed
+#  skill file that differs from the repo version is backed up to
+#  <file>.bak-YYYY-MM-DD-HHMM before being replaced. Custom skill folders
+#  outside the bundled set — humanizer, notebooklm, daily-journal, anything
+#  the user installed themselves — are NOT touched. Only graphify,
+#  meeting-todos, and patterns are synced because those are the ones bundled
+#  with the repo.)
 # ───────────────────────────────────────────────────────────────────────────────
 
-hdr "Installing bundled sub-skills"
-for sub in graphify meeting-todos patterns; do
-  src="$SKILL_DIR/skills/$sub"
-  dst="$HOME/.claude/skills/$sub"
-  if [[ -d "$src" ]]; then
-    mkdir -p "$dst"
-    cp -R "$src/." "$dst/" || err "$sub copy failed"
-    ok "$sub skill installed"
-  else
-    err "$sub skill source missing in repo"
-  fi
-done
+hdr "Installing bundled sub-skills (with backup-before-overwrite)"
+if [[ -x "$SKILL_DIR/scripts/sync-skills.sh" ]]; then
+  bash "$SKILL_DIR/scripts/sync-skills.sh" 2>&1 | grep -E "^(UPDATED|CREATED|BACKED_UP|SKIPPED|ERROR):" || true
+  ok "bundled sub-skills synced (any local edits were backed up to .bak-YYYY-MM-DD-HHMM files)"
+else
+  # Fallback for very old clones that don't have sync-skills.sh yet
+  warn "sync-skills.sh not found — using direct copy (no backups). Update your clone to enable backup-before-overwrite."
+  for sub in graphify meeting-todos patterns; do
+    src="$SKILL_DIR/skills/$sub"
+    dst="$HOME/.claude/skills/$sub"
+    if [[ -d "$src" ]]; then
+      mkdir -p "$dst"
+      cp -R "$src/." "$dst/" || err "$sub copy failed"
+      ok "$sub skill installed (no backup)"
+    else
+      err "$sub skill source missing in repo"
+    fi
+  done
+fi
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Humanizer
@@ -248,6 +328,14 @@ fi
 
 hdr "Installing claude-mem (cross-session memory)"
 mkdir -p "$HOME/.claude"
+# SAFETY: backup settings.json before editing. Existing keys (custom
+# marketplaces, custom MCP servers, custom plugin configs, custom permissions)
+# are preserved — the python edit only adds the thedotmack entry if missing
+# and only sets the claude-mem@thedotmack enabledPlugins flag. setdefault()
+# never overwrites existing keys.
+if [[ -f "$HOME/.claude/settings.json" ]]; then
+  cp "$HOME/.claude/settings.json" "$HOME/.claude/settings.json.bak-$(date +%Y-%m-%d-%H%M)"
+fi
 python3 - <<'PY' || err "claude-mem marketplace registration failed"
 import json, os
 p = os.path.expanduser("~/.claude/settings.json")
@@ -263,13 +351,19 @@ s["enabledPlugins"]["claude-mem@thedotmack"] = True
 with open(p, "w") as f: json.dump(s, f, indent=2)
 PY
 npx --yes claude-mem install >/dev/null 2>&1 || true
-ok "claude-mem registered (marketplace + plugin)"
+ok "claude-mem registered (marketplace + plugin) — settings.json backed up"
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Granola MCP (meeting workflow rule depends on this)
 # ───────────────────────────────────────────────────────────────────────────────
 
 hdr "Registering Granola MCP (meeting notes auto-sync)"
+# SAFETY: backup .mcp.json before editing. Existing MCP servers
+# (custom integrations, other URL or stdio MCPs the user wired themselves)
+# are preserved — setdefault() only adds the granola entry if missing.
+if [[ -f "$HOME/.claude/.mcp.json" ]]; then
+  cp "$HOME/.claude/.mcp.json" "$HOME/.claude/.mcp.json.bak-$(date +%Y-%m-%d-%H%M)"
+fi
 python3 - <<'PY' || err "granola MCP registration failed"
 import json, os
 p = os.path.expanduser("~/.claude/.mcp.json")
@@ -282,7 +376,7 @@ if "granola" not in m["mcpServers"]:
     m["mcpServers"]["granola"] = {"type": "url", "url": "https://mcp.granola.ai/mcp"}
 with open(p, "w") as f: json.dump(m, f, indent=2)
 PY
-ok "Granola MCP registered (you'll need a Granola account to actually use it)"
+ok "Granola MCP registered — .mcp.json backed up (existing MCP servers preserved)"
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Verification — NEVER FAIL SILENTLY

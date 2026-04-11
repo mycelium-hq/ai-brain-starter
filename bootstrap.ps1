@@ -117,27 +117,54 @@ if (-not (Have graphify)) {
 if (Have graphify) { Ok "graphify" } else { Err "graphify install failed" }
 
 # ─── Clone or update ai-brain-starter ─────────────────────────────────────────
+# SAFETY: detects local uncommitted changes and stashes them before pulling,
+# so users who hand-edited their local clone don't lose work.
 Hdr "Installing the ai-brain-starter skill"
 New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude\skills" | Out-Null
 if (Test-Path "$SkillDir\.git") {
-    Log "Already installed, pulling latest..."
+    Log "Already installed - checking for updates..."
     Push-Location $SkillDir
-    git pull --quiet
+    # Detect uncommitted local changes
+    git diff --quiet --ignore-submodules HEAD 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        $stashMsg = "bootstrap auto-stash $(Get-Date -Format 'yyyy-MM-dd-HHmm')"
+        Log "Detected local changes in your ai-brain-starter clone - stashing them as: $stashMsg"
+        Log "Recover them later with: cd $SkillDir; git stash list; git stash pop"
+        git stash push -u -m $stashMsg 2>$null | Out-Null
+    }
+    git pull --quiet 2>$null
+    if ($LASTEXITCODE -ne 0) { Warn "git pull failed - using existing version (network issue or local conflict)" }
     Pop-Location
 } else {
     git clone --quiet $RepoUrl $SkillDir
 }
 if (Test-Path "$SkillDir\SKILL.md") { Ok "ai-brain-starter at $SkillDir" } else { Err "ai-brain-starter clone failed" }
 
-# ─── Sub-skills ──────────────────────────────────────────────────────────────
-Hdr "Installing bundled sub-skills"
+# ─── Sub-skills (with backup-before-overwrite) ───────────────────────────────
+# SAFETY: any installed skill file that differs from the repo version is backed
+# up to <file>.bak-YYYY-MM-DD-HHMM before being replaced. Custom skill folders
+# outside the bundled set (humanizer, notebooklm, anything the user installed
+# themselves) are NOT touched. Only graphify, meeting-todos, and patterns are
+# synced because those are the ones bundled with the repo.
+Hdr "Installing bundled sub-skills (with backup-before-overwrite)"
+$stamp = Get-Date -Format "yyyy-MM-dd-HHmm"
 foreach ($sub in @("graphify", "meeting-todos", "patterns")) {
     $src = "$SkillDir\skills\$sub"
     $dst = "$env:USERPROFILE\.claude\skills\$sub"
     if (Test-Path $src) {
         New-Item -ItemType Directory -Force -Path $dst | Out-Null
-        Copy-Item -Recurse -Force "$src\*" $dst
-        Ok "$sub skill installed"
+        # Walk every file in src and back up the destination if it differs
+        Get-ChildItem -Recurse -File $src | ForEach-Object {
+            $rel = $_.FullName.Substring($src.Length + 1)
+            $dstFile = Join-Path $dst $rel
+            if ((Test-Path $dstFile) -and ((Get-FileHash $_.FullName).Hash -ne (Get-FileHash $dstFile).Hash)) {
+                Copy-Item $dstFile "$dstFile.bak-$stamp"
+            }
+            $dstParent = Split-Path $dstFile -Parent
+            if (-not (Test-Path $dstParent)) { New-Item -ItemType Directory -Force -Path $dstParent | Out-Null }
+            Copy-Item -Force $_.FullName $dstFile
+        }
+        Ok "$sub skill installed (any local edits backed up to .bak-$stamp files)"
     } else {
         Err "$sub skill source missing in repo"
     }
@@ -160,8 +187,17 @@ if (-not (Test-Path $nblmDir)) {
 if (Test-Path $nblmDir) { Ok "notebooklm skill installed" } else { Err "notebooklm clone failed" }
 
 # ─── claude-mem ──────────────────────────────────────────────────────────────
+# SAFETY: backup settings.json before editing. Existing keys (custom
+# marketplaces, custom MCP servers, custom plugin configs, custom permissions)
+# are preserved — the python edit only adds the thedotmack entry if missing
+# and only sets the claude-mem@thedotmack enabledPlugins flag. setdefault()
+# never overwrites existing keys.
 Hdr "Registering claude-mem"
 New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude" | Out-Null
+$settingsPath = "$env:USERPROFILE\.claude\settings.json"
+if (Test-Path $settingsPath) {
+    Copy-Item $settingsPath "$settingsPath.bak-$(Get-Date -Format 'yyyy-MM-dd-HHmm')"
+}
 
 $pyScript = @"
 import json, os
@@ -181,7 +217,14 @@ if ($LASTEXITCODE -eq 0) { Ok "claude-mem registered" } else { Err "claude-mem r
 npx --yes claude-mem install 2>$null | Out-Null
 
 # ─── Granola MCP ─────────────────────────────────────────────────────────────
+# SAFETY: backup .mcp.json before editing. Existing MCP servers (custom
+# integrations, other URL or stdio MCPs the user wired themselves) are
+# preserved — setdefault() only adds the granola entry if missing.
 Hdr "Registering Granola MCP"
+$mcpPath = "$env:USERPROFILE\.claude\.mcp.json"
+if (Test-Path $mcpPath) {
+    Copy-Item $mcpPath "$mcpPath.bak-$(Get-Date -Format 'yyyy-MM-dd-HHmm')"
+}
 $pyMcp = @"
 import json, os
 p = os.path.expanduser('~/.claude/.mcp.json')
