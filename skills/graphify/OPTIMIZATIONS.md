@@ -185,6 +185,32 @@ A naive run that would cost ~12M LLM tokens drops to ~1M for the first run, and 
    # ... then call save_semantic_cache as normal
    ```
 7. **Dispatching subagents on a cloud-synced source is slower.** Google Drive file reads are 2-5x slower than local file reads. On a 46-file team vault run, the biggest chunk (14 files) hung past 15 minutes while the smaller ones (7-13 files) finished in 4-7 minutes. Consider smaller target-chunks when the source is cloud-synced, or run agents in waves to avoid parallel cloud read contention.
+8. **Subagent sandboxes can deny Write and Bash.** Some subagent runtimes (especially when the parent hits rate limits mid-dispatch) grant Read permission but deny Write/Bash. Symptoms: agent returns "chunk NN done: X nodes, Y edges" in its message BUT no result file exists on disk. **Fallback: the agent should inline the full JSON payload in its final message so the caller can recover it.** Add this to your prompt: *"If your sandbox denies Write/Bash, print the JSON payload in a ```json code fence in your final message, followed by the 'chunk NN done' line."* Then have a recovery script that parses the agent's output file (at `/tmp/.../tasks/<agent_id>.output`) for JSON payloads in assistant message blocks. See the team vault recovery snippet in OPTIMIZATIONS.md — we recovered chunk_04 that way after its sandbox denied Write.
+
+### Recovering a failed-write chunk from the agent output file
+
+```python
+import json, re
+from pathlib import Path
+
+AGENT_ID = "a2a15811afd19aec2"  # from the harness notification
+OUTPUT_FILE = Path(f"/private/tmp/claude-501/.../tasks/{AGENT_ID}.output")
+
+text = OUTPUT_FILE.read_text()
+events = [json.loads(l) for l in text.splitlines() if l.strip()]
+for ev in reversed(events):
+    msg = ev.get("message", {})
+    if msg.get("role") != "assistant": continue
+    for block in msg.get("content", []):
+        if block.get("type") != "text": continue
+        txt = block.get("text", "")
+        m = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", txt)
+        if m:
+            payload = json.loads(m.group(1))
+            Path(".chunk_NN_result.json").write_text(json.dumps(payload))
+            print(f"recovered: {len(payload['nodes'])} nodes, {len(payload['edges'])} edges")
+            break
+```
 
 ## When to update this doc
 
