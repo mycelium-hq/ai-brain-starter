@@ -52,11 +52,10 @@ def strip_folder_prefix(label: str) -> str:
     prevents new path-form wikilinks, and this function collapses the legacy
     ones already embedded in the corpus.
 
-    Exception: if the label contains a character that suggests it's NOT a
-    wikilink (e.g. starts with http, contains a space on both sides of "/"),
-    leave it alone. Conservative: only strip when the prefix looks like a
-    folder name (ends with a slash and contains no spaces, or starts with an
-    emoji character common in the vault's folder names).
+    IMPORTANT — only safe for "document" file_type (Obsidian/notes corpora).
+    For code graphs where labels are legitimate module paths (e.g. `code/utils.py`),
+    stripping the folder would collapse meaningfully distinct nodes. Call sites
+    must gate by file_type. URLs are always preserved.
     """
     if not label or "/" not in label:
         return label
@@ -68,8 +67,16 @@ def strip_folder_prefix(label: str) -> str:
     return tail if tail else label
 
 
-def normalize_label(label: str) -> str:
-    label = strip_folder_prefix((label or "").strip())
+def normalize_label(label: str, file_type: str = "document") -> str:
+    """Normalize label for canonical dedup.
+
+    file_type="document" strips folder prefixes (Obsidian wikilink behavior).
+    file_type="code" / "paper" / etc preserves full paths (module paths are
+    meaningful).
+    """
+    label = (label or "").strip()
+    if file_type == "document":
+        label = strip_folder_prefix(label)
     for suf in LABEL_SUFFIX_VARIANTS:
         if label.endswith(suf):
             label = label[: -len(suf)]
@@ -102,10 +109,18 @@ def normalize_source_file(source_file: str, root: Path = None) -> str:
     return source_file
 
 
-def canonical_id(label: str) -> str:
-    norm = normalize_label(label)
-    slug = re.sub(r"[^\w\s-]", "", norm)
-    slug = re.sub(r"[\s_-]+", "_", slug).strip("_")[:60]
+def canonical_id(label: str, file_type: str = "document") -> str:
+    """Build a canonical id from a label.
+
+    Pass file_type="code" / "paper" for graphs where folder paths are meaningful
+    — they will be preserved in the slug (with `/` converted to `_`). Default
+    "document" strips folder prefixes (Obsidian wikilink behavior).
+    """
+    norm = normalize_label(label, file_type=file_type)
+    # Allow / through so code module paths stay distinct after normalization;
+    # we'll convert it to _ in the final slug step.
+    slug = re.sub(r"[^\w\s/-]", "", norm)
+    slug = re.sub(r"[\s_/-]+", "_", slug).strip("_")[:60]
     return "c_" + slug
 
 
@@ -126,10 +141,13 @@ def canonicalize(extraction: dict) -> dict:
         label = (n.get("label") or "").strip()
         if not label:
             continue
-        # Strip folder prefix BEFORE normalize so display label also loses it
-        label = strip_folder_prefix(label)
-        norm = normalize_label(label)
-        cid = label_to_cid.get(norm) or canonical_id(label)
+        file_type = n.get("file_type") or "document"
+        # Strip folder prefix BEFORE normalize so display label also loses it.
+        # ONLY for document-type nodes — code/paper nodes have meaningful paths.
+        if file_type == "document":
+            label = strip_folder_prefix(label)
+        norm = normalize_label(label, file_type=file_type)
+        cid = label_to_cid.get(norm) or canonical_id(label, file_type=file_type)
         if norm not in label_to_cid:
             label_to_cid[norm] = cid
             # Strip suffix variants from display label too
@@ -138,10 +156,13 @@ def canonicalize(extraction: dict) -> dict:
                 if display.endswith(suf):
                     display = display[: -len(suf)]
                     break
+            # Preserve valid file_type from source node; fall back to "document"
+            # only if the agent produced an invalid value (person, concept, etc.)
+            ft = file_type if file_type in VALID_FILE_TYPES else "document"
             canonical_nodes[cid] = {
                 "id": cid,
                 "label": display.strip(),
-                "file_type": "document",
+                "file_type": ft,
                 "source_file": normalize_source_file(n.get("source_file", "")),
             }
         id_remap[n.get("id", "")] = cid
