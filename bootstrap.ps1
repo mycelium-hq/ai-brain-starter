@@ -7,22 +7,56 @@
 # Usage (run from PowerShell, NOT cmd.exe):
 #     irm https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main/bootstrap.ps1 | iex
 #
+# Dry run (preview changes without making them):
+#     iex "& { $(irm https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main/bootstrap.ps1) } -DryRun"
+#
+# SAFETY GUARANTEES — same as bootstrap.sh:
+#   - Existing settings.json/.mcp.json keys preserved (setdefault never overwrites)
+#   - Explicit `claude-mem@thedotmack: false` is RESPECTED (not silently re-enabled)
+#   - Local uncommitted changes to ai-brain-starter clone are stashed before pull
+#   - DIVERGENT forks of ai-brain-starter (commits on both sides) are skipped
+#   - Sub-skill folders with their own .git/ are detected as YOUR FORK and skipped
+#   - Symlinked sub-skill folders are detected and skipped (warns)
+#   - Custom skills outside the bundled set (humanizer, notebooklm, anything you
+#     installed yourself) are NEVER touched
+#   - Your vault CLAUDE.md is NEVER touched
+#   - Every file modification creates a .bak-YYYY-MM-DD-HHMM backup
+#   - Final summary lists every change made
+#
 # Safe to re-run. Skips anything already installed.
+
+param([switch]$DryRun)
 
 $ErrorActionPreference = "Stop"
 $RepoUrl = "https://github.com/adelaidasofia/ai-brain-starter.git"
 $SkillDir = "$env:USERPROFILE\.claude\skills\ai-brain-starter"
-$Failed = @()
+$Failed    = @()
+$Installed = @()
+$Updated   = @()
+$Skipped   = @()
+$Backups   = @()
 
 function Hdr($msg)  { Write-Host ""; Write-Host $msg -ForegroundColor White -BackgroundColor DarkBlue }
 function Log($msg)  { Write-Host "  · $msg" -ForegroundColor Cyan }
 function Ok($msg)   { Write-Host "  + $msg" -ForegroundColor Green }
 function Warn($msg) { Write-Host "  ! $msg" -ForegroundColor Yellow }
 function Err($msg)  { Write-Host "  X $msg" -ForegroundColor Red; $script:Failed += $msg }
+function Dry($msg)  { Write-Host "  [dry-run] $msg" -ForegroundColor Magenta }
 function Have($cmd) { return [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }
+
+function Backup-File($path) {
+    if (-not (Test-Path $path)) { return }
+    $bak = "$path.bak-$(Get-Date -Format 'yyyy-MM-dd-HHmm')"
+    if ($DryRun) { Dry "would back up: $path -> $bak" }
+    else { Copy-Item $path $bak; $script:Backups += $bak }
+}
 
 Hdr "ai-brain-starter — one-command install"
 Write-Host ""
+if ($DryRun) {
+    Write-Host "  DRY RUN MODE - showing what would be installed without making any changes." -ForegroundColor Magenta
+    Write-Host ""
+}
 Write-Host "  This installs the full AI brain stack: graphify, humanizer, claude-mem,"
 Write-Host "  notebooklm, meeting-todos, patterns, the Granola MCP, plus the ai-brain-starter"
 Write-Host "  skill itself. Takes ~5 minutes the first time."
@@ -117,56 +151,130 @@ if (-not (Have graphify)) {
 if (Have graphify) { Ok "graphify" } else { Err "graphify install failed" }
 
 # ─── Clone or update ai-brain-starter ─────────────────────────────────────────
-# SAFETY: detects local uncommitted changes and stashes them before pulling,
-# so users who hand-edited their local clone don't lose work.
+# SAFETY:
+#   - Stashes local uncommitted changes before pulling
+#   - Detects DIVERGENT history (your fork has commits not on origin/main)
+#     and refuses to pull, so your fork is never silently overwritten
 Hdr "Installing the ai-brain-starter skill"
 New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude\skills" | Out-Null
 if (Test-Path "$SkillDir\.git") {
     Log "Already installed - checking for updates..."
     Push-Location $SkillDir
-    # Detect uncommitted local changes
-    git diff --quiet --ignore-submodules HEAD 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        $stashMsg = "bootstrap auto-stash $(Get-Date -Format 'yyyy-MM-dd-HHmm')"
-        Log "Detected local changes in your ai-brain-starter clone - stashing them as: $stashMsg"
-        Log "Recover them later with: cd $SkillDir; git stash list; git stash pop"
-        git stash push -u -m $stashMsg 2>$null | Out-Null
+
+    if ($DryRun) { Dry "would: git fetch --quiet origin" }
+    else { git fetch --quiet origin 2>$null }
+
+    $ahead = (git rev-list --count "@{u}..HEAD" 2>$null)
+    $behind = (git rev-list --count "HEAD..@{u}" 2>$null)
+    if (-not $ahead) { $ahead = 0 }
+    if (-not $behind) { $behind = 0 }
+    $ahead = [int]$ahead
+    $behind = [int]$behind
+
+    if ($ahead -gt 0 -and $behind -gt 0) {
+        Warn "DIVERGENT FORK DETECTED at $SkillDir"
+        Warn "  Your local clone has $ahead commit(s) NOT on origin/main"
+        Warn "  AND origin/main has $behind commit(s) NOT on your clone"
+        Warn "  Refusing to pull. Your fork is preserved unchanged."
+        Warn "  To merge manually: cd $SkillDir; git pull --rebase"
+        $script:Skipped += "ai-brain-starter clone (divergent fork - manual merge required)"
     }
-    git pull --quiet 2>$null
-    if ($LASTEXITCODE -ne 0) { Warn "git pull failed - using existing version (network issue or local conflict)" }
+    elseif ($ahead -gt 0 -and $behind -eq 0) {
+        Log "Your clone has $ahead local commit(s) and is otherwise current. Leaving as-is."
+        $script:Skipped += "ai-brain-starter clone (local commits, up to date)"
+    }
+    elseif ($behind -gt 0) {
+        git diff --quiet --ignore-submodules HEAD 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            $stashMsg = "bootstrap auto-stash $(Get-Date -Format 'yyyy-MM-dd-HHmm')"
+            Log "Detected local uncommitted changes - stashing as: $stashMsg"
+            Log "Recover later with: cd $SkillDir; git stash list; git stash pop"
+            if (-not $DryRun) { git stash push -u -m $stashMsg 2>$null | Out-Null }
+        }
+        if ($DryRun) { Dry "would: git pull --quiet (fast-forward $behind commit(s))" }
+        else { git pull --quiet 2>$null }
+        $script:Updated += "ai-brain-starter clone (pulled $behind commit(s))"
+    }
+    else {
+        Log "ai-brain-starter clone is up to date"
+    }
     Pop-Location
 } else {
-    git clone --quiet $RepoUrl $SkillDir
+    if ($DryRun) { Dry "would: git clone $RepoUrl -> $SkillDir" }
+    else { git clone --quiet $RepoUrl $SkillDir }
+    $script:Installed += "ai-brain-starter clone"
 }
-if (Test-Path "$SkillDir\SKILL.md") { Ok "ai-brain-starter at $SkillDir" } else { Err "ai-brain-starter clone failed" }
+if ((Test-Path "$SkillDir\SKILL.md") -or $DryRun) { Ok "ai-brain-starter at $SkillDir" } else { Err "ai-brain-starter clone failed" }
 
-# ─── Sub-skills (with backup-before-overwrite) ───────────────────────────────
-# SAFETY: any installed skill file that differs from the repo version is backed
-# up to <file>.bak-YYYY-MM-DD-HHMM before being replaced. Custom skill folders
-# outside the bundled set (humanizer, notebooklm, anything the user installed
-# themselves) are NOT touched. Only graphify, meeting-todos, and patterns are
-# synced because those are the ones bundled with the repo.
-Hdr "Installing bundled sub-skills (with backup-before-overwrite)"
+# ─── Sub-skills (with comprehensive safety checks) ───────────────────────────
+# SAFETY:
+#   - If the destination has its own .git/, treat it as YOUR FORK and skip
+#   - If the destination is a SYMLINK, warn and skip
+#   - Otherwise: file-by-file sync with backup-before-overwrite
+#   - Custom skill folders outside the bundled set (humanizer, notebooklm,
+#     daily-journal, anything the user installed themselves) are NEVER touched
+Hdr "Installing bundled sub-skills (with safety checks)"
 $stamp = Get-Date -Format "yyyy-MM-dd-HHmm"
+
 foreach ($sub in @("graphify", "meeting-todos", "patterns")) {
     $src = "$SkillDir\skills\$sub"
     $dst = "$env:USERPROFILE\.claude\skills\$sub"
-    if (Test-Path $src) {
-        New-Item -ItemType Directory -Force -Path $dst | Out-Null
-        # Walk every file in src and back up the destination if it differs
-        Get-ChildItem -Recurse -File $src | ForEach-Object {
-            $rel = $_.FullName.Substring($src.Length + 1)
-            $dstFile = Join-Path $dst $rel
-            if ((Test-Path $dstFile) -and ((Get-FileHash $_.FullName).Hash -ne (Get-FileHash $dstFile).Hash)) {
-                Copy-Item $dstFile "$dstFile.bak-$stamp"
-            }
-            $dstParent = Split-Path $dstFile -Parent
-            if (-not (Test-Path $dstParent)) { New-Item -ItemType Directory -Force -Path $dstParent | Out-Null }
-            Copy-Item -Force $_.FullName $dstFile
-        }
-        Ok "$sub skill installed (any local edits backed up to .bak-$stamp files)"
-    } else {
+
+    if (-not (Test-Path $src)) {
         Err "$sub skill source missing in repo"
+        continue
+    }
+
+    # Symlink detection (PowerShell: ReparsePoint attribute)
+    if ((Test-Path $dst) -and ((Get-Item $dst -ErrorAction SilentlyContinue).Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+        $target = (Get-Item $dst).Target
+        Warn "$sub is a SYMLINK to $target - bootstrap will NOT write through it"
+        Warn "  If you want bootstrap to update this skill, replace the symlink with a regular folder."
+        $script:Skipped += "$sub skill (symlink to $target)"
+        continue
+    }
+
+    # Fork detection (.git inside the destination)
+    if (Test-Path "$dst\.git") {
+        Log "$sub has its own .git directory - detected as YOUR FORK, skipping entirely"
+        Log "  Your fork is preserved untouched. You manage updates to it yourself."
+        $script:Skipped += "$sub skill (your own fork - has .git)"
+        continue
+    }
+
+    # Regular folder or missing — eligible for sync
+    if ($DryRun) {
+        Dry "would sync $sub skill from $src to $dst (with backup-before-overwrite)"
+        continue
+    }
+
+    New-Item -ItemType Directory -Force -Path $dst | Out-Null
+    $createdCount = 0
+    $updatedCount = 0
+    $backedUpCount = 0
+    Get-ChildItem -Recurse -File $src | ForEach-Object {
+        $rel = $_.FullName.Substring($src.Length + 1)
+        $dstFile = Join-Path $dst $rel
+        $dstParent = Split-Path $dstFile -Parent
+        if (-not (Test-Path $dstParent)) { New-Item -ItemType Directory -Force -Path $dstParent | Out-Null }
+        if (Test-Path $dstFile) {
+            if ((Get-FileHash $_.FullName).Hash -ne (Get-FileHash $dstFile).Hash) {
+                Copy-Item $dstFile "$dstFile.bak-$stamp"
+                $script:Backups += "$dstFile.bak-$stamp"
+                Copy-Item -Force $_.FullName $dstFile
+                $backedUpCount++
+                $updatedCount++
+            }
+        } else {
+            Copy-Item -Force $_.FullName $dstFile
+            $createdCount++
+        }
+    }
+    if ($createdCount -gt 0 -or $updatedCount -gt 0) {
+        Ok "$sub: $createdCount new, $updatedCount updated, $backedUpCount backed up"
+        $script:Updated += "$sub skill ($createdCount new, $updatedCount updated, $backedUpCount backed up)"
+    } else {
+        Ok "$sub: already current"
     }
 }
 
@@ -188,18 +296,18 @@ if (Test-Path $nblmDir) { Ok "notebooklm skill installed" } else { Err "notebook
 
 # ─── claude-mem ──────────────────────────────────────────────────────────────
 # SAFETY: backup settings.json before editing. Existing keys (custom
-# marketplaces, custom MCP servers, custom plugin configs, custom permissions)
-# are preserved — the python edit only adds the thedotmack entry if missing
-# and only sets the claude-mem@thedotmack enabledPlugins flag. setdefault()
-# never overwrites existing keys.
+# marketplaces, custom MCP servers, custom plugin configs, custom permissions,
+# custom hooks, custom env vars) are preserved. Explicit
+# `claude-mem@thedotmack: false` is RESPECTED (not silently re-enabled).
 Hdr "Registering claude-mem"
 New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude" | Out-Null
 $settingsPath = "$env:USERPROFILE\.claude\settings.json"
-if (Test-Path $settingsPath) {
-    Copy-Item $settingsPath "$settingsPath.bak-$(Get-Date -Format 'yyyy-MM-dd-HHmm')"
-}
+Backup-File $settingsPath
 
-$pyScript = @"
+if ($DryRun) {
+    Dry "would: register thedotmack marketplace + enable claude-mem@thedotmack (if not explicitly disabled)"
+} else {
+    $pyScript = @"
 import json, os
 p = os.path.expanduser('~/.claude/settings.json')
 try:
@@ -209,12 +317,17 @@ except FileNotFoundError:
 s.setdefault('extraKnownMarketplaces', {})
 if 'thedotmack' not in s['extraKnownMarketplaces']:
     s['extraKnownMarketplaces']['thedotmack'] = {'source': {'source': 'github', 'repo': 'thedotmack/claude-mem'}}
-s.setdefault('enabledPlugins', {})['claude-mem@thedotmack'] = True
+s.setdefault('enabledPlugins', {})
+if 'claude-mem@thedotmack' not in s['enabledPlugins']:
+    s['enabledPlugins']['claude-mem@thedotmack'] = True
+elif s['enabledPlugins']['claude-mem@thedotmack'] is False:
+    print('NOTE: respecting your explicit disable of claude-mem@thedotmack')
 with open(p, 'w') as f: json.dump(s, f, indent=2)
 "@
-$pyScript | python -
-if ($LASTEXITCODE -eq 0) { Ok "claude-mem registered" } else { Err "claude-mem registration failed" }
-npx --yes claude-mem install 2>$null | Out-Null
+    $pyScript | python -
+    if ($LASTEXITCODE -eq 0) { Ok "claude-mem registered" } else { Err "claude-mem registration failed" }
+    npx --yes claude-mem install 2>$null | Out-Null
+}
 
 # ─── Granola MCP ─────────────────────────────────────────────────────────────
 # SAFETY: backup .mcp.json before editing. Existing MCP servers (custom
@@ -222,10 +335,12 @@ npx --yes claude-mem install 2>$null | Out-Null
 # preserved — setdefault() only adds the granola entry if missing.
 Hdr "Registering Granola MCP"
 $mcpPath = "$env:USERPROFILE\.claude\.mcp.json"
-if (Test-Path $mcpPath) {
-    Copy-Item $mcpPath "$mcpPath.bak-$(Get-Date -Format 'yyyy-MM-dd-HHmm')"
-}
-$pyMcp = @"
+Backup-File $mcpPath
+
+if ($DryRun) {
+    Dry "would: register granola MCP at https://mcp.granola.ai/mcp (if not already present)"
+} else {
+    $pyMcp = @"
 import json, os
 p = os.path.expanduser('~/.claude/.mcp.json')
 try:
@@ -237,8 +352,9 @@ if 'granola' not in m['mcpServers']:
     m['mcpServers']['granola'] = {'type': 'url', 'url': 'https://mcp.granola.ai/mcp'}
 with open(p, 'w') as f: json.dump(m, f, indent=2)
 "@
-$pyMcp | python -
-if ($LASTEXITCODE -eq 0) { Ok "Granola MCP registered (you'll need a Granola account to use it)" } else { Err "Granola MCP registration failed" }
+    $pyMcp | python -
+    if ($LASTEXITCODE -eq 0) { Ok "Granola MCP registered (you'll need a Granola account to use it)" } else { Err "Granola MCP registration failed" }
+}
 
 # ─── Verification ────────────────────────────────────────────────────────────
 Hdr "Verifying installation"
@@ -265,10 +381,42 @@ if ($Failed.Count -eq 0) {
     Write-Host "━━━ All checks passed. ━━━" -ForegroundColor Green
 } else {
     Write-Host "━━━ $($Failed.Count) check(s) failed: ━━━" -ForegroundColor Red
-    foreach ($f in $Failed) { Write-Host "  • $f" }
+    foreach ($f in $Failed) { Write-Host "  - $f" }
     Write-Host ""
-    Write-Host "Don't proceed silently — fix these before running /setup-brain."
+    Write-Host "Don't proceed silently - fix these before running /setup-brain."
 }
+
+# ─── Change summary ──────────────────────────────────────────────────────────
+Hdr "Change summary"
+if ($DryRun) { Write-Host "DRY RUN - no actual changes made." -ForegroundColor Magenta }
+
+if ($Installed.Count -eq 0 -and $Updated.Count -eq 0 -and $Skipped.Count -eq 0 -and $Backups.Count -eq 0) {
+    Write-Host "  Nothing to report - your setup was already current."
+} else {
+    if ($Installed.Count -gt 0) {
+        Write-Host ""
+        Write-Host "  Installed (new):" -ForegroundColor Green
+        foreach ($x in $Installed) { Write-Host "    + $x" }
+    }
+    if ($Updated.Count -gt 0) {
+        Write-Host ""
+        Write-Host "  Updated:" -ForegroundColor Cyan
+        foreach ($x in $Updated) { Write-Host "    ^ $x" }
+    }
+    if ($Skipped.Count -gt 0) {
+        Write-Host ""
+        Write-Host "  Skipped (your customizations preserved):" -ForegroundColor Yellow
+        foreach ($x in $Skipped) { Write-Host "    o $x" }
+    }
+    if ($Backups.Count -gt 0) {
+        Write-Host ""
+        Write-Host "  Backups created (recoverable):" -ForegroundColor Yellow
+        foreach ($x in $Backups) { Write-Host "    > $x" }
+        Write-Host ""
+        Write-Host "  To restore any backup: Move-Item <file>.bak-YYYY-MM-DD-HHMM <file>"
+    }
+}
+Write-Host ""
 
 Write-Host ""
 Write-Host "━━━ Next steps ━━━" -ForegroundColor Cyan

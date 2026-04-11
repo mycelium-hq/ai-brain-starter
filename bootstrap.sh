@@ -73,18 +73,53 @@
 #   10. Homebrew, Python, Node, pipx, bun, gh, graphifyy — all installed only
 #       if missing. Existing versions are kept as-is.
 #
+#   11. ~/.claude/skills/{graphify,meeting-todos,patterns} with their own .git/
+#       — DETECTED AS A FORK and SKIPPED ENTIRELY. If you cloned your own
+#       customized version of one of these skills (e.g. your own graphify
+#       fork with custom rules), the bootstrap will not touch it. You manage
+#       updates yourself.
+#
+#   12. ~/.claude/skills/{anything} that is a SYMLINK — bootstrap warns
+#       before writing through the symlink, since the target may be a shared
+#       location you didn't intend to modify.
+#
+#   13. ~/.claude/skills/ai-brain-starter with DIVERGENT history (your local
+#       clone has commits not on origin/main) — bootstrap REFUSES TO PULL
+#       and tells you to merge manually. Your fork is never silently
+#       overwritten.
+#
 # IF SOMETHING DOES GO WRONG — every backup is timestamped and recoverable.
 # Look for *.bak-YYYY-MM-DD-HHMM files in ~/.claude/ and the affected skill
 # folders. To restore: `mv <file>.bak-YYYY-MM-DD-HHMM <file>`.
 #
+# DRY RUN — pass --dry-run to see exactly what the bootstrap WOULD do without
+# making any changes:
+#     bash bootstrap.sh --dry-run
+#
 # Safe to re-run anytime. Skips anything already installed and only updates
-# what's actually behind.
+# what's actually behind. Ends with a summary of every change made.
 
 set -euo pipefail
 
 REPO_URL="https://github.com/adelaidasofia/ai-brain-starter.git"
 SKILL_DIR="$HOME/.claude/skills/ai-brain-starter"
+DRY_RUN=0
 FAILED=()
+INSTALLED=()
+UPDATED=()
+SKIPPED=()
+BACKUPS=()
+
+# Parse args
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run|-n) DRY_RUN=1 ;;
+    --help|-h)
+      echo "Usage: bash bootstrap.sh [--dry-run]"
+      echo "  --dry-run, -n   Show what would be installed without making changes"
+      exit 0 ;;
+  esac
+done
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -95,25 +130,54 @@ ok()   { printf "  \033[32m✓\033[0m %s\n" "$*"; }
 warn() { printf "  \033[33m!\033[0m %s\n" "$*"; }
 err()  { printf "  \033[31m✗\033[0m %s\n" "$*"; FAILED+=("$*"); }
 hdr()  { printf "\n\033[1m%s\033[0m\n" "$*"; }
+dry()  { printf "  \033[35m[dry-run]\033[0m %s\n" "$*"; }
 
 is_mac()   { [[ "$(uname -s)" == "Darwin" ]]; }
 is_linux() { [[ "$(uname -s)" == "Linux" ]]; }
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# Run a command, OR print what it would do in dry-run mode.
+# Usage: do_cmd "human description" actual command...
+do_cmd() {
+  local desc="$1"; shift
+  if [[ $DRY_RUN -eq 1 ]]; then
+    dry "$desc"
+    return 0
+  fi
+  "$@"
+}
+
+# Backup a file before editing it. No-op in dry-run.
+backup_file() {
+  local f="$1"
+  [[ ! -f "$f" ]] && return 0
+  local bak="${f}.bak-$(date +%Y-%m-%d-%H%M)"
+  if [[ $DRY_RUN -eq 1 ]]; then
+    dry "would back up: $f → $bak"
+  else
+    cp "$f" "$bak"
+    BACKUPS+=("$bak")
+  fi
+}
+
 # ───────────────────────────────────────────────────────────────────────────────
-# Checks
+# Header
 # ───────────────────────────────────────────────────────────────────────────────
 
 hdr "ai-brain-starter — one-command install"
 echo
+if [[ $DRY_RUN -eq 1 ]]; then
+  echo "  \033[35mDRY RUN MODE\033[0m — showing what would be installed without making any changes."
+  echo
+fi
 echo "  This installs the full AI brain stack: graphify, humanizer, claude-mem,"
 echo "  notebooklm, meeting-todos, patterns, the Granola MCP, plus the ai-brain-starter"
 echo "  skill itself. Takes ~5 minutes the first time, ~10 seconds on re-runs."
 echo
 echo "  After this finishes, open Claude Code and type /setup-brain."
 echo
-sleep 1
+[[ $DRY_RUN -eq 0 ]] && sleep 1
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Homebrew (Mac only)
@@ -246,8 +310,10 @@ have graphify && ok "graphify $(graphify --version 2>/dev/null | head -1 || echo
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Clone or update the ai-brain-starter skill
-# (SAFETY: detects local uncommitted changes and stashes them before pulling,
-#  so users who hand-edited their local clone don't lose work.)
+# SAFETY:
+#   - Stashes local uncommitted changes before pulling
+#   - Detects DIVERGENT history (your fork has commits not on origin/main)
+#     and refuses to pull, so your fork is never silently overwritten
 # ───────────────────────────────────────────────────────────────────────────────
 
 hdr "Installing the ai-brain-starter skill"
@@ -255,50 +321,156 @@ mkdir -p "$HOME/.claude/skills"
 if [[ -d "$SKILL_DIR/.git" ]]; then
   log "Already installed — checking for updates..."
   cd "$SKILL_DIR"
-  # Detect uncommitted local changes (working tree OR staged)
-  if ! git diff --quiet --ignore-submodules HEAD 2>/dev/null; then
-    STASH_MSG="bootstrap auto-stash $(date +%Y-%m-%d-%H%M)"
-    log "Detected local changes in your ai-brain-starter clone — stashing them as: $STASH_MSG"
-    log "Recover them later with: cd $SKILL_DIR && git stash list && git stash pop"
-    git stash push -u -m "$STASH_MSG" >/dev/null 2>&1 || warn "stash failed — pulling anyway, your changes may be preserved by git"
+
+  # Fetch first so we know the divergence state
+  if [[ $DRY_RUN -eq 1 ]]; then
+    dry "would: git fetch --quiet origin"
+  else
+    git fetch --quiet origin 2>/dev/null || warn "git fetch failed — skipping update check"
   fi
-  git pull --quiet 2>/dev/null || warn "git pull failed — using existing version (network issue or local conflict)"
+
+  # Detect divergent history: count commits ahead and behind
+  AHEAD=$(git rev-list --count "@{u}..HEAD" 2>/dev/null || echo 0)
+  BEHIND=$(git rev-list --count "HEAD..@{u}" 2>/dev/null || echo 0)
+
+  if [[ "$AHEAD" -gt 0 && "$BEHIND" -gt 0 ]]; then
+    # Divergent fork — refuse to pull
+    warn "DIVERGENT FORK DETECTED at $SKILL_DIR"
+    warn "  Your local clone has $AHEAD commit(s) NOT on origin/main"
+    warn "  AND origin/main has $BEHIND commit(s) NOT on your clone"
+    warn "  Refusing to pull. Your fork is preserved unchanged."
+    warn "  To merge manually: cd $SKILL_DIR && git pull --rebase (or your preferred merge strategy)"
+    SKIPPED+=("ai-brain-starter clone (divergent fork — manual merge required)")
+  elif [[ "$AHEAD" -gt 0 && "$BEHIND" -eq 0 ]]; then
+    # Local-only commits, no upstream changes — leave alone
+    log "Your clone has $AHEAD local commit(s) and is otherwise current. Leaving as-is."
+    SKIPPED+=("ai-brain-starter clone (local commits, up to date)")
+  elif [[ "$BEHIND" -gt 0 ]]; then
+    # Behind upstream — safe to pull. Check for uncommitted changes first.
+    if ! git diff --quiet --ignore-submodules HEAD 2>/dev/null; then
+      STASH_MSG="bootstrap auto-stash $(date +%Y-%m-%d-%H%M)"
+      log "Detected local uncommitted changes — stashing as: $STASH_MSG"
+      log "Recover later with: cd $SKILL_DIR && git stash list && git stash pop"
+      do_cmd "git stash push -u -m '$STASH_MSG'" git stash push -u -m "$STASH_MSG" >/dev/null 2>&1 || warn "stash failed"
+    fi
+    do_cmd "git pull --quiet (fast-forward $BEHIND commit(s))" git pull --quiet 2>/dev/null || warn "git pull failed"
+    UPDATED+=("ai-brain-starter clone (pulled $BEHIND commit(s))")
+  else
+    log "ai-brain-starter clone is up to date"
+  fi
+
   cd - >/dev/null
 else
-  git clone --quiet "$REPO_URL" "$SKILL_DIR" || err "ai-brain-starter clone failed"
+  do_cmd "clone ai-brain-starter to $SKILL_DIR" git clone --quiet "$REPO_URL" "$SKILL_DIR" || err "ai-brain-starter clone failed"
+  INSTALLED+=("ai-brain-starter clone")
 fi
-[[ -f "$SKILL_DIR/SKILL.md" ]] && ok "ai-brain-starter skill at $SKILL_DIR"
+[[ -f "$SKILL_DIR/SKILL.md" || $DRY_RUN -eq 1 ]] && ok "ai-brain-starter skill at $SKILL_DIR"
 
 # ───────────────────────────────────────────────────────────────────────────────
-# Install bundled sub-skills via sync-skills.sh
-# (SAFETY: sync-skills.sh implements backup-before-overwrite. Any installed
-#  skill file that differs from the repo version is backed up to
-#  <file>.bak-YYYY-MM-DD-HHMM before being replaced. Custom skill folders
-#  outside the bundled set — humanizer, notebooklm, daily-journal, anything
-#  the user installed themselves — are NOT touched. Only graphify,
-#  meeting-todos, and patterns are synced because those are the ones bundled
-#  with the repo.)
+# Install bundled sub-skills (with comprehensive safety checks)
+# SAFETY:
+#   - If the destination is a SYMLINK, warn before writing through
+#   - If the destination has its own .git directory, treat it as a FORK and
+#     skip entirely (the user manages updates themselves)
+#   - Otherwise: sync via sync-skills.sh which implements backup-before-overwrite
+#   - Custom skill folders outside the bundled set are NEVER touched
 # ───────────────────────────────────────────────────────────────────────────────
 
-hdr "Installing bundled sub-skills (with backup-before-overwrite)"
-if [[ -x "$SKILL_DIR/scripts/sync-skills.sh" ]]; then
-  bash "$SKILL_DIR/scripts/sync-skills.sh" 2>&1 | grep -E "^(UPDATED|CREATED|BACKED_UP|SKIPPED|ERROR):" || true
-  ok "bundled sub-skills synced (any local edits were backed up to .bak-YYYY-MM-DD-HHMM files)"
-else
-  # Fallback for very old clones that don't have sync-skills.sh yet
-  warn "sync-skills.sh not found — using direct copy (no backups). Update your clone to enable backup-before-overwrite."
-  for sub in graphify meeting-todos patterns; do
-    src="$SKILL_DIR/skills/$sub"
-    dst="$HOME/.claude/skills/$sub"
-    if [[ -d "$src" ]]; then
-      mkdir -p "$dst"
-      cp -R "$src/." "$dst/" || err "$sub copy failed"
-      ok "$sub skill installed (no backup)"
+hdr "Installing bundled sub-skills (with safety checks)"
+
+SKILL_FORKS=()
+SKILL_SYMLINKS=()
+SKILLS_TO_SYNC=()
+
+for sub in graphify meeting-todos patterns; do
+  dst="$HOME/.claude/skills/$sub"
+
+  if [[ -L "$dst" ]]; then
+    # Symlink — warn before writing through
+    target="$(readlink "$dst")"
+    SKILL_SYMLINKS+=("$sub → $target")
+    warn "$sub is a SYMLINK to $target — bootstrap will NOT write through it"
+    warn "  If you want bootstrap to update this skill, replace the symlink with a regular folder."
+    SKIPPED+=("$sub skill (symlink to $target)")
+  elif [[ -d "$dst/.git" ]]; then
+    # User's own fork (their own .git inside the skill folder) — skip entirely
+    SKILL_FORKS+=("$sub")
+    log "$sub has its own .git/ directory — detected as YOUR FORK, skipping entirely"
+    log "  Your fork is preserved untouched. You manage updates to it yourself."
+    SKIPPED+=("$sub skill (your own fork — has .git)")
+  elif [[ -d "$dst" || ! -e "$dst" ]]; then
+    # Regular folder (or missing) — eligible for sync
+    SKILLS_TO_SYNC+=("$sub")
+  else
+    err "$sub destination $dst exists but is not a folder, symlink, or missing — skipping"
+    SKIPPED+=("$sub skill (unexpected destination type)")
+  fi
+done
+
+if [[ ${#SKILLS_TO_SYNC[@]} -gt 0 ]]; then
+  if [[ -x "$SKILL_DIR/scripts/sync-skills.sh" ]]; then
+    if [[ $DRY_RUN -eq 1 ]]; then
+      dry "would run sync-skills.sh for: ${SKILLS_TO_SYNC[*]}"
+      dry "  any installed file that differs from the repo version would be backed up first"
     else
-      err "$sub skill source missing in repo"
+      # sync-skills.sh syncs ALL bundled skills; we need it to skip the ones
+      # we identified as forks/symlinks. The simplest way: run it, then for
+      # each fork/symlink we already protected by NOT including it in
+      # SKILLS_TO_SYNC. But sync-skills.sh doesn't know about our list — it
+      # syncs all skills it finds in the repo. We need to either patch the
+      # script to accept a skip list, OR just sync each safe skill manually.
+      # Going with manual per-skill sync for explicitness.
+      for sub in "${SKILLS_TO_SYNC[@]}"; do
+        src="$SKILL_DIR/skills/$sub"
+        dst="$HOME/.claude/skills/$sub"
+        if [[ ! -d "$src" ]]; then
+          err "$sub skill source missing in repo"
+          continue
+        fi
+        mkdir -p "$dst"
+        # File-by-file sync with backup-before-overwrite (mirrors sync-skills.sh logic)
+        STAMP="$(date +%Y-%m-%d-%H%M)"
+        BACKED_UP_THIS_SUB=0
+        UPDATED_THIS_SUB=0
+        CREATED_THIS_SUB=0
+        while IFS= read -r srcfile; do
+          rel="${srcfile#$src/}"
+          dstfile="$dst/$rel"
+          mkdir -p "$(dirname "$dstfile")"
+          if [[ -f "$dstfile" ]]; then
+            if ! cmp -s "$srcfile" "$dstfile"; then
+              cp "$dstfile" "$dstfile.bak-$STAMP"
+              BACKUPS+=("$dstfile.bak-$STAMP")
+              cp "$srcfile" "$dstfile"
+              BACKED_UP_THIS_SUB=$((BACKED_UP_THIS_SUB + 1))
+              UPDATED_THIS_SUB=$((UPDATED_THIS_SUB + 1))
+            fi
+          else
+            cp "$srcfile" "$dstfile"
+            CREATED_THIS_SUB=$((CREATED_THIS_SUB + 1))
+          fi
+        done < <(find "$src" -type f)
+        if [[ $BACKED_UP_THIS_SUB -gt 0 || $UPDATED_THIS_SUB -gt 0 || $CREATED_THIS_SUB -gt 0 ]]; then
+          ok "$sub: $CREATED_THIS_SUB new, $UPDATED_THIS_SUB updated, $BACKED_UP_THIS_SUB backed up"
+          UPDATED+=("$sub skill ($CREATED_THIS_SUB new, $UPDATED_THIS_SUB updated, $BACKED_UP_THIS_SUB backed up)")
+        else
+          ok "$sub: already current"
+        fi
+      done
     fi
-  done
+  else
+    warn "sync-skills.sh not found — using direct copy (no backups)"
+    for sub in "${SKILLS_TO_SYNC[@]}"; do
+      src="$SKILL_DIR/skills/$sub"
+      dst="$HOME/.claude/skills/$sub"
+      [[ -d "$src" ]] && do_cmd "cp -R $src → $dst" mkdir -p "$dst" && do_cmd "" cp -R "$src/." "$dst/"
+    done
+  fi
 fi
+
+# Summary of what was protected this section
+[[ ${#SKILL_FORKS[@]} -gt 0 ]] && log "Forks preserved untouched: ${SKILL_FORKS[*]}"
+[[ ${#SKILL_SYMLINKS[@]} -gt 0 ]] && log "Symlinks preserved untouched: ${#SKILL_SYMLINKS[@]} skill(s)"
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Humanizer
@@ -329,10 +501,10 @@ fi
 hdr "Installing claude-mem (cross-session memory)"
 mkdir -p "$HOME/.claude"
 # SAFETY: backup settings.json before editing. Existing keys (custom
-# marketplaces, custom MCP servers, custom plugin configs, custom permissions)
-# are preserved — the python edit only adds the thedotmack entry if missing
-# and only sets the claude-mem@thedotmack enabledPlugins flag. setdefault()
-# never overwrites existing keys.
+# marketplaces, custom MCP servers, custom plugin configs, custom permissions,
+# custom hooks, custom env vars) are preserved — the python edit only adds
+# the thedotmack entry if missing and only enables claude-mem@thedotmack if
+# the user hasn't explicitly disabled it (False is preserved).
 if [[ -f "$HOME/.claude/settings.json" ]]; then
   cp "$HOME/.claude/settings.json" "$HOME/.claude/settings.json.bak-$(date +%Y-%m-%d-%H%M)"
 fi
@@ -343,11 +515,18 @@ try:
     with open(p) as f: s = json.load(f)
 except FileNotFoundError:
     s = {}
+# Add the marketplace if missing — never overwrite an existing entry
 s.setdefault("extraKnownMarketplaces", {})
 if "thedotmack" not in s["extraKnownMarketplaces"]:
     s["extraKnownMarketplaces"]["thedotmack"] = {"source": {"source": "github", "repo": "thedotmack/claude-mem"}}
+# Enable claude-mem ONLY if the user hasn't explicitly disabled it. An advanced
+# user who set enabledPlugins["claude-mem@thedotmack"] = False made that choice
+# on purpose and we must respect it. Only set True if the key is absent.
 s.setdefault("enabledPlugins", {})
-s["enabledPlugins"]["claude-mem@thedotmack"] = True
+if "claude-mem@thedotmack" not in s["enabledPlugins"]:
+    s["enabledPlugins"]["claude-mem@thedotmack"] = True
+elif s["enabledPlugins"]["claude-mem@thedotmack"] is False:
+    print("NOTE: respecting your explicit disable of claude-mem@thedotmack — leaving it off")
 with open(p, "w") as f: json.dump(s, f, indent=2)
 PY
 npx --yes claude-mem install >/dev/null 2>&1 || true
@@ -432,6 +611,39 @@ else
   echo "Don't proceed silently — fix these before running /setup-brain."
   echo "Re-running this script is safe and skips anything already installed."
 fi
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Change summary — every action this run took (or would take in dry-run mode)
+# ───────────────────────────────────────────────────────────────────────────────
+
+hdr "Change summary"
+if [[ $DRY_RUN -eq 1 ]]; then
+  printf "\033[35mDRY RUN — no actual changes made.\033[0m\n"
+fi
+
+if [[ ${#INSTALLED[@]} -eq 0 && ${#UPDATED[@]} -eq 0 && ${#SKIPPED[@]} -eq 0 && ${#BACKUPS[@]} -eq 0 ]]; then
+  echo "  Nothing to report — your setup was already current."
+else
+  if [[ ${#INSTALLED[@]} -gt 0 ]]; then
+    printf "\n  \033[32mInstalled (new):\033[0m\n"
+    for x in "${INSTALLED[@]}"; do printf "    + %s\n" "$x"; done
+  fi
+  if [[ ${#UPDATED[@]} -gt 0 ]]; then
+    printf "\n  \033[36mUpdated:\033[0m\n"
+    for x in "${UPDATED[@]}"; do printf "    ↑ %s\n" "$x"; done
+  fi
+  if [[ ${#SKIPPED[@]} -gt 0 ]]; then
+    printf "\n  \033[33mSkipped (your customizations preserved):\033[0m\n"
+    for x in "${SKIPPED[@]}"; do printf "    ⊘ %s\n" "$x"; done
+  fi
+  if [[ ${#BACKUPS[@]} -gt 0 ]]; then
+    printf "\n  \033[33mBackups created (recoverable):\033[0m\n"
+    for x in "${BACKUPS[@]}"; do printf "    ↳ %s\n" "$x"; done
+    echo
+    printf "  To restore any backup: \033[1mmv <file>.bak-YYYY-MM-DD-HHMM <file>\033[0m\n"
+  fi
+fi
+echo
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Next steps

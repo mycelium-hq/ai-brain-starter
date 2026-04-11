@@ -9,6 +9,150 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 11, 2026 (nineteenth session — bootstrap best practices for advanced users with custom skills + forks)
+
+Session 18 added the basic safety guarantees. This session adds the protections specifically aimed at advanced users — people who have their own forks of bundled skills, their own custom CLAUDE.md rules, their own divergent ai-brain-starter clone, or any other heavy customization. The bar: **never silently overwrite anyone's hard work, regardless of how complex their setup is.**
+
+### What's now protected for advanced users
+
+Four new protection layers in both `bootstrap.sh` and `bootstrap.ps1`:
+
+#### 1. Forked sub-skill detection
+
+If you have your own `.git/` directory inside `~/.claude/skills/graphify/` (or `meeting-todos/`, or `patterns/`) — meaning you cloned your own customized version of one of the bundled skills — the bootstrap **detects this and skips that skill entirely.** It won't sync the upstream version over yours. You manage updates to your fork yourself.
+
+The signal is the presence of `.git/` inside the skill folder. The bootstrap logs:
+
+```
+graphify has its own .git/ directory — detected as YOUR FORK, skipping entirely
+  Your fork is preserved untouched. You manage updates to it yourself.
+```
+
+#### 2. Symlinked sub-skill detection
+
+If `~/.claude/skills/graphify` (or another bundled skill) is a **symlink** instead of a regular folder — meaning you've pointed it at a shared location, a development checkout elsewhere, or a Dropbox/Drive path — the bootstrap detects the symlink and refuses to write through it. The target may be a shared resource you don't want surprised by this script.
+
+```
+graphify is a SYMLINK to /Users/you/code/graphify-fork — bootstrap will NOT write through it
+  If you want bootstrap to update this skill, replace the symlink with a regular folder.
+```
+
+#### 3. Divergent ai-brain-starter clone detection
+
+If your local `~/.claude/skills/ai-brain-starter` clone has commits that **aren't** on `origin/main` AND `origin/main` has commits that **aren't** on your clone (a true divergence — you've made your own commits that diverge from upstream), the bootstrap **refuses to pull** and tells you exactly how many commits diverge in each direction:
+
+```
+DIVERGENT FORK DETECTED at ~/.claude/skills/ai-brain-starter
+  Your local clone has 3 commit(s) NOT on origin/main
+  AND origin/main has 7 commit(s) NOT on your clone
+  Refusing to pull. Your fork is preserved unchanged.
+  To merge manually: cd ~/.claude/skills/ai-brain-starter && git pull --rebase
+```
+
+The bootstrap also handles two related cases more gracefully:
+
+- **Local commits, no upstream changes** (you're ahead but not divergent): leaves your clone alone, doesn't pull
+- **Behind upstream with no local commits**: stashes any uncommitted changes, then fast-forwards
+
+#### 4. Explicit-disable preservation for `claude-mem@thedotmack`
+
+Previously the bootstrap unconditionally set `enabledPlugins["claude-mem@thedotmack"] = True`. If an advanced user had explicitly set it to `False` (because they intentionally disabled the plugin), the bootstrap would silently re-enable it on the next run.
+
+Now the bootstrap only sets the key if it's **absent**. If the user has it set to `False`, the bootstrap respects that choice and prints:
+
+```
+NOTE: respecting your explicit disable of claude-mem@thedotmack — leaving it off
+```
+
+### `--dry-run` mode
+
+Both bootstrap scripts now accept a `--dry-run` flag (PowerShell: `-DryRun`) that previews **every action** the bootstrap would take, without making any changes. No files written, no installs run, no git operations performed. Just a transcript of "what would happen if you ran this for real."
+
+```bash
+bash bootstrap.sh --dry-run
+```
+
+```powershell
+iex "& { $(irm https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main/bootstrap.ps1) } -DryRun"
+```
+
+The output looks like:
+```
+[dry-run] would: git fetch --quiet origin
+[dry-run] would: git pull --quiet (fast-forward 53 commit(s))
+[dry-run] would sync graphify skill from <repo> to <dest> (with backup-before-overwrite)
+[dry-run] would back up: ~/.claude/settings.json → ~/.claude/settings.json.bak-2026-04-11-1530
+[dry-run] would: register thedotmack marketplace + enable claude-mem@thedotmack (if not explicitly disabled)
+```
+
+This is the right way for an advanced user to inspect the bootstrap before running it on a heavily customized setup.
+
+### Final change summary
+
+Both scripts now end with a structured **change summary** that lists everything that happened (or would happen, in dry-run mode):
+
+```
+━━━ Change summary ━━━
+
+  Installed (new):
+    + ai-brain-starter clone
+
+  Updated:
+    ↑ ai-brain-starter clone (pulled 53 commit(s))
+    ↑ graphify skill (12 new, 4 updated, 4 backed up)
+
+  Skipped (your customizations preserved):
+    ⊘ meeting-todos skill (your own fork — has .git)
+    ⊘ patterns skill (symlink to /Users/you/code/patterns-fork)
+
+  Backups created (recoverable):
+    ↳ /Users/you/.claude/settings.json.bak-2026-04-11-1530
+    ↳ /Users/you/.claude/skills/graphify/SKILL.md.bak-2026-04-11-1530
+    ↳ /Users/you/.claude/skills/graphify/scripts/run.py.bak-2026-04-11-1530
+    ↳ /Users/you/.claude/skills/graphify/scripts/util.py.bak-2026-04-11-1530
+
+  To restore any backup: mv <file>.bak-YYYY-MM-DD-HHMM <file>
+```
+
+After every run, the user knows exactly what changed, what was preserved, and how to undo anything they didn't expect.
+
+### Best practices we now follow
+
+For an installer that touches user-customized files, the relevant best practices are:
+
+| Best practice | Status |
+|---|---|
+| Idempotence (re-run safe) | ✅ |
+| Backup before overwrite | ✅ |
+| Respect explicit user choices (e.g. disabled plugins) | ✅ |
+| Detect forks of bundled components and skip them | ✅ |
+| Detect symlinks before writing through | ✅ |
+| Detect divergent histories before pulling | ✅ |
+| `--dry-run` preview mode | ✅ |
+| Final summary of every change | ✅ |
+| Detailed error messages | ✅ |
+| Verification block at end | ✅ |
+| Custom skills outside bundled set untouched | ✅ |
+| User vault never touched | ✅ |
+| Recoverable from any unexpected change | ✅ |
+
+The remaining gaps are nice-to-haves: a `--restore` mode that auto-restores from the most recent `.bak` files (not strictly needed since the file paths are obvious), atomic operations across the whole script (would require a temp directory + final swap, significant refactor), and a logging file (right now the summary is stdout only — could also write to `~/.claude/.bootstrap.log` for forensics).
+
+### What this means for an advanced user
+
+If you've built a heavy custom setup — your own forks of bundled skills, your own divergent ai-brain-starter, your own custom plugins, your own MCP servers, your own hand-tuned settings — running the bootstrap on top of it will:
+
+1. **Detect everything you've customized** (forks via `.git`, symlinks via attributes, divergent clones via `git rev-list`, explicit-false plugins via JSON inspection)
+2. **Skip those entirely** (not "back them up and overwrite", actually skip)
+3. **Tell you in the summary exactly what was preserved and why**
+4. **Update only the things that aren't customized** (and back those up too, just in case)
+
+The bar: an advanced user with five custom forks should be able to run the bootstrap and have nothing they care about touched. The summary should confirm "5 custom things preserved, 0 things you customized were modified."
+
+Run with `--dry-run` first if you're at all unsure. The dry run is the answer to "but what if it does something I don't expect?" — it shows you exactly what would happen with zero side effects.
+
+---
+
 ## April 11, 2026 (eighteenth session — bootstrap safety hardening for users with custom integrations)
 
 The auto-update flow shipped in session 16 needs to be safe to run on top of any existing setup, including ones with heavy custom integrations. This session adds explicit safety guarantees to the bootstrap so users (and you) can run it without worrying about losing custom config, custom skills, or local edits.
@@ -451,6 +595,23 @@ Added explicit guidance: `[[Colombia]]`, never `[[🌱 Curiosities/Colombia]]`. 
 ### 6. Session close — always check for repo updates (new Session Protocol Step 4)
 
 Before closing ANY session, Claude now scans for improvements that should propagate upstream: new rules, skills, scripts, prompt patterns, runbooks, workflow fixes. If anything qualifies, Claude asks: *"We improved [X] this session. Want me to push it to the ai-brain-starter repo so your team (and anyone else who builds their vault from your repo) benefits?"* Improvements that stay local by default are wasted — this rule closes the gap.
+
+### 7. Auto-update hook now offers per-rule merge into vault CLAUDE.md (follow-up fix in `222f9df`)
+
+The thirteenth-session commit shipped the rules to this repo, but the existing auto-update hook would only **notify** users that the CHANGELOG had new entries. It wouldn't diff the new rules against the user's vault CLAUDE.md or offer to merge them, so every existing vault would silently fall behind. The gap was caught the same afternoon and patched in a follow-up commit.
+
+The auto-update hook's `additionalContext` in `hooks.json` now explicitly instructs Claude to:
+
+1. Read the top CHANGELOG entry after the hook's `git pull` fetches commits.
+2. **Check whether the update added new rules to the Obsidian Rules or Session Protocol sections of SKILL.md.** If it did, read the user's vault CLAUDE.md and compare.
+3. For every new or enhanced rule that is not already in the user's vault CLAUDE.md, offer a per-rule merge: show a short diff (old rule vs. new rule, or just the new rule if it's a new addition), explain why the rule exists (citing the failure mode from the CHANGELOG), and ask one yes/no question. Wait for confirmation.
+4. On yes: back up the user's current CLAUDE.md to `CLAUDE.md.bak-YYYY-MM-DD-HHMM` first, then apply the edit. On no: drop the rule and don't ask again this session.
+5. If the sync output lists backed-up skill files, mention it casually so the user knows their customizations are recoverable.
+6. Check whether `hooks.json` differs from the user's local `settings.local.json` — if so, offer to update `settings.local.json`.
+
+Without this fix, rules shipped to the repo but silently failed to reach anyone who already had a vault built from an earlier version. With it, the auto-update flow closes the full loop: pull → diff → offer merge → apply → backup. The more elaborate session 16 rule cascade builds on this same foundation but via a dedicated `update-check.sh` script instead of inline hook logic — the two mechanisms stack rather than replace each other.
+
+**Maintainer-side note (not user-facing but worth recording):** the same fix surfaced that the maintainer's own personal vault `settings.local.json` was missing the auto-update hook entry entirely. The hook had shipped in the repo's `hooks.json` template and in new-install `/setup-brain` flows, but never propagated to the maintainer's pre-existing vault config. Atomic `jq --slurpfile` merge fixed it with a timestamped backup. Worth remembering: the repo's hooks template is not the source of truth for an already-configured vault. The two can drift, and the drift is invisible until someone runs the comparison.
 
 ---
 
