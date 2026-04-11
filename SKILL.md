@@ -19,7 +19,7 @@ If they've already run setup and are coming back to fix or upgrade something, as
 - **Fix something broken:** Ask what's wrong and diagnose. Common issues:
   - Vault map empty → open their CLAUDE.md and fill in the `## Vault Map` section with their actual folder list
   - Journal skill not saving → check `~/.claude/skills/daily-journal/SKILL.md` exists
-  - Insights not finding entries → check `Meta/journal-index.json` exists; if not, re-run the index generation from Phase 11
+  - Insights not finding entries → check `⚙️ Meta/journal-index.json` exists; if not, re-run the index generation from Phase 18
   - Claude creating duplicate folders → vault map is missing or wrong; fix it first
 - **Upgrade CLAUDE.md:** Read their existing CLAUDE.md. Compare it to the Phase 4 template. Add any missing sections (Vault Rules, Accountability Rules, Session Protocol) without overwriting their personal content. Never replace — only add what's missing.
 
@@ -510,22 +510,36 @@ Also create the **session-end-hook.sh** script that hardens the Stop hook — it
 
 ```bash
 #!/bin/bash
-# Save to: [VAULT_PATH]/Meta/scripts/session-end-hook.sh
+# Save to: [VAULT_PATH]/⚙️ Meta/scripts/session-end-hook.sh
 # chmod +x this file after creating it
 
 VAULT="[VAULT_PATH]"
-LAST_SESSION="$VAULT/Meta/Last Session.md"
-SESSION_LOG="$VAULT/Meta/Session Log.md"
+META_DIR="$VAULT/⚙️ Meta"
+LAST_SESSION="$META_DIR/Last Session.md"
+SESSION_LOG="$META_DIR/Session Log.md"
+ERROR_LOG="$META_DIR/hook-errors.log"
 DATE=$(date +%Y-%m-%d)
 TIME=$(date +%H:%M)
 
+# GUARD: fail loudly, never silently. If the Meta dir doesn't exist, bubble an error
+# into the Claude hook context so the user sees it. This honors the NEVER fail silently rule.
+if [ ! -d "$META_DIR" ]; then
+  MSG="session-end-hook: Meta directory not found at '$META_DIR'. Vault may use a different folder name than '⚙️ Meta' — update this script's META_DIR. No session context saved."
+  mkdir -p "$VAULT" 2>/dev/null && echo "$DATE $TIME — $MSG" >> "$VAULT/hook-errors.log"
+  echo "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"additionalContext\":\"HOOK ERROR: $MSG Tell the user immediately and help fix the path.\"}}"
+  exit 0
+fi
+
 # Step 1: Always write a timestamp entry to Session Log (guaranteed, no Claude involvement)
-echo "- $DATE $TIME — session ended" >> "$SESSION_LOG"
+if ! echo "- $DATE $TIME — session ended" >> "$SESSION_LOG" 2>>"$ERROR_LOG"; then
+  echo "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"additionalContext\":\"HOOK ERROR: Could not append to Session Log at '$SESSION_LOG'. Check '$ERROR_LOG' for details and tell the user.\"}}"
+  exit 0
+fi
 
 # Step 2: Append a stub to Last Session.md if today's date isn't already there
 if [ -f "$LAST_SESSION" ]; then
   if ! grep -q "^**Date:** $DATE" "$LAST_SESSION" 2>/dev/null; then
-    printf "\n\n---\n*Session ended: $DATE $TIME — update pending*\n" >> "$LAST_SESSION"
+    printf "\n\n---\n*Session ended: $DATE $TIME — update pending*\n" >> "$LAST_SESSION" 2>>"$ERROR_LOG"
   fi
 fi
 
@@ -537,19 +551,34 @@ Also create the **write-hook.sh** script that fires after every Write tool call.
 
 ```bash
 #!/bin/bash
-# Save to: [VAULT_PATH]/Meta/scripts/write-hook.sh
+# Save to: [VAULT_PATH]/⚙️ Meta/scripts/write-hook.sh
 # chmod +x this file after creating it
 
 INPUT=$(cat)
+
+# GUARD: if python3 is missing, fail loudly. Honors NEVER fail silently rule.
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"HOOK ERROR: write-hook.sh needs python3 but it's not on PATH. Tell the user and help them install it.\"}}"
+  exit 0
+fi
+
 FILE_PATH=$(echo "$INPUT" | python3 -c "
 import json, sys
 try:
     d = json.load(sys.stdin)
     path = d.get('tool_input', {}).get('file_path', '')
     print(path)
-except:
+except Exception as e:
+    sys.stderr.write(f'write-hook.sh JSON parse error: {e}\n')
     print('')
-" 2>/dev/null)
+")
+PARSE_EXIT=$?
+
+# If python parsing itself errored, surface it — don't pretend nothing happened
+if [ $PARSE_EXIT -ne 0 ]; then
+  echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"HOOK ERROR: write-hook.sh could not parse the tool input JSON. Check your Claude Code version and tell the user.\"}}"
+  exit 0
+fi
 
 if echo "$FILE_PATH" | grep -qi "Meeting Notes/\|Meeting-Notes/"; then
   BASENAME=$(basename "$FILE_PATH" .md)
@@ -561,15 +590,15 @@ fi
 
 Replace the Stop hook path in `.claude/settings.local.json` to point to this script:
 ```json
-"Stop": [{"hooks": [{"type": "command", "command": "bash '[VAULT_PATH]/Meta/scripts/session-end-hook.sh'", "statusMessage": "Saving session context..."}]}]
+"Stop": [{"hooks": [{"type": "command", "command": "bash '[VAULT_PATH]/⚙️ Meta/scripts/session-end-hook.sh'", "statusMessage": "Saving session context..."}]}]
 ```
 
 And add the PostToolUse hook:
 ```json
-"PostToolUse": [{"matcher": "Write", "hooks": [{"type": "command", "command": "bash '[VAULT_PATH]/Meta/scripts/write-hook.sh'", "statusMessage": "Checking write triggers..."}]}]
+"PostToolUse": [{"matcher": "Write", "hooks": [{"type": "command", "command": "bash '[VAULT_PATH]/⚙️ Meta/scripts/write-hook.sh'", "statusMessage": "Checking write triggers..."}]}]
 ```
 
-After creating both scripts, run: `chmod +x "[VAULT_PATH]/Meta/scripts/session-end-hook.sh" "[VAULT_PATH]/Meta/scripts/write-hook.sh"`
+After creating both scripts, run: `chmod +x "[VAULT_PATH]/⚙️ Meta/scripts/session-end-hook.sh" "[VAULT_PATH]/⚙️ Meta/scripts/write-hook.sh"`
 
 **Note:** If the user was already set up with `originals-hook.sh`, migrate by copying its contents into `write-hook.sh` and updating the hook path in `.claude/settings.local.json`.
 
@@ -884,7 +913,7 @@ aliases: [english variants + translations in every language the user journals in
 
 ```dataview
 TABLE creationDate as Date, floor_level as Level
-FROM "Journals"
+FROM "📓 Journals"
 WHERE floor = "[Floor Name]"
 SORT creationDate DESC
 ```
@@ -952,7 +981,7 @@ Floors 1–8. You're responding to the world, not choosing. These are the reacti
 
 ```dataview
 TABLE creationDate as Date, floor as Floor
-FROM "Journals"
+FROM "📓 Journals"
 WHERE floor_level = "low"
 SORT creationDate DESC
 LIMIT 20
@@ -978,7 +1007,7 @@ Floors 9–13. You're starting to choose how you respond. These are the transiti
 
 ```dataview
 TABLE creationDate as Date, floor as Floor
-FROM "Journals"
+FROM "📓 Journals"
 WHERE floor_level = "middle"
 SORT creationDate DESC
 LIMIT 20
@@ -1004,7 +1033,7 @@ Floors 14–16. You're creating, not reacting. Love, joy, peace — the generati
 
 ```dataview
 TABLE creationDate as Date, floor as Floor
-FROM "Journals"
+FROM "📓 Journals"
 WHERE floor_level = "high"
 SORT creationDate DESC
 LIMIT 20
@@ -1175,7 +1204,7 @@ If they confirm (or adjust), save the entry.
 
 #### Step 7: Save the journal entry
 
-**File location:** `[VAULT_PATH]/Journals/` — use the vault path from setup. This MUST be the user's actual vault path, verified during Phase 3.
+**File location:** `[VAULT_PATH]/📓 Journals/` — use the vault path from setup. This MUST be the user's actual vault path, verified during Phase 3. The folder is created with the 📓 emoji prefix in Phase 3 — do not save to a plain `Journals/` folder.
 
 **Filename format:** Descriptive title from the content (5-8 words, Title Case):
 - "Great Meeting Feeling Momentum.md"
@@ -1274,7 +1303,7 @@ Use whichever scheduling system is available in this Claude Code install. Try th
 
 1. **`schedule` skill** (preferred — built-in Anthropic skill). Invoke the Skill tool with `skill: "schedule"` and ask it to create a new scheduled task with:
    - **Name:** `daily-journal-reminder`
-   - **Schedule:** daily at `{JOURNAL_TRIGGER_TIME}` in timezone `{JOURNAL_TRIGGER_TZ}`
+   - **Schedule:** daily at `[JOURNAL_TRIGGER_TIME]` in timezone `[JOURNAL_TRIGGER_TZ]`
    - **Prompt:** the task body below
 
 2. **`mcp__scheduled-tasks__create_scheduled_task`** (fallback — scheduled-tasks MCP). Call with equivalent parameters (`name`, `cron` or `schedule`, `prompt`).
@@ -1292,7 +1321,7 @@ Check if the user already has a journal entry for today before doing anything el
 
 1. First try the index at `[VAULT_PATH]/⚙️ Meta/journal-index.json`. If it exists, read it and look for any entry where `date == today` (YYYY-MM-DD). If found, EXIT SILENTLY — do not prompt the user, do not send any message, just end the task. They already journaled today. Do NOT create a duplicate.
 
-2. If the index doesn't exist (user skipped Phase 18), fall back to scanning the Journals folder directly. Use Grep on `[VAULT_PATH]/📓 Journals/*.md` for the frontmatter line `creationDate: {today}` (match on the YYYY-MM-DD prefix only, ignore time). If ANY file matches, EXIT SILENTLY.
+2. If the index doesn't exist (user skipped Phase 18), fall back to scanning the Journals folder directly. Use Grep on `[VAULT_PATH]/📓 Journals/*.md` for the frontmatter line `creationDate: [TODAY]` (match on the YYYY-MM-DD prefix only, ignore time). If ANY file matches, EXIT SILENTLY.
 
 3. Only if BOTH checks find nothing, continue to Step 2.
 
@@ -1498,7 +1527,7 @@ Add these to their CLAUDE.md under a new section:
 3. Batch auto-captures. Content ideas, decisions, vault improvements — batch at end of session, don't interrupt the conversation to log them.
 4. Save discoveries. When you figure out something non-obvious through debugging or investigation (an API that behaves unexpectedly, a tool quirk, a pattern that doesn't work as expected), save it as a memory file with type: discovery. Lead with the fact, then Why it matters and Source. This prevents future sessions from re-learning the same thing.
 5. Don't do things without confirming first.
-5. Route to the right tool. Check the Tool Routing table. Don't burn Claude tokens when another tool is faster.
+6. Route to the right tool. Check the Tool Routing table. Don't burn Claude tokens when another tool is faster.
 
 ## Auto-Update Check
 
@@ -1521,7 +1550,7 @@ Create the Content Drafts, Decision Log, and Vault Changelog files if they don't
 
 After all rules are added, build a Wikilink Reference file that lists every linkable note in the vault. This helps Claude (and the user) know what can be wikilinked when writing new content.
 
-Create `[VAULT_PATH]/Meta/Wikilink Reference.md`:
+Create `[VAULT_PATH]/⚙️ Meta/Wikilink Reference.md`:
 
 ```markdown
 ---
@@ -1554,24 +1583,49 @@ After all the installs and imports, quickly verify: "Let's make sure everything 
 
 Ask: "Want me to set up weekly and monthly insight reports? You type /weekly or /monthly anytime and I'll analyze your entries for that calendar period and give you a reflection."
 
-If yes, first create a journal index builder script at `[VAULT_PATH]/Meta/scripts/build-journal-index.py`:
+If yes, first create a journal index builder script at `[VAULT_PATH]/⚙️ Meta/scripts/build-journal-index.py`:
 
 ```python
 #!/usr/bin/env python3
-"""Build a date index of all journal entries for fast lookup."""
-import os, json
+"""Build a date index of all journal entries for fast lookup.
+
+Honors the NEVER fail silently rule:
+- Missing folders raise FileNotFoundError with a clear message.
+- Per-file parse errors are logged to stderr AND to a sidecar log, never swallowed.
+- Non-zero exit code if ANY file failed, so cron / callers can detect partial success.
+"""
+import os, sys, json, traceback
 from datetime import datetime
 
 VAULT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-JOURNAL_DIR = os.path.join(VAULT, "\U0001f4d3 Journals")
-OUTPUT = os.path.join(VAULT, "\u2699\ufe0f Meta", "journal-index.json")
+JOURNAL_DIR = os.path.join(VAULT, "\U0001f4d3 Journals")           # 📓 Journals
+META_DIR = os.path.join(VAULT, "\u2699\ufe0f Meta")                # ⚙️ Meta
+OUTPUT = os.path.join(META_DIR, "journal-index.json")
+ERROR_LOG = os.path.join(META_DIR, "journal-index-errors.log")
+
+# Guard: fail loudly if expected folders don't exist
+if not os.path.isdir(JOURNAL_DIR):
+    sys.stderr.write(
+        f"ERROR: Journals folder not found at '{JOURNAL_DIR}'.\n"
+        f"Check that your vault uses the '📓 Journals' folder name (Phase 3 default).\n"
+        f"If your folder is named differently, update JOURNAL_DIR in this script.\n"
+    )
+    sys.exit(1)
+if not os.path.isdir(META_DIR):
+    sys.stderr.write(
+        f"ERROR: Meta folder not found at '{META_DIR}'.\n"
+        f"Check that your vault uses the '⚙️ Meta' folder name (Phase 3 default).\n"
+    )
+    sys.exit(1)
 
 entries = []
+errors = []
 for fname in os.listdir(JOURNAL_DIR):
-    if not fname.endswith(".md") or os.path.isdir(os.path.join(JOURNAL_DIR, fname)):
+    fpath = os.path.join(JOURNAL_DIR, fname)
+    if not fname.endswith(".md") or os.path.isdir(fpath):
         continue
     try:
-        with open(os.path.join(JOURNAL_DIR, fname), 'r', encoding='utf-8', errors='replace') as f:
+        with open(fpath, 'r', encoding='utf-8', errors='replace') as f:
             in_fm, meta = False, {}
             for i, line in enumerate(f):
                 if i == 0 and line.strip() == '---':
@@ -1587,15 +1641,31 @@ for fname in os.listdir(JOURNAL_DIR):
                 if 'floor' in meta: entry["floor"] = meta["floor"]
                 if 'floor_level' in meta: entry["floor_level"] = meta["floor_level"]
                 entries.append(entry)
-    except: pass
+    except Exception as e:
+        errors.append((fname, f"{type(e).__name__}: {e}"))
 
 entries.sort(key=lambda x: x["date"])
 with open(OUTPUT, 'w') as f:
     json.dump({"total": len(entries), "last_updated": datetime.now().strftime("%Y-%m-%dT%H:%M"), "entries": entries}, f, indent=2, ensure_ascii=False)
+
+# Surface any per-file errors loudly — never swallow
+if errors:
+    with open(ERROR_LOG, 'w') as f:
+        f.write(f"# Journal index build errors — {datetime.now().isoformat()}\n")
+        f.write(f"# {len(errors)} file(s) could not be parsed\n\n")
+        for fname, err in errors:
+            f.write(f"{fname}\t{err}\n")
+    sys.stderr.write(
+        f"WARNING: Indexed {len(entries)} entries but {len(errors)} file(s) failed to parse.\n"
+        f"See '{ERROR_LOG}' for details.\n"
+    )
+    print(f"Indexed {len(entries)} entries ({len(errors)} errors — see {ERROR_LOG})")
+    sys.exit(2)  # non-zero so cron/wrappers know it was a partial success
+
 print(f"Indexed {len(entries)} entries")
 ```
 
-Run it: `python3 "[VAULT_PATH]/Meta/scripts/build-journal-index.py"`
+Run it: `python3 "[VAULT_PATH]/⚙️ Meta/scripts/build-journal-index.py"`
 
 Then create the skill file at `~/.claude/skills/insights/SKILL.md`:
 
@@ -1617,11 +1687,11 @@ When the user types /weekly or /monthly, generate an insight report from their r
 
 **DO NOT grep the entire Journals folder.** With hundreds of entries, that times out.
 
-Instead, use the journal index at `[VAULT_PATH]/Meta/journal-index.json`. This is a JSON file mapping every journal entry to its `creationDate`, `floor`, and `floor_level`. One file read instead of hundreds.
+Instead, use the journal index at `[VAULT_PATH]/⚙️ Meta/journal-index.json`. This is a JSON file mapping every journal entry to its `creationDate`, `floor`, and `floor_level`. One file read instead of hundreds.
 
 If the index doesn't exist or is stale, rebuild it:
 ```bash
-python3 "[VAULT_PATH]/Meta/scripts/build-journal-index.py"
+python3 "[VAULT_PATH]/⚙️ Meta/scripts/build-journal-index.py"
 ```
 
 Filter entries by date range from the index, then read ONLY the matching files.
@@ -1748,8 +1818,8 @@ End with ONE question — not homework, not an action item. Just a question wort
 ## Save the Report
 
 Save to the vault:
-- Weekly: `Journals/Weekly Insights/YYYY-WXX Weekly Insight.md` (e.g., 2026-W15)
-- Monthly: `Journals/Monthly Insights/YYYY-MM Monthly Insight.md` (e.g., 2026-04)
+- Weekly: `📓 Journals/Weekly Insights/YYYY-WXX Weekly Insight.md` (e.g., 2026-W15)
+- Monthly: `📓 Journals/Monthly Insights/YYYY-MM Monthly Insight.md` (e.g., 2026-04)
 
 Create the folders if they don't exist.
 

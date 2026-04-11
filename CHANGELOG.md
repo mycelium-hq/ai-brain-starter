@@ -9,6 +9,57 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 10, 2026 (eleventh session — path fixes + honoring the NEVER-fail-silently rule)
+
+Pure bug-fix pass. No new features. Fresh pulls now install cleanly without silent path mismatches.
+
+### Path fixes — `⚙️ Meta/` and `📓 Journals/` emoji consistency
+
+Phase 3 creates the vault with emoji-prefixed folders (`⚙️ Meta/`, `📓 Journals/`), but multiple downstream templates referenced them without the emojis. On a fresh install these would silently write to non-existent folders:
+
+- **Phase 5 hook scripts** — `session-end-hook.sh`, `write-hook.sh`, and the `.claude/settings.local.json` hook command strings were all referencing `Meta/scripts/` (no emoji). Fixed to `⚙️ Meta/scripts/` in the save paths, the internal `$VAULT/Meta/` variable expansions, and the JSON hook command lines.
+- **Phase 10 generated daily-journal skill** — Step 7 save path was `[VAULT_PATH]/Journals/` instead of `[VAULT_PATH]/📓 Journals/`. Claude would have saved entries to a phantom folder or created a parallel one (same class of bug as the `~/Desktop/Desktop/` phantom folder issue).
+- **Phase 10 floor concept note Dataview queries** — four instances of `FROM "Journals"` that would have returned zero results because the actual folder is `📓 Journals`. Changed to `FROM "📓 Journals"`.
+- **Phase 18 build-journal-index.py** — the script path reference was `Meta/scripts/build-journal-index.py` in three places. Fixed.
+- **Phase 18 insights save paths** — `Journals/Weekly Insights/` and `Journals/Monthly Insights/` without the emoji. Fixed.
+- **Phase 16 Wikilink Reference path** — `[VAULT_PATH]/Meta/Wikilink Reference.md` without the emoji. Fixed.
+- **Phase 0 broken-install diagnostic** — said `Meta/journal-index.json` exists and pointed at "Phase 11" to regenerate it. Actual location is `⚙️ Meta/journal-index.json` and the script is installed in Phase 18. Both fixed.
+
+### Duplicate rule number in the Efficiency Rules template
+
+The `## Efficiency Rules` block that gets written to every new user's CLAUDE.md had two rules numbered `5.` — "Don't do things without confirming first" and "Route to the right tool." Renumbered the second one to `6.` so every new vault doesn't ship with a broken numbered list.
+
+### Honoring the NEVER-fail-silently rule
+
+Phase 16 rule 12 says `NEVER fail silently` but the hook scripts had zero error handling — which is how the `Meta/` path bugs survived so many commits. Hardened both scripts so they can't fail quietly:
+
+**`session-end-hook.sh`:**
+- Checks that `⚙️ Meta/` exists before doing anything. If missing, writes to `hook-errors.log` at the vault root AND emits a `HOOK ERROR` message into the Stop hook context so Claude tells the user immediately.
+- Every file-write operation now `2>>` redirects stderr into `⚙️ Meta/hook-errors.log`. If any write fails, the next session start surfaces it.
+
+**`write-hook.sh`:**
+- Guards on `python3` being on PATH. Emits a `HOOK ERROR` if missing instead of silently producing empty JSON.
+- Captures Python parse errors via `$?` and surfaces them in the hook context. Replaced the bare `except` with an explicit stderr write.
+
+**`build-journal-index.py`:**
+- Guards on `📓 Journals/` and `⚙️ Meta/` folders existing. `sys.exit(1)` with a clear message if either is missing.
+- Replaced the bare `except: pass` (which was swallowing per-file parse errors) with a proper `except Exception as e:` that collects errors into a list.
+- If any errors occurred, writes them to `⚙️ Meta/journal-index-errors.log` and exits with code `2` so cron/wrappers can detect partial success.
+
+### Placeholder syntax normalization
+
+My own Phase 10 scheduled-task section from yesterday used `{JOURNAL_TRIGGER_TIME}`, `{JOURNAL_TRIGGER_TZ}`, `{today}` with curly braces. Rest of the file uses `[VAR]` with square brackets. Normalized to brackets so Claude doesn't have to guess which substitution style is in play.
+
+### What you should do if you already ran setup before this commit
+
+Re-run `/setup-brain` and tell it to repair paths. Or manually:
+1. Move any files currently under `Meta/` (without emoji) into `⚙️ Meta/`. Same for `Journals/` → `📓 Journals/`.
+2. Update your `.claude/settings.local.json` hook paths to use `⚙️ Meta/scripts/` instead of `Meta/scripts/`.
+3. Re-run `python3 "⚙️ Meta/scripts/build-journal-index.py"` to rebuild the index at the correct path.
+4. If your CLAUDE.md has duplicate rule 5 in the Efficiency Rules block, renumber the second one to 6.
+
+---
+
 ## April 10, 2026 (tenth session — daily journal trigger + corporate-event Onde suggestion)
 
 Two new features, both touching Phase 10 and Phase 16 of `SKILL.md`. Existing users: see `migrations/2026-04-10-daily-journal-trigger-and-onde-suggestion.md` for how to apply.
