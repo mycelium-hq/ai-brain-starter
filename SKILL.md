@@ -1764,8 +1764,18 @@ Create the script at `[vault]/⚙️ Meta/scripts/run-insights.sh`:
 #        ./run-insights.sh monthly  (2nd of each month via cron)
 
 PERIOD="${1:-weekly}"
-VAULT_DIR="$HOME/Desktop/Adelaida Notes"  # ← update to user's vault path
+# IMPORTANT: replace [VAULT_PATH] with the user's actual vault path before
+# deploying. Phase 11 should prompt for this and inject it automatically; if
+# you're hand-editing, substitute it here. The script fails loud below if the
+# placeholder wasn't replaced.
+VAULT_DIR="[VAULT_PATH]"
 LOG_FILE="$VAULT_DIR/⚙️ Meta/scripts/.insights-cron.log"
+
+if [ "$VAULT_DIR" = "[VAULT_PATH]" ] || [ ! -d "$VAULT_DIR" ]; then
+  echo "ERROR: VAULT_DIR is not set or does not exist: $VAULT_DIR" >&2
+  echo "Edit run-insights.sh and replace [VAULT_PATH] with your actual vault path." >&2
+  exit 1
+fi
 
 # Find the Claude CLI (path changes with version updates)
 CLAUDE_BASE="$HOME/Library/Application Support/Claude/claude-code"
@@ -1820,8 +1830,17 @@ Create `run-insights.ps1` in the vault's `⚙️ Meta/scripts/` folder:
 #        .\run-insights.ps1 -Period monthly
 param([string]$Period = "weekly")
 
-$VaultDir = "$env:USERPROFILE\Documents\Adelaida Notes"  # ← update to user's vault path
+# IMPORTANT: replace [VAULT_PATH] with the user's actual vault path before
+# deploying. Phase 11 should prompt for this and inject it automatically; if
+# you're hand-editing, substitute it here. The script fails loud below if the
+# placeholder wasn't replaced.
+$VaultDir = "[VAULT_PATH]"
 $LogFile = "$VaultDir\⚙️ Meta\scripts\.insights-cron.log"
+
+if ($VaultDir -eq "[VAULT_PATH]" -or -not (Test-Path $VaultDir -PathType Container)) {
+    Write-Error "VAULT_DIR is not set or does not exist: $VaultDir. Edit run-insights.ps1 and replace [VAULT_PATH] with your actual vault path."
+    exit 1
+}
 
 # Find Claude CLI (Windows)
 $ClaudeBin = Get-ChildItem "$env:LOCALAPPDATA\AnthropicClaude\claude-code" -Recurse -Filter "claude.exe" -ErrorAction SilentlyContinue |

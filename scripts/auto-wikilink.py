@@ -43,37 +43,101 @@ import re
 import sys
 
 VAULT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-TEAM_VAULT_PREFIX = os.path.join(VAULT, "🚀 Onde Team")
-JOURNAL_DIR = os.path.join(VAULT, "📓 Journals")
-
-# Concept directories scanned for the personal-scope term list
-PERSONAL_CONCEPT_DIRS = [
-    os.path.join(VAULT, "✍️ Writing", "The High-Rise", "Floors"),
-    os.path.join(VAULT, "🧠 Psychology"),
-    os.path.join(VAULT, "📝 Notes"),
-    os.path.join(VAULT, "🌱 Curiosities"),
-    os.path.join(VAULT, "👤 CRM"),
-    os.path.join(VAULT, "💼 Business"),
-]
-
-# Concept directories scanned for the team-vault scope term list
-TEAM_CONCEPT_DIRS = [
-    os.path.join(TEAM_VAULT_PREFIX, "📋 Strategy"),
-    os.path.join(TEAM_VAULT_PREFIX, "👥 CRM"),
-    os.path.join(TEAM_VAULT_PREFIX, "💰 Raise"),
-    os.path.join(TEAM_VAULT_PREFIX, "🎯 Sales"),
-    os.path.join(TEAM_VAULT_PREFIX, "🛠 Product"),
-]
 
 # Folders never scanned for terms even within their vault scope
 EXCLUDED_DIR_NAMES = {
-    "🤖 AI Chats", "graphify-input", "graphify-out", "_archive", "Archive",
-    ".obsidian", ".git", ".claude", "Templates",
+    "🤖 AI Chats", "AI Chats", "graphify-input", "graphify-out",
+    "_archive", "Archive", ".obsidian", ".git", ".claude", "Templates",
 }
 
 
+def _detect_team_vault(vault_path: str) -> str:
+    """Find the team vault (if any).
+
+    Priority:
+      1. AI_BRAIN_TEAM_VAULT env var (relative subfolder name within the vault)
+      2. Any symlinked directory at the vault root (the convention multi-vault
+         setups use to mount a shared team vault into the personal vault)
+      3. Legacy hardcoded '🚀 Onde Team' fallback (kept so existing Onde team
+         vault setups keep working without reconfiguring)
+
+    Returns an absolute path to the team vault, or "" if none exists.
+    """
+    override = os.environ.get("AI_BRAIN_TEAM_VAULT", "").strip()
+    if override:
+        cand = os.path.join(vault_path, override)
+        return cand if os.path.isdir(cand) else ""
+    if os.path.isdir(vault_path):
+        for name in sorted(os.listdir(vault_path)):
+            p = os.path.join(vault_path, name)
+            if os.path.islink(p) and os.path.isdir(p):
+                return p
+    legacy = os.path.join(vault_path, "🚀 Onde Team")
+    return legacy if os.path.isdir(legacy) else ""
+
+
+def _find_journal_dir(vault_path: str) -> str:
+    """Locate the journals folder. Tries common names; falls back to emoji form."""
+    for name in ("📓 Journals", "Journals", "📔 Journal", "Journal"):
+        p = os.path.join(vault_path, name)
+        if os.path.isdir(p):
+            return p
+    return os.path.join(vault_path, "📓 Journals")
+
+
+def _discover_subdirs(parent: str) -> list:
+    """List immediate subdirectories of `parent`, skipping hidden and excluded."""
+    if not parent or not os.path.isdir(parent):
+        return []
+    return [
+        os.path.join(parent, name)
+        for name in sorted(os.listdir(parent))
+        if not name.startswith('.')
+        and name not in EXCLUDED_DIR_NAMES
+        and os.path.isdir(os.path.join(parent, name))
+    ]
+
+
+TEAM_VAULT_PREFIX = _detect_team_vault(VAULT)
+JOURNAL_DIR = _find_journal_dir(VAULT)
+
+# Concept directories scanned for the personal-scope term list.
+# Hardcoded defaults cover the ai-brain-starter standard folder layout;
+# missing directories are silently skipped by `load_terms_for_scope`.
+# Users with custom folder names can set AI_BRAIN_PERSONAL_CONCEPT_DIRS
+# to a colon-separated list of subfolder names relative to the vault root.
+_personal_override = os.environ.get("AI_BRAIN_PERSONAL_CONCEPT_DIRS", "").strip()
+if _personal_override:
+    PERSONAL_CONCEPT_DIRS = [
+        os.path.join(VAULT, p.strip()) for p in _personal_override.split(":") if p.strip()
+    ]
+else:
+    PERSONAL_CONCEPT_DIRS = [
+        os.path.join(VAULT, "✍️ Writing", "The High-Rise", "Floors"),
+        os.path.join(VAULT, "✍️ Writing"),
+        os.path.join(VAULT, "🧠 Psychology"),
+        os.path.join(VAULT, "Psychology"),
+        os.path.join(VAULT, "📝 Notes"),
+        os.path.join(VAULT, "Notes"),
+        os.path.join(VAULT, "🌱 Curiosities"),
+        os.path.join(VAULT, "👤 CRM"),
+        os.path.join(VAULT, "CRM"),
+        os.path.join(VAULT, "💼 Business"),
+        os.path.join(VAULT, "Business"),
+    ]
+
+# Concept directories scanned for the team-vault scope term list.
+# Auto-discovers all non-hidden, non-excluded immediate subdirs of the team
+# vault. If the legacy Adelaida-specific subfolder names exist, they'll be
+# picked up automatically; if the team vault uses different names, those
+# are picked up too. Empty list if no team vault exists.
+TEAM_CONCEPT_DIRS = _discover_subdirs(TEAM_VAULT_PREFIX)
+
+
 def in_team_vault(filepath: str) -> bool:
-    """True if `filepath` lies inside the team vault."""
+    """True if `filepath` lies inside the team vault. False if no team vault exists."""
+    if not TEAM_VAULT_PREFIX:
+        return False
     return os.path.abspath(filepath).startswith(os.path.abspath(TEAM_VAULT_PREFIX))
 
 

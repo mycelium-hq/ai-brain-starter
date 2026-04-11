@@ -2,7 +2,7 @@
 name: graphify
 description: any input (code, docs, papers, images) → knowledge graph → clustered communities → HTML + JSON + audit report
 trigger: /graphify
-argument-hint: "[subfolder path like 🚀 Onde/ or 📝 Notes/ — avoid running on full 5,000-file vault]"
+argument-hint: "[subfolder path to process, e.g. Notes/ or Journals/ — for very large vaults (1000+ files) subset instead of running on the full vault]"
 ---
 
 # /graphify
