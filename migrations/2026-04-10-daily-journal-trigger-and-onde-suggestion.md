@@ -48,6 +48,60 @@ Open your vault's `CLAUDE.md`, find the `## Obsidian Rules` section, and add the
 
 Skip this rule entirely if you don't plan corporate events or prefer not to get the suggestion. Removing it is a one-line delete.
 
+## CRITICAL — Post-pull one-time action for existing users (regardless of which option above you pick)
+
+Today's commits (tenth through twelfth sessions) include a lot more than just the journal trigger and Onde rule. They also fix:
+- Emoji folder paths in hook scripts, settings templates, and Dataview queries
+- The bug where graphify's `scripts/` folder (80–92% cost-cutting wrappers) was never actually copied to installed users
+- The auto-update hook now runs `sync-skills.sh` deterministically instead of telling Claude to guess what to copy
+
+**If your `.claude/settings.local.json` was written before today,** it has the OLD auto-update hook command that does a natural-language "copy any updated skills" instruction. After you pull, the new `sync-skills.sh` will exist in the repo but your old hook won't call it. You need to do **one** of the following exactly once, then you're permanently in sync:
+
+### Easiest — let Claude do it for you after the pull
+
+After the auto-update hook pulls the new commits on your next session start, just tell Claude:
+
+> "Run `bash ~/.claude/skills/ai-brain-starter/scripts/sync-skills.sh` to sync the skill folders, and then update my `.claude/settings.local.json` to match the new `hooks.json` in the repo."
+
+Claude will:
+1. Run sync-skills.sh — backs up any locally-modified skill files to `<file>.bak-YYYY-MM-DD-HHMM`, then overwrites with the repo versions.
+2. Diff `~/.claude/skills/ai-brain-starter/hooks.json` against your vault's `.claude/settings.local.json` and update the hooks section so the new auto-update+sync hook is in place for future sessions.
+
+### Manual — if you prefer to do it yourself
+
+```bash
+# 1. Sync the skills (backs up customizations before overwriting)
+bash ~/.claude/skills/ai-brain-starter/scripts/sync-skills.sh
+
+# 2. Review what was backed up
+cat ~/.claude/skills/ai-brain-starter/.sync.log
+
+# 3. Update your vault's settings.local.json to match the new hooks.json
+#    Open both files in your editor, copy the "hooks" block from:
+#    ~/.claude/skills/ai-brain-starter/hooks.json
+#    into:
+#    [YOUR_VAULT]/.claude/settings.local.json
+#    (substituting [VAULT_PATH] with your actual vault path in the bash commands)
+```
+
+After this one-time sync, all future updates flow automatically: the new hook runs `git fetch` + `git pull` + `sync-skills.sh` on every session start and reports what changed in plain language.
+
+### Verify the sync worked
+
+After running sync-skills.sh, your graphify install should now have:
+
+```
+~/.claude/skills/graphify/
+  SKILL.md
+  OPTIMIZATIONS.md          ← NEW (was missing)
+  scripts/                  ← NEW (was missing)
+    graphify_prep.py
+    graphify_chunk.py
+    graphify_canonicalize.py
+```
+
+If any of those four files under `scripts/` are still missing, the sync didn't run — run it manually.
+
 ## Rollback
 
 **Daily trigger:** ask Claude Code to delete the scheduled task: *"Remove the `daily-journal-reminder` scheduled task."* Or remove the cron line from `crontab -e` if you installed it via cron. No vault data is affected.

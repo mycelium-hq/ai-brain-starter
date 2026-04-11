@@ -371,7 +371,7 @@ SORT last_interaction ASC
 ### Recent Journal Entries
 ```dataview
 TABLE creationDate
-FROM "Journals"
+FROM "📓 Journals"
 WHERE type != "summary"
 SORT creationDate DESC
 LIMIT 20

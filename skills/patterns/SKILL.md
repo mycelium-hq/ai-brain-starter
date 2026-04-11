@@ -17,8 +17,8 @@ Run this after `/weekly`, after a heavy journaling session, or whenever the user
 ## Step 1: Gather recent signal (do this silently)
 
 Read these sources in parallel:
-- `[VAULT]/Meta/Last Session.md` — what was just worked on
-- `[VAULT]/Meta/Decision Log.md` — last 10–15 entries (look for repeating decision types)
+- `[VAULT]/⚙️ Meta/Last Session.md` — what was just worked on
+- `[VAULT]/⚙️ Meta/Decision Log.md` — last 10–15 entries (look for repeating decision types)
 - Any content drafts or writing drafts — recent drafts (look for recurring metaphors)
 - Last 7 journal entries (use journal-index.json if available, otherwise read directly)
 
