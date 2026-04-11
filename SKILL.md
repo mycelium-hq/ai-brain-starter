@@ -157,6 +157,36 @@ If available, add to the CLAUDE.md rules later: "Use Obsidian CLI for fast vault
 
 If not available (Windows, or older Obsidian): skip silently. The vault works fine without it — Claude just uses file search instead.
 
+### Knowledge Graph context loading (add to user's CLAUDE.md after first /graphify run)
+
+Once the user has run `/graphify` at least once and has `graphify-out/graph.json` + `graphify-out/GRAPH_REPORT.md`, their CLAUDE.md should include a "Knowledge Graph" rule that tells Claude to use the graph as the **primary** strategic context source. Draft template to append:
+
+```markdown
+## Knowledge Graph — CHECK THIS FIRST FOR STRATEGY / ANALYSIS
+
+This vault has a knowledge graph at `graphify-out/`. It's the fastest and most accurate way to get strategic context. **For any question that spans multiple concepts, start here before reading individual files.**
+
+**Context-loading decision tree:**
+
+| Question type | Start with | Then drill into |
+|---|---|---|
+| Strategy / pitch / planning / multi-concept | `graphify-out/GRAPH_REPORT.md` (god nodes + communities + hyperedges) | Top 3-5 source files in the relevant community |
+| "What connects X and Y?" | `/graphify path "X" "Y"` | Shortest-path files |
+| "What's in the vault about X?" | `/graphify explain "X"` | Top-degree neighbors |
+| "Find files mentioning X" | `obsidian search query="X"` | Matching files |
+| "What links to this file?" | `obsidian backlinks file="Name"` | Source of each backlink |
+| Editing a specific file | `Read` the file directly | — |
+
+**Rules:**
+1. **For strategic or multi-concept questions, ALWAYS read `GRAPH_REPORT.md` first.** It compresses the vault's structural thinking.
+2. **Use `/graphify query "<question>"` instead of reading 5 files** when you need a connected subgraph with source citations.
+3. **Use `/graphify path "A" "B"` for cross-concept connections.**
+4. **Update the graph after any significant writing session:** `/graphify <path> --update`. The cache makes incremental runs essentially free.
+5. **When merging duplicate concept nodes, update aliases in the canonical file's frontmatter — don't rename or delete.** This preserves existing `[[Old Name]]` wikilinks. See `⚙️ Meta/Graphify Runbook.md`.
+```
+
+Skip this block if the user hasn't run `/graphify` yet — but mention it in the setup summary so they know to add it after the first run.
+
 After Phase 0 completes, tell the user: "I installed a few tools in the background that make everything faster and more efficient. Now let's get started with you."
 
 ## Phase 1: Language & Welcome

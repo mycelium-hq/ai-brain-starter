@@ -9,6 +9,27 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 10, 2026 (ninth session — knowledge graph as primary context source)
+
+Added a new CLAUDE.md template block (`SKILL.md` Phase 0) that tells future Claude sessions to use the knowledge graph as the **first** stop for strategic / multi-concept questions, not as an afterthought.
+
+**Why:** Running the optimized `/graphify` pipeline produces `GRAPH_REPORT.md` (~11K tokens) which compresses the entire vault's structural thinking — god nodes, communities, hyperedges, surprising connections. For any strategy question (pitch deck, investor prep, planning, analysis), reading the report first is **faster and more accurate** than grepping and re-reading individual files. The graph connects concepts across files in a way grep cannot.
+
+**The decision tree baked into the template:**
+
+| Question type | Start with | Then drill into |
+|---|---|---|
+| Strategy / pitch / planning / multi-concept | `GRAPH_REPORT.md` (god nodes + communities + hyperedges) | Top 3-5 source files in the relevant community |
+| "What connects X and Y?" | `/graphify path "X" "Y"` | Shortest-path files |
+| "What's in the vault about X?" | `/graphify explain "X"` | Top-degree neighbors |
+| "Find files mentioning X" | `obsidian search query="X"` | Matching files |
+| "What links to this file?" | `obsidian backlinks file="Name"` | Source of each backlink |
+| Editing a specific file | `Read` the file directly | — |
+
+**Also documented:** when merging duplicate concept nodes (e.g. "Accenture" vs "Accenture Colombia" vs "Accenture LATAM"), always update **aliases in the canonical file's frontmatter**. Never rename or delete — aliases preserve existing `[[Old Name]]` wikilinks automatically. Hit real cases of this during Adelaida's 2026-04-10 runs (Accenture, Anthony Rose).
+
+---
+
 ## April 10, 2026 (eighth session — auto-wikilink v2: vault-scope-aware, regex bug fix)
 
 Added `scripts/auto-wikilink.py` (v2). The previous version had three critical bugs that corrupted team vault files when run against a multi-vault setup with a symlinked team folder:
