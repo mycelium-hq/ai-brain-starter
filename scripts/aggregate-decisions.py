@@ -47,7 +47,9 @@ import re
 import sys
 from pathlib import Path
 
-VAULT_ROOT = Path(os.environ.get("VAULT_ROOT", os.path.expanduser("~/Documents/MyVault")))
+# Auto-detect from script location (⚙️ Meta/scripts/ → 2 levels up), or override via env var.
+_SCRIPT_DIR = Path(__file__).resolve().parent
+VAULT_ROOT = Path(os.environ.get("VAULT_ROOT", str(_SCRIPT_DIR.parent.parent)))
 META_DIR = VAULT_ROOT / "⚙️ Meta"
 DECISIONS_DIR = META_DIR / "Decisions"
 DECISION_LOG = META_DIR / "Decision Log.md"

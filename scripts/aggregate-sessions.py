@@ -62,8 +62,10 @@ import re
 import sys
 from pathlib import Path
 
-# VAULT_ROOT — override via env var, or edit this default for your setup.
-VAULT_ROOT = Path(os.environ.get("VAULT_ROOT", os.path.expanduser("~/Documents/MyVault")))
+# VAULT_ROOT — auto-detect from script location (⚙️ Meta/scripts/ → 2 levels up),
+# or override via env var.
+_SCRIPT_DIR = Path(__file__).resolve().parent
+VAULT_ROOT = Path(os.environ.get("VAULT_ROOT", str(_SCRIPT_DIR.parent.parent)))
 META_DIR = VAULT_ROOT / "⚙️ Meta"
 SESSIONS_DIR = META_DIR / "Sessions"
 LAST_SESSION = META_DIR / "Last Session.md"
