@@ -1515,9 +1515,10 @@ Ask: "Want to set up a daily journal routine? Here's how it works: you type /jou
 If yes, ask these questions one at a time (conversational, not a form):
 1. "What time of day do you want me to start the journal conversation automatically? I'll install a scheduled trigger that kicks off a /journal session at that time — but only if you haven't journaled yet that day, so it stays out of your way on days you already wrote. Give me a specific time in your local timezone (like `7:30pm` or `8:00am`). If you're not sure, I'll default to **7:30pm** — evening wind-down works for most people. You can change it later."
 2. "What do you want me to ask about? (work, emotions, relationships, health, all of it?)"
-3. "Do you want me to track any habits? Things like gym days, sleep time, mood, water intake, meditation, screen time? I'll ask about them each session and log them in the entry."
+3. "Do you want me to track any habits? Things like sleep time, mood, reading, exercise, water intake, meditation, screen time? I'll ask about them each session and log them in the entry."
 4. "How raw do you want the entries? (polished or stream-of-consciousness?)"
-5. "Do you want me to hold you accountable on anything? For example: gym consistency ('you said 4x/week, you're at 2'), sleep time ('that's the late-bed spiral again'), scrolling habits ('any scroll holes today?'), spending patterns, or anything else you tend to let slide. I'll check in on these during each journal session — coach energy, not parent energy. What matters to you?"
+5. "Do you want me to hold you accountable on anything? This is totally personal — it should be whatever YOU tend to let slide. Some examples: sleep consistency ('that's the late-bed spiral again'), reading ('you said 30 min a day, when's the last time you picked up the book?'), exercise ('you're at 2 this week, you said 4'), screen time ('any scroll holes today?'), meditation, water intake, spending habits — literally anything. I'll check in during each journal session with coach energy, not parent energy. What matters to you?"
+6. "Do you want a gratitude or abundance check-in each session? It's a quick question — 'what's one thing you have right now that you're grateful for?' — to make sure the journal doesn't only capture hard days. Some people love it, some find it corny. Totally optional."
 
 Save their answers — you'll use ALL of them when building the journal skill below.
 
@@ -1800,38 +1801,53 @@ Based on their answer, dig deeper. Be curious, not clinical. Include these speci
 - Use their language back to them.
 - Celebrate wins they'd normally skip over.
 
-#### Step 2.5: Abundance / gratitude check
-Ask ONE quick question about present abundance:
+#### Step 2.5: Abundance / gratitude check (only if they opted in — question 6 from setup)
+If the user said yes to the gratitude check-in, ask ONE quick question about present abundance:
 - "What's one thing you have right now — financially, personally, anything — that you're grateful for?"
 - Even "I had a great dinner" or "I can pay my rent" counts.
 - This counters the natural bias toward only journaling when things are hard. The good stuff is there — it just doesn't get written down. Include the answer naturally in the entry.
+
+If they said no or skipped question 6, skip this step entirely.
 
 #### Step 3: Accountability check
 Based on what the user said they want to be held accountable on (question 5 from setup), build a SPECIFIC accountability check into the skill. For each item they chose, include:
 
 **The pattern:** What to ask, what a good answer looks like, what a bad answer looks like, and what to say for each.
 
-Example structures (adapt to whatever they actually asked for):
+Build the accountability check from WHATEVER the user asked for in question 5. Don't assume gym, sleep, or any specific habit — use exactly what they said. For each item, follow this structure:
 
-**Gym / exercise:**
-- "Did you hit the gym today?" or "How many gym days this week so far?"
-- If below their target: "You're at [X] for the week. You said [target]. When are you going tomorrow?"
-- If on track: "Nice. That's [X] this week. The streak is building."
-- Log the count in the entry.
+1. **Ask** — a direct check-in question specific to their habit
+2. **Compare** — measure against their stated goal/target
+3. **Push or celebrate** — if behind, name the pattern and nudge forward; if on track, acknowledge the streak
+4. **Log** — track the data in the entry
 
-**Sleep:**
+Example structures (use as templates, adapt to whatever they chose):
+
+**Exercise (if they asked for it):**
+- "How many [exercise type] days this week so far?"
+- If below target: "You're at [X]. You said [target]. When's the next one?"
+- If on track: "That's [X] this week. The streak is building."
+
+**Sleep (if they asked for it):**
 - "What time did you go to bed last night?"
 - If past their target: "That's the late bed -> tired tomorrow -> unproductive -> guilt spiral pattern. Phone in another room tonight?"
-- If reasonable: Note it positively.
 
-**Scrolling / screen time:**
+**Reading (if they asked for it):**
+- "Did you read today?" or "How far into [book] are you?"
+- If slipping: "You said [target]. When's the last time you actually sat down with the book?"
+
+**Scrolling / screen time (if they asked for it):**
 - "Any scroll holes or binge sessions today?"
-- If yes: Flag the pattern without judgment. "That's the crash after a sprint. Normal. But let's not let it become a streak."
+- If yes: "That's the crash after a sprint. Normal. But let's not let it become a streak."
 
-**Spending / money:**
-- If they mentioned spending: "Can you afford that without it stinging after?"
+**Meditation / mindfulness (if they asked for it):**
+- "Did you sit today?"
+- If missed: "That's [X] days skipped. You said this resets you. What's blocking it?"
 
-**Other habits:** Follow the same structure — ask, compare to their stated goal, push gently if behind, celebrate if on track.
+**Spending / money (if they asked for it):**
+- "Can you afford that without it stinging after?"
+
+**Any other habit they named:** Follow the same structure — ask, compare to their stated goal, push gently if behind, celebrate if on track. The user defines what matters, not the skill.
 
 **Key principle: Coach energy, not parent energy.** Direct but not nagging. Track the data. Name the patterns. Don't lecture.
 
@@ -1954,16 +1970,17 @@ If they confirm (or adjust), save the entry.
 creationDate: YYYY-MM-DDTHH:MM
 floor: [Floor name]
 floor_level: [low/middle/high]
-[any habit fields they requested, e.g. gym_count: 3, sleep_time: 11pm]
+[any habit fields they requested, e.g. exercise_count: 3, sleep_time: 11pm, reading_mins: 30]
 ---
 
 ## Journal — [User's first name]'s voice
 [The journal entry — written in FIRST PERSON as the user, in their voice. Stream of consciousness, casual, honest. Include the details they shared. Don't clean it up too much — journals should be raw and real. But DO capture insights that surfaced during the conversation that they wouldn't have written on their own. **This section contains the user's original thought only. Panel voices, advisor names, and synthetic dialogue NEVER appear here.** If a panel insight shifted their thinking during the interview and they said so out loud, write THEIR reaction here in THEIR voice — put the panelist's actual line in the panel section below.]
 
-[Include the abundance/gratitude note naturally woven in.]
+[If they opted into the gratitude check-in, include the abundance/gratitude note naturally woven in.]
 
 [Accountability tracking line, e.g.:]
-**Gym:** [X]/[target] this week · **Sleep:** [time to bed] · **Scroll check:** [clean/flagged]
+[Whatever they chose to track, e.g.:]
+**Sleep:** [time to bed] · **Reading:** [X] min · **Exercise:** [X]/[target] this week
 
 ---
 
@@ -2463,6 +2480,8 @@ cd ~/.claude/skills/ai-brain-starter && git fetch origin main --quiet 2>/dev/nul
 ```
 If an update is available, tell the user: "There's a newer version of the AI Brain Starter skill. Want me to update? (`git pull` — takes 2 seconds)." If yes, run `git pull`, read CHANGELOG.md, and tell them what's new in plain English. If they say no, don't ask again this session.
 
+**After any pull, check for pending migrations.** Read `migrations/` for any `.md` files newer than the user's last applied version. Each migration file explains what changed and what questions to ask the existing user. Apply them conversationally — don't dump a wall of text, just ask the questions one at a time and update the user's skill files based on their answers.
+
 ## Auto-Capture Rules
 
 1. Content ideas → Content Drafts.md (batch at end of session, don't interrupt)
@@ -2759,8 +2778,7 @@ date_range: [start] to [end]
 entries_analyzed: [X]
 primary_floor: [Floor]
 floor_trend: [up/down/stable]
-gym_total: [X]
-avg_bedtime: [time]
+[habit totals from whatever they track, e.g. exercise_total, avg_bedtime, reading_total, etc.]
 ---
 
 [Full report]
@@ -2777,10 +2795,10 @@ After saving the insight report, check whether any floor that appeared this peri
 2. Check if it has a `## Personal Patterns` section. If not, create one.
 3. Ask: Is there a NEW trigger, pattern, or movement insight from this period that isn't already captured?
    - New trigger: "Fear spikes before investor meetings and when money conversations come up."
-   - New pattern: "Joy tends to follow 3+ gym days and flow states."
+   - New pattern: "Joy tends to follow consistent exercise weeks and flow states."
    - New movement: "Moving from Anger to Acceptance happened same-day — both times after journaling the frustration out."
    - New person-floor link: "Conversations with [person] consistently land on [floor]."
-4. If yes, append under `## Personal Patterns` with the date: `- *(Week of Apr 7, 2026)* Joy shows up after back-to-back gym days and uninterrupted creative mornings.`
+4. If yes, append under `## Personal Patterns` with the date: `- *(Week of Apr 7, 2026)* Joy shows up after consistent mornings and uninterrupted creative blocks.`
 5. If nothing new, skip — don't add filler.
 
 **What's worth adding:** Triggers that appeared 2+ times, movement strategies that worked, person-floor correlations, surprises.
