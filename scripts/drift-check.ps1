@@ -35,6 +35,7 @@ $ScriptDir   = Split-Path -Parent $MyInvocation.MyCommand.Path
 $StarterDir  = Split-Path -Parent $ScriptDir
 $InstallDir  = "$env:USERPROFILE\.claude\skills"
 $CooldownFile = "$env:USERPROFILE\.claude\.ai-brain-starter-drift-check-last-run"
+$IgnoreFile  = "$env:USERPROFILE\.claude\.ai-brain-starter-drift-check-ignore"
 $Today = (Get-Date -Format "yyyy-MM-dd")
 
 # ── Cooldown ──────────────────────────────────────────────────────────────
@@ -56,6 +57,26 @@ if (-not (Test-Path -LiteralPath $StarterDir)) {
 # ── Helpers ───────────────────────────────────────────────────────────────
 $DriftLines = New-Object System.Collections.ArrayList
 
+# Per-user ignore registry. Each line is either a literal installed path OR
+# a wildcard pattern (PowerShell -like syntax). `#` starts a comment, blank
+# lines are ignored. Trailing whitespace stripped. Mirrors drift-check.sh.
+$IgnorePatterns = @()
+if (Test-Path -LiteralPath $IgnoreFile) {
+    $IgnorePatterns = @(Get-Content -LiteralPath $IgnoreFile -Encoding UTF8 | ForEach-Object {
+        $line = $_.Trim()
+        if ($line -and -not $line.StartsWith("#")) { $line }
+    })
+}
+
+function Test-IsIgnored {
+    param([string]$Path)
+    if ($IgnorePatterns.Count -eq 0) { return $false }
+    foreach ($pat in $IgnorePatterns) {
+        if ($Path -like $pat) { return $true }
+    }
+    return $false
+}
+
 function Test-FilesIdentical {
     param([string]$PathA, [string]$PathB)
     if (-not (Test-Path -LiteralPath $PathA) -or -not (Test-Path -LiteralPath $PathB)) {
@@ -73,6 +94,7 @@ function Add-Drift {
         [string]$RepoSourcePath,
         [string]$Note = ""
     )
+    if (Test-IsIgnored $InstalledPath) { return }
     [void]$DriftLines.Add("$Scope|$InstalledPath|$RepoSourcePath|$Note")
 }
 

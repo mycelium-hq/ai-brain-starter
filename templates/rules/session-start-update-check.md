@@ -148,10 +148,11 @@ If they say yes, for **each drift entry**, do this exact sequence:
 
 4. **If the entry has a `note` field**, surface it before asking. Especially for `graph-context-hook.sh` (note: `hand-edited CONFIG block at top of file — cherry-pick changes, do NOT overwrite wholesale`) — tell the user: "This file has a hand-edited config block at the top with paths and settings specific to your vault. I won't replace it wholesale. Instead, I can show you what's new in the repo version and let you decide if any of those changes are worth merging by hand."
 
-5. **Ask the user, one of four actions:**
+5. **Ask the user, one of five actions:**
    - **update** — apply this one
-   - **skip** — leave this file alone, move to the next
-   - **update all remaining** — apply every remaining drift without further asking (still backs up each one, still respects `note` warnings — those still get cherry-pick treatment and a manual ask)
+   - **skip** — leave this file alone for now, move to the next (will ask again next time drift-check runs)
+   - **skip permanently** — never ask about this file again. Appends the installed path to `~/.claude/.ai-brain-starter-drift-check-ignore` so future drift-check runs silently filter it out. Use this for files that are drifted on purpose (hand-customized vault scripts, edited rule blocks). The file is plain text, one path per line, `#` for comments — the user can edit it directly later if they change their mind.
+   - **update all remaining** — apply every remaining drift without further asking (still backs up each one, still respects `note` warnings — those still get cherry-pick treatment and a manual ask, never wholesale overwrite)
    - **stop** — quit the drift walkthrough entirely
 
 6. **If the user says update** (or "update all"), do this in order — backup ALWAYS happens first, no exceptions:
@@ -161,6 +162,16 @@ If they say yes, for **each drift entry**, do this exact sequence:
    - Confirm to the user: "Updated. Backup at `<installed_path>.bak-...`."
 
 7. **If the user says skip**, log it: "Skipped [basename]." Move on.
+
+7a. **If the user says skip permanently**, append the installed path to `~/.claude/.ai-brain-starter-drift-check-ignore` (creating the file if it doesn't exist), then log: "Won't ask about [basename] again. To re-enable, edit `~/.claude/.ai-brain-starter-drift-check-ignore` and remove the line." Use this exact append idiom (Mac/Linux):
+   ```bash
+   echo "<installed_path>" >> "$HOME/.claude/.ai-brain-starter-drift-check-ignore"
+   ```
+   Or on Windows (PowerShell):
+   ```powershell
+   Add-Content -LiteralPath "$env:USERPROFILE\.claude\.ai-brain-starter-drift-check-ignore" -Value "<installed_path>"
+   ```
+   The path goes in literally — drift-check supports both literal paths and shell-glob patterns, so a literal append always works.
 
 8. **After the walkthrough**, summarize: "Done. Updated [N], skipped [M]. Every updated file has a timestamped backup next to it — if anything looks wrong, restore with `mv <file>.bak-... <file>`."
 

@@ -70,6 +70,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STARTER_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 INSTALL_DIR="$HOME/.claude/skills"
 COOLDOWN_FILE="$HOME/.claude/.ai-brain-starter-drift-check-last-run"
+IGNORE_FILE="$HOME/.claude/.ai-brain-starter-drift-check-ignore"
 TODAY="$(date +%Y-%m-%d)"
 FORCE=0
 VAULT=""
@@ -111,8 +112,44 @@ fi
 DRIFT_LINES=""
 DRIFT_COUNT=0
 
+# ── Ignore registry ──────────────────────────────────────────────────────
+# Per-user file at ~/.claude/.ai-brain-starter-drift-check-ignore. Each line
+# is either a literal installed path OR a shell-glob pattern matching one.
+# `#` starts a comment, blank lines are ignored. Trailing whitespace stripped.
+#
+# Use case: a file like graph-context-hook.sh ships as a generic template in
+# the repo and gets hand-customized in the vault during /setup-brain. Drift
+# is permanent-by-design — listing it in the ignore file tells drift-check
+# "I customized this on purpose, don't tell me about it again."
+#
+# Editing: open the file in a text editor and add a line. Or, during the
+# drift walkthrough in session-start-update-check.md, the user can pick
+# "skip permanently" and Claude appends the path here for them.
+IGNORE_PATTERNS=""
+if [[ -f "$IGNORE_FILE" ]]; then
+  IGNORE_PATTERNS="$(grep -v '^[[:space:]]*\(#\|$\)' "$IGNORE_FILE" 2>/dev/null || true)"
+fi
+
+is_ignored() {
+  local path="$1"
+  [[ -z "$IGNORE_PATTERNS" ]] && return 1
+  while IFS= read -r pat; do
+    pat="${pat#"${pat%%[![:space:]]*}"}"  # strip leading whitespace
+    pat="${pat%"${pat##*[![:space:]]}"}"  # strip trailing whitespace
+    [[ -z "$pat" ]] && continue
+    # shellcheck disable=SC2254 — intentional unquoted glob match
+    case "$path" in
+      $pat) return 0 ;;
+    esac
+  done <<< "$IGNORE_PATTERNS"
+  return 1
+}
+
 add_drift() {
   # $1=scope $2=installed_path $3=repo_source_path $4=note
+  if is_ignored "$2"; then
+    return 0
+  fi
   DRIFT_LINES="${DRIFT_LINES}${1}|${2}|${3}|${4}"$'\n'
   DRIFT_COUNT=$((DRIFT_COUNT + 1))
 }
