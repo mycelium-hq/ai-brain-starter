@@ -32,6 +32,12 @@
 #     differs from the repo template, report drift. The block boundary is the
 #     next top-level (#) heading or end-of-file.
 #
+#   Scope D — standalone vault rule files (only if --vault given):
+#     For every templates/rules/*.md, check if a matching file exists at
+#     $VAULT/⚙️ Meta/rules/<basename>. If it does and differs from the repo
+#     version, report drift. This scope covers modular rule files that were
+#     extracted from CLAUDE.md into standalone files (2026-04-12 split).
+#
 # What it does NOT do:
 #   - Modify files. Ever. drift-check is a detector, not a fixer.
 #   - Decide what to update. The Claude session-start rule reads this output
@@ -46,7 +52,7 @@
 #   ...
 #   ---END---
 #
-#   Scopes: skill | vault-script | vault-rule
+#   Scopes: skill | vault-script | vault-rule | vault-rule-file
 #   Note: free-text annotation, may be empty. Used to flag hand-edited files
 #         (e.g. graph-context-hook.sh) that need cherry-pick instead of
 #         wholesale overwrite.
@@ -282,6 +288,29 @@ PY
 
     if [[ "$drift_result" == "DRIFT" ]]; then
       add_drift "vault-rule" "$VAULT/CLAUDE.md" "$rule_file" "block heading: $heading"
+    fi
+  done
+fi
+
+# ── Scope D — standalone vault rule files ─────────────────────────────────
+# Modular rule files live at $VAULT/⚙️ Meta/rules/*.md. They are standalone
+# copies of templates/rules/*.md (not inlined into CLAUDE.md). Compare each
+# installed file against its repo counterpart. This scope was added when
+# CLAUDE.md was split into modular files to stay under the 10K-token read
+# limit (2026-04-12).
+if [[ -n "$VAULT" && -d "$VAULT/⚙️ Meta/rules" && -d "$STARTER_DIR/templates/rules" ]]; then
+  for rule_file in "$STARTER_DIR/templates/rules"/*.md; do
+    [[ -f "$rule_file" ]] || continue
+    basename_rule=$(basename "$rule_file")
+    dest="$VAULT/⚙️ Meta/rules/$basename_rule"
+
+    # Only check files that are actually installed as standalone files.
+    # If the file doesn't exist in the vault's rules/ dir, it might be
+    # an old inline-only template (Scope C handles those). Skip.
+    [[ -f "$dest" ]] || continue
+
+    if ! cmp -s "$rule_file" "$dest"; then
+      add_drift "vault-rule-file" "$dest" "$rule_file" ""
     fi
   done
 fi

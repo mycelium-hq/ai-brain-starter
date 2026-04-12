@@ -9,6 +9,21 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 12, 2026 (twenty-sixth session — modular CLAUDE.md + aggregator tightening)
+
+Two problems: CLAUDE.md and Last Session.md both grew past the 10,000-token read limit, which meant Claude needed multiple reads at session start and could miss important rules.
+
+**What changed:**
+
+- **CLAUDE.md split into modular rule files.** Three large protocol blocks — session-start checks (~200 lines), session-end cascade (~120 lines), and meeting workflow (~55 lines) — were extracted into standalone files in `⚙️ Meta/rules/`. CLAUDE.md now has concise trigger pointers that tell Claude *when* to load each protocol and *where* to find it. The pointers explicitly say "the summary below is NOT sufficient — you MUST read the full file." This keeps CLAUDE.md under 10K tokens while preserving every detail of every protocol.
+- **New rule template files** in `templates/rules/`: `session-start-checks.md` and `session-end-cascade.md` — the universal (non-personal) versions of the extracted protocols. These get installed into your vault's `⚙️ Meta/rules/` directory during setup.
+- **Session aggregator tightened.** Default changed from top 3 sessions to top 2. New `--max-lines` flag (default: 60) truncates verbose session entries with a pointer to the full file in `Sessions/`. Legacy pre-split content archived to `Sessions/legacy-pre-split.md` instead of bloating the aggregated view. Result: Last Session.md dropped from ~25K tokens to ~4K tokens.
+- **Old inline rule templates preserved.** The old `session-start-update-check.md` and `session-end-capture.md` templates still exist for backwards compatibility. New installs will use the modular rule files instead.
+
+**Net result:** both mandatory session-start files now load in a single read call. No protocol details were lost — they just moved from "always loaded" to "loaded when triggered."
+
+---
+
 ## April 11, 2026 (twenty-fifth session — graphify runbook hardening)
 
 Hardened `skills/graphify/RUNBOOK.md` with a top-of-file STOP-READ gate, a PRE-FLIGHT CHECKLIST, two new standing rules, and four new lessons (#37–#40) — all from a real session that started with "run graphify on more of the vault" and turned into 30+ minutes of wasted work because the runbook got skimmed instead of read.

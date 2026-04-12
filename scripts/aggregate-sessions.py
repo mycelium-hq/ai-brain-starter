@@ -126,12 +126,27 @@ def strip_frontmatter(content: str) -> str:
     return content
 
 
-def build_aggregate(files: list[Path], keep: int) -> str:
+def truncate_body(body: str, max_lines: int, source_file: Path) -> str:
+    """Truncate a session body to max_lines, adding a pointer to the full file."""
+    lines = body.split("\n")
+    if max_lines <= 0 or len(lines) <= max_lines:
+        return body
+    truncated = "\n".join(lines[:max_lines])
+    truncated += (
+        f"\n\n> *[truncated — {len(lines)} lines total. "
+        f"Full session: `⚙️ Meta/Sessions/{source_file.name}`]*"
+    )
+    return truncated
+
+
+def build_aggregate(files: list[Path], keep: int, max_lines: int = 0) -> str:
     """Build the aggregator region content from the top N session files."""
     top = files[:keep]
     blocks = []
     for f in top:
         body = strip_frontmatter(f.read_text(encoding="utf-8")).rstrip()
+        if max_lines > 0:
+            body = truncate_body(body, max_lines, f)
         blocks.append(body)
 
     header = (
@@ -195,7 +210,13 @@ def main() -> int:
         description="Rebuild Last Session.md from ⚙️ Meta/Sessions/*.md"
     )
     parser.add_argument(
-        "--keep", type=int, default=3, help="Number of sessions to show (default: 3)"
+        "--keep", type=int, default=2, help="Number of sessions to show (default: 2)"
+    )
+    parser.add_argument(
+        "--max-lines",
+        type=int,
+        default=60,
+        help="Max lines per session entry before truncation (default: 60)",
     )
     parser.add_argument(
         "--dry-run", action="store_true", help="Preview without writing"
@@ -224,7 +245,7 @@ def main() -> int:
         )
         return 0
 
-    aggregate_block = build_aggregate(files, args.keep)
+    aggregate_block = build_aggregate(files, args.keep, args.max_lines)
 
     if LAST_SESSION.exists() and not args.no_legacy:
         existing = LAST_SESSION.read_text(encoding="utf-8")

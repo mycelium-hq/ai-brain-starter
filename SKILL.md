@@ -932,21 +932,43 @@ You are not a yes-machine. You are a thinking partner. Act like one.
 4. End: Run the **session-end capture cascade** — see the "Session end — capture cascade" section below. **Write session content to a per-worktree file at `⚙️ Meta/Sessions/YYYY-MM-DDTHH-MM-{worktree}.md`** (the session-end hook creates a stub for you to fill in). **Write decisions to per-decision files at `⚙️ Meta/Decisions/YYYY-MM-DDTHH-MM-{slug}.md`**. Never write to `Last Session.md` or `Decision Log.md` directly — those are auto-generated aggregator views rebuilt from the per-worktree source files. Race-safe against concurrent worktrees: unique filenames eliminate write contention, aggregator output is deterministic from sorted input. See [adelaidasofia/ai-brain-starter#5](https://github.com/adelaidasofia/ai-brain-starter/issues/5) for the full design rationale.
 ```
 
-**After writing the template above, APPEND TWO MORE SECTIONS** to the user's CLAUDE.md by reading the rule files from the repo and inlining them verbatim. This keeps the rules versioned in the repo so future updates flow to users via the auto-update check, while still putting the full text in their CLAUDE.md so it's loaded at session start.
+**After writing the template above, do TWO things:**
 
-```bash
-# Append the session-start update-check rule
-cat ~/.claude/skills/ai-brain-starter/templates/rules/session-start-update-check.md >> [VAULT_PATH]/CLAUDE.md
+**A. APPEND concise trigger pointers** to the user's CLAUDE.md (NOT the full protocols — just the pointers). These tell Claude when to load the full protocol from the modular rule files:
 
-# Append the session-end capture cascade rule
-cat ~/.claude/skills/ai-brain-starter/templates/rules/session-end-capture.md >> [VAULT_PATH]/CLAUDE.md
+```markdown
+---
+
+# Session start — update & drift checks
+
+At session start (after reading CLAUDE.md + Last Session.md + Current Priorities.md), run the once-per-day update and drift checks. **You MUST read `⚙️ Meta/rules/session-start-checks.md` before running anything — the summary below is NOT sufficient.** The full file contains: CHANGELOG translation rules, exact user-facing language, drift walkthrough with 5 user-action options, backup-before-every-change safety rules, and cherry-pick logic for files with hand-edited configs. Quick summary (for orientation only, not execution): run `update-check.sh` (translates CHANGELOG to plain English, offers install), then `drift-check.sh` (walks user through file-by-file diffs). Both have once-per-day cooldowns.
+
+---
+
+# Session end — capture cascade
+
+When the user signals the session is ending (bye, thanks, wrapping up, done, good night, ttyl, etc.) or says `/wrap-up`, run the full capture cascade before saying goodbye. **You MUST read `⚙️ Meta/rules/session-end-cascade.md` before starting — the summary below is NOT sufficient.** The full file contains: the 7-bucket scan framework, destination routing table (personal vs team vs GitHub issue), per-worktree write rules with race-safety reminders, GitHub issue draft format, aggregator invocation, and the "what NOT to do" guardrails. Quick summary (for orientation only): scan conversation → categorize → write to per-worktree files → file improvements as GitHub issues → run aggregators → confirm. Skip if session was tiny (<5 messages).
 ```
 
-(On Windows: `Get-Content "$env:USERPROFILE\.claude\skills\ai-brain-starter\templates\rules\session-start-update-check.md" | Add-Content [VAULT_PATH]\CLAUDE.md` and same for the second file.)
+**B. INSTALL the modular rule files** into the vault's `⚙️ Meta/rules/` directory:
+
+```bash
+mkdir -p "[VAULT_PATH]/⚙️ Meta/rules"
+
+# Install session-start-checks protocol
+cp ~/.claude/skills/ai-brain-starter/templates/rules/session-start-checks.md "[VAULT_PATH]/⚙️ Meta/rules/session-start-checks.md"
+
+# Install session-end cascade protocol
+cp ~/.claude/skills/ai-brain-starter/templates/rules/session-end-cascade.md "[VAULT_PATH]/⚙️ Meta/rules/session-end-cascade.md"
+```
+
+(On Windows: `Copy-Item "$env:USERPROFILE\.claude\skills\ai-brain-starter\templates\rules\session-start-checks.md" "[VAULT_PATH]\⚙️ Meta\rules\session-start-checks.md"` and same for the second file.)
+
+Replace `{{DATE}}` in both files with today's date (YYYY-MM-DD).
+
+**Why modular files instead of inlining into CLAUDE.md:** The old approach appended ~320 lines of protocol detail directly into CLAUDE.md, pushing it past the 10K-token read limit. Claude then needed multiple chunked reads at session start. The modular approach keeps CLAUDE.md under 10K tokens (always loadable in one read) and puts the detailed protocols in standalone files that only get read when their trigger fires. Nothing is lost — the full protocols are right there in `⚙️ Meta/rules/`, and the pointers in CLAUDE.md are strong enough that Claude can't skip them.
 
 These two rules together make the setup self-maintaining: users always end up on the latest version without needing to know what `git` is, AND nothing useful from any session ever gets lost — it cascades into the right vault file automatically, with workflow improvements going straight to the maintainer's issue queue.
-
-**Phase 4 must inline the actual content of those two rule files**, not the placeholders above. Read `~/.claude/skills/ai-brain-starter/templates/rules/session-start-update-check.md` and `~/.claude/skills/ai-brain-starter/templates/rules/session-end-capture.md` and append them verbatim to the user's CLAUDE.md, replacing the bracketed placeholders. This way the rules stay versioned in the repo and any improvements flow to users via the auto-update check.
 
 Tell them: "Your memory file is created. From now on, every Claude session in this vault starts with full context about who you are."
 
