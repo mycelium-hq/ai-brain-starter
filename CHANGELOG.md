@@ -9,6 +9,45 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 11, 2026 (twenty-fifth session — graphify runbook hardening)
+
+Hardened `skills/graphify/RUNBOOK.md` with a top-of-file STOP-READ gate, a PRE-FLIGHT CHECKLIST, two new standing rules, and four new lessons (#37–#40) — all from a real session that started with "run graphify on more of the vault" and turned into 30+ minutes of wasted work because the runbook got skimmed instead of read.
+
+### Part 1 — The STOP-READ gate and PRE-FLIGHT CHECKLIST
+
+The runbook now opens with a big red directive telling Claude to read the whole file in full before touching any graphify work. If the file exceeds the Read tool's 10k-token cap (which it does), Claude is instructed to chunk the read with `offset` + `limit` — never to fall back to Grep sampling or `head_limit`, because those are search tools, not reading tools, and they leave you confident you've "covered it" while missing most of the content.
+
+Right after the gate is a 7-step **PRE-FLIGHT CHECKLIST** that catches the five most destructive antipatterns before they cost time:
+
+1. Read this whole file
+2. Check for stale graphify processes from other sessions
+3. Force-warm the target folder if your vault is on a sync service (iCloud, Google Drive, OneDrive, Dropbox) — cold reads can be 1000x slower and look exactly like a hang
+4. Never call `check_semantic_cache` on large corpora — re-hashing blocks for minutes
+5. Prioritize concept-dense corpora (Books/Notes/Writing) over episodic ones (Journals/Daily Logs) — roughly 3x more concepts per token
+6. Verify the cwd matches the target vault root
+7. Run the stage-selection script to size the job before dispatching — NOT on capped slices though, see Lesson #38
+
+### Part 2 — Two new standing rules
+
+**Active lesson capture.** Any optimization or gotcha gets written up the moment it surfaces, not saved for end-of-session. If you wait, the specifics (exact numbers, exact error messages) degrade into vague pattern-matching and the lesson loses most of its value. Ten seconds to write now beats ten minutes of re-derivation next week.
+
+**Validation hypotheses on every batch/dispatch doc.** Every handoff doc for a graphify batch must include a "What this run is testing" table with numbered hypotheses, quantitative predictions, measurement methods, and explicit kill criteria. This turns every stage into a live experiment for the lessons it depends on. You already pay the tokens — recording the measured result against a pre-registered prediction is free signal. Without it, lessons stay anecdotal ("cap-7 worked last time") and drift silently. With it, every stage either strengthens the lesson with N more data points or explicitly overturns it when a kill criterion triggers.
+
+### Part 3 — Four new lessons (#37–#40)
+
+- **#37** — Read-tool 10k cap handling: use `offset`+`limit` chunking, never Grep sampling
+- **#38** — Don't run the full-corpus sizer for capped slices. Write a targeted picker that sorts by metadata (filename date, `st_size`, `st_mtime`) without reading contents, then reads only the top `cap × 1.6–2.0` candidates in a 16-thread pool for a 6–8x speedup over sequential. Includes filter-attrition math: journals lose ~70% to `<500w OR already-cached`, writing loses ~40%, so overshoot constants are corpus-specific.
+- **#39** — Scan for content-level near-duplicate drafts in `Writing/` and `Drafts/` folders BEFORE chunking. `graphify_prep.py` only catches byte-identical duplicates; files that share 99% of their content but differ in formatting or wikilink conventions slip through. A single 57k-word draft triplicated across three folders costs ~430K tokens to redundantly extract. A 10-second title-similarity scan before dispatch catches it.
+- **#40** — Merge discipline: normalize wikilinks + tags + whitespace before line-level comparison, then preserve every unique line in a "Recovered from earlier drafts" appendix at the bottom of the merged file. Never silent-drop content. Back up all originals to `/tmp` before overwriting or deleting anything.
+
+### Why this matters for non-technical users
+
+These four lessons are the difference between a `/graphify` run that costs 30 minutes and one that costs 3 hours. For someone who has never written a Python script and whose vault is on iCloud or Google Drive, the cold-read gotcha (Lesson #17) combined with the skimmed-runbook pathology (now blocked by the new top-gate) was the most common "it hung, I don't know what happened" outcome. The gate + checklist force a diagnostic path before any action, and the new lessons give Claude explicit fallbacks for the three most common failure modes.
+
+**What you should do:** nothing. Next time you run `/graphify`, Claude will read the hardened runbook first and apply the new pre-flight checklist automatically. You'll notice faster runs and fewer "why is this hanging?" moments. If you want to see the new lessons, open `skills/graphify/RUNBOOK.md` and scroll to the "Session-start discipline and read-tool patterns" subsection (Lessons #37–#40) and the two "Standing rule" blocks at the top of "Lessons learned."
+
+---
+
 ## April 11, 2026 (twenty-fourth session — CHANGELOG rotation)
 
 Rotated 28 older session entries (April 8 → April 11 sessions 1–18) out of `CHANGELOG.md` and into a new `CHANGELOG_archive_2026Q1.md`. The live changelog now carries only the most recent ~5 sessions, which is what almost every post-pull update check actually needs to read.

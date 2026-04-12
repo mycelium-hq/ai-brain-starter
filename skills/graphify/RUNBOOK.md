@@ -1,5 +1,29 @@
 # Graphify Runbook
 
+> 🛑 **CLAUDE — STOP. READ THIS WHOLE FILE IN FULL BEFORE TOUCHING ANYTHING `/graphify`-RELATED. NO EXCEPTIONS.**
+>
+> This file is long — typically 12–15k tokens — which means **it will exceed the Read tool's 10k-token cap** and a single naive Read call will return an error. When that happens, use `offset` + `limit` to chunk through it (e.g. `offset=1 limit=220`, then `offset=220 limit=200`, then `offset=420 limit=200`). **Do NOT substitute Grep, head_limit, or sampling for reading.** Every skipped lesson has historically cost 10–60 minutes of wasted work — hung processes, wrong-root cache misses, cold-read hangs, schema drift, deprioritization inversions. The whole file is load-bearing.
+>
+> **Session-start gate:** before dispatching ANY graphify work you must have (a) read this file in full, (b) completed the pre-flight checklist below, (c) verified no other stale graphify process is running. If any of the three is not true, stop and complete them first. This gate exists because skimmed runbooks have been the single biggest source of wasted work in production sessions.
+
+---
+
+## PRE-FLIGHT CHECKLIST (run before every graphify session)
+
+Do these in order. Each one takes <30 seconds and prevents a known failure class.
+
+1. **Read this whole file.** Chunked via offset+limit if needed.
+2. **Check for stale graphify processes** from other sessions or worktrees: `ps aux | grep -E "graphify|stage_select" | grep -v grep`. If one is sitting at 0% CPU for >2 minutes, it's hung on Lesson #6 (first-Python-detect hang) — kill it and restart cleanly.
+3. **Force-warm the target folder if your vault is on a sync service** (iCloud Drive, Google Drive, OneDrive, Dropbox). Lesson #17 — cold reads can be 1000x slower than warm reads and look exactly like a hang. On macOS iCloud: `brctl download "<folder>"` queues the download; wait 30–60s then do `ls` / `find | wc -l` on the folder to confirm files are actually local. Exit 0 from `brctl` means "queued," not "downloaded."
+4. **Never call `check_semantic_cache` on large corpora.** It re-hashes every file and blocks for minutes on cold reads. Use the fast cache-iteration pattern: iterate `graphify-out/cache/*.json`, read each cache file's `source_file` fields, bucket by folder + by `is_llm_extraction()` discriminator. Runs in <2s on any corpus size.
+5. **Prioritize concept-dense corpora over episodic ones.** Books / Notes / Writing / Strategy / Business yield roughly 3x the unique concepts per token of Journals / Daily Logs / AI Chats. If the budget is tight or you want maximum structural signal, graphify the concept-dense corpora **first**, then spend remaining budget on journals. The default for "run /graphify on more of the vault" should be **concept-dense first** unless the user explicitly names an episodic corpus.
+6. **Verify the cwd matches the target vault root.** Wrong-root runs produce 0 cache hits, inflate the cost estimate 5–10x, and write new nodes into the wrong graph. See Lesson #35.
+7. **Run the stage-selection script to size the job BEFORE dispatching any subagents.** It already knows about the ≥500-word filter, the `[AI Extract]` skip, the preflight-aware cache discriminator, and emits a real cost estimate with the Grep-first reduction applied. If you're estimating cost by hand instead of running the sizer, you're overestimating 2–4x. **Exception:** for capped slices ("pick 200 newest journals"), skip the full-corpus sizer and use a targeted picker instead — see Lesson #38.
+
+If you complete this checklist and still haven't read the full file, **stop here and go read it.** The checklist is the lower bound, not a substitute.
+
+---
+
 How to run `/graphify` on a vault efficiently. **Read this before every graphify session** and update it whenever a run reveals a new optimization or gotcha.
 
 This runbook is the production playbook from running graphify on a 4,700-file personal vault across 5 sessions and ~5M tokens. Every lesson is from a real failure or optimization that landed.
@@ -197,6 +221,37 @@ print(f'duplicate labels: {len(dupes)} (should be 0 after canonicalize)')
 
 These are the lessons from real production runs. Each one comes from a failure that cost time, tokens, or both.
 
+#### Standing rule — active lesson capture
+
+**Capture optimizations and gotchas THE MOMENT they surface, not at session-end.** Every graphify session produces new lessons as it runs — new cold-read thresholds, new filter-attrition math, new content-level gotchas, new failure modes. If you wait until the end to write them up, you lose the specifics (exact numbers, exact error messages, exact file paths) and the lesson degrades to vague pattern-matching. **The rule:** as soon as you observe something that would change how you'd run the next session, stop and append it to this file *before* continuing. Ten seconds to write now beats ten minutes of re-derivation next week.
+
+**Triggers for a new lesson:**
+- Unexpected cost or time delta (better OR worse than estimate)
+- New failure mode or error class
+- A workaround that worked (so next time you skip the broken path)
+- A content-level pattern the tooling can't auto-detect (e.g. near-duplicate draft clusters)
+- Any moment you think "I should remember this next time"
+
+**Where to put it:** as a numbered lesson at the appropriate subsection below. Use the most recent number + 1. Add a `*(was #NN)*` cross-ref only if it supersedes or merges with a previous lesson. Lessons are append-only — if a finding turns out to be wrong, update the existing lesson with the correction and the date, don't delete it.
+
+#### Standing rule — every batch/dispatch doc includes a validation-hypotheses section
+
+**Every handoff doc for a graphify batch or stage must include an explicit "What this run is testing" section** with numbered hypotheses, predictions, measurement methods, and kill criteria. Table format: *# | Hypothesis | Prediction | How to measure | Kill criterion*. This turns every stage into a live experiment for the lessons it depends on, so claims either ship permanently or get falsified before they calcify into folklore.
+
+**Why it matters:** you already pay the tokens. Recording the measured result against a pre-registered prediction is free signal. Without it, lessons stay anecdotal — you remember "cap-7 worked on the last run" but you don't know if it's still working three stages later. WITH it, every stage either strengthens the lesson (with N more data points) or explicitly overturns it (with a measured kill-criterion trigger).
+
+**What to include in the hypotheses table:**
+- **Predictions should be quantitative when possible** ("concepts/Ktoken ≥ 0.85", "chunk emits 5–7 hyperedges", "0 fallback parses needed") — not qualitative ("works well", "looks right"). Quantitative predictions force real measurement and have real kill criteria.
+- **Kill criteria should specify a revision or rollback**, not just "investigate." Example: *"if <4 hyperedges emitted, reset single-file chunks to cap-5 in the prompt template for future runs."* That way a failed hypothesis is immediately actionable.
+- **Cover the new lessons from the most recent session** as the default set. If no new lessons shipped recently, cover the oldest un-revalidated lessons in the relevant sections — a standing inventory of "what's due for a re-test."
+- **Target 4–8 hypotheses per stage.** Fewer = under-utilized, more = diluted focus.
+
+**Post-dispatch discipline:** when the stage finishes, append a "Results" section to the handoff doc BEFORE running cleanup. For each hypothesis, write *measured value → verdict (SHIPS / REVISE / KILL) → runbook update action*. Copy the verified findings as numbered-lesson updates in this runbook. Do not delete the handoff doc until the runbook updates are in place — it's the only source of the experimental log.
+
+**Why this is a rule not a suggestion:** the alternative failure mode is optimizations that "felt right" at the time but never get measured against reality. A cap-change shipped based on N=1 observation would stay shipped regardless of whether it continued to work. This rule catches drift early.
+
+---
+
 ### Dedupe + preflight
 
 1. **Run `graphify_prep.py --apply` first — dedupe is enormous.** Pass A handles `* 2.md` siblings, Pass B handles cross-directory duplicates. **Always grep the vault for subdirectory names before deleting cross-dir dupes** to confirm nothing depends on them.
@@ -299,6 +354,16 @@ These are the lessons from real production runs. Each one comes from a failure t
 ### Long-form / single-file routing
 
 36. **Long-form Writing should use graphify's native chunker, not a parallel-agent flow.** The parallel pipeline was designed for episodic corpora where each file is self-contained. For book chapters and long-form essays where a single file IS the conceptual unit, use `/graphify "Writing/" --update` (intra-file chunker).
+
+### Session-start discipline and read-tool patterns
+
+37. **Read-tool 10k-token cap is a trap for long runbooks — use offset+limit, never Grep sampling.** This file is ~12–15k tokens. A naive `Read` call returns an error. The wrong response is to fall back to Grep with `head_limit` — Grep is a search tool, not a reading tool, and sampling from the middle of a structured document leaves you confident you've "covered it" while missing most of the actual content. **The correct response** is to chunk the Read: `offset=1 limit=220`, then `offset=220 limit=200`, then `offset=420 limit=200`. Three reads cover the whole file and cost ~45s total. This discipline applies to ALL runbooks and SKILL files that exceed the cap — not just this one.
+
+38. **Full-corpus sizers waste I/O when the request is a capped slice — use a targeted picker instead.** The full stage-selection script walks every file in the target folder because it's designed for "full stage" rollouts: word-count every file, SHA256-hash every file for cache lookup, then bin-pack everything eligible. For a capped request like "pick 200 newest journals + 100 largest writing files" this is a **~9x overshoot on I/O** (2,700 files instead of the 300 you actually need) and it compounds with Lesson #17 cold-read costs. **The rule:** if the request is a capped count (`N newest`, `N largest`, `N random`), write a targeted picker that (a) globs the folder, (b) sorts by the selection key *without* reading file contents (date parsed from filename, `st_size` for "largest-first", `st_mtime` for recency), (c) iterates only up to ~1.6–2.0x the cap (overshoot to survive the <500w + cache filters), (d) reads each file ONCE in a `ThreadPoolExecutor` with 16 threads to compute word count + cache hit in a single pass, (e) stops at the cap. **Filter-attrition math:** journals typically lose ~70% of candidates to the `<500w OR already-cached` filter, so overshoot 2.0x. Writing loses ~40%, so overshoot 1.6x. Different corpora have different attrition profiles — measure on the first run and hard-code constants per corpus type. **Threaded reads matter:** sequential cold reads on a sync-service vault hit ~1.3–1.9s per file; a 16-thread pool cleanly overlaps the latency and gets a 6–8x speedup. Python's GIL releases during I/O and sync-service cold reads are network-wait bound, not CPU bound. Sweet spot is 16 threads — 4 leaves bandwidth on the table, 32 hits diminishing returns. **Implementation detail:** classify each file in one pass — read bytes once, word-count from the bytes, hash from the same bytes for cache lookup. Never re-read the file for a second derived metric.
+
+39. **Scan for content-level duplicates in concept-dense corpora BEFORE chunking.** `graphify_prep.py --apply` only catches ` 2.md` siblings (Pass A) and byte-identical cross-dir duplicates (Pass B). It does NOT catch **near-duplicate drafts** — files that share 99% of their content but differ in formatting, wikilinking conventions, or tag style. In practice you'll find these in `Writing/`, `Drafts/`, and any `Substack/Drafts/`-style folder where the same draft lives in multiple places as it's being iterated. **The fix:** after building the chunk file list but before dispatch, run a "potential-duplicate scanner" that groups files by normalized-title similarity (≥0.8 title Jaccard on stemmed words), flags groups of 2+, and prompts for resolution. Writing/, Drafts/, Essays/, and Substack-style folders are the ones most likely to contain variants. Journals and Notes typically don't have this pattern because their naming conventions enforce uniqueness. **Why it matters at token cost:** a single 57k-word draft triplicated across three folders costs ~430K tokens to extract redundantly. The scan takes <10s and can save 5–15% of stage budget on any writing-heavy rollout.
+
+40. **When merging divergent drafts, normalize wikilinks + tags before line comparison AND preserve unique lines in a "Recovered from earlier drafts" appendix — never silent-drop.** Use this normalizer before comparing lines across draft variants: (a) `[[Target|display]]` → `display`, (b) `[[Target]]` → `target`, (c) `#tag` → `tag`, (d) collapse whitespace + lowercase. After normalization you'll typically find that each non-canonical draft has 50–100 substantive lines the canonical version lacks — real prose that would be silently lost if you naively picked one file as canonical and deleted the rest. **The rule:** every merge of divergent content must end with an appendix section under a clearly-marked heading (e.g. `## Recovered from earlier drafts (YYYY-MM-DD merge)`) listing every line that was unique to a non-canonical source. The appendix is annotated with which file it came from, which mtime that file had, and a one-line note telling the user to re-integrate into the main body when they have time. **Never silently drop content during a merge.** Backups of all originals go to `/tmp/<topic>_merge_backup_YYYYMMDD_HHMM/` before any file is overwritten or deleted — recoverable if the merge is wrong.
 
 ---
 
