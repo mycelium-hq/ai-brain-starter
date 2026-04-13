@@ -111,7 +111,10 @@ def gather_session_files(include_stubs: bool = False) -> list[Path]:
     include them."""
     if not SESSIONS_DIR.exists():
         return []
-    all_files = [p for p in SESSIONS_DIR.glob("*.md") if p.is_file()]
+    all_files = [
+        p for p in SESSIONS_DIR.glob("*.md")
+        if p.is_file() and not p.name.startswith("legacy")
+    ]
     if not include_stubs:
         all_files = [
             p for p in all_files if not is_stub(p.read_text(encoding="utf-8"))
@@ -179,6 +182,20 @@ def extract_legacy(existing: str) -> str:
     if legacy_idx != -1:
         # Strip the header itself — main() re-adds it.
         after_header = existing[legacy_idx + len(LEGACY_HEADER) :].lstrip("\n")
+        # Strip any aggregator regions that got snowballed into legacy
+        # (bug fix: steady-state path was not stripping these, causing
+        # exponential growth on each run)
+        pattern = re.compile(
+            re.escape(AGGREGATOR_BEGIN)
+            + r".*?"
+            + re.escape(AGGREGATOR_END),
+            re.DOTALL,
+        )
+        after_header = pattern.sub("", after_header)
+        # Strip duplicate legacy headers that got nested
+        after_header = after_header.replace(LEGACY_HEADER, "")
+        # Clean up excessive blank lines left by stripping
+        after_header = re.sub(r"\n{4,}", "\n\n---\n\n", after_header)
         return after_header.rstrip()
 
     # First-run migration: no legacy header yet.
@@ -259,6 +276,25 @@ def main() -> int:
     if legacy:
         new_content += f"\n\n---\n\n{LEGACY_HEADER}\n\n"
         new_content += legacy.rstrip() + "\n"
+
+    # Safety cap: never produce a file larger than 15KB (~4k tokens).
+    # If the output exceeds this, the legacy section has grown too large
+    # or something else snowballed. Truncate legacy with a pointer.
+    MAX_BYTES = 15_000
+    if len(new_content.encode("utf-8")) > MAX_BYTES:
+        print(
+            f"WARNING: output would be {len(new_content.encode('utf-8')):,} bytes "
+            f"(cap: {MAX_BYTES:,}). Truncating legacy to fit.",
+            file=sys.stderr,
+        )
+        # Rebuild without legacy, add a pointer instead
+        new_content = preamble() + aggregate_block
+        new_content += (
+            f"\n\n---\n\n{LEGACY_HEADER}\n\n"
+            "*Legacy content exceeded size cap and was moved to "
+            "`⚙️ Meta/Sessions/legacy-pre-split.md`. Read that file "
+            "when you need historical context.*\n"
+        )
 
     if args.dry_run:
         print(f"--- DRY RUN ---")

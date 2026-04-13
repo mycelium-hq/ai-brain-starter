@@ -9,7 +9,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"MANDATORY SESSION PROTOCOL: Before responding to the user, you MUST first read these files in order: 1) The project CLAUDE.md at the vault root 2) ⚙️ Meta/Last Session.md 3) ⚙️ Meta/Current Priorities.md — Do NOT greet the user or respond until all three files have been read. This is non-negotiable.\\n\\nGRAPH ROUTING REMINDER: If your vault has a knowledge graph at graphify-out/GRAPH_REPORT.md (or a separate graph for a sub-folder like a work/team area), READ the right one BEFORE drilling into individual source files for any strategy/multi-concept question. The keyword-triggered graph-context-hook.sh (if installed) will fire a second routing reminder with file freshness when your prompt mentions configured keywords.\"}}'",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"SESSION START: CLAUDE.md is already auto-loaded in your system prompt (do NOT re-read it). Read these two files: 1) ⚙️ Meta/Last Session.md 2) ⚙️ Meta/Current Priorities.md. Then read the relevant rules file from ⚙️ Meta/rules/ ONLY when you are about to do that type of work (obsidian.md for vault edits, graphify.md for graph questions, tool-routing.md for task routing, efficiency.md for process rules, meeting-workflow.md for meetings).\\n\\nGRAPH ROUTING: If your vault has a knowledge graph, pick the right graph for the question scope BEFORE drilling into source files. Use /graphify query for targeted lookups instead of reading full reports. The keyword-triggered graph-context-hook.sh (if installed) will fire a second routing reminder with freshness info.\"}}'",
             "once": true,
             "statusMessage": "Loading session context..."
           },
@@ -45,7 +45,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreCompact\",\"additionalContext\":\"BEFORE COMPACTING: You are about to lose context. Before compaction proceeds, update ⚙️ Meta/Last Session.md with: what was done, what is pending, and any decisions made. VERBATIM RULE: For commitments (by anyone), preserve EXACT words used — not summaries. For key decisions, keep the original reasoning phrasing. Also preserve file paths and specific details you will need after compaction. Save any non-obvious technical discoveries as memory files (type: discovery).\"}}'",
+            "command": "echo '{\"continue\":true,\"systemMessage\":\"BEFORE COMPACTING: You are about to lose context. Before compaction proceeds, update ⚙️ Meta/Last Session.md with: what was done, what is pending, and any decisions made. VERBATIM RULE: For commitments (by anyone), preserve EXACT words used — not summaries. For key decisions, keep the original reasoning phrasing. Also preserve file paths and specific details you will need after compaction. Save any non-obvious technical discoveries as memory files (type: discovery).\"}'",
             "statusMessage": "Preserving session context before compaction..."
           }
         ]

@@ -9,7 +9,19 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
-## April 13, 2026 (twenty-seventh session — /deconstruct first-principles skill)
+## April 13, 2026 (twenty-eighth session -- context optimization)
+
+Three fixes that prevent your vault from slowing down over time:
+
+1. **Session aggregator bug fix.** The script that builds Last Session.md had a bug where old content got duplicated on every run. Over time this could balloon the file to hundreds of KB, making it unreadable. Fixed: old content now gets stripped properly, and there's a 15KB safety cap so it can never snowball again.
+
+2. **Smarter session-start hook.** The hook used to tell Claude to re-read your CLAUDE.md file, but it's already loaded automatically. That was wasting tokens. Now it just tells Claude to read Last Session + Current Priorities, and load rules files only when needed for the specific task.
+
+3. **New: context-audit.py script.** Run `python3 "⚙️ Meta/scripts/context-audit.py"` to check your vault's health: file sizes, aggregator integrity, stale memories, zombie worktrees, rules completeness. All checks should show green. Run it anytime things feel slow, or add it to your /monthly routine.
+
+---
+
+## April 13, 2026 (twenty-seventh session -- /deconstruct first-principles skill)
 
 New skill: `/deconstruct` strips away assumptions you don't realize you're making and rebuilds your thinking from scratch. Modeled on Aristotle's first-principles method.
 
