@@ -9,6 +9,21 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 13, 2026 (twenty-seventh session — /deconstruct first-principles skill)
+
+New skill: `/deconstruct` strips away assumptions you don't realize you're making and rebuilds your thinking from scratch. Modeled on Aristotle's first-principles method.
+
+**What changed:**
+
+- **New skill: `skills/deconstruct/SKILL.md`** — a 4-phase analysis framework. Phase 1 surfaces hidden assumptions and classifies their origin (convention, imitation, precedent, fear, or unexamined default). Phase 2 finds what's true independent of all that. Phase 3 rebuilds 3 approaches from scratch. Phase 4 identifies the single high-leverage move.
+- **Two modes:** Full mode (all 4 phases) for big decisions. Fast mode (Phase 1 + Phase 4 only) for daily use when auto-triggered.
+- **Three auto-trigger integration points:** (1) Panel trigger for convention-following language during journaling ("best practice," "that's how it's done"). (2) Decision-log gate that auto-offers deconstruct when stakes are high. (3) Weekly retrospective audit that flags high-stakes decisions made without a first-principles check.
+- **Fear-to-journal bridge:** When an assumption is classified as fear-origin, the skill explicitly flags it as an emotional problem, not an analytical one: "This isn't an analysis problem. It's a journal entry. What are you actually afraid of?"
+
+**Why this matters:** Most thinking tools help you think better within your current frame. This one questions the frame itself. The auto-triggers mean you don't have to remember to use it; it catches convention-following and high-stakes moments automatically.
+
+---
+
 ## April 12, 2026 (twenty-sixth session — modular CLAUDE.md + aggregator tightening)
 
 Two problems: CLAUDE.md and Last Session.md both grew past the 10,000-token read limit, which meant Claude needed multiple reads at session start and could miss important rules.
