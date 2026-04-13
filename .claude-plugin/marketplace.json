@@ -1,0 +1,15 @@
+{
+  "name": "ai-brain-starter",
+  "owner": {
+    "name": "Adelaida Diaz-Roa",
+    "url": "https://github.com/adelaidasofia"
+  },
+  "plugins": [
+    {
+      "name": "ai-brain-starter",
+      "source": "./",
+      "description": "AI-powered Obsidian vault setup with journaling, knowledge graphs, and pattern recognition",
+      "version": "1.0.0"
+    }
+  ]
+}
