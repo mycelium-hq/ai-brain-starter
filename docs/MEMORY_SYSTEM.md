@@ -214,7 +214,24 @@ There are several persistence layers in this setup. They serve different purpose
 | **Plans** | Single conversation | When working on a multi-step implementation | Reaching alignment on approach before executing |
 | **Tasks** | Single conversation or short cycle | When tracking progress through discrete steps | In-flight work for the current session |
 
-**The key question for memory:** *will this still be useful 3 sessions from now?* If yes → memory. If only useful for the next 30 minutes → tasks or plan.
+**The key question for memory:** *will this still be useful 3 sessions from now?* If yes, memory. If only useful for the next 30 minutes, tasks or plan.
+
+### Memory durability: memory is not the source of truth
+
+Project-level memory (`~/.claude/projects/.../memory/`) is tied to ONE Claude account and ONE project path. If the user switches Claude accounts (personal, business, team), memories from other accounts are invisible. Memory is a convenience index for fast recall, not the canonical store.
+
+**Rule: Never store something ONLY in memory.** Every memory should be backed by a durable file that any Claude session can read:
+
+| What you learned | Back it up in |
+|---|---|
+| Personal preference or rule | Vault CLAUDE.md (Preferences section) or `rules/` files |
+| Universal pattern (useful to anyone) | The repo that powers the vault setup |
+| Discovery about a tool/API | The relevant runbook, rules file, or script comments |
+| Project state or priority | `Current Priorities.md` or similar vault file |
+
+When saving a memory, ask: *"If this user opens the vault from a different Claude account tomorrow, will this information be available?"* If no, also put it in a vault file.
+
+This matters most for users who work across multiple machines, accounts, or team setups. The vault travels with them; the memory directory does not.
 
 ---
 

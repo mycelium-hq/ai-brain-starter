@@ -960,9 +960,12 @@ cp ~/.claude/skills/ai-brain-starter/templates/rules/session-start-checks.md "[V
 
 # Install session-end cascade protocol
 cp ~/.claude/skills/ai-brain-starter/templates/rules/session-end-cascade.md "[VAULT_PATH]/⚙️ Meta/rules/session-end-cascade.md"
+
+# Install graphify rules (read-runbook-first gate + context-loading decision tree)
+cp ~/.claude/skills/ai-brain-starter/templates/rules/graphify.md "[VAULT_PATH]/⚙️ Meta/rules/graphify.md"
 ```
 
-(On Windows: `Copy-Item "$env:USERPROFILE\.claude\skills\ai-brain-starter\templates\rules\session-start-checks.md" "[VAULT_PATH]\⚙️ Meta\rules\session-start-checks.md"` and same for the second file.)
+(On Windows: `Copy-Item "$env:USERPROFILE\.claude\skills\ai-brain-starter\templates\rules\session-start-checks.md" "[VAULT_PATH]\⚙️ Meta\rules\session-start-checks.md"` and same for the second and third files.)
 
 Replace `{{DATE}}` in both files with today's date (YYYY-MM-DD).
 
@@ -1266,6 +1269,10 @@ A matching prompt should print a `hookSpecificOutput` JSON; a non-matching promp
 **Design rule:** the hook does NOT pin specific god-node names in its message text. God-node names go stale every graphify run. The stable signal is the path + freshness date — let the model open the report to see the actual current top nodes. If you need a hand-curated snapshot, put it in CLAUDE.md (with an "as of YYYY-MM-DD" tag), not in the hook.
 
 The full hook template (UserPromptSubmit + Stop + PreCompact + PostToolUse) is in `hooks.json` at the repo root. After any `git pull`, compare it to your `.claude/settings.local.json` to see if hooks have been updated.
+
+**Hook performance note for large vaults (5,000+ files):** PostToolUse hooks fire on every tool call. In code repos this is fine. In large Obsidian vaults (5,000+ files), a PostToolUse hook that scans files or runs scripts can become overwhelming, firing hundreds of times in a session. If you notice slowdowns or excessive hook output, consider moving the hook logic to a cron-based approach (check every N minutes) instead of per-tool-call. The Write-matcher pattern above is scoped narrowly (only fires on Write, not Read/Grep/etc.) which keeps it manageable.
+
+**Sync philosophy for auto-updates:** when auto-updating files (skills, scripts, templates), always back up the existing file before overwriting. Never skip an update because the user might have customized the file. The right pattern is: copy the existing file to `<name>.bak-YYYY-MM-DD-HHMM`, then overwrite with the new version. This way the update always lands AND local customizations are recoverable from the backup. Missing an update is invisible; a backup is always recoverable.
 
 **Decision Log.md:**
 ```markdown

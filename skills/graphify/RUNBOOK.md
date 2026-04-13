@@ -1,10 +1,12 @@
 # Graphify Runbook
 
-> 🛑 **CLAUDE — STOP. READ THIS WHOLE FILE IN FULL BEFORE TOUCHING ANYTHING `/graphify`-RELATED. NO EXCEPTIONS.**
+> 🛑 **CLAUDE — STOP. READ THIS WHOLE FILE IN FULL BEFORE DOING ANYTHING GRAPHIFY-RELATED. NO EXCEPTIONS.**
 >
-> This file is long — typically 12–15k tokens — which means **it will exceed the Read tool's 10k-token cap** and a single naive Read call will return an error. When that happens, use `offset` + `limit` to chunk through it (e.g. `offset=1 limit=220`, then `offset=220 limit=200`, then `offset=420 limit=200`). **Do NOT substitute Grep, head_limit, or sampling for reading.** Every skipped lesson has historically cost 10–60 minutes of wasted work — hung processes, wrong-root cache misses, cold-read hangs, schema drift, deprioritization inversions. The whole file is load-bearing.
+> This applies to ALL graphify-related work: running the pipeline, checking coverage or status, answering questions about the graph, estimating costs, querying graph data, or any other graphify topic. "I'm just checking coverage" is NOT an exception. The runbook contains the correct methods, filters, and lessons that determine HOW to do every graphify task.
 >
-> **Session-start gate:** before dispatching ANY graphify work you must have (a) read this file in full, (b) completed the pre-flight checklist below, (c) verified no other stale graphify process is running. If any of the three is not true, stop and complete them first. This gate exists because skimmed runbooks have been the single biggest source of wasted work in production sessions.
+> This file is long, typically 12-15k tokens, which means **it will exceed the Read tool's 10k-token cap** and a single naive Read call will return an error. When that happens, use `offset` + `limit` to chunk through it (e.g. `offset=1 limit=200`, then `offset=200 limit=200`, then `offset=400 limit=200`). **Do NOT substitute Grep, head_limit, or sampling for reading.** Every skipped lesson has historically cost 10-60 minutes of wasted work.
+>
+> **Session-start gate:** before doing ANY graphify-related work you must have (a) read this file in full, (b) completed the pre-flight checklist below, (c) verified no other stale graphify process is running. If any of the three is not true, stop and complete them first. This gate exists because skimmed runbooks have been the single biggest source of wasted work in production sessions.
 
 ---
 
