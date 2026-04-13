@@ -9,6 +9,26 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-13 -- Naming conventions + journal integration
+
+- **Insight report naming:** Weekly reports now use human-readable dates (e.g., "Apr. 7-13, 2026 Weekly.md") instead of ISO week numbers. Monthly uses "Apr. 2026 Monthly.md".
+- **Journal / Session Captures integration:** Daily journal skill now checks the Session Captures staging file before starting the interview, surfaces accumulated seeds, and deletes them after use.
+- **Journal index note:** Users with emoji folder names (e.g., "Journals" vs. "Journals") must pass `--journal-dir` and `--meta-dir` explicitly to `build-journal-index.py`, or update the defaults in the script to match their vault structure.
+
+---
+
+## April 13, 2026 (forty-second session -- LLM accuracy guardrails)
+
+Five new efficiency rules that prevent Claude from guessing when a tool gives the right answer instantly:
+
+- **Rule #10: Never count in-context.** Use `wc` for words/chars/lines. LLMs tokenize subwords, not characters, so counting by reading is architecturally unreliable.
+- **Rule #11: Never do math in-context.** Use `python3 -c` or `bc` for any arithmetic. Anthropic's own docs say to verify with specialized software. There's an open bug for this (anthropics/claude-code#9421).
+- **Rule #12: Verify wikilinks exist.** Check with `obsidian unresolved` or Glob before creating `[[links]]`. Never link to non-existent notes without flagging it.
+- **Rule #13: Use IANA timezones.** Never hardcode UTC offsets or use ambiguous abbreviations (EST/EDT). Use `python3` with `zoneinfo` for conversions. DST differences between cities make offsets unreliable.
+- **Rule #14: Check file size before reading.** Run `wc -l` first. Under 2000 lines: read whole. Over 2000: use offset/limit. Over 5000: question whether you need the whole file.
+
+---
+
 ## April 13, 2026 (forty-first session -- always check system clock)
 
 - **Efficiency rule #9: Always check the system clock.** Claude's internal sense of time is unreliable, and the system prompt only provides a rough date (no time). New rule: always run `date` in bash before writing any timestamp. Applies to journal entries, meeting notes, file headers, session captures, and to-do dates. Use `date "+%Y-%m-%d %I:%M %p"` for human-readable format.

@@ -64,6 +64,14 @@ If an omission exists, one panelist at Step 5 must name it in one sentence.
 
 **The main body of the journal entry is the user's original voice only.** Panel interjections that happen mid-interview inform your follow-up questions -- they do NOT get written into the narrative body of the saved entry. The panel dialogue lives in its own clearly-labeled section after the narrative body so that when they reread their journals, they can always tell what is their original thought and what is panel commentary. Never blend the two. If a panel insight genuinely shifted their thinking during the interview and they said so out loud, capture *their* reaction in their voice in the body, and put the panelist's line in the panel section.
 
+### Step 0: Check Session Captures
+
+Before starting the interview, read the Session Captures staging file (e.g., `[VAULT_PATH]/Meta/Session Captures.md` or equivalent). Look for accumulated journal seeds: thoughts, observations, or fragments captured during previous Claude Code sessions that were flagged for the next journal entry.
+
+- Surface ALL seeds during the interview. Weave them into your follow-up questions naturally (e.g., "Earlier this week you noted [seed]. Is that still on your mind?").
+- After the journal entry is saved, DELETE the used seeds from the staging file. Don't archive them; they've served their purpose once they land in a journal entry.
+- If the staging file doesn't exist or is empty, skip silently and proceed to Step 1.
+
 ### Step 1: Open with a warm, casual check-in
 
 Start with ONE simple question. Don't overwhelm. Pick one of these based on time of day:

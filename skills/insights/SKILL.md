@@ -189,8 +189,8 @@ End with ONE question. Not homework. Not an action item. A question worth thinki
 
 ## Save the Report
 
-- Weekly: `[VAULT_PATH]/Journals/Weekly Insights/YYYY-WXX Weekly Insight.md`
-- Monthly: `[VAULT_PATH]/Journals/Monthly Insights/YYYY-MM Monthly Insight.md`
+- Weekly: `[VAULT_PATH]/Journals/Weekly Insights/Mon. D-D, YYYY Weekly.md` (e.g., `Apr. 7-13, 2026 Weekly.md`). Use 3-letter month abbreviation with period. Cross-month example: `Mar. 31-Apr. 6, 2026 Weekly.md`
+- Monthly: `[VAULT_PATH]/Journals/Monthly Insights/Mon. YYYY Monthly.md` (e.g., `Apr. 2026 Monthly.md`)
 
 Create folders if they don't exist.
 
