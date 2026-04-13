@@ -75,6 +75,10 @@ if ! command -v gh &>/dev/null; then brew install gh; fi
 # fails, the verification block at the end of Phase 0 catches it.
 if ! command -v graphify &>/dev/null; then pipx install graphifyy && graphify install; fi
 
+# FastMCP — framework for building custom MCP servers in minimal Python.
+# Needed when building custom connectors (CRM bridges, vault sync, etc.)
+if ! command -v fastmcp &>/dev/null; then pipx install fastmcp; fi
+
 # Sub-skills bundled in this repo — copy the FULL folders so the wrapper
 # scripts come along too. (Plain `cp SKILL.md` misses the scripts/ folders
 # where the cost-cutting optimizations live.) Copy ALL three sub-skills here
