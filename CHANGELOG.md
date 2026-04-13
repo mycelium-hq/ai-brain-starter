@@ -9,6 +9,20 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 13, 2026 (thirty-first session -- to-do system with Dataview views)
+
+New documentation and templates for a complete to-do system that scales from solo use to small teams.
+
+**What's new:**
+
+- **`docs/TODO_SYSTEM.md`** -- full architecture guide for an inline-field to-do system. Covers: Dataview inline fields (`[owner::] [area::] [priority::]`), a three-question prioritization framework, view file templates (per-person, by-area, sprint progress, overdue, due-this-week, waiting-on), a "This Week" focusing lens (max 7 items, ONE Thing pattern), a Done Archive for completed tasks, and a lint rule so Claude auto-fixes missing fields. All templates are generic with placeholder names and paths.
+
+- **`templates/dataview-queries.md`** -- added 6 to-do system queries: filter by person + priority, group by area, overdue items, due this week, waiting-on (delegated), and sprint progress. These complement the existing journal, CRM, and decision-log queries.
+
+**How to use it:** Read `docs/TODO_SYSTEM.md`, adapt the folder paths and team member names to your vault, create the view files from the templates, and add inline fields to your existing tasks (a script approach is recommended for 100+ tasks). Add the lint rule to your CLAUDE.md so fields stay complete over time.
+
+---
+
 ## April 13, 2026 (thirtieth session -- obsidian hygiene rules)
 
 New file: `templates/rules/obsidian.md` -- 21 rules for wikilink hygiene, naming conventions, and import safety. Born from a vault-wide audit that found and fixed 3,548 issues across a 5,900-file vault. The four most impactful rules (discovered during the audit):

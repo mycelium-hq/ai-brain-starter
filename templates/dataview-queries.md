@@ -232,6 +232,69 @@ LIMIT 30
 
 ---
 
+## To-do system queries
+
+These queries work with the inline-field to-do system documented in `docs/TODO_SYSTEM.md`. Every task needs `[owner:: Name] [area:: X] [priority:: 1-3]` at the end of the checkbox line.
+
+### My tasks (filter by person, sorted by priority)
+
+```dataview
+TASK
+FROM "Team/Home/Team To-dos"
+WHERE !completed AND contains(owner, "Alice") AND priority = 1
+GROUP BY area
+```
+
+### All tasks by area
+
+```dataview
+TASK
+FROM "Team/Home/Team To-dos"
+WHERE !completed
+GROUP BY area
+```
+
+### Overdue tasks
+
+```dataview
+TASK
+FROM "Team/Home/Team To-dos"
+WHERE !completed AND due AND due < date(today)
+SORT due ASC
+```
+
+### Due this week
+
+```dataview
+TASK
+FROM "Team/Home/Team To-dos"
+WHERE !completed AND due AND due >= date(today) AND due <= date(today) + dur(7 days)
+SORT due ASC
+GROUP BY owner
+```
+
+### Waiting on others (delegated items)
+
+Shows tasks owned by others, excluding your own. Replace "Alice" with your name.
+
+```dataview
+TASK
+FROM "Team/Home/Team To-dos"
+WHERE !completed AND contains(owner, "Bob") AND !contains(owner, "Alice")
+SORT area ASC
+```
+
+### Sprint progress (completed vs remaining)
+
+```dataview
+TASK
+FROM "Team/Home/Team To-dos"
+WHERE completed
+GROUP BY area
+```
+
+---
+
 ## Decision Log queries
 
 If you keep a Decision Log (see `templates/Decision Log.md`), these queries surface patterns over time.
