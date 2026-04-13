@@ -9,6 +9,10 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 13, 2026 (thirty-eighth session -- Obsidian sort order)
+
+Phase 2 plugin installer now configures `fileSortOrder: "byModifiedTime"` in `.obsidian/app.json` during setup. Files and folders sort by most recently modified (newest first) out of the box. Uses `setdefault` so it won't overwrite if the user already set a preference.
+
 ## April 13, 2026 (thirty-seventh session -- new skill + panel automation)
 
 Added **1 new skill** and **1 automation script**:

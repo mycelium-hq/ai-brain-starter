@@ -776,7 +776,20 @@ for pid in installed:
         existing.append(pid)
 cp_file.write_text(json.dumps(existing, indent=2))
 
+# Configure app.json — sort files by most recently modified (newest first).
+# Merge with existing settings so we don't clobber anything the user already set.
+app_file = OBSIDIAN_DIR / "app.json"
+app_settings = {}
+if app_file.exists():
+    try:
+        app_settings = json.loads(app_file.read_text())
+    except Exception:
+        app_settings = {}
+app_settings.setdefault("fileSortOrder", "byModifiedTime")
+app_file.write_text(json.dumps(app_settings, indent=2))
+
 print(f"\nDone. Installed {len(installed)}/{len(PLUGINS)} plugins.")
+print("File explorer set to sort by most recently modified.")
 print("If Obsidian is currently open, the user must reload it (Cmd/Ctrl+R) for plugins to activate.")
 PY
 ```
