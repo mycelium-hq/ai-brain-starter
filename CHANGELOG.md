@@ -9,6 +9,24 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 13, 2026 (thirty-second session -- Obsidian plugin integration + skill tracking)
+
+Five additions that connect your vault to Obsidian's plugin ecosystem and help you understand which skills you actually use:
+
+1. **Skill usage tracking.** New hook + script (`skill-usage-tracker.sh`) that logs every `/skill` invocation to a JSONL file. Companion report script (`skill-usage-report.py`) generates a Markdown usage report with per-skill counts, daily/weekly trends, and peak-time analysis. Add it to your `/monthly` routine to spot which skills earn their keep and which you forgot exist.
+
+2. **Obsidian plugin integration guide.** New template `templates/rules/obsidian-plugins.md` covering three plugins that extend what Claude Code can do with your vault: Local REST API (open notes, search, run commands over HTTP), Smart Connections (semantic search that finds conceptually related notes even without shared links), and Juggl/Neo4j (visual graph exploration). Includes a search routing table so you know when to use which tool.
+
+3. **Open-in-Obsidian rule.** Rule 22 in `templates/rules/obsidian.md`: after creating or significantly editing a file, auto-open it in Obsidian via the Local REST API so you don't have to hunt for it. Skips bulk operations.
+
+4. **Neo4j export script.** `scripts/graph-to-neo4j.py` converts your graphify `graph.json` into Neo4j-compatible CSVs and a Cypher import script. For power users who want Cypher queries over their knowledge graph.
+
+5. **PostToolUse Skill hook.** Added to `hooks.json` so the skill tracker fires automatically. Existing hooks unchanged.
+
+All scripts auto-detect vault root from `$VAULT_ROOT` env var or their own file location, so they work in any vault without editing paths.
+
+---
+
 ## April 13, 2026 (thirty-first session -- to-do system with Dataview views)
 
 New documentation and templates for a complete to-do system that scales from solo use to small teams.

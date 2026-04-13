@@ -62,6 +62,16 @@
             "statusMessage": "Checking write triggers..."
           }
         ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash '[VAULT_PATH]/⚙️ Meta/scripts/skill-usage-tracker.sh'",
+            "statusMessage": "Logging skill usage..."
+          }
+        ]
       }
     ]
   },
