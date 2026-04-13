@@ -2507,6 +2507,7 @@ Add these to their CLAUDE.md under a new section:
 6. Route to the right tool. Check the Tool Routing table. Don't burn Claude tokens when another tool is faster.
 7. Compact proactively. Run `/compact` when context usage hits ~50%, don't wait for auto-compaction. Long sessions degrade quality in the back half when context fills silently. Rule of thumb: if you've done 3+ major tasks in one session, compact before starting the next one.
 8. Optimize on repeat. Every repeated task is an improvement opportunity. Before running: review what happened last time (runbook, prior session, memory). After running: note what could be better and **fix it immediately** (update the runbook, fix the script, add a rule, file the bug). Don't just note it and move on. Recurring processes get a runbook AND lessons learned after each run. Document deduplication misses, schema violations, hung steps, parallelization opportunities, caching gaps, new tools available since last run, and pattern drift.
+9. Always check the system clock. Never guess the date or time. Run `date` in bash before writing any timestamp (journal entries, meeting notes, file headers, session captures, to-do dates). Claude's internal sense of time is unreliable and the system prompt only provides a rough date with no time. Use `date "+%Y-%m-%d %I:%M %p"` for human-readable timestamps.
 
 ## Auto-Update Check
 

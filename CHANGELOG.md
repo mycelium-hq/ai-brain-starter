@@ -9,6 +9,12 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 13, 2026 (forty-first session -- always check system clock)
+
+- **Efficiency rule #9: Always check the system clock.** Claude's internal sense of time is unreliable, and the system prompt only provides a rough date (no time). New rule: always run `date` in bash before writing any timestamp. Applies to journal entries, meeting notes, file headers, session captures, and to-do dates. Use `date "+%Y-%m-%d %I:%M %p"` for human-readable format.
+
+---
+
 ## April 13, 2026 (fortieth session -- optimize-on-repeat + change impact audit)
 
 Two process improvements ported from production use:
