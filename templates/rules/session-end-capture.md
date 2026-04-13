@@ -80,12 +80,12 @@ For anything in the "Improvements to the AI brain setup" bucket, **draft a GitHu
 
 Run:
 ```bash
-gh issue create --repo adelaidasofia/ai-brain-starter \
+gh issue create --repo <MAINTAINER_REPO> \
   --title "[short title from the draft]" \
   --body "[the full draft body]"
 ```
 
-(Or `gh issue create --repo <maintainer>/<fork>` if the user is on a fork — check their CLAUDE.md for a `MAINTAINER_REPO` field.)
+Where `<MAINTAINER_REPO>` is the GitHub repo that maintains the AI brain setup. Check the user's CLAUDE.md for a `MAINTAINER_REPO` field. If none exists, default to `adelaidasofia/ai-brain-starter`.
 
 **If `gh` isn't authenticated** (first time), tell the user: *"Quick one-time setup: run `gh auth login` in a terminal and follow the prompts (pick GitHub.com, then HTTPS, then login with a web browser). Once that's done, I can file issues automatically forever after. Want to do that now or later?"*
 
