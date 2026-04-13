@@ -158,9 +158,15 @@ if "granola" not in m["mcpServers"]:
         "type": "url",
         "url": "https://mcp.granola.ai/mcp"
     }
-    with open(p, "w") as f:
-        json.dump(m, f, indent=2)
     print("registered granola MCP")
+if "chatprd" not in m["mcpServers"]:
+    m["mcpServers"]["chatprd"] = {
+        "type": "url",
+        "url": "https://app.chatprd.ai/mcp"
+    }
+    print("registered chatprd MCP")
+with open(p, "w") as f:
+    json.dump(m, f, indent=2)
 else:
     print("granola MCP already registered")
 PY
