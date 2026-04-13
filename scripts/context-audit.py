@@ -38,9 +38,8 @@ ROOT_CLAUDE_MD = VAULT_ROOT / "CLAUDE.md"
 
 # Memory directory for the vault project — auto-detect from vault path
 # Claude Code encodes the vault path as the project directory name
-_vault_path_encoded = str(VAULT_ROOT).replace("/", "-")
-if _vault_path_encoded.startswith("-"):
-    _vault_path_encoded = _vault_path_encoded  # keep leading dash
+# Claude Code encodes paths: / → -, spaces → -, leading dash kept
+_vault_path_encoded = str(VAULT_ROOT).replace("/", "-").replace(" ", "-")
 MEMORY_DIR = Path.home() / ".claude" / "projects" / _vault_path_encoded / "memory"
 
 AGGREGATOR_MARKER = "<!-- aggregate-sessions:BEGIN -->"
