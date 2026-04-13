@@ -1,6 +1,6 @@
 ---
 name: patterns
-description: Instinct Engine — scans recent sessions, journals, and decisions for recurring patterns and turns them into concrete captures (CLAUDE.md rules, concept notes, writing seeds, skill improvements). Run after /weekly or whenever you sense a pattern hardening.
+description: Instinct Engine — scans recent sessions, journals, and decisions for recurring patterns and turns them into concrete captures (CLAUDE.md rules, concept notes, writing seeds, skill improvements). Run after /weekly or whenever you sense a pattern hardening. Also runs semi-autonomously via session-end auto-detection triggers.
 trigger: /patterns
 ---
 
@@ -11,6 +11,32 @@ You are extracting signal before it evaporates. This skill scans recent sessions
 Run this after `/weekly`, after a heavy journaling session, or whenever the user says "I keep noticing..." or "this keeps coming up."
 
 **Headless/auto mode:** If you are running in a cron job, background script, or `--print` session with no interactive user, skip Step 3's confirmation. Auto-capture all findings. Add `(auto-captured — review and edit)` as a note in any new files created. Proceed directly to Step 4 → Step 5.
+
+---
+
+## Auto-Detection (session-end triggers)
+
+At the end of every session (before the session-close checklist), Claude should silently evaluate whether the current session hit any of these four triggers. If one or more fires, surface it as a suggestion before closing.
+
+**Trigger 1: High tool-call friction**
+The session required 5+ tool calls to accomplish something that should have been routine (e.g., finding a file, running a known workflow, looking up a fact that's in the vault). This suggests a missing shortcut, rule, or skill step.
+→ *"I noticed it took [N] steps to [task]. Want me to run /patterns to capture a shortcut?"*
+
+**Trigger 2: User correction**
+The user corrected Claude's approach during this session ("no, not that way", "don't do X", "use Y instead"). A feedback memory was likely saved, but there may be a deeper pattern if this correction echoes prior ones.
+→ *"You corrected me on [topic] this session. Want me to check if this is a recurring pattern worth capturing as a rule?"*
+
+**Trigger 3: Dead-end recovery**
+Claude hit errors or dead ends before finding the working path (wrong file, failed approach, had to backtrack). The successful path should be preserved so future sessions don't repeat the exploration.
+→ *"I had to backtrack on [task] before finding the right approach. Want me to capture the working path as a pattern?"*
+
+**Trigger 4: Non-trivial discovery**
+Claude discovered something non-obvious about the vault, a tool, an API, or a workflow that isn't documented anywhere. A discovery memory may have been saved, but it might warrant a rule or skill update.
+→ *"I discovered [finding] this session. Want me to check if it should become a permanent rule?"*
+
+**How to evaluate:** This is a lightweight check, not a full /patterns scan. Claude reviews the conversation in memory for: corrections received, tool-call counts on repeated tasks, backtrack moments, and surprises. If nothing fires, say nothing. If one or more fires, offer a single concise prompt (not a wall of text). The user can say "yes" (run full /patterns), "just save it" (capture the specific finding without a full scan), or "no" (skip).
+
+**Do NOT auto-run the full pattern scan.** Only suggest. The user decides whether to run it.
 
 ---
 

@@ -9,6 +9,19 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 13, 2026 (thirty-fourth session -- patterns auto-detection)
+
+The `/patterns` skill (Instinct Engine) now has **session-end auto-detection triggers** inspired by Hermes Agent's skill generation heuristics. Instead of only running when you manually invoke `/patterns`, Claude now silently evaluates four triggers at the end of every session:
+
+1. **High tool-call friction** (5+ calls for routine work, suggesting a missing shortcut)
+2. **User correction** (approach was wrong, may echo a recurring pattern worth codifying)
+3. **Dead-end recovery** (backtracked before finding the right path, worth preserving)
+4. **Non-trivial discovery** (undocumented finding that should become a rule)
+
+If any trigger fires, Claude suggests running `/patterns` but never auto-runs it. You can say "yes" (full scan), "just save it" (quick capture), or "no" (skip).
+
+---
+
 ## April 13, 2026 (thirty-third session -- vault maintenance automation)
 
 Three additions that keep your vault clean automatically so it doesn't become a junk drawer over time:
