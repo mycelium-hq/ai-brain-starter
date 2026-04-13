@@ -9,9 +9,19 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 13, 2026 (fortieth session -- optimize-on-repeat + change impact audit)
+
+Two process improvements ported from production use:
+
+- **Efficiency rule #8: Optimize on repeat.** Expanded beyond "recurring processes get a runbook." Now: before running a repeated task, review what happened last time. After running, note what could be better and fix it immediately (update the runbook, fix the script, add a rule, file the bug). The key addition is "don't just note it and move on." Document deduplication misses, schema violations, hung steps, parallelization opportunities, caching gaps, new tools, and pattern drift.
+
+- **Session close Lane 8: Change impact audit.** When a session modifies rules, scripts, skills, hooks, schedules, integrations, or paths, verify nothing broke before closing. Six checks: (1) paths resolve, (2) skills still trigger, (3) hooks still fire, (4) schedules still run, (5) cross-file references valid, (6) integrations connect. Catches silent breakage from renamed paths, moved files, or updated configs.
+
+---
+
 ## April 13, 2026 (thirty-ninth session -- Session-close capture system)
 
-- **Session close protocol:** 7-lane automatic capture at end of every session (journal seeds, writing notes, actionable content, to-dos, delegations, decisions, belief shifts). Nothing valuable stays trapped in chat transcripts.
+- **Session close protocol:** 8-lane automatic capture at end of every session (journal seeds, writing notes, actionable content, to-dos, delegations, decisions, belief shifts, change impact audit). Nothing valuable stays trapped in chat transcripts.
 - **Session Captures staging file:** template added for journal seed accumulation across sessions. Journal skill pulls from it and deletes used items.
 - **Decision archive lifecycle:** active decisions in Decisions/ move to Decisions/Archive/ after Outcome + Pattern are filled in during weekly/monthly retrospectives.
 - **Decision retrospective:** added to weekly/monthly insights skill (section 5b2) to close the loop on past decisions.
