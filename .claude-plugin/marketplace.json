@@ -8,7 +8,7 @@
     {
       "name": "ai-brain-starter",
       "source": "./",
-      "description": "AI-powered Obsidian vault setup with journaling, knowledge graphs, and pattern recognition",
+      "description": "The operating system for Claude Code. Memory, accountability, journaling, knowledge graphs, pattern recognition, and first-principles analysis — one install, every session compounds.",
       "version": "1.0.0"
     }
   ]
