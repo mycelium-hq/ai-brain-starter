@@ -9,6 +9,15 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 13, 2026 (thirty-ninth session -- Session-close capture system)
+
+- **Session close protocol:** 7-lane automatic capture at end of every session (journal seeds, writing notes, actionable content, to-dos, delegations, decisions, belief shifts). Nothing valuable stays trapped in chat transcripts.
+- **Session Captures staging file:** template added for journal seed accumulation across sessions. Journal skill pulls from it and deletes used items.
+- **Decision archive lifecycle:** active decisions in Decisions/ move to Decisions/Archive/ after Outcome + Pattern are filled in during weekly/monthly retrospectives.
+- **Decision retrospective:** added to weekly/monthly insights skill (section 5b2) to close the loop on past decisions.
+
+---
+
 ## April 13, 2026 (thirty-eighth session -- Obsidian sort order)
 
 Phase 2 plugin installer now configures `fileSortOrder: "byModifiedTime"` in `.obsidian/app.json` during setup. Files and folders sort by most recently modified (newest first) out of the box. Uses `setdefault` so it won't overwrite if the user already set a preference.

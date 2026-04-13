@@ -1,13 +1,15 @@
 ---
 creationDate: {{DATE}}
 type: rule
-purpose: Full protocol for capturing all session context before ending
+purpose: 7-lane automatic capture at end of every session — nothing valuable stays trapped in chat
 trigger: User signals session end (bye, thanks, wrapping up, done, good night, ttyl, etc.) or /wrap-up
 ---
 
-# Session end — capture cascade (don't lose context)
+# Session end — 7-lane capture cascade
 
 When the user signals the session is ending, run this capture cascade **before** saying goodbye. The point: **nothing useful from the conversation gets lost.** Every personal insight, every team decision, every workflow improvement gets written to the right place in the right vault.
+
+**Execution rule:** Run ALL 7 lanes automatically. Present ONE summary at the end. DO NOT SKIP ANY LANE. If a lane has nothing to capture, skip it silently, but you must check.
 
 ## Closing signals to listen for
 
@@ -23,46 +25,78 @@ The user can also trigger it manually with `/wrap-up`.
 
 **Skip the cascade if the session was tiny** — fewer than 5 user messages, or under ~1000 tokens of substantive conversation, or "just chatted" with no decisions, no information, no learnings. Don't make a 5-minute closing ceremony out of a 30-second hello-goodbye.
 
-## The cascade — run all of it, in order
+## The 7 lanes — run all of them, every time
 
-### Step 1 — Scan the conversation
+### Lane 1 — Journal seeds (verbatim quotes)
 
-Look back through the session and identify everything worth preserving. Categorize each item into one of these buckets:
+Scan the conversation for moments where the user said something worth journaling: realizations, emotional shifts, raw admissions, turns of phrase that capture how they actually think. Save exact words, never reworded. No cap on how many you capture.
 
-- **Decisions** — anything they decided during the session, even small ones
-- **Personal context** — feelings, goals, life events, relationships
-- **Team / business context** — strategic decisions, customer info, sales pipeline updates, roadmap changes
-- **New facts** — things they told you about people, projects, tools, places
-- **Workflow learnings** — patterns that worked well, friction points, edge cases
-- **Ideas** — things to write about, things to build, things to explore later
-- **Improvements to the AI brain setup itself** — friction, missing features, bugs
+**Destination:** Append to `⚙️ Meta/Session Captures.md` under "Journal Seeds." Use the format:
 
-### Step 2 — Decide where each item goes
+```markdown
+### YYYY-MM-DD — session-name
+- "Exact quote here." `[context tag]`
+```
 
-| Type | Destination |
-|---|---|
-| **Personal** (feelings, life, relationships, goals) | Personal vault: `⚙️ Meta/Sessions/YYYY-MM-DDTHH-MM-{worktree}.md` (always); `⚙️ Meta/Decisions/YYYY-MM-DDTHH-MM-{slug}.md` if a decision |
-| **Team / business** (work, strategy, customers) | Team vault if one exists: same per-worktree pattern |
-| **Improvements to the AI brain setup** | File a GitHub issue (see Step 4) |
-| **Anything ambiguous** | Personal vault session file with a note flagging it for review |
+The daily journal skill pulls from this file during the interview and deletes used items after journaling. This is a staging area, not an archive.
 
-**Per-worktree writes (race-safety).** Write to `⚙️ Meta/Sessions/{timestamp}-{worktree}.md` and `⚙️ Meta/Decisions/{timestamp}-{slug}.md`, never to `Last Session.md` or `Decision Log.md` directly. Decisions need frontmatter `type: decision, worktree, decision_date, floor, stakes, speed, outcome, pattern`. The session-end hook runs the aggregators automatically.
+### Lane 2 — Writing note candidates
 
-**For users with both a personal vault AND a team vault:** always cascade to BOTH. Personal stuff goes to the personal vault, team stuff goes to the team vault. Never let personal stuff leak into the team vault. When ambiguous, default to personal.
+Scan for ideas worth developing into published writing (blog posts, newsletter pieces, essays, social posts). The user's writing platform of choice is defined in their CLAUDE.md. Claude rewrites freely here (unlike journal seeds, which are verbatim).
 
-### Step 3 — Write to the vault(s)
+**Destination:** Append to the user's Content Drafts file or equivalent. If none exists, append to `⚙️ Meta/Session Captures.md` under "Ideas & Strategy Captures."
 
-Use the file paths in CLAUDE.md's vault map. Don't ask the user where things go — figure it out from the existing structure.
+### Lane 3 — Actionable content filing
 
-For each write:
-- **Don't overwrite**, append. Use markdown headings to keep entries chronological.
-- **Use the date format** the rest of the file uses.
-- **Include enough context** that the entry makes sense in 6 months.
-- **Wikilink** people, projects, and concepts.
+Scan for strategy fragments, product insights, business ideas, research findings, or any substantive content that surfaced mid-session. File each item to wherever it belongs in the vault based on the vault map.
 
-### Step 4 — File improvement ideas as GitHub issues
+**Destination:** Wherever it belongs. Use the vault map and RESOLVER.md files. If no clear home exists, file to `⚙️ Meta/Session Captures.md` under "Ideas & Strategy Captures" with a note about where it might eventually live.
 
-For anything in the "Improvements to the AI brain setup" bucket, **draft a GitHub issue and offer to file it.**
+### Lane 4 — To-do filing
+
+Scan for action items the user committed to. Separate personal to-dos from team to-dos. Never mix them in the same file.
+
+**Destination:**
+- Personal to-dos: the user's personal to-do file (check CLAUDE.md for the path)
+- Team to-dos: the team to-do file or project tracker (check CLAUDE.md for the path)
+
+If no to-do file paths are defined, ask the user where they track to-dos and remember it for next time.
+
+### Lane 5 — Delegation filing
+
+Scan for items the user needs someone else to do. Label each with WHO is responsible. Draft the message (Slack, email, or whatever channel they use) so the user can send it with one click.
+
+**Destination:** The user's delegation or "waiting on" file. If none exists, append to Open Loops under "Waiting On Others" with the person's name and what's expected.
+
+### Lane 6 — Decision logging
+
+Scan for any decisions made during the session. For each decision, capture:
+
+- **What:** The decision in one sentence
+- **Why:** What tipped it. Specific facts, not vibes.
+- **Floor / State:** Emotional/cognitive state at decision time
+- **Stakes:** Low / Medium / High
+- **Speed:** Instant / Hours / Days / Weeks
+- **Outcome:** *(leave blank, fill in later during weekly/monthly retrospective)*
+- **Pattern:** *(leave blank, fill in later)*
+
+**Destination:** Per-decision files at `⚙️ Meta/Decisions/YYYY-MM-DDTHH-MM-{slug}.md` with frontmatter `type: decision, worktree, decision_date, floor, stakes, speed, outcome, pattern`. Never write to `Decision Log.md` directly; it is auto-generated by the aggregator.
+
+**Archive lifecycle:** Decisions stay in `⚙️ Meta/Decisions/` as "active" until both Outcome and Pattern are filled in during a weekly or monthly retrospective. Once both fields are complete, move the file to `⚙️ Meta/Decisions/Archive/`. The aggregator rebuilds the Decision Log view from both folders.
+
+### Lane 7 — Belief shift check
+
+Ask yourself: based on this session, does the user believe something differently now than they did at the start? A changed assumption about their product, a shifted priority, a new understanding of a relationship or strategy.
+
+If yes, note it in the session file. These are the highest-signal entries for weekly/monthly insights because they mark genuine learning, not just activity.
+
+**Destination:** `⚙️ Meta/Sessions/YYYY-MM-DDTHH-MM-{worktree}.md` under a "Belief Shifts" heading.
+
+## After the 7 lanes
+
+### File improvement ideas as GitHub issues
+
+For anything that surfaced about the AI brain setup itself (friction, missing features, bugs), **draft a GitHub issue and offer to file it.**
 
 **Draft format:**
 
@@ -81,9 +115,9 @@ Show the draft and ask: *"I want to send this to the maintainer so they can fix 
 
 If yes: `gh issue create --repo <MAINTAINER_REPO or adelaidasofia/ai-brain-starter> --title "..." --body "..."`
 
-If no: save to `<vault>/💡 Improvement Ideas.md`.
+If no: save to the vault's improvement ideas file.
 
-### Step 5 — Run the aggregators
+### Run the aggregators
 
 ```bash
 VAULT_ROOT="<absolute vault path>" python3 "<vault>/⚙️ Meta/scripts/aggregate-sessions.py"
@@ -92,18 +126,26 @@ VAULT_ROOT="<absolute vault path>" python3 "<vault>/⚙️ Meta/scripts/aggregat
 
 Only needed if you wrote files after the session-end hook fired.
 
-### Step 6 — Confirm with the user
+### Confirm with the user
 
-In plain language, tell them what was saved and where. Then say goodbye in their primary language.
+Present ONE summary of everything captured across all 7 lanes. Keep it concise: what was saved and where. Then say goodbye in their primary language.
+
+## Per-worktree writes (race-safety)
+
+Write to `⚙️ Meta/Sessions/{timestamp}-{worktree}.md` and `⚙️ Meta/Decisions/{timestamp}-{slug}.md`, never to `Last Session.md` or `Decision Log.md` directly. The session-end hook runs the aggregators automatically.
+
+**For users with both a personal vault AND a team vault:** always cascade to BOTH. Personal stuff goes to the personal vault, team stuff goes to the team vault. Never let personal stuff leak into the team vault. When ambiguous, default to personal.
 
 ## What NOT to do
 
 - **Don't ask the user what to save.** Scan the conversation, decide, and do it.
 - **Don't make it long.** ~30 seconds of work, 1-3 short messages.
+- **Don't skip lanes.** Check all 7, even if most are empty.
 - **Don't write to the team vault if it's personal content.**
 - **Don't file empty or trivial GitHub issues.**
+- **Don't reword journal seeds.** Exact words only (Lane 1).
 - **Don't fail silently.** If something breaks, TELL THE USER.
 
 ## Why this rule matters
 
-Without this rule, every session ends with valuable context evaporating. The cascade is the safety net.
+Without this rule, every session ends with valuable context evaporating. The 7-lane cascade is the safety net. Journal seeds feed the daily journal. Decisions feed the weekly retrospective. Belief shifts feed the monthly insight. Nothing stays trapped in a chat transcript.

@@ -152,6 +152,17 @@ Scan `[VAULT_PATH]/Meta/Decisions/` for any decisions logged this period with `s
 
 This is the accountability loop for first-principles thinking. The deconstruct skill catches decisions in real time. This catches the ones that slipped through.
 
+### 5b2. Decision retrospective
+
+Scan `[VAULT_PATH]/Meta/Decisions/` for active decision files (those NOT in the `Archive/` subfolder). For each one:
+
+1. **Check if enough time has passed** to evaluate the outcome. Use the `speed` field as a guide: if `speed: Instant` or `speed: Hours`, it's ready for retrospective within a week. If `speed: Days`, wait 2-4 weeks. If `speed: Weeks`, wait 1-3 months.
+2. **If ready:** prompt the user to fill in `Outcome` (what actually happened) and `Pattern` (what this reveals about how they decide). Don't fill these in yourself; ask the user. The learning only works if they articulate it.
+3. **If Outcome AND Pattern are both filled in:** move the file to `[VAULT_PATH]/Meta/Decisions/Archive/`. The decision is complete; it has taught what it can teach.
+4. **Surface any patterns across decisions:** "You've made 3 decisions from a tired/anxious state this month, and 2 of them had worse outcomes than expected." Or: "Every time you decided quickly on hiring, the outcome was positive. Your instinct here is reliable."
+
+If there are no active decisions to review, skip this section silently.
+
 ### 5c. Skill usage snapshot (if data exists)
 
 Check if `[VAULT_PATH]/Meta/skill-usage-log.jsonl` exists and has entries for the period. If it does, include a brief summary:

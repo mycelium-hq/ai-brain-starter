@@ -25,6 +25,10 @@ You don't need to log every decision — only the ones where you'd want to look 
 
 The point of leaving these blank at decision-time is that you can't grade your own decision from inside the moment. You need distance. Set a calendar reminder for 30 days later (or 90, or 6 months — depends on the decision's time horizon) and come back. The retrospective is where the learning lives.
 
+## Archive lifecycle
+
+Decisions live in `Meta/Decisions/` as "active" until both **Outcome** and **Pattern** are filled in. The weekly/monthly insights skill (section 5b2) reviews active decisions and prompts you to complete them when enough time has passed. Once both fields are filled, the file moves to `Meta/Decisions/Archive/`. The aggregator rebuilds this Decision Log view from both active and archived files, so nothing is lost. The archive keeps the active folder focused on decisions that still need follow-up.
+
 ---
 
 ## How to read this log
