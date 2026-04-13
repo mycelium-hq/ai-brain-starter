@@ -1,25 +1,31 @@
 # AI Brain Starter
 
-**Turn any folder of notes into an AI-powered second brain in one conversation.**
+**The operating system for Claude Code.**
 
-One command to install. One command to start. Claude does the rest.
+One command installs it. One conversation configures it. Every session after that compounds.
 
 ---
 
-## What This Does
+## The Problem
 
-You type `/setup-brain` in Claude Code. Claude interviews you about your life, work, and goals — then builds a complete Obsidian knowledge vault around your answers:
+Claude Code is powerful out of the box. But every session starts from zero. It doesn't know who you are, what you're working on, what you decided last week, or what patterns you keep repeating. You re-explain context. You lose insights to chat transcripts. You get generic answers when you need specific ones.
 
-- **Memory file** (CLAUDE.md) — Claude reads this automatically every session. No more re-explaining yourself.
-- **Folder structure** — organized by how you think, not how software thinks
-- **Contact cards** (CRM) — every person in your life becomes queryable
-- **Context layer** — priorities, open loops, last session, decision log
-- **Templates** — for journals, meetings, and contacts
-- **Daily journal** — Claude interviews you, saves the entry, tracks patterns over time
-- **Accountability rules** — Claude pushes back on bad ideas, checks your ego, calls you out when you're avoiding something
-- **Power tools** — Graphify (knowledge graphs), Humanizer (de-AI your writing), Claude-Mem (session memory), NotebookLM (query your Google notebooks)
+This system fixes that.
 
-The whole setup takes about 2 hours with the conversation. The basics take 30 minutes.
+## What This Actually Is
+
+AI Brain Starter turns Claude Code into a persistent, opinionated collaborator that accumulates real understanding of your life and work over time. It is not a note-taking template. It is a full behavioral layer:
+
+- **Memory that compounds** — Claude reads your context file (CLAUDE.md) every session. Corrections stick. Preferences persist. You never re-explain yourself.
+- **Session lifecycle hooks** — every session start loads your last context and current priorities. Every session end captures decisions, insights, ideas, and to-dos to the right files. Nothing stays trapped in a chat transcript.
+- **A daily journal that pushes back** — not a diary prompt. A structured interview with an advisory panel of 90+ real voices (Naval, Brene Brown, Hormozi, Buffett, your own custom advisors) that challenge your thinking, catch your blind spots, and track your emotional patterns over time.
+- **Knowledge graphs** — Graphify turns your entire vault into a queryable graph. Claude answers "what does my vault say about X?" from structured data instead of grepping thousands of files.
+- **Pattern recognition** — weekly and monthly insight reports surface trends you can't see from inside a single day: recurring emotional states, decision patterns, avoidance behaviors, wins you forgot to celebrate.
+- **First-principles analysis** — the /deconstruct skill auto-triggers on high-stakes decisions. Surfaces hidden assumptions, finds foundational truths, rebuilds from scratch.
+- **Writing that doesn't sound like AI** — the Humanizer strips AI patterns from everything you publish, calibrated to your actual voice.
+- **Accountability rules** — Claude is not a yes-machine. It corrects you, checks your ego, calls out avoidance, and reminds you who you said you wanted to be.
+
+The whole system ships as one install command, works for non-technical users, and auto-updates itself.
 
 ---
 
@@ -27,17 +33,15 @@ The whole setup takes about 2 hours with the conversation. The basics take 30 mi
 
 ### What you need before starting
 
-A Mac, Windows, or Linux computer. **That's it.** The bootstrap installs everything else for you — Obsidian, Claude Code, Python, Node.js, all the tools. You don't need to download or set up anything in advance.
+A Mac, Windows, or Linux computer. **That's it.** The bootstrap installs everything else for you: Obsidian, Claude Code, Python, Node.js, all tools. You don't need to download or set up anything in advance.
 
 ### Step 1 — Open your terminal
 
-The bootstrap is one command that you paste into your terminal. If you've never opened a terminal before, here's how:
-
-- **On Mac:** press `⌘ + Space`, type `Terminal`, press Enter. A black window opens. That's your terminal.
-- **On Windows:** click the Start button, type `PowerShell`, click on **Windows PowerShell** (the blue icon — NOT the black "cmd" icon). A blue window opens. That's PowerShell. **Important: this MUST be PowerShell, not cmd.exe — they look similar but cmd won't work.**
+- **On Mac:** press `Cmd + Space`, type `Terminal`, press Enter.
+- **On Windows:** click Start, type `PowerShell`, click **Windows PowerShell** (the blue icon, NOT cmd.exe).
 - **On Linux:** you already know.
 
-### Step 2 — Paste and run the install command
+### Step 2 — Paste and run
 
 **Mac and Linux:**
 
@@ -45,21 +49,28 @@ The bootstrap is one command that you paste into your terminal. If you've never 
 curl -fsSL https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main/bootstrap.sh | bash
 ```
 
-**Windows (PowerShell — see Step 1 above):**
+**Windows (PowerShell):**
 
 ```powershell
 irm https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main/bootstrap.ps1 | iex
 ```
 
-Paste the command into your terminal window and press Enter. Then leave the window open and let it run — it takes about 5–10 minutes the first time. **Don't close the window** until you see "Done."
+Paste it and press Enter. Let it run (5-10 minutes). Don't close the window until you see "Done."
 
-This installs everything: Obsidian, Claude Code, Python, Node.js, graphify, humanizer, claude-mem, notebooklm, meeting-todos, patterns, the Granola MCP, plus the ai-brain-starter skill itself. Safe to re-run anytime — it skips anything already installed.
+This installs everything: Obsidian, Claude Code, Python, Node.js, graphify, humanizer, claude-mem, notebooklm, meeting-todos, patterns, the Granola MCP, and the ai-brain-starter skill. Safe to re-run anytime.
 
-If you see a password prompt at any point: that's normal. Type your computer's login password and press Enter. **You won't see characters as you type — that's also normal.** Don't close the window.
+### Step 3 — Start the conversation
+
+```
+claude
+/setup-brain
+```
+
+Claude interviews you about your life, work, and goals, then builds your entire system around your answers. The basics take 30 minutes. The full setup takes about 2 hours.
 
 ### Joining an existing team vault
 
-If a teammate has already set up a vault and shared it with you (Google Drive, OneDrive, Dropbox, git), you don't need to set up your own structure. Run the bootstrap above, then:
+If a teammate already set up a vault and shared it with you:
 
 ```
 cd "<path to the shared vault>"
@@ -67,35 +78,61 @@ claude
 /setup-brain join-team
 ```
 
-The `join-team` mode skips structure-creation entirely — it just verifies your install, auto-fixes the directory layout if Claude can't find the team CLAUDE.md (a common issue with shared folders that wrap a single content subfolder), wires your meeting-notes tool, and confirms everything works. Takes about 5 minutes.
+This skips structure creation, verifies your install, wires your tools, and confirms everything works. About 5 minutes.
 
 ### Stay updated
-
-This skill is actively improving — new features, better prompts, and more tools get added regularly. Update weekly:
 
 ```bash
 cd ~/.claude/skills/ai-brain-starter && git pull
 ```
 
-Or just tell Claude: "Update the ai-brain-starter skill."
+Or just tell Claude: "Update the ai-brain-starter skill." Check [CHANGELOG.md](CHANGELOG.md) for what's new in plain English.
 
-After updating, check [CHANGELOG.md](CHANGELOG.md) to see what's new — written in plain English, no jargon.
+---
 
-### Step 3 — Start the conversation
+## How It Works
 
-When the bootstrap finishes, it tells you it's done. Then:
+### Session start
+Hooks automatically load your last session context, current priorities, and graph routing. Claude already knows what you were doing before you say a word.
 
-1. **In the same terminal window** (Terminal on Mac/Linux, PowerShell on Windows), type `claude` and press Enter. This starts Claude Code.
-2. Once Claude Code starts, type `/setup-brain` and press Enter.
+### During the session
+Claude has access to your full context: who you are, what you're building, your decision history, your knowledge graph, your patterns. Every answer is specific to you.
 
-```
-claude
-/setup-brain
-```
+### Session end
+A cascade scans the entire conversation and files everything to the right place: decisions to your decision log, to-dos to your task list, insights to your captures file, ideas to your ideas doc. Substack note candidates get drafted. Journal seeds get preserved verbatim for your next /journal session.
 
-Claude will walk you through everything from there. No technical knowledge required.
+### Over weeks and months
+Weekly insight reports track your emotional floor patterns, flag avoidance, surface wins. Monthly reports go deeper. The /patterns skill (Instinct Engine) detects recurring friction and converts it into permanent rules and captures. Your system literally gets smarter the more you use it.
 
-**Want the full story first?** Read [How I Built a Second Brain That Actually Works With AI](https://adelaidadiazroa.substack.com/p/how-i-built-a-second-brain-that-actually) — the why, the surprises, and what changed.
+---
+
+## The Toolkit
+
+Every tool is installed and wired during setup. They work together, not in isolation.
+
+| Command | What it does |
+|---------|-------------|
+| `/journal` | Daily journal interview with advisory panel, accountability checks, and emotional floor tracking |
+| `/weekly` | Weekly pattern recognition across your journal entries |
+| `/monthly` | Deeper monthly trends with therapist and life coach observations |
+| `/graphify` | Build a knowledge graph from any set of files |
+| `/humanizer` | Strip AI patterns from your writing, calibrated to your voice |
+| `/deconstruct` | First-principles analysis on any decision or strategy |
+| `/patterns` | Extract recurring patterns from sessions into permanent captures |
+| `/meeting-todos` | Pull action items from meeting notes into your to-do list |
+| `/notebooklm` | Query your Google NotebookLM notebooks with source-grounded answers |
+| `/optimize-brain` | Deep vault optimization: CRM, graphs, dashboards, compression, wikilinks |
+| `/mem-search` | Search Claude's cross-session memory database |
+
+### Power tools under the hood
+
+- **Claude-Mem** — cross-session memory that makes corrections and context persist automatically
+- **Graphify** — knowledge graph extraction with community detection, audit trails, and 80-92% token savings via wrapper scripts
+- **Nano Banana** — image generation via Google Gemini 3 Pro Image
+- **Granola MCP** — meeting transcription with automatic cascade to downstream files
+- **Dataview + Bases** — live database queries over your markdown files in Obsidian
+
+Full catalog with attribution and source links: [`docs/POWER_TOOLS.md`](docs/POWER_TOOLS.md)
 
 ---
 
@@ -103,76 +140,33 @@ Claude will walk you through everything from there. No technical knowledge requi
 
 ```
 Your Vault/
-  CLAUDE.md                    # Your memory file — Claude reads this every session
+  CLAUDE.md                    # Your memory file — loaded every session
   Meta/
     00 Start Here.md           # Session routing
-    Current Priorities.md      # Your top 5 right now
+    Current Priorities.md      # Your top focus areas
     Open Loops.md              # What's unresolved
-    Last Session.md            # What happened last time
+    Last Session.md            # Continuity between sessions
     Decision Log.md            # Decisions tracked over time
-    Templates/
-      Template - Journal Entry.md
-      Template - CRM Entry.md
-      Template - Meeting Note.md
-  Journals/                    # Daily entries
+    Session Captures.md        # Insights, seeds, ideas filed automatically
+    rules/                     # Behavioral rules for different task types
+    Templates/                 # Journal, CRM, meeting note templates
+  Journals/                    # Daily entries with floor tags
     Monthly Summaries/         # Compressed by month
-  CRM/                         # People cards with live queries
+  CRM/                         # Queryable contact cards with Dataview
   Home/                        # Personal goals, habits, health
-  Work/                        # Your projects and career
-  Writing/                     # Anything you create
+  Work/                        # Projects and career
+  Writing/                     # Drafts, Substack, books
   Books/                       # Book notes
   Psychology/                  # Inner work, therapy, growth
 ```
 
-Plus any custom folders based on your life.
-
----
-
-## Power Tools (Installed During Setup)
-
-| Tool | What it does | Command |
-|------|-------------|---------|
-| **Humanizer** | Strips AI patterns from your writing | `/humanizer` |
-| **Graphify** | Builds a knowledge graph of your vault | `/graphify .` |
-| **Claude-Mem** | Remembers past sessions automatically | automatic + `/mem-search` |
-| **NotebookLM** | Queries your Google NotebookLM notebooks | `/notebooklm` |
-| **Weekly Insights** | Pattern recognition from your journal week | `/weekly` |
-| **Monthly Insights** | Deeper trends, therapist + coach observations | `/monthly` |
-| **Meeting → To-Do** | Extracts your action items from meeting notes | `/meeting-todos` |
-| **Nano Banana** | Image generation via Google Gemini 3 Pro Image | `/plugin install nano-banana@devon-claude-skills` |
-
-These require Homebrew + Python 3.12 + Node.js. The setup walks you through installing them.
-
-**Want the full picture of every tool, why it's there, and how they fit together?** Read [`docs/POWER_TOOLS.md`](docs/POWER_TOOLS.md) — the catalog of every third-party skill, MCP server, and Obsidian plugin this setup wires together, with attribution and source links for each.
-
----
-
-## After Setup
-
-### Daily use
-- Open Obsidian for visual navigation
-- Open Claude Code in your vault for AI-powered work
-- Type `/journal` for daily journal interviews
-- Type `/humanizer` on any draft before publishing
-
-### Deep optimization
-Type `/optimize-brain` when you're ready for the weekend pass:
-- **File audit** — scan vault, report stats, find the mess
-- **AI chat import & cleanup** — export ChatGPT/Claude/Gemini history, keep the gold, delete the noise
-- **CRM standardization** — turn people mentions into queryable contacts
-- **Journal compression** — monthly summaries from your entries
-- **Domain summaries** — one compressed note per life area
-- **Graph cleanup** — fix broken links, connect orphans, enrich dead ends
-- **Dashboards** — live Dataview queries for contacts, tasks, projects
-- **Wikilink audit** — find and link unlinked mentions across the vault
-- **About Me** — self-portrait built from your data
-- **Vault health report** — final audit with stats and recommendations
+Plus custom folders based on your interview.
 
 ---
 
 ## The Accountability Rules
 
-Every CLAUDE.md created by this skill includes these rules. Claude is not a yes-machine — it's a thinking partner.
+Every CLAUDE.md created by this system includes these rules. Claude is a thinking partner, not a yes-machine.
 
 1. Correct me if I'm wrong.
 2. Stop me if I'm gossiping.
@@ -194,31 +188,33 @@ Every CLAUDE.md created by this skill includes these rules. Claude is not a yes-
 
 ## Who This Is For
 
-- Founders who use AI daily and want it to actually know them
-- Writers who have years of notes scattered everywhere
-- Anyone who journals (or wants to start)
-- People who've tried Notion, Roam, Apple Notes, and none of it stuck
-- Non-technical people — the setup is a conversation, not a config file
+- **Claude Code power users** who want every session to build on the last one
+- **Founders** running a company and a life and tired of re-explaining context to AI
+- **Writers** with years of notes scattered everywhere who want them connected and queryable
+- **Anyone who journals** (or wants to) and wants an AI that actually remembers what you said
+- **Teams** who want a shared knowledge system with personal vaults that stay private
+- **Non-technical people** — the entire setup is a conversation, not a config file
 
 ---
 
 ## Deeper Documentation
 
-- **[`docs/POWER_TOOLS.md`](docs/POWER_TOOLS.md)** — every third-party skill, MCP server, and Obsidian plugin this setup uses, with attribution, install commands, and the why behind each
-- **[`docs/MEMORY_SYSTEM.md`](docs/MEMORY_SYSTEM.md)** — how to make Claude Code accumulate knowledge across sessions using typed memories (the most underrated pattern in this whole setup)
-- **[`skills/graphify/RUNBOOK.md`](skills/graphify/RUNBOOK.md)** — the production playbook for running graphify on a large vault, with cost guardrails and lessons from ~5M tokens of real runs
+- **[`docs/POWER_TOOLS.md`](docs/POWER_TOOLS.md)** — every third-party skill, MCP server, and Obsidian plugin, with attribution and source links
+- **[`docs/MEMORY_SYSTEM.md`](docs/MEMORY_SYSTEM.md)** — how Claude accumulates knowledge across sessions using typed memories
+- **[`skills/graphify/RUNBOOK.md`](skills/graphify/RUNBOOK.md)** — production playbook for running graphify on a large vault, with cost guardrails
 - **[`templates/dataview-queries.md`](templates/dataview-queries.md)** — reusable Dataview query library for journals, CRM, AI chats, decision logs
-- **[`templates/Decision Log.md`](templates/Decision%20Log.md)** — template for tracking the *how* of your decisions so you can learn patterns over time
-- **[`scripts/build-journal-index.py`](scripts/build-journal-index.py)** — builds a fast lookup index over your journal entries, used by `/insights` and `/weekly`/`/monthly`
+- **[`OPTIMIZE.md`](OPTIMIZE.md)** — the deep vault optimization guide (11 phases, weekend project)
+- **[`EXAMPLES.md`](EXAMPLES.md)** — sample journal entry and weekly insight report showing output quality
+- **[`CONTRIBUTING.md`](CONTRIBUTING.md)** — how to contribute (the project is opinionated by design)
 - **[CHANGELOG.md](CHANGELOG.md)** — what's new in plain English
 
 ---
 
 ## Background
 
-This system was built by [Adelaida Diaz-Roa](https://adelaidadiazroa.substack.com), founder of Onde, across a week of intensive Obsidian + Claude Code optimization. 5,000 notes, 12 years of journals, two books in progress, a startup to raise for — all connected, compressed, and navigable.
+This system was built by [Adelaida Diaz-Roa](https://adelaidadiazroa.substack.com), founder of [Onde](https://www.planwithonde.com), across weeks of intensive optimization with Claude Code. 5,000+ notes, 12 years of journals, two books in progress, a startup to raise for, all connected, compressed, and navigable.
 
-Read the full story: [How I Built a Second Brain That Actually Works With AI](https://adelaidadiazroa.substack.com)
+Read the full story: [How I Built a Second Brain That Actually Works With AI](https://adelaidadiazroa.substack.com/p/how-i-built-a-second-brain-that-actually)
 
 ---
 
