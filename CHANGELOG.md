@@ -9,6 +9,12 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 13, 2026 (thirty-fifth session -- proactive compaction rule)
+
+Added efficiency rule #7: **compact proactively at ~50% context usage.** Long sessions (graph pipelines, weekly reviews, multi-step cascades) degrade quality when context fills silently. The rule is simple: if you've done 3+ major tasks, compact before the next one. The PreCompact hook already preserves state, so compaction is safe.
+
+---
+
 ## April 13, 2026 (thirty-fourth session -- patterns auto-detection)
 
 The `/patterns` skill (Instinct Engine) now has **session-end auto-detection triggers** inspired by Hermes Agent's skill generation heuristics. Instead of only running when you manually invoke `/patterns`, Claude now silently evaluates four triggers at the end of every session:

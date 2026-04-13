@@ -2478,6 +2478,7 @@ Add these to their CLAUDE.md under a new section:
 4. Save discoveries. When you figure out something non-obvious through debugging or investigation (an API that behaves unexpectedly, a tool quirk, a pattern that doesn't work as expected), save it as a memory file with type: discovery. Lead with the fact, then Why it matters and Source. This prevents future sessions from re-learning the same thing.
 5. Don't do things without confirming first.
 6. Route to the right tool. Check the Tool Routing table. Don't burn Claude tokens when another tool is faster.
+7. Compact proactively. Run `/compact` when context usage hits ~50%, don't wait for auto-compaction. Long sessions degrade quality in the back half when context fills silently. Rule of thumb: if you've done 3+ major tasks in one session, compact before starting the next one.
 
 ## Auto-Update Check
 
