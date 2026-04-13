@@ -107,9 +107,11 @@ if "thedotmack" not in s["extraKnownMarketplaces"]:
     }
 s.setdefault("enabledPlugins", {})
 s["enabledPlugins"]["claude-mem@thedotmack"] = True
+s["enabledPlugins"]["context7"] = True
 with open(p, "w") as f:
     json.dump(s, f, indent=2)
 print("registered claude-mem@thedotmack marketplace + enabled plugin")
+print("enabled context7 plugin (up-to-date library docs for coding sessions)")
 PY
 # Also run the npx installer as a belt-and-suspenders fallback (no-op if
 # the marketplace install already completed)
