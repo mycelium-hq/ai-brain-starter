@@ -9,6 +9,13 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 13, 2026 (thirty-seventh session -- new skill + panel automation)
+
+Added **1 new skill** and **1 automation script**:
+
+- **repurpose-talk** (`/repurpose-talk`) -- turns a speaking engagement into 10-30 content pieces. Extracts key insights, stories, and one-liners, then generates LinkedIn posts, short-form notes, article seeds, and a video clip plan with timestamps. Includes a 2-week posting calendar and cross-pollination checks (business angles, investor soundbites, CRM follow-ups). Supports bilingual output. Trigger: `/repurpose-talk` or "I just gave a talk."
+- **panel-trigger-hook.sh** -- a UserPromptSubmit hook that detects decision language in prompts ("should I", "weighing", "torn between", "pros and cons", etc.) and injects an advisory panel reminder so Claude pulls 3-5 relevant voices with mandatory dissent. Silent passthrough on non-decision prompts. Install by adding to settings.local.json hooks. Solves the problem of advisory panels only firing when explicitly invoked -- this makes them proactive.
+
 ## April 13, 2026 (thirty-sixth session -- 5 new skills)
 
 Added **5 skills** that were missing from the repo:
