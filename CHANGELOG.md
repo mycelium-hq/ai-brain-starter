@@ -9,6 +9,20 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 13, 2026 (twenty-ninth session -- graphify multi-vault pipeline)
+
+Three new graphify scripts that make the knowledge graph pipeline work across multiple vaults:
+
+1. **`graphify_stage_finish.py`** -- the end-to-end finish script that combines chunk results, canonicalizes, merges into the existing graph, reclusters, regenerates the report, and saves the cache. Now accepts `--vault-root`, `--report-title`, and `--report-path` so it works for any vault (personal, team, or project) without hardcoded paths.
+
+2. **`graphify_canonicalize.py`** -- merges nodes that refer to the same concept but were given different IDs across files (e.g., 74 separate "Love" nodes from different journals collapse to 1). Also strips invalid file_type values agents invent and normalizes folder-prefix wikilink labels.
+
+3. **`graphify_stage_select.py`** -- walks a corpus folder, applies filters (500-word minimum, skip AI-generated content), checks the cache for real LLM extractions vs. preflight stubs, and bin-packs the uncached files into word-balanced chunks ready for parallel dispatch.
+
+All three auto-detect your vault root from their own script location, so they work anywhere without editing paths.
+
+---
+
 ## April 13, 2026 (twenty-eighth session -- context optimization)
 
 Three fixes that prevent your vault from slowing down over time:
