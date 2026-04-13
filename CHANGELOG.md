@@ -9,6 +9,22 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 13, 2026 (thirty-third session -- vault maintenance automation)
+
+Three additions that keep your vault clean automatically so it doesn't become a junk drawer over time:
+
+1. **Vault maintenance script.** New `scripts/vault_maintenance.py` runs a monthly hygiene scan checking 7 categories: inbox overdue files, naming issues (too-long or lowercase-starting filenames), stray binaries outside designated folders, backup file accumulation, empty folders, oversized folders (500+ files), and graphify backup count. Writes a Markdown report to your Meta folder. Fully configurable via CLI flags.
+
+2. **Graphify backup rotation script.** New `scripts/rotate_graphify_backups.py` keeps only the N most recent graph.json backups (default 3) and deletes the rest. Also cleans .bak files older than N days. Prevents the 50-backup pileup that can consume hundreds of MB.
+
+3. **Inbox zero pattern.** New Rule 23 in `templates/rules/obsidian.md`: create an Inbox/ folder as a quick-capture landing zone with a 7-day max residency rule. The maintenance scan flags overdue items. Prevents notes from piling up in random folders.
+
+4. **Maintenance docs.** New `docs/MAINTENANCE.md` with setup instructions, CLI usage, and three recommended scheduled task patterns (monthly scan, quarterly audit, weekly backup rotation) with cron expressions.
+
+All scripts require `--vault-root` (no hardcoded paths), auto-detect emoji-prefixed Meta folders, and work in any vault.
+
+---
+
 ## April 13, 2026 (thirty-second session -- Obsidian plugin integration + skill tracking)
 
 Five additions that connect your vault to Obsidian's plugin ecosystem and help you understand which skills you actually use:
