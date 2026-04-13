@@ -9,6 +9,20 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 13, 2026 (thirty-sixth session -- 5 new skills)
+
+Added **5 skills** that were missing from the repo:
+
+- **daily-journal** -- conversational journaling with floor detection, behavior accountability, and advisory panel dialogue. Interviews you, identifies your emotional floor, runs checks (gym, sleep, scrolling), consults 90+ advisory voices, and saves a properly formatted entry. Includes idea quarantine and to-do extraction.
+- **humanizer** (v2.7.0) -- removes AI writing patterns from text using Wikipedia's 29-pattern library. Pre-flight doc-type detection, voice calibration against your own writing, Spanish/bilingual support, 4-tier ROI-ranked pattern ordering, and adaptive pass strength.
+- **insights** (/weekly, /monthly) -- generates insight reports from journal entries with floor trends, life coach flags, therapist observations, 60+ panel voices, first-principles audit, skill usage snapshots, and Obsidian ecosystem checks.
+- **nano-banana** -- image generation via Google Gemini 3 Pro Image. Text-to-image, editing, multi-image composition (up to 14 images), iterative refinement, and search-grounded generation.
+- **notebooklm** -- query Google NotebookLM notebooks from Claude Code for source-grounded, citation-backed answers. Browser automation, library management, persistent auth.
+
+All skills were sanitized: personal paths replaced with `[VAULT_PATH]`, names removed, personal context genericized. Panel rosters preserved (they're public figures and the framework is universal).
+
+---
+
 ## April 13, 2026 (thirty-fifth session -- proactive compaction rule)
 
 Added efficiency rule #7: **compact proactively at ~50% context usage.** Long sessions (graph pipelines, weekly reviews, multi-step cascades) degrade quality when context fills silently. The rule is simple: if you've done 3+ major tasks, compact before the next one. The PreCompact hook already preserves state, so compaction is safe.
