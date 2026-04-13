@@ -9,6 +9,19 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## April 13, 2026 (thirtieth session -- obsidian hygiene rules)
+
+New file: `templates/rules/obsidian.md` -- 21 rules for wikilink hygiene, naming conventions, and import safety. Born from a vault-wide audit that found and fixed 3,548 issues across a 5,900-file vault. The four most impactful rules (discovered during the audit):
+
+- **Never wikilink inside URLs.** Auto-linking scripts that insert `[[wikilinks]]` into URLs break both the URL and the link. 205 instances found and fixed.
+- **No em dashes in filenames.** Em dashes (`---`) break Obsidian anchor links and TOC slugs. Use ` - ` instead. 46 files renamed.
+- **Heading links use wikilink syntax.** Markdown anchors `[text](#slug)` silently break in Obsidian with emojis or special characters. Use `[[#Heading|display]]`.
+- **No Roam artifacts.** `[[//database-path/...]]` references from Roam exports never resolve. Clean on import.
+
+Drop this file into your vault's rules folder and reference it from your root CLAUDE.md.
+
+---
+
 ## April 13, 2026 (twenty-ninth session -- graphify multi-vault pipeline)
 
 Three new graphify scripts that make the knowledge graph pipeline work across multiple vaults:
