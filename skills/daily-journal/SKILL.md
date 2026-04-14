@@ -64,12 +64,22 @@ If an omission exists, one panelist at Step 5 must name it in one sentence.
 
 **The main body of the journal entry is the user's original voice only.** Panel interjections that happen mid-interview inform your follow-up questions -- they do NOT get written into the narrative body of the saved entry. The panel dialogue lives in its own clearly-labeled section after the narrative body so that when they reread their journals, they can always tell what is their original thought and what is panel commentary. Never blend the two. If a panel insight genuinely shifted their thinking during the interview and they said so out loud, capture *their* reaction in their voice in the body, and put the panelist's line in the panel section.
 
-### Step 0: Check Session Captures
+### Step 0: Pull Session Captures (ALWAYS — do this before saying anything)
 
-Before starting the interview, read the Session Captures staging file (e.g., `[VAULT_PATH]/Meta/Session Captures.md` or equivalent). Look for accumulated journal seeds: thoughts, observations, or fragments captured during previous Claude Code sessions that were flagged for the next journal entry.
+Before asking the opening check-in question, read the Session Captures staging file (e.g., `[VAULT_PATH]/Meta/Session Captures.md` or equivalent) in full.
 
-- Surface ALL seeds during the interview. Weave them into your follow-up questions naturally (e.g., "Earlier this week you noted [seed]. Is that still on your mind?").
-- After the journal entry is saved, DELETE the used seeds from the staging file. Don't archive them; they've served their purpose once they land in a journal entry.
+**Show the seeds to the user immediately** — before the Step 1 question. People forget what they said earlier in the day. Seeing them listed upfront lets them react, add context, and decide what they want to explore in the journal.
+
+Format:
+> "Before we start — here's what you noted today across your sessions. I don't want you to forget any of it:
+> - [seed 1 — exact words]
+> - [seed 2 — exact words]
+> Any of these you want to talk about?"
+
+Then proceed to Step 1. Use the seeds to inform your follow-up questions throughout the interview.
+
+**After the journal entry is saved:** DELETE the used seeds from the staging file. Keep the frontmatter, section headers, format comments, and any seeds that were NOT used. The `Ideas & Strategy Captures` section is handled separately — leave it intact.
+
 - If the staging file doesn't exist or is empty, skip silently and proceed to Step 1.
 
 ### Step 1: Open with a warm, casual check-in
@@ -229,7 +239,11 @@ If they confirm (or adjust), save the entry.
 
 ### Step 7: Save the journal entry
 
-**File location:** `[VAULT_PATH]/Journals/` (adjust to match your vault's journal folder)
+**File location:** Journal files go in the monthly subfolder, not the root. Pattern: `[VAULT_PATH]/Journals/[Month YYYY]/filename.md` (e.g. `Journals/April 2026/filename.md`). Check your vault's journal folder structure and match it.
+
+**Always use Bash (`cat`) to read and write journal files — do NOT use the Read tool.** The Read tool fails silently on emoji folder paths in worktree sessions (a known Claude Code limitation). Use:
+- Write: `cat > "/full/path/file.md" << 'EOF' ... EOF`
+- Read/verify: `cat "/full/path/file.md"` or `ls -la "/full/path/file.md"`
 
 **Filename format:** Create a descriptive title from the content (5-8 words, Title Case), like:
 - "Ranch Weekend Family Health Worries.md"
