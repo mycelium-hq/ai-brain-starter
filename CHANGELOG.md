@@ -9,6 +9,13 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-14 -- Recursive folder sorting by most recently modified
+
+- **New plugin: Custom File Explorer sorting** (`custom-sort` by SebastianMC). Phase 2 now installs this automatically. It sorts every folder in your vault by the most recently modified note *inside* it, recursively. This means if you edit a file deep inside a subfolder, that folder and all its parents bubble to the top of the file explorer — not just the file itself. Fixes the limitation where Obsidian's built-in sort only used the folder's own filesystem mtime (which macOS doesn't update recursively).
+- **New file: `sortspec.md`** at vault root. Auto-generated during setup. Contains the `> advanced recursive modified` rule for all folders. You can customize per-folder rules here if needed.
+
+---
+
 ## 2026-04-14 -- Optional time tracking lane in session-end cascade
 
 - **New Lane 8 (optional): Time tracking.** If you add a "Time tracking" preference to your CLAUDE.md, Claude will auto-log what you worked on at the end of each session, categorized by type (Writing, Business, Vault, Personal, Admin, etc.). No manual tagging needed: Claude infers the category from conversation context. Pairs well with productivity APIs like RescueTime for a combined "what app" + "what purpose" view during weekly reviews. Opt-in: does nothing unless you enable it.

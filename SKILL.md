@@ -749,6 +749,7 @@ PLUGINS = {
     "smart-connections": "brianpetro/obsidian-smart-connections",
     "obsidian-local-rest-api": "coddingtonbear/obsidian-local-rest-api",
     "juggl": "HEmile/juggl",
+    "custom-sort": "SebastianMC/obsidian-custom-sort",
 }
 
 def fetch_latest_release(repo):
@@ -821,6 +822,19 @@ if app_file.exists():
         app_settings = {}
 app_settings.setdefault("fileSortOrder", "byModifiedTime")
 app_file.write_text(json.dumps(app_settings, indent=2))
+
+# Write sortspec.md for custom-sort plugin — sorts ALL folders by the most
+# recently modified file inside them recursively (newest first).
+# Uses "advanced recursive modified" which traverses the full folder tree,
+# so folders bubble up based on the newest note anywhere inside them.
+sortspec_file = VAULT_DIR / "sortspec.md"
+if not sortspec_file.exists():
+    sortspec_file.write_text(
+        "---\nsorting-spec: |\n  target-folder: /*\n  > advanced recursive modified\n---\n"
+    )
+    print("sortspec.md created — folders will sort by most recently modified note (recursive).")
+else:
+    print("sortspec.md already exists — skipping.")
 
 print(f"\nDone. Installed {len(installed)}/{len(PLUGINS)} plugins.")
 print("File explorer set to sort by most recently modified.")
