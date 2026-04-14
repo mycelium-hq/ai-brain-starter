@@ -9,6 +9,15 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-14 -- Doc compression rule + memory durability enforcement
+
+Two new efficiency rules that make the whole setup more reliable:
+
+- **Rule #25: Compress all Claude-facing docs.** Every file Claude reads (rules, runbooks, SKILL.md, CLAUDE.md, templates) must fit in a single Read call (<10k tokens). Dense prose, no filler. If a file exceeds the limit, split it. This prevents the Read tool from silently truncating important instructions.
+- **Rule #26: Memory durability.** Never store something only in Claude's project memory. Memory is tied to one account on one machine. Every memory must also be written to a vault file in the same response. The vault is the source of truth across all accounts and computers.
+
+Both rules in `templates/rules/efficiency.md`.
+
 ## 2026-04-14 -- MCP Build Runbook + 13 build lessons
 
 New `docs/MCP_BUILD_RUNBOOK.md` — the full protocol for building MCP servers and managed agents on top of this vault setup. Distilled from a single build session that shipped 13 agents.
