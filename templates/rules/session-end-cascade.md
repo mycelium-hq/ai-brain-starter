@@ -1,15 +1,15 @@
 ---
 creationDate: {{DATE}}
 type: rule
-purpose: 8-lane automatic capture at end of every session — nothing valuable stays trapped in chat
+purpose: 9-lane automatic capture at end of every session — nothing valuable stays trapped in chat
 trigger: User signals session end (bye, thanks, wrapping up, done, good night, ttyl, etc.) or /wrap-up
 ---
 
-# Session end — 8-lane capture cascade
+# Session end — 9-lane capture cascade
 
 When the user signals the session is ending, run this capture cascade **before** saying goodbye. The point: **nothing useful from the conversation gets lost.** Every personal insight, every team decision, every workflow improvement gets written to the right place in the right vault.
 
-**Execution rule:** Run ALL 8 lanes automatically. Present ONE summary at the end. DO NOT SKIP ANY LANE. If a lane has nothing to capture, skip it silently, but you must check.
+**Execution rule:** Run ALL 9 lanes automatically. Present ONE summary at the end. DO NOT SKIP ANY LANE. If a lane has nothing to capture, skip it silently, but you must check.
 
 ## Closing signals to listen for
 
@@ -25,7 +25,7 @@ The user can also trigger it manually with `/wrap-up`.
 
 **Skip the cascade if the session was tiny** — fewer than 5 user messages, or under ~1000 tokens of substantive conversation, or "just chatted" with no decisions, no information, no learnings. Don't make a 5-minute closing ceremony out of a 30-second hello-goodbye.
 
-## The 8 lanes — run all of them, every time
+## The 9 lanes — run all of them, every time
 
 ### Lane 1 — Journal seeds (verbatim quotes)
 
@@ -92,7 +92,23 @@ If yes, note it in the session file. These are the highest-signal entries for we
 
 **Destination:** `⚙️ Meta/Sessions/YYYY-MM-DDTHH-MM-{worktree}.md` under a "Belief Shifts" heading.
 
-### Lane 8 — Change impact audit
+### Lane 8 — Time tracking (optional)
+
+If the user has enabled time tracking (check CLAUDE.md for a "Time tracking" preference), append time blocks to their time tracking file for every substantive work segment in the session. Format:
+
+```
+- HH:MMam/pm - HH:MMam/pm | Category | Brief description
+```
+
+Infer the category from conversation context (no need to ask). Use the categories defined in their time tracking file. Group entries under `### YYYY-MM-DD` date headers.
+
+**How to infer categories:** You know what the user was working on from the conversation. Journal writing = Writing. Processing a meeting = Business. Reorganizing vault files = Vault. Setting up tools = Admin. No manual tagging needed.
+
+**If a productivity API is connected** (e.g., RescueTime MCP), pull live data during weekly/monthly reviews to merge app-level data (which apps, how long) with session logs (what purpose). This gives users a combined view: where hours went (API) + why (your logs).
+
+**Skip this lane** if the user hasn't enabled time tracking in their CLAUDE.md.
+
+### Lane 9 — Change impact audit
 
 If the session modified rules, scripts, skills, hooks, schedules, integrations, paths, or vault structure, verify nothing broke upstream or downstream before closing. Run these quick smoke checks:
 
@@ -140,7 +156,7 @@ Only needed if you wrote files after the session-end hook fired.
 
 ### Confirm with the user
 
-Present ONE summary of everything captured across all 8 lanes. Keep it concise: what was saved and where. Then say goodbye in their primary language.
+Present ONE summary of everything captured across all 9 lanes. Keep it concise: what was saved and where. Then say goodbye in their primary language.
 
 ## Per-worktree writes (race-safety)
 
@@ -152,7 +168,7 @@ Write to `⚙️ Meta/Sessions/{timestamp}-{worktree}.md` and `⚙️ Meta/Decis
 
 - **Don't ask the user what to save.** Scan the conversation, decide, and do it.
 - **Don't make it long.** ~30 seconds of work, 1-3 short messages.
-- **Don't skip lanes.** Check all 8, even if most are empty.
+- **Don't skip lanes.** Check all 9 (Lane 8 only if time tracking is enabled), even if most are empty.
 - **Don't write to the team vault if it's personal content.**
 - **Don't file empty or trivial GitHub issues.**
 - **Don't reword journal seeds.** Exact words only (Lane 1).
@@ -160,4 +176,4 @@ Write to `⚙️ Meta/Sessions/{timestamp}-{worktree}.md` and `⚙️ Meta/Decis
 
 ## Why this rule matters
 
-Without this rule, every session ends with valuable context evaporating. The 8-lane cascade is the safety net. Journal seeds feed the daily journal. Decisions feed the weekly retrospective. Belief shifts feed the monthly insight. Nothing stays trapped in a chat transcript.
+Without this rule, every session ends with valuable context evaporating. The 9-lane cascade is the safety net. Journal seeds feed the daily journal. Decisions feed the weekly retrospective. Belief shifts feed the monthly insight. Nothing stays trapped in a chat transcript.

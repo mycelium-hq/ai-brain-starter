@@ -9,6 +9,20 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-14 -- Optional time tracking lane in session-end cascade
+
+- **New Lane 8 (optional): Time tracking.** If you add a "Time tracking" preference to your CLAUDE.md, Claude will auto-log what you worked on at the end of each session, categorized by type (Writing, Business, Vault, Personal, Admin, etc.). No manual tagging needed: Claude infers the category from conversation context. Pairs well with productivity APIs like RescueTime for a combined "what app" + "what purpose" view during weekly reviews. Opt-in: does nothing unless you enable it.
+- Session-end cascade is now 9 lanes (was 8). Lane 9 is the former Lane 8 (change impact audit).
+
+---
+
+## 2026-04-14 -- Customer discovery meeting template + to-do system guidance
+
+- **New template: `templates/meeting-prep-discovery.md`** -- A Mom Test-based customer discovery meeting prep template. Includes: 3-point agenda to send the client, role assignments (lead/relationship owner/listener), 30-question bank organized by block (their world, pain points, how they buy, competitive landscape, expansion), meeting structure with time blocks, case study outline draft, and post-meeting action items. Generic and ready to use for any B2B client meeting. Based on Rob Fitzpatrick's "The Mom Test" framework.
+- **To-do system tip: external tracker callout** -- When team members use an external task tracker (Linear, Jira, Asana) for certain work (e.g., engineering), don't duplicate those tasks in the vault. Instead, add a callout in the vault to-do file noting where those tasks live. Prevents sync drift and double maintenance.
+
+---
+
 ## 2026-04-14 -- Cowork project guide + floor voice verification
 
 - **New doc: `docs/COWORK_PROJECTS.md`** — Guide for creating project-scoped CLAUDE.md files when using Cowork projects. Includes template, architecture diagram, and tips from real usage (iterate with Cowork feedback, split tool routing, don't over-duplicate). Solves the common problem where a Cowork project scoped to a subfolder doesn't inherit root vault context.
