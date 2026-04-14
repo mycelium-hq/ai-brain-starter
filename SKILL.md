@@ -836,6 +836,15 @@ if not sortspec_file.exists():
 else:
     print("sortspec.md already exists — skipping.")
 
+# Pre-activate custom-sort plugin by writing data.json with suspended: false.
+# The plugin defaults to suspended: true on first install, which means it does
+# nothing until the user manually clicks the ribbon toggle. Writing data.json
+# here skips that manual step entirely.
+custom_sort_data = PLUGINS_DIR / "custom-sort" / "data.json"
+if "custom-sort" in installed and not custom_sort_data.exists():
+    custom_sort_data.write_text(json.dumps({"suspended": False}, indent=2))
+    print("custom-sort pre-activated (suspended: false written to data.json).")
+
 print(f"\nDone. Installed {len(installed)}/{len(PLUGINS)} plugins.")
 print("File explorer set to sort by most recently modified.")
 print("If Obsidian is currently open, the user must reload it (Cmd/Ctrl+R) for plugins to activate.")

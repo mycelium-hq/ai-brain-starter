@@ -9,6 +9,12 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-14 -- custom-sort auto-activates on install (no manual toggle needed)
+
+- **Fix:** custom-sort plugin now writes `data.json` with `suspended: false` during Phase 2 setup. Previously the plugin installed silently disabled (Obsidian's default is `suspended: true`) and required a manual ribbon-click to activate. First-time users had no idea why their folders weren't sorting. This is now handled automatically.
+
+---
+
 ## 2026-04-14 -- Journal organization by month + insights save path fix
 
 - **New script: `scripts/organize-journals.py`** — organizes a flat Journals folder into month subfolders ("January 2026", "February 2026", etc.) based on the `creationDate` field in each entry's YAML frontmatter. Also moves any existing `Monthly Summaries/` and `Weekly Insights/` subfolders into their matching month folders and removes the empty parent folders. Run once to reorganize, or after any bulk import. Usage: `python3 scripts/organize-journals.py --vault-root "/path/to/vault"`.
