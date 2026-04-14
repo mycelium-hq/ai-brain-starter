@@ -15,7 +15,7 @@
 11. **Descriptive file names on import.** Rename cryptic filenames (hashes, UUIDs) to descriptive ones before adding to vault.
 12. **Wikilink new content on import.** Add wikilinks inline from external sources. No source prefixes in filenames (no "Slack -", "Google Drive -").
 13. **CRM on import.** When importing transcripts/meeting notes mentioning people: update CRM entries. Preserve dataview blocks in CRM files, never replace them with narratives.
-14. **Log decisions.** Use a decision template: What / Why / Stakes / Speed / Outcome / Pattern. Append to a decision log, never edit the log directly.
+14. **Log decisions.** When the user makes a decision during conversation (spending money, joining something, hiring/firing, changing strategy, saying yes or no to an opportunity), append it to the per-worktree decision file in `Meta/Decisions/` with: What, Why, Floor/State (what emotional or cognitive state they were in when deciding), Stakes (low/medium/high), Speed (instant/hours/days/weeks). Leave Outcome and Pattern blank for later review. Don't interrupt the conversation to log it; batch at a natural pause or session end. Never edit the Decision Log directly; the aggregator builds it from the per-worktree files.
 15. **Capture original thinking verbatim.** Exact phrasing, never paraphrase. Place in the right location.
 16. **Check before creating.** No new folders/files without verifying they don't exist. Grep first. If manually moved, respect the new location.
 17. **Fresh-Read before Edit.** Any edit more than ~5 min after last read of that file requires re-reading first. Prevents lost-update races with Obsidian edits or concurrent sessions.
