@@ -1,0 +1,30 @@
+# Efficiency Rules
+
+1. **Scripts over agents** for bulk/mechanical operations
+2. **Read files once.** Work from memory after first read
+3. **Batch edits.** 10+ similar edits -> one script
+4. **Minimize agents.** Can a single Bash/Python command do it? Then do that
+5. **Start every session** by reading `00 Start Here.md` -> `Last Session.md` -> `Current Priorities.md`. Don't ask what we were doing
+6. **Use Obsidian CLI** for backlinks, search, unresolved links. Faster than grep
+7. **Route to the right tool.** See your tool-routing rules. Don't do research tools' job here
+8. **Pick the right tool for the job type:**
+   - Metadata/frontmatter changes (YAML fields, tags, status) -> **Python script**
+   - Content changes needing judgment (wikilinks in prose, rewriting) -> **agents**
+   - Indexing large file sets (100+) -> **script for data**, agent only for summary
+   - Parallel independent tasks -> **multiple agents in one message**
+9. **Manus for bulk research + deliverables.** Write structured task briefs. Include: scope, decision rules, output format, verification report
+10. **Humanize external-facing prose.** Any finished prose for a human audience gets a humanizer pass before it's done. In-scope: writing folders, fundraising materials, sales content, emails, social media, blog posts. Out of scope: YAML, code, tables, dashboards, runbooks, meta, journals, internal notes, single-line edits. Announce after running
+11. **Never duplicate the title.** Obsidian shows filename as page title. Don't add a `# Heading` repeating it
+12. **Keep ALL CLAUDE.md files in sync.** If you have multiple CLAUDE.md files across your vault (root, journal folder, writing folder, team vault), update all when adding cross-cutting rules
+13. **NEVER fail silently. NEVER fabricate data.** Report failures immediately. Missing > fake. Never write stub/placeholder data pretending to be real
+14. **Optimize on repeat.** Every repeated task is an improvement opportunity. Before running: review what happened last time (runbook, prior session, memory). After running: note what could be better and **fix it immediately** (update the runbook, fix the script, add a rule, file the bug). Don't just note it and move on. Recurring processes get a runbook AND lessons learned after each run. Document deduplication misses, schema violations, hung steps, parallelization opportunities, caching gaps, new tools available since last run, and pattern drift
+15. **Pull the advisory panel proactively.** At judgment moments (decisions, strategy, pitch edits, trade-offs, pricing, hiring, partnerships, fundraising), read your advisory panel rules and bring in 3-5 relevant voices without being asked. At least one panelist MUST dissent. Include a one-liner credential so the team knows why that person's view matters
+16. **Goal-driven execution.** Convert imperative instructions into verifiable success criteria before starting. "Fix the bug" becomes "write a test that reproduces the bug, then make it pass." "Add validation" becomes "write tests for invalid inputs, then make them pass." "Refactor X" becomes "ensure tests pass before and after." State multi-step plans with checkpoints. This leverages Claude's ability to loop until criteria are met, instead of guessing what "done" looks like
+17. **Senior engineer test.** Before shipping any code change, gut-check: "Would an experienced developer look at this and think it's overcomplicated?" If yes, simplify. Three similar lines > a premature abstraction. One clear function > a class hierarchy for a single use case
+18. **Compact proactively.** Run `/compact` when context usage hits ~50%, don't wait for auto-compaction. Long sessions degrade quality in the back half when context fills silently. Rule of thumb: if you've done 3+ major tasks in one session, compact before starting the next one
+19. **Always check the system clock.** Never guess the date or time. Run `date` in bash before writing any timestamp (journal entries, meeting notes, file headers, session captures, to-do dates). Claude's internal sense of time is unreliable and the system prompt only provides a rough date with no time. Use `date "+%Y-%m-%d %I:%M %p"` for human-readable timestamps
+20. **Never count in-context.** Words, characters, lines, tokens: always use `wc` (`wc -w` for words, `wc -m` for characters, `wc -l` for lines). LLMs process subword tokens, not individual characters, so counting by reading is architecturally unreliable. For token estimates use `python3` with `tiktoken`
+21. **Never do math in-context.** For any arithmetic beyond trivial addition, run `python3 -c "print(...)"` or `echo "..." | bc`. This is not a prompt-engineering problem; the architecture cannot do deterministic arithmetic. Applies to: financial projections, metric calculations, unit conversions, percentages, date arithmetic
+22. **Verify wikilinks exist before creating them.** Before writing `[[any link]]` to a note you haven't read this session, verify the target exists with `obsidian unresolved` or Glob. Never create links to non-existent notes without flagging it. After bulk edits, run `obsidian unresolved` as a final check
+23. **Use IANA timezones, never hardcode offsets.** For timezone work, use `python3` with `zoneinfo` (e.g., `America/New_York`, `UTC`). Never use abbreviations (EST/EDT are ambiguous) or numeric offsets (they ignore DST). For quick display: `TZ='America/New_York' date '+%Y-%m-%d %H:%M %Z'`
+24. **Check file size before reading.** Run `wc -l` before deciding how to read a file. Under 2000 lines: read whole. Over 2000 lines: use Read with offset/limit. Over 5000 lines: consider whether you need the whole file at all. Never guess file size

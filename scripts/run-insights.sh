@@ -26,6 +26,12 @@ echo "$(date): Starting $PERIOD insights generation..." >> "$LOG_FILE"
 
 cd "$VAULT_DIR" || exit 1
 
-"$CLAUDE_BIN" --print "/$PERIOD" 2>>"$LOG_FILE" | tee -a "$LOG_FILE"
+"$CLAUDE_BIN" --print \
+  --model claude-sonnet-4-6 \
+  --allowedTools "Read,Write,Edit,Glob,Grep,Bash" \
+  --permission-mode acceptEdits \
+  "Run the /insights skill for a $PERIOD report. Read the skill at ~/.claude/skills/insights/SKILL.md first, then follow its instructions exactly. Read all journal entries for the $PERIOD calendar period and generate the full report. Save it to the correct folder." \
+  >> "$LOG_FILE" 2>&1
 
-echo "$(date): $PERIOD insights complete." >> "$LOG_FILE"
+EXIT_CODE=$?
+echo "$(date): Finished $PERIOD insights (exit code: $EXIT_CODE)" >> "$LOG_FILE"

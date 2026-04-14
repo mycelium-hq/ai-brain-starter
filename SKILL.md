@@ -118,13 +118,18 @@ if "thedotmack" not in s["extraKnownMarketplaces"]:
     s["extraKnownMarketplaces"]["thedotmack"] = {
         "source": {"source": "github", "repo": "thedotmack/claude-mem"}
     }
+if "obsidian-skills" not in s["extraKnownMarketplaces"]:
+    s["extraKnownMarketplaces"]["obsidian-skills"] = {
+        "source": {"source": "github", "repo": "kepano/obsidian-skills"}
+    }
 s.setdefault("enabledPlugins", {})
 s["enabledPlugins"]["claude-mem@thedotmack"] = True
+s["enabledPlugins"]["obsidian@obsidian-skills"] = True
 s["enabledPlugins"]["context7"] = True
 s["enabledPlugins"]["playwright"] = True
 with open(p, "w") as f:
     json.dump(s, f, indent=2)
-print("registered claude-mem@thedotmack marketplace + enabled plugin")
+print("registered claude-mem + obsidian marketplaces + enabled plugins")
 print("enabled context7 plugin (up-to-date library docs for coding sessions)")
 print("enabled playwright plugin (headless browser automation + test suites)")
 PY
@@ -1009,15 +1014,13 @@ When the user signals the session is ending (bye, thanks, wrapping up, done, goo
 ```bash
 mkdir -p "[VAULT_PATH]/⚙️ Meta/rules"
 
-# Install session-start-checks protocol
-cp ~/.claude/skills/ai-brain-starter/templates/rules/session-start-checks.md "[VAULT_PATH]/⚙️ Meta/rules/session-start-checks.md"
-
-# Install session-end cascade protocol
-cp ~/.claude/skills/ai-brain-starter/templates/rules/session-end-cascade.md "[VAULT_PATH]/⚙️ Meta/rules/session-end-cascade.md"
-
-# Install graphify rules (read-runbook-first gate + context-loading decision tree)
-cp ~/.claude/skills/ai-brain-starter/templates/rules/graphify.md "[VAULT_PATH]/⚙️ Meta/rules/graphify.md"
+# Install ALL rules files from the repo
+for rule in ~/.claude/skills/ai-brain-starter/templates/rules/*.md; do
+  cp "$rule" "[VAULT_PATH]/⚙️ Meta/rules/$(basename "$rule")"
+done
 ```
+
+This copies all rules: session-start-checks, session-end-cascade, graphify, obsidian, obsidian-plugins, efficiency, meeting-workflow, tool-routing, advisory-panel, and any future additions.
 
 (On Windows: `Copy-Item "$env:USERPROFILE\.claude\skills\ai-brain-starter\templates\rules\session-start-checks.md" "[VAULT_PATH]\⚙️ Meta\rules\session-start-checks.md"` and same for the second and third files.)
 
@@ -2941,9 +2944,7 @@ Then add routing to the user's CLAUDE.md so `/weekly` and `/monthly` work as sla
 When the user types `/weekly` or `/monthly`, invoke the Skill tool with `skill: "insights"` before doing anything else.
 ```
 
-Then ask: "Want these to run automatically? I can set up a cron job so your weekly insight generates every Monday morning and your monthly insight on the 2nd of each month — no typing required."
-
-If yes, set up automatic generation:
+Now set up automatic generation. Weekly insights run every Monday morning, monthly insights on the 2nd of each month. Don't ask, just install them:
 
 ### Mac / Linux
 

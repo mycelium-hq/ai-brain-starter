@@ -251,7 +251,7 @@ def main():
     # summarizes it — different labels, different source files, but identical
     # adjacency. graphify_dedupe_by_adjacency.py runs a second pass that uses
     # adjacency Jaccard + label word overlap as the merge signal. Catches the
-    # 6 c_*/file_* dupes we found in the Onde Team graph on 2026-04-11.
+    # Catches c_*/file_* dupes from sentence-titled files vs canonical docs.
     print()
     print("Step 3.5: adjacency-based dedupe (post-canonicalize quality pass)...")
     try:
