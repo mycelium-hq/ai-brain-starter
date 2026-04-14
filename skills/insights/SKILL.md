@@ -29,6 +29,19 @@ From the index, filter entries where `date` falls within the target week or mont
 ### Step 2: Read ONLY the matching files
 Read the full content of each matching file. Do NOT read files outside the date range. With the index, you're reading 5-15 files instead of searching the entire vault.
 
+### Step 2b: Pull RescueTime + session time data (if available)
+
+**If the RescueTime MCP is connected:** For each day in the period, call `mcp__rescuetime__get_daily_summary` to get productivity pulse, hours, and productive vs. distracting breakdown. For weekly, also call `mcp__rescuetime__get_productivity_trend` with `days: 7` and `mcp__rescuetime__get_top_activities` for the most recent day. Skip this step silently if the MCP is not connected.
+
+**If a Time Tracking file exists** (check CLAUDE.md for the path, typically `⚙️ Meta/Time Tracking.md`): Read it and filter entries for the period. This shows what categories were worked on during Claude Code sessions (Writing, Business, Vault, Personal, Admin). Merge with RescueTime app data for a combined picture: RescueTime shows which apps were used, session logs show what purpose they served.
+
+Add to the report if data is available:
+- Average daily Productivity Pulse for the period
+- Total productive vs. distracting hours
+- Top 3 apps by time
+- Session time breakdown by category
+- Notable gaps or mismatches (e.g., "12h in Obsidian but only 3h tagged as Writing in sessions")
+
 ## Report Structure
 
 ### 1. The week/month at a glance
@@ -36,6 +49,7 @@ Read the full content of each matching file. Do NOT read files outside the date 
 - Floor distribution: how many entries on each floor, primary floor for the period
 - Floor trend: up, down, or stable vs. previous period
 - Habit tracking summary: gym count, average bedtime, scroll incidents
+- Time allocation (if RescueTime or Time Tracking data available): where hours actually went vs. where priorities say they should go
 
 ### 2. What stood out
 - 2-3 most significant moments, themes, or shifts
