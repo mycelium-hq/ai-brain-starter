@@ -178,6 +178,8 @@ Based on what came up in Steps 1-3 AND which triggers fired mid-interview, selec
 
 **Format:** Stage a short in-character dialogue among the selected panelists. Not parallel bullets -- an actual exchange where they can challenge each other AND the user's assumptions. Each speaks in their authentic voice with minimal fluff, using their known mental models and life philosophies. Robust disagreement where useful -- not consensus for its own sake. Panelists can ask the user questions back if needed.
 
+**Before the dialogue, list the panel** with a 4-6 word credential note for each -- who they are, why their voice carries weight. Examples: "AngelList founder, leverage thinker," "shame researcher, 20yr vulnerability work," "PayPal/Square exec, execution systems," "Nubank founder, LatAm scale." This appears at the top of the panel section in the saved entry so future rereads show who was in the room without needing to look anyone up.
+
 **Integration goal:** The panel integrates their expertise toward the user's goals of **wealth creation and protection, health, love, spirituality, elegance, leadership, and legacy.** Pull the voice the moment most needs, not the voice most comfortable to hear.
 
 **Hard rules:**
@@ -270,6 +272,8 @@ creationDate: YYYY-MM-DDTHH:MM
 
 ## Panel dialogue (synthetic -- not the user's original thought)
 > Warning: Everything below this line is AI-generated panel commentary, not the user's writing. Kept separate so future rereads can distinguish their original voice from advisor reactions.
+
+**Panel:** [Name] *(credential, 4-6 words)* · [Name] *(credential)* · [Name] *(credential)*
 
 [Short staged exchange among the 3-5 selected panelists -- actual dialogue, not parallel bullets. Panelists talk to each other and to the user. At least one dissent must be clearly visible. Keep it tight.]
 
