@@ -229,11 +229,39 @@ If you already have a to-do file with tasks but no inline fields, use a Python s
 
 This is safer than manual editing for files with 100+ tasks. See the ai-brain-starter repo for a reference script.
 
+## Auto-Reprioritization
+
+Every time Claude touches the to-do file (adding or completing a task), it runs a lightweight priority check. This keeps priorities current without requiring manual weekly reviews to catch drift.
+
+### On task add
+- Evaluate the new task against the 3-question priority framework
+- Scan existing P1s: does the new task outrank any of them? If so, flag it
+- If the list has 15+ P1 items, warn that criteria may be too loose
+
+### On task complete
+- Scan for newly unblocked tasks (dependencies resolved, deadlines approaching within 5 days)
+- Bump their priority if warranted
+- Check: did completing this task make any other task irrelevant? Mark it if so
+
+### At sprint transitions / weekly reviews
+- Full reprioritization pass: re-evaluate ALL open tasks against current goals using the 3-question framework
+- This is the only time tasks may change priority wholesale
+
+### What NOT to do
+- **Never rearrange file sections.** The file structure is navigational. Dataview views handle sort order
+- **Never reorder task lines within a section.** Changing priority fields on individual tasks is fine; moving lines around disorients users who work from muscle-memory position
+- **Never batch-update every priority on a single add/complete.** The lightweight check is surgical: touch only the tasks whose priority actually changed
+
+Add this to your CLAUDE.md:
+
+> **Auto-reprioritization on every to-do touch.** Every time Claude adds or completes a task, run a lightweight priority check. On add: evaluate against the 3-question framework, check if it outranks existing P1s. On complete: scan for newly unblocked tasks or approaching deadlines, bump priority if warranted. Full reprioritization only at sprint transitions / weekly reviews. Never rearrange file sections.
+
 ## How Claude uses the system
 
 - **Session start:** Check `✅ This Week` for current focus
 - **"What should I work on?":** Pull p1 items from Team To-dos, sorted by due date
-- **Adding tasks:** Always include all three fields
+- **Adding tasks:** Always include all three fields, then run reprioritization check
 - **Meeting follow-ups:** `/meeting-todos` adds fields to every extracted action item
-- **Sprint transitions:** Move completed items to Done Archive automatically
+- **Sprint transitions:** Move completed items to Done Archive, run full reprioritization
 - **Weekly review:** Re-sort priorities using the three-question framework
+- **On task complete:** Mark done, scan for unblocked tasks, update priorities
