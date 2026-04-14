@@ -83,13 +83,20 @@ if ! command -v fastmcp &>/dev/null; then pipx install fastmcp; fi
 
 # Sub-skills bundled in this repo — copy the FULL folders so the wrapper
 # scripts come along too. (Plain `cp SKILL.md` misses the scripts/ folders
-# where the cost-cutting optimizations live.) Copy ALL three sub-skills here
+# where the cost-cutting optimizations live.) Copy ALL sub-skills here
 # instead of deferring to later phases — Phase 0 must leave a working stack
 # even if the user stops the conversation early.
-mkdir -p ~/.claude/skills/graphify ~/.claude/skills/meeting-todos ~/.claude/skills/patterns
-cp -R ~/.claude/skills/ai-brain-starter/skills/graphify/.       ~/.claude/skills/graphify/
-cp -R ~/.claude/skills/ai-brain-starter/skills/meeting-todos/.  ~/.claude/skills/meeting-todos/
-cp -R ~/.claude/skills/ai-brain-starter/skills/patterns/.       ~/.claude/skills/patterns/
+mkdir -p ~/.claude/skills/graphify ~/.claude/skills/meeting-todos ~/.claude/skills/patterns \
+        ~/.claude/skills/insights ~/.claude/skills/deconstruct ~/.claude/skills/daily-journal \
+        ~/.claude/skills/repurpose-talk ~/.claude/skills/nano-banana
+cp -R ~/.claude/skills/ai-brain-starter/skills/graphify/.        ~/.claude/skills/graphify/
+cp -R ~/.claude/skills/ai-brain-starter/skills/meeting-todos/.   ~/.claude/skills/meeting-todos/
+cp -R ~/.claude/skills/ai-brain-starter/skills/patterns/.        ~/.claude/skills/patterns/
+cp -R ~/.claude/skills/ai-brain-starter/skills/insights/.        ~/.claude/skills/insights/
+cp -R ~/.claude/skills/ai-brain-starter/skills/deconstruct/.     ~/.claude/skills/deconstruct/
+cp -R ~/.claude/skills/ai-brain-starter/skills/daily-journal/.   ~/.claude/skills/daily-journal/
+cp -R ~/.claude/skills/ai-brain-starter/skills/repurpose-talk/.  ~/.claude/skills/repurpose-talk/
+cp -R ~/.claude/skills/ai-brain-starter/skills/nano-banana/.     ~/.claude/skills/nano-banana/
 
 # Claude-Mem — ~30-40% fewer tokens on session starts. Two install paths:
 # (1) the marketplace plugin (preferred — wires /plugin commands and slash
@@ -259,6 +266,11 @@ command -v gh >/dev/null      || FAILED+=("gh (GitHub CLI)")
 [ -d ~/.claude/skills/graphify ]      && [ -d ~/.claude/skills/graphify/scripts ] || FAILED+=("graphify skill folder (with scripts/)")
 [ -d ~/.claude/skills/meeting-todos ] || FAILED+=("meeting-todos skill folder")
 [ -d ~/.claude/skills/patterns ]      || FAILED+=("patterns skill folder")
+[ -d ~/.claude/skills/insights ]      || FAILED+=("insights skill folder")
+[ -d ~/.claude/skills/deconstruct ]   || FAILED+=("deconstruct skill folder")
+[ -d ~/.claude/skills/daily-journal ] || FAILED+=("daily-journal skill folder")
+[ -d ~/.claude/skills/repurpose-talk ]|| FAILED+=("repurpose-talk skill folder")
+[ -d ~/.claude/skills/nano-banana ]   || FAILED+=("nano-banana skill folder")
 [ -d ~/.claude/skills/humanizer ]     || FAILED+=("humanizer skill folder")
 [ -d ~/.claude/skills/notebooklm ]    || FAILED+=("notebooklm skill folder")
 
@@ -315,13 +327,11 @@ winget install -e --id GitHub.cli --accept-source-agreements --accept-package-ag
 pipx install graphifyy
 graphify install --platform windows
 
-:: Copy ALL three sub-skills (graphify, meeting-todos, patterns)
-mkdir %USERPROFILE%\.claude\skills\graphify       2>nul
-mkdir %USERPROFILE%\.claude\skills\meeting-todos  2>nul
-mkdir %USERPROFILE%\.claude\skills\patterns       2>nul
-xcopy /E /I /Y %USERPROFILE%\.claude\skills\ai-brain-starter\skills\graphify\*       %USERPROFILE%\.claude\skills\graphify\
-xcopy /E /I /Y %USERPROFILE%\.claude\skills\ai-brain-starter\skills\meeting-todos\*  %USERPROFILE%\.claude\skills\meeting-todos\
-xcopy /E /I /Y %USERPROFILE%\.claude\skills\ai-brain-starter\skills\patterns\*       %USERPROFILE%\.claude\skills\patterns\
+:: Copy ALL sub-skills from the repo
+for %%S in (graphify meeting-todos patterns insights deconstruct daily-journal repurpose-talk nano-banana) do (
+  mkdir %USERPROFILE%\.claude\skills\%%S 2>nul
+  xcopy /E /I /Y %USERPROFILE%\.claude\skills\ai-brain-starter\skills\%%S\* %USERPROFILE%\.claude\skills\%%S\
+)
 
 # Claude-Mem — register the marketplace + enable the plugin AND run npx as fallback
 python -c "import json, os; p = os.path.expanduser('~/.claude/settings.json'); s = {}; ^
@@ -399,12 +409,19 @@ fi
 # Graphify
 pipx install graphifyy && graphify install
 
-# Sub-skills bundled in this repo — copy ALL three so Phase 0 leaves a working
+# Sub-skills bundled in this repo — copy ALL so Phase 0 leaves a working
 # stack even if the user stops the conversation early.
-mkdir -p ~/.claude/skills/graphify ~/.claude/skills/meeting-todos ~/.claude/skills/patterns
-cp -R ~/.claude/skills/ai-brain-starter/skills/graphify/.       ~/.claude/skills/graphify/
-cp -R ~/.claude/skills/ai-brain-starter/skills/meeting-todos/.  ~/.claude/skills/meeting-todos/
-cp -R ~/.claude/skills/ai-brain-starter/skills/patterns/.       ~/.claude/skills/patterns/
+mkdir -p ~/.claude/skills/graphify ~/.claude/skills/meeting-todos ~/.claude/skills/patterns \
+        ~/.claude/skills/insights ~/.claude/skills/deconstruct ~/.claude/skills/daily-journal \
+        ~/.claude/skills/repurpose-talk ~/.claude/skills/nano-banana
+cp -R ~/.claude/skills/ai-brain-starter/skills/graphify/.        ~/.claude/skills/graphify/
+cp -R ~/.claude/skills/ai-brain-starter/skills/meeting-todos/.   ~/.claude/skills/meeting-todos/
+cp -R ~/.claude/skills/ai-brain-starter/skills/patterns/.        ~/.claude/skills/patterns/
+cp -R ~/.claude/skills/ai-brain-starter/skills/insights/.        ~/.claude/skills/insights/
+cp -R ~/.claude/skills/ai-brain-starter/skills/deconstruct/.     ~/.claude/skills/deconstruct/
+cp -R ~/.claude/skills/ai-brain-starter/skills/daily-journal/.   ~/.claude/skills/daily-journal/
+cp -R ~/.claude/skills/ai-brain-starter/skills/repurpose-talk/.  ~/.claude/skills/repurpose-talk/
+cp -R ~/.claude/skills/ai-brain-starter/skills/nano-banana/.     ~/.claude/skills/nano-banana/
 
 # Claude-Mem — register the marketplace + enable the plugin AND run npx as fallback
 mkdir -p ~/.claude
@@ -703,7 +720,7 @@ Save the vault path — you'll use it for all file operations.
 
 **AUTO-INSTALL FIRST. Don't make the user click through Obsidian's plugin browser unless the auto-install fails.** Non-technical users miss-click in the plugin UI, install the wrong plugin, or skip the "Enable" step after "Install" — these are the top three Phase 2 support requests.
 
-Tell the user: *"I'm going to install three plugins for you in the background — Dataview, Templater, and Tasks. They power live queries, templates, and task tracking across your vault. Give me a few seconds."*
+Tell the user: *"I'm going to install four plugins for you in the background — Dataview, Templater, Tasks, and Calendar. They power live queries, templates, task tracking, and a visual calendar of your journal entries. Give me a few seconds."*
 
 Then run this Python helper, substituting `[VAULT_PATH]` with the actual vault path saved in Phase 1 step 8:
 
@@ -723,6 +740,7 @@ PLUGINS = {
     "dataview":  "blacksmithgu/obsidian-dataview",
     "templater-obsidian": "SilentVoid13/Templater",
     "obsidian-tasks-plugin": "obsidian-tasks-group/obsidian-tasks",
+    "calendar": "liamcain/obsidian-calendar-plugin",
 }
 
 def fetch_latest_release(repo):
@@ -803,7 +821,7 @@ PY
 ```
 
 **After the script runs:**
-- If all 3 succeeded: tell the user *"Done — Dataview, Templater, and Tasks are installed. If Obsidian is open right now, close and reopen it (or press Cmd+R / Ctrl+R) so the plugins activate."*
+- If all 4 succeeded: tell the user *"Done — Dataview, Templater, Tasks, and Calendar are installed. If Obsidian is open right now, close and reopen it (or press Cmd+R / Ctrl+R) so the plugins activate."*
 - If any plugin failed (network error, GitHub rate limit, etc.): fall back to the manual UI walkthrough for ONLY the failed plugins. Don't make the user click through plugins that already installed successfully.
 - If the auto-install fails entirely (no Python, no network, vault path wrong): fall back to the full manual UI walkthrough below.
 
@@ -816,6 +834,7 @@ Walk them through installing and enabling each one:
 1. **Dataview** — "Search 'Dataview' → Install → Enable. This powers live queries and dashboards."
 2. **Templater** — "Search 'Templater' → Install → Enable. This auto-applies templates when you create notes."
 3. **Tasks** — "Search 'Tasks' → Install → Enable. This tracks to-dos across your vault."
+4. **Calendar** — "Search 'Calendar' → Install → Enable. This gives you a visual calendar view of your journal entries."
 
 "All three installed and enabled? Let's keep going."
 
@@ -1514,35 +1533,68 @@ attendees: []
 
 Tell them: "Templates are set up. When you create a new note in Obsidian, Templater can auto-apply these."
 
-## Phase 9: Additional Skills (if not already installed in Phase 0)
+## Phase 9: Verify All Skills
 
-Phase 0 already installed Homebrew, Python, Graphify, Claude-Mem, and Humanizer. This phase catches anything that was skipped or failed, plus optional tools.
+Phase 0 installed everything. This phase verifies nothing was skipped or failed.
 
-Check what's missing and install:
+### Verify all skills are present
+Run a quick check on every skill folder. If anything is missing, retry the install:
+- `ls ~/.claude/skills/graphify/SKILL.md` — if missing: `mkdir -p ~/.claude/skills/graphify && cp -R ~/.claude/skills/ai-brain-starter/skills/graphify/. ~/.claude/skills/graphify/`
+- `ls ~/.claude/skills/meeting-todos/SKILL.md` — if missing: same pattern with `meeting-todos`
+- `ls ~/.claude/skills/patterns/SKILL.md` — if missing: same pattern with `patterns`
+- `ls ~/.claude/skills/insights/SKILL.md` — if missing: same pattern with `insights`
+- `ls ~/.claude/skills/deconstruct/SKILL.md` — if missing: same pattern with `deconstruct`
+- `ls ~/.claude/skills/daily-journal/SKILL.md` — if missing: same pattern with `daily-journal`
+- `ls ~/.claude/skills/repurpose-talk/SKILL.md` — if missing: same pattern with `repurpose-talk`
+- `ls ~/.claude/skills/nano-banana/SKILL.md` — if missing: same pattern with `nano-banana`
+- `ls ~/.claude/skills/humanizer` — if missing: `git clone https://github.com/adelaidasofia/humanizer.git ~/.claude/skills/humanizer`
+- `ls ~/.claude/skills/notebooklm` — if missing: `git clone https://github.com/PleasePrompto/notebooklm-skill.git ~/.claude/skills/notebooklm`
+- `graphify --version` — if missing: `pipx install graphifyy && graphify install`
+- Claude-Mem — if not in plugin list: `npx claude-mem install`
 
-### NotebookLM integration
-Ask: "Do you use Google's NotebookLM?"
-If yes:
-```
-git clone https://github.com/PleasePrompto/notebooklm-skill.git ~/.claude/skills/notebooklm
-```
-
-### Verify Phase 0 installs
-Quickly check that everything from Phase 0 is working:
-- `graphify --version` — if missing, retry: `pipx install graphifyy && graphify install`
-- `ls ~/.claude/skills/graphify/SKILL.md` — if missing, retry with the full folder copy: `mkdir -p ~/.claude/skills/graphify && cp -R ~/.claude/skills/ai-brain-starter/skills/graphify/. ~/.claude/skills/graphify/` (the `-R` and trailing `/.` are critical — a plain `cp SKILL.md` misses the `scripts/` folder where the cost-cutting wrappers live)
-- `ls ~/.claude/skills/humanizer` — if missing, retry: `git clone https://github.com/adelaidasofia/humanizer.git ~/.claude/skills/humanizer`
-- Claude-Mem — if not in plugin list, retry: `npx claude-mem install`
-
-Add graphify routing to their CLAUDE.md (global `~/.claude/CLAUDE.md` if it exists, or vault root):
+Add skill routing to their CLAUDE.md (global `~/.claude/CLAUDE.md` if it exists, or vault root). Add ALL of these:
 
 ```markdown
 # graphify
 - **graphify** (`~/.claude/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`
 When the user types `/graphify`, invoke the Skill tool with `skill: "graphify"` before doing anything else.
+
+# daily journal
+- **daily-journal** (`~/.claude/skills/daily-journal/SKILL.md`) — daily journal interview. Trigger: `/journal`
+When the user types `/journal`, invoke the Skill tool with `skill: "daily-journal"` before doing anything else.
+
+# humanizer
+- **humanizer** (`~/.claude/skills/humanizer/SKILL.md`) — remove AI writing patterns from text. Trigger: `/humanizer`
+When the user types `/humanizer`, invoke the Skill tool with `skill: "humanizer"` before doing anything else.
+
+# insights (weekly / monthly)
+- **insights** (`~/.claude/skills/insights/SKILL.md`) - journal pattern recognition. Triggers: `/weekly`, `/monthly`, `/insights`
+When the user types `/weekly` or `/monthly`, invoke the Skill tool with `skill: "insights"` before doing anything else.
+
+# patterns (Instinct Engine)
+- **patterns** (`~/.claude/skills/patterns/SKILL.md`) — extract recurring patterns from sessions. Trigger: `/patterns`
+When the user types `/patterns`, invoke the Skill tool with `skill: "patterns"` before doing anything else.
+
+# meeting todos
+- **meeting-todos** (`~/.claude/skills/meeting-todos/SKILL.md`) — extract action items from a meeting note. Trigger: `/meeting-todos`
+When the user types `/meeting-todos`, invoke the Skill tool with `skill: "meeting-todos"` before doing anything else.
+
+# deconstruct (first principles)
+- **deconstruct** (`~/.claude/skills/deconstruct/SKILL.md`) — first-principles analyst. Trigger: `/deconstruct`
+When the user types `/deconstruct`, invoke the Skill tool with `skill: "deconstruct"` before doing anything else.
+
+# repurpose-talk
+- **repurpose-talk** (`~/.claude/skills/repurpose-talk/SKILL.md`) - turn a speaking engagement into content pieces. Trigger: `/repurpose-talk`
+When the user types `/repurpose-talk`, invoke the Skill tool with `skill: "repurpose-talk"` before doing anything else.
+
+# notebooklm
+- **notebooklm** (`~/.claude/skills/notebooklm/SKILL.md`) — query Google NotebookLM for source-grounded answers. Trigger: `/notebooklm`
+
+# nano-banana (image generation)
+- **nano-banana** (`~/.claude/skills/nano-banana/SKILL.md`) — generate and edit images via Gemini. Trigger: `/nano-banana`
 ```
 
-Tell the user what's installed: "You have [X] power tools running. Here's what each one does:" and give a one-line explanation of each.
+Tell the user what's installed: "You have [X] power tools running. Here's what each one does:" and give a one-line explanation of each slash command.
 
 ## Phase 10: Set Up Daily Journaling
 
