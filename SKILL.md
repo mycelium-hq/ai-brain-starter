@@ -720,7 +720,7 @@ Save the vault path — you'll use it for all file operations.
 
 **AUTO-INSTALL FIRST. Don't make the user click through Obsidian's plugin browser unless the auto-install fails.** Non-technical users miss-click in the plugin UI, install the wrong plugin, or skip the "Enable" step after "Install" — these are the top three Phase 2 support requests.
 
-Tell the user: *"I'm going to install four plugins for you in the background — Dataview, Templater, Tasks, and Calendar. They power live queries, templates, task tracking, and a visual calendar of your journal entries. Give me a few seconds."*
+Tell the user: *"I'm going to install your Obsidian plugins in the background. These power live queries, templates, task tracking, a journal calendar, AI-powered note linking, and graph visualization. Give me a few seconds."*
 
 Then run this Python helper, substituting `[VAULT_PATH]` with the actual vault path saved in Phase 1 step 8:
 
@@ -741,6 +741,9 @@ PLUGINS = {
     "templater-obsidian": "SilentVoid13/Templater",
     "obsidian-tasks-plugin": "obsidian-tasks-group/obsidian-tasks",
     "calendar": "liamcain/obsidian-calendar-plugin",
+    "smart-connections": "brianpetro/obsidian-smart-connections",
+    "obsidian-local-rest-api": "coddingtonbear/obsidian-local-rest-api",
+    "juggl": "HEmile/juggl",
 }
 
 def fetch_latest_release(repo):
@@ -821,22 +824,25 @@ PY
 ```
 
 **After the script runs:**
-- If all 4 succeeded: tell the user *"Done — Dataview, Templater, Tasks, and Calendar are installed. If Obsidian is open right now, close and reopen it (or press Cmd+R / Ctrl+R) so the plugins activate."*
+- If all plugins succeeded: tell the user *"Done — all plugins installed. If Obsidian is open right now, close and reopen it (or press Cmd+R / Ctrl+R) so they activate."*
 - If any plugin failed (network error, GitHub rate limit, etc.): fall back to the manual UI walkthrough for ONLY the failed plugins. Don't make the user click through plugins that already installed successfully.
 - If the auto-install fails entirely (no Python, no network, vault path wrong): fall back to the full manual UI walkthrough below.
 
 **Manual fallback (only if auto-install failed):**
 
-"Now let's install three plugins that make everything work. In Obsidian: Settings → Community Plugins → Turn on community plugins → Browse."
+"Now let's install the plugins that make everything work. In Obsidian: Settings → Community Plugins → Turn on community plugins → Browse."
 
 Walk them through installing and enabling each one:
 
-1. **Dataview** — "Search 'Dataview' → Install → Enable. This powers live queries and dashboards."
-2. **Templater** — "Search 'Templater' → Install → Enable. This auto-applies templates when you create notes."
-3. **Tasks** — "Search 'Tasks' → Install → Enable. This tracks to-dos across your vault."
-4. **Calendar** — "Search 'Calendar' → Install → Enable. This gives you a visual calendar view of your journal entries."
+1. **Dataview** — "Search 'Dataview' → Install → Enable. Powers live queries and dashboards."
+2. **Templater** — "Search 'Templater' → Install → Enable. Auto-applies templates when you create notes."
+3. **Tasks** — "Search 'Tasks' → Install → Enable. Tracks to-dos across your vault."
+4. **Calendar** — "Search 'Calendar' → Install → Enable. Visual calendar view of your journal entries."
+5. **Smart Connections** — "Search 'Smart Connections' → Install → Enable. AI-powered note linking, finds connections you'd miss."
+6. **Local REST API** — "Search 'Local REST API' → Install → Enable. Lets Claude interact with your vault directly."
+7. **Juggl** — "Search 'Juggl' → Install → Enable. Interactive graph visualization of your notes."
 
-"All three installed and enabled? Let's keep going."
+"All installed and enabled? Let's keep going."
 
 ## Phase 3: Create Folder Structure
 
