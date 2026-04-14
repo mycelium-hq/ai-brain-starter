@@ -9,6 +9,13 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-14 -- Cowork project guide + floor voice verification
+
+- **New doc: `docs/COWORK_PROJECTS.md`** — Guide for creating project-scoped CLAUDE.md files when using Cowork projects. Includes template, architecture diagram, and tips from real usage (iterate with Cowork feedback, split tool routing, don't over-duplicate). Solves the common problem where a Cowork project scoped to a subfolder doesn't inherit root vault context.
+- **Writing voice as floor verification** — New section in SKILL.md (under "Emotional floor tagging") that teaches Claude to cross-check floor assignments against writing style, not just content. Includes a voice signature table for all 16 floors and cross-floor heuristics (entry length, bilingual code-switching, body vocabulary). Template is calibrated per-user after ~100 entries.
+
+---
+
 ## 2026-04-13 -- Naming conventions + journal integration
 
 - **Insight report naming:** Weekly reports now use human-readable dates (e.g., "Apr. 7-13, 2026 Weekly.md") instead of ISO week numbers. Monthly uses "Apr. 2026 Monthly.md".

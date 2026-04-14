@@ -1633,6 +1633,38 @@ If you want to understand the framework deeper: [Internal Design — The High-Ri
 
 **IMPORTANT: The user never self-assigns a floor number.** Claude reads the journal conversation, identifies the dominant emotional state, and tags it automatically in Step 4 of the journal skill. Don't ask them to pick a number, rate themselves, or learn the scale. They just talk. The framework works in the background.
 
+### Writing voice as floor verification
+
+After 50+ journal entries, you'll notice the user's writing style changes predictably by floor. The prose is a seismograph. Trust the punctuation and sentence structure over self-report. If they say "good day" but the writing is future-tense cascading, that's Fear, not Joy.
+
+Common patterns (calibrate these to each user as you accumulate entries):
+
+| Floor | Typical voice signature |
+|---|---|
+| Shame | Recursive self-attack, sentence fragments, "wtf is wrong with me" |
+| Guilt | Catalog of things not done, "I should/I haven't" patterns |
+| Apathy | Trailing "...", "idk", "whatever", sentences refuse to finish |
+| Grief | Broken sentences, onomatopoeic sounds, grammar dissolves |
+| Fear | Future-tense cascade, "what if" spirals, contingency lists mid-paragraph |
+| Desire | Run-on stacking ("and then... and also..."), spontaneous calculations |
+| Anger | Longest sentences, second-person address ("you said..."), profanity |
+| Pride | Achievement stacking, dollar amounts, itineraries, "look at this" energy |
+| Courage | Post-action declarative ("I sent it"), nervous laughter next to vulnerability |
+| Neutrality | Chronological reporting, no emotional charge, "it was nice" |
+| Willingness | Re-engagement declarations, "getting back on track" |
+| Acceptance | "And that's okay", gentle flowing, disappointment held not fought |
+| Reason | Numbered lists, frameworks, strategic vocabulary, analytical distance |
+| Love | Bilingual code-switching (secondary language emerges), names others, outward warmth |
+| Joy | Short bouncing sentences, exclamation, brevity, spontaneous decisions |
+| Peace | Shortest entries, simple words, no spirals, nothing to process |
+
+**Cross-floor heuristics:**
+- Entry length is often inversely proportional to floor height (low floors = longest entries, Peace = shortest)
+- Secondary language appearing mid-entry = high floor signal (they're relaxed enough to code-switch)
+- Body vocabulary (hiding/sick = low, buzzing/racing = Fear, warm/tingly = Love, rested = Peace)
+
+These patterns are USER-SPECIFIC. The table above is a starting template. After ~100 entries, you'll have enough data to calibrate the voice signatures to this particular person. Use the patterns to cross-check your floor assignment, not replace it.
+
 ### Bilingual aliases (recap before creating floor notes)
 
 You already collected `PRIMARY_LANGUAGE` and `SECONDARY_LANGUAGES` in Phase 1 Step 1.0. Apply them now:
