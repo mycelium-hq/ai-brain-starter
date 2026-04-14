@@ -9,6 +9,13 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-14 -- Journal organization by month + insights save path fix
+
+- **New script: `scripts/organize-journals.py`** — organizes a flat Journals folder into month subfolders ("January 2026", "February 2026", etc.) based on the `creationDate` field in each entry's YAML frontmatter. Also moves any existing `Monthly Summaries/` and `Weekly Insights/` subfolders into their matching month folders and removes the empty parent folders. Run once to reorganize, or after any bulk import. Usage: `python3 scripts/organize-journals.py --vault-root "/path/to/vault"`.
+- **Insights skill save path updated** — `/weekly` and `/monthly` reports now save directly inside the appropriate month folder (e.g. `Journals/April 2026/Apr. 7-13, 2026 Weekly.md`) instead of a separate `Weekly Insights/` or `Monthly Insights/` root subfolder. Keeps all content for a given month together in one place.
+
+---
+
 ## 2026-04-14 -- Recursive folder sorting by most recently modified
 
 - **New plugin: Custom File Explorer sorting** (`custom-sort` by SebastianMC). Phase 2 now installs this automatically. It sorts every folder in your vault by the most recently modified note *inside* it, recursively. This means if you edit a file deep inside a subfolder, that folder and all its parents bubble to the top of the file explorer — not just the file itself. Fixes the limitation where Obsidian's built-in sort only used the folder's own filesystem mtime (which macOS doesn't update recursively).

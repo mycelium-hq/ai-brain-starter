@@ -189,10 +189,17 @@ End with ONE question. Not homework. Not an action item. A question worth thinki
 
 ## Save the Report
 
-- Weekly: `[VAULT_PATH]/Journals/Weekly Insights/Mon. D-D, YYYY Weekly.md` (e.g., `Apr. 7-13, 2026 Weekly.md`). Use 3-letter month abbreviation with period. Cross-month example: `Mar. 31-Apr. 6, 2026 Weekly.md`
-- Monthly: `[VAULT_PATH]/Journals/Monthly Insights/Mon. YYYY Monthly.md` (e.g., `Apr. 2026 Monthly.md`)
+Journals are organized by month folder. Save reports INSIDE the appropriate month folder, not in a separate subfolder.
 
-Create folders if they don't exist.
+- Weekly: `[VAULT_PATH]/Journals/{Month YYYY}/Mon. D-D, YYYY Weekly.md`
+  - Month folder is determined by the END date of the week.
+  - Example: `Journals/April 2026/Apr. 7-13, 2026 Weekly.md`
+  - If the week spans two months (e.g. Mar. 31–Apr. 6), use the month of the end date: `Journals/April 2026/Mar. 31-Apr. 6, 2026 Weekly.md`
+  - Use 3-letter month abbreviation with period in the filename.
+- Monthly: `[VAULT_PATH]/Journals/{Month YYYY}/Mon. YYYY Monthly.md`
+  - Example: `Journals/April 2026/Apr. 2026 Monthly.md`
+
+The month folder will already exist if journals are organized (run `scripts/organize-journals.py` to set that up). Create it if it doesn't exist.
 
 Format:
 ```markdown
