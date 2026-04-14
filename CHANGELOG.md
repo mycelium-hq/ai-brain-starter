@@ -9,6 +9,19 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-14 -- MCP Build Runbook + 13 build lessons
+
+New `docs/MCP_BUILD_RUNBOOK.md` — the full protocol for building MCP servers and managed agents on top of this vault setup. Distilled from a single build session that shipped 13 agents.
+
+What's in it:
+- **Optimization Pass** (mandatory before every build): kills over-engineered stacks before you write code. Saved multiple Next.js + Postgres + Railway setups that were meant for one internal user.
+- **13 lessons** from real builds: symlink handling in macOS vaults, dict access safety, lazy Anthropic client pattern, datetime.utcnow() deprecation fix, financial math goes in Excel not Python/LLM, and more.
+- **Self-test protocol**: every agent must pass a no-API-key self-test before it's done.
+- **GitHub publishing checklist**: strip personal data, standard files, README requirements.
+- **Which agents are worth publishing**: decision table for when to open-source vs keep private.
+
+The lazy client pattern and symlink rules alone will save most people 30-60 minutes per build.
+
 ## 2026-04-14 -- ChatPRD and RescueTime MCP setup docs + RescueTime server script
 
 Two new MCP integrations documented and ready to use:
