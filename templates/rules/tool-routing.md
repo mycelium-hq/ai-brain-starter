@@ -19,6 +19,7 @@ You likely have paid plans or free tiers on many tools. **Don't burn Claude toke
 | Code editing / AI pair programming | **Cursor**, **Windsurf**, or similar | Use Claude Code for vault/orchestration work |
 | Cloud deployment | **Railway**, **Vercel**, or similar | Don't write deploy scripts here |
 | Sales prospecting / enrichment | **Apollo**, **ZoomInfo**, or similar | Don't manually research contacts |
+| Productivity data / time tracking | **RescueTime** (MCP if connected, read-only) | Don't estimate time manually. Pull live data via MCP during weekly reviews. Session time logged auto to Time Tracking file. See POWER_TOOLS.md for setup. |
 | Building custom MCP servers | **FastMCP** | 10-line Python servers with decorators; use for any custom connector |
 | Browser testing / regression suites / form validation | **Playwright** | Don't use Claude in Chrome or Computer Use for repeatable tests |
 | Web scraping / structured data extraction from pages | **Playwright** (headless, lower tokens) | Don't screenshot + OCR when DOM access works |

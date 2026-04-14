@@ -9,6 +9,18 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-14 -- ChatPRD and RescueTime MCP setup docs + RescueTime server script
+
+Two new MCP integrations documented and ready to use:
+
+- **ChatPRD MCP** — HTTP MCP at `https://app.chatprd.ai/mcp`. Add to your vault `.mcp.json`, authenticate once via OAuth, and Claude can create/read/search PRDs directly from Claude Code. Setup snippet in `docs/POWER_TOOLS.md`.
+- **RescueTime MCP** — Custom FastMCP server at `scripts/mcps/rescuetime-server.py`. Gives Claude read access to your productivity data (pulse, top apps, category breakdown, trends). Pairs with the session-end time tracking lane so `/weekly` reviews can merge app-level data (RescueTime) with purpose-level logs (session end cascade). Setup instructions in `docs/POWER_TOOLS.md`.
+- **Tool routing template updated** — added RescueTime row so the routing table is complete for anyone who sets it up.
+
+Important: never commit your RescueTime API key or ChatPRD tokens. Keep secrets in the `env` block of your vault `.mcp.json` and make sure that file is gitignored.
+
+---
+
 ## 2026-04-14 -- custom-sort auto-activates on install (no manual toggle needed)
 
 - **Fix:** custom-sort plugin now writes `data.json` with `suspended: false` during Phase 2 setup. Previously the plugin installed silently disabled (Obsidian's default is `suspended: true`) and required a manual ribbon-click to activate. First-time users had no idea why their folders weren't sorting. This is now handled automatically.
