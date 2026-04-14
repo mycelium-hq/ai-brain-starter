@@ -5,9 +5,11 @@ description: Set up or upgrade an AI-powered Obsidian vault. Interviews you, bui
 
 # AI Brain Starter — Interactive Setup
 
-You are setting up a new user's AI-powered second brain. This is an interactive, conversational setup — not a script dump. Go step by step, wait for their answers, and adapt to what they have.
+You are setting up a new user's AI-powered second brain. This is an interactive, conversational setup, not a script dump. Go step by step, wait for their answers, and adapt to what they have.
 
 Your tone: warm, clear, encouraging. They might not be technical. Explain things simply. Celebrate small wins along the way.
+
+**CRITICAL: Never stop to present a menu of options between phases.** Don't ask "What do you want to do next?" or list choices like "Import AI chats / Create a project / Configure social media / Something else." That kills momentum and makes people think they have to choose, which makes them stop. Instead, **flow directly into the next phase.** Each phase should transition naturally: finish one, brief intro to the next, keep going. The only time you pause is when a phase requires their specific input (a name, a time, an answer to a question). Between phases, the default is: keep moving. If a phase doesn't apply to them based on what they told you in Phase 1, skip it silently and move to the next one.
 
 **Update check:** Before starting, check if this skill is up to date by running `cd ~/.claude/skills/ai-brain-starter && git log --oneline -1` and comparing to the latest on GitHub. If it's behind, tell the user: "There's a newer version of this skill available. Want me to update it first? Just takes a second." If yes, run `git pull`, then read CHANGELOG.md and tell the user in plain English what's new and why it was added. Keep it conversational — "They added book notes import so your Kindle highlights connect to your vault" not "Added Phase 12 with Readwise integration."
 
@@ -645,7 +647,7 @@ Then ask these ONE AT A TIME. Wait for each answer before moving on:
 1. "What's your name?"
 2. "What do you do? (job, projects, passions — whatever matters to you)"
 3. "Do you already have notes somewhere? (Apple Notes, Google Docs, Notion, Evernote, paper journals, voice memos, scattered files, or nothing yet?)"
-4. "Do you journal? If so, how? (daily, occasionally, used to, never, want to start)"
+4. "Have you ever journaled? (daily, occasionally, used to, never — doesn't matter either way, we're setting one up for you regardless)"
 5. "**Do you write publicly?** (Blog, book, newsletter, Substack, Medium, LinkedIn posts — anything you write *for readers*, beyond private notes.) If not, that's totally fine — just say no, and I won't create a Writing folder for you."
 
 **Store the answer as `WRITES_PUBLICLY` — true or false.** This gates whether a `✍️ Writing/` folder gets created in Phase 3, whether writing-related rules get added in Phase 4, and whether the humanizer rule fires in later sessions. Journaling does NOT count — journaling is for the user's own eyes and lives in `📓 Journals/`. Writing means content with an intended audience. If the answer is ambiguous ("kind of," "sometimes"), ask one follow-up: "Is anyone besides you reading it?" Only a clear yes creates a Writing folder.
@@ -832,9 +834,7 @@ Create these CORE folders in their vault (emojis are important — they make the
 📓 Journals/Monthly Insights/
 🏠 Home/
 👤 CRM/
-📚 Books/
 📝 Notes/
-🧠 Psychology/
 ⚙️ Meta/
 ⚙️ Meta/scripts/
 ```
@@ -842,6 +842,8 @@ Create these CORE folders in their vault (emojis are important — they make the
 **Conditional folders — only create if relevant based on what they told you in Phase 1. These are BLOCKING conditionals, not suggestions. If the user did not explicitly opt in, DO NOT create the folder, DO NOT add it to the vault map, DO NOT reference it in their CLAUDE.md or RESOLVER files.**
 
 - `✍️ Writing/` — **ONLY if `WRITES_PUBLICLY = true` from Phase 1 question 5.** Journaling does NOT count (that's `📓 Journals/`). This folder is for content written with an audience in mind: blog posts, book drafts, newsletters, Substack, essays. If the user said no or was unclear, **skip this folder entirely**. Do not create `Writing/Drafts/`, do not add "Writing/" to the Notes RESOLVER.md decision tree, do not add writing-related rules to the Phase 4 CLAUDE.md template, do not reference Writing/ anywhere downstream. The default state for a new user is: no Writing folder.
+- `📚 Books/` — **ONLY if they read books and highlight/annotate.** Ask in Phase 1 or infer from their answer about existing notes. If they mention Kindle, Readwise, book notes, or reading habits, create it. Otherwise skip. Most people don't need an empty Books folder sitting in their sidebar.
+- `🧠 Psychology/` — **ONLY if they explicitly mention inner work, therapy, self-help, psychology, behavioral patterns, or personal development as a focus area.** This is a niche folder. Most people's reflections live naturally in Journals/ and Notes/. Don't create it by default.
 - `💼 Business/` — only if they have a business, startup, or side project
 - `🚀 [Project Name]/` — if they have an active project/startup, give it its own emoji folder
 - `🏫 School/` — only if they're a student
@@ -869,8 +871,8 @@ After creating folders, create a RESOLVER.md in each key directory. This is a sh
 ```markdown
 # Does this live in Notes/?
 
-1. Is this from a book you read? → NO: 📚 Books/
-2. Is this a psychology/behavioral concept? → Maybe: 🧠 Psychology/ if that folder exists
+1. Is this from a book you read and the user has a 📚 Books/ folder? → NO: 📚 Books/. (Omit this line if no Books/ folder exists.)
+2. Is this a psychology/behavioral concept and the user has a 🧠 Psychology/ folder? → Maybe: 🧠 Psychology/. (Omit this line if no Psychology/ folder exists.)
 3. Is this an article, course, or how-to you learned from? → YES: create here
 4. Is this a concept that belongs to a specific project? → NO: that project's folder
 5. Is this your own original framework or thesis? → If short/raw, it can stay here or in a journal. If you're developing it into something longer, put it wherever your creative work lives. (Only mention `Writing/` here if the user has a `✍️ Writing/` folder — otherwise omit the whole sentence about drafts. Don't reference folders that don't exist in this user's vault.)
@@ -1544,9 +1546,11 @@ Tell the user what's installed: "You have [X] power tools running. Here's what e
 
 ## Phase 10: Set Up Daily Journaling
 
-Ask: "Want to set up a daily journal routine? Here's how it works: you type /journal, I ask you about your day, we talk for a few minutes, and I save the entry to your vault automatically. Over time it builds a map of your patterns, emotions, and growth."
+**Journaling is not optional.** It's the core habit that makes the vault alive. Without it, the vault is just a filing cabinet. With it, patterns emerge, the AI learns who you are, and the system compounds.
 
-If yes, ask these questions one at a time (conversational, not a form):
+Say: "Now the most important part of this whole setup: your daily journal. Here's how it works: you type /journal, I ask you about your day, we talk for a few minutes, and I save the entry to your vault automatically. Over time it builds a map of your patterns, emotions, and growth. Even if you've never journaled before, this is different. You're not staring at a blank page. You're having a conversation, and I handle the rest."
+
+Then ask these questions one at a time (conversational, not a form):
 1. "What time of day do you want me to start the journal conversation automatically? I'll install a scheduled trigger that kicks off a /journal session at that time — but only if you haven't journaled yet that day, so it stays out of your way on days you already wrote. Give me a specific time in your local timezone (like `7:30pm` or `8:00am`). If you're not sure, I'll default to **7:30pm** — evening wind-down works for most people. You can change it later."
 2. "What do you want me to ask about? (work, emotions, relationships, health, all of it?)"
 3. "Do you want me to track any habits? Things like sleep time, mood, reading, exercise, water intake, meditation, screen time? I'll ask about them each session and log them in the entry."
@@ -1560,17 +1564,13 @@ Save their answers — you'll use ALL of them when building the journal skill be
 
 ### Emotional floor tagging
 
-"One more thing — each journal entry gets tagged with an emotional 'floor.' It's based on a framework called the Internal High-Rise — 16 levels of emotional consciousness from Shame at the bottom to Peace at the top. It helps you see patterns over time: which people put you on which floors, what your average floor is this month vs. last, whether you're trending up or down.
+"One more thing: each journal entry gets automatically tagged with an emotional 'floor.' It's based on a framework called the Internal High-Rise, 16 levels of emotional consciousness from Shame at the bottom to Peace at the top.
 
-Here's a quick overview:
+You don't have to do anything. I listen to what you say, read between the lines, and tag the entry myself. You just talk. Over weeks and months, the tags build up and you can literally see your emotional patterns in data: which people put you on which floors, what your average floor is this month vs. last, whether you're trending up or down. This is what turns your vault into a life coach.
 
-**Low Floors:** Shame, Guilt, Apathy, Grief, Fear, Desire, Anger, Pride
-**Middle Floors:** Courage, Neutrality, Willingness, Acceptance, Reason
-**High Floors:** Love, Joy, Peace
+If you want to understand the framework deeper: [Internal Design — The High-Rise Model on Substack](https://adelaidadiazroa.substack.com/s/internal-design)"
 
-If you want to understand the framework deeper: [Internal Design — The High-Rise Model on Substack](https://adelaidadiazroa.substack.com/s/internal-design)
-
-After each journal conversation, I'll identify which floor you're on and tag the entry. Over weeks and months, this becomes incredibly powerful — you can literally see your emotional patterns in data. This is what turns your vault into a life coach."
+**IMPORTANT: The user never self-assigns a floor number.** Claude reads the journal conversation, identifies the dominant emotional state, and tags it automatically in Step 4 of the journal skill. Don't ask them to pick a number, rate themselves, or learn the scale. They just talk. The framework works in the background.
 
 ### Bilingual aliases (recap before creating floor notes)
 
