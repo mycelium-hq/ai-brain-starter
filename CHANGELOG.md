@@ -645,3 +645,8 @@ Run with `--dry-run` first if you're at all unsure. The dry run is the answer to
 ## Older entries
 
 For sessions 1–18 (April 8–11, 2026), see [`CHANGELOG_archive_2026Q1.md`](CHANGELOG_archive_2026Q1.md). Rotated on 2026-04-11 to keep the live changelog focused on the most recent ~5 sessions.
+
+## [Unreleased]
+
+### Changed
+- `templates/rules/advisory-panel.md` Rule 1: confidence scoring is now internal only. Panel filters by lens-fit score (0-100) but NEVER prints the number in output. No `[confidence: N]`, no `(72)`, no score annotations. Background filter, not visible ink.

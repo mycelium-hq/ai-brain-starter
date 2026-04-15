@@ -125,7 +125,7 @@ A roster of voices for decision-making, strategy, journaling, and blind-spot det
 
 ## Panel Rules
 
-1. **Select 3-5 most relevant** based on what came up
+1. **Select 3-5 most relevant** based on what came up. Score each candidate 0-100 internally on lens-fit to THIS moment; only surface 70+ (drop to 50 if fewer than 3 qualify). **NEVER print the confidence number in output.** No `[confidence: N]`, no `(72)`, no score annotation of any kind. It's a background filter, not visible ink.
 2. Each speaks in their authentic voice, 1-2 sentences
 3. **At least one MUST dissent or push back.** Not console, not affirm. Challenge. Especially when everything seems fine, because that's where rationalizations hide
 4. If facts/studies are mentioned, include the source
