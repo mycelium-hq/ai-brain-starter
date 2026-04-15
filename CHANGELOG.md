@@ -9,6 +9,13 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-14 -- Advisory panel: Colombia localization section + named-only rule
+
+Two additions to the advisory panel template:
+
+- **New "Colombia: Life & Business" section** with 8 named, integrity-verified voices covering corporate culture (Carlos Raul Yepes), brand building (Catalina Escobar), cultural identity (Hector Abad Faciolince), business law (Francisco Reyes Villamizar), women in business (Sylvia Escovar), relationships/gender (Florence Thomas), bicultural identity (Patricia Engel), and holistic wellness (Dr. Jorge Carvajal Posada). Every person was researched for integrity before inclusion.
+- **Rule #8: Named panelists only.** Claude must never invent archetypes or unnamed experts. Every panel voice must be a named person from the roster. If none fit, say so and offer to add one. Prevents fabricated "a hospitality GM" or "a marketplace founder" style voices.
+
 ## 2026-04-14 -- Doc compression rule + memory durability enforcement
 
 Two new efficiency rules that make the whole setup more reliable:

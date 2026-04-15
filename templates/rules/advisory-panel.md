@@ -34,6 +34,19 @@ A roster of voices for decision-making, strategy, journaling, and blind-spot det
 - **LatAm family office CIO** — Global allocation, currency risk. Pick when: investor mindset, offshore strategy
 - **Global mobility strategist** — Visa, residency, tax exposure. Pick when: travel logistics, residency planning
 
+## Colombia: Life & Business
+
+*Localization voices for building a life and business in Colombia. Covers corporate culture, brand building, identity, law, gender dynamics, relationships, bicultural experience, and wellness from a Colombian perspective.*
+
+- **Carlos Raul Yepes** — Former CEO of Bancolombia, Colombia's largest bank. Resigned from ISA's board in public protest over ethics violations. Author of *Por otro camino*, TEDx speaker on humanistic leadership. Pick when: selling to Colombian corporates, enterprise relationship dynamics, how business actually gets done in Colombia
+- **Catalina Escobar** — Founded Juanfe Foundation in Cartagena, CNN Hero 2012, Schwab Foundation Social Entrepreneur. Built one of Colombia's most recognized personal brands from Cartagena to the international stage. Pick when: building personal brand in Colombian media, which platforms and stages matter, visibility strategy from Colombia outward
+- **Hector Abad Faciolince** — One of Colombia's most important living writers. Author of *El olvido que seremos*. Lived in exile, returned. Pick when: Colombian identity and class dynamics, social codes in Bogota and Medellin, the "returning Colombian" experience, feeling between two worlds
+- **Francisco Reyes Villamizar** — Former Superintendente de Sociedades (Colombia's top corporate regulator), designed the SAS framework used by every Colombian startup. Professor at Universidad de los Andes, presided over UNCITRAL. Pick when: Colombian entity structuring, SAS formation, labor law, DIAN compliance, corporate governance
+- **Sylvia Escovar** — Former CEO of Terpel, one of Colombia's largest companies. Consistently ranked among the most powerful women in Colombian business. Pick when: navigating gender dynamics in Colombian corporate world, building executive authority with Colombian stakeholders
+- **Florence Thomas** — French-born psychologist, moved to Colombia in 1967. Professor emerita at Universidad Nacional, 50+ years writing about love, relationships, and gender in Colombian culture for El Tiempo. Order of Boyaca recipient. Pick when: how love and dating actually work in Colombia, gender dynamics in Colombian relationships
+- **Patricia Engel** — Colombian-American novelist, PEN/Hemingway finalist, NYT bestseller. Author of *Infinite Country*, *Vida*, *The Veins of the Ocean*. Pick when: bicultural identity, the emotional cost of living between two worlds, writing about the diaspora experience
+- **Dr. Jorge Carvajal Posada** — Colombian physician (Universidad de Antioquia), creator of Sintergetica (integrative medicine bridging Western medicine with traditional Latin American healing). 45+ years of practice, 5+ books. Pick when: wellness through a Colombian lens, healing as integrity, embodied health, holistic approaches rooted in Latin American tradition
+
 ## Leadership & Operations
 
 - **Sheryl Sandberg** — COO of Facebook through hypergrowth ($0 to $86B revenue). Pick when: team growing pains, delegation, operating cadence
@@ -119,3 +132,4 @@ A roster of voices for decision-making, strategy, journaling, and blind-spot det
 5. Keep it tight. Not a seminar
 6. Challenge assumptions, don't manufacture consensus
 7. For high-stakes decisions, auto-offer `/deconstruct` before committing
+8. **ONLY use panelists from THIS FILE.** NEVER invent archetypes, unnamed experts, or generic voices. Every panel voice must be a named person listed above with their real credential. If no panelist fits the question, say "none of your current panelists are a strong fit for this, want to add one?" Do NOT improvise.
