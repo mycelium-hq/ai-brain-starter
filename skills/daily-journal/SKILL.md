@@ -65,9 +65,11 @@ If an omission exists, one panelist at Step 5 must name it in one sentence.
 
 **The main body of the journal entry is the user's original voice only.** Panel interjections that happen mid-interview inform your follow-up questions — they do NOT get written into the narrative body of the saved entry. The panel dialogue lives in its own clearly-labeled section after the narrative body so that when they reread their journals, they can always tell what is their original thought and what is panel commentary. Never blend the two. If a panel insight genuinely shifted their thinking during the interview and they said so out loud, capture *their* reaction in their voice in the body, and put the panelist's line in the panel section.
 
-### Step 0: Pull Session Captures (ALWAYS — do this before saying anything)
+### Step 0: Pull Session Captures AND RescueTime (ALWAYS — do both before saying anything)
 
-Before opening the interview, read `⚙️ Meta/Session Captures.md` (or your vault's equivalent staging file) in full. This file contains verbatim quotes the user said throughout the day across all their Claude sessions — things they've likely forgotten by the time they journal.
+**0a. RescueTime.** If the RescueTime MCP is connected, pull today's summary immediately so the Productivity Pulse, productive/distracting hours, and top 3 apps are in the room from sentence one. Do NOT defer this to Step 3. If the MCP is not connected, note it and move on.
+
+**0b. Session Captures.** Read `⚙️ Meta/Session Captures.md` (or your vault's equivalent staging file) in full. This file contains verbatim quotes the user said throughout the day across all their Claude sessions — things they've likely forgotten by the time they journal.
 
 **Show them the seeds at the very top of the conversation** before asking the check-in question:
 
@@ -227,9 +229,12 @@ When tagging, use array format: `floor: [Grief, Love]` means dominant Grief with
 
 Based on what came up in Steps 1–3 AND which triggers fired mid-interview, select the **3–5 most relevant advisors** from the full roster below (default to 3; go up to 5 only when multiple domains got triggered). Do NOT re-interview them — Steps 1–3 already did the interviewing. Use what's already on the table.
 
-**Format:** Stage a short in-character dialogue among the selected panelists. Not parallel bullets — an actual exchange where they can challenge each other AND the user's assumptions. Each speaks in their authentic voice with minimal fluff, using their known mental models and life philosophies. Robust disagreement where useful — not consensus for its own sake. Panelists can ask the user questions back if needed.
+**Format (strict):** Parallel single paragraphs, 3-5 sentences each. NOT a back-and-forth dialogue. Each panelist gets their own paragraph in their authentic voice, delivering a verdict. Weave in your own pullbacks (questions, callouts, pushback the panel missed) as `*[Pullback: ...]*` inline at the end of the relevant panelist's paragraph.
 
-**Before the dialogue, list the panel** with a 4-6 word credential note for each — who they are, why their voice carries weight. Examples: "AngelList founder, leverage thinker," "shame researcher, 20yr vulnerability work," "PayPal/Square exec, execution systems," "Nubank founder, LatAm scale." This appears at the top of the panel section in the saved entry so future rereads show who was in the room without needing to look anyone up.
+**Credential format:** Bolded name, then parentheses with concrete proof (metrics, titles, book titles, dollar amounts, follower counts). Examples:
+- `**Howard Marks** (co-founded Oaktree, $190B AUM, the memos)`
+- `**Alex Hormozi** (*$100M Offers*, scaled Gym Launch to $100M+)`
+Not 4-6 word mental-model descriptors. Concrete proof only.
 
 **Integration goal:** The panel integrates their expertise toward the user's goals of **wealth creation and protection, health, love, spirituality, elegance, leadership, and legacy.** Pull the voice the moment most needs, not the voice most comfortable to hear.
 
@@ -280,9 +285,11 @@ Rick Rubin (creativity via presence, subtractive genius, trust the muse) · Eliz
 
 ### Step 6: Confirm and save
 
-Tell the user: "Okay, I've got your entry. Here's what I'm hearing — [brief summary]. I'd tag this as [Floor]. The panel says [1-line summary]. Sound right?"
+**Show the full panel section inline in chat BEFORE saving.** Do not save with only a 1-line panel summary. Post the complete panel section (all panelists' paragraphs, dissent line, omission line) exactly as it will appear in the file, then say:
 
-If they confirm (or adjust), save the entry.
+> "Panel above. Floor: [Floor]. Approve as-is, edit a voice, swap a panelist, or add one?"
+
+Wait for explicit confirmation. Only save after the user says yes or suggests edits. Saving before showing the panel is a skill-contract violation.
 
 ### Step 7: Save the journal entry
 
@@ -302,6 +309,16 @@ If they confirm (or adjust), save the entry.
 ```markdown
 ---
 creationDate: YYYY-MM-DDTHH:MM
+floor: Primary              # single floor name (or [Primary, Secondary] for elevator emotions)
+floor_level: Low | Middle | High
+gym: true | false
+gym_week: X                 # count for this week
+sleep_time: "HH:MM"
+meditation: true | false
+deep_work: X                # blocks completed today
+rt_pulse: X                 # RescueTime Productivity Pulse 0-100
+rt_productive_h: X.X
+rt_distracting_h: X.X       # null if not pulled
 ---
 
 ## Journal — [user]'s voice
