@@ -9,6 +9,17 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-16 (night) -- Windows parser bug + bootstrap cleanup
+
+Post-consolidation audit caught three things: a PowerShell parser bug that broke every Windows bootstrap run, bun left in as dead weight, and install verbs that leaked past the phase-file firewall.
+
+- **`bootstrap.ps1`**: `"$sub:"` in two status lines was parsed by PowerShell as a scope accessor (`$scope:name`), erroring on every bundled sub-skill. Fixed with `"${sub}:"`. Sergio (and any Windows user) would have hit this on every install.
+- **`bootstrap.sh` + `.ps1`**: removed bun. It was a claude-mem runtime dep that stayed after claude-mem was dropped. Nothing currently depends on it.
+- **`phases/`**: pulled remaining install verbs (brew/winget/snap/flatpak/git-clone/cp -R/mcpServers) out of phase-01, -04, -06-09, -11. Phases now defer to bootstrap for any install recovery.
+- **CHANGELOG**: compressed the top three entries from 3-paragraph templates to 1-paragraph + bullets. Cleanup commits don't need the full template.
+
+---
+
 ## 2026-04-16 (late evening) -- Single source of truth for installs: bootstrap canonical, Phase 0 thin
 
 Install logic lived in two places (`bootstrap.sh`/`.ps1` AND `phases/phase-00-install.md`) with 80% overlap; they drifted and users on different paths got different stacks.
