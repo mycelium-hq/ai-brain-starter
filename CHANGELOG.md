@@ -9,6 +9,14 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-16 (p.m.) -- Claude Performance Self-Improvement System
+
+**scripts/claude_performance_digest.py** (new):
+- Weekly digest script that reads Claude Code JSONL session data from ~/.claude/projects/ and computes six effectiveness metrics: activity distribution (Coding/Exploration/Debugging/Delegation/Planning/Conversation), one-shot edit rate, agent spawn analysis, model mix (Opus/Sonnet/Haiku), per-project allocation, and hookify firings.
+- Six diagnostic rules with configurable thresholds. When triggered, writes prescriptive to-dos to "Claude To-dos.md" for investigation items, and for four specific rule types (VERBOSE AGENTS, MODEL ROUTING, LOW ONE-SHOT RATE, EXPLORATION OVERHEAD) writes permanent behavioral rules to ~/.claude/CLAUDE.md so future sessions read them at start.
+- Stdlib only, stream-parses JSONL, idempotent to-do appending. Self-locates via __file__. Configurable PROJECT_LABELS dict for clean display labels.
+- Usage: python3 scripts/claude_performance_digest.py [--days N] [--dry-run] [--no-report]
+
 ## 2026-04-16 -- Plugin hook fix + graphify encoding hardening (Lessons #95-99)
 
 **scripts/fix-plugin-hooks.sh** (new):
