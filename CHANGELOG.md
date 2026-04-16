@@ -9,6 +9,20 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-16 (evening) -- Fix duplicate note titles (filename + H1)
+
+**The problem:** scripts and templates were writing `# Title` as the first line after frontmatter. In Obsidian the filename IS the title, so the H1 created a visible duplicate ("Journal Metrics" rendered twice, once as note title, again as body heading). Reported repeatedly before a permanent fix.
+
+**What changed:**
+
+- **`scripts/granola_sync.py`**: removed the `# {title}` line from the generated meeting note body. Auto-imported notes now start with the `*Auto-imported...*` context line.
+- **`phases/phase-06-09-tools-templates.md`**: CRM Entry and Meeting Note templates no longer include `# {{title}}` after frontmatter. Added inline note explaining why.
+- **`templates/hookify-rules/hookify.no-duplicate-h1.local.md`** (new): opt-in warn rule that catches any H1 written after frontmatter in a `.md` file. Install by copying into your vault's `.claude/` folder.
+
+**Why it matters:** filename = title is one of Obsidian's core conventions. An H1 that repeats the filename is always visual noise. Fixing the source templates and adding the hookify rule prevents regressions across sessions.
+
+---
+
 ## 2026-04-16 (late p.m.) -- Session close protocol: no more stubs, 7-day retention, compressed rule
 
 **The problem:** the session-end-hook created a "stub" session file every time the hook fired, expecting Claude to fill it in. In practice most sessions end without running the full protocol (short sessions, abrupt exits, worktree subagents, compactions), so stubs piled up unused. One user had 966 of 1,046 files as empty stubs -- 92% noise, 4.2 MB of clutter in the `⚙️ Meta/Sessions/` folder.

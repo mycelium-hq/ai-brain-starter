@@ -148,8 +148,6 @@ granola_id: {note_data.get('id', '')}
 attendees: [{', '.join(attendee_names)}]
 ---
 
-# {title}
-
 *Auto-imported from [[Granola]] - {date}*
 
 ## Attendees

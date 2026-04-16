@@ -121,14 +121,14 @@ status: active
 priority: medium
 ---
 
-# {{title}}
-
 ## Context
 
 ## Connected
 
 ## Interactions
 ```
+
+> **Note:** Never include `# {{title}}` after frontmatter. In Obsidian the filename IS the title; an H1 that repeats it creates a visible duplicate.
 
 **Template - Meeting Note.md:**
 ```markdown
@@ -137,8 +137,6 @@ creationDate: {{date}}
 type: meeting
 attendees: []
 ---
-
-# {{title}}
 
 ## Agenda
 
