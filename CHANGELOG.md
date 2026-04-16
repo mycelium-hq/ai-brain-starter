@@ -9,6 +9,19 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-16 (evening) -- Dropped Calendar + Juggl from default stack
+
+Audited the installed Obsidian plugins against actual usage. Two plugins weren't earning their spot: Calendar (dead weight once `/journal` became the entry point — nobody was clicking dates) and Juggl (zero config data, zero note references — graph exploration happens via Graphify + Smart Connections now).
+
+- **`phases/phase-02-03-plugins-folders.md`**: removed `calendar` and `juggl` from the PLUGINS dict and from the manual-fallback walkthrough. Auto-installer now ships 6 plugins, not 8.
+- **`templates/rules/obsidian-plugins.md`**: dropped the Juggl section; "Visual Graph Exploration" now points only at Neo4j Browser.
+- **`templates/rules/tool-routing.md`** + **`docs/POWER_TOOLS.md`**: removed Juggl/Calendar from routing tables and power-tool catalog.
+- **`skills/insights/SKILL.md`**: removed Juggl from the monthly plugin-update scan list.
+
+Existing installs aren't auto-removed — this only affects new `/setup-brain` runs. If you want to drop them from an existing vault, delete `.obsidian/plugins/{calendar,juggl}` and remove them from `community-plugins.json`.
+
+---
+
 ## 2026-04-16 (night) -- Windows parser bug + bootstrap cleanup
 
 Post-consolidation audit caught three things: a PowerShell parser bug that broke every Windows bootstrap run, bun left in as dead weight, and install verbs that leaked past the phase-file firewall.

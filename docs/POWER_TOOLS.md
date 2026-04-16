@@ -208,8 +208,6 @@ Install these via Obsidian Settings → Community Plugins → Browse. `/setup-br
 
 ### Strongly recommended
 
-- **[Calendar](https://github.com/liamcain/obsidian-calendar-plugin)** — date-based navigation. Click a date to jump to that day's journal entry.
-
 - **[Tasks](https://github.com/obsidian-tasks-group/obsidian-tasks)** — task tracking with due dates, recurring tasks, and dataview integration.
 
 - **[YAML Properties](https://help.obsidian.md/properties)** — built into Obsidian 1.4+. Required for the frontmatter that drives all Dataview queries.
@@ -226,7 +224,7 @@ Install these via Obsidian Settings → Community Plugins → Browse. `/setup-br
 
 This is the full stack working in concert:
 
-1. **You write a daily journal** via `/journal` (a custom skill, not in this catalog — set up in `/setup-brain` Phase 10). Templater auto-fills the frontmatter. Calendar gives you the date navigation.
+1. **You write a daily journal** via `/journal` (a custom skill, not in this catalog — set up in `/setup-brain` Phase 10). Templater auto-fills the frontmatter.
 
 2. **You run a meeting** with Granola recording. Afterward you say *"I just had a meeting with Sara"*. The meeting workflow rule in CLAUDE.md fires:
    - The Granola MCP fetches the transcript

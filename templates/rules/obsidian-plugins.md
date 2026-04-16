@@ -63,15 +63,7 @@ Use both: graphify for navigating explicit relationships, Smart Connections for 
 
 ## Visual Graph Exploration (optional)
 
-Two options for visually browsing the knowledge graph:
-
-### Option A: Juggl (in-Obsidian, no external dependencies)
-
-**Plugin**: Juggl by Emile van Krieken (successor to the deprecated Neo4j Graph View)
-
-Juggl renders an interactive graph inside Obsidian using the vault's native link data. No Neo4j required. Good for browsing neighborhoods and exploring connections visually. Install from Community Plugins when you want it.
-
-### Option B: Neo4j Browser (standalone, Cypher queries)
+### Neo4j Browser (standalone, Cypher queries)
 
 For power-user graph analysis with Cypher queries, use Neo4j directly (not as an Obsidian plugin).
 
@@ -109,7 +101,7 @@ When to use which search tool:
 | Keyword/exact match | `obsidian search` or Grep | Fastest for known terms |
 | Structural neighbors ("what links to X?") | graphify graph.json query | Explicit relationships, communities |
 | Semantic similarity ("what else talks about themes like X?") | Smart Connections sidebar in Obsidian | Finds conceptually related notes even without shared links or keywords |
-| Visual graph exploration | Neo4j Browser or Juggl in Obsidian | Cypher queries, visual cluster browsing. Neo4j requires CSVs imported via `graph-to-neo4j.py` |
+| Visual graph exploration | Neo4j Browser | Cypher queries, visual cluster browsing. Requires CSVs imported via `graph-to-neo4j.py` |
 
 ---
 
@@ -117,5 +109,4 @@ When to use which search tool:
 
 - [ ] Local REST API: install from Community Plugins, set API key in shell profile, test with `curl -sk -H "Authorization: Bearer $OBSIDIAN_REST_API_KEY" "https://127.0.0.1:27124/"`
 - [ ] Smart Connections: install from Community Plugins, configure exclusions, wait for initial embedding
-- [ ] Juggl: install when you want visual graph browsing (no external dependencies)
 - [ ] Neo4j: install when you want Cypher query power (requires Neo4j Desktop or Docker)

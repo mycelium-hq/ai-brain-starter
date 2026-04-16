@@ -215,7 +215,7 @@ Keep this to 2-3 sentences. If the log file doesn't exist or is empty, skip this
 
 Once a month, scan the Obsidian community plugin registry (github.com/obsidianmd/obsidian-releases, specifically community-plugins.json) for:
 - New AI, knowledge-graph, or automation plugins relevant to your setup
-- Updates to plugins you use (Smart Connections, Local REST API, Juggl)
+- Updates to plugins you use (Smart Connections, Local REST API)
 - Community patterns or architecture ideas worth adopting
 
 Keep to 2-3 sentences: what's new, whether any of it is worth installing or investigating. If nothing relevant, skip silently.
