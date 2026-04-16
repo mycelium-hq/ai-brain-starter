@@ -313,3 +313,59 @@ Publish if: the core logic is universal (not company-specific), it composes with
 | Graph State of the Union | Yes | Useful to anyone running graphify quarterly |
 | Invoice generator (with local tax law) | No | Tax rules are country-specific |
 | Business-specific pipeline | No | Too narrow without heavy reconfiguration |
+
+
+---
+
+## LESSONS FROM DEBUGGING (2026-04-16)
+
+### Lesson: Valid MCP transport types are `stdio`, `sse`, `http` — never `url`
+
+If you set `"type": "url"` in `.mcp.json`, Claude Code silently drops the ENTIRE file from `claude mcp list`. No warning, no error. The file appears to be ignored; in reality the schema validator rejects it whole when one entry is malformed.
+
+**Fix:** Use `"type": "http"` with a `"url"` field. Example:
+
+```json
+{
+  "mcpServers": {
+    "my-http-server": {
+      "type": "http",
+      "url": "https://example.com/mcp"
+    }
+  }
+}
+```
+
+**Verify after every .mcp.json edit:** run `claude mcp list`. If servers disappear, diff against working marketplace examples in `~/.claude/plugins/marketplaces/claude-plugins-official/external_plugins/*/.mcp.json`.
+
+### Lesson: `fastmcp run` uses the pipx venv, not system Python
+
+`fastmcp` installed via `pipx install fastmcp` runs server scripts under its OWN isolated Python. Any import in your server file must be installed INTO that venv:
+
+```bash
+# Option A: pipx inject
+pipx inject fastmcp networkx pandas
+
+# Option B: direct pip into the venv
+~/.local/pipx/venvs/fastmcp/bin/python3 -m pip install networkx
+```
+
+System-wide `pip3 install` does nothing for `fastmcp run ...`-hosted servers.
+
+**Symptoms:** `claude mcp list` shows `✗ Failed to connect` for your server. Running `fastmcp run /path/to/server.py` manually shows `ModuleNotFoundError`.
+
+**Debug command:**
+```bash
+fastmcp run /path/to/your/server.py
+# Watch stderr for ModuleNotFoundError
+```
+
+### Lesson: `claude mcp reset-project-choices` when trust state gets stuck
+
+If `.mcp.json` entries appear unapproved even after restarts, the trust store may have cached a rejection. Run:
+
+```bash
+claude mcp reset-project-choices
+```
+
+Then restart Claude Code in the project dir. You will get a fresh trust dialog for all project-scoped servers.
