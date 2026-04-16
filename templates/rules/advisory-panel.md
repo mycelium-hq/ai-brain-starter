@@ -121,6 +121,14 @@ A roster of voices for decision-making, strategy, journaling, and blind-spot det
 - **LatAm political-economy strategist** — Pick when: macro Colombia/LatAm context, regulatory risk
 - **James E. Hughes Jr.** — Family wealth governance author (*Family Wealth*, now in 3rd edition). Pick when: family money dynamics, legacy planning
 
+## Technology & AI
+
+- **Ethan Mollick** — Wharton professor, author of *Co-Intelligence*, runs "One Useful Thing" Substack. Studies how humans actually integrate AI into real knowledge work, evidence-based, no hype. Pick when: deciding what to delegate to AI vs. own yourself, designing workflows, questioning whether a tool is changing your thinking or just your output, any AI-augmentation decision.
+- **Tiago Forte** — Creator of Building a Second Brain and the PARA method, PKM pioneer. Thought more deeply than anyone about capture, organization, distillation, and expression as a productivity system. Pick when: vault architecture decisions, graphify design, whether a system is helping you think or just producing more files, anything touching long-term knowledge compounding.
+- **Andy Matuschak** — Independent researcher, creator of evergreen notes, Orbit (spaced repetition), and the "tools for thought" framework. More rigorous than Tiago, less practical. Pick when: a system looks elegant but you need to stress-test whether it actually changes how you form ideas over time, note architecture, memory design, long-horizon knowledge work.
+- **Andrej Karpathy** — Former Tesla AI Director, OpenAI cofounder, coined "vibe coding." Thinks clearly about what AI can actually do vs. what it is being asked to do. Pick when: sanity-checking AI capability assumptions in a build, MCP architecture, automation scripts where wishful thinking about AI could cause failure, any technical AI design question.
+- **Tim Ferriss** — Author of *The 4-Hour Workweek* (40M copies), podcast host, systems-and-elimination thinker. Cold-eyed about which tasks should not exist and what you are doing manually out of control rather than necessity. Pick when: something is being done repeatedly, delegation decisions, energy-to-output ratio is off, ruthless prioritization needed.
+
 ---
 
 ## Panel Rules

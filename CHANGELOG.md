@@ -9,6 +9,20 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-15 -- Advisory panel: Technology & AI section
+
+Five new panelists covering the AI/automation gap most knowledge workers have in their advisory roster:
+
+- **Ethan Mollick** (Wharton/Co-Intelligence) — practical AI integration, what to delegate vs. own
+- **Tiago Forte** (Building a Second Brain) — PKM, vault architecture, knowledge compounding
+- **Andy Matuschak** (evergreen notes, tools for thought) — stress-tests whether systems actually change thinking over time
+- **Andrej Karpathy** (Tesla AI, OpenAI) — technical AI sanity-checks, capability assumptions
+- **Tim Ferriss** (4-Hour Workweek) — ruthless elimination, delegation, systems over heroics
+
+Pick when: AI workflow decisions, vault/system design, automation choices, delegation triage.
+
+---
+
 ## 2026-04-14 -- Advisory panel: Colombia localization section + named-only rule
 
 Two additions to the advisory panel template:
@@ -50,9 +64,37 @@ Important: never commit your RescueTime API key or ChatPRD tokens. Keep secrets 
 
 ---
 
+## 2026-04-15 -- Advisory panel: Technology & AI section
+
+Five new panelists covering the AI/automation gap most knowledge workers have in their advisory roster:
+
+- **Ethan Mollick** (Wharton/Co-Intelligence) — practical AI integration, what to delegate vs. own
+- **Tiago Forte** (Building a Second Brain) — PKM, vault architecture, knowledge compounding
+- **Andy Matuschak** (evergreen notes, tools for thought) — stress-tests whether systems actually change thinking over time
+- **Andrej Karpathy** (Tesla AI, OpenAI) — technical AI sanity-checks, capability assumptions
+- **Tim Ferriss** (4-Hour Workweek) — ruthless elimination, delegation, systems over heroics
+
+Pick when: AI workflow decisions, vault/system design, automation choices, delegation triage.
+
+---
+
 ## 2026-04-14 -- custom-sort auto-activates on install (no manual toggle needed)
 
 - **Fix:** custom-sort plugin now writes `data.json` with `suspended: false` during Phase 2 setup. Previously the plugin installed silently disabled (Obsidian's default is `suspended: true`) and required a manual ribbon-click to activate. First-time users had no idea why their folders weren't sorting. This is now handled automatically.
+
+---
+
+## 2026-04-15 -- Advisory panel: Technology & AI section
+
+Five new panelists covering the AI/automation gap most knowledge workers have in their advisory roster:
+
+- **Ethan Mollick** (Wharton/Co-Intelligence) — practical AI integration, what to delegate vs. own
+- **Tiago Forte** (Building a Second Brain) — PKM, vault architecture, knowledge compounding
+- **Andy Matuschak** (evergreen notes, tools for thought) — stress-tests whether systems actually change thinking over time
+- **Andrej Karpathy** (Tesla AI, OpenAI) — technical AI sanity-checks, capability assumptions
+- **Tim Ferriss** (4-Hour Workweek) — ruthless elimination, delegation, systems over heroics
+
+Pick when: AI workflow decisions, vault/system design, automation choices, delegation triage.
 
 ---
 
@@ -63,10 +105,38 @@ Important: never commit your RescueTime API key or ChatPRD tokens. Keep secrets 
 
 ---
 
+## 2026-04-15 -- Advisory panel: Technology & AI section
+
+Five new panelists covering the AI/automation gap most knowledge workers have in their advisory roster:
+
+- **Ethan Mollick** (Wharton/Co-Intelligence) — practical AI integration, what to delegate vs. own
+- **Tiago Forte** (Building a Second Brain) — PKM, vault architecture, knowledge compounding
+- **Andy Matuschak** (evergreen notes, tools for thought) — stress-tests whether systems actually change thinking over time
+- **Andrej Karpathy** (Tesla AI, OpenAI) — technical AI sanity-checks, capability assumptions
+- **Tim Ferriss** (4-Hour Workweek) — ruthless elimination, delegation, systems over heroics
+
+Pick when: AI workflow decisions, vault/system design, automation choices, delegation triage.
+
+---
+
 ## 2026-04-14 -- Recursive folder sorting by most recently modified
 
 - **New plugin: Custom File Explorer sorting** (`custom-sort` by SebastianMC). Phase 2 now installs this automatically. It sorts every folder in your vault by the most recently modified note *inside* it, recursively. This means if you edit a file deep inside a subfolder, that folder and all its parents bubble to the top of the file explorer — not just the file itself. Fixes the limitation where Obsidian's built-in sort only used the folder's own filesystem mtime (which macOS doesn't update recursively).
 - **New file: `sortspec.md`** at vault root. Auto-generated during setup. Contains the `> advanced recursive modified` rule for all folders. You can customize per-folder rules here if needed.
+
+---
+
+## 2026-04-15 -- Advisory panel: Technology & AI section
+
+Five new panelists covering the AI/automation gap most knowledge workers have in their advisory roster:
+
+- **Ethan Mollick** (Wharton/Co-Intelligence) — practical AI integration, what to delegate vs. own
+- **Tiago Forte** (Building a Second Brain) — PKM, vault architecture, knowledge compounding
+- **Andy Matuschak** (evergreen notes, tools for thought) — stress-tests whether systems actually change thinking over time
+- **Andrej Karpathy** (Tesla AI, OpenAI) — technical AI sanity-checks, capability assumptions
+- **Tim Ferriss** (4-Hour Workweek) — ruthless elimination, delegation, systems over heroics
+
+Pick when: AI workflow decisions, vault/system design, automation choices, delegation triage.
 
 ---
 
@@ -77,10 +147,38 @@ Important: never commit your RescueTime API key or ChatPRD tokens. Keep secrets 
 
 ---
 
+## 2026-04-15 -- Advisory panel: Technology & AI section
+
+Five new panelists covering the AI/automation gap most knowledge workers have in their advisory roster:
+
+- **Ethan Mollick** (Wharton/Co-Intelligence) — practical AI integration, what to delegate vs. own
+- **Tiago Forte** (Building a Second Brain) — PKM, vault architecture, knowledge compounding
+- **Andy Matuschak** (evergreen notes, tools for thought) — stress-tests whether systems actually change thinking over time
+- **Andrej Karpathy** (Tesla AI, OpenAI) — technical AI sanity-checks, capability assumptions
+- **Tim Ferriss** (4-Hour Workweek) — ruthless elimination, delegation, systems over heroics
+
+Pick when: AI workflow decisions, vault/system design, automation choices, delegation triage.
+
+---
+
 ## 2026-04-14 -- Customer discovery meeting template + to-do system guidance
 
 - **New template: `templates/meeting-prep-discovery.md`** -- A Mom Test-based customer discovery meeting prep template. Includes: 3-point agenda to send the client, role assignments (lead/relationship owner/listener), 30-question bank organized by block (their world, pain points, how they buy, competitive landscape, expansion), meeting structure with time blocks, case study outline draft, and post-meeting action items. Generic and ready to use for any B2B client meeting. Based on Rob Fitzpatrick's "The Mom Test" framework.
 - **To-do system tip: external tracker callout** -- When team members use an external task tracker (Linear, Jira, Asana) for certain work (e.g., engineering), don't duplicate those tasks in the vault. Instead, add a callout in the vault to-do file noting where those tasks live. Prevents sync drift and double maintenance.
+
+---
+
+## 2026-04-15 -- Advisory panel: Technology & AI section
+
+Five new panelists covering the AI/automation gap most knowledge workers have in their advisory roster:
+
+- **Ethan Mollick** (Wharton/Co-Intelligence) — practical AI integration, what to delegate vs. own
+- **Tiago Forte** (Building a Second Brain) — PKM, vault architecture, knowledge compounding
+- **Andy Matuschak** (evergreen notes, tools for thought) — stress-tests whether systems actually change thinking over time
+- **Andrej Karpathy** (Tesla AI, OpenAI) — technical AI sanity-checks, capability assumptions
+- **Tim Ferriss** (4-Hour Workweek) — ruthless elimination, delegation, systems over heroics
+
+Pick when: AI workflow decisions, vault/system design, automation choices, delegation triage.
 
 ---
 
