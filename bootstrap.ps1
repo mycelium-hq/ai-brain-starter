@@ -400,10 +400,10 @@ foreach ($sub in @("graphify", "meeting-todos", "patterns", "insights", "deconst
         }
     }
     if ($createdCount -gt 0 -or $updatedCount -gt 0) {
-        Ok "$sub: $createdCount new, $updatedCount updated, $backedUpCount backed up"
+        Ok "${sub}: $createdCount new, $updatedCount updated, $backedUpCount backed up"
         $script:Updated += "$sub skill ($createdCount new, $updatedCount updated, $backedUpCount backed up)"
     } else {
-        Ok "$sub: already current"
+        Ok "${sub}: already current"
     }
 }
 
