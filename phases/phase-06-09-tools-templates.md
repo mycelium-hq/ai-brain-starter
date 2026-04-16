@@ -167,7 +167,6 @@ Run a quick check on every skill folder. If anything is missing, retry the insta
 - `ls ~/.claude/skills/repurpose-talk/SKILL.md` — if missing: same pattern with `repurpose-talk`
 - `ls ~/.claude/skills/nano-banana/SKILL.md` — if missing: same pattern with `nano-banana`
 - `ls ~/.claude/skills/humanizer` — if missing: `git clone https://github.com/adelaidasofia/humanizer.git ~/.claude/skills/humanizer`
-- `ls ~/.claude/skills/notebooklm` — if missing: `git clone https://github.com/PleasePrompto/notebooklm-skill.git ~/.claude/skills/notebooklm`
 - `graphify --version` — if missing: `pipx install graphifyy && graphify install`
 - Claude-Mem — if not in plugin list: `npx claude-mem install`
 
@@ -205,9 +204,6 @@ When the user types `/deconstruct`, invoke the Skill tool with `skill: "deconstr
 # repurpose-talk
 - **repurpose-talk** (`~/.claude/skills/repurpose-talk/SKILL.md`) - turn a speaking engagement into content pieces. Trigger: `/repurpose-talk`
 When the user types `/repurpose-talk`, invoke the Skill tool with `skill: "repurpose-talk"` before doing anything else.
-
-# notebooklm
-- **notebooklm** (`~/.claude/skills/notebooklm/SKILL.md`) — query Google NotebookLM for source-grounded answers. Trigger: `/notebooklm`
 
 # nano-banana (image generation)
 - **nano-banana** (`~/.claude/skills/nano-banana/SKILL.md`) — generate and edit images via Gemini. Trigger: `/nano-banana`

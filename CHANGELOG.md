@@ -9,6 +9,14 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-16 (p.m.) -- Removed notebooklm from bundled stack
+
+Dropped the notebooklm skill from the default install. Not part of the daily workflow for most users; the overhead (Chromium browser automation, Google auth dance, first-run setup) wasn't paying off. If you want it, clone directly: `git clone https://github.com/PleasePrompto/notebooklm-skill.git ~/.claude/skills/notebooklm`. Existing installs are untouched (bootstrap never overwrites the folder).
+
+Removed from: bootstrap.sh, bootstrap.ps1, README.md, docs/POWER_TOOLS.md, phases/phase-00-install.md, phases/phase-06-09-tools-templates.md, scripts/vault-repo-drift-check.sh, skills/notebooklm/.
+
+---
+
 ## 2026-04-16 (p.m.) -- Session close rule: compressed + restructured
 
 **templates/rules/session-end-cascade.md** (rewrite, 191 → 85 lines):

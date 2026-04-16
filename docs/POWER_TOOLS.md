@@ -82,28 +82,6 @@ You also need a `GEMINI_API_KEY` environment variable from [Google AI Studio](ht
 
 ---
 
-### notebooklm — query your NotebookLM notebooks from Claude Code
-
-**What it does:** Lets Claude Code chat directly with [Google NotebookLM](https://notebooklm.google/) for source-grounded, citation-backed answers. Each question opens a fresh browser session, retrieves the answer exclusively from your uploaded documents, and closes. No copy-paste dance between Claude and the NotebookLM UI.
-
-**Why it matters for any knowledge worker:**
-- **Massively reduced hallucinations** — answers come only from documents you've uploaded, not from the model's training data
-- **Token-efficient research** — instead of Claude reading 10 files to answer a question, it asks NotebookLM once and gets a synthesized answer with citations
-- **Use cases:** API documentation deep-dives (faster than reading the entire docs site), legal/compliance questions against contracts you've uploaded, research synthesis from a corpus of papers, due diligence against an investor's portfolio docs
-
-**Install:**
-```bash
-git clone https://github.com/PleasePrompto/notebooklm-skill.git ~/.claude/skills/notebooklm
-```
-
-First run will set up a Python venv and install Chromium for browser automation. Authentication is one-time via a visible browser window (Google login).
-
-**Trigger:** mention NotebookLM, share a `notebooklm.google.com` URL, or ask Claude to "check my notebook on X."
-
-**Source:** [PleasePrompto/notebooklm-skill](https://github.com/PleasePrompto/notebooklm-skill). Based on the [NotebookLM MCP](https://github.com/PleasePrompto/notebooklm-mcp) by the same author. **Local Claude Code only** — does not work in the web UI (no network access from the skill sandbox there).
-
----
-
 ### claude-mem — cross-session persistent memory
 
 **What it does:** Adds persistent memory across Claude Code sessions. Stores observations, decisions, and patterns in a queryable knowledge base so Claude can answer "did we already solve this?" or "how did we approach X last time?"
@@ -282,6 +260,6 @@ This is the full stack working in concert:
 
 5. **Strategic moment:** you ask Claude *"what does my vault say about X?"*. Claude reads `graphify-out/GRAPH_REPORT.md` first (god nodes, communities, hyperedges) instead of grepping individual files. The answer comes with context, not just keyword matches.
 
-6. **You write a pitch deck**. `nano-banana` generates the visuals. `humanizer` cleans the copy. `notebooklm` answers due-diligence questions from your uploaded investor docs. The Decision Log records why you made each major framing call so you can grade them later.
+6. **You write a pitch deck**. `nano-banana` generates the visuals. `humanizer` cleans the copy. The Decision Log records why you made each major framing call so you can grade them later.
 
 None of these tools are mine. They're all open source by other people. What `/setup-brain` does is **install them and wire them together** with the right CLAUDE.md rules, templates, and folder structure so the whole stack acts like one tool.

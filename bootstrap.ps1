@@ -17,7 +17,7 @@
 #   - DIVERGENT forks of ai-brain-starter (commits on both sides) are skipped
 #   - Sub-skill folders with their own .git/ are detected as YOUR FORK and skipped
 #   - Symlinked sub-skill folders are detected and skipped (warns)
-#   - Custom skills outside the bundled set (humanizer, notebooklm, anything you
+#   - Custom skills outside the bundled set (humanizer, anything you
 #     installed yourself) are NEVER touched
 #   - Your vault CLAUDE.md is NEVER touched
 #   - Every file modification creates a .bak-YYYY-MM-DD-HHMM backup
@@ -58,7 +58,7 @@ if ($DryRun) {
     Write-Host ""
 }
 Write-Host "  This installs the full AI brain stack: graphify, humanizer, claude-mem,"
-Write-Host "  notebooklm, meeting-todos, patterns, the Granola MCP, plus the ai-brain-starter"
+Write-Host "  meeting-todos, patterns, the Granola MCP, plus the ai-brain-starter"
 Write-Host "  skill itself. Takes ~5 minutes the first time."
 Write-Host ""
 Write-Host "  After this finishes, open Claude Code and type /setup-brain."
@@ -337,8 +337,8 @@ if ((Test-Path "$SkillDir\SKILL.md") -or $DryRun) { Ok "ai-brain-starter at $Ski
 #   - If the destination has its own .git/, treat it as YOUR FORK and skip
 #   - If the destination is a SYMLINK, warn and skip
 #   - Otherwise: file-by-file sync with backup-before-overwrite
-#   - Custom skill folders outside the bundled set (humanizer, notebooklm,
-#     daily-journal, anything the user installed themselves) are NEVER touched
+#   - Custom skill folders outside the bundled set (humanizer, daily-journal,
+#     anything the user installed themselves) are NEVER touched
 Hdr "Installing bundled sub-skills (with safety checks)"
 $stamp = Get-Date -Format "yyyy-MM-dd-HHmm"
 
@@ -412,14 +412,6 @@ if (-not (Test-Path $humDir)) {
 }
 if (Test-Path $humDir) { Ok "humanizer skill installed" } else { Err "humanizer clone failed" }
 
-# ─── NotebookLM ──────────────────────────────────────────────────────────────
-$nblmDir = "$env:USERPROFILE\.claude\skills\notebooklm"
-if (-not (Test-Path $nblmDir)) {
-    Hdr "Installing notebooklm"
-    git clone --quiet https://github.com/PleasePrompto/notebooklm-skill.git $nblmDir
-}
-if (Test-Path $nblmDir) { Ok "notebooklm skill installed" } else { Err "notebooklm clone failed" }
-
 # ─── claude-mem ──────────────────────────────────────────────────────────────
 # SAFETY: backup settings.json before editing. Existing keys (custom
 # marketplaces, custom MCP servers, custom plugin configs, custom permissions,
@@ -489,7 +481,7 @@ foreach ($pair in @(@("graphify","graphify"), @("node","node"), @("npm","npm"), 
 }
 if ((Have bun) -or (Test-Path "$env:USERPROFILE\.bun\bin\bun.exe")) { Ok "bun" } else { Err "bun not found" }
 
-foreach ($sub in @("graphify","meeting-todos","patterns","humanizer","notebooklm","ai-brain-starter")) {
+foreach ($sub in @("graphify","meeting-todos","patterns","humanizer","ai-brain-starter")) {
     if (Test-Path "$env:USERPROFILE\.claude\skills\$sub") { Ok "skill: $sub" } else { Err "skill missing: $sub" }
 }
 if (Test-Path "$env:USERPROFILE\.claude\skills\graphify\scripts") { Ok "graphify scripts" } else { Err "graphify scripts missing" }

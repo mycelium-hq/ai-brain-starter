@@ -8,7 +8,7 @@ First, detect the platform: Mac, Windows, or Linux. Then check what's already in
 
 > "Setting up the tools you'll need — give me a moment. This usually takes 2–3 minutes the first time, or just a few seconds if you've already run the bootstrap. I'll keep you posted as each piece installs."
 
-Then for each install (graphify, claude-mem, humanizer, notebooklm, granola, etc.), give a brief one-line confirmation when it completes: *"Graphify ready ✓"*, *"Claude-Mem ready ✓"*. This tells the user the system is alive and reduces the "is this thing frozen?" anxiety. Don't dump command output — one line per tool is enough.
+Then for each install (graphify, claude-mem, humanizer, granola, etc.), give a brief one-line confirmation when it completes: *"Graphify ready ✓"*, *"Claude-Mem ready ✓"*. This tells the user the system is alive and reduces the "is this thing frozen?" anxiety. Don't dump command output — one line per tool is enough.
 
 If everything installs cleanly, end Phase 0 with: *"All tools ready. Now let's get you set up."*
 
@@ -111,12 +111,6 @@ npx claude-mem install 2>/dev/null || true
 # Humanizer — de-AI writing
 if [ ! -d ~/.claude/skills/humanizer ]; then
   git clone https://github.com/adelaidasofia/humanizer.git ~/.claude/skills/humanizer
-fi
-
-# NotebookLM — query your NotebookLM notebooks for source-grounded answers
-# (browser automation; auths the first time via a visible Google login)
-if [ ! -d ~/.claude/skills/notebooklm ]; then
-  git clone https://github.com/PleasePrompto/notebooklm-skill.git ~/.claude/skills/notebooklm
 fi
 
 # Granola MCP — meeting notes auto-sync. The "I just had a meeting" workflow
@@ -248,7 +242,6 @@ command -v gh >/dev/null      || FAILED+=("gh (GitHub CLI)")
 [ -d ~/.claude/skills/repurpose-talk ]|| FAILED+=("repurpose-talk skill folder")
 [ -d ~/.claude/skills/nano-banana ]   || FAILED+=("nano-banana skill folder")
 [ -d ~/.claude/skills/humanizer ]     || FAILED+=("humanizer skill folder")
-[ -d ~/.claude/skills/notebooklm ]    || FAILED+=("notebooklm skill folder")
 
 # Config files
 [ -f ~/.claude/settings.json ] && grep -q "claude-mem@thedotmack" ~/.claude/settings.json \
@@ -319,9 +312,6 @@ npx claude-mem install
 
 # Humanizer
 git clone https://github.com/adelaidasofia/humanizer.git %USERPROFILE%\.claude\skills\humanizer
-
-# NotebookLM — source-grounded answers from your uploaded docs
-git clone https://github.com/PleasePrompto/notebooklm-skill.git %USERPROFILE%\.claude\skills\notebooklm
 
 # Granola MCP — meeting workflow rule depends on this
 python -c "import json, os; p = os.path.expanduser('~/.claude/.mcp.json'); m = {'mcpServers': {}}; ^
@@ -418,9 +408,6 @@ npx claude-mem install 2>/dev/null || true
 
 # Humanizer
 git clone https://github.com/adelaidasofia/humanizer.git ~/.claude/skills/humanizer
-
-# NotebookLM — source-grounded answers
-git clone https://github.com/PleasePrompto/notebooklm-skill.git ~/.claude/skills/notebooklm
 
 # Granola MCP — meeting workflow rule depends on this
 python3 - <<'PY'

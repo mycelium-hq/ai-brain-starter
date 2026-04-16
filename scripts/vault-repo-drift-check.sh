@@ -64,7 +64,6 @@ for skill_dir in ~/.claude/skills/*/; do
   # Skip the repo itself and external skills
   [ "$skill_name" = "ai-brain-starter" ] && continue
   [ "$skill_name" = "humanizer" ] && continue
-  [ "$skill_name" = "notebooklm" ] && continue
   if [ ! -d "$REPO_ROOT/skills/$skill_name" ]; then
     echo "  DRIFT: skill $skill_name installed but not in repo"
     DRIFT_FOUND=1

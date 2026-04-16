@@ -16,7 +16,6 @@
 #     - meeting-todos, patterns sub-skills
 #     - claude-mem (marketplace + plugin)
 #     - humanizer (de-AI writing)
-#     - notebooklm (source-grounded answers)
 #     - Granola MCP (meeting notes auto-sync)
 #     - The ai-brain-starter skill itself
 #
@@ -51,9 +50,9 @@
 #      <file>.bak-YYYY-MM-DD-HHMM before being replaced. Local customizations
 #      are recoverable.
 #
-#   5. ~/.claude/skills/{humanizer,notebooklm} — installed only if the folder
-#      doesn't exist (idempotent git clone). NEVER touched on re-run, so your
-#      forks, customizations, or local edits to these skills are 100% safe.
+#   5. ~/.claude/skills/humanizer: installed only if the folder doesn't exist
+#      (idempotent git clone). NEVER touched on re-run, so your forks,
+#      customizations, or local edits to this skill are 100% safe.
 #
 #   6. ~/.claude/skills/{anything else} — NOT TOUCHED. Custom skills you
 #      installed yourself (daily-journal, your own forks, third-party skills
@@ -172,7 +171,7 @@ if [[ $DRY_RUN -eq 1 ]]; then
   echo
 fi
 echo "  This installs the full AI brain stack: graphify, humanizer, claude-mem,"
-echo "  notebooklm, meeting-todos, patterns, the Granola MCP, plus the ai-brain-starter"
+echo "  meeting-todos, patterns, the Granola MCP, plus the ai-brain-starter"
 echo "  skill itself. Takes ~5 minutes the first time, ~10 seconds on re-runs."
 echo
 echo "  After this finishes, open Claude Code and type /setup-brain."
@@ -569,17 +568,6 @@ fi
 [[ -d "$HOME/.claude/skills/humanizer" ]] && ok "humanizer skill installed"
 
 # ───────────────────────────────────────────────────────────────────────────────
-# NotebookLM
-# ───────────────────────────────────────────────────────────────────────────────
-
-if [[ ! -d "$HOME/.claude/skills/notebooklm" ]]; then
-  hdr "Installing notebooklm (source-grounded answers from your uploaded docs)"
-  git clone --quiet https://github.com/PleasePrompto/notebooklm-skill.git "$HOME/.claude/skills/notebooklm" \
-    || err "notebooklm clone failed"
-fi
-[[ -d "$HOME/.claude/skills/notebooklm" ]] && ok "notebooklm skill installed"
-
-# ───────────────────────────────────────────────────────────────────────────────
 # claude-mem (marketplace plugin + npx fallback)
 # ───────────────────────────────────────────────────────────────────────────────
 
@@ -667,7 +655,7 @@ done
 { have bun || [[ -x "$HOME/.bun/bin/bun" ]]; } && ok "bun" || err "bun not found"
 
 # Skill folders
-for sub in graphify meeting-todos patterns humanizer notebooklm ai-brain-starter; do
+for sub in graphify meeting-todos patterns humanizer ai-brain-starter; do
   if [[ -d "$HOME/.claude/skills/$sub" ]]; then
     ok "skill: $sub"
   else
