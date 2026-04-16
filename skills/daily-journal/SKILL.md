@@ -7,6 +7,17 @@ description: Daily journal interview and entry creator. Use this when the user w
 
 A conversational journaling skill that interviews the user, identifies their emotional floor, runs a behavior accountability check, consults the advisory panel, and saves a properly formatted journal entry to their Obsidian vault.
 
+## Language
+
+Run the entire interview and write the entry in the language the user writes in. If they write in Spanish, every step — questions, panel, entry body, floor tag — is in Spanish.
+
+**Spanish floor aliases** (wikilinks in Spanish entries route to the same floor file via aliases):
+Asco (1) · Vergüenza (2) · Bochorno (3) · Culpa (4) · Apatía (5) · Resignación (6) · Confusión (7) · Soledad (8) · Aburrimiento (9) · Duelo (10) · Decepción (11) · Herida (12) · Miedo (13) · Frustración (14) · Deseo (15) · Rabia (16) · Desprecio (17) · Orgullo (18) · Valentía (19) · Esperanza (20) · Neutralidad (21) · Disposición (22) · Aceptación (23) · Razón (24) · Confianza (25) · Compasión (26) · Humildad (27) · Pertenencia (28) · Amor (29) · Gratitud (30) · Entusiasmo (31) · Asombro (32) · Alegría (33) · Paz (34)
+
+**Floor tag:**
+- English: `*Floor: [[Fear]] · [[Low Floors]]*`
+- Spanish: `*Piso: [[Miedo]] · [[Pisos Bajos]]*`
+
 ## How It Works
 
 When the user invokes `/journal`, follow this exact flow:
@@ -39,6 +50,9 @@ When the user uses certain language or surfaces certain situations during Steps 
 | Creative work they feel proud of | Rick Rubin OR Elizabeth Gilbert | Reinforce the signal |
 | A gathering or relational moment to mark | Priya Parker | Name the sacred ordinary |
 | Queer polarity / individuality inside partnership | Dani Dillard / Whitney Mixter OR Dr. Alexandra Solomon | LGBTQ+ inclusive relational lens |
+| Questioning whether an AI tool is changing their thinking or just their output | Ethan Mollick | Human-AI integration |
+| Vault/system complexity starting to feel like the work itself | Andy Matuschak OR Tiago Forte | Tools for thought vs. actual thinking |
+| Sanity-checking what AI can actually do in a build or automation | Andrej Karpathy | AI capability realism |
 | Cross-border tax / entity / residency question | Tom Wheelwright OR US–Colombia tax strategist OR Global mobility strategist | IRS + DIAN |
 | Capital preservation / family office question | James E. Hughes Jr. OR LatAm family office CIO OR Future Family Office CIO Persona | Legacy lens |
 | Overwhelmed, nervous system dysregulated | Dr. Peter Levine OR Dr. Stan Tatkin OR Bessel van der Kolk | Somatic-first |
@@ -111,13 +125,11 @@ Based on their answer, ask follow-up questions. Be curious, not clinical. Push g
 - Celebrate wins they'd normally skip over
 - Keep it conversational, not therapeutic — you're a smart friend who knows them well
 
-### Step 2.5: Financial abundance check
+### Step 2.5: Gratitude check (optional — offer, don't force)
 
-Ask ONE quick question about present abundance:
-- "What's one thing you have financially right now that you're grateful for?" or
-- "What's something good about your financial situation today — even small?"
+Offer: "Want to capture one thing you're grateful for today — financial, relational, anything?"
 
-This counters the journaling bias where people only document money stress and never capture abundance. Even "I had a great dinner with friends" or "I can afford my rent this month" counts. Include the answer naturally in the journal entry.
+If yes: include it naturally in the journal entry. If they skip it, move on without comment. This counters the journaling bias where only struggle gets documented. "I can afford my rent" counts as much as "great dinner with friends."
 
 ### Step 3: Behavior Accountability Check
 
@@ -367,6 +379,47 @@ deep_work: X                # blocks completed today
 - **Strict separation:** the `## Journal` section contains ONLY their original thought, written in their voice. Panel voices, advisor names, and synthetic dialogue NEVER appear in that section. Panel commentary lives exclusively in the `## Panel dialogue` section below the horizontal rule, labeled as synthetic. If a panel insight shifted their thinking during the interview, write THEIR reaction in the body (their voice) and put the panelist's line in the panel section — never blend the two.
 - The floor tag goes before ## Concepts
 - Use `[[wikilinks]]` for all concept references in the body text too, naturally
+
+
+**Floor wikilinks — auto-link everything:** Every floor name in the `## Journal` body text — first occurrence — gets wrapped as `[[FloorName]]`. Same in Spanish: `[[Miedo]]`, `[[Valentía]]`, etc. This builds the graph.
+
+**Floor note template:** When saving an entry and the floor note doesn't exist yet, create it at the vault's floor note path with this format:
+
+```markdown
+---
+aliases: [floor-name-lowercase, common-synonyms, spanish-equivalents]
+floor_number: [X]
+type: concept
+floor_tier: [low|middle|high]
+creationDate: YYYY-MM-DD
+---
+# [[FloorName|FloorName]]
+
+**[[The High-Rise Series|High-Rise]] Floor:** [X]
+**[[Energy|Energy]]:** [one-line energy description]
+
+[2-3 sentences: what this floor is, how it feels.]
+
+## How it shows up
+- [symptom or behavior]
+- [symptom or behavior]
+
+## The way out
+[1-2 sentences on what moves you off this floor.]
+
+## From your journals
+*(Fills in over time.)*
+
+## Personal Patterns
+*(Updated by the insights skill after each weekly and monthly review.)*
+
+## [[Connection|Connected]]
+[[Adjacent Floor]] | [[Related Concept]]
+
+**Substack:** [Internal Design](https://adelaidadiazroa.substack.com/s/internal-design) | [Diseño Interior](https://adelaidadiazroa.substack.com/s/internal-design)
+```
+
+If the floor note already exists, check the bottom for the bilingual Substack line. Add if missing.
 
 ### Step 8: Idea Quarantine Check
 

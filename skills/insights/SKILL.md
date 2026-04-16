@@ -6,6 +6,14 @@ argument-hint: "[week or month -- e.g. 'this week', 'last month', or leave blank
 
 When the user types /weekly or /monthly, generate an insight report from their recent journal entries.
 
+## Language
+
+Generate the entire report in the language the user writes in. If Spanish, all sections — coach, therapist, panel, floor notes — are in Spanish.
+
+**Spanish floor aliases:** Asco (1) · Vergüenza (2) · Bochorno (3) · Culpa (4) · Apatía (5) · Resignación (6) · Confusión (7) · Soledad (8) · Aburrimiento (9) · Duelo (10) · Decepción (11) · Herida (12) · Miedo (13) · Frustración (14) · Deseo (15) · Rabia (16) · Desprecio (17) · Orgullo (18) · Valentía (19) · Esperanza (20) · Neutralidad (21) · Disposición (22) · Aceptación (23) · Razón (24) · Confianza (25) · Compasión (26) · Humildad (27) · Pertenencia (28) · Amor (29) · Gratitud (30) · Entusiasmo (31) · Asombro (32) · Alegría (33) · Paz (34)
+
+Floor wikilinks in the report use Spanish aliases in Spanish: `[[Miedo]]`, `[[Valentía]]` etc.
+
 ## For /weekly -- read all journal entries from the current calendar week (Monday-Sunday). If today is Monday or Tuesday, default to the previous week (since there's barely any data yet). The user can specify "this week" to override.
 ## For /monthly -- read all journal entries from the current calendar month (1st-last day). If today is the 1st-3rd, default to the previous month. The user can specify "this month" to override.
 
@@ -236,6 +244,8 @@ avg_bedtime: [time]
 
 ## After Saving: Update Floor Notes with Personal Insights
 
+**Floor wikilinks in report body:** Every floor name in sections 1–7 — `[[Fear]]`, `[[Courage]]`, etc. — first occurrence per floor. In Spanish reports use Spanish aliases: `[[Miedo]]`, `[[Valentía]]`. This builds the graph and links readers to the floor files where the Substack reference lives.
+
 After saving the insight report, check whether any floor that appeared this period has a new personal pattern worth capturing. Floor concept notes live in the vault's concept folder (e.g., `Notes/` or `Writing/The High-Rise/Floors/`).
 
 **For each floor that appeared 2+ times this period:**
@@ -256,9 +266,47 @@ After saving the insight report, check whether any floor that appeared this peri
 - A surprise, something the user wouldn't expect to see in their data
 
 **What to skip:**
-- Generic observations ("Fear feels scary"), that's already in the static description
+- Generic observations ("Fear feels scary") — already in the static description
 - One-time events that won't recur
 - Anything already captured in a previous update
+
+**Floor note bootstrap:** If a floor note doesn't exist for a floor that appeared this period, create it:
+
+```markdown
+---
+aliases: [floor-name-lowercase, common-synonyms, spanish-equivalents]
+floor_number: [X]
+type: concept
+floor_tier: [low|middle|high]
+creationDate: YYYY-MM-DD
+---
+# [[FloorName|FloorName]]
+
+**[[The High-Rise Series|High-Rise]] Floor:** [X]
+**[[Energy|Energy]]:** [one-line energy description]
+
+[2-3 sentences about the floor.]
+
+## How it shows up
+- [symptom or behavior]
+
+## The way out
+[1-2 sentences.]
+
+## From your journals
+*(Fills in over time.)*
+
+## Personal Patterns
+
+- *(Week of [date])* [first observation from this period]
+
+## [[Connection|Connected]]
+[[Adjacent Floor]] | [[Related Concept]]
+
+**Substack:** [Internal Design](https://adelaidadiazroa.substack.com/s/internal-design) | [Diseño Interior](https://adelaidadiazroa.substack.com/s/internal-design)
+```
+
+**Existing notes:** Check each updated floor note for the bilingual Substack line at the bottom. Add if missing.
 
 Over time, clicking `[[Fear]]` won't show a textbook definition. It'll show YOUR fear: what triggers it, who brings it, what moves you out of it, and how it's changed over the months.
 
