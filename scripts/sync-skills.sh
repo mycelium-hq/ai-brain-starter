@@ -88,8 +88,14 @@ sync_file() {
 
 # Sync an entire skill folder: every file and subdirectory, recursively.
 sync_skill_folder() {
-  local source_dir="$1"
-  local dest_dir="$2"
+  # Strip any trailing slash from source_dir/dest_dir. Callers pass
+  # `$STARTER_DIR/skills/*/` which expands to paths ending in `/`; combined
+  # with the `/` we append in the strip pattern below, that would produce `//`
+  # and fail to match, leaving rel_path equal to the full absolute path.
+  # Result: files copied to $dest_dir/Users/<user>/<abspath>/... instead of
+  # $dest_dir/<file>. See 2026-04-16 humanizer pollution incident.
+  local source_dir="${1%/}"
+  local dest_dir="${2%/}"
   local skill_name="$3"
 
   if [ ! -d "$source_dir" ]; then
@@ -101,6 +107,12 @@ sync_skill_folder() {
   # Walk every file in the source, preserving relative paths
   while IFS= read -r -d '' src_file; do
     local rel_path="${src_file#"$source_dir/"}"
+    # Defensive guard: if the strip somehow didn't work, refuse to write an
+    # absolute-path-masquerading-as-relative. Catches future regressions.
+    if [[ "$rel_path" = /* ]]; then
+      ERRORS+=("sync_skill_folder: abs path leaked for $src_file (source_dir=$source_dir) — skipping")
+      continue
+    fi
     local dest_file="$dest_dir/$rel_path"
     sync_file "$src_file" "$dest_file" "$skill_name"
   done < <(find "$source_dir" -type f -print0 2>/dev/null)
