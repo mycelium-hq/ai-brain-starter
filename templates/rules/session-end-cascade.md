@@ -1,148 +1,78 @@
 ---
 creationDate: {{DATE}}
 type: rule
-purpose: 9-lane automatic capture at end of every session — nothing valuable stays trapped in chat
-trigger: User signals session end (bye, thanks, wrapping up, done, good night, ttyl, etc.) or /wrap-up
+purpose: Session close protocol. Run before goodbye or context compaction.
+trigger: User signals session end OR context compaction imminent
 ---
 
-# Session end — 11-lane capture cascade
+# Session close protocol
 
-When the user signals the session is ending, run this capture cascade **before** saying goodbye. The point: **nothing useful from the conversation gets lost.** Every personal insight, every team decision, every workflow improvement gets written to the right place in the right vault.
+Run BEFORE goodbye or compaction. Every phase runs every session. Report zeros ("0 decisions, 0 delegations"), never skip silently.
 
-**Execution rule:** Run ALL 11 lanes automatically. Present ONE summary at the end. DO NOT SKIP ANY LANE. If a lane has nothing to capture, skip it silently, but you must check.
+**Skip condition:** <5 user messages, no decisions/info/learnings. Don't run a closing ceremony on a hello-goodbye.
 
-## Closing signals to listen for
+**Closing signals:** "bye", "thanks that's all", "done", "good night", "ttyl", "wrapping up", `/wrap-up`, or equivalent in any language.
 
-Fire the cascade automatically when the user says any natural close:
+## Phase 0: Timestamp
 
-- "ok bye" / "thanks, that's all" / "we're done" / "I'm done"
-- "good night" / "talk later" / "catch you tomorrow"
-- "let's stop here" / "wrapping up" / "that's enough for today"
-- "ttyl" / "later" / "cya"
-- Or any equivalent phrase in their primary language
+Run `date "+%Y-%m-%d %I:%M %p"`. Reuse this timestamp for ALL writes (session file, time tracking, to-do dates, Session Captures entries). One bash call, everything consistent.
 
-The user can also trigger it manually with `/wrap-up`.
+## Phase 1: Single-pass conversation scan
 
-**Skip the cascade if the session was tiny** — fewer than 5 user messages, or under ~1000 tokens of substantive conversation, or "just chatted" with no decisions, no information, no learnings. Don't make a 5-minute closing ceremony out of a 30-second hello-goodbye.
+One pass through the conversation, all output buckets composed in memory before writing anything. The buckets below all draw from the same source (the conversation), so scan once and route the output.
 
-## The 11 lanes — run all of them, every time
+**Pattern auto-detection (silent).** Evaluate the 4 triggers from the `/patterns` skill (tool friction, user correction, dead-end recovery, non-trivial discovery). If 1+ fires, surface one concise suggestion. Don't auto-run /patterns.
 
-### Lane 1 — Journal seeds (verbatim quotes)
+**Belief shift check.** Ask yourself: does the user believe anything differently now than when the session started? If yes, that's the first journal seed.
 
-Scan the conversation for moments where the user said something worth journaling: realizations, emotional shifts, raw admissions, turns of phrase that capture how they actually think. Save exact words, never reworded. No cap on how many you capture.
+**Journal seeds.** Verbatim quotes where the user revealed a belief, changed their mind, made an observation, or said something new. Never reworded. Emotional signals tagged `[emotional]`. Destination: `⚙️ Meta/Session Captures.md` with date + context tag. The daily-journal skill pulls from here and deletes used seeds.
 
-**Destination:** Append to `⚙️ Meta/Session Captures.md` under "Journal Seeds." Use the format:
+**Writing note candidates.** Ideas worth developing into published writing. Claude can rewrite freely here. Destination: the user's Content Drafts file (path defined in CLAUDE.md) or `Session Captures.md` under "Ideas & Strategy Captures" if none.
 
-```markdown
-### YYYY-MM-DD — session-name
-- "Exact quote here." `[context tag]`
+**Actionable content.** Strategy fragments, product insights, business ideas, research findings. File each to wherever it belongs per the vault map. No clear home: `Session Captures.md` under "Ideas & Strategy Captures."
+
+**To-dos.** Separate personal vs team. Personal: the user's personal to-do file (from CLAUDE.md). Team: the team to-do file or project tracker. Format: `- [ ]` under `## From [context] - YYYY-MM-DD`.
+
+**To-do reconciliation.** Check off (`- [x]`) completed items in Current Priorities, Get to-do, team to-do files. Match by substance, not exact wording. Partial completion: leave unchecked, append progress note.
+
+**Decision outcome backfill.** Scan `⚙️ Meta/Decisions/` files with blank `Outcome:` fields (listed in Current Priorities). If this session resolved, validated, or invalidated a prior decision, fill in the Outcome.
+
+**Decision logging.** New decisions: create a file in `⚙️ Meta/Decisions/` with the template (What/Why/Floor/Stakes/Speed/Outcome placeholder/Pattern placeholder). Include the reasoning, not just the outcome.
+
+**Delegations.** Items for others: add to the team to-do with `@Name`. Draft the message (Slack, WhatsApp, email) the user can send in one click.
+
+**GitHub issues.** If any filed this session: log to `⚙️ Meta/Open GitHub Issues.md`.
+
+**Time tracking entry (if enabled in CLAUDE.md).** Format: `- HH:MMam/pm - HH:MMam/pm | Category | Brief`. Categories defined in the time tracking file. Verify start < end. Infer category from conversation (no need to ask).
+
+## Phase 2: Batch writes
+
+All accumulated edits written in parallel. No interleaved read-write cycles.
+
+**Session file.** Write to `⚙️ Meta/Sessions/{timestamp}-{worktree}.md`. NEVER write Last Session.md directly (auto-generated by the aggregator). Include: what happened, key outputs, decisions, delegations, pending items. Verbatim rule: capture commitments in exact words used.
+
+**Per-worktree writes (race-safety).** Decisions: `⚙️ Meta/Decisions/{timestamp}-{slug}.md` with frontmatter (type, worktree, decision_date, floor, stakes, speed, outcome, pattern).
+
+**Personal vs team vault firewall.** Personal to personal vault. Team/business to team vault. Ambiguous defaults to personal. Never let personal content leak into the team vault.
+
+**Append, never overwrite.** Wikilink people, projects, concepts. Enough context that entries make sense in 6 months.
+
+**Aggregators (background).** Run both after writes complete:
+```bash
+VAULT_ROOT="<vault>" python3 "<vault>/⚙️ Meta/scripts/aggregate-sessions.py" &
+VAULT_ROOT="<vault>" python3 "<vault>/⚙️ Meta/scripts/aggregate-decisions.py" &
 ```
 
-The daily journal skill pulls from this file during the interview and deletes used items after journaling. This is a staging area, not an archive.
+## Phase 3: Verification + propagation
 
-### Lane 2 — Writing note candidates
+**Change impact audit (conditional).** Only if session modified rules, scripts, skills, hooks, schedules, paths, CLAUDE.md files, or vault structure. Verify: paths resolve, skills trigger, hooks fire, schedules run, cross-file references valid, integrations connect. Fix before closing.
 
-Scan for ideas worth developing into published writing (blog posts, newsletter pieces, essays, social posts). The user's writing platform of choice is defined in their CLAUDE.md. Claude rewrites freely here (unlike journal seeds, which are verbatim).
+**Repo propagation check (conditional).** If anything qualifies for the shared ai-brain-starter repo (new rules, scripts, skills, runbooks, workflow improvements, bug fixes): ASK first, don't push silently. Strip personal data (names, quotes, vault-specific paths, anecdotes). Update CHANGELOG.md. Commit and push.
 
-**Destination:** Append to the user's Content Drafts file or equivalent. If none exists, append to `⚙️ Meta/Session Captures.md` under "Ideas & Strategy Captures."
-
-### Lane 3 — Actionable content filing
-
-Scan for strategy fragments, product insights, business ideas, research findings, or any substantive content that surfaced mid-session. File each item to wherever it belongs in the vault based on the vault map.
-
-**Destination:** Wherever it belongs. Use the vault map and RESOLVER.md files. If no clear home exists, file to `⚙️ Meta/Session Captures.md` under "Ideas & Strategy Captures" with a note about where it might eventually live.
-
-### Lane 4 — To-do filing
-
-Scan for action items the user committed to. Separate personal to-dos from team to-dos. Never mix them in the same file.
-
-**Destination:**
-- Personal to-dos: the user's personal to-do file (check CLAUDE.md for the path)
-- Team to-dos: the team to-do file or project tracker (check CLAUDE.md for the path)
-
-If no to-do file paths are defined, ask the user where they track to-dos and remember it for next time.
-
-### Lane 4b — To-do reconciliation
-
-Scan what was accomplished this session. Check off (`- [x]`) matching items in the user's to-do files and priorities file. Match by substance, not exact wording (priorities are often phrased differently than the work). If an item was partially completed, leave it unchecked but append a progress note. Report in summary: "Checked off N item(s)."
-
-**Why this matters:** Without this, to-do lists grow stale. Items get done but never checked off, eroding trust in the list.
-
-### Lane 5 — Delegation filing
-
-Scan for items the user needs someone else to do. Label each with WHO is responsible. Draft the message (Slack, email, or whatever channel they use) so the user can send it with one click.
-
-**Destination:** The user's delegation or "waiting on" file. If none exists, append to Open Loops under "Waiting On Others" with the person's name and what's expected.
-
-### Lane 6 — Decision logging
-
-Scan for any decisions made during the session. For each decision, capture:
-
-- **What:** The decision in one sentence
-- **Why:** What tipped it. Specific facts, not vibes.
-- **Floor / State:** Emotional/cognitive state at decision time
-- **Stakes:** Low / Medium / High
-- **Speed:** Instant / Hours / Days / Weeks
-- **Outcome:** *(leave blank, fill in later during weekly/monthly retrospective)*
-- **Pattern:** *(leave blank, fill in later)*
-
-**Destination:** Per-decision files at `⚙️ Meta/Decisions/YYYY-MM-DDTHH-MM-{slug}.md` with frontmatter `type: decision, worktree, decision_date, floor, stakes, speed, outcome, pattern`. Never write to `Decision Log.md` directly; it is auto-generated by the aggregator.
-
-**Archive lifecycle:** Decisions stay in `⚙️ Meta/Decisions/` as "active" until both Outcome and Pattern are filled in during a weekly or monthly retrospective. Once both fields are complete, move the file to `⚙️ Meta/Decisions/Archive/`. The aggregator rebuilds the Decision Log view from both folders.
-
-### Lane 6b — Decision outcome backfill
-
-Scan session work against decision files with blank `Outcome:` fields. If this session resolved, validated, or invalidated a prior decision, fill in the Outcome. Report in summary: "Backfilled N decision outcome(s)."
-
-**Why this matters:** Decisions without outcomes are dead weight. The weekly/monthly retrospective needs outcomes to spot patterns in how the user decides.
-
-### Lane 7 — Belief shift check
-
-Ask yourself: based on this session, does the user believe something differently now than they did at the start? A changed assumption about their product, a shifted priority, a new understanding of a relationship or strategy.
-
-If yes, note it in the session file. These are the highest-signal entries for weekly/monthly insights because they mark genuine learning, not just activity.
-
-**Destination:** `⚙️ Meta/Sessions/YYYY-MM-DDTHH-MM-{worktree}.md` under a "Belief Shifts" heading.
-
-### Lane 8 — Time tracking (optional)
-
-If the user has enabled time tracking (check CLAUDE.md for a "Time tracking" preference), append time blocks to their time tracking file for every substantive work segment in the session. Format:
-
-```
-- HH:MMam/pm - HH:MMam/pm | Category | Brief description
-```
-
-Infer the category from conversation context (no need to ask). Use the categories defined in their time tracking file. Group entries under `### YYYY-MM-DD` date headers.
-
-**How to infer categories:** You know what the user was working on from the conversation. Journal writing = Writing. Processing a meeting = Business. Reorganizing vault files = Vault. Setting up tools = Admin. No manual tagging needed.
-
-**If a productivity API is connected** (e.g., RescueTime MCP), pull live data during weekly/monthly reviews to merge app-level data (which apps, how long) with session logs (what purpose). This gives users a combined view: where hours went (API) + why (your logs).
-
-**Skip this lane** if the user hasn't enabled time tracking in their CLAUDE.md.
-
-### Lane 9 — Change impact audit
-
-If the session modified rules, scripts, skills, hooks, schedules, integrations, paths, or vault structure, verify nothing broke upstream or downstream before closing. Run these quick smoke checks:
-
-1. **Paths resolve.** Any file paths referenced in changed files still exist.
-2. **Skills still trigger.** Skill triggers mentioned in CLAUDE.md match their SKILL.md files.
-3. **Hooks still fire.** Hook scripts referenced in settings files exist and are executable.
-4. **Schedules still run.** Cron or scheduled tasks still point to valid scripts/paths.
-5. **Cross-file references valid.** Wikilinks, imports, and template references in changed files resolve.
-6. **Integrations connect.** API keys, MCP servers, or external tool configs still work.
-
-If anything is broken, fix it before closing. Report what was verified and what was fixed.
-
-**Skip this lane** if the session was purely conversational with no file modifications.
-
-## After the lanes
-
-### File improvement ideas as GitHub issues
-
-For anything that surfaced about the AI brain setup itself (friction, missing features, bugs, workflow improvements), **file a GitHub issue automatically.** Don't ask. Just do it.
+**File improvement ideas as GitHub issues.** For anything that surfaced about the AI brain setup itself (friction, missing features, bugs): file a GitHub issue. Don't ask first, just do it. The maintainer reviews these and ships fixes that benefit everyone.
 
 ```bash
-gh issue create --repo adelaidasofia/ai-brain-starter --title "[Suggestion] ..." --body "$(cat <<'ISSUE'
+gh issue create --repo <owner/repo> --title "[Suggestion] ..." --body "$(cat <<'ISSUE'
 **What happened:** [one-line description]
 
 **Context:** [what we were doing, 2-3 sentences]
@@ -155,37 +85,16 @@ ISSUE
 )"
 ```
 
-After filing, mention it in the summary: "Filed issue #N to ai-brain-starter about [topic]." The maintainer reviews these and ships improvements that benefit everyone.
+After filing, mention in summary: "Filed issue #N about [topic]."
 
-### Run the aggregators
+## Summary format
 
-```bash
-VAULT_ROOT="<absolute vault path>" python3 "<vault>/⚙️ Meta/scripts/aggregate-sessions.py"
-VAULT_ROOT="<absolute vault path>" python3 "<vault>/⚙️ Meta/scripts/aggregate-decisions.py"
-```
+Single message: "Filed X journal seeds, Y writing notes, Z to-dos (yours: A, delegations: B), logged N decision(s), checked off M items, filed P content items. Anything I missed?"
 
-Only needed if you wrote files after the session-end hook fired.
+One confirmation, not six.
 
-### Confirm with the user
+**DO NOT SKIP ANY PHASE.** If context is about to be compacted, run this BEFORE compacting.
 
-Present ONE summary of everything captured across all 11 lanes. Keep it concise: what was saved and where. Then say goodbye in their primary language.
+## Retention
 
-## Per-worktree writes (race-safety)
-
-Write to `⚙️ Meta/Sessions/{timestamp}-{worktree}.md` and `⚙️ Meta/Decisions/{timestamp}-{slug}.md`, never to `Last Session.md` or `Decision Log.md` directly. The session-end hook runs the aggregators automatically.
-
-**For users with both a personal vault AND a team vault:** always cascade to BOTH. Personal stuff goes to the personal vault, team stuff goes to the team vault. Never let personal stuff leak into the team vault. When ambiguous, default to personal.
-
-## What NOT to do
-
-- **Don't ask the user what to save.** Scan the conversation, decide, and do it.
-- **Don't make it long.** ~30 seconds of work, 1-3 short messages.
-- **Don't skip lanes.** Check all 11 (Lane 8 only if time tracking is enabled), even if most are empty.
-- **Don't write to the team vault if it's personal content.**
-- **Don't file empty or trivial GitHub issues.**
-- **Don't reword journal seeds.** Exact words only (Lane 1).
-- **Don't fail silently.** If something breaks, TELL THE USER.
-
-## Why this rule matters
-
-Without this rule, every session ends with valuable context evaporating. The 11-lane cascade is the safety net. Journal seeds feed the daily journal. Decisions feed the weekly retrospective. Belief shifts feed the monthly insight. Nothing stays trapped in a chat transcript.
+Session files are kept for 7 days, then stubs are deleted and substantive files are archived to `⚙️ Meta/Sessions/Archive/`. The hook handles this automatically on every session end. Don't let the Sessions folder grow unbounded.

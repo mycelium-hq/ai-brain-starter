@@ -9,6 +9,17 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-16 (p.m.) -- Session close rule: compressed + restructured
+
+**templates/rules/session-end-cascade.md** (rewrite, 191 → 85 lines):
+- Renamed "11-lane capture cascade" to "Session close protocol" and restructured into Phase 0 (single timestamp) / Phase 1 (single-pass scan with output buckets) / Phase 2 (batch writes) / Phase 3 (verify + propagate). Same semantics, dense caveman prose.
+- Added explicit "Report zeros, never skip silently" directive and a templated summary format so every session ends with the same shape.
+- Backgrounded both aggregators in Phase 2 (parallel `&`) for faster wall time.
+- Added Phase 0 timestamp discipline: one `date` call per session, reuse everywhere.
+- Added 7-day retention policy (session files archived or stubbed, prevents unbounded growth).
+- Kept the `gh issue create` heredoc under Phase 3 so end users have the actual command, using `<owner/repo>` placeholder.
+- Tightened skip condition: <5 user messages with no decisions/info/learnings.
+
 ## 2026-04-16 (p.m.) -- Hookify template README: correct upstream URL
 
 **templates/hookify-rules/README.md**:
