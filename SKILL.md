@@ -33,20 +33,22 @@ This setup has 24 phases (0-23). Each phase is stored in its own file under `pha
 
 ### Phase Routing Table
 
-| Phase | File | What it does |
-|-------|------|-------------|
-| 0 | `phases/phase-00-install.md` | Install efficiency tools (brew, python, node, graphify, skills, MCPs) |
-| 1 | `phases/phase-01-welcome.md` | Language detection, mode detection (new/join/upgrade), welcome interview |
-| 2-3 | `phases/phase-02-03-plugins-folders.md` | Install Obsidian plugins, create folder structure + RESOLVERs |
-| 4 | `phases/phase-04-claude-md.md` | Build their CLAUDE.md (interview + template). Template at `templates/generated/claude-md-template.md` |
-| 5 | `phases/phase-05-context-layer.md` | Context notes, session hooks, aggregator scripts, decision log |
-| 6-9 | `phases/phase-06-09-tools-templates.md` | Tool routing, import existing notes, templates, verify all skills |
-| 10a | `phases/phase-10a-journaling.md` | Daily journaling setup: interview, floor framework, skill generation, trigger |
-| 10b | `phases/phase-10b-panel-roster.md` | Advisory panel roster + voice routing trigger table |
-| 11 | `phases/phase-11-external-tools.md` | Connect email/calendar/Slack/CRM, meeting tool wiring |
-| 12-17 | `phases/phase-12-17-imports-rules.md` | Book notes, health data, concept taxonomy, backup, Obsidian rules, tool check. Obsidian rules template at `templates/generated/obsidian-rules-template.md` |
-| 18 | `phases/phase-18-insights.md` | Weekly/monthly insights setup + cron. Skill template at `templates/generated/insights-skill-template.md` |
-| 19-23 | `phases/phase-19-23-finish.md` | Test drive, team vault, what's next, Instinct Engine, theme. Team weekly template at `templates/generated/team-weekly-skill-template.md` |
+| Phase | File | Tier | What it does |
+|-------|------|------|-------------|
+| 0 | `phases/phase-00-install.md` | both | Install efficiency tools (brew, python, node, graphify, skills, MCPs) |
+| 1 | `phases/phase-01-welcome.md` | both | Language detection, **plan tier selection**, mode detection (new/join/upgrade), welcome interview |
+| 2-3 | `phases/phase-02-03-plugins-folders.md` | both | Install Obsidian plugins, create folder structure + RESOLVERs |
+| 4 | `phases/phase-04-claude-md.md` | both | Build their CLAUDE.md (interview + template). Template at `templates/generated/claude-md-template.md` |
+| 5 | `phases/phase-05-context-layer.md` | both* | Context notes, session hooks, aggregator scripts, decision log. *Light mode skips graph-context-hook and panel-trigger-hook* |
+| 6-9 | `phases/phase-06-09-tools-templates.md` | both | Tool routing, import existing notes, templates, verify all skills |
+| 10a | `phases/phase-10a-journaling.md` | both | Daily journaling setup: interview, floor framework, skill generation, trigger |
+| 10b | `phases/phase-10b-panel-roster.md` | full | Advisory panel roster + voice routing trigger table. *Light mode skips entirely* |
+| 11 | `phases/phase-11-external-tools.md` | both | Connect email/calendar/Slack/CRM, meeting tool wiring |
+| 12-17 | `phases/phase-12-17-imports-rules.md` | both | Book notes, health data, concept taxonomy, backup, Obsidian rules, tool check. Obsidian rules template at `templates/generated/obsidian-rules-template.md` |
+| 18 | `phases/phase-18-insights.md` | both* | Weekly/monthly insights setup + cron. *Light mode: weekly summary only, no pattern analysis or monthly reports*. Skill template at `templates/generated/insights-skill-template.md` |
+| 19-23 | `phases/phase-19-23-finish.md` | both | Test drive, team vault, what's next, Instinct Engine, theme. Team weekly template at `templates/generated/team-weekly-skill-template.md` |
+
+**Tier key:** `both` = runs for all plans. `both*` = runs for all plans but with reduced scope for light mode. `full` = Max/Team only, skipped on Pro.
 
 ### How to Execute
 
@@ -61,6 +63,7 @@ This setup has 24 phases (0-23). Each phase is stored in its own file under `pha
 These are collected during early phases and used by later ones. Keep them in memory:
 
 - `PRIMARY_LANGUAGE` / `SECONDARY_LANGUAGES` — from Phase 1
+- `PLAN_TIER` (`"light"` or `"full"`) — from Phase 1 step 1.0b. Gates Phase 5 hooks, Phase 10b panel, Phase 18 insights depth, and Rule 19 size
 - `WRITES_PUBLICLY` (true/false) — from Phase 1 question 5
 - `VAULT_PATH` — from Phase 1 step 8
 - `MEETING_TOOLS` / `MEETING_DRIVE_FOLDER` etc. — from Phase 11

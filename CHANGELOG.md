@@ -9,19 +9,21 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
-## 2026-04-15 -- Advisory panel: Technology & AI section
+## 2026-04-15 -- Graph query MCP + conditional graph loading + Minimax routing + session length flag
 
-Five new panelists covering the AI/automation gap most knowledge workers have in their advisory roster:
+Four optimizations for high-volume, multi-account Claude setups:
 
-- **Ethan Mollick** (Wharton/Co-Intelligence) — practical AI integration, what to delegate vs. own
-- **Tiago Forte** (Building a Second Brain) — PKM, vault architecture, knowledge compounding
-- **Andy Matuschak** (evergreen notes, tools for thought) — stress-tests whether systems actually change thinking over time
-- **Andrej Karpathy** (Tesla AI, OpenAI) — technical AI sanity-checks, capability assumptions
-- **Tim Ferriss** (4-Hour Workweek) — ruthless elimination, delegation, systems over heroics
+**Graph query MCP** (`scripts/mcps/graph-query-server.py`): FastMCP server that loads your vault graph (NetworkX node-link JSON) at startup and exposes surgical tools: `search_nodes`, `get_neighbors`, `find_path`, `query_subgraph`, `get_community_members`. Replaces reading the full GRAPH_REPORT.md (~3K tokens) every time you ask a question. Load graph once, query it many times. Supports two vaults via `scope` param ('primary'/'secondary'). Requires two env vars: `GRAPH_JSON_PATH` and `SECOND_GRAPH_JSON_PATH`. Install via `fastmcp` (pip) and add to `.mcp.json`.
 
-Pick when: AI workflow decisions, vault/system design, automation choices, delegation triage.
+**Conditional graph loading** (`templates/generated/claude-md-template.md`): Session Protocol step 1 changed from "always load both graphs" to "load only when the first message is topic-relevant." Keyword hook (`graph-context-hook.sh`) catches natural-language queries (not just exact nouns) so casual questions like "what's my pattern with money?" or "my pitch needs work" trigger graph loading automatically. Saves 6K+ tokens on sessions that don't touch the graph.
+
+**Explicit Minimax routing list** (`templates/rules/efficiency.md`, rule 28): Five operation types always route to the cheap model without asking: (a) structured extraction from raw text, (b) bulk tagging/classifying, (c) boilerplate from template, (d) single-doc summary under 5K tokens with no voice requirement, (e) pre-extraction for graphify/weekly/insights pipelines. Removes the hesitation loop where Claude second-guesses whether to route.
+
+**Session length flag** (`templates/rules/efficiency.md`, rule 29): At 30 exchanges, surface a reminder to run `/compact`. Long sessions degrade in the back half. Early compaction keeps the context clean.
 
 ---
+
+
 
 ## 2026-04-14 -- Advisory panel: Colombia localization section + named-only rule
 
@@ -64,19 +66,7 @@ Important: never commit your RescueTime API key or ChatPRD tokens. Keep secrets 
 
 ---
 
-## 2026-04-15 -- Advisory panel: Technology & AI section
 
-Five new panelists covering the AI/automation gap most knowledge workers have in their advisory roster:
-
-- **Ethan Mollick** (Wharton/Co-Intelligence) — practical AI integration, what to delegate vs. own
-- **Tiago Forte** (Building a Second Brain) — PKM, vault architecture, knowledge compounding
-- **Andy Matuschak** (evergreen notes, tools for thought) — stress-tests whether systems actually change thinking over time
-- **Andrej Karpathy** (Tesla AI, OpenAI) — technical AI sanity-checks, capability assumptions
-- **Tim Ferriss** (4-Hour Workweek) — ruthless elimination, delegation, systems over heroics
-
-Pick when: AI workflow decisions, vault/system design, automation choices, delegation triage.
-
----
 
 ## 2026-04-14 -- custom-sort auto-activates on install (no manual toggle needed)
 
@@ -84,19 +74,7 @@ Pick when: AI workflow decisions, vault/system design, automation choices, deleg
 
 ---
 
-## 2026-04-15 -- Advisory panel: Technology & AI section
 
-Five new panelists covering the AI/automation gap most knowledge workers have in their advisory roster:
-
-- **Ethan Mollick** (Wharton/Co-Intelligence) — practical AI integration, what to delegate vs. own
-- **Tiago Forte** (Building a Second Brain) — PKM, vault architecture, knowledge compounding
-- **Andy Matuschak** (evergreen notes, tools for thought) — stress-tests whether systems actually change thinking over time
-- **Andrej Karpathy** (Tesla AI, OpenAI) — technical AI sanity-checks, capability assumptions
-- **Tim Ferriss** (4-Hour Workweek) — ruthless elimination, delegation, systems over heroics
-
-Pick when: AI workflow decisions, vault/system design, automation choices, delegation triage.
-
----
 
 ## 2026-04-14 -- Journal organization by month + insights save path fix
 
@@ -105,19 +83,7 @@ Pick when: AI workflow decisions, vault/system design, automation choices, deleg
 
 ---
 
-## 2026-04-15 -- Advisory panel: Technology & AI section
 
-Five new panelists covering the AI/automation gap most knowledge workers have in their advisory roster:
-
-- **Ethan Mollick** (Wharton/Co-Intelligence) — practical AI integration, what to delegate vs. own
-- **Tiago Forte** (Building a Second Brain) — PKM, vault architecture, knowledge compounding
-- **Andy Matuschak** (evergreen notes, tools for thought) — stress-tests whether systems actually change thinking over time
-- **Andrej Karpathy** (Tesla AI, OpenAI) — technical AI sanity-checks, capability assumptions
-- **Tim Ferriss** (4-Hour Workweek) — ruthless elimination, delegation, systems over heroics
-
-Pick when: AI workflow decisions, vault/system design, automation choices, delegation triage.
-
----
 
 ## 2026-04-14 -- Recursive folder sorting by most recently modified
 
@@ -126,19 +92,7 @@ Pick when: AI workflow decisions, vault/system design, automation choices, deleg
 
 ---
 
-## 2026-04-15 -- Advisory panel: Technology & AI section
 
-Five new panelists covering the AI/automation gap most knowledge workers have in their advisory roster:
-
-- **Ethan Mollick** (Wharton/Co-Intelligence) — practical AI integration, what to delegate vs. own
-- **Tiago Forte** (Building a Second Brain) — PKM, vault architecture, knowledge compounding
-- **Andy Matuschak** (evergreen notes, tools for thought) — stress-tests whether systems actually change thinking over time
-- **Andrej Karpathy** (Tesla AI, OpenAI) — technical AI sanity-checks, capability assumptions
-- **Tim Ferriss** (4-Hour Workweek) — ruthless elimination, delegation, systems over heroics
-
-Pick when: AI workflow decisions, vault/system design, automation choices, delegation triage.
-
----
 
 ## 2026-04-14 -- Optional time tracking lane in session-end cascade
 
@@ -147,19 +101,7 @@ Pick when: AI workflow decisions, vault/system design, automation choices, deleg
 
 ---
 
-## 2026-04-15 -- Advisory panel: Technology & AI section
 
-Five new panelists covering the AI/automation gap most knowledge workers have in their advisory roster:
-
-- **Ethan Mollick** (Wharton/Co-Intelligence) — practical AI integration, what to delegate vs. own
-- **Tiago Forte** (Building a Second Brain) — PKM, vault architecture, knowledge compounding
-- **Andy Matuschak** (evergreen notes, tools for thought) — stress-tests whether systems actually change thinking over time
-- **Andrej Karpathy** (Tesla AI, OpenAI) — technical AI sanity-checks, capability assumptions
-- **Tim Ferriss** (4-Hour Workweek) — ruthless elimination, delegation, systems over heroics
-
-Pick when: AI workflow decisions, vault/system design, automation choices, delegation triage.
-
----
 
 ## 2026-04-14 -- Customer discovery meeting template + to-do system guidance
 

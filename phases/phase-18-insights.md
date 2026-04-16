@@ -1,5 +1,29 @@
 ## Phase 18: Weekly & Monthly Insights
 
+### Tier Gate (check PLAN_TIER from Phase 1)
+
+**If `PLAN_TIER == "light"`:** install a simpler version of the insights skill. Tell the user:
+
+> "I'm setting up a weekly summary for you. Type /weekly anytime and I'll pull together what happened that week: how many entries you wrote, which floors you were on, and the highlights worth remembering. Clean and quick."
+
+The light-mode insights skill includes sections 1 (Week at a Glance), 2 (What Stood Out), and 6 (Wins to Celebrate) from the full template. It skips sections 3 (Life Coach patterns), 4 (Therapist patterns), 5 (Panel Thoughts), and the post-report floor-note updates and graph integration steps. No /monthly command in light mode (weekly only). Still install the journal index builder and the cron job for weekly generation (same schedule), but the cron prompt should reference the simplified skill. Skip the /patterns auto-run at the end of the cron job.
+
+When generating the light-mode skill file at `~/.claude/skills/insights/SKILL.md`, use the full template as a base but include only:
+- The date-finding logic (journal index)
+- Section 1: The Week at a Glance (entry count, floor distribution, floor trend, habit tracking)
+- Section 2: What Stood Out (2-3 significant moments, recurring themes, accountability check)
+- Section 6: Wins to Celebrate
+- Section 7: One Question to Sit With
+- The save-to-vault section (weekly only)
+
+Add a note at the top of the generated skill: "This is the light-mode insights skill. For pattern analysis, advisory panel thoughts, and monthly reports, upgrade to the full setup by running /setup-brain again."
+
+Then continue with the cron/schedule setup below (weekly only, skip monthly).
+
+**If `PLAN_TIER == "full"`:** run the full setup as written below, including monthly reports and all sections.
+
+---
+
 "One more thing — and this might be the most powerful part. I can generate a weekly and monthly reflection from your journal entries. Not just a summary of what happened, but pattern recognition: what floors you've been on, what's shifting, what a life coach would push you on, what a therapist would want you to sit with."
 
 Ask: "Want me to set up weekly and monthly insight reports? You type /weekly or /monthly anytime and I'll analyze your entries for that calendar period and give you a reflection."

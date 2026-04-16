@@ -124,6 +124,24 @@ If they pick a non-English primary language, do NOT default back to English mid-
 
 **Substack link override (Spanish only):** the SKILL.md links to the framework article at `https://adelaidadiazroa.substack.com/s/internal-design` (English) in several places. **Only swap it if the user picks Spanish** — in that case, replace every occurrence with `https://perspectivasblog.substack.com/s/el-rascacielos` (and use the Spanish title "El Rascacielos — el modelo del diseño interno"). For every other language (including English), leave the existing English URL as-is.
 
+### Step 1.0b — Plan Tier (ASK SECOND, after language)
+
+Before the welcome interview, ask (in their primary language):
+
+> "Quick question before we start building: **which Claude plan are you on?**
+>
+> - **Pro** ($20/month) — I'll set you up with the essentials. Daily journal, session memory, smart file organization, and the core rules that make this work. Everything runs great, we just skip the heavy automation that would eat through your daily usage.
+> - **Max** ($100/month) or **Team** — I'll give you everything. Knowledge graphs, an advisory panel that challenges your thinking, automatic context routing, the full session protocol. The works."
+
+Wait for their answer. Store it as:
+- `PLAN_TIER` = `"light"` (Pro) or `"full"` (Max / Team)
+
+If they're not sure or ask what the difference is, explain plainly: "The Pro setup gives you a fully working second brain: journaling, session memory, file organization, all the rules. The Max setup adds features that use more of your daily budget: a knowledge graph that maps connections across your notes, an advisory panel of named voices that push back on your thinking, and automatic pattern analysis on your journal. You can always upgrade later by running setup again."
+
+**Do not use the word "tokens" or "context window."** These are Claude-internal concepts. Say "daily usage" or "daily budget" if you need to reference limits.
+
+This variable gates behavior in Phase 5 (hooks), Phase 10b (advisory panel), and Phase 18 (insights). See each phase file for the conditional logic.
+
 ### Step 1.1 — Welcome (in their language)
 
 Now translate the welcome into their primary language and continue:
