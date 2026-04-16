@@ -155,17 +155,17 @@ Tell them: "Templates are set up. When you create a new note in Obsidian, Templa
 Phase 0 installed everything. This phase verifies nothing was skipped or failed.
 
 ### Verify all skills are present
-Run a quick check on every skill folder. If anything is missing, retry the install:
-- `ls ~/.claude/skills/graphify/SKILL.md` — if missing: `mkdir -p ~/.claude/skills/graphify && cp -R ~/.claude/skills/ai-brain-starter/skills/graphify/. ~/.claude/skills/graphify/`
-- `ls ~/.claude/skills/meeting-todos/SKILL.md` — if missing: same pattern with `meeting-todos`
-- `ls ~/.claude/skills/patterns/SKILL.md` — if missing: same pattern with `patterns`
-- `ls ~/.claude/skills/insights/SKILL.md` — if missing: same pattern with `insights`
-- `ls ~/.claude/skills/deconstruct/SKILL.md` — if missing: same pattern with `deconstruct`
-- `ls ~/.claude/skills/daily-journal/SKILL.md` — if missing: same pattern with `daily-journal`
-- `ls ~/.claude/skills/repurpose-talk/SKILL.md` — if missing: same pattern with `repurpose-talk`
-- `ls ~/.claude/skills/nano-banana/SKILL.md` — if missing: same pattern with `nano-banana`
-- `ls ~/.claude/skills/humanizer` — if missing: `git clone https://github.com/adelaidasofia/humanizer.git ~/.claude/skills/humanizer`
-- `graphify --version` — if missing: `pipx install graphifyy && graphify install`
+Run a quick check on every skill folder. All installs live in bootstrap: if anything below is missing, re-run `bash ~/.claude/skills/ai-brain-starter/bootstrap.sh` (Mac/Linux) or `pwsh ~/.claude/skills/ai-brain-starter/bootstrap.ps1` (Windows).
+- `ls ~/.claude/skills/graphify/SKILL.md`
+- `ls ~/.claude/skills/meeting-todos/SKILL.md`
+- `ls ~/.claude/skills/patterns/SKILL.md`
+- `ls ~/.claude/skills/insights/SKILL.md`
+- `ls ~/.claude/skills/deconstruct/SKILL.md`
+- `ls ~/.claude/skills/daily-journal/SKILL.md`
+- `ls ~/.claude/skills/repurpose-talk/SKILL.md`
+- `ls ~/.claude/skills/nano-banana/SKILL.md`
+- `ls ~/.claude/skills/humanizer`
+- `graphify --version`
 
 Add skill routing to their CLAUDE.md (global `~/.claude/CLAUDE.md` if it exists, or vault root). Add ALL of these:
 

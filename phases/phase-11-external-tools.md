@@ -40,14 +40,8 @@ Store the answer as `MEETING_TOOLS` (a list — could be multiple). Then for eac
 
 #### 1. Granola
 
-- **Wire the MCP** (already done in Phase 0 if they ran the bootstrap, but verify):
-  ```bash
-  python3 -c "import json,os; p=os.path.expanduser('~/.claude/.mcp.json'); m={'mcpServers':{}}; \
-    exec('try:\n  m=json.load(open(p))\nexcept: pass'); \
-    m.setdefault('mcpServers',{}).setdefault('granola',{'type':'url','url':'https://mcp.granola.ai/mcp'}); \
-    json.dump(m, open(p,'w'), indent=2)"
-  ```
-- **Tell them:** "I wired the Granola MCP. You'll need a Granola account at https://granola.ai — once it's recording, meeting notes auto-sync into your vault."
+- **Verify the MCP is wired** (bootstrap registers it; if the `granola` entry is missing from `~/.claude/.mcp.json`, re-run the bootstrap).
+- **Tell them:** "The Granola MCP is wired. You'll need a Granola account at https://granola.ai — once it's recording, meeting notes auto-sync into your vault."
 - **Discovery rule for the meeting workflow CLAUDE.md section:**
   > Search the meeting-notes folder via Glob for any file modified in the last 24 hours (Granola auto-sync drops files there). Read the freshest one fully — it's the source of truth.
 
@@ -154,12 +148,7 @@ Then offer the meeting-todos skill (always, regardless of which tool they picked
 
 "After any meeting note is saved to your Meeting Notes folder, I'll automatically pull out your action items (separate from others') and show you a preview before adding anything to your to-do. You don't have to type anything — it fires the moment the note lands in the vault. You can also trigger it manually with `/meeting-todos` anytime."
 
-The skill itself was already installed in Phase 0 (if they ran bootstrap.sh) at `~/.claude/skills/meeting-todos/`. If for any reason it's missing, copy it now:
-
-```bash
-mkdir -p ~/.claude/skills/meeting-todos
-cp -R ~/.claude/skills/ai-brain-starter/skills/meeting-todos/. ~/.claude/skills/meeting-todos/
-```
+The skill itself was already installed in Phase 0 at `~/.claude/skills/meeting-todos/`. If it's missing, re-run the bootstrap (`bash ~/.claude/skills/ai-brain-starter/bootstrap.sh` or `.ps1` on Windows).
 
 Add routing to the user's CLAUDE.md:
 

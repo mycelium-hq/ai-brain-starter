@@ -11,7 +11,7 @@
 #
 # What it installs:
 #     - Homebrew (Mac only, if missing)
-#     - Python 3.10+, Node.js, pipx, bun, gh, fastmcp
+#     - Python 3.10+, Node.js, pipx, gh, fastmcp
 #     - Claude Code (via npm) and Obsidian (desktop app)
 #     - graphify CLI + Claude skill (with optimization scripts)
 #     - All bundled sub-skills: graphify, meeting-todos, patterns, insights,
@@ -73,7 +73,7 @@
 #   9. gh authentication — only prompts if `gh auth status` reports unauthed.
 #      Existing gh logins are preserved.
 #
-#   10. Homebrew, Python, Node, pipx, bun, gh, graphifyy — all installed only
+#   10. Homebrew, Python, Node, pipx, gh, graphifyy — all installed only
 #       if missing. Existing versions are kept as-is.
 #
 #   11. ~/.claude/skills/{graphify,meeting-todos,patterns} with their own .git/
@@ -238,26 +238,6 @@ if ! have node; then
 fi
 have node && ok "node $(node --version)"
 have npm  && ok "npm $(npm --version)"
-
-# ───────────────────────────────────────────────────────────────────────────────
-# bun — required by several plugin hooks (remotion, some custom skill runners).
-# Installed via brew on Mac (cleanest), via the official installer on Linux
-# (drops into ~/.bun/bin). The verification block checks both PATH and
-# ~/.bun/bin/bun so the bootstrap passes either way.
-# ───────────────────────────────────────────────────────────────────────────────
-
-if ! have bun && [[ ! -x "$HOME/.bun/bin/bun" ]]; then
-  hdr "Installing bun"
-  if is_mac; then
-    brew install bun || err "bun install failed"
-  else
-    # Official installer. It edits ~/.bashrc|~/.zshrc to add ~/.bun/bin to PATH;
-    # we also export it for the current session so the verification block works.
-    curl -fsSL https://bun.sh/install | bash 2>/dev/null || err "bun install failed"
-    export PATH="$HOME/.bun/bin:$PATH"
-  fi
-fi
-{ have bun || [[ -x "$HOME/.bun/bin/bun" ]]; } && ok "bun installed"
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Claude Code (Anthropic's CLI/desktop app — REQUIRED for /setup-brain)
@@ -715,8 +695,6 @@ for check in "${CHECKS[@]}"; do
     err "$name not callable"
   fi
 done
-{ have bun || [[ -x "$HOME/.bun/bin/bun" ]]; } && ok "bun" || err "bun not found"
-
 # Skill folders (full bundled set + humanizer + ai-brain-starter itself)
 for sub in graphify meeting-todos patterns insights deconstruct daily-journal repurpose-talk nano-banana humanizer ai-brain-starter; do
   if [[ -d "$HOME/.claude/skills/$sub" ]]; then

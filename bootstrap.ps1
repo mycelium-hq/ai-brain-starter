@@ -176,20 +176,6 @@ if (-not (Have pipx)) {
 }
 if (Have pipx) { Ok "pipx" } else { Err "pipx install failed" }
 
-# ─── bun ──────────────────────────────────────────────────────────────────────
-# bun is required by several plugin hooks. On Windows, the official installer
-# is a PowerShell one-liner that drops bun at %USERPROFILE%\.bun\bin\bun.exe.
-if (-not (Have bun) -and -not (Test-Path "$env:USERPROFILE\.bun\bin\bun.exe")) {
-    Hdr "Installing bun"
-    try {
-        powershell -NoProfile -ExecutionPolicy Bypass -Command "irm bun.sh/install.ps1 | iex" 2>$null
-    } catch {
-        Warn "bun install failed: $_ (non-blocking — some plugin hooks may not work)"
-    }
-    $env:Path = "$env:USERPROFILE\.bun\bin;$env:Path"
-}
-if ((Have bun) -or (Test-Path "$env:USERPROFILE\.bun\bin\bun.exe")) { Ok "bun installed" }
-
 # ─── fastmcp ──────────────────────────────────────────────────────────────────
 # Framework for building custom MCP servers in minimal Python. Needed when
 # wiring custom connectors (CRM bridges, vault sync, investor relations, etc.)

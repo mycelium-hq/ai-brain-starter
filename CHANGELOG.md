@@ -11,40 +11,30 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ## 2026-04-16 (late evening) -- Single source of truth for installs: bootstrap canonical, Phase 0 thin
 
-**The problem:** install logic lived in TWO places: `bootstrap.sh`/`bootstrap.ps1` (curl-one-liner path) AND `phases/phase-00-install.md` (inline bash blocks Claude Code executes during /setup-brain). About 80 percent overlap. They drifted. phase-00 installed 5 extra sub-skills and a chatprd MCP that bootstrap missed. bootstrap verified a bun that it never installed. Windows and Linux variants in phase-00 had subtly broken Python one-liners. A non-technical user on a different install path got a different stack.
+Install logic lived in two places (`bootstrap.sh`/`.ps1` AND `phases/phase-00-install.md`) with 80% overlap; they drifted and users on different paths got different stacks.
 
-**What changed:**
+- **`bootstrap.sh`** and **`bootstrap.ps1`** are the ONE source of truth: fastmcp, full bundled sub-skill set (insights, deconstruct, daily-journal, repurpose-talk, nano-banana skill folder), granola + chatprd MCPs, obsidian-skills marketplace, obsidian/context7/playwright plugins, Mac Obsidian CLI symlink. `--dry-run` skips verification.
+- **`phases/phase-00-install.md`** rewritten 431 → 158 lines: thin orchestrator only. Invokes the local bootstrap, then Granola login walkthrough, Obsidian CLI confirmation, nano-banana deferred install, Knowledge Graph CLAUDE.md rule template.
 
-- **`bootstrap.sh`** and **`bootstrap.ps1`** are now the ONE source of truth for every mechanical install. Added: bun, fastmcp, the full bundled sub-skill set (insights, deconstruct, daily-journal, repurpose-talk, nano-banana skill folder), chatprd MCP, obsidian-skills marketplace registration, context7 and playwright and obsidian plugin enable, Mac Obsidian CLI symlink. Verification block expanded to cover all of it. `--dry-run` now skips verification (no false failures on "file not written yet").
-- **`phases/phase-00-install.md`** rewritten from 431 lines to 158. Now a thin orchestrator: progress message, invoke the local bootstrap, Granola post-install login walkthrough, Obsidian CLI confirmation, nano-banana deferred-install conversation, Knowledge Graph CLAUDE.md rule template, closing line. Zero duplicated install bash.
-
-**Why it matters:** the previous setup had a silent-drift failure mode. Any new dependency added in one place would quietly be missing in the other, surfacing weeks later as "why does my vault not have deconstruct?" or "why doesn't bun work on this machine?" Now every install path (curl one-liner before Claude Code, local bootstrap during /setup-brain, re-run on existing setup) hits the same code and produces the same stack. Windows parity via `.ps1` is maintained in the same commit, not as a TODO.
+Every install path (curl one-liner, /setup-brain, re-run) now hits the same code. Windows parity via `.ps1` in the same commit, not deferred.
 
 ---
 
 ## 2026-04-16 (evening, later) -- Enforce compressed Claude-facing docs at tool level
 
-**The problem:** a "compress all Claude-facing docs" rule lived in memory for days, but a fresh session still shipped a verbose memory file + hookify rule because memory scans are easy to skip. A memory rule that depends on Claude remembering to check it is not a rule — it's a suggestion.
+Memory-level rules require active recall and get skipped; moved compression enforcement into a tool-level hook so it fires regardless.
 
-**What changed:**
-
-- **`templates/hookify-rules/hookify.compress-claude-docs.local.md`** (new): fires on every write to memory files, hookify rules, vault rule files, and CLAUDE.md. Warn-level. Shows the compression rules inline so Claude sees them at tool-use time, not memory-scan time. Can't be missed.
-
-**Why it matters:** memory-level rules require active recall. Tool-level hooks fire regardless. Any rule Claude must "remember to apply before writing" belongs in a hook, not a memory file.
+- **`templates/hookify-rules/hookify.compress-claude-docs.local.md`** (new): warn-level hook on writes to memory files, hookify rules, vault rule files, and CLAUDE.md. Shows the rules inline at tool-use time.
 
 ---
 
 ## 2026-04-16 (evening) -- Fix duplicate note titles (filename + H1)
 
-**The problem:** scripts and templates were writing `# Title` as the first line after frontmatter. In Obsidian the filename IS the title, so the H1 created a visible duplicate ("Journal Metrics" rendered twice, once as note title, again as body heading). Reported repeatedly before a permanent fix.
+Scripts and templates were writing `# Title` after frontmatter; in Obsidian the filename IS the title, so every note rendered its heading twice.
 
-**What changed:**
-
-- **`scripts/granola_sync.py`**: removed the `# {title}` line from the generated meeting note body. Auto-imported notes now start with the `*Auto-imported...*` context line.
-- **`phases/phase-06-09-tools-templates.md`**: CRM Entry and Meeting Note templates no longer include `# {{title}}` after frontmatter. Added inline note explaining why.
-- **`templates/hookify-rules/hookify.no-duplicate-h1.local.md`** (new): opt-in warn rule that catches any H1 written after frontmatter in a `.md` file. Install by copying into your vault's `.claude/` folder.
-
-**Why it matters:** filename = title is one of Obsidian's core conventions. An H1 that repeats the filename is always visual noise. Fixing the source templates and adding the hookify rule prevents regressions across sessions.
+- **`scripts/granola_sync.py`**: dropped the `# {title}` line; auto-imported notes now start with the `*Auto-imported...*` context line.
+- **`phases/phase-06-09-tools-templates.md`**: CRM Entry and Meeting Note templates no longer include `# {{title}}` after frontmatter.
+- **`templates/hookify-rules/hookify.no-duplicate-h1.local.md`** (new): opt-in warn rule catching any H1 written after frontmatter in a `.md` file.
 
 ---
 

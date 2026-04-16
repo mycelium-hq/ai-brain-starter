@@ -182,21 +182,16 @@ if ($paths | Where-Object { Test-Path -LiteralPath $_ }) { "OBSIDIAN_PRESENT" } 
 
 **If `OBSIDIAN_PRESENT`:** Skip the question entirely. Go straight to step 7 with: *"Obsidian is already installed (the bootstrap took care of that for you). Let's create your vault now."*
 
-**If `OBSIDIAN_MISSING`** (the bootstrap was skipped or failed): install it now, automatically, without asking the user to download anything:
+**If `OBSIDIAN_MISSING`** (the bootstrap was skipped or failed): re-run the bootstrap, which handles Obsidian install on Mac/Linux/Windows with all the platform fallbacks (brew, snap, flatpak, AppImage, winget):
 
 ```bash
-# Mac
-brew install --cask obsidian
-
-# Linux — try snap, flatpak, then AppImage
-sudo snap install obsidian --classic 2>/dev/null \
-  || flatpak install -y flathub md.obsidian.Obsidian 2>/dev/null \
-  || (mkdir -p "$HOME/.local/bin" && curl -fsSL -o "$HOME/.local/bin/obsidian" "$(curl -fsSL https://api.github.com/repos/obsidianmd/obsidian-releases/releases/latest | grep -oE 'https://github.com/obsidianmd/obsidian-releases/releases/download/[^"]+\.AppImage' | head -1)" && chmod +x "$HOME/.local/bin/obsidian")
+# Mac/Linux
+bash ~/.claude/skills/ai-brain-starter/bootstrap.sh
 ```
 
 ```powershell
 # Windows
-winget install -e --id Obsidian.Obsidian --accept-source-agreements --accept-package-agreements
+pwsh ~/.claude/skills/ai-brain-starter/bootstrap.ps1
 ```
 
 Then say: *"I just installed Obsidian for you. Let's create your vault now."*
