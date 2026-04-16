@@ -1,6 +1,6 @@
 ---
 name: patterns
-description: Instinct Engine — scans recent sessions, journals, and decisions for recurring patterns and turns them into concrete captures (CLAUDE.md rules, concept notes, writing seeds, skill improvements). Run after /weekly or whenever you sense a pattern hardening. Also runs semi-autonomously via session-end auto-detection triggers.
+description: Instinct Engine — scans recent sessions, journals, and decisions for recurring patterns and turns them into concrete captures (CLAUDE.md rules, concept notes, writing seeds, skill improvements). Run after /weekly or whenever you sense a pattern hardening. Also runs semi-autonomously via session-end auto-detection triggers. Do NOT use for weekly/monthly journal reviews (use insights), daily journaling (use daily-journal), or one-off decisions (use deconstruct).
 trigger: /patterns
 ---
 

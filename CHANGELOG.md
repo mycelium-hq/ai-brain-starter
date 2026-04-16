@@ -9,6 +9,21 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-16 -- Bug fixes: pip, graph edge key, directed graphs, and skill guardrails
+
+Porting improvements that surfaced from production use:
+
+**graphify/SKILL.md** -- Three fixes:
+- `pip install` changed to `"$PYTHON" -m pip install` (with bare-pip fallback). Prevents the case where the system `pip` installs to a different Python than the one graphify actually runs under, causing "module not found" on first run.
+- Added `--directed` flag to the usage table. Builds a `DiGraph` that preserves edge direction (source to target) instead of the default undirected `Graph`. Useful for code dependency graphs, citation networks, or any corpus where direction matters.
+- Added `--whisper-model` flag to the usage table. Lets you pass a larger model (`small`, `medium`, `large`) when transcribing audio/video files for higher accuracy at the cost of speed.
+
+**meeting-todos/SKILL.md** -- Added guardrail to the description: "Do NOT use for general task management, journaling, or pulling full meeting transcripts (use the meeting workflow for that)." Prevents Claude from triggering this skill when someone asks to journal or pull a full transcript.
+
+**patterns/SKILL.md** -- Added guardrail: "Do NOT use for weekly/monthly journal reviews (use insights), daily journaling (use daily-journal), or one-off decisions (use deconstruct)." Clarifies the skill's scope so Claude routes correctly instead of running `/patterns` on a prompt that belongs in `/journal` or `/weekly`.
+
+---
+
 ## 2026-04-15 -- To-do system template
 
 New template: `templates/generated/todo-system-template.md`. A complete prioritized task management system for Obsidian with Dataview integration.
