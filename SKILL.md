@@ -48,7 +48,7 @@ This setup has 24 phases (0-23). Each phase is stored in its own file under `pha
 | 18 | `phases/phase-18-insights.md` | both* | Weekly/monthly insights setup + cron. *Light mode: weekly summary only, no pattern analysis or monthly reports*. Skill template at `templates/generated/insights-skill-template.md` |
 | 19-23 | `phases/phase-19-23-finish.md` | both | Test drive, team vault, what's next, Instinct Engine, theme. Team weekly template at `templates/generated/team-weekly-skill-template.md` |
 
-**Tier key:** `both` = runs for all plans. `both*` = runs for all plans but with reduced scope for light mode. `full` = Max/Team only, skipped on Pro.
+**Tier key:** `both` = runs in both setup versions. `both*` = runs in both but with reduced scope in light mode. `full` = full version only, skipped in light mode. Version is chosen by usage cost, not subscription plan — both versions work on any plan.
 
 ### How to Execute
 

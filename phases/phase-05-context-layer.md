@@ -288,7 +288,7 @@ After creating both scripts, run: `chmod +x "[VAULT_PATH]/⚙️ Meta/scripts/se
 
 ### Tier-Gated Hooks (check PLAN_TIER from Phase 1)
 
-**If `PLAN_TIER == "light"`:** skip the graph-context-hook and panel-trigger-hook below. Light-mode users still get the session-end-hook, write-hook, session protocol hook, and auto-update hook installed above. The skipped hooks are the ones that fire on every prompt to route context and panel voices, which adds up fast on a Pro plan. Tell the user: "I'm skipping the graph-routing and panel hooks to keep things lean on your plan. You still get full session memory, automatic meeting detection, and the session protocol. If you upgrade later, just run setup again and I'll add the rest."
+**If `PLAN_TIER == "light"`:** skip the graph-context-hook and panel-trigger-hook below. Light-mode users still get the session-end-hook, write-hook, session protocol hook, and auto-update hook installed above. The skipped hooks are the ones that fire on every prompt to route context and panel voices, which adds up fast in daily usage. Tell the user: "I'm skipping the graph-routing and panel hooks to keep things lean. You still get full session memory, automatic meeting detection, and the session protocol. If you want the full version later, just run setup again and I'll add the rest."
 
 **If `PLAN_TIER == "full"`:** install everything below as written.
 

@@ -124,21 +124,33 @@ If they pick a non-English primary language, do NOT default back to English mid-
 
 **Substack link override (Spanish only):** the SKILL.md links to the framework article at `https://adelaidadiazroa.substack.com/s/internal-design` (English) in several places. **Only swap it if the user picks Spanish** — in that case, replace every occurrence with `https://perspectivasblog.substack.com/s/el-rascacielos` (and use the Spanish title "El Rascacielos — el modelo del diseño interno"). For every other language (including English), leave the existing English URL as-is.
 
-### Step 1.0b — Plan Tier (ASK SECOND, after language)
+### Step 1.0b — Setup Version (ASK SECOND, after language)
 
 Before the welcome interview, ask (in their primary language):
 
-> "Quick question before we start building: **which Claude plan are you on?**
+> "Quick question before we start building: **do you want the light or full setup?** Both work on any Claude plan. The only tradeoff is how much of your daily usage the system spends.
 >
-> - **Pro** ($20/month) — I'll set you up with the essentials. Daily journal, session memory, smart file organization, and the core rules that make this work. Everything runs great, we just skip the heavy automation that would eat through your daily usage.
-> - **Max** ($100/month) or **Team** — I'll give you everything. Knowledge graphs, an advisory panel that challenges your thinking, automatic context routing, the full session protocol. The works."
+> I recommend **full** if you can spare the daily budget. It's the version the system was designed around, and the light version is genuinely a subset — useful, but missing the parts that make this feel like a second brain instead of a notes app.
+>
+> **Both versions include:** the daily journal interview, floor tagging (the High-Rise framework that maps where you're operating from), session memory, meeting workflow, file organization, and the core rules.
+>
+> **Full setup adds:**
+> - **Advisory panel** — named voices in every journal entry that push back on your thinking, surface blind spots, and log dissent
+> - **Knowledge graph** that maps connections across all your notes, people, projects, and decisions — surfaced automatically into conversation
+> - **Automatic context routing** — when you mention a person, project, or concept, the relevant graph context loads without you asking
+> - **Monthly insight reports** with pattern analysis (recurring themes, stuck loops, floor trends, decisions vs outcomes)
+> - **Instinct Engine** (/patterns) — scans your journals and decisions for patterns you haven't noticed yet, and turns them into concrete rules
+>
+> **Light setup skips those five things.** You still get a real second brain — journaling with floor tagging, weekly summaries, session memory, meeting detection, file organization — just without the panel pushback, graph connections, and pattern surfacing that the system was designed around.
+>
+> Light uses noticeably less daily budget. Full uses more but gives you the pushback, pattern recognition, and connection-finding that makes this compounding instead of linear. Which do you want?"
 
 Wait for their answer. Store it as:
-- `PLAN_TIER` = `"light"` (Pro) or `"full"` (Max / Team)
+- `PLAN_TIER` = `"light"` or `"full"`
 
-If they're not sure or ask what the difference is, explain plainly: "The Pro setup gives you a fully working second brain: journaling, session memory, file organization, all the rules. The Max setup adds features that use more of your daily budget: a knowledge graph that maps connections across your notes, an advisory panel of named voices that push back on your thinking, and automatic pattern analysis on your journal. You can always upgrade later by running setup again."
+If they're unsure, lean them toward full: "Honestly, full is what I'd pick. The panel and graph are the two things people say made the biggest difference. If you find the daily budget tight after a week, you can rerun setup and drop to light. Going the other way — starting light and adding later — works too, but you'll be less likely to discover what you're missing."
 
-**Do not use the word "tokens" or "context window."** These are Claude-internal concepts. Say "daily usage" or "daily budget" if you need to reference limits.
+**Do not use the word "tokens" or "context window."** These are Claude-internal concepts. Say "daily usage" or "daily budget" if you need to reference limits. **Do not gate the choice by subscription plan (Pro/Max/Team).** Both options work on any plan; the tradeoff is usage cost, not plan tier.
 
 This variable gates behavior in Phase 5 (hooks), Phase 10b (advisory panel), and Phase 18 (insights). See each phase file for the conditional logic.
 
