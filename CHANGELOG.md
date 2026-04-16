@@ -9,6 +9,12 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-16 (p.m.) -- Hookify template README: correct upstream URL
+
+**templates/hookify-rules/README.md**:
+- Fixed two links that pointed to `github.com/anthropics/claude-code/tree/main/plugins/hookify`. The hookify plugin actually lives in a separate repo: `github.com/anthropics/claude-plugins-official/tree/main/plugins/hookify`. Both references updated.
+- Discovered while filing an upstream PR to fix a CLAUDE_PLUGIN_ROOT fallback bug in hookify itself: [anthropics/claude-plugins-official#1441](https://github.com/anthropics/claude-plugins-official/pull/1441).
+
 ## 2026-04-16 (p.m.) -- Claude Performance Self-Improvement System
 
 **scripts/claude_performance_digest.py** (new):

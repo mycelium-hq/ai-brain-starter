@@ -1,10 +1,10 @@
 # Hookify Rule Templates
 
-These are example rules for the [hookify plugin](https://github.com/anthropics/claude-code/tree/main/plugins/hookify) from Anthropic's official claude-code repo. They enforce behavioral rules at the tool level, catching mistakes before they happen.
+These are example rules for the [hookify plugin](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/hookify) from Anthropic's official claude-code repo. They enforce behavioral rules at the tool level, catching mistakes before they happen.
 
 ## Setup
 
-1. Install hookify: In Claude Code, run `/plugin install hookify` or clone from the [claude-code repo](https://github.com/anthropics/claude-code/tree/main/plugins/hookify)
+1. Install hookify: In Claude Code, run `/plugin install hookify` or clone from the [claude-code repo](https://github.com/anthropics/claude-plugins-official/tree/main/plugins/hookify)
 2. Copy any rules you want to your vault's `.claude/` directory:
    ```bash
    cp templates/hookify-rules/hookify.*.local.md .claude/
