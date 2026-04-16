@@ -95,9 +95,9 @@ At session start (after reading CLAUDE.md + Last Session.md + Current Priorities
 
 ---
 
-# Session end — capture cascade
+# Session close protocol
 
-When the user signals the session is ending (bye, thanks, wrapping up, done, good night, ttyl, etc.) or says `/wrap-up`, run the 7-lane capture cascade before saying goodbye. **You MUST read `⚙️ Meta/rules/session-end-cascade.md` before starting — the summary below is NOT sufficient.** The full file contains: all 7 lane definitions with exact destinations, the archive lifecycle for decisions, per-worktree write rules with race-safety reminders, GitHub issue draft format, aggregator invocation, and the "what NOT to do" guardrails. Quick summary (for orientation only): scan conversation across 7 lanes (journal seeds, writing notes, actionable content, to-dos, delegations, decisions, belief shifts) → file each to its destination → run aggregators → present one summary. DO NOT SKIP ANY LANE. Skip the whole cascade only if session was tiny (<5 messages).
+When the user signals the session is ending (bye, thanks, wrapping up, done, good night, ttyl, etc.) or says `/wrap-up`, OR when context compaction is imminent, run the session close protocol before saying goodbye. **You MUST read `⚙️ Meta/rules/session-end-cascade.md` before starting — the summary below is NOT sufficient.** The full file contains: the four phases (timestamp, single-pass scan, batch writes, verification), per-worktree write rules with race-safety reminders, retention policy, aggregator invocation, and the summary format. Quick summary (for orientation only): (0) run `date` for one timestamp to reuse everywhere, (1) single-pass conversation scan filling all output buckets in memory (journal seeds, writing notes, actionable content, to-dos, to-do reconciliation, decision backfill + logging, delegations, GitHub issues, time tracking), (2) batch writes in parallel + background aggregators, (3) conditional change-impact audit + repo propagation. DO NOT SKIP ANY PHASE. Skip the whole protocol only if session was tiny (<5 messages, no decisions/learnings).
 ```
 
 **B. INSTALL the modular rule files** into the vault's `⚙️ Meta/rules/` directory:

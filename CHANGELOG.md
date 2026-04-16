@@ -9,6 +9,40 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-16 (late p.m.) -- Session close protocol: no more stubs, 7-day retention, compressed rule
+
+**The problem:** the session-end-hook created a "stub" session file every time the hook fired, expecting Claude to fill it in. In practice most sessions end without running the full protocol (short sessions, abrupt exits, worktree subagents, compactions), so stubs piled up unused. One user had 966 of 1,046 files as empty stubs -- 92% noise, 4.2 MB of clutter in the `⚙️ Meta/Sessions/` folder.
+
+**What changed:**
+
+**`scripts/session-end-hook.sh`** (rewritten):
+- No longer creates stub files. Claude writes the real session file directly during session close (Phase 2 of the protocol).
+- Added retention cleanup on every hook invocation: stubs older than 7 days are deleted, substantive files older than 7 days are archived to `Sessions/Archive/`. Fast and idempotent -- only touches files past the cutoff.
+- Cross-platform date math (BSD `date -v-7d` on macOS, GNU `date -d '7 days ago'` on Linux).
+- Step 4 prompt trimmed: points Claude at the session-close rule file instead of restating the entire protocol inline in a JSON blob.
+
+**`templates/rules/session-end-cascade.md`** (rewritten, same filename for install compatibility):
+- Went from 7 lanes / 192 lines to 4 phases / 84 lines. No information lost -- just compressed per the "caveman prose" rule (machine instructions, not human-facing).
+- Phase 0: run `date` once, reuse the timestamp everywhere (session file, time tracking, to-do dates).
+- Phase 1: single-pass conversation scan fills all output buckets in memory before writing anything.
+- Phase 2: batch writes in parallel, aggregators run in background.
+- Phase 3: conditional change-impact audit and repo propagation.
+
+**`phases/phase-05-context-layer.md`**: the inline hook template embedded in the phase doc was updated to match the new scripts/ version (no stubs, retention cleanup, compressed Step 4 prompt).
+
+**`phases/phase-04-claude-md.md`**: the CLAUDE.md session-end section was updated from "7-lane capture cascade" to "4-phase session close protocol" to match the new rule file.
+
+**Why this matters for you:**
+- Your `⚙️ Meta/Sessions/` folder will stop filling up with empty placeholders.
+- The folder self-cleans: anything older than 7 days either goes away (stubs) or moves to `Archive/` (substantive). You get a week of rolling context, nothing more.
+- Session close runs faster (single-pass scan, parallel writes, background aggregators).
+
+**Upgrade notes:**
+- If you already have hundreds of stub files, delete them: `grep -rl 'session_label: "update pending"' "$VAULT/⚙️ Meta/Sessions/" | xargs rm` (one user went from 1,046 files / 4.2 MB to 83 files / 476 KB).
+- The new hook is backward-compatible with existing substantive session files; they'll sit untouched until they pass the 7-day cutoff, then move to `Archive/`.
+
+---
+
 ## 2026-04-16 (p.m.) -- Removed claude-mem from bundled stack (security)
 
 Dropped claude-mem from the default install after a security audit surfaced: (1) unauthenticated local HTTP API on port 37777; (2) arbitrary file-read via the `smart_unfold` / `smart_outline` MCP tools; (3) API keys stored plaintext at `~/.supermemory-claude/credentials.json`; (4) a `UserPromptSubmit` hook injecting content into every session (persistent prompt-injection surface); (5) deprecated `glob@11.1.0` transitive dep flagged for ReDoS; (6) PreToolUse:Read hook truncating Read output to line 1 (we had shipped a local patch around this).

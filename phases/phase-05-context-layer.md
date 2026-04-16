@@ -102,25 +102,41 @@ Also create the **session-end-hook.sh** script. This script writes a per-worktre
 # Save to: [VAULT_PATH]/⚙️ Meta/scripts/session-end-hook.sh
 # chmod +x this file after creating it
 #
-# PER-WORKTREE META WRITES:
-# Instead of writing to the shared Last Session.md (which races on
-# concurrent worktrees — last write wins, earlier sessions clobbered),
-# each session gets its own file in ⚙️ Meta/Sessions/ named by timestamp
-# + worktree. After the stub is created, the aggregator script rebuilds
-# Last Session.md from all Sessions/ files. Concurrent writes to
-# Sessions/ cannot collide (unique filenames); concurrent aggregator
-# runs produce deterministic output (same sorted input → same bytes).
-# See: https://github.com/adelaidasofia/ai-brain-starter/issues/5
+# NO STUBS: Claude writes session files directly during session close
+# (see ⚙️ Meta/rules/session-end-cascade.md Phase 2). This hook only:
+#   1. Appends a timestamp to Session Log
+#   2. Cleans up: deletes stubs >7d old, archives substantive files >7d old
+#   3. Runs the aggregator to refresh Last Session.md
+#   4. Emits the session-close prompt for Claude
+#
+# PER-WORKTREE META WRITES: each session gets its own file in
+# ⚙️ Meta/Sessions/ named by timestamp + worktree. The aggregator
+# rebuilds Last Session.md deterministically — concurrent runs are safe
+# (same sorted input → same bytes). See issue #5.
+#
+# Prior versions wrote a "stub" file every hook invocation, expecting
+# Claude to fill it in. In practice most sessions end without running
+# the full protocol, and stubs piled up (one user had 966 of 1,046
+# files as empty stubs). This version trusts Claude to write the real
+# file during session close and never creates stubs.
 
 VAULT="[VAULT_PATH]"
 META_DIR="$VAULT/⚙️ Meta"
 SESSIONS_DIR="$META_DIR/Sessions"
+ARCHIVE_DIR="$SESSIONS_DIR/Archive"
 SESSION_LOG="$META_DIR/Session Log.md"
 ERROR_LOG="$META_DIR/hook-errors.log"
 AGGREGATE_SESSIONS="$META_DIR/scripts/aggregate-sessions.py"
 DATE=$(date +%Y-%m-%d)
 TIME=$(date +%H:%M)
 TIMESTAMP_FILE=$(date +%Y-%m-%dT%H-%M)
+
+# Cutoff for retention (7 days back). BSD date (macOS) uses -v, GNU uses -d.
+if date -v-7d +%Y-%m-%d >/dev/null 2>&1; then
+  CUTOFF=$(date -v-7d +%Y-%m-%d)
+else
+  CUTOFF=$(date -d '7 days ago' +%Y-%m-%d)
+fi
 
 # GUARD: fail loudly, never silently. If the Meta dir doesn't exist, bubble an error
 # into the Claude hook context so the user sees it. This honors the NEVER fail silently rule.
@@ -135,7 +151,7 @@ fi
 #   1. pwd matches .../.claude/worktrees/{name}/... → use {name}
 #   2. Read the .git file if we're inside a git worktree
 #   3. Fall back to "main-$$" (PID) so two concurrent fallback sessions
-#      never collide on the same stub filename
+#      never collide on the same filename
 WORKTREE_NAME=""
 PWD_PATH="$(pwd)"
 case "$PWD_PATH" in
@@ -153,8 +169,8 @@ fi
 
 SESSION_FILE="$SESSIONS_DIR/${TIMESTAMP_FILE}-${WORKTREE_NAME}.md"
 
-# Ensure the Sessions folder exists
 mkdir -p "$SESSIONS_DIR" 2>>"$ERROR_LOG"
+mkdir -p "$ARCHIVE_DIR" 2>>"$ERROR_LOG"
 
 # Step 1: Always write a timestamp entry to Session Log (guaranteed, no Claude involvement).
 # Append-only, small writes are atomic on local filesystems so this is safe under concurrency.
@@ -163,33 +179,30 @@ if ! echo "- $DATE $TIME — session ended ($WORKTREE_NAME)" >> "$SESSION_LOG" 2
   exit 0
 fi
 
-# Step 2: Write a stub session file if one doesn't already exist for this session.
-# Unique filename per (minute × worktree) → no collision between concurrent worktrees.
-# If the file already exists (Claude filled it in mid-session), don't clobber it.
-if [ ! -f "$SESSION_FILE" ]; then
-  cat > "$SESSION_FILE" <<STUBEOF 2>>"$ERROR_LOG"
----
-creationDate: ${DATE}T${TIME}
-type: session
-worktree: ${WORKTREE_NAME}
-session_date: ${DATE}
-session_label: "update pending"
-aliases: [Session ${DATE} ${WORKTREE_NAME}]
----
-
-# Session — update pending (${DATE} ${TIME}, \`${WORKTREE_NAME}\` worktree)
-
-**Date:** ${DATE} ${TIME}
-**Session:** *stub written by session-end-hook.sh — Claude to fill in*
-
-## Status
-
-This file is a placeholder. Claude should replace the body with a full
-session summary: what was worked on, what shipped, what's pending, any
-open threads. Keep the frontmatter fields valid — \`creationDate\`,
-\`type: session\`, \`worktree\`, \`session_date\`.
-STUBEOF
-fi
+# Step 2: Retention cleanup — delete stubs >7d old, archive substantive >7d old.
+# Runs every hook invocation but only touches files past the cutoff (fast + idempotent).
+# Keeps the Sessions folder from growing unbounded while preserving the last week
+# of context for /weekly reviews and the aggregator's Last Session.md rebuild.
+for f in "$SESSIONS_DIR"/*.md; do
+  [ -f "$f" ] || continue
+  fname=$(basename "$f")
+  fdate="${fname:0:10}"
+  # Skip files that don't start with a date pattern
+  [[ "$fdate" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || \
+  [[ "$fdate" =~ ^[0-9]{8} ]] || continue
+  # Normalize YYYYMMDD to YYYY-MM-DD for comparison
+  if [[ "$fdate" =~ ^[0-9]{8}$ ]]; then
+    fdate="${fdate:0:4}-${fdate:4:2}-${fdate:6:2}"
+  fi
+  # Skip if within retention window
+  [[ "$fdate" > "$CUTOFF" || "$fdate" == "$CUTOFF" ]] && continue
+  # Old file: delete if legacy stub, archive if substantive
+  if grep -q 'session_label: "update pending"' "$f" 2>/dev/null; then
+    rm "$f"
+  else
+    mv "$f" "$ARCHIVE_DIR/"
+  fi
+done
 
 # Step 3: Run the aggregator to refresh Last Session.md from Sessions/.
 # Deterministic output → safe even if another worktree's hook is running
@@ -198,9 +211,9 @@ if [ -f "$AGGREGATE_SESSIONS" ]; then
   VAULT_ROOT="$VAULT" python3 "$AGGREGATE_SESSIONS" >/dev/null 2>>"$ERROR_LOG" || true
 fi
 
-# Step 4: Ask Claude to fill in the stub and log any decisions.
+# Step 4: Ask Claude to run session close protocol and log any decisions.
 cat <<EOF
-{"continue":true,"stopReason":"session-end-cascade","systemMessage":"SESSION ENDING (${DATE} ${TIME}, worktree: ${WORKTREE_NAME}): A per-worktree session stub was created at '${SESSION_FILE}'. REPLACE the stub body with a full session summary — keep the frontmatter fields (creationDate, type: session, worktree, session_date) valid and update the session_label and the '# Session — ...' heading to match the real work. WRITE ONLY TO '${SESSION_FILE}' — do NOT write to Last Session.md directly (it is auto-generated from Sessions/ by aggregate-sessions.py). VERBATIM RULE: for any commitments made during this session, capture the EXACT words used (e.g. 'I will send this today' not 'committed to sending'). Same for key decisions — preserve the reasoning in original phrasing. For any decisions made, ALSO create a per-decision file at '${META_DIR}/Decisions/${TIMESTAMP_FILE}-{slug}.md' with the decision template (What/Why/Floor/Stakes/Speed/Outcome/Pattern) and frontmatter (type: decision, worktree, decision_date). Do NOT write to Decision Log.md directly — it is auto-generated by aggregate-decisions.py. After writing the session and decision files, run: VAULT_ROOT='${VAULT}' python3 '${META_DIR}/scripts/aggregate-sessions.py' && VAULT_ROOT='${VAULT}' python3 '${META_DIR}/scripts/aggregate-decisions.py'. Also save any non-obvious technical discoveries as memory files (type: discovery)."}
+{"continue":true,"stopReason":"session-end-cascade","systemMessage":"SESSION ENDING (${DATE} ${TIME}, worktree: ${WORKTREE_NAME}): Run session close protocol (⚙️ Meta/rules/session-end-cascade.md). Write session file to '${SESSION_FILE}' — do NOT write to Last Session.md directly (auto-generated by aggregate-sessions.py). VERBATIM RULE: for commitments made during this session, capture the EXACT words used. For any decisions, create per-decision files at '${META_DIR}/Decisions/${TIMESTAMP_FILE}-{slug}.md' with frontmatter (type: decision, worktree, decision_date). After writing, run: VAULT_ROOT='${VAULT}' python3 '${AGGREGATE_SESSIONS}' && VAULT_ROOT='${VAULT}' python3 '${META_DIR}/scripts/aggregate-decisions.py'. Also save any non-obvious technical discoveries as memory files (type: discovery)."}
 EOF
 ```
 
