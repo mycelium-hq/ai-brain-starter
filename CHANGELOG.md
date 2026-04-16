@@ -9,6 +9,22 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-16 -- Plugin hook fix + graphify encoding hardening (Lessons #95-99)
+
+**scripts/fix-plugin-hooks.sh** (new):
+- Claude Code does not reliably expand `${CLAUDE_PLUGIN_ROOT}` in plugin hooks.json. When the variable is unset, hook commands resolve to a nonexistent path, error, and Claude Code defaults to BLOCK for PreToolUse -- silently denying all Write/Edit operations. Run this script after any plugin install to replace all `${CLAUDE_PLUGIN_ROOT}` references with absolute paths. Safe to re-run.
+
+**graphify_stage_finish.py** -- encoding hardening (Lesson #98):
+- All `write_text()` calls now use `encoding="utf-8"`. Without it, emoji characters in node labels (e.g. folder names like `📋 Strategy`) can be silently mangled on some systems. Affected calls: raw JSON, canon JSON, graph.json (already had `ensure_ascii=False`, now also has explicit encoding), GRAPH_REPORT.md, and extraction_manifest.json.
+
+**graphify_stage_select.py** -- SKIP_PARTS expanded (Lesson #89):
+- Added `⚙️ Meta` and `🗄 Archive` to the skip set. Without these, vault meta folders (templates, GRAPH_REPORT.md, runbook files) would appear as eligible extraction candidates, inflating file counts and wasting LLM tokens.
+
+**What NOT to do (Lesson #99)**:
+- Never write `graph.json` directly from a NetworkX object (`nx.node_link_data()`). The `hyperedges` key lives outside the NetworkX model and is silently dropped. Always use `graphify_stage_finish.py --num-chunks 0` for recluster/report-only runs -- it reads `merged_graph` as a dict and preserves hyperedges through the full pipeline.
+
+---
+
 ## 2026-04-16 -- Graphify pipeline hardening: layout auto-detect, mtime manifest, dual-SHA, cache pruner
 
 Four improvements to the graphify staged-rollout scripts, plus a new utility:

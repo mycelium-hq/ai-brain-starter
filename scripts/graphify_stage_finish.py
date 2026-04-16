@@ -209,7 +209,7 @@ def main():
 
     raw_extraction = {"nodes": combined_nodes, "edges": combined_edges, "hyperedges": combined_hyper}
     raw_path = Path(f"{base}/.{args.stage_name.replace(' ', '_')}_raw.json")
-    raw_path.write_text(json.dumps(raw_extraction, indent=2))
+    raw_path.write_text(json.dumps(raw_extraction, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"  wrote {raw_path}")
 
     # === Step 2: canonicalize ===
@@ -225,7 +225,7 @@ def main():
           f"({100*(1-len(canon['edges'])/max(1,len(combined_edges))):.0f}% reduction)")
 
     canon_path = Path(f"{base}/.{args.stage_name.replace(' ', '_')}_canon.json")
-    canon_path.write_text(json.dumps(canon, indent=2))
+    canon_path.write_text(json.dumps(canon, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"  wrote {canon_path}")
 
     # === Step 3: backup + union merge ===
@@ -444,7 +444,7 @@ def main():
         lines.append("")
 
     Path(args.report_path).parent.mkdir(parents=True, exist_ok=True)
-    Path(args.report_path).write_text("\n".join(lines))
+    Path(args.report_path).write_text("\n".join(lines), encoding="utf-8")
     print(f"  wrote {args.report_path}")
 
     # === Step 5: cache save ===
@@ -527,7 +527,7 @@ def main():
                 "stage": args.stage_name,
             }
 
-        manifest_path.write_text(json.dumps(manifest, indent=2))
+        manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
         print(f"  manifest updated: {len(files_in_stage)} files recorded in {manifest_path}")
     except Exception as e:
         print(f"  WARN: manifest update failed: {e}")
