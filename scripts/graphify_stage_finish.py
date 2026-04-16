@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-graphify_stage_finish.py — End-to-end finish for a graphify stage.
+graphify_stage_finish.py -- End-to-end finish for a graphify stage.
 
 Combines the per-chunk result JSON files, runs canonicalize, union-merges with
 the existing graph.json, reclusters, regenerates a simplified GRAPH_REPORT.md,
@@ -13,7 +13,7 @@ report by hand, with community labels derived from the highest-degree node
 in each community.
 
 Usage:
-    python3 ⚙️\\ Meta/scripts/graphify_stage_finish.py \\
+    python3 graphify_stage_finish.py \\
         --num-chunks 20 \\
         --stage-name "stage 2" \\
         --token-cost-k 1377 \\
@@ -23,6 +23,7 @@ If graphify is installed via pipx, use the pipx python interpreter.
 For multi-vault setups, pass --vault-root to target a specific vault.
 """
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -32,9 +33,9 @@ from pathlib import Path
 from collections import Counter
 from datetime import date
 
-# Auto-detect vault root from script location: scripts/ sits under ⚙️ Meta/
+# Auto-detect vault root from script location: scripts/ sits under a parent folder
 _SCRIPT_DIR = Path(__file__).resolve().parent
-DEFAULT_VAULT = _SCRIPT_DIR.parent.parent  # ⚙️ Meta/scripts/ -> ⚙️ Meta/ -> vault root
+DEFAULT_VAULT = _SCRIPT_DIR.parent.parent  # scripts/ -> parent folder -> vault root
 # VAULT is set in main() from --vault-root arg; default here for import-time safety
 VAULT = DEFAULT_VAULT
 sys.path.insert(0, str(_SCRIPT_DIR))
@@ -56,7 +57,6 @@ def clean_slash_label(label: str) -> str:
         return label
     if SLASH_LABEL_RE.match(label):
         return label  # path-form, let canonicalize strip it
-    # In-parenthesis case: `Nelly (friend/potential teammate)` → `Nelly (friend, potential teammate)`
     return label.replace("/", ", ")
 
 
@@ -66,15 +66,18 @@ def main():
     ap.add_argument("--stage-name", default="stage")
     ap.add_argument("--token-cost-k", type=int, default=0,
                     help="Reported total LLM token cost for this stage, in thousands")
-    ap.add_argument("--chunk-prefix", default="graphify-out/.chunk_")
-    ap.add_argument("--graph-path", default="graphify-out/graph.json")
+    ap.add_argument("--chunk-prefix", default=None)
+    ap.add_argument("--graph-path", default=None)
     ap.add_argument("--vault-root", default=None,
-                    help="Root directory of the vault. Defaults to personal vault. "
-                         "For multi-vault setups: pass the target vault root path.")
+                    help="Root directory of the vault. Defaults to auto-detected from script location.")
+    ap.add_argument("--corpus-folder", default=None,
+                    help="Content folder inside vault (for multi-vault layout). Auto-detected if omitted.")
     ap.add_argument("--report-title", default=None,
                     help="Title prefix for the GRAPH_REPORT.md. Defaults to stage name.")
-    ap.add_argument("--report-path", default="graphify-out/GRAPH_REPORT.md",
-                    help="Where to write the report. For multi-vault: pass the target report path.")
+    ap.add_argument("--report-path", default=None,
+                    help="Where to write the report. Auto-detected per layout if omitted.")
+    ap.add_argument("--cache-dir", default=None,
+                    help="Override cache dir. Auto-detected per layout if omitted.")
     args = ap.parse_args()
 
     # Lesson #64: resolve vault root from arg, not hardcoded constant
@@ -85,8 +88,66 @@ def main():
         VAULT = DEFAULT_VAULT
     os.chdir(VAULT)
 
+    # Lesson #87/#90: auto-detect vault layout. Personal puts cache+chunks+graph
+    # under graphify-out/. Multi-vault splits them: cache at <vault>/graphify-out/cache/
+    # (sibling of content folder), chunks+graph inside <vault>/<corpus>/graphify-out/.
+    team_cache = VAULT / "graphify-out" / "cache"
+    if team_cache.exists():
+        # Need a corpus folder to know where chunks/graph live
+        corpus = args.corpus_folder
+        if not corpus:
+            # Auto-detect: find child directories that have graphify-out nested
+            candidates = [c for c in VAULT.iterdir()
+                          if c.is_dir() and c.name != "graphify-out"]
+            found = []
+            for c in candidates:
+                for sub in [c, *[s for s in c.iterdir() if s.is_dir()]]:
+                    if (sub / "graphify-out").exists() and sub != VAULT:
+                        found.append(c.name)
+                        break
+            if len(found) == 1:
+                corpus = found[0]
+            elif len(found) > 1:
+                print(f"ERROR: multi-vault layout detected but can't auto-detect corpus folder. "
+                      f"Candidates: {found}. Pass --corpus-folder.",
+                      file=sys.stderr)
+                sys.exit(1)
+            else:
+                corpus = None
+        if corpus:
+            base = f"{corpus}/graphify-out"
+            # Check if there's a nested subfolder with graphify-out
+            nested = VAULT / corpus
+            for sub in nested.iterdir() if nested.is_dir() else []:
+                if sub.is_dir() and (sub / "graphify-out").exists():
+                    base = f"{corpus}/{sub.name}/graphify-out"
+                    break
+            layout = f"team-vault (corpus: {corpus})"
+            default_cache_dir = str(team_cache)
+        else:
+            base = "graphify-out"
+            layout = "personal"
+            default_cache_dir = str(VAULT / "graphify-out" / "cache")
+    else:
+        base = "graphify-out"
+        layout = "personal"
+        default_cache_dir = str(VAULT / "graphify-out" / "cache")
+
+    if args.chunk_prefix is None:
+        args.chunk_prefix = str(VAULT / base / ".chunk_")
+    if args.graph_path is None:
+        args.graph_path = str(VAULT / base / "graph.json")
+    if args.report_path is None:
+        args.report_path = str(VAULT / base / "GRAPH_REPORT.md")
+    if args.cache_dir is None:
+        args.cache_dir = default_cache_dir
+
+    print(f"Layout: {layout}")
+    print(f"  base: {base}")
+    print(f"  cache_dir: {args.cache_dir}")
+
     print("=" * 60)
-    print(f"GRAPHIFY STAGE FINISH — {args.stage_name}")
+    print(f"GRAPHIFY STAGE FINISH -- {args.stage_name}")
     print(f"  vault: {VAULT}")
     print("=" * 60)
     print()
@@ -100,7 +161,7 @@ def main():
     for i in range(1, args.num_chunks + 1):
         p = Path(f"{args.chunk_prefix}{i:02d}_result.json")
         if not p.exists():
-            print(f"  MISSING chunk {i:02d} — aborting")
+            print(f"  MISSING chunk {i:02d}, aborting")
             sys.exit(1)
         data = json.loads(p.read_text())
         for n in data.get("nodes", []):
@@ -147,7 +208,7 @@ def main():
         print(f"  WARNING: dropped {bad_nodes} non-dict nodes, {bad_edges} non-dict edges, {bad_hyper} non-dict hyperedges (Lesson #81)")
 
     raw_extraction = {"nodes": combined_nodes, "edges": combined_edges, "hyperedges": combined_hyper}
-    raw_path = Path(f"graphify-out/.{args.stage_name.replace(' ', '_')}_raw.json")
+    raw_path = Path(f"{base}/.{args.stage_name.replace(' ', '_')}_raw.json")
     raw_path.write_text(json.dumps(raw_extraction, indent=2))
     print(f"  wrote {raw_path}")
 
@@ -163,7 +224,7 @@ def main():
           f"{len(canon['edges'])} edges "
           f"({100*(1-len(canon['edges'])/max(1,len(combined_edges))):.0f}% reduction)")
 
-    canon_path = Path(f"graphify-out/.{args.stage_name.replace(' ', '_')}_canon.json")
+    canon_path = Path(f"{base}/.{args.stage_name.replace(' ', '_')}_canon.json")
     canon_path.write_text(json.dumps(canon, indent=2))
     print(f"  wrote {canon_path}")
 
@@ -171,11 +232,15 @@ def main():
     print()
     print("Step 3: union-merging with existing graph.json...")
     ts = time.strftime("%Y%m%d_%H%M")
-    backup = Path(args.graph_path + f".backup_{ts}_pre_{args.stage_name.replace(' ', '_')}_finish")
-    backup.write_bytes(Path(args.graph_path).read_bytes())
-    print(f"  backed up: {backup}")
-
-    existing = json.loads(open(args.graph_path).read())
+    graph_path = Path(args.graph_path)
+    if graph_path.exists():
+        backup = Path(args.graph_path + f".backup_{ts}_pre_{args.stage_name.replace(' ', '_')}_finish")
+        backup.write_bytes(graph_path.read_bytes())
+        print(f"  backed up: {backup}")
+        existing = json.loads(graph_path.read_text(encoding="utf-8"))
+    else:
+        print(f"  no existing graph.json found, starting fresh")
+        existing = {"nodes": [], "links": [], "hyperedges": []}
     existing_nodes = existing["nodes"]
     existing_edges = existing.get("links", [])
     print(f"  existing: {len(existing_nodes)} nodes, {len(existing_edges)} edges")
@@ -241,17 +306,10 @@ def main():
     print(f"  growth: nodes +{added_nodes} ({100*added_nodes/max(1,len(existing_nodes)):.1f}%), "
           f"edges +{added_edges} ({100*added_edges/max(1,len(existing_edges)):.1f}%)")
 
-    Path(args.graph_path).write_text(json.dumps(merged_graph))
+    Path(args.graph_path).write_text(json.dumps(merged_graph, ensure_ascii=False), encoding="utf-8")
     print(f"  wrote {args.graph_path}")
 
     # === Step 3.5: adjacency-based dedupe (catches what canonicalize misses) ===
-    # Lesson #54 (2026-04-11): graphify_canonicalize.py merges by normalized
-    # label only. It cannot catch the case where a brain-dump file with a
-    # sentence-as-title coexists with a properly-named canonical doc that
-    # summarizes it — different labels, different source files, but identical
-    # adjacency. graphify_dedupe_by_adjacency.py runs a second pass that uses
-    # adjacency Jaccard + label word overlap as the merge signal. Catches the
-    # Catches c_*/file_* dupes from sentence-titled files vs canonical docs.
     print()
     print("Step 3.5: adjacency-based dedupe (post-canonicalize quality pass)...")
     try:
@@ -276,31 +334,35 @@ def main():
                 print(f"    {p['canonical_label']!r} <- {p['duplicate_label']!r}  jacc={p['jaccard']}")
             nodes_removed, edges_removed, self_loops, deduped = apply_merges(merged_graph, pairs)
             print(f"  removed {nodes_removed} duplicate nodes, {self_loops} self-loops, deduped {deduped} edges")
-            Path(args.graph_path).write_text(json.dumps(merged_graph))
+            Path(args.graph_path).write_text(json.dumps(merged_graph, ensure_ascii=False), encoding="utf-8")
             print(f"  re-wrote {args.graph_path}")
         else:
-            print("  no duplicates found — graph is clean")
+            print("  no duplicates found, graph is clean")
     except Exception as e:
-        print(f"  WARNING: dedupe pass failed ({e}) — continuing without it")
+        print(f"  WARNING: dedupe pass failed ({e}), continuing without it")
         import traceback; traceback.print_exc()
 
     # === Step 3.7: prune dangling edges (Lesson #70) ===
     print()
     print("Step 3.7: pruning dangling edges...")
-    edge_field = "links" if "links" in merged_graph else "edges"
-    node_ids_set = {n["id"] for n in merged_graph["nodes"]}
-    before_edges = len(merged_graph[edge_field])
-    merged_graph[edge_field] = [
-        e for e in merged_graph[edge_field]
-        if e.get("source", "") in node_ids_set and e.get("target", "") in node_ids_set
-    ]
-    pruned = before_edges - len(merged_graph[edge_field])
+    try:
+        from graphify.export import prune_dangling_edges
+        merged_graph, pruned = prune_dangling_edges(merged_graph)
+    except ImportError:
+        edge_field = "links" if "links" in merged_graph else "edges"
+        node_ids_set = {n["id"] for n in merged_graph["nodes"]}
+        before_edges = len(merged_graph[edge_field])
+        merged_graph[edge_field] = [
+            e for e in merged_graph[edge_field]
+            if e.get("source", "") in node_ids_set and e.get("target", "") in node_ids_set
+        ]
+        pruned = before_edges - len(merged_graph[edge_field])
     if pruned:
         print(f"  pruned {pruned} dangling edges (endpoints referenced non-existent nodes)")
-        Path(args.graph_path).write_text(json.dumps(merged_graph))
+        Path(args.graph_path).write_text(json.dumps(merged_graph, ensure_ascii=False), encoding="utf-8")
         print(f"  re-wrote {args.graph_path}")
     else:
-        print("  no dangling edges — graph is clean")
+        print("  no dangling edges, graph is clean")
 
     # === Step 3.8: clean stale _src/_tgt edge metadata (Lesson #56 root cause fix) ===
     edge_field_38 = "links" if "links" in merged_graph else "edges"
@@ -313,7 +375,7 @@ def main():
                 stale_meta += 1
     if stale_meta:
         print(f"\nStep 3.8: removed {stale_meta} stale _src/_tgt edge metadata refs")
-        Path(args.graph_path).write_text(json.dumps(merged_graph))
+        Path(args.graph_path).write_text(json.dumps(merged_graph, ensure_ascii=False), encoding="utf-8")
 
     # === Step 4: recluster + regenerate report ===
     print()
@@ -328,7 +390,7 @@ def main():
     print(f"  {len(communities)} communities")
     scores = score_all(G, communities)
 
-    # Lesson #43 — build community_labels from highest-degree node per community
+    # Lesson #43: build community_labels from highest-degree node per community
     community_labels = {}
     for cid, nids in communities.items():
         best = max(nids, key=lambda n: G.degree(n))
@@ -338,7 +400,7 @@ def main():
     try:
         sc = surprising_connections(G, communities, top_n=10)
     except (KeyError, Exception) as e:
-        print(f"  surprising_connections failed ({e}) — skipping (Lesson #56)")
+        print(f"  surprising_connections failed ({e}), skipping (Lesson #56)")
         sc = []
 
     confs = Counter(d.get("confidence", "EXTRACTED") for _, _, d in G.edges(data=True))
@@ -350,17 +412,17 @@ def main():
     lines.append(f"# Graph Report - {report_title}  ({today})")
     lines.append("")
     lines.append("## Summary")
-    lines.append(f"- {G.number_of_nodes()} nodes · {G.number_of_edges()} edges · {len(communities)} communities")
+    lines.append(f"- {G.number_of_nodes()} nodes, {G.number_of_edges()} edges, {len(communities)} communities")
     ext = round(100 * confs.get("EXTRACTED", 0) / max(1, total_e))
     inf = round(100 * confs.get("INFERRED", 0) / max(1, total_e))
     amb = round(100 * confs.get("AMBIGUOUS", 0) / max(1, total_e))
-    lines.append(f"- Extraction: {ext}% EXTRACTED · {inf}% INFERRED · {amb}% AMBIGUOUS")
+    lines.append(f"- Extraction: {ext}% EXTRACTED, {inf}% INFERRED, {amb}% AMBIGUOUS")
     if args.token_cost_k:
         lines.append(f"- {args.stage_name} token cost: ~{args.token_cost_k}K LLM tokens")
     lines.append("")
     lines.append("## Top God Nodes")
     for i, n in enumerate(gn, 1):
-        lines.append(f"{i}. `{n['label']}` — {n['edges']} edges")
+        lines.append(f"{i}. `{n['label']}` ({n['edges']} edges)")
     lines.append("")
     lines.append("## Surprising Connections")
     for s in sc[:10]:
@@ -390,24 +452,92 @@ def main():
     print("Step 5: saving semantic cache...")
     try:
         from graphify.cache import save_semantic_cache
-        saved = save_semantic_cache(
-            canon["nodes"], canon["edges"], canon.get("hyperedges"), root=Path.cwd()
-        )
-        print(f"  cached {saved} per-file entries")
+        # graphify.cache writes to <root>/graphify-out/cache/, so pass the grandparent
+        # of the target cache dir so the lib lands exactly where we expect.
+        cache_root = Path(args.cache_dir).parent.parent
+
+        # Fix: save_semantic_cache does `root / source_file` for non-absolute paths.
+        # For personal vault, root might not be the vault root but source_files are
+        # relative to VAULT, so root/source_file doesn't exist. Normalize source_files
+        # to absolute VAULT paths before passing in. Absolute paths bypass the
+        # root-concatenation in save_semantic_cache so cache_root is only used for
+        # the output directory, not file resolution.
+        def _abs_canon(items):
+            result = []
+            for item in (items or []):
+                sf = item.get("source_file", "")
+                if sf and not Path(sf).is_absolute():
+                    abs_sf = VAULT / sf
+                    if abs_sf.exists():
+                        item = dict(item)
+                        item["source_file"] = str(abs_sf)
+                result.append(item)
+            return result
+
+        abs_nodes = _abs_canon(canon["nodes"])
+        abs_edges = _abs_canon(canon["edges"])
+        abs_hyper = _abs_canon(canon.get("hyperedges") or [])
+
+        saved = save_semantic_cache(abs_nodes, abs_edges, abs_hyper, root=cache_root)
+        print(f"  cached {saved} per-file entries at {cache_root}/graphify-out/cache/")
     except Exception as e:
         print(f"  WARN: cache save failed: {e}")
 
-    # === Step 5b: verify upgrade (Lesson #46 — directory count is misleading) ===
-    # The cache is keyed by SHA256(content + null + path) so LLM extractions
-    # OVERWRITE preflight stubs at the same hash. ls | wc -l stays flat. To
-    # tell whether work actually landed, count entries that were touched in
-    # this run AND have an LLM signature.
+    # Lesson #93: update the extraction manifest so future select runs can
+    # short-circuit on file mtime instead of SHA. One entry per source_file
+    # that appears in this stage's canonical nodes/edges/hyperedges.
+    try:
+        manifest_path = (VAULT / base / "extraction_manifest.json").resolve()
+        manifest = {"version": 1, "entries": {}}
+        if manifest_path.exists():
+            try:
+                manifest = json.loads(manifest_path.read_text())
+            except Exception:
+                manifest = {"version": 1, "entries": {}}
+
+        now = time.time()
+        files_in_stage = set()
+        for item_list in [canon["nodes"], canon["edges"], canon.get("hyperedges") or []]:
+            for item in item_list:
+                sf = item.get("source_file")
+                if not sf or not isinstance(sf, str):
+                    continue
+                # Resolve to absolute path. source_file is relative to VAULT.
+                p = (VAULT / sf).resolve() if not Path(sf).is_absolute() else Path(sf).resolve()
+                if p.is_file():
+                    files_in_stage.add(str(p))
+
+        node_counts = Counter(
+            str((VAULT / n["source_file"]).resolve()) if n.get("source_file") and not Path(n["source_file"]).is_absolute()
+            else str(Path(n.get("source_file", "")).resolve()) if n.get("source_file")
+            else ""
+            for n in canon["nodes"]
+        )
+
+        for abs_path in files_in_stage:
+            try:
+                content = Path(abs_path).read_bytes()
+                sha = hashlib.sha256(content + b"\x00" + abs_path.encode()).hexdigest()
+            except Exception:
+                sha = None
+            manifest["entries"][abs_path] = {
+                "llm_time": now,
+                "sha": sha,
+                "node_count": node_counts.get(abs_path, 0),
+                "stage": args.stage_name,
+            }
+
+        manifest_path.write_text(json.dumps(manifest, indent=2))
+        print(f"  manifest updated: {len(files_in_stage)} files recorded in {manifest_path}")
+    except Exception as e:
+        print(f"  WARN: manifest update failed: {e}")
+
+    # === Step 5b: verify upgrade (Lesson #46, directory count is misleading) ===
     print()
     print("Step 5b: verifying upgrade...")
     try:
-        sys.path.insert(0, str(VAULT / "⚙️ Meta" / "scripts"))
         from graphify_stage_select import is_llm_extraction
-        cache_dir = Path("graphify-out/cache")
+        cache_dir = Path(args.cache_dir)
         cutoff = time.time() - 3600  # last hour
         upgraded = 0
         recent = 0

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-graphify_stage_select.py — Stage selection for the graphify staged rollout.
+graphify_stage_select.py -- Stage selection for the graphify staged rollout.
 
-Walks a corpus folder, applies the standard filters (≥500 words, no [AI Extract]),
-checks the cache for REAL LLM extractions (not preflight stubs — see Lesson #39),
+Walks a corpus folder, applies the standard filters (>=500 words, no [AI Extract]),
+checks the cache for REAL LLM extractions (not preflight stubs, see Lesson #39),
 and bin-packs the misses into ~50K-word chunks ready for parallel dispatch.
 
 LESSON #39 (2026-04-11):
@@ -18,20 +18,20 @@ LLM cache entry signature (any ONE is sufficient):
   - any edge has confidence_score != 1.0
 
 Preflight-only signature: structural relations ("references", "expresses_floor")
-with confidence="EXTRACTED" and score=1.0. These are NOT real hits — re-extract.
+with confidence="EXTRACTED" and score=1.0. These are NOT real hits, re-extract.
 
 Usage:
     python3 graphify_stage_select.py <corpus_folder> [--target-words 50000] [--stage-pct 1.0] [--stage-skip-pct 0.30]
 
 Examples:
     # Stage 3: full Daily Logs
-    python3 graphify_stage_select.py "📅 Daily Logs"
+    python3 graphify_stage_select.py "Daily Logs"
 
     # Stage 2: skip the recent 30% (already done in Stage 1), take the rest
-    python3 graphify_stage_select.py "📓 Journals" --stage-skip-pct 0.30
+    python3 graphify_stage_select.py "Journals" --stage-skip-pct 0.30
 
     # Stage 5 sub-stage: full Writing folder
-    python3 graphify_stage_select.py "✍️ Writing"
+    python3 graphify_stage_select.py "Writing"
 """
 import argparse
 import json
@@ -43,8 +43,7 @@ from datetime import datetime
 
 # Auto-detect vault root from script location
 _SCRIPT_DIR = Path(__file__).resolve().parent
-VAULT = _SCRIPT_DIR.parent.parent  # ⚙️ Meta/scripts/ -> ⚙️ Meta/ -> vault root
-CACHE_DIR = VAULT / "graphify-out" / "cache"
+VAULT = _SCRIPT_DIR.parent.parent  # scripts/ -> parent folder -> vault root
 
 
 def is_llm_extraction(cache_data: dict) -> bool:
@@ -67,23 +66,92 @@ def is_llm_extraction(cache_data: dict) -> bool:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("corpus_folder", help="Folder relative to vault root, e.g. '📅 Daily Logs'")
+    ap.add_argument("corpus_folder", nargs="+",
+                    help="One or more folders relative to vault root, e.g. 'Notes' 'Writing'")
     ap.add_argument("--target-words", type=int, default=50000)
+    ap.add_argument("--max-files-per-chunk", type=int, default=45,
+                    help="Max files per chunk (Lesson #81: 60+ causes schema collapse, default 45)")
     ap.add_argument("--stage-skip-pct", type=float, default=0.0,
-                    help="Skip the most-recent N%% of files (e.g. 0.30 for 30%%, used by Stage 2 to skip Stage 1's slice)")
+                    help="Skip the most-recent N%%%% of files (e.g. 0.30 for 30%%%%, used by Stage 2 to skip Stage 1's slice)")
     ap.add_argument("--min-words", type=int, default=500)
     ap.add_argument("--skip-ai-extract", action="store_true", default=True)
-    ap.add_argument("--out-prefix", default="graphify-out/.chunk_")
+    ap.add_argument("--out-prefix", default=None,
+                    help="Name prefix for chunk files (written inside out_dir, e.g. 'notes' -> .notes_chunk_01)")
+    ap.add_argument("--vault-root", default=None,
+                    help="Root directory of the vault. Defaults to auto-detected from script location.")
     args = ap.parse_args()
 
-    os.chdir(VAULT)
-    folder = Path(args.corpus_folder)
-    if not folder.exists():
-        print(f"folder not found: {folder}", file=sys.stderr)
+    vault = Path(args.vault_root) if args.vault_root else VAULT
+    if not vault.exists():
+        print(f"vault not found: {vault}", file=sys.stderr)
         sys.exit(1)
 
-    all_files = [f for f in folder.rglob("*.md") if "_review_alternate_drafts" not in f.parts]
-    print(f"Total files in {folder}: {len(all_files)}")
+    folders = []
+    for cf in args.corpus_folder:
+        f = vault / cf
+        if not f.exists():
+            print(f"folder not found: {f}", file=sys.stderr)
+            sys.exit(1)
+        folders.append(f)
+
+    # Auto-detect graphify-out layout (Lesson #87):
+    # - Personal vault: <vault>/graphify-out/ for cache + chunks + graph
+    # - Multi-vault (team style): <vault>/graphify-out/cache/ at vault root,
+    #   chunks + graph inside a subfolder of <vault>/<corpus>/
+    team_cache = vault / "graphify-out" / "cache"
+    team_out = None
+    # Check if any corpus folder has a graphify-out nested inside it
+    for folder in folders:
+        if folder.is_dir():
+            for sub in folder.iterdir():
+                if sub.is_dir() and (sub / "graphify-out").exists():
+                    team_out = sub / "graphify-out"
+                    break
+            if team_out:
+                break
+            # Also check direct graphify-out under folder
+            if (folder / "graphify-out").exists():
+                team_out = folder / "graphify-out"
+                break
+    personal_out = vault / "graphify-out"
+    if team_cache.exists() and team_out is not None and team_out != personal_out:
+        cache_dir = team_cache
+        out_dir = team_out
+        layout = "team-vault"
+    else:
+        cache_dir = personal_out / "cache"
+        out_dir = personal_out
+        layout = "personal"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    # --out-prefix is a NAME, not a path. Resolve inside out_dir.
+    if args.out_prefix:
+        out_prefix = str(out_dir / f".{args.out_prefix}_chunk_")
+    else:
+        out_prefix = str(out_dir / ".chunk_")
+    print(f"Layout: {layout}")
+    print(f"  cache_dir: {cache_dir}")
+    print(f"  out_dir:   {out_dir}")
+
+    os.chdir(vault)
+
+    # Lesson #89: exclude meta/archive folders from both vaults.
+    # Also skip _review_alternate_drafts/ (quarantine folder) and conflict copies.
+    SKIP_PARTS = {"_review_alternate_drafts", "Archive"}
+    def skip(f):
+        if any(p in SKIP_PARTS for p in f.parts):
+            return True
+        stem = f.stem
+        # iCloud/GDrive conflict copies ("foo 2.md")
+        if stem.endswith(" 2") or stem.endswith(" 3"):
+            return True
+        return False
+
+    all_files = []
+    for folder in folders:
+        folder_files = [f for f in folder.rglob("*.md") if not skip(f)]
+        all_files.extend(folder_files)
+    folder_label = ", ".join(str(f.relative_to(vault)) for f in folders)
+    print(f"Total files in [{folder_label}]: {len(all_files)}")
 
     if args.stage_skip_pct > 0:
         def sort_key(f):
@@ -122,17 +190,56 @@ def main():
     if args.skip_ai_extract:
         print(f"  Skipped [AI Extract]: {skipped_ai}")
 
-    # Cache check (LLM-only, per Lesson #39)
+    # Cache check (LLM-only, per Lesson #39).
+    # Lesson #93: mtime manifest short-circuits SHA-based lookup. If the file
+    # hasn't been modified since its last LLM extraction, skip it regardless of
+    # whether the SHA cache key matches. This prevents cosmetic edits (frontmatter
+    # tweaks, wikilink fixes, whitespace) from triggering full re-extraction.
+    manifest_path = out_dir / "extraction_manifest.json"
+    manifest = {}
+    if manifest_path.exists():
+        try:
+            manifest = json.loads(manifest_path.read_text()).get("entries", {})
+        except Exception:
+            manifest = {}
+
     llm_hits = 0
     preflight_only_hits = 0
+    mtime_hits = 0
     real_misses = []
     for f in eligible:
         try:
+            abs_path = str(f.resolve())
+            file_mtime = f.stat().st_mtime
+            m_entry = manifest.get(abs_path)
+            # Short-circuit on mtime manifest: if the file hasn't changed since
+            # its last LLM extraction, treat as cached. 5-second slack absorbs
+            # filesystem mtime precision variance between Python + the OS.
+            if m_entry and file_mtime <= m_entry.get("llm_time", 0) + 5:
+                mtime_hits += 1
+                llm_hits += 1
+                continue
+            # Fall back to SHA-based cache check (covers moved/renamed files
+            # that somehow preserved mtime, plus the first run after shipping
+            # this fix when the manifest is still empty).
+            # Lesson #94: graphify.cache hashes content + \x00 + relative_to(root).
+            # Try both relative-to-vault and absolute path; the lib falls back
+            # to absolute when relative_to raises ValueError.
             content = f.read_bytes()
-            resolved = str(f.resolve()).encode()
-            h = hashlib.sha256(content + b"\x00" + resolved).hexdigest()
-            cache_file = CACHE_DIR / f"{h}.json"
-            if cache_file.exists():
+            cache_file = None
+            candidate_paths = []
+            try:
+                candidate_paths.append(str(f.resolve().relative_to(vault.resolve())).encode())
+            except ValueError:
+                pass
+            candidate_paths.append(abs_path.encode())
+            for cp in candidate_paths:
+                h = hashlib.sha256(content + b"\x00" + cp).hexdigest()
+                cf = cache_dir / f"{h}.json"
+                if cf.exists():
+                    cache_file = cf
+                    break
+            if cache_file is not None:
                 data = json.loads(cache_file.read_text())
                 if is_llm_extraction(data):
                     llm_hits += 1
@@ -146,7 +253,7 @@ def main():
 
     print()
     print(f"Cache breakdown (preflight-aware):")
-    print(f"  Real LLM hits:          {llm_hits}")
+    print(f"  LLM hits total:         {llm_hits}  (mtime-manifest: {mtime_hits}, SHA: {llm_hits - mtime_hits})")
     print(f"  Preflight-only (redo):  {preflight_only_hits}")
     print(f"  Total needing LLM work: {len(real_misses)}")
 
@@ -157,22 +264,32 @@ def main():
     print(f"Total words needing LLM: {total_words:,}")
     print(f"Target chunks: {target_chunks}")
 
+    max_fpc = args.max_files_per_chunk
     items = sorted([(f, word_counts[str(f)]) for f in real_misses], key=lambda x: -x[1])
     bins = [[] for _ in range(target_chunks)]
     bin_w = [0] * target_chunks
     for f, w in items:
-        idx = bin_w.index(min(bin_w))
+        # Find lightest bin that hasn't hit file-count cap (Lesson #81)
+        bin_candidates = [(bin_w[i], i) for i in range(len(bins)) if len(bins[i]) < max_fpc]
+        if not bin_candidates:
+            # All bins full, create a new one
+            bins.append([])
+            bin_w.append(0)
+            bin_candidates = [(0, len(bins) - 1)]
+        _, idx = min(bin_candidates)
         bins[idx].append(f)
         bin_w[idx] += w
 
-    # Clean old chunk files matching this prefix
-    for old in Path("graphify-out").glob(".chunk_*_files.txt"):
+    # Clean old chunk files matching this prefix pattern
+    prefix_name = Path(out_prefix).name  # e.g. ".chunk_" or ".notes_chunk_"
+    prefix_glob = prefix_name + "*"
+    for old in out_dir.glob(prefix_glob + "_files.txt"):
         old.unlink()
-    for old in Path("graphify-out").glob(".chunk_*_result.json"):
+    for old in out_dir.glob(prefix_glob + "_result.json"):
         old.unlink()
 
     for i, (b, w) in enumerate(zip(bins, bin_w), 1):
-        Path(f"{args.out_prefix}{i:02d}_files.txt").write_text("\n".join(str(f) for f in b))
+        Path(f"{out_prefix}{i:02d}_files.txt").write_text("\n".join(str(f) for f in b))
         print(f"  chunk_{i:02d}: {len(b)} files, {w:,} words")
 
     print()
@@ -180,7 +297,7 @@ def main():
     naive = sum(bin_w) * 2.55 / 1000
     grep_first = sum(bin_w) * 2.55 * 0.54 / 1000  # 46% reduction per Lesson #42
     print(f"Expected cost naive: ~{naive:.0f}K tokens")
-    print(f"With Grep-first (Lesson #42 — 46% reduction): ~{grep_first:.0f}K tokens")
+    print(f"With Grep-first (Lesson #42, 46% reduction): ~{grep_first:.0f}K tokens")
 
 
 if __name__ == "__main__":

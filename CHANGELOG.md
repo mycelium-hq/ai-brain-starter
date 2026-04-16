@@ -9,6 +9,31 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-16 -- Graphify pipeline hardening: layout auto-detect, mtime manifest, dual-SHA, cache pruner
+
+Four improvements to the graphify staged-rollout scripts, plus a new utility:
+
+**graphify_stage_select.py** (rewrite):
+- Layout auto-detect (Lesson #87): detects personal vs. multi-vault (team) layout at startup. Personal vault keeps cache + chunks under graphify-out/. Team layout splits cache at vault root, chunks under corpus subfolder. Prints layout name for clarity.
+- SKIP_PARTS filter (Lesson #89): excludes Archive/, _review_alternate_drafts/, and iCloud/GDrive conflict copies ("foo 2.md") from file listing. Prevents non-content files from entering the extraction pipeline.
+- Mtime-manifest short-circuit (Lesson #93): reads extraction_manifest.json and skips files whose mtime is within 5 seconds of their last LLM extraction. Falls back to SHA check when the manifest doesn't cover a file. Cuts re-run times dramatically on large vaults.
+- Dual-SHA cache lookup (Lesson #94): tries both relative-to-vault and absolute path variants when checking the SHA cache. The graphify library uses relative paths internally, older scripts used absolute. This prevents false cache misses after upgrades.
+- Now accepts multiple corpus folders in a single run and supports --max-files-per-chunk (default 45) to prevent schema collapse on large batches.
+
+**graphify_stage_finish.py** (rewrite):
+- Layout auto-detect with --corpus-folder and --cache-dir args. Auto-detects corpus folder by scanning vault children. Uses detected base path for raw/canon output, graph path, and report path.
+- Manifest writer (Lesson #93): after cache save, writes extraction_manifest.json with per-file entries (llm_time, sha, node_count, stage). This is the write side of the mtime short-circuit that select.py reads.
+- Fixed cache_dir in Step 5b to use args.cache_dir instead of hardcoded path.
+- Added import hashlib (required for manifest SHA computation).
+
+**graphify_prune_stale_cache.py** (new):
+- Deletes cache entries whose SHA256 key no longer matches any current file. Run monthly or after vault restructuring. Honors the same SKIP_PARTS and dual-SHA logic as select.py.
+
+**patch-claude-mem-read-hook.sh** (new):
+- Disables the claude-mem PreToolUse:Read hook that replaces file content with a one-line summary. Idempotent, creates timestamped backup before patching. Run after any claude-mem plugin update.
+
+---
+
 ## 2026-04-16 -- Bug fixes: pip, graph edge key, directed graphs, and skill guardrails
 
 Porting improvements that surfaced from production use:
