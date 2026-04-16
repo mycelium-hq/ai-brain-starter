@@ -82,23 +82,6 @@ You also need a `GEMINI_API_KEY` environment variable from [Google AI Studio](ht
 
 ---
 
-### claude-mem — cross-session persistent memory
-
-**What it does:** Adds persistent memory across Claude Code sessions. Stores observations, decisions, and patterns in a queryable knowledge base so Claude can answer "did we already solve this?" or "how did we approach X last time?"
-
-**Why it matters:** complements [the typed memory system](MEMORY_SYSTEM.md). The memory system is for **deliberate, hand-curated** facts. claude-mem is for **automatic, accumulated** observations across sessions — the things Claude noticed but you didn't think to write down.
-
-**Install:**
-```bash
-npx claude-mem install
-```
-
-`/setup-brain` Phase 0 installs this automatically.
-
-**Source:** [thedotmack/claude-mem](https://github.com/thedotmack/claude-mem).
-
----
-
 ## MCP servers
 
 MCP (Model Context Protocol) servers extend Claude Code with structured tool access to external systems. Configured in `~/.claude/.mcp.json`.
@@ -209,7 +192,7 @@ The Claude Code MCP ecosystem is growing fast. Other servers worth adding for a 
 - **HubSpot MCP** — CRM integration if you don't use markdown CRM files.
 - **Apollo MCP** — sales prospecting and enrichment.
 
-Browse the [Anthropic MCP catalog](https://github.com/anthropics/claude-plugins-official) and the [thedotmack marketplace](https://github.com/thedotmack/claude-mem) for the current list.
+Browse the [Anthropic MCP catalog](https://github.com/anthropics/claude-plugins-official) for the current list.
 
 ---
 
@@ -254,7 +237,7 @@ This is the full stack working in concert:
    - Cascades any strategy decisions to the relevant canonical docs
    - Runs `/humanizer` on any external-facing prose written
 
-3. **You journal at the end of the day**. `/journal` uses claude-mem to remember the patterns it noticed across the week.
+3. **You journal at the end of the day**. `/journal` captures the patterns it noticed across the week.
 
 4. **Weekly:** you run `/graphify Journals --update` (incremental, ~free because of the cache). The graph stays current. You run `/insights` (or `/weekly`) which reads `journal-index.json` (built by `build-journal-index.py`) and surfaces patterns.
 

@@ -57,7 +57,7 @@ irm https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main/bootst
 
 Paste it and press Enter. Let it run (5-10 minutes). Don't close the window until you see "Done."
 
-This installs everything: Obsidian, Claude Code, Python, Node.js, graphify, humanizer, claude-mem, meeting-todos, patterns, the Granola MCP, and the ai-brain-starter skill. Safe to re-run anytime.
+This installs everything: Obsidian, Claude Code, Python, Node.js, graphify, humanizer, meeting-todos, patterns, the Granola MCP, and the ai-brain-starter skill. Safe to re-run anytime.
 
 ### Step 3 — Start the conversation
 
@@ -125,7 +125,6 @@ Every tool is installed and wired during setup. They work together, not in isola
 
 ### Power tools under the hood
 
-- **Claude-Mem** — cross-session memory that makes corrections and context persist automatically
 - **Graphify** — knowledge graph extraction with community detection, audit trails, and 80-92% token savings via wrapper scripts
 - **Nano Banana** — image generation via Google Gemini 3 Pro Image
 - **Granola MCP** — meeting transcription with automatic cascade to downstream files

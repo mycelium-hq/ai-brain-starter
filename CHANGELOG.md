@@ -9,6 +9,18 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-16 (p.m.) -- Removed claude-mem from bundled stack (security)
+
+Dropped claude-mem from the default install after a security audit surfaced: (1) unauthenticated local HTTP API on port 37777; (2) arbitrary file-read via the `smart_unfold` / `smart_outline` MCP tools; (3) API keys stored plaintext at `~/.supermemory-claude/credentials.json`; (4) a `UserPromptSubmit` hook injecting content into every session (persistent prompt-injection surface); (5) deprecated `glob@11.1.0` transitive dep flagged for ReDoS; (6) PreToolUse:Read hook truncating Read output to line 1 (we had shipped a local patch around this).
+
+Fresh installs no longer register the `thedotmack` marketplace, enable `claude-mem@thedotmack`, install `bun` as a claude-mem runtime, or run `npx claude-mem install`. Existing installs that already had it are NOT auto-uninstalled (bootstrap is additive). To remove manually: `claude plugin uninstall claude-mem@thedotmack` + drop the `thedotmack` entry from `extraKnownMarketplaces` in `~/.claude/settings.json`.
+
+What replaces it for most users: the auto-memory system at `~/.claude/projects/.../memory/` (typed markdown files, durable, human-readable) plus graphify for cross-session knowledge. That combo covers `mem-search` / `knowledge-agent` use cases without the attack surface. For AST-aware code search (the one unique capability), install `ast-grep` as a standalone CLI if a specific project needs it.
+
+Removed from: bootstrap.sh, bootstrap.ps1 (if present), README.md, docs/POWER_TOOLS.md, phases/phase-00-install.md, phases/phase-01-welcome.md, phases/phase-06-09-tools-templates.md, scripts/patch-claude-mem-read-hook.sh (deleted).
+
+---
+
 ## 2026-04-16 (p.m.) -- Removed notebooklm from bundled stack
 
 Dropped the notebooklm skill from the default install. Not part of the daily workflow for most users; the overhead (Chromium browser automation, Google auth dance, first-run setup) wasn't paying off. If you want it, clone directly: `git clone https://github.com/PleasePrompto/notebooklm-skill.git ~/.claude/skills/notebooklm`. Existing installs are untouched (bootstrap never overwrites the folder).

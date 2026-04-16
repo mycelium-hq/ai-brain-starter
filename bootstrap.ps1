@@ -12,7 +12,6 @@
 #
 # SAFETY GUARANTEES — same as bootstrap.sh:
 #   - Existing settings.json/.mcp.json keys preserved (setdefault never overwrites)
-#   - Explicit `claude-mem@thedotmack: false` is RESPECTED (not silently re-enabled)
 #   - Local uncommitted changes to ai-brain-starter clone are stashed before pull
 #   - DIVERGENT forks of ai-brain-starter (commits on both sides) are skipped
 #   - Sub-skill folders with their own .git/ are detected as YOUR FORK and skipped
@@ -57,7 +56,7 @@ if ($DryRun) {
     Write-Host "  DRY RUN MODE - showing what would be installed without making any changes." -ForegroundColor Magenta
     Write-Host ""
 }
-Write-Host "  This installs the full AI brain stack: graphify, humanizer, claude-mem,"
+Write-Host "  This installs the full AI brain stack: graphify, humanizer,"
 Write-Host "  meeting-todos, patterns, the Granola MCP, plus the ai-brain-starter"
 Write-Host "  skill itself. Takes ~5 minutes the first time."
 Write-Host ""
@@ -174,13 +173,6 @@ if (-not (Have pipx)) {
     $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
 }
 if (Have pipx) { Ok "pipx" } else { Err "pipx install failed" }
-
-# ─── bun ──────────────────────────────────────────────────────────────────────
-if (-not (Have bun) -and -not (Test-Path "$env:USERPROFILE\.bun\bin\bun.exe")) {
-    Hdr "Installing bun (claude-mem dependency)"
-    irm bun.sh/install.ps1 | iex
-}
-if ((Have bun) -or (Test-Path "$env:USERPROFILE\.bun\bin\bun.exe")) { Ok "bun installed" } else { Err "bun install failed" }
 
 # ─── gh (GitHub CLI) ──────────────────────────────────────────────────────────
 if (-not (Have gh)) {
@@ -412,41 +404,6 @@ if (-not (Test-Path $humDir)) {
 }
 if (Test-Path $humDir) { Ok "humanizer skill installed" } else { Err "humanizer clone failed" }
 
-# ─── claude-mem ──────────────────────────────────────────────────────────────
-# SAFETY: backup settings.json before editing. Existing keys (custom
-# marketplaces, custom MCP servers, custom plugin configs, custom permissions,
-# custom hooks, custom env vars) are preserved. Explicit
-# `claude-mem@thedotmack: false` is RESPECTED (not silently re-enabled).
-Hdr "Registering claude-mem"
-New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude" | Out-Null
-$settingsPath = "$env:USERPROFILE\.claude\settings.json"
-Backup-File $settingsPath
-
-if ($DryRun) {
-    Dry "would: register thedotmack marketplace + enable claude-mem@thedotmack (if not explicitly disabled)"
-} else {
-    $pyScript = @"
-import json, os
-p = os.path.expanduser('~/.claude/settings.json')
-try:
-    with open(p) as f: s = json.load(f)
-except FileNotFoundError:
-    s = {}
-s.setdefault('extraKnownMarketplaces', {})
-if 'thedotmack' not in s['extraKnownMarketplaces']:
-    s['extraKnownMarketplaces']['thedotmack'] = {'source': {'source': 'github', 'repo': 'thedotmack/claude-mem'}}
-s.setdefault('enabledPlugins', {})
-if 'claude-mem@thedotmack' not in s['enabledPlugins']:
-    s['enabledPlugins']['claude-mem@thedotmack'] = True
-elif s['enabledPlugins']['claude-mem@thedotmack'] is False:
-    print('NOTE: respecting your explicit disable of claude-mem@thedotmack')
-with open(p, 'w') as f: json.dump(s, f, indent=2)
-"@
-    $pyScript | python -
-    if ($LASTEXITCODE -eq 0) { Ok "claude-mem registered" } else { Err "claude-mem registration failed" }
-    npx --yes claude-mem install 2>$null | Out-Null
-}
-
 # ─── Granola MCP ─────────────────────────────────────────────────────────────
 # SAFETY: backup .mcp.json before editing. Existing MCP servers (custom
 # integrations, other URL or stdio MCPs the user wired themselves) are
@@ -479,16 +436,10 @@ Hdr "Verifying installation"
 foreach ($pair in @(@("graphify","graphify"), @("node","node"), @("npm","npm"), @("pipx","pipx"), @("gh","gh"))) {
     if (Have $pair[1]) { Ok $pair[0] } else { Err "$($pair[0]) not callable" }
 }
-if ((Have bun) -or (Test-Path "$env:USERPROFILE\.bun\bin\bun.exe")) { Ok "bun" } else { Err "bun not found" }
-
 foreach ($sub in @("graphify","meeting-todos","patterns","humanizer","ai-brain-starter")) {
     if (Test-Path "$env:USERPROFILE\.claude\skills\$sub") { Ok "skill: $sub" } else { Err "skill missing: $sub" }
 }
 if (Test-Path "$env:USERPROFILE\.claude\skills\graphify\scripts") { Ok "graphify scripts" } else { Err "graphify scripts missing" }
-
-if ((Get-Content "$env:USERPROFILE\.claude\settings.json" -ErrorAction SilentlyContinue) -match "claude-mem@thedotmack") {
-    Ok "claude-mem registered in settings.json"
-} else { Err "claude-mem not in settings.json" }
 
 if ((Get-Content "$env:USERPROFILE\.claude\.mcp.json" -ErrorAction SilentlyContinue) -match "granola") {
     Ok "granola MCP in .mcp.json"

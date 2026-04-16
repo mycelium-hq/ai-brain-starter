@@ -8,7 +8,7 @@ First, detect the platform: Mac, Windows, or Linux. Then check what's already in
 
 > "Setting up the tools you'll need — give me a moment. This usually takes 2–3 minutes the first time, or just a few seconds if you've already run the bootstrap. I'll keep you posted as each piece installs."
 
-Then for each install (graphify, claude-mem, humanizer, granola, etc.), give a brief one-line confirmation when it completes: *"Graphify ready ✓"*, *"Claude-Mem ready ✓"*. This tells the user the system is alive and reduces the "is this thing frozen?" anxiety. Don't dump command output — one line per tool is enough.
+Then for each install (graphify, humanizer, granola, etc.), give a brief one-line confirmation when it completes: *"Graphify ready ✓"*, *"Humanizer ready ✓"*. This tells the user the system is alive and reduces the "is this thing frozen?" anxiety. Don't dump command output — one line per tool is enough.
 
 If everything installs cleanly, end Phase 0 with: *"All tools ready. Now let's get you set up."*
 
@@ -31,12 +31,6 @@ fi
 
 # Node.js
 if ! command -v node &>/dev/null; then brew install node; fi
-
-# bun — claude-mem's runtime. Without this, claude-mem plugin commands fail
-# because the worker service is a bun script, not a node script.
-if ! command -v bun &>/dev/null && [ ! -x ~/.bun/bin/bun ]; then
-  curl -fsSL https://bun.sh/install | bash
-fi
 
 # gh (GitHub CLI) — needed for the session-close repo-update propagation rule,
 # and for any user who'll fork ai-brain-starter and push improvements back
@@ -69,13 +63,8 @@ cp -R ~/.claude/skills/ai-brain-starter/skills/daily-journal/.   ~/.claude/skill
 cp -R ~/.claude/skills/ai-brain-starter/skills/repurpose-talk/.  ~/.claude/skills/repurpose-talk/
 cp -R ~/.claude/skills/ai-brain-starter/skills/nano-banana/.     ~/.claude/skills/nano-banana/
 
-# Claude-Mem — ~30-40% fewer tokens on session starts. Two install paths:
-# (1) the marketplace plugin (preferred — wires /plugin commands and slash
-# triggers), (2) the npx install as a fallback. Do both: marketplace
-# registration is what makes /mem-search and the auto-context loader work.
+# Marketplace plugins — register obsidian-skills + enable context7/playwright
 mkdir -p ~/.claude
-# Add the thedotmack marketplace to settings.json if not already there.
-# Use python (always available after Homebrew) so we don't depend on jq.
 python3 - <<'PY'
 import json, os
 p = os.path.expanduser("~/.claude/settings.json")
@@ -85,28 +74,20 @@ try:
 except FileNotFoundError:
     s = {}
 s.setdefault("extraKnownMarketplaces", {})
-if "thedotmack" not in s["extraKnownMarketplaces"]:
-    s["extraKnownMarketplaces"]["thedotmack"] = {
-        "source": {"source": "github", "repo": "thedotmack/claude-mem"}
-    }
 if "obsidian-skills" not in s["extraKnownMarketplaces"]:
     s["extraKnownMarketplaces"]["obsidian-skills"] = {
         "source": {"source": "github", "repo": "kepano/obsidian-skills"}
     }
 s.setdefault("enabledPlugins", {})
-s["enabledPlugins"]["claude-mem@thedotmack"] = True
 s["enabledPlugins"]["obsidian@obsidian-skills"] = True
 s["enabledPlugins"]["context7"] = True
 s["enabledPlugins"]["playwright"] = True
 with open(p, "w") as f:
     json.dump(s, f, indent=2)
-print("registered claude-mem + obsidian marketplaces + enabled plugins")
+print("registered obsidian marketplace + enabled plugins")
 print("enabled context7 plugin (up-to-date library docs for coding sessions)")
 print("enabled playwright plugin (headless browser automation + test suites)")
 PY
-# Also run the npx installer as a belt-and-suspenders fallback (no-op if
-# the marketplace install already completed)
-npx claude-mem install 2>/dev/null || true
 
 # Humanizer — de-AI writing
 if [ ! -d ~/.claude/skills/humanizer ]; then
@@ -230,7 +211,6 @@ command -v npm >/dev/null     || FAILED+=("npm")
 command -v pipx >/dev/null    || FAILED+=("pipx")
 command -v graphify >/dev/null || FAILED+=("graphify CLI")
 command -v gh >/dev/null      || FAILED+=("gh (GitHub CLI)")
-{ command -v bun >/dev/null || [ -x ~/.bun/bin/bun ]; } || FAILED+=("bun runtime (claude-mem dependency)")
 
 # Skill folders
 [ -d ~/.claude/skills/graphify ]      && [ -d ~/.claude/skills/graphify/scripts ] || FAILED+=("graphify skill folder (with scripts/)")
@@ -244,8 +224,6 @@ command -v gh >/dev/null      || FAILED+=("gh (GitHub CLI)")
 [ -d ~/.claude/skills/humanizer ]     || FAILED+=("humanizer skill folder")
 
 # Config files
-[ -f ~/.claude/settings.json ] && grep -q "claude-mem@thedotmack" ~/.claude/settings.json \
-                              || FAILED+=("claude-mem marketplace registration in ~/.claude/settings.json")
 [ -f ~/.claude/.mcp.json ]     && grep -q "granola" ~/.claude/.mcp.json \
                               || FAILED+=("Granola MCP entry in ~/.claude/.mcp.json")
 
@@ -286,9 +264,6 @@ winget install -e --id OpenJS.NodeJS.LTS --accept-source-agreements --accept-pac
 pip install pipx
 pipx ensurepath
 
-# bun runtime — claude-mem dependency
-powershell -Command "irm bun.sh/install.ps1 | iex"
-
 # gh (GitHub CLI) — used by the session-close repo-update propagation rule
 winget install -e --id GitHub.cli --accept-source-agreements --accept-package-agreements
 
@@ -301,14 +276,6 @@ for %%S in (graphify meeting-todos patterns insights deconstruct daily-journal r
   mkdir %USERPROFILE%\.claude\skills\%%S 2>nul
   xcopy /E /I /Y %USERPROFILE%\.claude\skills\ai-brain-starter\skills\%%S\* %USERPROFILE%\.claude\skills\%%S\
 )
-
-# Claude-Mem — register the marketplace + enable the plugin AND run npx as fallback
-python -c "import json, os; p = os.path.expanduser('~/.claude/settings.json'); s = {}; ^
-exec('try:\n  s = json.load(open(p))\nexcept: pass'); ^
-s.setdefault('extraKnownMarketplaces', {}).setdefault('thedotmack', {'source': {'source': 'github', 'repo': 'thedotmack/claude-mem'}}); ^
-s.setdefault('enabledPlugins', {})['claude-mem@thedotmack'] = True; ^
-json.dump(s, open(p, 'w'), indent=2)"
-npx claude-mem install
 
 # Humanizer
 git clone https://github.com/adelaidasofia/humanizer.git %USERPROFILE%\.claude\skills\humanizer
@@ -362,12 +329,7 @@ sudo apt-get install -y nodejs npm   # Ubuntu/Debian
 # After Python and Node are confirmed:
 pip install pipx && pipx ensurepath
 
-# bun runtime — claude-mem dependency
-if ! command -v bun >/dev/null && [ ! -x ~/.bun/bin/bun ]; then
-  curl -fsSL https://bun.sh/install | bash
-fi
-
-# gh (GitHub CLI) — used by the session-close repo-update propagation rule
+# gh (GitHub CLI) used by the session-close repo-update propagation rule
 if ! command -v gh >/dev/null; then
   sudo apt-get install -y gh 2>/dev/null || sudo dnf install -y gh 2>/dev/null || sudo pacman -S --noconfirm github-cli 2>/dev/null || true
 fi
@@ -388,23 +350,6 @@ cp -R ~/.claude/skills/ai-brain-starter/skills/deconstruct/.     ~/.claude/skill
 cp -R ~/.claude/skills/ai-brain-starter/skills/daily-journal/.   ~/.claude/skills/daily-journal/
 cp -R ~/.claude/skills/ai-brain-starter/skills/repurpose-talk/.  ~/.claude/skills/repurpose-talk/
 cp -R ~/.claude/skills/ai-brain-starter/skills/nano-banana/.     ~/.claude/skills/nano-banana/
-
-# Claude-Mem — register the marketplace + enable the plugin AND run npx as fallback
-mkdir -p ~/.claude
-python3 - <<'PY'
-import json, os
-p = os.path.expanduser("~/.claude/settings.json")
-try:
-    with open(p) as f: s = json.load(f)
-except FileNotFoundError:
-    s = {}
-s.setdefault("extraKnownMarketplaces", {})
-if "thedotmack" not in s["extraKnownMarketplaces"]:
-    s["extraKnownMarketplaces"]["thedotmack"] = {"source": {"source": "github", "repo": "thedotmack/claude-mem"}}
-s.setdefault("enabledPlugins", {})["claude-mem@thedotmack"] = True
-with open(p, "w") as f: json.dump(s, f, indent=2)
-PY
-npx claude-mem install 2>/dev/null || true
 
 # Humanizer
 git clone https://github.com/adelaidasofia/humanizer.git ~/.claude/skills/humanizer

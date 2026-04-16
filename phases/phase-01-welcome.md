@@ -89,10 +89,10 @@ fi
 
 If we routed to mode B (joining an existing team vault), do NOT run Phases 2, 3, 4, 5, 14, 15, 16, 19. The vault already exists; you'd just be duplicating work. Run only:
 
-1. **Phase 0** — silent install of the dependencies (graphify, humanizer, claude-mem, etc.). The user may already have some of these from earlier conversations; the install commands are idempotent.
+1. **Phase 0** — silent install of the dependencies (graphify, humanizer, etc.). The user may already have some of these from earlier conversations; the install commands are idempotent.
 2. **Step 1.−1a** — write the cwd pointer if needed (above).
 3. **Phase 11 — Meeting tool selection** (the new adaptive section, see below). Ask which tool they use and wire it up.
-4. **A short verification block** — confirm the team CLAUDE.md is loadable, graphify is callable, the meeting MCP is registered if applicable, and the user's `~/.claude/settings.json` has claude-mem registered.
+4. **A short verification block** — confirm the team CLAUDE.md is loadable, graphify is callable, and the meeting MCP is registered if applicable.
 5. **Hand off** — say "You're ready. The team vault is at `<path>`. Open it in Claude Code from here and the real CLAUDE.md will load automatically. Try asking a question that uses the graph (e.g. *'what does our graph say about pricing?'*) to confirm the context is loading."
 
 Don't ask the language question (1.0) or any of the personal-setup questions (1.1) — those are for new personal vaults only. The team vault already has its own CLAUDE.md with its own conventions.

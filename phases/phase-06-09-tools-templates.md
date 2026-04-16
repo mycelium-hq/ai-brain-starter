@@ -168,7 +168,6 @@ Run a quick check on every skill folder. If anything is missing, retry the insta
 - `ls ~/.claude/skills/nano-banana/SKILL.md` — if missing: same pattern with `nano-banana`
 - `ls ~/.claude/skills/humanizer` — if missing: `git clone https://github.com/adelaidasofia/humanizer.git ~/.claude/skills/humanizer`
 - `graphify --version` — if missing: `pipx install graphifyy && graphify install`
-- Claude-Mem — if not in plugin list: `npx claude-mem install`
 
 Add skill routing to their CLAUDE.md (global `~/.claude/CLAUDE.md` if it exists, or vault root). Add ALL of these:
 

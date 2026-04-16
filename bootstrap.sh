@@ -14,7 +14,6 @@
 #     - Python 3.10+, Node.js, pipx, bun, gh
 #     - graphify CLI + Claude skill (with optimization scripts)
 #     - meeting-todos, patterns sub-skills
-#     - claude-mem (marketplace + plugin)
 #     - humanizer (de-AI writing)
 #     - Granola MCP (meeting notes auto-sync)
 #     - The ai-brain-starter skill itself
@@ -29,9 +28,8 @@
 # This script is safe to run on top of an existing setup. Specifically:
 #
 #   1. ~/.claude/settings.json — backed up to settings.json.bak-YYYY-MM-DD-HHMM
-#      before edit. The edit only ADDS the thedotmack marketplace and the
-#      claude-mem enabledPlugin entry. Existing custom marketplaces, plugins,
-#      MCP servers, permissions, env vars, and any other keys are preserved
+#      before edit. Existing custom marketplaces, plugins, MCP servers,
+#      permissions, env vars, and any other keys are preserved
 #      (setdefault() never overwrites existing values).
 #
 #   2. ~/.claude/.mcp.json — backed up to .mcp.json.bak-YYYY-MM-DD-HHMM before
@@ -170,7 +168,7 @@ if [[ $DRY_RUN -eq 1 ]]; then
   echo "  \033[35mDRY RUN MODE\033[0m — showing what would be installed without making any changes."
   echo
 fi
-echo "  This installs the full AI brain stack: graphify, humanizer, claude-mem,"
+echo "  This installs the full AI brain stack: graphify, humanizer,"
 echo "  meeting-todos, patterns, the Granola MCP, plus the ai-brain-starter"
 echo "  skill itself. Takes ~5 minutes the first time, ~10 seconds on re-runs."
 echo
@@ -266,17 +264,6 @@ if ! have pipx; then
   export PATH="$HOME/.local/bin:$PATH"
 fi
 have pipx && ok "pipx $(pipx --version 2>/dev/null || echo installed)"
-
-# ───────────────────────────────────────────────────────────────────────────────
-# bun runtime (claude-mem dependency)
-# ───────────────────────────────────────────────────────────────────────────────
-
-if ! have bun && [[ ! -x "$HOME/.bun/bin/bun" ]]; then
-  hdr "Installing bun"
-  log "bun is the runtime claude-mem uses. Without it, claude-mem plugin commands fail silently."
-  curl -fsSL https://bun.sh/install | bash >/dev/null 2>&1 || err "bun install failed"
-fi
-{ have bun || [[ -x "$HOME/.bun/bin/bun" ]]; } && ok "bun installed"
 
 # ───────────────────────────────────────────────────────────────────────────────
 # gh (GitHub CLI)
@@ -568,44 +555,6 @@ fi
 [[ -d "$HOME/.claude/skills/humanizer" ]] && ok "humanizer skill installed"
 
 # ───────────────────────────────────────────────────────────────────────────────
-# claude-mem (marketplace plugin + npx fallback)
-# ───────────────────────────────────────────────────────────────────────────────
-
-hdr "Installing claude-mem (cross-session memory)"
-mkdir -p "$HOME/.claude"
-# SAFETY: backup settings.json before editing. Existing keys (custom
-# marketplaces, custom MCP servers, custom plugin configs, custom permissions,
-# custom hooks, custom env vars) are preserved — the python edit only adds
-# the thedotmack entry if missing and only enables claude-mem@thedotmack if
-# the user hasn't explicitly disabled it (False is preserved).
-if [[ -f "$HOME/.claude/settings.json" ]]; then
-  cp "$HOME/.claude/settings.json" "$HOME/.claude/settings.json.bak-$(date +%Y-%m-%d-%H%M)"
-fi
-python3 - <<'PY' || err "claude-mem marketplace registration failed"
-import json, os
-p = os.path.expanduser("~/.claude/settings.json")
-try:
-    with open(p) as f: s = json.load(f)
-except FileNotFoundError:
-    s = {}
-# Add the marketplace if missing — never overwrite an existing entry
-s.setdefault("extraKnownMarketplaces", {})
-if "thedotmack" not in s["extraKnownMarketplaces"]:
-    s["extraKnownMarketplaces"]["thedotmack"] = {"source": {"source": "github", "repo": "thedotmack/claude-mem"}}
-# Enable claude-mem ONLY if the user hasn't explicitly disabled it. An advanced
-# user who set enabledPlugins["claude-mem@thedotmack"] = False made that choice
-# on purpose and we must respect it. Only set True if the key is absent.
-s.setdefault("enabledPlugins", {})
-if "claude-mem@thedotmack" not in s["enabledPlugins"]:
-    s["enabledPlugins"]["claude-mem@thedotmack"] = True
-elif s["enabledPlugins"]["claude-mem@thedotmack"] is False:
-    print("NOTE: respecting your explicit disable of claude-mem@thedotmack — leaving it off")
-with open(p, "w") as f: json.dump(s, f, indent=2)
-PY
-npx --yes claude-mem install >/dev/null 2>&1 || true
-ok "claude-mem registered (marketplace + plugin) — settings.json backed up"
-
-# ───────────────────────────────────────────────────────────────────────────────
 # Granola MCP (meeting workflow rule depends on this)
 # ───────────────────────────────────────────────────────────────────────────────
 
@@ -667,9 +616,6 @@ done
 [[ -d "$HOME/.claude/skills/graphify/scripts" ]] && ok "graphify scripts" || err "graphify scripts missing"
 
 # Config files
-grep -q "claude-mem@thedotmack" "$HOME/.claude/settings.json" 2>/dev/null \
-  && ok "claude-mem registered in settings.json" \
-  || err "claude-mem not in settings.json"
 grep -q "granola" "$HOME/.claude/.mcp.json" 2>/dev/null \
   && ok "granola MCP in .mcp.json" \
   || err "granola not in .mcp.json"
