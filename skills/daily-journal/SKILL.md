@@ -316,9 +316,10 @@ gym_week: X                 # count for this week
 sleep_time: "HH:MM"
 meditation: true | false
 deep_work: X                # blocks completed today
-rt_pulse: X                 # RescueTime Productivity Pulse 0-100
-rt_productive_h: X.X
-rt_distracting_h: X.X       # null if not pulled
+# RescueTime fields — ONLY include if the user has RescueTime connected:
+# rt_pulse: X               # Productivity Pulse 0-100
+# rt_productive_h: X.X
+# rt_distracting_h: X.X
 ---
 
 ## Journal — [user]'s voice
