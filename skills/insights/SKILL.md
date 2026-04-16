@@ -24,7 +24,7 @@ Journal entries are in: `[VAULT_PATH]/Journals/`
 **DO NOT grep thousands of files.** Use the journal index instead.
 
 ### Step 0: Load the journal index
-Read `[VAULT_PATH]/Meta/journal-index.json`. This is a JSON file mapping every journal entry to its `creationDate`, `floor`, and `floor_level`. It's fast, one file read instead of scanning the whole vault.
+Read `[VAULT_PATH]/Meta/journal-index.json`. Structure: `{"total": N, "last_updated": "YYYY-MM-DD", "entries": [{file, date, floor, floor_level}, ...]}`. Access entries via `idx["entries"]`, then filter by `entry["date"]`.
 
 If the index doesn't exist or is more than 7 days old, rebuild it first:
 ```bash
@@ -32,14 +32,16 @@ If the index doesn't exist or is more than 7 days old, rebuild it first:
 ```
 
 ### Step 1: Filter entries by date range
-From the index, filter entries where `date` falls within the target week or month. This gives you the exact list of filenames to read.
+From `idx["entries"]`, filter where `entry["date"]` starts with the target YYYY-MM (monthly) or falls within the target Mon-Sun range (weekly).
+
+**Floor counting:** Some entries tag multiple floors (stored as a list, e.g. `[Courage, Fear, Love]`). When computing floor distribution, EXPAND multi-floor entries: if an entry tags 3 floors, count +1 for each. Do NOT count the list as a single item. Verify by running a Python script against the index rather than hand-counting.
 
 ### Step 2: Read ONLY the matching files
 Read the full content of each matching file. Do NOT read files outside the date range. With the index, you're reading 5-15 files instead of searching the entire vault.
 
 ### Step 2b: Pull RescueTime + session time data (if available)
 
-**If the RescueTime MCP is connected:** For each day in the period, call `mcp__rescuetime__get_daily_summary` to get productivity pulse, hours, and productive vs. distracting breakdown. For weekly, also call `mcp__rescuetime__get_productivity_trend` with `days: 7` and `mcp__rescuetime__get_top_activities` for the most recent day. Skip this step silently if the MCP is not connected.
+**If the RescueTime MCP is connected:** Try calling `mcp__rescuetime__get_daily_summary` for each day. If the MCP is disconnected or returns errors, note "RescueTime unavailable for this period" in the report and skip all RescueTime-dependent sections. Do NOT silently omit. For weekly, also call `mcp__rescuetime__get_productivity_trend` with `days: 7`.
 
 **If a Time Tracking file exists** (check CLAUDE.md for the path, typically `⚙️ Meta/Time Tracking.md`): Read it and filter entries for the period. This shows what categories were worked on during Claude Code sessions (Writing, Business, Vault, Personal, Admin). Merge with RescueTime app data for a combined picture: RescueTime shows which apps were used, session logs show what purpose they served.
 
@@ -50,6 +52,16 @@ Add to the report if data is available:
 - Session time breakdown by category
 - Notable gaps or mismatches (e.g., "12h in Obsidian but only 3h tagged as Writing in sessions")
 
+### Step 2c: Data availability check
+Before writing the report, check which data sources exist for the target period:
+- Time Tracking file: does it have entries for this month?
+- Deep Work Chain: does it have entries for this month?
+- Decisions folder: do any decision files fall in this period?
+- Skill usage log: any entries for this period?
+- RescueTime MCP: is it connected?
+
+If a data source has no entries for the period, skip that section silently. If 3+ data sources are missing, add a one-line note at the top: "Note: some tracking systems started after this period. Sections that depend on them are omitted."
+
 ## Report Structure
 
 ### 1. The week/month at a glance
@@ -58,6 +70,11 @@ Add to the report if data is available:
 - Floor trend: up, down, or stable vs. previous period
 - Habit tracking summary: gym count, average bedtime, scroll incidents
 - Time allocation (if RescueTime or Time Tracking data available): where hours actually went vs. where priorities say they should go
+
+### 1b. Floor-Topic Correlations
+Compute a matrix: for each floor that appeared 3+ times this period, count how many entries co-occur with each topic cluster. Use keyword matching against entry content. Define 5-7 topic clusters relevant to the user's life (e.g., work, writing, money, relationships, health, spiritual, social). Present as a table (floor rows x topic columns). Then write 3-4 bullet points naming the strongest correlations: "Money correlates with Fear (7) and barely with Peace (2). When you think about money, you're on the worried floors."
+
+Only report what the data shows. Do not interpret beyond the numbers.
 
 ### 2. What stood out
 - 2-3 most significant moments, themes, or shifts
@@ -338,6 +355,15 @@ The panel should answer: *"What's one thing about this setup that's slowing you 
 If the audit script flags warnings, include specific fix recommendations. If everything passes, say so briefly and move on.
 
 ## Rules
+- **FACTUAL ACCURACY IS NON-NEGOTIABLE. NO HALLUCINATION. NO GUESSING DATES.**
+  - Every number (floor counts, gym counts, dates, entry counts): computed by script from the index or frontmatter. Never hand-counted.
+  - Every quote: copy-pasted from the actual entry. Never paraphrased from memory.
+  - Every claim ("you said X," "your therapist told you Y"): traceable to a specific entry and date. If you can't point to the entry, don't say it.
+  - Every date: verified from frontmatter `creationDate` or the index. If you don't know when something happened, say "the date isn't in the entries" rather than guessing.
+  - **Reflective references are not events.** If an entry discusses a past breakup, that does NOT mean the breakup happened this month. Only log events that the entry says happened during the reporting period.
+  - **Names must come from the entry itself.** If a person is unnamed, use their role ("the therapist," "a friend"). Never pull names from the graph or other files.
+  - **Filenames are not facts.** A file called "Colombia Fashion Week" doesn't mean Fashion Week happened. Only entry content counts.
+  - If unsure about anything: say "the data doesn't show this." Uncertainty is always better than fabrication.
 - Read EVERY entry in the period. Don't skip or skim.
 - Be specific, use their words, reference entries by name, name people and situations.
 - Life coach = direct. Therapist = gentle. Both = honest.
