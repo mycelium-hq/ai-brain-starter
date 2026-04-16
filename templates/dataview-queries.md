@@ -234,7 +234,39 @@ LIMIT 30
 
 ## To-do system queries
 
-These queries work with the inline-field to-do system documented in `docs/TODO_SYSTEM.md`. Every task needs `[owner:: Name] [area:: X] [priority:: 1-3]` at the end of the checkbox line.
+These queries work with the inline-field to-do system. Every task needs `[area:: X] [priority:: 1-3]` at the end of the checkbox line. Team tasks also need `[owner:: Name]`. See `templates/generated/todo-system-template.md` for the full system.
+
+### Personal to-do: all P1s (auto-pull for This Week view)
+
+```dataview
+TASK
+FROM "To-dos/Get to-do"
+WHERE !completed AND priority = 1
+SORT due ASC
+```
+
+### Personal to-do: P2s due within 7 days
+
+```dataview
+TASK
+FROM "To-dos/Get to-do"
+WHERE !completed AND priority = 2 AND due AND date(due) <= date(today) + dur(7 days)
+SORT due ASC
+LIMIT 5
+```
+
+### Combined P1s (personal + team, for a unified This Week view)
+
+If you have both a personal to-do list and a team to-do list, this pulls P1s from both:
+
+```dataview
+TASK
+FROM "To-dos/Get to-do" OR "Team/Home/Team To-dos"
+WHERE !completed AND priority = 1
+SORT due ASC
+```
+
+ Every task needs `[owner:: Name] [area:: X] [priority:: 1-3]` at the end of the checkbox line.
 
 ### My tasks (filter by person, sorted by priority)
 

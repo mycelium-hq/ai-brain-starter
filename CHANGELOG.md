@@ -9,6 +9,28 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-15 -- To-do system template
+
+New template: `templates/generated/todo-system-template.md`. A complete prioritized task management system for Obsidian with Dataview integration.
+
+**What it includes:**
+- **Main to-do file** with P1/P2/P3 priority tiers, Dataview inline fields (`[area::]`, `[priority::]`, `[due::]`), and a Done Archive section
+- **This Week view** that auto-pulls all P1 items via Dataview (never needs manual refresh)
+- **Waiting On tracker** with sections for delegations, external blockers, and "blocked on self" items
+- **Team variant** with per-person views, `[owner::]` field, and sprint progress queries
+
+**System rules baked in:**
+- Lint rule: every task must have `[area::]` and `[priority::]` or Claude adds them on contact
+- Stale item decay: open items older than 14 days with no due date get flagged during weekly reviews
+- Overdue rule: past-due items auto-surface and must be re-dated or dropped
+- Priority assignment framework: three questions (hard deadline? someone blocked? moves top goal?)
+
+**Integration:** Added as a conditional folder in Phase 2-3 (only created if the user wants in-vault task management). Personal to-do Dataview queries added to the query library.
+
+Born from the maintainer's own vault restructure: the "organize by when I thought of it" pattern always decays into a mess. Priority tiers with inline fields and auto-refreshing views don't.
+
+---
+
 ## 2026-04-15 -- Graph query MCP + conditional graph loading + Minimax routing + session length flag
 
 Four optimizations for high-volume, multi-account Claude setups:
