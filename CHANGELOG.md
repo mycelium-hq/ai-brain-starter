@@ -9,6 +9,19 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-16 (late evening) -- Single source of truth for installs: bootstrap canonical, Phase 0 thin
+
+**The problem:** install logic lived in TWO places: `bootstrap.sh`/`bootstrap.ps1` (curl-one-liner path) AND `phases/phase-00-install.md` (inline bash blocks Claude Code executes during /setup-brain). About 80 percent overlap. They drifted. phase-00 installed 5 extra sub-skills and a chatprd MCP that bootstrap missed. bootstrap verified a bun that it never installed. Windows and Linux variants in phase-00 had subtly broken Python one-liners. A non-technical user on a different install path got a different stack.
+
+**What changed:**
+
+- **`bootstrap.sh`** and **`bootstrap.ps1`** are now the ONE source of truth for every mechanical install. Added: bun, fastmcp, the full bundled sub-skill set (insights, deconstruct, daily-journal, repurpose-talk, nano-banana skill folder), chatprd MCP, obsidian-skills marketplace registration, context7 and playwright and obsidian plugin enable, Mac Obsidian CLI symlink. Verification block expanded to cover all of it. `--dry-run` now skips verification (no false failures on "file not written yet").
+- **`phases/phase-00-install.md`** rewritten from 431 lines to 158. Now a thin orchestrator: progress message, invoke the local bootstrap, Granola post-install login walkthrough, Obsidian CLI confirmation, nano-banana deferred-install conversation, Knowledge Graph CLAUDE.md rule template, closing line. Zero duplicated install bash.
+
+**Why it matters:** the previous setup had a silent-drift failure mode. Any new dependency added in one place would quietly be missing in the other, surfacing weeks later as "why does my vault not have deconstruct?" or "why doesn't bun work on this machine?" Now every install path (curl one-liner before Claude Code, local bootstrap during /setup-brain, re-run on existing setup) hits the same code and produces the same stack. Windows parity via `.ps1` is maintained in the same commit, not as a TODO.
+
+---
+
 ## 2026-04-16 (evening, later) -- Enforce compressed Claude-facing docs at tool level
 
 **The problem:** a "compress all Claude-facing docs" rule lived in memory for days, but a fresh session still shipped a verbose memory file + hookify rule because memory scans are easy to skip. A memory rule that depends on Claude remembering to check it is not a rule — it's a suggestion.

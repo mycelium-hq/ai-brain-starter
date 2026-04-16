@@ -57,8 +57,10 @@ if ($DryRun) {
     Write-Host ""
 }
 Write-Host "  This installs the full AI brain stack: graphify, humanizer,"
-Write-Host "  meeting-todos, patterns, the Granola MCP, plus the ai-brain-starter"
-Write-Host "  skill itself. Takes ~5 minutes the first time."
+Write-Host "  meeting-todos, patterns, insights, deconstruct, daily-journal,"
+Write-Host "  repurpose-talk, nano-banana (skill docs), Granola + ChatPRD MCPs,"
+Write-Host "  the obsidian-skills marketplace, plus the ai-brain-starter skill"
+Write-Host "  itself. Takes ~5 minutes the first time."
 Write-Host ""
 Write-Host "  After this finishes, open Claude Code and type /setup-brain."
 Write-Host ""
@@ -173,6 +175,29 @@ if (-not (Have pipx)) {
     $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
 }
 if (Have pipx) { Ok "pipx" } else { Err "pipx install failed" }
+
+# ─── bun ──────────────────────────────────────────────────────────────────────
+# bun is required by several plugin hooks. On Windows, the official installer
+# is a PowerShell one-liner that drops bun at %USERPROFILE%\.bun\bin\bun.exe.
+if (-not (Have bun) -and -not (Test-Path "$env:USERPROFILE\.bun\bin\bun.exe")) {
+    Hdr "Installing bun"
+    try {
+        powershell -NoProfile -ExecutionPolicy Bypass -Command "irm bun.sh/install.ps1 | iex" 2>$null
+    } catch {
+        Warn "bun install failed: $_ (non-blocking — some plugin hooks may not work)"
+    }
+    $env:Path = "$env:USERPROFILE\.bun\bin;$env:Path"
+}
+if ((Have bun) -or (Test-Path "$env:USERPROFILE\.bun\bin\bun.exe")) { Ok "bun installed" }
+
+# ─── fastmcp ──────────────────────────────────────────────────────────────────
+# Framework for building custom MCP servers in minimal Python. Needed when
+# wiring custom connectors (CRM bridges, vault sync, investor relations, etc.)
+if (-not (Have fastmcp)) {
+    Hdr "Installing fastmcp"
+    pipx install fastmcp 2>$null
+}
+if (Have fastmcp) { Ok "fastmcp" } else { Warn "fastmcp not installed (non-blocking — install later with: pipx install fastmcp)" }
 
 # ─── gh (GitHub CLI) ──────────────────────────────────────────────────────────
 if (-not (Have gh)) {
@@ -334,7 +359,7 @@ if ((Test-Path "$SkillDir\SKILL.md") -or $DryRun) { Ok "ai-brain-starter at $Ski
 Hdr "Installing bundled sub-skills (with safety checks)"
 $stamp = Get-Date -Format "yyyy-MM-dd-HHmm"
 
-foreach ($sub in @("graphify", "meeting-todos", "patterns")) {
+foreach ($sub in @("graphify", "meeting-todos", "patterns", "insights", "deconstruct", "daily-journal", "repurpose-talk", "nano-banana")) {
     $src = "$SkillDir\skills\$sub"
     $dst = "$env:USERPROFILE\.claude\skills\$sub"
 
@@ -408,12 +433,12 @@ if (Test-Path $humDir) { Ok "humanizer skill installed" } else { Err "humanizer 
 # SAFETY: backup .mcp.json before editing. Existing MCP servers (custom
 # integrations, other URL or stdio MCPs the user wired themselves) are
 # preserved — setdefault() only adds the granola entry if missing.
-Hdr "Registering Granola MCP"
+Hdr "Registering MCPs (Granola + ChatPRD)"
 $mcpPath = "$env:USERPROFILE\.claude\.mcp.json"
 Backup-File $mcpPath
 
 if ($DryRun) {
-    Dry "would: register granola MCP at https://mcp.granola.ai/mcp (if not already present)"
+    Dry "would: register granola + chatprd MCPs (existing entries preserved)"
 } else {
     $pyMcp = @"
 import json, os
@@ -425,25 +450,66 @@ except FileNotFoundError:
 m.setdefault('mcpServers', {})
 if 'granola' not in m['mcpServers']:
     m['mcpServers']['granola'] = {'type': 'url', 'url': 'https://mcp.granola.ai/mcp'}
+if 'chatprd' not in m['mcpServers']:
+    m['mcpServers']['chatprd'] = {'type': 'url', 'url': 'https://app.chatprd.ai/mcp'}
 with open(p, 'w') as f: json.dump(m, f, indent=2)
 "@
     $pyMcp | python -
-    if ($LASTEXITCODE -eq 0) { Ok "Granola MCP registered (you'll need a Granola account to use it)" } else { Err "Granola MCP registration failed" }
+    if ($LASTEXITCODE -eq 0) { Ok "MCPs registered: granola, chatprd (Granola needs an account to use)" } else { Err "MCP registration failed" }
+}
+
+# ─── Marketplaces + enabled plugins (settings.json) ──────────────────────────
+# SAFETY: backup settings.json first. setdefault() never clobbers existing
+# marketplaces, plugins, permissions, env vars, or any other keys.
+Hdr "Registering marketplace + enabling plugins"
+$settingsPath = "$env:USERPROFILE\.claude\settings.json"
+Backup-File $settingsPath
+
+if ($DryRun) {
+    Dry "would register obsidian-skills marketplace (kepano/obsidian-skills) and enable: obsidian, context7, playwright"
+} else {
+    $pyPlugins = @"
+import json, os
+p = os.path.expanduser('~/.claude/settings.json')
+try:
+    with open(p) as f: s = json.load(f)
+except FileNotFoundError:
+    s = {}
+s.setdefault('extraKnownMarketplaces', {})
+if 'obsidian-skills' not in s['extraKnownMarketplaces']:
+    s['extraKnownMarketplaces']['obsidian-skills'] = {
+        'source': {'source': 'github', 'repo': 'kepano/obsidian-skills'}
+    }
+s.setdefault('enabledPlugins', {})
+for plug in ('obsidian@obsidian-skills', 'context7', 'playwright'):
+    s['enabledPlugins'].setdefault(plug, True)
+with open(p, 'w') as f: json.dump(s, f, indent=2)
+"@
+    $pyPlugins | python -
+    if ($LASTEXITCODE -eq 0) { Ok "Marketplace + plugins registered (settings.json backed up)" } else { Err "settings.json plugin registration failed" }
 }
 
 # ─── Verification ────────────────────────────────────────────────────────────
 Hdr "Verifying installation"
+if ($DryRun) {
+    Log "skipping verification under -DryRun (nothing was actually installed)"
+} else {
 foreach ($pair in @(@("graphify","graphify"), @("node","node"), @("npm","npm"), @("pipx","pipx"), @("gh","gh"))) {
     if (Have $pair[1]) { Ok $pair[0] } else { Err "$($pair[0]) not callable" }
 }
-foreach ($sub in @("graphify","meeting-todos","patterns","humanizer","ai-brain-starter")) {
+foreach ($sub in @("graphify","meeting-todos","patterns","insights","deconstruct","daily-journal","repurpose-talk","nano-banana","humanizer","ai-brain-starter")) {
     if (Test-Path "$env:USERPROFILE\.claude\skills\$sub") { Ok "skill: $sub" } else { Err "skill missing: $sub" }
 }
 if (Test-Path "$env:USERPROFILE\.claude\skills\graphify\scripts") { Ok "graphify scripts" } else { Err "graphify scripts missing" }
 
-if ((Get-Content "$env:USERPROFILE\.claude\.mcp.json" -ErrorAction SilentlyContinue) -match "granola") {
-    Ok "granola MCP in .mcp.json"
-} else { Err "granola not in .mcp.json" }
+$mcpContent = Get-Content "$env:USERPROFILE\.claude\.mcp.json" -ErrorAction SilentlyContinue
+if ($mcpContent -match "granola") { Ok "granola MCP in .mcp.json" } else { Err "granola not in .mcp.json" }
+if ($mcpContent -match "chatprd") { Ok "chatprd MCP in .mcp.json" } else { Err "chatprd not in .mcp.json" }
+
+if ((Get-Content "$env:USERPROFILE\.claude\settings.json" -ErrorAction SilentlyContinue) -match "obsidian-skills") {
+    Ok "obsidian-skills marketplace in settings.json"
+} else { Warn "obsidian-skills marketplace not in settings.json (non-blocking)" }
+}  # end: if (-not $DryRun)
 
 Write-Host ""
 if ($Failed.Count -eq 0) {

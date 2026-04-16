@@ -11,15 +11,21 @@
 #
 # What it installs:
 #     - Homebrew (Mac only, if missing)
-#     - Python 3.10+, Node.js, pipx, bun, gh
+#     - Python 3.10+, Node.js, pipx, bun, gh, fastmcp
+#     - Claude Code (via npm) and Obsidian (desktop app)
 #     - graphify CLI + Claude skill (with optimization scripts)
-#     - meeting-todos, patterns sub-skills
-#     - humanizer (de-AI writing)
-#     - Granola MCP (meeting notes auto-sync)
+#     - All bundled sub-skills: graphify, meeting-todos, patterns, insights,
+#       deconstruct, daily-journal, repurpose-talk, nano-banana (skill docs only)
+#     - humanizer (de-AI writing) — cloned from its own fork repo
+#     - Granola + ChatPRD MCPs
+#     - Marketplace: obsidian-skills (kepano); plugins: obsidian, context7, playwright
+#     - Mac: Obsidian CLI symlink to /usr/local/bin/obsidian (if the app ships it)
 #     - The ai-brain-starter skill itself
 #
-# What it does NOT install (because it requires manual steps inside Claude Code):
-#     - nano-banana (image generation) — instructions printed at the end
+# What it does NOT install (requires marketplace commands inside Claude Code):
+#     - nano-banana plugin (image generation backend) — the SKILL FOLDER is
+#       synced above so /nano-banana is discoverable, but the actual plugin
+#       needs /plugin install + a Gemini API key. Instructions printed at end.
 #
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # SAFETY GUARANTEES — for users with existing setups + custom integrations
@@ -234,6 +240,26 @@ have node && ok "node $(node --version)"
 have npm  && ok "npm $(npm --version)"
 
 # ───────────────────────────────────────────────────────────────────────────────
+# bun — required by several plugin hooks (remotion, some custom skill runners).
+# Installed via brew on Mac (cleanest), via the official installer on Linux
+# (drops into ~/.bun/bin). The verification block checks both PATH and
+# ~/.bun/bin/bun so the bootstrap passes either way.
+# ───────────────────────────────────────────────────────────────────────────────
+
+if ! have bun && [[ ! -x "$HOME/.bun/bin/bun" ]]; then
+  hdr "Installing bun"
+  if is_mac; then
+    brew install bun || err "bun install failed"
+  else
+    # Official installer. It edits ~/.bashrc|~/.zshrc to add ~/.bun/bin to PATH;
+    # we also export it for the current session so the verification block works.
+    curl -fsSL https://bun.sh/install | bash 2>/dev/null || err "bun install failed"
+    export PATH="$HOME/.bun/bin:$PATH"
+  fi
+fi
+{ have bun || [[ -x "$HOME/.bun/bin/bun" ]]; } && ok "bun installed"
+
+# ───────────────────────────────────────────────────────────────────────────────
 # Claude Code (Anthropic's CLI/desktop app — REQUIRED for /setup-brain)
 # Without this, the user has no way to actually run the skill they just installed.
 # Distributed via npm so the install path is identical on Mac, Linux, and Windows
@@ -380,6 +406,19 @@ fi
 have graphify && ok "graphify $(graphify --version 2>/dev/null | head -1 || echo installed)"
 
 # ───────────────────────────────────────────────────────────────────────────────
+# FastMCP — framework for building custom MCP servers in minimal Python.
+# Needed when wiring CRM bridges, vault sync, investor relations, or any
+# project-specific MCP the user (or their team) builds on top of this stack.
+# ───────────────────────────────────────────────────────────────────────────────
+
+if ! have fastmcp; then
+  hdr "Installing fastmcp"
+  log "fastmcp lets you build custom MCP servers in a few lines of Python."
+  pipx install fastmcp >/dev/null 2>&1 || warn "fastmcp install failed (non-blocking — install later with: pipx install fastmcp)"
+fi
+have fastmcp && ok "fastmcp $(fastmcp --version 2>/dev/null | head -1 || echo installed)"
+
+# ───────────────────────────────────────────────────────────────────────────────
 # Clone or update the ai-brain-starter skill
 # SAFETY:
 #   - Stashes local uncommitted changes before pulling
@@ -453,7 +492,7 @@ SKILL_FORKS=()
 SKILL_SYMLINKS=()
 SKILLS_TO_SYNC=()
 
-for sub in graphify meeting-todos patterns; do
+for sub in graphify meeting-todos patterns insights deconstruct daily-journal repurpose-talk nano-banana; do
   dst="$HOME/.claude/skills/$sub"
 
   if [[ -L "$dst" ]]; then
@@ -558,14 +597,15 @@ fi
 # Granola MCP (meeting workflow rule depends on this)
 # ───────────────────────────────────────────────────────────────────────────────
 
-hdr "Registering Granola MCP (meeting notes auto-sync)"
+hdr "Registering MCPs (Granola + ChatPRD)"
 # SAFETY: backup .mcp.json before editing. Existing MCP servers
 # (custom integrations, other URL or stdio MCPs the user wired themselves)
-# are preserved — setdefault() only adds the granola entry if missing.
-if [[ -f "$HOME/.claude/.mcp.json" ]]; then
-  cp "$HOME/.claude/.mcp.json" "$HOME/.claude/.mcp.json.bak-$(date +%Y-%m-%d-%H%M)"
-fi
-python3 - <<'PY' || err "granola MCP registration failed"
+# are preserved — setdefault() only adds entries that are missing.
+backup_file "$HOME/.claude/.mcp.json"
+if [[ $DRY_RUN -eq 1 ]]; then
+  dry "would register granola + chatprd MCPs in ~/.claude/.mcp.json (existing entries preserved)"
+else
+  python3 - <<'PY' || err "MCP registration failed"
 import json, os
 p = os.path.expanduser("~/.claude/.mcp.json")
 try:
@@ -573,11 +613,76 @@ try:
 except FileNotFoundError:
     m = {"mcpServers": {}}
 m.setdefault("mcpServers", {})
+added = []
 if "granola" not in m["mcpServers"]:
     m["mcpServers"]["granola"] = {"type": "url", "url": "https://mcp.granola.ai/mcp"}
+    added.append("granola")
+if "chatprd" not in m["mcpServers"]:
+    m["mcpServers"]["chatprd"] = {"type": "url", "url": "https://app.chatprd.ai/mcp"}
+    added.append("chatprd")
 with open(p, "w") as f: json.dump(m, f, indent=2)
+print("added:", ", ".join(added) if added else "nothing new (already registered)")
 PY
-ok "Granola MCP registered — .mcp.json backed up (existing MCP servers preserved)"
+  ok "MCPs registered: granola, chatprd — .mcp.json backed up (existing entries preserved)"
+fi
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Marketplaces + enabled plugins (settings.json)
+# SAFETY: backup settings.json first. setdefault() never clobbers existing
+# marketplaces, plugins, permissions, env vars, or any other keys.
+# ───────────────────────────────────────────────────────────────────────────────
+
+hdr "Registering marketplace + enabling plugins"
+backup_file "$HOME/.claude/settings.json"
+if [[ $DRY_RUN -eq 1 ]]; then
+  dry "would register obsidian-skills marketplace (kepano/obsidian-skills) and enable: obsidian, context7, playwright"
+else
+  python3 - <<'PY' || err "settings.json plugin registration failed"
+import json, os
+p = os.path.expanduser("~/.claude/settings.json")
+try:
+    with open(p) as f: s = json.load(f)
+except FileNotFoundError:
+    s = {}
+s.setdefault("extraKnownMarketplaces", {})
+if "obsidian-skills" not in s["extraKnownMarketplaces"]:
+    s["extraKnownMarketplaces"]["obsidian-skills"] = {
+        "source": {"source": "github", "repo": "kepano/obsidian-skills"}
+    }
+s.setdefault("enabledPlugins", {})
+for plug in ("obsidian@obsidian-skills", "context7", "playwright"):
+    s["enabledPlugins"].setdefault(plug, True)
+with open(p, "w") as f: json.dump(s, f, indent=2)
+PY
+  ok "Marketplace + plugins registered (settings.json backed up)"
+fi
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Obsidian CLI symlink (Mac only, Obsidian 1.12.7+)
+# The Obsidian desktop app ships a CLI binary. Linking it into /usr/local/bin
+# makes `obsidian search`, `obsidian backlinks` etc. callable from anywhere —
+# used by the graphify and meeting skills for fast vault queries.
+# Requires sudo for /usr/local/bin; we skip cleanly if the user declines.
+# ───────────────────────────────────────────────────────────────────────────────
+
+if is_mac; then
+  OBS_CLI="/Applications/Obsidian.app/Contents/MacOS/obsidian-cli"
+  LINK="/usr/local/bin/obsidian"
+  if [[ -f "$OBS_CLI" ]] && [[ ! -e "$LINK" || "$(readlink "$LINK" 2>/dev/null)" != "$OBS_CLI" ]]; then
+    hdr "Linking Obsidian CLI"
+    log "Makes 'obsidian search/backlinks/...' callable from any terminal."
+    log "Requires your Mac password (for the /usr/local/bin symlink)."
+    if [[ $DRY_RUN -eq 1 ]]; then
+      dry "would: sudo ln -sf $OBS_CLI $LINK"
+    else
+      sudo ln -sf "$OBS_CLI" "$LINK" 2>/dev/null \
+        && ok "obsidian CLI linked at $LINK" \
+        || warn "obsidian CLI link skipped (not blocking — vault works fine without it)"
+    fi
+  elif [[ -L "$LINK" ]]; then
+    ok "obsidian CLI already linked"
+  fi
+fi
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Verification — NEVER FAIL SILENTLY
@@ -585,6 +690,15 @@ ok "Granola MCP registered — .mcp.json backed up (existing MCP servers preserv
 
 hdr "Verifying installation"
 
+if [[ $DRY_RUN -eq 1 ]]; then
+  log "skipping verification under --dry-run (nothing was actually installed)"
+  # Jump past the verification block via a flag; the change-summary still runs.
+  SKIP_VERIFY=1
+else
+  SKIP_VERIFY=0
+fi
+
+if [[ $SKIP_VERIFY -eq 0 ]]; then
 CHECKS=(
   "graphify CLI:graphify"
   "node:node"
@@ -603,8 +717,8 @@ for check in "${CHECKS[@]}"; do
 done
 { have bun || [[ -x "$HOME/.bun/bin/bun" ]]; } && ok "bun" || err "bun not found"
 
-# Skill folders
-for sub in graphify meeting-todos patterns humanizer ai-brain-starter; do
+# Skill folders (full bundled set + humanizer + ai-brain-starter itself)
+for sub in graphify meeting-todos patterns insights deconstruct daily-journal repurpose-talk nano-banana humanizer ai-brain-starter; do
   if [[ -d "$HOME/.claude/skills/$sub" ]]; then
     ok "skill: $sub"
   else
@@ -615,10 +729,19 @@ done
 # graphify scripts present (the 80%-cost-cut wrappers)
 [[ -d "$HOME/.claude/skills/graphify/scripts" ]] && ok "graphify scripts" || err "graphify scripts missing"
 
-# Config files
+# MCP entries
 grep -q "granola" "$HOME/.claude/.mcp.json" 2>/dev/null \
   && ok "granola MCP in .mcp.json" \
   || err "granola not in .mcp.json"
+grep -q "chatprd" "$HOME/.claude/.mcp.json" 2>/dev/null \
+  && ok "chatprd MCP in .mcp.json" \
+  || err "chatprd not in .mcp.json"
+
+# Marketplace + plugins
+grep -q "obsidian-skills" "$HOME/.claude/settings.json" 2>/dev/null \
+  && ok "obsidian-skills marketplace in settings.json" \
+  || warn "obsidian-skills marketplace not in settings.json (non-blocking)"
+fi  # end: if [[ $SKIP_VERIFY -eq 0 ]]
 
 echo
 if [[ ${#FAILED[@]} -eq 0 ]]; then
