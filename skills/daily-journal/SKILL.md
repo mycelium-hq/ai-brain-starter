@@ -166,27 +166,62 @@ After the emotional check-in, run through these accountability items. Be direct 
 
 Based on everything they said, identify the PRIMARY floor:
 
-**Low Floors:**
-- Shame — "I'm such an idiot," self-disgust, hiding
-- Guilt — "I should be doing more," not enough, letting people down
-- Apathy — "Nothing matters," checked out, numb, Netflix spiral
-- Grief — Loss, sadness, missing someone/something, killed mood
-- Fear — Anxiety, "what if," scared, uncertain, imposter feelings
-- Desire — Wanting, craving, reaching, crushes, ambition mixed with lack
-- Anger — Frustration, someone not matching effort, disrespect, explosions
-- Pride — Proving something, competitive, need for external validation
+**Low Floors (1-18) — Reactive:**
+1. Disgust — outward rejection, visceral "get it away from me"
+2. Shame — "I'm such an idiot," self-disgust, hiding
+3. Embarrassment — social exposure, temporary, recoverable
+4. Guilt — "I should be doing more," not enough, letting people down
+5. Apathy — "Nothing matters," checked out, numb, Netflix spiral
+6. Resignation — shadow of Acceptance, defeated "it is what it is" (NOT the same as making peace)
+7. Confusion — mind reaching and failing, "I don't know," contradictory thoughts
+8. Loneliness — surrounded but unfound, no one gets it
+9. Boredom — restless, understimulated, THE TRAMPOLINE FLOOR (generative potential)
+10. Grief — loss, sadness, missing someone/something, killed mood
+11. Disappointment — gap between hope and what arrived, "I thought..."
+12. Hurt — breach in a relationship, "how could they"
+13. Fear — anxiety, "what if," scared, uncertain, imposter feelings
+14. Frustration — blocked energy, trying and failing, "this should be working"
+15. Desire — wanting, craving, reaching, crushes, ambition mixed with lack
+16. Anger — directed energy, "this is wrong," disrespect, explosions
+17. Contempt — "you are beneath me," hierarchical dismissal, cold not hot
+18. Pride — proving something, competitive, need for external validation
 
-**Middle Floors:**
-- Courage — Taking action despite fear, showing up, doing the hard thing
-- Neutrality — Calm observation, "it is what it is," processing without charge
-- Willingness — "Getting back on track," optimistic restart, open to trying
-- Acceptance — Making peace with reality, letting go of control
-- Reason — Analytical, strategic, clear-headed problem solving
+**Middle Floors (19-24) — Transitional:**
+19. Courage — taking action despite fear, showing up, doing the hard thing
+20. Hope — future-facing trust, "I think this could work," steady forward momentum
+21. Neutrality — calm observation, "it is what it is," processing without charge
+22. Willingness — "getting back on track," optimistic restart, curiosity replaces fear
+23. Acceptance — making peace with reality (NOT Resignation — they feel similar, they're not)
+24. Reason — analytical, strategic, clear-headed, the ceiling of the mind
 
-**High Floors:**
-- Love — Connection, gratitude, warmth, feeling held, giving freely
-- Joy — Delight, fun, laughter, alive, "best day ever" energy
-- Peace — Stillness, presence, nothing to fix, enough as-is
+**High Floors (25-34) — Generative:**
+25. Trust — quiet confidence that things hold, less hedging
+26. Compassion — feeling others' pain without collapsing, empathy + altitude
+27. Humility — accurate self-perception, "I was wrong about," no drama
+28. Belonging — being received, "I'm in the right room," quiet certainty
+29. Love — connection, warmth, feeling held, giving freely
+30. Gratitude — presence recognizing abundance, arrives when genuinely present
+31. Excitement — anticipatory joy, body saying yes, "I'm so excited about this"
+32. Wonder — awe at what exists, amazement, expansion
+33. Joy — delight, fun, laughter, alive, "best day ever" energy
+34. Peace — stillness, presence, nothing to fix, enough as-is
+
+**Elevator Emotions (not floors — movement between floors):**
+- Nostalgia = Grief (10) + Love (29), aching warmth
+- Awe = Fear (13) + Wonder (32), smallness and expansion at once
+- Jealousy = Fear (13) + Desire (15) + Anger (16), rapid cycling
+- Schadenfreude = Pride (18) + corrupted Joy (33), slide downward
+- Vulnerability = Shame (2) to Love (29), staircase (deliberate, step by step)
+- Overwhelm = any floor, flooding (capacity failure)
+- Bittersweet = Grief (10) + Joy (33)
+
+**Shadow Twins (low floor pretending to be its high twin):**
+- Resignation (6) / Acceptance (23): "I've given up" vs "I've made peace"
+- Apathy (5) / Neutrality (21): "I don't care" vs "I'm not attached"
+- Desire (15) / Love (29): "I want from you" vs "I give to you"
+- Pride (18) / Confidence: "I need you to see me" vs "I see myself"
+
+When tagging, use array format: `floor: [Grief, Love]` means dominant Grief with Love also present. First element = dominant.
 
 ### Step 5: Advisory Panel Dialogue
 
