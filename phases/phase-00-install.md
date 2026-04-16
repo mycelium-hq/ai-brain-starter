@@ -2,7 +2,7 @@
 
 **Do this silently before the conversation starts.** All mechanical installs live in `bootstrap.sh` (Mac/Linux) and `bootstrap.ps1` (Windows) at the repo root. Phase 0 is a thin orchestrator: detect platform, invoke bootstrap, handle the conversational follow-ups, then hand off to Phase 1.
 
-**Why one source of truth?** The install list (brew/python/node/pipx/bun/gh/fastmcp, graphify, humanizer, all bundled sub-skills, Granola + ChatPRD MCPs, obsidian-skills marketplace, context7/playwright plugins, Obsidian app, Obsidian CLI symlink) used to live in two places: bootstrap scripts AND this phase file. They drifted. Now bootstrap is canonical. Every line of install logic lives there, on every platform. Phase 0 never copies bash.
+**Why one source of truth?** The install list (brew/python/node/pipx/gh/fastmcp, graphify, humanizer, all bundled sub-skills, Granola + ChatPRD MCPs, obsidian-skills marketplace, context7/playwright plugins, Obsidian app, Obsidian CLI symlink) used to live in two places: bootstrap scripts AND this phase file. They drifted. Now bootstrap is canonical. Every line of install logic lives there, on every platform. Phase 0 never copies bash.
 
 ---
 
@@ -40,7 +40,7 @@ If the user reached /setup-brain WITHOUT running bootstrap first (rare), the rep
 
 | Category | Items |
 |---|---|
-| CLI tools | Homebrew (Mac), Python 3.10+, Node.js, pipx, bun, gh, fastmcp, Claude Code |
+| CLI tools | Homebrew (Mac), Python 3.10+, Node.js, pipx, gh, fastmcp, Claude Code |
 | Desktop apps | Obsidian (via brew/winget/snap/flatpak/AppImage), Obsidian CLI symlink (Mac) |
 | Graphify | graphifyy Python package + `graphify install` (platform binary) |
 | Sub-skills | graphify, meeting-todos, patterns, insights, deconstruct, daily-journal, repurpose-talk, nano-banana (skill folder only; plugin install is deferred) |
