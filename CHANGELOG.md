@@ -9,6 +9,18 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-16 (evening, later) -- Enforce compressed Claude-facing docs at tool level
+
+**The problem:** a "compress all Claude-facing docs" rule lived in memory for days, but a fresh session still shipped a verbose memory file + hookify rule because memory scans are easy to skip. A memory rule that depends on Claude remembering to check it is not a rule — it's a suggestion.
+
+**What changed:**
+
+- **`templates/hookify-rules/hookify.compress-claude-docs.local.md`** (new): fires on every write to memory files, hookify rules, vault rule files, and CLAUDE.md. Warn-level. Shows the compression rules inline so Claude sees them at tool-use time, not memory-scan time. Can't be missed.
+
+**Why it matters:** memory-level rules require active recall. Tool-level hooks fire regardless. Any rule Claude must "remember to apply before writing" belongs in a hook, not a memory file.
+
+---
+
 ## 2026-04-16 (evening) -- Fix duplicate note titles (filename + H1)
 
 **The problem:** scripts and templates were writing `# Title` as the first line after frontmatter. In Obsidian the filename IS the title, so the H1 created a visible duplicate ("Journal Metrics" rendered twice, once as note title, again as body heading). Reported repeatedly before a permanent fix.
