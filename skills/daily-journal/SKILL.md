@@ -346,8 +346,7 @@ deep_work: X                # blocks completed today
 
 ---
 
-## Panel dialogue (synthetic — not the user's original thought)
-> ⚠️ Everything below this line is AI-generated panel commentary, not the user's writing. Kept separate so future rereads can distinguish their original voice from advisor reactions.
+## Panel dialogue
 
 **Panel:** [Name] *(credential, 4-6 words)* · [Name] *(credential)* · [Name] *(credential)*
 
@@ -376,7 +375,7 @@ deep_work: X                # blocks completed today
 - Include specific details (names, places, what happened)
 - If they surfaced something new in the interview that surprised them, make sure it lands in the entry
 - Don't over-polish. The best entries are messy and real.
-- **Strict separation:** the `## Journal` section contains ONLY their original thought, written in their voice. Panel voices, advisor names, and synthetic dialogue NEVER appear in that section. Panel commentary lives exclusively in the `## Panel dialogue` section below the horizontal rule, labeled as synthetic. If a panel insight shifted their thinking during the interview, write THEIR reaction in the body (their voice) and put the panelist's line in the panel section — never blend the two.
+- **Strict separation:** the `## Journal` section contains ONLY their original thought, written in their voice. Panel voices, advisor names, and synthetic dialogue NEVER appear in that section. Panel commentary lives exclusively in the `## Panel dialogue` section below the horizontal rule. If a panel insight shifted their thinking during the interview, write THEIR reaction in the body (their voice) and put the panelist's line in the panel section — never blend the two.
 - The floor tag goes before ## Concepts
 - Use `[[wikilinks]]` for all concept references in the body text too, naturally
 

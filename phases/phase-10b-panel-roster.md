@@ -49,8 +49,7 @@ floor_level: [low/middle/high]
 
 ---
 
-## Panel dialogue (synthetic — not [User]'s original thought)
-> ⚠️ Everything below this line is AI-generated panel commentary, not the user's own writing. Kept separate so future rereads can distinguish original voice from advisor reactions.
+## Panel dialogue
 
 [Short staged exchange among the 3–5 selected panelists — actual dialogue, not parallel bullets. Panelists talk to each other and to the user. At least one dissent must be clearly visible. Keep it tight.]
 
@@ -129,7 +128,7 @@ Append format:
 - Include specific details (names, places, what happened)
 - If they surfaced something new in the conversation that surprised them, make sure it lands in the entry
 - Don't over-polish. The best entries are messy and real.
-- **Strict voice separation.** The `## Journal — [name]'s voice` section contains ONLY their original thought. Panel voices, advisor names, and synthetic dialogue NEVER appear there. Panel commentary lives exclusively in the `## Panel dialogue` section below the horizontal rule, labeled as synthetic. Never blend the two.
+- **Strict voice separation.** The `## Journal — [name]'s voice` section contains ONLY their original thought. Panel voices, advisor names, and synthetic dialogue NEVER appear there. Panel commentary lives exclusively in the `## Panel dialogue` section below the horizontal rule. Never blend the two.
 - The floor tag goes before ## Concepts
 - Use `[[wikilinks]]` for all concept references
 - **Good days matter.** Most people only journal in detail when things are bad. Push for detail on good days too — these are the entries they'll want to read later.
