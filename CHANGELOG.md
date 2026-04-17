@@ -9,6 +9,16 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-17 (later) -- auto-snapshot: guard against large vaults
+
+`scripts/auto-snapshot.sh` now checks tracked file count before running `git add -A`. If the vault has more than 5,000 tracked files (typical Obsidian vault: 10K-60K), the script logs a clear abort message and exits instead of walking the full tree. A full-tree `git add` on a large vault locks `.git/index.lock` for 10+ minutes and burns assistant context while it waits.
+
+No behavior change for small repos (side projects, code repos). If you have a large vault, use explicit-path staging at session close instead.
+
+- **`scripts/auto-snapshot.sh`**: added file-count guard before `git add -A`
+
+---
+
 ## 2026-04-17 (later) -- vault-context hook: actual file injection for strategic questions
 
 Previously, the session-protocol hook told Claude to "read Current Priorities.md before responding." That's an instruction — it can be skipped or deferred. In practice, Claude often gave generic answers without ever reading the vault.
