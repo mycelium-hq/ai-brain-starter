@@ -7,9 +7,9 @@ candidate with context from the vault, prompts for approval, and inserts
 [[wikilinks]] into the first occurrence per file.
 
 After applying a wikilink, if the entity has no existing note it offers to
-create a stub note:
-  - People  → 👤 CRM/<Name>.md  (CRM format with backlinks Dataview)
-  - Concepts → 📝 Notes/<Name>.md  (concept format with backlinks Dataview)
+create a stub note seeded with graph neighbors from graph.json:
+  - People  → 👤 CRM/<Name>.md  (CRM format + neighbors + backlinks Dataview)
+  - Concepts → 📝 Notes/<Name>.md  (concept format + neighbors + backlinks Dataview)
 
 For single first names, prompts for the full name and uses alias syntax:
     [[George Trimis|George]]
@@ -19,18 +19,22 @@ Usage:
 
     --report PATH         Path to WIKILINK_GAPS.md (auto-detected if omitted)
     --vault-root PATH     Vault root (default: current directory)
+    --graph PATH          Path to graph.json (auto-detected if omitted)
     --people-dir PATH     Where to create person stubs (default: 👤 CRM)
     --concepts-dir PATH   Where to create concept stubs (default: 📝 Notes)
     --dry-run             Show changes without writing files
 """
 
 import argparse
+import json
 import re
 import sys
+from collections import defaultdict
 from datetime import date
 from pathlib import Path
 
 SKIP_PARTS = {"⚙️ Meta", "Archive", "🗄 Archive", "_review_alternate_drafts"}
+FILE_TYPES = {"document", "code", "image", "paper", "rationale"}
 EXISTING_LINK_RE = re.compile(r'\[\[[^\]]+\]\]')
 
 DATAVIEW_BACKLINKS = '''\
@@ -51,8 +55,82 @@ dv.table(["File", "Date", "Source"], rows);
 ```'''
 
 
-def person_stub(name: str, first_name: str) -> str:
+# ---------------------------------------------------------------------------
+# Graph neighbor lookup
+# ---------------------------------------------------------------------------
+
+def load_graph_neighbors(graph_path: Path) -> dict[str, list[str]]:
+    """
+    Build label -> [neighbor labels sorted by degree] from graph.json.
+    Skips file/document nodes. Returns {} if graph_path is None or missing.
+    """
+    if not graph_path or not graph_path.exists():
+        return {}
+
+    graph = json.loads(graph_path.read_text(encoding="utf-8"))
+    nodes = graph.get("nodes", [])
+    edges = graph.get("links", graph.get("edges", []))
+
+    # id -> label, id -> type
+    id_label: dict[str, str] = {}
+    id_type: dict[str, str] = {}
+    for n in nodes:
+        nid = n.get("id", "")
+        id_label[nid] = n.get("label", "").strip()
+        id_type[nid] = n.get("type", "")
+
+    # Degree per node id
+    degree: dict[str, int] = defaultdict(int)
+    for e in edges:
+        degree[e.get("source", "")] += 1
+        degree[e.get("target", "")] += 1
+
+    # Adjacency: label -> set of neighbor ids
+    adjacency: dict[str, set] = defaultdict(set)
+    for e in edges:
+        src, tgt = e.get("source", ""), e.get("target", "")
+        src_label = id_label.get(src, "")
+        tgt_label = id_label.get(tgt, "")
+        if src_label and tgt_label:
+            adjacency[src_label].add(tgt)
+            adjacency[tgt_label].add(src)
+
+    # Build label -> sorted neighbor labels (skip file nodes, skip blanks)
+    neighbors: dict[str, list[str]] = {}
+    for label, neighbor_ids in adjacency.items():
+        valid = []
+        for nid in neighbor_ids:
+            nlabel = id_label.get(nid, "").strip()
+            ntype = id_type.get(nid, "")
+            if nlabel and ntype.lower() not in FILE_TYPES:
+                valid.append((nlabel, degree.get(nid, 0)))
+        valid.sort(key=lambda x: -x[1])
+        neighbors[label] = [lbl for lbl, _ in valid]
+
+    return neighbors
+
+
+def get_neighbors_for(label: str, link_target: str, neighbors: dict[str, list[str]], top: int = 8) -> list[str]:
+    """Return top N neighbor labels for an entity, trying both display and full name."""
+    for key in [link_target, label]:
+        found = neighbors.get(key, [])
+        if found:
+            return found[:top]
+    # Case-insensitive fallback
+    key_lower = link_target.lower()
+    for k, v in neighbors.items():
+        if k.lower() == key_lower:
+            return v[:top]
+    return []
+
+
+# ---------------------------------------------------------------------------
+# Stub note templates
+# ---------------------------------------------------------------------------
+
+def person_stub(name: str, first_name: str, neighbor_labels: list[str]) -> str:
     aliases = f"\n- {first_name}" if first_name and first_name != name else ""
+    connected = " | ".join(f"[[{n}]]" for n in neighbor_labels) if neighbor_labels else ""
     return f"""\
 ---
 creationDate: {date.today()}
@@ -72,7 +150,7 @@ priority:
 -
 
 ## Connected
-
+{connected}
 
 ## Interactions
 
@@ -80,7 +158,8 @@ priority:
 """
 
 
-def concept_stub(name: str) -> str:
+def concept_stub(name: str, neighbor_labels: list[str]) -> str:
+    connected = " | ".join(f"[[{n}]]" for n in neighbor_labels) if neighbor_labels else ""
     return f"""\
 ---
 creationDate: {date.today()}
@@ -91,12 +170,34 @@ type: concept
 *Add description here.*
 
 ## Connected
-
+{connected}
 
 ## All Entries
 
 {DATAVIEW_BACKLINKS}
 """
+
+
+# ---------------------------------------------------------------------------
+# Core helpers
+# ---------------------------------------------------------------------------
+
+def find_graph(vault: Path, explicit: str | None) -> Path | None:
+    if explicit:
+        p = Path(explicit)
+        return p if p.exists() else None
+    for candidate in [
+        vault / "⚙️ Meta/graphify-out/graph.json",
+        vault / "graphify-out/graph.json",
+    ]:
+        if candidate.exists():
+            return candidate
+    for child in sorted(vault.iterdir()):
+        if child.is_dir() and child.name not in SKIP_PARTS:
+            candidate = child / "⚙️ Meta/graphify-out/graph.json"
+            if candidate.exists():
+                return candidate
+    return None
 
 
 def load_report(report_path: Path) -> list[dict]:
@@ -121,7 +222,6 @@ def load_report(report_path: Path) -> list[dict]:
 
 
 def find_note(vault: Path, name: str) -> Path | None:
-    """Return the path of an existing note with this name, or None."""
     stem = name.lower()
     for md in vault.rglob("*.md"):
         if any(part in SKIP_PARTS for part in md.parts):
@@ -185,6 +285,7 @@ def create_stub(
     note_name: str,
     ntype: str,
     first_name: str,
+    neighbor_labels: list[str],
     people_dir: str,
     concepts_dir: str,
     dry_run: bool,
@@ -196,19 +297,25 @@ def create_stub(
     )
     if is_person:
         folder = vault / people_dir
-        content = person_stub(note_name, first_name)
+        content = person_stub(note_name, first_name, neighbor_labels)
     else:
         folder = vault / concepts_dir
-        content = concept_stub(note_name)
+        content = concept_stub(note_name, neighbor_labels)
 
     note_path = folder / f"{note_name}.md"
     if dry_run:
         print(f"  [DRY RUN] Would create: {note_path.relative_to(vault)}")
+        if neighbor_labels:
+            print(f"  [DRY RUN] Connected: {' | '.join(f'[[{n}]]' for n in neighbor_labels)}")
         return note_path
     folder.mkdir(parents=True, exist_ok=True)
     note_path.write_text(content, encoding="utf-8")
     return note_path
 
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -216,15 +323,26 @@ def main() -> None:
     )
     parser.add_argument("--report", default=None, metavar="PATH")
     parser.add_argument("--vault-root", default=".", metavar="PATH")
-    parser.add_argument("--people-dir", default="👤 CRM", metavar="PATH",
-                        help="Folder for new person stubs (default: 👤 CRM)")
-    parser.add_argument("--concepts-dir", default="📝 Notes", metavar="PATH",
-                        help="Folder for new concept stubs (default: 📝 Notes)")
+    parser.add_argument("--graph", default=None, metavar="PATH",
+                        help="Path to graph.json (auto-detected if omitted)")
+    parser.add_argument("--people-dir", default="👤 CRM", metavar="PATH")
+    parser.add_argument("--concepts-dir", default="📝 Notes", metavar="PATH")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
     vault = Path(args.vault_root).resolve()
 
+    # Load graph neighbors
+    graph_path = find_graph(vault, args.graph)
+    if graph_path:
+        print(f"Graph:  {graph_path.relative_to(vault)}")
+        neighbors = load_graph_neighbors(graph_path)
+        print(f"Loaded neighbors for {len(neighbors)} entities")
+    else:
+        print("Warning: graph.json not found — stubs will have empty Connected section")
+        neighbors = {}
+
+    # Find report
     if args.report:
         report_path = Path(args.report)
     else:
@@ -305,6 +423,10 @@ def main() -> None:
         if existing:
             print(f"  Note exists: {existing.relative_to(vault)}")
         else:
+            # Show which neighbors will be seeded
+            neighbor_labels = get_neighbors_for(label, link_target, neighbors)
+            if neighbor_labels:
+                print(f"  Graph neighbors to seed: {' | '.join(f'[[{n}]]' for n in neighbor_labels)}")
             try:
                 stub_choice = input(f"  No note for '{link_target}'. Create stub? [y/n]: ").strip().lower()
             except (EOFError, KeyboardInterrupt):
@@ -312,7 +434,7 @@ def main() -> None:
             if stub_choice == "y":
                 stub_path = create_stub(
                     vault, link_target, term_info["type"], first_name,
-                    args.people_dir, args.concepts_dir, args.dry_run,
+                    neighbor_labels, args.people_dir, args.concepts_dir, args.dry_run,
                 )
                 if stub_path:
                     rel = stub_path.relative_to(vault) if not args.dry_run else stub_path
