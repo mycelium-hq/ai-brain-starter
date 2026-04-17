@@ -7,12 +7,16 @@ candidate with context from the vault, prompts for approval, and inserts
 [[wikilinks]] into the first occurrence per file.
 
 After applying a wikilink, if the entity has no existing note it offers to
-create a stub note seeded with REAL verbatim excerpts from vault mentions:
-  - People  → 👤 CRM/<Name>.md  (CRM format + real quotes + backlinks Dataview)
-  - Concepts → 📝 Notes/<Name>.md  (concept format + real quotes + backlinks Dataview)
+create a stub note. The stub is seeded by:
+  1. Collecting real vault mentions (up to 40 for people, 15 for concepts)
+  2. Calling Claude API to synthesize a Context section from only that text
+     — no hallucination, Claude only sees sentences actually written in vault
 
-No summarization, no hallucination — only text pulled directly from your notes.
-The Dataview block auto-populates the full backlink list in Obsidian.
+  - People  → 👤 CRM/<Name>.md  (CRM format + synthesized context + Dataview)
+  - Concepts → 📝 Notes/<Name>.md  (concept format + synthesized context + Dataview)
+
+Requires: pip install anthropic
+Env var:  ANTHROPIC_API_KEY
 
 For single first names, prompts for the full name and uses alias syntax:
     [[George Trimis|George]]
@@ -58,19 +62,30 @@ dv.table(["File", "Date", "Source"], rows);
 # Vault mention extraction
 # ---------------------------------------------------------------------------
 
-def collect_mentions(vault: Path, search_term: str, max_per_file: int = 2, max_total: int = 10) -> list[tuple[str, str]]:
+def collect_mentions(
+    vault: Path,
+    search_term: str,
+    max_per_file: int = 2,
+    max_total: int = 15,
+    chronological: bool = False,
+) -> list[tuple[str, str]]:
     """
-    Find ALL mentions of search_term across vault (linked and unlinked).
+    Find mentions of search_term across vault (linked and unlinked).
     Returns list of (source_file_stem, verbatim_sentence) tuples.
-    Pulls the full sentence containing the match, not just a character window.
+
+    chronological=True: sort files oldest→newest (use for people, to capture arc).
+    chronological=False: sort newest→oldest (default, good for concepts).
     """
-    # Match inside or outside wikilinks — we want all occurrences
     pattern = re.compile(r'\b' + re.escape(search_term) + r'\b', re.IGNORECASE)
-    # Split into sentences on . ! ? or newline
-    sentence_split = re.compile(r'(?<=[.!?\n])\s+')
     results = []
 
-    for md in sorted(vault.rglob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True):
+    files = sorted(
+        vault.rglob("*.md"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=not chronological,
+    )
+
+    for md in files:
         if any(part in SKIP_PARTS for part in md.parts):
             continue
         try:
@@ -85,19 +100,14 @@ def collect_mentions(vault: Path, search_term: str, max_per_file: int = 2, max_t
         for m in pattern.finditer(clean):
             if file_hits >= max_per_file:
                 break
-            # Grab the sentence: scan backward to sentence start, forward to end
-            start = max(0, m.start())
-            # Walk back to sentence boundary
-            s = clean.rfind('\n', 0, start)
+            s = clean.rfind('\n', 0, m.start())
             s = s + 1 if s >= 0 else 0
-            # Walk forward to sentence boundary
             e = len(clean)
             for ch in '.!?\n':
                 pos = clean.find(ch, m.end())
                 if pos >= 0:
                     e = min(e, pos + 1)
             sentence = clean[s:e].strip()
-            # Skip very short or very long extracts, skip pure frontmatter lines
             if len(sentence) < 20 or len(sentence) > 400 or sentence.startswith('---'):
                 continue
             results.append((md.stem, sentence))
@@ -110,22 +120,82 @@ def collect_mentions(vault: Path, search_term: str, max_per_file: int = 2, max_t
 
 
 # ---------------------------------------------------------------------------
+# Claude API synthesis
+# ---------------------------------------------------------------------------
+
+def synthesize_context(name: str, ntype: str, mentions: list[tuple[str, str]]) -> str:
+    """
+    Call Claude API to synthesize a ## Context section from real vault mentions.
+    Input is only text pulled from the vault — Claude adds no outside knowledge.
+    Returns bullet-point lines ready to paste into the note.
+    Falls back to a blank bullet if anthropic is not installed or API fails.
+    """
+    if not mentions:
+        return "-"
+
+    try:
+        import anthropic
+    except ImportError:
+        print("  ⚠ anthropic not installed — Context will be blank. Run: pip install anthropic")
+        return "-"
+
+    excerpts = "\n".join(
+        f"[{source}] {sentence}" for source, sentence in mentions
+    )
+
+    if ntype.lower() == "person":
+        prompt = f"""\
+You are writing a CRM note inside a personal Obsidian vault. Based ONLY on the following excerpts from the vault owner's own notes, write 4-7 concise bullet points capturing:
+- Who {name} is and how they entered the vault owner's life
+- The arc of the relationship (how it evolved over time, key turning points)
+- The emotional texture and any complexity or contradiction
+- Current status
+
+Rules:
+- Use ONLY information present in the excerpts. Do not add any outside knowledge.
+- Write in third person about {name}.
+- Be specific and direct. No filler. No hedging.
+- If the relationship is complicated, say so plainly.
+
+Excerpts (oldest to newest):
+{excerpts}
+
+Return only the bullet points, each starting with -"""
+    else:
+        prompt = f"""\
+You are writing a concept note inside a personal Obsidian vault. Based ONLY on the following excerpts from the vault owner's own notes, write 3-5 concise bullet points capturing:
+- How the vault owner uses or defines the concept "{name}"
+- What it connects to or comes up alongside
+- Any recurring pattern in how it appears
+
+Rules:
+- Use ONLY information present in the excerpts. Do not add any outside knowledge.
+- Be specific and direct. No filler.
+
+Excerpts:
+{excerpts}
+
+Return only the bullet points, each starting with -"""
+
+    try:
+        client = anthropic.Anthropic()
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=600,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return response.content[0].text.strip()
+    except Exception as e:
+        print(f"  ⚠ Claude API call failed ({e}) — Context will be blank")
+        return "-"
+
+
+# ---------------------------------------------------------------------------
 # Stub note templates
 # ---------------------------------------------------------------------------
 
-def _format_quotes(mentions: list[tuple[str, str]]) -> str:
-    if not mentions:
-        return ""
-    lines = []
-    for source, sentence in mentions:
-        lines.append(f"> {sentence}\n> — *{source}*\n")
-    return "\n".join(lines)
-
-
-def person_stub(name: str, first_name: str, mentions: list[tuple[str, str]]) -> str:
+def person_stub(name: str, first_name: str, context_bullets: str) -> str:
     aliases = f"\n- {first_name}" if first_name and first_name != name else ""
-    quotes = _format_quotes(mentions)
-    from_notes = f"\n## From your notes\n\n{quotes}" if quotes else ""
     return f"""\
 ---
 creationDate: {date.today()}
@@ -138,10 +208,9 @@ last_interaction: {date.today()}
 next_step: ''
 priority:
 ---
-{from_notes}
 
 ## Context
--
+{context_bullets}
 
 ## Interactions
 
@@ -149,16 +218,16 @@ priority:
 """
 
 
-def concept_stub(name: str, mentions: list[tuple[str, str]]) -> str:
-    quotes = _format_quotes(mentions)
-    from_notes = f"\n## From your notes\n\n{quotes}" if quotes else ""
+def concept_stub(name: str, context_bullets: str) -> str:
     return f"""\
 ---
 creationDate: {date.today()}
 aliases: []
 type: concept
 ---
-{from_notes}
+
+## Context
+{context_bullets}
 
 ## All Entries
 
@@ -256,7 +325,6 @@ def create_stub(
     note_name: str,
     ntype: str,
     first_name: str,
-    mentions: list[tuple[str, str]],
     people_dir: str,
     concepts_dir: str,
     dry_run: bool,
@@ -266,17 +334,43 @@ def create_stub(
         and all(w[0].isupper() for w in note_name.split() if w)
         and note_name.replace(" ", "").replace("-", "").isalpha()
     )
+
+    # Collect mentions with settings tuned to entity type
+    if is_person:
+        # Chronological order so Claude sees the arc oldest→newest
+        mentions = collect_mentions(
+            vault, first_name or note_name,
+            max_per_file=3, max_total=40, chronological=True,
+        )
+        # Also try full name if we searched by first name and got few results
+        if first_name and len(mentions) < 10:
+            full_mentions = collect_mentions(
+                vault, note_name,
+                max_per_file=3, max_total=40, chronological=True,
+            )
+            seen = {s for s, _ in mentions}
+            mentions += [(s, t) for s, t in full_mentions if s not in seen]
+            mentions = mentions[:40]
+    else:
+        mentions = collect_mentions(
+            vault, note_name,
+            max_per_file=2, max_total=15, chronological=False,
+        )
+
+    print(f"  Synthesizing context from {len(mentions)} vault mention(s)...")
+    context_bullets = synthesize_context(note_name, ntype, mentions)
+
     if is_person:
         folder = vault / people_dir
-        content = person_stub(note_name, first_name, mentions)
+        content = person_stub(note_name, first_name, context_bullets)
     else:
         folder = vault / concepts_dir
-        content = concept_stub(note_name, mentions)
+        content = concept_stub(note_name, context_bullets)
 
     note_path = folder / f"{note_name}.md"
     if dry_run:
         print(f"  [DRY RUN] Would create: {note_path.relative_to(vault)}")
-        print(f"  [DRY RUN] Seeded with {len(mentions)} verbatim quote(s) from vault")
+        print(f"  [DRY RUN] Context preview:\n{context_bullets}")
         return note_path
     folder.mkdir(parents=True, exist_ok=True)
     note_path.write_text(content, encoding="utf-8")
@@ -381,9 +475,6 @@ def main() -> None:
         if existing:
             print(f"  Note exists: {existing.relative_to(vault)}")
         else:
-            # Collect real quotes from vault before asking
-            mentions = collect_mentions(vault, label)
-            print(f"  Found {len(mentions)} mention(s) across vault to seed the note")
             try:
                 stub_choice = input(f"  No note for '{link_target}'. Create stub? [y/n]: ").strip().lower()
             except (EOFError, KeyboardInterrupt):
@@ -391,7 +482,7 @@ def main() -> None:
             if stub_choice == "y":
                 stub_path = create_stub(
                     vault, link_target, term_info["type"], first_name,
-                    mentions, args.people_dir, args.concepts_dir, args.dry_run,
+                    args.people_dir, args.concepts_dir, args.dry_run,
                 )
                 if stub_path:
                     rel = stub_path.relative_to(vault) if not args.dry_run else stub_path
