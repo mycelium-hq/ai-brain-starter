@@ -9,6 +9,17 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-17 -- wikilink gaps: `--exclude` flag to skip vault author's own name
+
+In personal vaults, the owner's name appears in every journal entry — as a section header, panel pullback marker, signature, or third-person reference. The gaps script was surfacing it as a high-connection "candidate" with thousands of false matches.
+
+Fix: add `--exclude LABEL [LABEL ...]` so users can suppress their own name (or any label) permanently without touching the script.
+
+- **`scripts/graphify_wikilink_gaps.py`**: new `--exclude` flag; excluded labels skip the `is_wikilink_candidate` check entirely. Case-insensitive match.
+- **Usage:** `python3 graphify_wikilink_gaps.py --vault-root . --exclude "Jane Doe" "Jane"`
+
+---
+
 ## 2026-04-16 (late, part 2) -- auto-wikilink: `--all` flag for vault-wide backfill
 
 `auto-wikilink.py` previously defaulted to journals only. For a mature vault, that leaves years of writing, notes, chats, and CRM with unlinked mentions. Running it on individual folders piecemeal is tedious.
