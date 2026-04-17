@@ -9,6 +9,23 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-17 (later) -- vault-context hook: actual file injection for strategic questions
+
+Previously, the session-protocol hook told Claude to "read Current Priorities.md before responding." That's an instruction — it can be skipped or deferred. In practice, Claude often gave generic answers without ever reading the vault.
+
+Fix: a new `vault-context.py` hook that actually reads the files and injects their contents into context before Claude responds. No instructions to follow — the content is just there.
+
+How it works: on every message, the hook checks for strategic keywords (plan, decision, priorities, client, revenue, strategy, etc.). If matched, it reads `⚙️ Meta/Current Priorities.md` and `⚙️ Meta/Open Loops.md` and passes them as `additionalContext`. Silent on trivial queries (rename, fix typo, etc.). Auto-detects the vault root by walking up from the working directory — no hardcoded paths, works in worktrees.
+
+You can extend it by editing `~/.claude/hooks/vault-context.py` and adding entries to `TOPIC_MAP` — each entry maps a keyword list to a list of additional files to inject (e.g. your raise dashboard, a project brief, a client list).
+
+- **`hooks/vault-context.py`** (new): the hook itself. Auto-detecting, keyword-triggered, silent on non-matches.
+- **`hooks.json`**: added vault-context as a UserPromptSubmit hook.
+- **`phases/phase-05-context-layer.md`**: added installation step with copy command and wiring instructions.
+- **Why it matters:** instructions are unreliable. Injected context is not.
+
+---
+
 ## 2026-04-17 (later) -- daily-journal: verbatim-capture rule added
 
 When you're journaling with Claude, you type a lot of things back: answers, tangents, panel replies, corrections. Previously the skill only synthesized those into a smooth narrative, so the exact words got lost. If you later came back looking for something you'd said, it was gone.

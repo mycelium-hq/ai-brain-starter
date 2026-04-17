@@ -93,7 +93,27 @@ Also add an auto-update hook that pulls updates and applies them automatically o
 }
 ```
 
-Tell them: "Done. From now on, the first thing I do every session is read your files — automatically, before I say anything. If there's an update to the skill, I'll pull it and apply it automatically — you'll just see a quick note about what changed."
+Also add the **vault-context hook** — this one actually reads and injects file contents before responding to strategic questions, instead of just instructing Claude to read them. The difference matters: an instruction can be skipped or deferred; injected content is always there.
+
+Copy the hook file:
+```bash
+cp ~/.claude/skills/ai-brain-starter/hooks/vault-context.py ~/.claude/hooks/vault-context.py
+```
+
+Then add it as an additional UserPromptSubmit hook in `.claude/settings.local.json`:
+```json
+{
+  "type": "command",
+  "command": "python3 ~/.claude/hooks/vault-context.py",
+  "statusMessage": "Loading vault context..."
+}
+```
+
+The hook auto-detects the vault root by walking up from the working directory. It fires only when the prompt contains strategic keywords (plan, priorities, decision, strategy, revenue, client, product, etc.) and injects `⚙️ Meta/Current Priorities.md` and `⚙️ Meta/Open Loops.md` as `additionalContext`. Silent on trivial queries.
+
+To add your own project-specific files, edit `~/.claude/hooks/vault-context.py` and uncomment the `TOPIC_MAP` example entries — each entry maps a list of keywords to a list of vault-relative file paths.
+
+Tell them: "Done. From now on, the first thing I do every session is read your files — automatically, before I say anything. And whenever you ask something strategic, I'll pull your current priorities and open items into context before I respond. If there's an update to the skill, I'll pull it and apply it automatically — you'll just see a quick note about what changed."
 
 Also create the **session-end-hook.sh** script. This script writes a per-worktree session stub (never to the shared `Last Session.md`) and then runs the aggregator. This design is race-safe against concurrent worktrees — see the "Why per-worktree writes" note below the script for the full explanation.
 
