@@ -126,9 +126,16 @@ print("If Obsidian is currently open, the user must reload it (Cmd/Ctrl+R) for p
 PY
 ```
 
-**After the script runs:**
-- If all plugins succeeded: tell the user *"Done — all plugins installed. If Obsidian is open right now, close and reopen it (or press Cmd+R / Ctrl+R) so they activate."*
-- If any plugin failed (network error, GitHub rate limit, etc.): fall back to the manual UI walkthrough for ONLY the failed plugins. Don't make the user click through plugins that already installed successfully.
+**After the script runs — read the output carefully before doing anything:**
+- `= plugin already installed` → **success, do nothing.** This means the plugin was already present. Do NOT re-run, do NOT tell the user to install it manually, do NOT flag it as a problem. Already installed is the ideal state.
+- `+ plugin installed` → freshly installed, success.
+- `! plugin install failed: ...` → genuine failure (network error, GitHub rate limit, etc.). Fall back to the manual UI walkthrough for ONLY this plugin.
+- `Done. Installed X/Y plugins.` at the end → if X equals Y, everything succeeded (including pre-existing ones). Move on.
+
+**Do not retry a plugin that printed `= already installed`.** Do not ask the user to check it. Do not loop back. It's done.
+
+- If all plugins are `=` or `+`: tell the user *"Done — all plugins are installed. If Obsidian is open right now, close and reopen it (or press Cmd+R / Ctrl+R) so they activate."*
+- If any plugin failed (`!`): fall back to the manual UI walkthrough for ONLY the failed plugins.
 - If the auto-install fails entirely (no Python, no network, vault path wrong): fall back to the full manual UI walkthrough below.
 
 **Manual fallback (only if auto-install failed):**
