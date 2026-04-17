@@ -9,6 +9,26 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-17 (later) -- token optimization guide + cheap model routing
+
+New `docs/TOKEN_OPTIMIZATION.md`: a practical guide to where Claude Code burns tokens on overhead (spoiler: 5K–20K per message before you type anything) and six fixes that cut 50–70% of that cost. Covers caveman-dense Claude-facing files, a hard cap on MEMORY.md entries, disabling unused MCP servers, routing grunt work to cheap models, and a quarterly compression habit.
+
+New `scripts/minimax.sh`: a thin bash wrapper for MiniMax M2.7 (~$0.06/M tokens, 150x cheaper than Opus). Users supply their own API key from [platform.minimax.io](https://platform.minimax.io). Good for extraction, summarization, and bulk classification — the grunt work you shouldn't pay Opus for.
+
+`docs/MEMORY_SYSTEM.md` now has a hard 50-entry cap and a pre-add checklist (already in CLAUDE.md? skip. one-time bug fix? skip. useful in 3 sessions? if no, skip).
+
+`templates/generated/obsidian-rules-template.md` now ships a "Token Efficiency Rules" block so every new vault starts with the compress-everything mindset baked in.
+
+- **`docs/TOKEN_OPTIMIZATION.md`** (new): the full guide + checklist
+- **`scripts/minimax.sh`** (new): generic cheap-model helper
+- **`docs/POWER_TOOLS.md`**: new "Cheap model APIs" section
+- **`docs/MEMORY_SYSTEM.md`**: 50-entry cap in the hygiene section
+- **`templates/generated/obsidian-rules-template.md`**: Token Efficiency Rules block
+- **`README.md`**: linked TOKEN_OPTIMIZATION.md in Deeper Documentation
+- **Why it matters:** a large vault setup burns hundreds of thousands of tokens per session on overhead alone. These patterns pay for themselves within one session.
+
+---
+
 ## 2026-04-17 (later) -- auto-snapshot: guard against large vaults
 
 `scripts/auto-snapshot.sh` now checks tracked file count before running `git add -A`. If the vault has more than 5,000 tracked files (typical Obsidian vault: 10K-60K), the script logs a clear abort message and exits instead of walking the full tree. A full-tree `git add` on a large vault locks `.git/index.lock` for 10+ minutes and burns assistant context while it waits.
