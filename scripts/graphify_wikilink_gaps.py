@@ -43,7 +43,7 @@ SENTENCE_STARTERS = {
 # Separators that indicate formatting artifacts, not concept names
 NOISE_SEPARATORS = {" - ", " → ", " > ", " :: "}
 
-WIKILINK_RE = re.compile(r'\[\[([^\]|#\n]+?)(?:\|[^\]\n]+?)?\]\]')
+WIKILINK_RE = re.compile(r'\[\[([^\]|#\n]+?)(?:\|([^\]\n]+?))?\]\]')
 
 
 def is_wikilink_candidate(label: str, ntype: str) -> bool:
@@ -58,9 +58,14 @@ def is_wikilink_candidate(label: str, ntype: str) -> bool:
 
     words = label.split()
 
-    # More than 4 words = almost certainly a title, sentence, or LLM-invented phrase
-    # (real wikilinks: "Founder Exhaustion Loop", "angel investing", "Tai Lopez" — all ≤4 words)
-    if len(words) > 4:
+    # More than 3 words = almost certainly a title, sentence, or LLM-invented phrase
+    # Real wikilinks: "angel investing", "Tai Lopez", "Founder Exhaustion Loop" — all ≤3 words
+    if len(words) > 3:
+        return False
+
+    # First word is a gerund (-ing) = extracted phrase, not a named concept
+    # "Designing Peace Through", "Choosing Authenticity Over", "Reframing X as Y"
+    if len(words) > 1 and words[0].endswith("ing"):
         return False
 
     # Sentences end with terminal punctuation
@@ -84,21 +89,22 @@ def is_wikilink_candidate(label: str, ntype: str) -> bool:
     if len(words) >= 3 and words[0].lower() in SENTENCE_STARTERS:
         return False
 
-    # All-lowercase 3+ word phrases = extracted prose, not a named concept
+    # All-lowercase 3-word phrases = extracted prose, not a named concept
     # Exception: 2-word lowercase phrases like "angel investing" are valid
-    if len(words) >= 3 and label == label.lower():
+    if len(words) == 3 and label == label.lower():
         return False
 
     return True
 
 
-def looks_like_first_name(label: str) -> bool:
-    """True if label is a single capitalized word that could be a first name only."""
+def looks_like_first_name(label: str, ntype: str) -> bool:
+    """True if label is a single capitalized word AND the graph typed it as a person."""
     words = label.split()
     return (
-        len(words) == 1
+        ntype.lower() == "person"
+        and len(words) == 1
         and label[0].isupper()
-        and not label.isupper()  # not an acronym like "CEO"
+        and not label.isupper()  # not an acronym
         and len(label) >= 3
         and label.isalpha()
     )
@@ -123,7 +129,10 @@ def find_graph(vault: Path, explicit: str | None) -> Path:
 
 
 def scan_wikilinks(vault: Path) -> dict[str, int]:
-    """Return lowercased wikilink target -> occurrence count across vault .md files."""
+    """
+    Return lowercased term -> occurrence count for all wikilink targets AND aliases.
+    [[George Trimis|George]] counts both "george trimis" and "george" as linked.
+    """
     counts: dict[str, int] = defaultdict(int)
     for md in vault.rglob("*.md"):
         if any(part in SKIP_PARTS for part in md.parts):
@@ -132,6 +141,8 @@ def scan_wikilinks(vault: Path) -> dict[str, int]:
             text = md.read_text(encoding="utf-8", errors="ignore")
             for m in WIKILINK_RE.finditer(text):
                 counts[m.group(1).strip().lower()] += 1
+                if m.group(2):  # alias display text e.g. [[Adelaida Diaz-Roa|Adelaida]]
+                    counts[m.group(2).strip().lower()] += 1
         except OSError:
             continue
     return counts
@@ -179,7 +190,7 @@ def main() -> None:
                 "label": label,
                 "type": ntype,
                 "degree": deg,
-                "needs_disambiguation": looks_like_first_name(label),
+                "needs_disambiguation": looks_like_first_name(label, ntype),
             })
 
     print(f"Vault:  {vault}")
