@@ -13,6 +13,10 @@ Run BEFORE goodbye or compaction. Every phase runs every session. Report zeros (
 
 **Closing signals:** "bye", "thanks that's all", "done", "good night", "ttyl", "wrapping up", `/wrap-up`, or equivalent in any language.
 
+## Model
+
+Switch to **Sonnet** before starting this protocol. The session close is structured, write-heavy work — scanning, filing, batch writes, running aggregators. That is Sonnet territory. Opus is for judgment calls; this is not one. Announce the switch so the user knows what model is running the close.
+
 ## Phase 0: Timestamp
 
 Run `date "+%Y-%m-%d %I:%M %p"`. Reuse this timestamp for ALL writes (session file, time tracking, to-do dates, Session Captures entries). One bash call, everything consistent.

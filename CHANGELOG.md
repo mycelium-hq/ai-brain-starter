@@ -9,6 +9,26 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-17 -- session close runs on Sonnet
+
+**`templates/rules/session-end-cascade.md`**: added a Model section at the top. The session-close protocol should always run on Sonnet, not Opus. The close is structured, write-heavy work (scanning, filing, batch writes, running aggregators) — no judgment calls. Switching to Sonnet before Phase 0 saves real tokens without losing anything. Claude announces the switch so you know what model is running.
+
+---
+
+## 2026-04-17 -- maintenance hooks, MCP health check, worktree pruner, rollback guide
+
+New scripts and hooks that save common manual recovery steps:
+
+- **`scripts/mcp-config-check.py`** (new): health checker for your MCP config. Catches six silent-fail bugs: malformed .mcp.json, missing server paths, blank env vars, ghost config files, orphan MCP directories, and misplaced user-scoped MCPs. Run at session start or on-demand. Configurable via env vars (VAULT_ROOT, MCP_SCAN_DIRS).
+- **`scripts/worktree-prune.sh`** (new): weekly git worktree pruner. Self-locates via $BASH_SOURCE so it survives vault moves. Logs to `logs/worktree-prune.log`. Wire to a cron or scheduled task.
+- **`hooks/file-changed-settings.sh`** (new): FileChanged hook that validates .claude/settings.json and .mcp.json on every write. Surfaces a clear error to stderr if JSON is malformed, before a silent failure cascades into broken hooks.
+- **`hooks/rotate-logs.sh`** (new): rotates hook logs at 500KB, keeps 3 gzipped generations per file. Auto-discovers *.log files in LOG_DIR. Safe to call every SessionStart. Prevents unbounded log growth on active vaults.
+- **`hooks/claude-scheduled-runner.sh`** (new): headless Claude Code launcher for launchd/cron scheduled tasks. Reads the task prompt from a SKILL.md file, runs `claude -p` with a turn cap, logs to ~/Library/Logs. All paths configurable via env (VAULT_ROOT, CLAUDE_BIN, TASKS_DIR, LOG_DIR).
+- **`templates/rules/rollback.md`** (new): step-by-step recovery guide when hooks, settings, or plugins break. Diagnosis-first approach (check JSON validity, scan logs, look for stuck locks) before any revert. Nuclear-last ordering.
+- **`templates/rules/obsidian-reference.md`** (new): Obsidian-specific reference details. Covers the workspace.json sort-state quirk (why editing app.json doesn't change sort order), macOS APFS folder mtime behavior, and the custom-sort plugin fix.
+
+---
+
 ## 2026-04-17 (later) -- token optimization guide + cheap model routing
 
 New `docs/TOKEN_OPTIMIZATION.md`: a practical guide to where Claude Code burns tokens on overhead (spoiler: 5K–20K per message before you type anything) and six fixes that cut 50–70% of that cost. Covers caveman-dense Claude-facing files, a hard cap on MEMORY.md entries, disabling unused MCP servers, routing grunt work to cheap models, and a quarterly compression habit.
