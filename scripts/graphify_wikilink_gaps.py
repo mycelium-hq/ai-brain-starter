@@ -58,8 +58,9 @@ def is_wikilink_candidate(label: str, ntype: str) -> bool:
 
     words = label.split()
 
-    # More than 6 words = title or sentence, not a concept/name
-    if len(words) > 6:
+    # More than 4 words = almost certainly a title, sentence, or LLM-invented phrase
+    # (real wikilinks: "Founder Exhaustion Loop", "angel investing", "Tai Lopez" — all ≤4 words)
+    if len(words) > 4:
         return False
 
     # Sentences end with terminal punctuation
@@ -75,15 +76,17 @@ def is_wikilink_candidate(label: str, ntype: str) -> bool:
         if sep in label:
             return False
 
-    # Lowercase opener + 3+ words = sentence fragment, not a named concept
-    # ("the process of X", "how to build Y")
-    # Exception: single-word lowercase labels like "love", "fear" are valid
-    if len(words) > 2 and label[0].islower():
-        if words[0].lower() in SENTENCE_STARTERS:
-            return False
+    # Sentence-opener words at start of 3+ word phrases, case-insensitive.
+    # "When Climbing Becomes Rising", "The People in Your Elevator",
+    # "Rest as the Path to Capacity" — all get filtered.
+    # Named concepts she already uses ("The High-Rise Series") are already wikilinked
+    # so they won't appear in this gap report anyway.
+    if len(words) >= 3 and words[0].lower() in SENTENCE_STARTERS:
+        return False
 
-    # All-lowercase 4+ word phrases = extracted prose, not a named thing
-    if len(words) >= 4 and label == label.lower():
+    # All-lowercase 3+ word phrases = extracted prose, not a named concept
+    # Exception: 2-word lowercase phrases like "angel investing" are valid
+    if len(words) >= 3 and label == label.lower():
         return False
 
     return True
