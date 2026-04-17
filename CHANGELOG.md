@@ -9,6 +9,17 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-17 (later) -- daily-journal: verbatim-capture rule added
+
+When you're journaling with Claude, you type a lot of things back: answers, tangents, panel replies, corrections. Previously the skill only synthesized those into a smooth narrative, so the exact words got lost. If you later came back looking for something you'd said, it was gone.
+
+Fix: every message you type during a journal session now gets logged word-for-word in a dedicated `### My responses to the panel (verbatim, every message I typed back in this session)` subsection inside the entry. No paraphrase. No summary. Typos preserved. The narrative stays readable; the verbatim appendix is the archive.
+
+- **`skills/daily-journal/SKILL.md`**: new "Verbatim-capture rule (critical — no exceptions)" section near the top (after the separation rule). Updated entry template to require the verbatim subsection. Added reinforcement line in the Step 7 "Important" bullets.
+- **Why it matters:** a journal that silently paraphrases you is a journal you stop trusting. The rule is stated in three places now so the model can't skip it.
+
+---
+
 ## 2026-04-17 -- wikilink gaps: `--exclude` flag to skip vault author's own name
 
 In personal vaults, the owner's name appears in every journal entry — as a section header, panel pullback marker, signature, or third-person reference. The gaps script was surfacing it as a high-connection "candidate" with thousands of false matches.

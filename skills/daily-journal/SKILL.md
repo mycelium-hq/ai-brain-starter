@@ -79,6 +79,28 @@ If an omission exists, one panelist at Step 5 must name it in one sentence.
 
 **The main body of the journal entry is the user's original voice only.** Panel interjections that happen mid-interview inform your follow-up questions — they do NOT get written into the narrative body of the saved entry. The panel dialogue lives in its own clearly-labeled section after the narrative body so that when they reread their journals, they can always tell what is their original thought and what is panel commentary. Never blend the two. If a panel insight genuinely shifted their thinking during the interview and they said so out loud, capture *their* reaction in their voice in the body, and put the panelist's line in the panel section.
 
+### Verbatim-capture rule (critical — no exceptions)
+
+**Every message the user types during the journal session must be captured word-for-word in the saved entry.** Not paraphrased. Not summarized. Not "extracted into the narrative." Verbatim.
+
+This includes:
+- The opening content they paste or type
+- Every follow-up answer to your questions
+- Every reply to the panel (yes — even if it's one line)
+- Every reaction, clarification, correction, or tangent
+- Every screenshot caption or side comment
+- The messages where they push back on you or ask for fixes
+
+**How to store it:**
+- The narrative body (`## Journal — [user]'s voice`) still synthesizes their day in their voice, written as flowing prose. This is the readable reflection.
+- Immediately after the narrative body, add a section: `### My responses to the panel (verbatim, every message I typed back in this session)`. Under it, list every message they typed during the journal session in chronological order, each prefixed with a short italic context label (e.g. `*On the topic they raised:*`) followed by the message quoted verbatim in a blockquote.
+- Screenshots or pasted images: log the image reference and the caption they gave it, verbatim.
+- Do NOT truncate. Do NOT fix typos. Do NOT clean up. Their raw words are the archive.
+
+**Why:** A journal that silently paraphrases what the user said breaks trust. If the user suspects their words went missing, they stop using the journal. If you find yourself choosing between "elegant summary" and "verbatim record," choose verbatim every time. The narrative is nice-to-have; the verbatim appendix is the contract.
+
+**Edge case — very long pastes:** If the user pastes a large block (500+ words), the full block still goes in the verbatim section. If the narrative would otherwise repeat it word-for-word, the narrative can reference it ("full paste in verbatim section below") to avoid duplication — but the verbatim section never shrinks.
+
 ### Step 0: Pull Session Captures AND RescueTime (ALWAYS — do both before saying anything)
 
 **0a. RescueTime.** If the RescueTime MCP is connected, pull today's summary immediately so the Productivity Pulse, productive/distracting hours, and top 3 apps are in the room from sentence one. Do NOT defer this to Step 3. If the MCP is not connected, note it and move on.
@@ -341,6 +363,17 @@ deep_work: X                # blocks completed today
 
 [Include the financial abundance note naturally.]
 
+### My responses to the panel (verbatim, every message I typed back in this session)
+*Required by the verbatim-capture rule. Every message the user typed during this journal session, word-for-word, in chronological order. Do not paraphrase, do not trim, do not fix typos. Each message gets a short italic context label, then the message as a blockquote.*
+
+*On [what this message was about]:*
+> [verbatim message 1]
+
+*On [what this message was about]:*
+> [verbatim message 2]
+
+[…continue for every message they typed.]
+
 **Gym:** [X]/4 this week · **Sleep:** [time to bed] · **Meditation:** [yes/no, Xmin] · **Deep Work:** [X]/2 blocks
 **RescueTime:** Pulse [X]/100 · Productive [Xh] · Distracting [Xh] · Top apps: [app1, app2, app3]
 
@@ -376,6 +409,7 @@ deep_work: X                # blocks completed today
 - If they surfaced something new in the interview that surprised them, make sure it lands in the entry
 - Don't over-polish. The best entries are messy and real.
 - **Strict separation:** the `## Journal` section contains ONLY their original thought, written in their voice. Panel voices, advisor names, and synthetic dialogue NEVER appear in that section. Panel commentary lives exclusively in the `## Panel dialogue` section below the horizontal rule. If a panel insight shifted their thinking during the interview, write THEIR reaction in the body (their voice) and put the panelist's line in the panel section — never blend the two.
+- **Verbatim appendix is non-negotiable:** the `### My responses to the panel` subsection inside the `## Journal` block must contain every message the user typed during the session, word-for-word. If you skip this, the entry is broken. See the verbatim-capture rule near the top of this file.
 - The floor tag goes before ## Concepts
 - Use `[[wikilinks]]` for all concept references in the body text too, naturally
 
