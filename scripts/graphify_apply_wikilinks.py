@@ -66,14 +66,15 @@ def collect_mentions(
     vault: Path,
     search_term: str,
     max_per_file: int = 2,
-    max_total: int = 15,
+    max_total: int | None = None,
     chronological: bool = False,
 ) -> list[tuple[str, str]]:
     """
     Find mentions of search_term across vault (linked and unlinked).
     Returns list of (source_file_stem, verbatim_sentence) tuples.
 
-    chronological=True: sort files oldest→newest (use for people, to capture arc).
+    max_total=None: collect all mentions (use for journal people).
+    chronological=True: sort files oldest→newest (captures relationship arc).
     chronological=False: sort newest→oldest (default, good for concepts).
     """
     pattern = re.compile(r'\b' + re.escape(search_term) + r'\b', re.IGNORECASE)
@@ -113,10 +114,10 @@ def collect_mentions(
             results.append((md.stem, sentence))
             file_hits += 1
 
-        if len(results) >= max_total:
+        if max_total is not None and len(results) >= max_total:
             break
 
-    return results[:max_total]
+    return results if max_total is None else results[:max_total]
 
 
 # ---------------------------------------------------------------------------
@@ -143,27 +144,51 @@ def synthesize_context(name: str, ntype: str, mentions: list[tuple[str, str]]) -
         f"[{source}] {sentence}" for source, sentence in mentions
     )
 
+    n = len(mentions)
+
     if ntype.lower() == "person":
+        # Scale detail to mention count: few mentions = brief (book author),
+        # many mentions = full arc (journal person)
+        if n >= 30:
+            bullet_range = "8-15"
+            depth_instruction = (
+                "This person appears extensively in the journals. Write a detailed, "
+                "narrative-quality context: how the relationship entered the vault owner's life, "
+                "each distinct phase, key turning points, contradictions, emotional texture, "
+                "and current status. Surface blind spots and coaching opportunities plainly."
+            )
+        elif n >= 10:
+            bullet_range = "5-8"
+            depth_instruction = (
+                "Capture the relationship arc, key moments, emotional texture, and current status."
+            )
+        else:
+            bullet_range = "3-5"
+            depth_instruction = (
+                "Capture who this person is and their role in the vault owner's life."
+            )
+
         prompt = f"""\
-You are writing a CRM note inside a personal Obsidian vault. Based ONLY on the following excerpts from the vault owner's own notes, write 4-7 concise bullet points capturing:
-- Who {name} is and how they entered the vault owner's life
-- The arc of the relationship (how it evolved over time, key turning points)
-- The emotional texture and any complexity or contradiction
-- Current status
+You are writing a CRM note inside a personal Obsidian vault. Based ONLY on the following \
+excerpts from the vault owner's own notes (oldest to newest), write {bullet_range} bullet points.
+
+{depth_instruction}
 
 Rules:
 - Use ONLY information present in the excerpts. Do not add any outside knowledge.
 - Write in third person about {name}.
 - Be specific and direct. No filler. No hedging.
-- If the relationship is complicated, say so plainly.
+- If the relationship is complicated or contradictory, say so plainly.
+- Facts only — this is for coaching and blind-spot detection, not flattery.
 
-Excerpts (oldest to newest):
+Excerpts ({n} total, chronological):
 {excerpts}
 
 Return only the bullet points, each starting with -"""
     else:
         prompt = f"""\
-You are writing a concept note inside a personal Obsidian vault. Based ONLY on the following excerpts from the vault owner's own notes, write 3-5 concise bullet points capturing:
+You are writing a concept note inside a personal Obsidian vault. Based ONLY on the following \
+excerpts from the vault owner's own notes, write 3-5 concise bullet points capturing:
 - How the vault owner uses or defines the concept "{name}"
 - What it connects to or comes up alongside
 - Any recurring pattern in how it appears
@@ -181,7 +206,7 @@ Return only the bullet points, each starting with -"""
         client = anthropic.Anthropic()
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=600,
+            max_tokens=1200,
             messages=[{"role": "user", "content": prompt}],
         )
         return response.content[0].text.strip()
@@ -337,20 +362,30 @@ def create_stub(
 
     # Collect mentions with settings tuned to entity type
     if is_person:
-        # Chronological order so Claude sees the arc oldest→newest
+        # No cap — read every mention chronologically so Claude sees the full arc.
+        # For journal people (Vanessa, George) this can be 50-200+ mentions.
+        # For book authors this naturally returns a handful.
         mentions = collect_mentions(
             vault, first_name or note_name,
-            max_per_file=3, max_total=40, chronological=True,
+            max_per_file=3, max_total=None, chronological=True,
         )
-        # Also try full name if we searched by first name and got few results
-        if first_name and len(mentions) < 10:
+        # Also search by full name if we started from first name, merge deduped
+        if first_name:
             full_mentions = collect_mentions(
                 vault, note_name,
-                max_per_file=3, max_total=40, chronological=True,
+                max_per_file=3, max_total=None, chronological=True,
             )
-            seen = {s for s, _ in mentions}
-            mentions += [(s, t) for s, t in full_mentions if s not in seen]
-            mentions = mentions[:40]
+            seen_stems = {s for s, _ in mentions}
+            for s, t in full_mentions:
+                if s not in seen_stems:
+                    mentions.append((s, t))
+            # Re-sort merged list by file mtime ascending
+            stem_to_mtime = {
+                md.stem: md.stat().st_mtime
+                for md in vault.rglob("*.md")
+                if not any(p in SKIP_PARTS for p in md.parts)
+            }
+            mentions.sort(key=lambda x: stem_to_mtime.get(x[0], 0))
     else:
         mentions = collect_mentions(
             vault, note_name,
