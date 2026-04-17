@@ -76,6 +76,16 @@ def is_wikilink_candidate(label: str, ntype: str) -> bool:
     if '"' in label or "\u201c" in label or "\u201d" in label:
         return False
 
+    # Parenthetical disambiguation added by LLM: "Onde (startup)", "Onde (Company)"
+    # These are graph artifacts — the real wikilink target is just "Onde"
+    if "(" in label:
+        return False
+
+    # Date/timestamp patterns — note titles, never inline mentions
+    # "2025-12-19 00-33", "2024-09 Monthly Summary"
+    if re.search(r'\b\d{4}-\d{2}\b', label):
+        return False
+
     # Formatting artifacts: "A - B", "A → B"
     for sep in NOISE_SEPARATORS:
         if sep in label:
