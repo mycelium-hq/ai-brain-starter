@@ -26,17 +26,20 @@ v2 fixes all three:
     team-vault content.
 
 Usage:
-  # Default: process journals, personal-only term scope
+  # Default: process journals only
   python3 "⚙️ Meta/scripts/auto-wikilink.py"
 
-  # Specific files (still personal-only by default)
+  # Entire vault (journals + AI Chats + writing + notes + everywhere)
+  python3 "⚙️ Meta/scripts/auto-wikilink.py" --all
+
+  # Dry run first to preview changes
+  python3 "⚙️ Meta/scripts/auto-wikilink.py" --all --dry-run
+
+  # Specific files
   python3 "⚙️ Meta/scripts/auto-wikilink.py" file1.md file2.md
 
-  # Dry run (show changes without writing)
-  python3 "⚙️ Meta/scripts/auto-wikilink.py" --dry-run
-
-  # Opt-in to processing team-vault files (uses team-vault terms only)
-  python3 "⚙️ Meta/scripts/auto-wikilink.py" --allow-team file_in_team_vault.md
+  # Include team-vault files (uses team-vault terms only, strict firewall)
+  python3 "⚙️ Meta/scripts/auto-wikilink.py" --all --allow-team
 """
 import os
 import re
@@ -44,11 +47,20 @@ import sys
 
 VAULT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Folders never scanned for terms even within their vault scope
-EXCLUDED_DIR_NAMES = {
+# Folders never scanned for TERMS (concept notes live elsewhere; AI chats are not canonical)
+EXCLUDED_TERM_DIRS = {
     "🤖 AI Chats", "AI Chats", "graphify-input", "graphify-out",
     "_archive", "Archive", ".obsidian", ".git", ".claude", "Templates",
 }
+
+# Folders never written to during --all walk (system/read-only; AI Chats IS writable)
+EXCLUDED_PROCESSING_DIRS = {
+    "graphify-input", "graphify-out",
+    "_archive", "Archive", ".obsidian", ".git", ".claude", "Templates",
+}
+
+# Keep a single alias for the term-scanning path (used in _discover_subdirs + load_terms)
+EXCLUDED_DIR_NAMES = EXCLUDED_TERM_DIRS
 
 
 def _detect_team_vault(vault_path: str) -> str:
@@ -284,10 +296,37 @@ def add_wikilinks(filepath: str, terms, dry_run: bool = False):
     return 0, []
 
 
+def collect_all_files(vault_path: str, include_team: bool = False) -> list:
+    """Walk the entire vault and return all .md file paths, skipping system dirs.
+
+    Used by --all mode. AI Chats is intentionally included — files there can
+    receive wikilinks even though they're excluded from term scanning.
+    Team vault files are excluded unless include_team is True.
+    """
+    result = []
+    team_prefix = os.path.abspath(TEAM_VAULT_PREFIX) if TEAM_VAULT_PREFIX else None
+    for root, dirs, files in os.walk(vault_path):
+        dirs[:] = [
+            d for d in sorted(dirs)
+            if not d.startswith(".")
+            and d not in EXCLUDED_PROCESSING_DIRS
+        ]
+        for fname in files:
+            if not fname.endswith(".md"):
+                continue
+            fpath = os.path.join(root, fname)
+            abs_fpath = os.path.abspath(fpath)
+            if team_prefix and abs_fpath.startswith(team_prefix) and not include_team:
+                continue
+            result.append(fpath)
+    return result
+
+
 def main():
     args = sys.argv[1:]
     dry_run = "--dry-run" in args
     allow_team = "--allow-team" in args
+    all_mode = "--all" in args
     specific_files = [a for a in args if not a.startswith("--")]
 
     print(f"=== auto-wikilink v2 ({'DRY-RUN' if dry_run else 'APPLY'}) ===")
@@ -295,6 +334,9 @@ def main():
     # Determine files to process
     if specific_files:
         files = [os.path.abspath(f) for f in specific_files if f.endswith(".md")]
+    elif all_mode:
+        files = collect_all_files(VAULT, include_team=allow_team)
+        print(f"--all mode: {len(files)} .md files found in vault")
     else:
         files = []
         if os.path.exists(JOURNAL_DIR):

@@ -9,6 +9,20 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-16 (late, part 2) -- auto-wikilink: `--all` flag for vault-wide backfill
+
+`auto-wikilink.py` previously defaulted to journals only. For a mature vault, that leaves years of writing, notes, chats, and CRM with unlinked mentions. Running it on individual folders piecemeal is tedious.
+
+Fix: add a `--all` flag that walks the entire vault, plus a cleaner dir-exclusion model.
+
+- **`scripts/auto-wikilink.py`**: new `--all` flag walks every `.md` file in the vault (respecting the team-vault firewall). Split `EXCLUDED_DIR_NAMES` into `EXCLUDED_TERM_DIRS` (dirs that can't be sources of canonical terms — e.g. AI Chats) and `EXCLUDED_PROCESSING_DIRS` (dirs that can't be written to — e.g. `_archive`, `.obsidian`). AI Chats now receives wikilinks but never supplies them.
+- **Use pattern:** `--dry-run --all` first (prints proposed count), review sample, then drop `--dry-run` to apply. On a mature vault this typically connects 10k-50k unlinked references in one pass.
+- **Still safe:** existing region-tracking, frontmatter protection, and path-form guard all unchanged. Team-vault firewall still hard-enforced.
+
+Why this matters: an Obsidian alias lets `[[Vanessa]]` resolve to `[[Vanessa Rodriguez]]`, but it does NOT auto-convert plain text "Vanessa" mentions across your vault. `--all` closes that gap retroactively, so the graph actually reflects what you wrote.
+
+---
+
 ## 2026-04-16 (late) -- Model routing: flip the default, add a nudge hook
 
 Most sessions silently run the biggest model available even for trivial tasks because users set `"model": "opus"` (or `opusplan`) once and forget. The rules at the SKILL level say "route to the right model" but no mechanism enforces it — and a running Claude session can't swap its own model mid-turn.
