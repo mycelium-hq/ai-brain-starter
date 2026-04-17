@@ -58,6 +58,14 @@ You are not a yes-machine. You are a thinking partner. Act like one.
 3. **Use RESOLVER.md before creating files.** Each key folder has a RESOLVER.md with a decision tree. Check it before creating any note to confirm it belongs there.
 4. **Humanize external-facing prose before it leaves your hands.** Any prose you write for a human audience — a client email, a LinkedIn post, a Substack draft, a pitch doc, a newsletter, an essay — gets `/humanizer` run on it before it's considered done. The skill strips the AI-isms that give you away. Don't ask, just run it. **Scope:** prose only. Skip YAML, code, tables, dashboards, runbooks, meta files, journal entries, and single-line edits. For non-trivial changes to a humanized doc, re-run on the section you touched, not the whole file. The humanizer skill was installed in Phase 0 — if it's missing, re-run `git clone https://github.com/adelaidasofia/humanizer.git ~/.claude/skills/humanizer`.
 
+## Git in this vault (if git-tracked)
+
+If this vault is under git for local snapshots:
+
+1. **Never run `git add -A`, `git add .`, or unscoped `git status`.** Obsidian vaults grow to 10,000+ files between journals, attachments, and plugin caches (`.smart-env/`, `.obsidian/workspace*`). A full-tree git walk takes minutes of CPU and blocks every follow-up command. Always pass explicit paths: `git add "path/to/file.md" "path/to/another.md"`.
+2. **Check the remote before pushing.** Run `git remote -v`. If empty, this is a local snapshot repo (rollback-only, no push). If remote exists, standard push rules apply.
+3. **During session close, stage only the paths the session touched.** Session file, decision files, edited rule files, to-do edits. Not the whole tree.
+
 ## Session Protocol
 1. Start: Read this file and `⚙️ Meta/Last Session.md` (auto-generated, never edit directly). Load graph reports CONDITIONALLY based on first message topic: personal/journal/writing topics — primary graph; work/business topics — work graph; cross-domain or unclear — both. If you have a graph-query MCP registered, use it for targeted lookups instead of reading the full GRAPH_REPORT.md. Run the daily AI brain update check (see below).
 2. **Run the daily AI brain setup update check** — see the "Session start — daily update check" section below. Once per day, automatically check if there's an update available and, if so, summarize it in plain English and offer to install it.

@@ -22,6 +22,18 @@ This is a **public repo** that strangers fork to build their own vaults. The who
 
 If you catch yourself writing "this is what [name] does," stop. Rewrite it as a generic pattern. The repo is for strangers, not for the maintainer's team.
 
+## Git in large Obsidian vaults (users' vaults, not this repo)
+
+Many users of this skill will have their Obsidian vault under git for local snapshots (the Phase 5 setup suggests it). Obsidian vaults commonly grow to 10,000+ files between journal entries, attachments, book notes, and plugin caches (`.smart-env/`, `.obsidian/workspace*`, etc.). Walking that full tree with `git add -A` or unscoped `git status` takes minutes of CPU, locks `.git/index.lock`, and wastes a lot of assistant context polling for progress.
+
+**Rules when operating in a user's vault:**
+1. Never run `git add -A`, `git add .`, or unscoped `git status`. Always pass explicit file paths you intend to stage.
+2. If a vault has no git remote (`git remote -v` empty), never attempt `git push`. Vaults are commonly local-only snapshot repos.
+3. When `git` is slow, check `wc -l <(git ls-files)` — if >10k files, you are in a vault repo; switch to targeted paths immediately.
+4. The generated session-close template (`templates/generated/session-close.md` or the user's equivalent) must include the "targeted-paths only" pattern for any git snapshot step. If a new setup phase is introducing git automation, ship the rule with it.
+
+These rules ship to every user's vault CLAUDE.md via Phase 4 / `templates/generated/claude-md-template.md`. Keep them generic (no personal paths) per the public-repo rule at the top of this file.
+
 ## Repo structure rules
 
 **Before creating any new file or folder, always check what already exists:**
