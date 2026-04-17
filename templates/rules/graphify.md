@@ -28,3 +28,4 @@ If you have multiple vaults (e.g. personal + team), each vault has its OWN graph
 4. **Update after significant writing sessions.** `/graphify <path> --update`. Cache makes incremental runs cheap.
 5. **Stale if god nodes/community labels don't match reality.** Re-run `/graphify --update`.
 6. **When merging duplicates, update aliases.** Add old name as alias so existing wikilinks still resolve.
+7. **Run wikilink gap report after each graphify session.** `python3 scripts/graphify_wikilink_gaps.py --vault-root .` — finds high-connection entities with no `[[wikilinks]]` yet. Output saved to `graphify-out/WIKILINK_GAPS.md`. Good starting point for new vaults with sparse linking.
