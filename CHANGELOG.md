@@ -9,6 +9,20 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-16 (late) -- Model routing: flip the default, add a nudge hook
+
+Most sessions silently run the biggest model available even for trivial tasks because users set `"model": "opus"` (or `opusplan`) once and forget. The rules at the SKILL level say "route to the right model" but no mechanism enforces it — and a running Claude session can't swap its own model mid-turn.
+
+Fix: flip the default, add a lightweight nudge.
+
+- **`hooks/route-suggest.py`** (new): UserPromptSubmit hook. Classifies each prompt by keyword — strategy/panel/architecture → suggest `opus`; trivial edit → suggest `haiku`; extraction/tagging/boilerplate → suggest a cheap model (minimax/local). Silent when no confident match. Never auto-switches — just prints a one-line `[route nudge]` the user sees in context.
+- **`templates/rules/efficiency.md`**: added Rule 30 — "Never push back with 'too long' or 'too expensive.'" Cost appeals shut down conversations; specific blockers open them. Banned phrases listed.
+- **Recommended default:** set `"model": "sonnet"` in settings.json and use `/model opus` or a shell alias (e.g. `cc-deep='claude --model opusplan'`) when you actually need heavy reasoning. Opus becomes opt-in, not opt-out.
+
+Why this matters: a dumb router with the right default beats a smart router with the wrong one. Flipping the default is one line; the nudge hook catches the 20% of prompts where the default is wrong. Together they cut token burn without adding decision fatigue.
+
+---
+
 ## 2026-04-16 (evening) -- Dropped Calendar + Juggl from default stack
 
 Audited the installed Obsidian plugins against actual usage. Two plugins weren't earning their spot: Calendar (dead weight once `/journal` became the entry point — nobody was clicking dates) and Juggl (zero config data, zero note references — graph exploration happens via Graphify + Smart Connections now).
