@@ -82,6 +82,35 @@ You also need a `GEMINI_API_KEY` environment variable from [Google AI Studio](ht
 
 ---
 
+## Cheap model APIs
+
+When the task is mechanical — extract entities, summarize a doc, classify notes — burning Opus tokens is wasteful. A cheap reasoning model costs 100–150x less and is sufficient.
+
+### MiniMax M2.7 — cheap text processing
+
+**What it does:** A fast, cheap reasoning model good at extraction, classification, summarization, and boilerplate generation. Not a replacement for Claude on judgment-heavy work, but a workhorse for grunt-work text processing.
+
+**Why it matters:** Entity extraction across a 500-file vault: ~$0.30 on MiniMax vs ~$45 on Opus. For batch operations (graphify pre-processing, transcript entity extraction, bulk note tagging), the savings compound.
+
+**Cost:** ~$0.06/M tokens at [platform.minimax.io](https://platform.minimax.io) (create a free account, add credits).
+
+**Install:** This repo ships `scripts/minimax.sh`. After getting your API key:
+```bash
+export MINIMAX_API_KEY="your-key-here"  # add to ~/.zshrc
+chmod +x scripts/minimax.sh
+
+# Test it
+./scripts/minimax.sh "Summarize this in 3 bullet points: Claude Code is a terminal-based AI coding assistant built by Anthropic."
+```
+
+**Route to MiniMax when:** extracting structure from raw text (meeting transcripts, docs), bulk-classifying or tagging vault notes, generating boilerplate from a template, summarizing a single document with no voice requirement.
+
+**Route to Sonnet/Opus when:** judgment calls, writing in your voice, cross-file synthesis, anything with ambiguity.
+
+See [`docs/TOKEN_OPTIMIZATION.md`](TOKEN_OPTIMIZATION.md) for the full routing guide.
+
+---
+
 ## MCP servers
 
 MCP (Model Context Protocol) servers extend Claude Code with structured tool access to external systems. Configured in `~/.claude/.mcp.json`.

@@ -97,6 +97,20 @@ If an update is available, tell the user: "There's a newer version of the AI Bra
 
 **After any pull, check for pending migrations.** Read `migrations/` for any `.md` files newer than the user's last applied version. Each migration file explains what changed and what questions to ask the existing user. Apply them conversationally — don't dump a wall of text, just ask the questions one at a time and update the user's skill files based on their answers.
 
+## Token Efficiency Rules
+
+Every Claude-facing file (CLAUDE.md, MEMORY.md, rules files) is loaded into context on every message. Every word in them has a multiplied cost across every session. Treat them as load-bearing infrastructure, not documentation.
+
+1. **Caveman-dense prose.** Tables beat paragraphs. One line beats five. No intro sentences, no "it's important to note." Remove words that don't change meaning. Target: each file under 10KB (one Read call). Split if it can't fit. Compress every time you edit.
+
+2. **Memory cap.** MEMORY.md max 50 entries. Before adding #51, prune the oldest redundant entry. Never duplicate what's already in CLAUDE.md or rules files — that pays the cost twice.
+
+3. **Disable unused MCP servers.** Every registered server sends tool name listings every message, whether you're using it or not. Audit monthly: remove any server unused in the last two weeks.
+
+4. **Route cheap work to cheap models.** File moves, frontmatter edits, bulk tagging, boilerplate generation — these don't need Opus. Route them to Haiku or a cheap API (see `docs/POWER_TOOLS.md`). Save Opus for judgment, strategy, and synthesis.
+
+5. **Compress Claude-facing files quarterly.** Read every rule in CLAUDE.md and each rules file. Delete rules you've never seen fire. Convert prose to tables. Prune memory. A stale or bloated rules file costs tokens and can mislead — both are bad.
+
 ## Auto-Capture Rules
 
 1. Content ideas → Content Drafts.md (batch at end of session, don't interrupt)

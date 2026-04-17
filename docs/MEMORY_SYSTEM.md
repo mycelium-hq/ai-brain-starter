@@ -192,14 +192,24 @@ memory/
 
 ## Memory hygiene
 
-Memories decay. Set a quarterly habit:
+Memories decay — and they cost tokens on every session start. Left unchecked, MEMORY.md grows until it costs more to load than it saves.
 
+**Hard cap: 50 entries.** Before adding a new entry, prune the oldest redundant one. If you're adding entry 51, something existing should go.
+
+**Before adding, check:**
+- Is this already in CLAUDE.md? If yes, skip — CLAUDE.md loads every session anyway; duplicating it in memory pays the cost twice.
+- Is this in a rules file? Same rule — skip.
+- Is this a one-time bug fix? The fix lives in the code. Skip.
+- Will this still be relevant in 3 sessions? If no, skip.
+
+**Set a quarterly habit:**
 1. **Open `MEMORY.md`** and read every line.
 2. **Delete what's no longer true.** Project memories especially — past launches, completed work, stale dates.
 3. **Update what's drifted.** Roles change, references move, feedback evolves.
 4. **Check that every linked file still exists.** Broken links waste tokens on a misleading description.
+5. **Count entries.** If over 50, prune to 45. Leave room for the next quarter.
 
-This takes ~10 minutes per quarter and is worth it. A memory file that contradicts current reality is worse than no memory at all — it actively misleads.
+This takes ~10 minutes per quarter and is worth it. A memory file that contradicts current reality is worse than no memory at all — it actively misleads. And a bloated MEMORY.md burns thousands of tokens per session before you type a word.
 
 ---
 
