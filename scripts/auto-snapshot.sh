@@ -45,6 +45,14 @@ if git remote 2>/dev/null | grep -q .; then
   exit 1
 fi
 
+# Guard: abort if vault has >5000 tracked files (likely a large Obsidian vault).
+# git add -A on a 60K-file vault takes 10+ min and locks .git/index.lock.
+TRACKED=$(git ls-files 2>/dev/null | wc -l | tr -d ' ')
+if [ "$TRACKED" -gt 5000 ]; then
+  echo "[$TIMESTAMP] ABORT — $TRACKED tracked files; git add -A would walk the full tree. Use session-close targeted staging instead." >> "$LOG"
+  exit 1
+fi
+
 # Stage everything respecting .gitignore
 git add -A 2>>"$LOG"
 
