@@ -2,9 +2,11 @@
 """
 graphify_wikilink_gaps.py — find graph entities worth wikilink-ing.
 
-Reads graph.json, counts each node's degree (connection count), scans vault
-.md files for existing [[wikilinks]], then reports nodes that are highly
-connected but never linked. Run after any graphify session to find quick wins.
+Reads graph.json, filters to genuine wikilink candidates (people, concepts,
+organizations, tools — not sentences or long titles), checks against existing
+[[wikilinks]] in the vault, and reports ranked gaps.
+
+Then run graphify_apply_wikilinks.py to interactively approve and apply them.
 
 Usage:
     python3 graphify_wikilink_gaps.py [options]
@@ -26,21 +28,89 @@ from datetime import date
 from pathlib import Path
 
 SKIP_PARTS = {"⚙️ Meta", "Archive", "🗄 Archive", "_review_alternate_drafts"}
-SKIP_TYPES = {"document"}  # file nodes already map to real files; skip them
+
+# Node types that are file nodes — already map to real vault files, skip them
+FILE_TYPES = {"document", "code", "image", "paper", "rationale"}
+
+# Words that typically open sentences (not named concepts)
+SENTENCE_STARTERS = {
+    "the", "a", "an", "this", "that", "these", "those", "how", "when", "why",
+    "what", "if", "because", "since", "there", "it", "they", "we", "you", "i",
+    "my", "our", "your", "his", "her", "its", "their", "he", "she", "but",
+    "and", "or", "so", "yet", "for", "nor",
+}
+
+# Separators that indicate formatting artifacts, not concept names
+NOISE_SEPARATORS = {" - ", " → ", " > ", " :: "}
+
 WIKILINK_RE = re.compile(r'\[\[([^\]|#\n]+?)(?:\|[^\]\n]+?)?\]\]')
+
+
+def is_wikilink_candidate(label: str, ntype: str) -> bool:
+    """Return True if this graph node looks like a genuine wikilink candidate."""
+    # Skip file-type nodes
+    if ntype.lower() in FILE_TYPES:
+        return False
+
+    # Too long to be a wikilink
+    if len(label) > 55:
+        return False
+
+    words = label.split()
+
+    # More than 6 words = title or sentence, not a concept/name
+    if len(words) > 6:
+        return False
+
+    # Sentences end with terminal punctuation
+    if label and label[-1] in ".?!,;":
+        return False
+
+    # Quoted speech or dialogue
+    if '"' in label or "\u201c" in label or "\u201d" in label:
+        return False
+
+    # Formatting artifacts: "A - B", "A → B"
+    for sep in NOISE_SEPARATORS:
+        if sep in label:
+            return False
+
+    # Lowercase opener + 3+ words = sentence fragment, not a named concept
+    # ("the process of X", "how to build Y")
+    # Exception: single-word lowercase labels like "love", "fear" are valid
+    if len(words) > 2 and label[0].islower():
+        if words[0].lower() in SENTENCE_STARTERS:
+            return False
+
+    # All-lowercase 4+ word phrases = extracted prose, not a named thing
+    if len(words) >= 4 and label == label.lower():
+        return False
+
+    return True
+
+
+def looks_like_first_name(label: str) -> bool:
+    """True if label is a single capitalized word that could be a first name only."""
+    words = label.split()
+    return (
+        len(words) == 1
+        and label[0].isupper()
+        and not label.isupper()  # not an acronym like "CEO"
+        and len(label) >= 3
+        and label.isalpha()
+    )
 
 
 def find_graph(vault: Path, explicit: str | None) -> Path:
     if explicit:
         return Path(explicit).resolve()
-    # Standard vault layout: graphify-out/ at vault root or inside ⚙️ Meta/
     for candidate in [
-        vault / "graphify-out/graph.json",
         vault / "⚙️ Meta/graphify-out/graph.json",
+        vault / "graphify-out/graph.json",
     ]:
         if candidate.exists():
             return candidate
-    # Multi-corpus layout: graph inside a corpus subfolder
+    # Multi-corpus layout: graph inside corpus subfolder
     for child in sorted(vault.iterdir()):
         if child.is_dir() and child.name not in SKIP_PARTS:
             candidate = child / "⚙️ Meta/graphify-out/graph.json"
@@ -50,7 +120,7 @@ def find_graph(vault: Path, explicit: str | None) -> Path:
 
 
 def scan_wikilinks(vault: Path) -> dict[str, int]:
-    """Return lowercased wikilink target -> occurrence count across all vault .md files."""
+    """Return lowercased wikilink target -> occurrence count across vault .md files."""
     counts: dict[str, int] = defaultdict(int)
     for md in vault.rglob("*.md"):
         if any(part in SKIP_PARTS for part in md.parts):
@@ -68,16 +138,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--vault-root", default=".", metavar="PATH",
-                        help="Vault root directory (default: current directory)")
-    parser.add_argument("--graph", default=None, metavar="PATH",
-                        help="Explicit path to graph.json")
-    parser.add_argument("--top", type=int, default=30, metavar="N",
-                        help="Max candidates to report (default: 30)")
-    parser.add_argument("--min-degree", type=int, default=3, metavar="N",
-                        help="Minimum connections to qualify (default: 3)")
-    parser.add_argument("--output", default=None, metavar="PATH",
-                        help="Output path for markdown report")
+    parser.add_argument("--vault-root", default=".", metavar="PATH")
+    parser.add_argument("--graph", default=None, metavar="PATH")
+    parser.add_argument("--top", type=int, default=30, metavar="N")
+    parser.add_argument("--min-degree", type=int, default=3, metavar="N")
+    parser.add_argument("--output", default=None, metavar="PATH")
     args = parser.parse_args()
 
     vault = Path(args.vault_root).resolve()
@@ -86,7 +151,7 @@ def main() -> None:
     print(f"Graph:  {graph_path}")
     graph = json.loads(graph_path.read_text(encoding="utf-8"))
     nodes = graph.get("nodes", [])
-    edges = graph.get("links", graph.get("edges", []))  # NetworkX uses "links"
+    edges = graph.get("links", graph.get("edges", []))  # NetworkX stores edges as "links"
 
     # Compute undirected degree per node id
     degree: dict[str, int] = defaultdict(int)
@@ -94,40 +159,52 @@ def main() -> None:
         degree[e.get("source", "")] += 1
         degree[e.get("target", "")] += 1
 
-    # Collect nodes that meet min-degree threshold (skip document/file nodes)
+    # Collect candidates: pass quality filter + min-degree threshold
     candidates: list[dict] = []
+    filtered_out = 0
     for n in nodes:
         ntype = n.get("type", "")
-        if ntype in SKIP_TYPES:
-            continue
         label = n.get("label", "").strip()
         if not label:
             continue
+        if not is_wikilink_candidate(label, ntype):
+            filtered_out += 1
+            continue
         deg = degree.get(n.get("id", ""), 0)
         if deg >= args.min_degree:
-            candidates.append({"label": label, "type": ntype, "degree": deg})
+            candidates.append({
+                "label": label,
+                "type": ntype,
+                "degree": deg,
+                "needs_disambiguation": looks_like_first_name(label),
+            })
 
     print(f"Vault:  {vault}")
-    print(f"Nodes qualifying (degree >= {args.min_degree}): {len(candidates)}")
+    print(f"Nodes after quality filter: {len(candidates)} kept, {filtered_out} filtered (sentences/titles/noise)")
     print("Scanning vault for existing wikilinks...")
 
     wikilinks = scan_wikilinks(vault)
     print(f"Unique wikilink targets found: {len(wikilinks)}")
 
-    # Gaps: qualifying nodes with no existing wikilinks
+    # Gaps: candidates with 0 existing wikilinks
     all_gaps = [c for c in candidates if wikilinks.get(c["label"].lower(), 0) == 0]
     all_gaps.sort(key=lambda x: -x["degree"])
     total_gaps = len(all_gaps)
     display_gaps = all_gaps[: args.top]
 
     # Console output
-    print(f"\nWikilink Gap Report — top {len(display_gaps)} of {total_gaps} gaps\n")
-    print(f"{'#':<4} {'Entity':<35} {'Type':<15} {'Connections'}")
-    print("-" * 68)
+    needs_disambig = [g for g in display_gaps if g["needs_disambiguation"]]
+    print(f"\nWikilink Gap Report — top {len(display_gaps)} of {total_gaps} gaps")
+    if needs_disambig:
+        print(f"⚠ {len(needs_disambig)} look like first names only — will need full name when applying")
+    print()
+    print(f"{'#':<4} {'Entity':<35} {'Type':<15} {'Connections':<12} {'Note'}")
+    print("-" * 75)
     for i, g in enumerate(display_gaps, 1):
-        print(f"{i:<4} {g['label']:<35} {g['type']:<15} {g['degree']}")
+        note = "⚠ first name?" if g["needs_disambiguation"] else ""
+        print(f"{i:<4} {g['label']:<35} {g['type']:<15} {g['degree']:<12} {note}")
 
-    # Write markdown report
+    # Write markdown report (used as input for graphify_apply_wikilinks.py)
     out_path = (
         Path(args.output).resolve()
         if args.output
@@ -141,20 +218,24 @@ def main() -> None:
         "",
         "# Wikilink Gap Report",
         "",
-        f"High-connection graph entities with no existing `[[wikilinks]]`.",
+        "High-connection graph entities with no existing `[[wikilinks]]`.",
         f"Showing top {len(display_gaps)} of {total_gaps} gaps (min degree: {args.min_degree}).",
+        "Delete rows you don't want, then run `graphify_apply_wikilinks.py` to apply.",
         "",
-        "| # | Entity | Type | Connections |",
-        "|---|--------|------|-------------|",
+        "| # | Entity | Type | Connections | Note |",
+        "|---|--------|------|-------------|------|",
     ]
     for i, g in enumerate(display_gaps, 1):
-        lines.append(f"| {i} | {g['label']} | {g['type']} | {g['degree']} |")
+        note = "first name?" if g["needs_disambiguation"] else ""
+        lines.append(f"| {i} | {g['label']} | {g['type']} | {g['degree']} | {note} |")
     lines += [
         "",
-        "*Run `graphify_wikilink_gaps.py` to refresh after adding wikilinks.*",
+        "*Edit this file to remove terms you don't want, then run `graphify_apply_wikilinks.py --report <this file>`.*",
     ]
     out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"\nReport saved: {out_path}")
+    print(f"Next: review the report, delete unwanted rows, then run:")
+    print(f"  python3 graphify_apply_wikilinks.py --vault-root . --report '{out_path}'")
 
 
 if __name__ == "__main__":
