@@ -6,40 +6,109 @@ Reads WIKILINK_GAPS.md (edit it first to remove unwanted rows), shows each
 candidate with context from the vault, prompts for approval, and inserts
 [[wikilinks]] into the first occurrence per file.
 
+After applying a wikilink, if the entity has no existing note it offers to
+create a stub note:
+  - People  → 👤 CRM/<Name>.md  (CRM format with backlinks Dataview)
+  - Concepts → 📝 Notes/<Name>.md  (concept format with backlinks Dataview)
+
 For single first names, prompts for the full name and uses alias syntax:
     [[George Trimis|George]]
 
 Usage:
     python3 graphify_apply_wikilinks.py [options]
 
-    --report PATH       Path to WIKILINK_GAPS.md (auto-detected if omitted)
-    --vault-root PATH   Vault root (default: current directory)
-    --dry-run           Show changes without writing files
+    --report PATH         Path to WIKILINK_GAPS.md (auto-detected if omitted)
+    --vault-root PATH     Vault root (default: current directory)
+    --people-dir PATH     Where to create person stubs (default: 👤 CRM)
+    --concepts-dir PATH   Where to create concept stubs (default: 📝 Notes)
+    --dry-run             Show changes without writing files
 """
 
 import argparse
 import re
 import sys
+from datetime import date
 from pathlib import Path
 
 SKIP_PARTS = {"⚙️ Meta", "Archive", "🗄 Archive", "_review_alternate_drafts"}
-
-# Matches an existing [[wikilink]] so we don't double-link
 EXISTING_LINK_RE = re.compile(r'\[\[[^\]]+\]\]')
+
+DATAVIEW_BACKLINKS = '''\
+```dataviewjs
+const name = dv.current().file.name;
+const linked = dv.pages(`[[${name}]]`)
+  .where(p => !p.file.path.includes("_meta"))
+  .sort(p => p.creationDate || p.file.mtime, "desc");
+const rows = linked.map(p => {
+  const date = p.creationDate
+    ? String(p.creationDate).slice(0,10)
+    : p.file.mtime.toFormat("yyyy-MM-dd");
+  const folder = p.file.folder.split("/").pop();
+  return [p.file.link, date, folder];
+});
+dv.paragraph(`**${rows.length} mentions**`);
+dv.table(["File", "Date", "Source"], rows);
+```'''
+
+
+def person_stub(name: str, first_name: str) -> str:
+    aliases = f"\n- {first_name}" if first_name and first_name != name else ""
+    return f"""\
+---
+creationDate: {date.today()}
+aliases:{aliases}
+type: person
+relationship:
+company:
+status: active
+last_interaction: {date.today()}
+next_step: ''
+priority:
+---
+
+*Add context here.*
+
+## Context
+-
+
+## Connected
+
+
+## Interactions
+
+{DATAVIEW_BACKLINKS}
+"""
+
+
+def concept_stub(name: str) -> str:
+    return f"""\
+---
+creationDate: {date.today()}
+aliases: []
+type: concept
+---
+
+*Add description here.*
+
+## Connected
+
+
+## All Entries
+
+{DATAVIEW_BACKLINKS}
+"""
 
 
 def load_report(report_path: Path) -> list[dict]:
-    """Parse WIKILINK_GAPS.md table rows into dicts."""
     terms = []
     for line in report_path.read_text(encoding="utf-8").splitlines():
         if not line.startswith("|"):
             continue
         parts = [p.strip() for p in line.strip("|").split("|")]
-        # Columns: # | Entity | Type | Connections | Note
         if len(parts) < 4 or parts[0] in ("#", "---", ""):
             continue
         try:
-            int(parts[0])  # first col must be a row number
+            int(parts[0])
         except ValueError:
             continue
         terms.append({
@@ -51,16 +120,20 @@ def load_report(report_path: Path) -> list[dict]:
     return terms
 
 
-def find_contexts(vault: Path, search_term: str, max_results: int = 3) -> list[tuple[Path, str, int]]:
-    """
-    Find files with unlinked occurrences of search_term.
-    Returns list of (file, snippet, char_offset) tuples.
-    Skips occurrences already inside [[...]].
-    """
-    # Word-boundary search, case-insensitive
+def find_note(vault: Path, name: str) -> Path | None:
+    """Return the path of an existing note with this name, or None."""
+    stem = name.lower()
+    for md in vault.rglob("*.md"):
+        if any(part in SKIP_PARTS for part in md.parts):
+            continue
+        if md.stem.lower() == stem:
+            return md
+    return None
+
+
+def find_contexts(vault: Path, search_term: str, max_results: int = 2) -> list[tuple[Path, str]]:
     pattern = re.compile(r'\b' + re.escape(search_term) + r'\b', re.IGNORECASE)
     results = []
-
     for md in vault.rglob("*.md"):
         if any(part in SKIP_PARTS for part in md.parts):
             continue
@@ -68,43 +141,24 @@ def find_contexts(vault: Path, search_term: str, max_results: int = 3) -> list[t
             text = md.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
-
-        # Build set of spans already inside wikilinks
-        linked_spans = set()
-        for m in EXISTING_LINK_RE.finditer(text):
-            linked_spans.add((m.start(), m.end()))
-
+        linked_spans = {(m.start(), m.end()) for m in EXISTING_LINK_RE.finditer(text)}
         for m in pattern.finditer(text):
-            # Skip if inside an existing wikilink
             if any(s <= m.start() and m.end() <= e for s, e in linked_spans):
                 continue
             start = max(0, m.start() - 90)
             end = min(len(text), m.end() + 90)
             snippet = "..." + text[start:end].replace("\n", " ").strip() + "..."
-            results.append((md, snippet, m.start()))
+            results.append((md, snippet))
             if len(results) >= max_results:
                 return results
-
     return results
 
 
-def apply_wikilink(
-    vault: Path,
-    search_term: str,
-    link_target: str,
-    display: str,
-    dry_run: bool,
-) -> int:
-    """
-    Insert [[link_target|display]] (or [[term]]) as first occurrence per file.
-    Skips occurrences already inside [[...]].
-    Returns count of files modified.
-    """
+def apply_wikilink(vault: Path, search_term: str, link_target: str, display: str, dry_run: bool) -> int:
     is_alias = link_target != display
     replacement = f"[[{link_target}|{display}]]" if is_alias else f"[[{search_term}]]"
     pattern = re.compile(r'\b' + re.escape(search_term) + r'\b', re.IGNORECASE)
     modified = 0
-
     for md in vault.rglob("*.md"):
         if any(part in SKIP_PARTS for part in md.parts):
             continue
@@ -112,42 +166,65 @@ def apply_wikilink(
             text = md.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
-
-        # Build set of spans already inside wikilinks
-        linked_spans = set()
-        for lm in EXISTING_LINK_RE.finditer(text):
-            linked_spans.add((lm.start(), lm.end()))
-
-        # Find first unlinked occurrence
+        linked_spans = {(m.start(), m.end()) for m in EXISTING_LINK_RE.finditer(text)}
         for m in pattern.finditer(text):
             if any(s <= m.start() and m.end() <= e for s, e in linked_spans):
                 continue
-            # Replace this first occurrence
-            new_text = text[: m.start()] + replacement + text[m.end() :]
+            new_text = text[: m.start()] + replacement + text[m.end():]
             if dry_run:
                 print(f"  [DRY RUN] {md.name}: '{m.group()}' → {replacement}")
             else:
                 md.write_text(new_text, encoding="utf-8")
             modified += 1
-            break  # first occurrence per file only
-
+            break
     return modified
+
+
+def create_stub(
+    vault: Path,
+    note_name: str,
+    ntype: str,
+    first_name: str,
+    people_dir: str,
+    concepts_dir: str,
+    dry_run: bool,
+) -> Path | None:
+    is_person = ntype.lower() == "person" or (
+        len(note_name.split()) >= 2
+        and all(w[0].isupper() for w in note_name.split() if w)
+        and note_name.replace(" ", "").replace("-", "").isalpha()
+    )
+    if is_person:
+        folder = vault / people_dir
+        content = person_stub(note_name, first_name)
+    else:
+        folder = vault / concepts_dir
+        content = concept_stub(note_name)
+
+    note_path = folder / f"{note_name}.md"
+    if dry_run:
+        print(f"  [DRY RUN] Would create: {note_path.relative_to(vault)}")
+        return note_path
+    folder.mkdir(parents=True, exist_ok=True)
+    note_path.write_text(content, encoding="utf-8")
+    return note_path
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--report", default=None, metavar="PATH",
-                        help="Path to WIKILINK_GAPS.md")
+    parser.add_argument("--report", default=None, metavar="PATH")
     parser.add_argument("--vault-root", default=".", metavar="PATH")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Show what would change without writing files")
+    parser.add_argument("--people-dir", default="👤 CRM", metavar="PATH",
+                        help="Folder for new person stubs (default: 👤 CRM)")
+    parser.add_argument("--concepts-dir", default="📝 Notes", metavar="PATH",
+                        help="Folder for new concept stubs (default: 📝 Notes)")
+    parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
     vault = Path(args.vault_root).resolve()
 
-    # Find report
     if args.report:
         report_path = Path(args.report)
     else:
@@ -163,7 +240,7 @@ def main() -> None:
 
     terms = load_report(report_path)
     if not terms:
-        sys.exit("No terms found in the report. Check formatting or re-run graphify_wikilink_gaps.py.")
+        sys.exit("No terms found. Re-run graphify_wikilink_gaps.py first.")
 
     print(f"Loaded {len(terms)} candidates from {report_path.name}")
     if args.dry_run:
@@ -178,20 +255,17 @@ def main() -> None:
         label = term_info["label"]
         print(f"\n[{i}/{len(terms)}] {label}  ({term_info['type']}, {term_info['degree']} connections)")
 
-        # Show context snippets
         contexts = find_contexts(vault, label)
         if not contexts:
-            print("  (no unlinked occurrences found — already linked or not in vault)")
+            print("  (no unlinked occurrences — already linked or not in vault)")
             skipped.append(label)
             continue
-        for _, snippet, _ in contexts[:2]:
+        for _, snippet in contexts:
             print(f"  > {snippet}")
 
-        # Flag disambiguation need
         if term_info["needs_disambiguation"]:
-            print(f"  ⚠ Looks like a first name. You'll be prompted for the full name.")
+            print("  ⚠ Looks like a first name. You'll be prompted for the full name.")
 
-        # Prompt
         try:
             choice = input("  Add wikilink? [y/n/q]: ").strip().lower()
         except (EOFError, KeyboardInterrupt):
@@ -205,9 +279,10 @@ def main() -> None:
             skipped.append(label)
             continue
 
-        # Handle first-name disambiguation
+        # First-name disambiguation
         link_target = label
         display = label
+        first_name = ""
         if term_info["needs_disambiguation"]:
             try:
                 full_name = input(
@@ -219,13 +294,32 @@ def main() -> None:
             if full_name:
                 link_target = full_name
                 display = label
+                first_name = label
 
         count = apply_wikilink(vault, label, link_target, display, args.dry_run)
         tag = f"[[{link_target}|{display}]]" if link_target != display else f"[[{label}]]"
         print(f"  {tag} — linked in {count} file(s)")
+
+        # Offer stub note creation if no existing note
+        existing = find_note(vault, link_target)
+        if existing:
+            print(f"  Note exists: {existing.relative_to(vault)}")
+        else:
+            try:
+                stub_choice = input(f"  No note for '{link_target}'. Create stub? [y/n]: ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                stub_choice = "n"
+            if stub_choice == "y":
+                stub_path = create_stub(
+                    vault, link_target, term_info["type"], first_name,
+                    args.people_dir, args.concepts_dir, args.dry_run,
+                )
+                if stub_path:
+                    rel = stub_path.relative_to(vault) if not args.dry_run else stub_path
+                    print(f"  Created: {rel}")
+
         applied.append({"tag": tag, "files": count})
 
-    # Summary
     print(f"\n{'[DRY RUN] ' if args.dry_run else ''}Done.")
     print(f"  Applied: {len(applied)}  |  Skipped: {len(skipped)}")
     if applied:
