@@ -1,10 +1,10 @@
 # Advisory Panel
 
-A roster of voices for decision-making, strategy, journaling, and blind-spot detection. Select 3-5 relevant voices based on what's being discussed. Each speaks 1-2 sentences in their authentic voice. At least one MUST dissent or push back. Not consensus for its own sake.
+3-5 voices per question. Each 1-2 sentences, authentic voice. One MUST dissent.
 
-**When to pull in the panel:** High-stakes decisions, strategy sessions, pitch rewrites, journaling, weekly reviews, or any moment where a second perspective would catch something you'd miss. The team can use this too: every panelist has a one-liner credential so you know why their perspective matters.
+**When:** High-stakes decisions, strategy, pitch rewrites, journaling, weekly reviews. Team can use too.
 
-**Customization:** This panel comes pre-loaded with voices that cover business, psychology, relationships, health, creativity, and wisdom. You can add, remove, or swap panelists to fit your life. The framework matters more than the specific names. Add people who represent the perspectives you need most.
+**Customization:** Add, remove, or swap panelists to fit your life. The framework matters more than the specific names.
 
 ---
 
@@ -123,21 +123,21 @@ A roster of voices for decision-making, strategy, journaling, and blind-spot det
 
 ## Technology & AI
 
-- **Ethan Mollick** — Wharton professor, author of *Co-Intelligence*, runs "One Useful Thing" Substack. Studies how humans actually integrate AI into real knowledge work, evidence-based, no hype. Pick when: deciding what to delegate to AI vs. own yourself, designing workflows, questioning whether a tool is changing your thinking or just your output, any AI-augmentation decision.
-- **Tiago Forte** — Creator of Building a Second Brain and the PARA method, PKM pioneer. Thought more deeply than anyone about capture, organization, distillation, and expression as a productivity system. Pick when: vault architecture decisions, graphify design, whether a system is helping you think or just producing more files, anything touching long-term knowledge compounding.
-- **Andy Matuschak** — Independent researcher, creator of evergreen notes, Orbit (spaced repetition), and the "tools for thought" framework. More rigorous than Tiago, less practical. Pick when: a system looks elegant but you need to stress-test whether it actually changes how you form ideas over time, note architecture, memory design, long-horizon knowledge work.
-- **Andrej Karpathy** — Former Tesla AI Director, OpenAI cofounder, coined "vibe coding." Thinks clearly about what AI can actually do vs. what it is being asked to do. Pick when: sanity-checking AI capability assumptions in a build, MCP architecture, automation scripts where wishful thinking about AI could cause failure, any technical AI design question.
-- **Tim Ferriss** — Author of *The 4-Hour Workweek* (40M copies), podcast host, systems-and-elimination thinker. Cold-eyed about which tasks should not exist and what you are doing manually out of control rather than necessity. Pick when: something is being done repeatedly, delegation decisions, energy-to-output ratio is off, ruthless prioritization needed.
+- **Ethan Mollick** — Wharton professor, *Co-Intelligence*. Evidence-based on how humans actually integrate AI. Pick when: delegate to AI vs. own it, workflow design, is this tool changing your thinking or just your output
+- **Tiago Forte** — Created PARA + Building a Second Brain, PKM pioneer. Pick when: vault architecture, whether a system helps you think or just produces more files, long-term knowledge compounding
+- **Andy Matuschak** — Independent researcher, evergreen notes, Orbit, tools-for-thought. More rigorous than Tiago, less practical. Pick when: stress-test whether a system changes how you form ideas, note architecture, long-horizon knowledge work
+- **Andrej Karpathy** — Former Tesla AI Director, OpenAI cofounder. Pick when: sanity-checking AI capability assumptions, MCP architecture, automation where wishful thinking could cause failure
+- **Tim Ferriss** — *The 4-Hour Workweek*, elimination thinker. Pick when: something is being done repeatedly, delegation decisions, energy-to-output ratio is off
 
 ---
 
 ## Panel Rules
 
-1. **Select 3-5 most relevant** based on what came up. Score each candidate 0-100 internally on lens-fit to THIS moment; only surface 70+ (drop to 50 if fewer than 3 qualify). **NEVER print the confidence number in output.** No `[confidence: N]`, no `(72)`, no score annotation of any kind. It's a background filter, not visible ink.
-2. Each speaks in their authentic voice, 1-2 sentences
-3. **At least one MUST dissent or push back.** Not console, not affirm. Challenge. Especially when everything seems fine, because that's where rationalizations hide
-4. If facts/studies are mentioned, include the source
-5. Keep it tight. Not a seminar
-6. Challenge assumptions, don't manufacture consensus
-7. For high-stakes decisions, auto-offer `/deconstruct` before committing
-8. **ONLY use panelists from THIS FILE.** NEVER invent archetypes, unnamed experts, or generic voices. Every panel voice must be a named person listed above with their real credential. If no panelist fits the question, say "none of your current panelists are a strong fit for this, want to add one?" Do NOT improvise.
+1. **Select 3-5 most relevant.** Score lens-fit 0-100 internally; surface 70+ (drop to 50 if fewer than 3 qualify). Never print the score.
+2. Each speaks in their authentic voice, 1-2 sentences. Format: **Name** (credentials) — sentence.
+3. **At least one MUST dissent or push back.** Not console, not affirm. Challenge. Especially when everything seems fine, because that's where rationalizations hide.
+4. If facts/studies are mentioned, include the source.
+5. Keep it tight. Not a seminar.
+6. Challenge assumptions, don't manufacture consensus.
+7. For high-stakes decisions, auto-offer `/deconstruct` before committing.
+8. **ONLY use named panelists from this file.** No archetypes, no invented experts. If none fit: say so, offer to add one. Never improvise.

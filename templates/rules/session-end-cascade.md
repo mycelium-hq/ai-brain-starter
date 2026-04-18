@@ -67,6 +67,32 @@ VAULT_ROOT="<vault>" python3 "<vault>/⚙️ Meta/scripts/aggregate-sessions.py"
 VAULT_ROOT="<vault>" python3 "<vault>/⚙️ Meta/scripts/aggregate-decisions.py" &
 ```
 
+## Phase 2b: Git snapshot + cleanup
+
+After Phase 2 writes, commit session changes and remove this session's worktree. Both steps run every session.
+
+**Git snapshot (targeted paths only).** Never `git add -A` or `git add .` in a vault — full tree walks take minutes and lock the index. Stage only the files you actually wrote this session:
+
+```bash
+cd "<vault-root>"
+git add \
+  "⚙️ Meta/Sessions/<this-session-file>.md" \
+  "⚙️ Meta/Decisions/<any-new-decision-files>" \
+  "<any-other-specific-paths-touched>"
+git commit -m "session: <slug> <date>"
+```
+
+Skip this phase if the session made no file changes. Don't stage speculatively.
+
+**Worktree + branch cleanup.** Run after the commit (or if skipping the commit). Prevents branch and disk accumulation — each skipped cleanup leaves one full vault copy behind:
+
+```bash
+VAULT="<vault-root>"
+git -C "$VAULT" worktree remove --force "$(pwd)" 2>/dev/null || true
+git -C "$VAULT" worktree prune
+git -C "$VAULT" branch | grep 'claude/' | xargs git -C "$VAULT" branch -D 2>/dev/null || true
+```
+
 ## Phase 3: Verification + propagation
 
 **Change impact audit (conditional).** Only if session modified rules, scripts, skills, hooks, schedules, paths, CLAUDE.md files, or vault structure. Verify: paths resolve, skills trigger, hooks fire, schedules run, cross-file references valid, integrations connect. Fix before closing.

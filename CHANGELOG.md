@@ -9,6 +9,24 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-17 -- git bloat prevention + vault health check
+
+**The problem this fixes:** Claude Code's worktree isolation feature creates a full copy of your vault for every session. If those copies aren't cleaned up, they accumulate — 32 stale copies discovered in a live vault, totalling 46GB. On top of that, each copy left a `claude/` git branch behind, inflating `.git/objects` to 6GB. Binary files (videos, Photoshop files) committed by accident made it worse.
+
+**What changed:**
+
+- **`scripts/worktree-prune.sh`** (upgraded): now also deletes orphaned `claude/` branches — those whose worktree directory no longer exists. Previously only pruned stale refs. Wire this to a weekly cron or scheduled task.
+
+- **`scripts/vault_maintenance.py`** (upgraded): added a Git Health section to the monthly maintenance report. Checks for: stale `claude/` branches (>5 is a warning), prunable worktrees, and git pack size >500MB. Reports the exact fix commands so you don't have to look them up.
+
+- **`templates/rules/session-end-cascade.md`** (upgraded): added Phase 2b — git snapshot + cleanup. Every session close now removes the current worktree and deletes all `claude/` branches after committing. Prevents accumulation from the source.
+
+- **`templates/rules/advisory-panel.md`** (tightened): intro, Technology & AI section, and Panel Rules compressed ~40%. No panelists removed. The `Pick when:` triggers are unchanged — just stripped the commentary between credential and trigger.
+
+**If you already have bloat:** run the vault maintenance script to see your current state, then follow the fix commands in the report. Or run manually: `git branch | grep 'claude/' | xargs git branch -D && git worktree prune`.
+
+---
+
 ## 2026-04-17 -- session close runs on Sonnet
 
 **`templates/rules/session-end-cascade.md`**: added a Model section at the top. The session-close protocol should always run on Sonnet, not Opus. The close is structured, write-heavy work (scanning, filing, batch writes, running aggregators) — no judgment calls. Switching to Sonnet before Phase 0 saves real tokens without losing anything. Claude announces the switch so you know what model is running.

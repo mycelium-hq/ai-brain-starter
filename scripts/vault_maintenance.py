@@ -13,6 +13,7 @@ Checks performed:
   5. Empty folders
   6. Large folders - any folder with 500+ files
   7. Graphify backup count - graph.json.backup_* files (target: <=3)
+  8. Git health - claude/ branches, prunable worktrees, git objects size
 
 Usage:
   python3 vault_maintenance.py --vault-root /path/to/vault
@@ -23,6 +24,7 @@ The report is written to {vault-root}/Meta/Maintenance Report.md
 
 import argparse
 import os
+import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
@@ -189,6 +191,68 @@ def check_graphify_backups(vault_root: Path) -> list[str]:
     return [f"- `{b.name}`" for b in sorted(out_dir.glob("graph.json.backup_*"))]
 
 
+def check_git_health(vault_root: Path) -> list[str]:
+    """Check for common git bloat: stale claude/ branches, prunable worktrees, large objects."""
+    git_dir = vault_root / ".git"
+    if not git_dir.is_dir():
+        return []
+
+    issues = []
+
+    # claude/ branches — each one holds a full vault snapshot as git objects
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(vault_root), "branch"],
+            capture_output=True, text=True, timeout=15
+        )
+        claude_branches = [l.strip() for l in result.stdout.splitlines() if "claude/" in l]
+        if len(claude_branches) > 5:
+            issues.append(
+                f"- **{len(claude_branches)} stale `claude/` branches** "
+                f"(expected: 0 between sessions). Each holds a full vault snapshot as git objects. "
+                f"Fix: `git branch | grep 'claude/' | xargs git branch -D && git gc --prune=now`"
+            )
+        elif claude_branches:
+            issues.append(
+                f"- {len(claude_branches)} `claude/` branch(es) found. "
+                f"Run the cleanup after the session ends."
+            )
+    except Exception:
+        pass
+
+    # Prunable worktrees — directories already deleted but refs remain
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(vault_root), "worktree", "list"],
+            capture_output=True, text=True, timeout=15
+        )
+        prunable = [l for l in result.stdout.splitlines() if "prunable" in l]
+        if prunable:
+            issues.append(
+                f"- **{len(prunable)} prunable worktree(s)** (stale refs, directories already gone). "
+                f"Fix: `git worktree prune`"
+            )
+    except Exception:
+        pass
+
+    # Git objects size — flag if suspiciously large
+    try:
+        pack_dir = git_dir / "objects" / "pack"
+        if pack_dir.is_dir():
+            total = sum(f.stat().st_size for f in pack_dir.rglob("*.pack") if f.is_file())
+            total_mb = total / (1024 * 1024)
+            if total_mb > 500:
+                issues.append(
+                    f"- **Git pack: {total_mb:.0f}MB** (expected: <100MB for a notes vault). "
+                    f"Large binary files may have been committed. "
+                    f"Identify: `git verify-pack -v .git/objects/pack/*.idx | sort -k3 -rn | head -10`"
+                )
+    except Exception:
+        pass
+
+    return issues
+
+
 def generate_report(vault_root: Path, binary_allowed: list[str]) -> str:
     today = datetime.now().strftime("%Y-%m-%d")
 
@@ -199,9 +263,10 @@ def generate_report(vault_root: Path, binary_allowed: list[str]) -> str:
     empty = check_empty_folders(vault_root)
     large = check_large_folders(vault_root)
     graphify = check_graphify_backups(vault_root)
+    git_health = check_git_health(vault_root)
 
-    categories = sum(1 for lst in [inbox, naming, binaries, backups, empty, large] if lst)
-    total = len(inbox) + len(naming) + len(binaries) + len(backups) + len(empty) + len(large)
+    categories = sum(1 for lst in [inbox, naming, binaries, backups, empty, large, git_health] if lst)
+    total = len(inbox) + len(naming) + len(binaries) + len(backups) + len(empty) + len(large) + len(git_health)
 
     s = []
     s.append(f"---\ncreationDate: {today}\ntype: meta\n---\n")
@@ -225,6 +290,10 @@ def generate_report(vault_root: Path, binary_allowed: list[str]) -> str:
     s.append(f"{len(graphify)} backups found (target: <=3)")
     if graphify:
         s.append("\n".join(graphify))
+    s.append("")
+
+    s.append(f"## Git Health ({len(git_health)})")
+    s.append("\n".join(git_health) if git_health else "No git issues found.")
     s.append("")
 
     return "\n".join(s)
