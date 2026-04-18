@@ -33,7 +33,11 @@ rotate() {
   for (( i = KEEP - 1; i >= 1; i-- )); do
     [[ -f "${f}.${i}.gz" ]] && mv "${f}.${i}.gz" "${f}.$((i + 1)).gz" 2>/dev/null
   done
-  gzip -c "$f" > "${f}.1.gz" 2>/dev/null && : > "$f"
+  if gzip -c "$f" > "${f}.1.gz" 2>/dev/null; then
+    : > "$f"
+  else
+    rm -f "${f}.1.gz"
+  fi
 }
 
 for log in "${LOGS[@]}"; do

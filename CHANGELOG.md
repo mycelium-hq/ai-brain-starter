@@ -9,6 +9,15 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-17 (hooks audit) -- rotate-logs.sh gzip failure cleanup
+
+**The problem this fixes:** If gzip failed mid-write (disk full, permission error), a partial or zero-byte `.1.gz` was left on disk. On the next rotation cycle it would shift to `.2.gz`, polluting the rotation history. The original log was always safe, but the stale partial was never cleaned up.
+
+**What changed:**
+- **`hooks/rotate-logs.sh`**: gzip step now uses `if/else`. On success, truncates the original. On failure, removes the partial `.1.gz`. One-line change, no behavior change on the happy path.
+
+---
+
 ## 2026-04-17 (later) -- vault-git targeted-paths rule in CLAUDE.md and claude-md-template
 
 **The problem this fixes:** Claude Code was running `git add -A` inside large Obsidian vaults during session close, walking 60K+ files, locking `.git/index.lock` for 10+ minutes, and burning context while the assistant polled for progress. Rules alone aren't enough — future sessions can ignore them.
