@@ -9,6 +9,20 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-17 -- bootstrap now auto-removes deprecated tools on re-run
+
+**What changed:** `bootstrap.sh` and `bootstrap.ps1` now have a "Cleanup deprecated tools" section that runs at the top of every re-run. If it finds something that's been removed from the bundled stack, it removes it automatically and tells you why. No prompts, no manual steps.
+
+Current tools it removes if present:
+- **claude-mem** — security issues (open local HTTP port, file-read surface, plaintext API keys). The built-in memory system covers everything it did.
+- **notebooklm** — browser automation + Google login on every session wasn't worth it for most users. If you want it back: `git clone https://github.com/PleasePrompto/notebooklm-skill.git ~/.claude/skills/notebooklm`
+
+**If you actively use one of these:** re-install it after the bootstrap runs. The bootstrap only removes it — it doesn't block you from having it.
+
+**How future removals work:** when something gets removed from the default stack, the bootstrap handles the cleanup. You don't need to read release notes or run manual commands — just re-run bootstrap and it takes care of it.
+
+---
+
 ## 2026-04-17 (session-end-cascade.md) -- foreground-only git + cross-session lock contention rules
 
 **The problem this fixes:** If you run multiple Claude sessions on the same machine, they share one `.git/` and queue at `.git/index.lock` when closing. The old session-close protocol backgrounded aggregators (`&`) and sometimes deleted live locks (`rm -f .git/index.lock`), which in concurrent setups corrupted the git index and stalled commits for minutes. One session's session-close.md edit on 2026-04-17 lost a 10-minute window to this exact race.

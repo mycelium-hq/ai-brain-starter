@@ -34,6 +34,7 @@ $Installed = @()
 $Updated   = @()
 $Skipped   = @()
 $Backups   = @()
+$Cleaned   = @()
 
 function Hdr($msg)  { Write-Host ""; Write-Host $msg -ForegroundColor White -BackgroundColor DarkBlue }
 function Log($msg)  { Write-Host "  · $msg" -ForegroundColor Cyan }
@@ -49,6 +50,44 @@ function Backup-File($path) {
     if ($DryRun) { Dry "would back up: $path -> $bak" }
     else { Copy-Item $path $bak; $script:Backups += $bak }
 }
+
+Hdr "Cleaning up deprecated tools"
+
+# claude-mem: unauthenticated local HTTP API, arbitrary file-read surface,
+# API keys in plaintext, hook that injected content into every session.
+$settingsPath = "$env:USERPROFILE\.claude\settings.json"
+$claudeMemPresent = $false
+if (Test-Path $settingsPath) {
+    try {
+        $s = Get-Content $settingsPath -Raw | ConvertFrom-Json
+        $hasMkt  = $s.extraKnownMarketplaces -and $s.extraKnownMarketplaces.PSObject.Properties.Name -contains "thedotmack"
+        $hasPlug = $s.enabledPlugins -and $s.enabledPlugins.PSObject.Properties.Name -contains "claude-mem@thedotmack"
+        $claudeMemPresent = $hasMkt -or $hasPlug
+    } catch {}
+}
+if ($claudeMemPresent) {
+    if ($DryRun) { Dry "would remove claude-mem from settings.json (marketplace + plugin entry)" }
+    else {
+        Backup-File $settingsPath
+        $s = Get-Content $settingsPath -Raw | ConvertFrom-Json
+        if ($s.extraKnownMarketplaces) { $s.extraKnownMarketplaces.PSObject.Properties.Remove("thedotmack") }
+        if ($s.enabledPlugins)         { $s.enabledPlugins.PSObject.Properties.Remove("claude-mem@thedotmack") }
+        $s | ConvertTo-Json -Depth 10 | Set-Content $settingsPath
+        Ok "Removed claude-mem — had security issues (open local HTTP port, file-read surface). Built-in memory covers everything it did."
+        $script:Cleaned += "claude-mem"
+    }
+} else { Ok "claude-mem not present — nothing to clean" }
+
+# notebooklm: browser automation + Google login dance wasn't worth it for most users.
+$notebooklmDir = "$env:USERPROFILE\.claude\skills\notebooklm"
+if (Test-Path $notebooklmDir) {
+    if ($DryRun) { Dry "would remove $notebooklmDir (notebooklm skill)" }
+    else {
+        Remove-Item -Recurse -Force $notebooklmDir
+        Ok "Removed notebooklm — rarely used, required browser automation + Google login on every session. To restore: git clone https://github.com/PleasePrompto/notebooklm-skill.git `$env:USERPROFILE\.claude\skills\notebooklm"
+        $script:Cleaned += "notebooklm"
+    }
+} else { Ok "notebooklm not present — nothing to clean" }
 
 Hdr "ai-brain-starter — one-command install"
 Write-Host ""
@@ -511,7 +550,7 @@ if ($Failed.Count -eq 0) {
 Hdr "Change summary"
 if ($DryRun) { Write-Host "DRY RUN - no actual changes made." -ForegroundColor Magenta }
 
-if ($Installed.Count -eq 0 -and $Updated.Count -eq 0 -and $Skipped.Count -eq 0 -and $Backups.Count -eq 0) {
+if ($Installed.Count -eq 0 -and $Updated.Count -eq 0 -and $Skipped.Count -eq 0 -and $Backups.Count -eq 0 -and $Cleaned.Count -eq 0) {
     Write-Host "  Nothing to report - your setup was already current."
 } else {
     if ($Installed.Count -gt 0) {
@@ -535,6 +574,11 @@ if ($Installed.Count -eq 0 -and $Updated.Count -eq 0 -and $Skipped.Count -eq 0 -
         foreach ($x in $Backups) { Write-Host "    > $x" }
         Write-Host ""
         Write-Host "  To restore any backup: Move-Item <file>.bak-YYYY-MM-DD-HHMM <file>"
+    }
+    if ($Cleaned.Count -gt 0) {
+        Write-Host ""
+        Write-Host "  Removed (deprecated):" -ForegroundColor Red
+        foreach ($x in $Cleaned) { Write-Host "    X $x" }
     }
 }
 Write-Host ""

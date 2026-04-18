@@ -112,6 +112,7 @@ INSTALLED=()
 UPDATED=()
 SKIPPED=()
 BACKUPS=()
+CLEANED=()
 
 # Parse args
 for arg in "$@"; do
@@ -181,6 +182,68 @@ echo
 echo "  After this finishes, open Claude Code and type /setup-brain."
 echo
 [[ $DRY_RUN -eq 0 ]] && sleep 1
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Cleanup deprecated tools
+# Tools removed from the bundled stack are cleaned up automatically here.
+# No action needed from the user — if something is detected, it's gone.
+# ───────────────────────────────────────────────────────────────────────────────
+
+hdr "Cleaning up deprecated tools"
+
+# claude-mem (removed 2026-04-16): unauthenticated local HTTP API, arbitrary
+# file-read surface, API keys in plaintext, and a hook that injected content
+# into every session. The built-in memory system covers all use cases safely.
+SETTINGS="$HOME/.claude/settings.json"
+_claude_mem_present=0
+if [[ -f "$SETTINGS" ]] && python3 -c "
+import json, sys
+try:
+    s = json.load(open('$SETTINGS'))
+    has_mkt = 'thedotmack' in s.get('extraKnownMarketplaces', {})
+    has_plug = s.get('enabledPlugins', {}).get('claude-mem@thedotmack') is not False and 'claude-mem@thedotmack' in s.get('enabledPlugins', {})
+    sys.exit(0 if (has_mkt or has_plug) else 1)
+except: sys.exit(1)
+" 2>/dev/null; then
+  _claude_mem_present=1
+fi
+
+if [[ $_claude_mem_present -eq 1 ]]; then
+  if [[ $DRY_RUN -eq 1 ]]; then
+    dry "would remove claude-mem from settings.json (marketplace + plugin entry)"
+  else
+    backup_file "$SETTINGS"
+    python3 - <<'PY'
+import json, os
+p = os.path.expanduser("~/.claude/settings.json")
+s = json.load(open(p))
+s.get("extraKnownMarketplaces", {}).pop("thedotmack", None)
+ep = s.get("enabledPlugins", {})
+ep.pop("claude-mem@thedotmack", None)
+with open(p, "w") as f: json.dump(s, f, indent=2)
+PY
+    ok "Removed claude-mem — had security issues (open local HTTP port, file-read surface). Built-in memory covers everything it did."
+    CLEANED+=("claude-mem")
+  fi
+else
+  ok "claude-mem not present — nothing to clean"
+fi
+
+# notebooklm skill (removed 2026-04-16): Chromium browser automation +
+# Google auth dance added friction that wasn't worth it for most users.
+# If you actively use it, it still works — just not bundled by default.
+NOTEBOOKLM_DIR="$HOME/.claude/skills/notebooklm"
+if [[ -d "$NOTEBOOKLM_DIR" ]]; then
+  if [[ $DRY_RUN -eq 1 ]]; then
+    dry "would remove $NOTEBOOKLM_DIR (notebooklm skill)"
+  else
+    rm -rf "$NOTEBOOKLM_DIR"
+    ok "Removed notebooklm — rarely used, required browser automation + Google login on every session. If you want it back: git clone https://github.com/PleasePrompto/notebooklm-skill.git ~/.claude/skills/notebooklm"
+    CLEANED+=("notebooklm")
+  fi
+else
+  ok "notebooklm not present — nothing to clean"
+fi
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Homebrew (Mac only)
@@ -741,7 +804,7 @@ if [[ $DRY_RUN -eq 1 ]]; then
   printf "\033[35mDRY RUN — no actual changes made.\033[0m\n"
 fi
 
-if [[ ${#INSTALLED[@]} -eq 0 && ${#UPDATED[@]} -eq 0 && ${#SKIPPED[@]} -eq 0 && ${#BACKUPS[@]} -eq 0 ]]; then
+if [[ ${#INSTALLED[@]} -eq 0 && ${#UPDATED[@]} -eq 0 && ${#SKIPPED[@]} -eq 0 && ${#BACKUPS[@]} -eq 0 && ${#CLEANED[@]} -eq 0 ]]; then
   echo "  Nothing to report — your setup was already current."
 else
   if [[ ${#INSTALLED[@]} -gt 0 ]]; then
@@ -761,6 +824,10 @@ else
     for x in "${BACKUPS[@]}"; do printf "    ↳ %s\n" "$x"; done
     echo
     printf "  To restore any backup: \033[1mmv <file>.bak-YYYY-MM-DD-HHMM <file>\033[0m\n"
+  fi
+  if [[ ${#CLEANED[@]} -gt 0 ]]; then
+    printf "\n  \033[31mRemoved (deprecated):\033[0m\n"
+    for x in "${CLEANED[@]}"; do printf "    ✕ %s\n" "$x"; done
   fi
 fi
 echo
