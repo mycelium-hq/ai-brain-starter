@@ -9,6 +9,20 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-17 (later) -- vault-git targeted-paths rule in CLAUDE.md and claude-md-template
+
+**The problem this fixes:** Claude Code was running `git add -A` inside large Obsidian vaults during session close, walking 60K+ files, locking `.git/index.lock` for 10+ minutes, and burning context while the assistant polled for progress. Rules alone aren't enough — future sessions can ignore them.
+
+**What changed:**
+
+- **`CLAUDE.md`**: new "Git in large Obsidian vaults (users' vaults)" section. Instructs the assistant to never run `git add -A`, `git add .`, or unscoped `git status` in a vault. Always pass explicit file paths. Includes a fast diagnostic (`wc -l <(git ls-files)`) to detect whether you're in a large vault.
+- **`templates/generated/claude-md-template.md`**: added "Git in this vault (if git-tracked)" section. Ships the rule to every new vault's `CLAUDE.md` via Phase 4 so new users get it on setup, not after an incident.
+- **`scripts/auto-snapshot.sh`** (follow-up): rewrote to use targeted paths instead of `git add -A` even with the file-count guard. The guard always aborted on large vaults anyway — the rewrite makes the script actually useful.
+
+**If you already have a large vault under git:** stage only the files you know changed. Session files, decision files, edited rules, to-do edits. Not the whole tree.
+
+---
+
 ## 2026-04-17 -- git bloat prevention + vault health check
 
 **The problem this fixes:** Claude Code's worktree isolation feature creates a full copy of your vault for every session. If those copies aren't cleaned up, they accumulate — 32 stale copies discovered in a live vault, totalling 46GB. On top of that, each copy left a `claude/` git branch behind, inflating `.git/objects` to 6GB. Binary files (videos, Photoshop files) committed by accident made it worse.
