@@ -22,7 +22,7 @@ AI Brain Starter turns Claude Code into a persistent, opinionated collaborator t
 - **Knowledge graphs** — Graphify turns your entire vault into a queryable graph. Claude answers "what does my vault say about X?" from structured data instead of grepping thousands of files.
 - **Pattern recognition** — weekly and monthly insight reports surface trends you can't see from inside a single day: recurring emotional states, decision patterns, avoidance behaviors, wins you forgot to celebrate.
 - **First-principles analysis** — the /deconstruct skill auto-triggers on high-stakes decisions. Surfaces hidden assumptions, finds foundational truths, rebuilds from scratch.
-- **Writing that doesn't sound like AI** — the Humanizer strips AI patterns from everything you publish, calibrated to your actual voice.
+- **Writing that sounds like you, not AI** — the Humanizer (v3.0.0) strips AI patterns and rewrites in your actual voice, statistically anchored to your own writing corpus. Run `/humanizer --diff` to score how close any draft is to your voice before publishing.
 - **Accountability rules** — Claude is not a yes-machine. It corrects you, checks your ego, calls out avoidance, and reminds you who you said you wanted to be.
 
 The whole system ships as one install command, works for non-technical users, and auto-updates itself.
@@ -116,7 +116,7 @@ Every tool is installed and wired during setup. They work together, not in isola
 | `/weekly` | Weekly pattern recognition across your journal entries |
 | `/monthly` | Deeper monthly trends with therapist and life coach observations |
 | `/graphify` | Build a knowledge graph from any set of files |
-| `/humanizer` | Strip AI patterns from your writing, calibrated to your voice |
+| `/humanizer` | Strip AI patterns and rewrite in your voice — anchored to your actual writing corpus. `--diff` mode scores any draft 0–100 |
 | `/deconstruct` | First-principles analysis on any decision or strategy |
 | `/patterns` | Extract recurring patterns from sessions into permanent captures |
 | `/meeting-todos` | Pull action items from meeting notes into your to-do list |

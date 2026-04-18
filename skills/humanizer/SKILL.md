@@ -1,15 +1,12 @@
 ---
 name: humanizer
-version: 2.7.0
+version: 3.0.0
 description: |
-  Remove signs of AI-generated writing from text. Use when editing or reviewing
-  text to make it sound more natural and human-written. Based on Wikipedia's
-  comprehensive "Signs of AI writing" guide. Detects and fixes patterns including:
-  inflated symbolism, promotional language, superficial -ing analyses, vague
-  attributions, em dash overuse, rule of three, AI vocabulary words, passive
-  voice, negative parallelisms, and filler phrases. Do NOT use for first drafts,
-  creative writing, or content that hasn't been written yet. Only for post-editing
-  existing text.
+  Remove signs of AI-generated writing from text and rewrite in the author's
+  actual voice. Based on Wikipedia's "Signs of AI writing" guide plus a
+  statistical voice fingerprint built from the author's own corpus.
+  Three modes: humanize (default), detect-only, fingerprint-diff.
+  Requires voice-indexer.py to be run once to build ~/.claude/voice-fingerprint.json.
   v2.6.0: pre-flight doc-type detection, non-prose skip pass, incremental mode,
   mandatory voice calibration with auto-load, personal overrides file support,
   and runbook lessons-learned logging.
@@ -17,6 +14,10 @@ description: |
   AI-iness density check for adaptive pass strength (light/mixed/full), and
   four-tier ROI-ranked pattern ordering so time-constrained runs hit the
   highest-signal rules first.
+  v3.0.0: Voice fingerprint mode — statistical fingerprint from journal corpus
+  anchors rewrites to actual author patterns, not generic "sounds human."
+  New fingerprint-diff mode scores how close any text is to the author's voice.
+  Indexer script: voice-indexer.py (run once, re-run monthly).
 license: MIT
 compatibility: claude-code opencode
 allowed-tools:
@@ -116,11 +117,34 @@ Tell the user: "I have full rule libraries for English and Spanish. For [languag
 
 Do not silently apply English rules to non-English prose under any circumstances.
 
-### 5. Load voice calibration (see Voice Calibration section below — it is NOT optional)
+### 5. Load voice fingerprint (primary voice anchor)
+
+Check for `~/.claude/voice-fingerprint.json`. This file is built by `voice-indexer.py` from the writer's actual journal corpus — it captures sentence rhythm, connector frequency, punctuation density, Spanish/English ratio, and vocabulary richness statistically across thousands of entries.
+
+**If the fingerprint exists:** Read it. Build a voice profile block to anchor the rewrite:
+
+```
+Voice profile ({files_indexed} journals, {total_words} words):
+- Sentence length: avg {sentence_length.mean} words  σ={sentence_length.std}  P50={sentence_length.p50}
+- Paragraph length: avg {paragraph_length.mean} words
+- Spanish ratio: {spanish_ratio.mean} ({spanish_ratio.interpretation})
+- Punctuation: {punctuation.commas_per_sentence} commas/sentence, {punctuation.em_dashes_per_100_words} em-dashes/100 words
+- Top connectors: [top 8 from top_connectors_per_1000_words]
+- Vocabulary richness (TTR): {vocabulary_richness.avg_ttr} ({vocabulary_richness.interpretation})
+- Common openers: [top 5 from top_opener_words]
+```
+
+This profile is a hard constraint on the rewrite. Do not produce sentences that are more than 1.5× the P75 sentence length. Prefer the writer's high-frequency connectors over generic alternatives. Match punctuation density — if the fingerprint shows low em-dash usage, don't introduce them.
+
+**If the fingerprint does not exist:** Tell the user before starting: "No voice fingerprint found. Run `python3 ~/.claude/skills/humanizer/voice-indexer.py` once to build it from your journals (~5 min for 2,000+ files). Falling back to voice sample calibration." Do not silently skip.
+
+**Fingerprint-diff mode:** If the user invokes `/humanizer --diff` or asks "how close is this to my voice," skip rewriting entirely and run the diff report instead. See the Fingerprint-Diff Mode section.
+
+### 6. Load voice calibration (see Voice Calibration section below — it is NOT optional)
 
 When loading the voice sample in step 5, make sure the sample matches the input's language. Don't load an English sample to calibrate a Spanish rewrite.
 
-### 6. Load personal overrides
+### 7. Load personal overrides
 
 Before applying generic patterns, check for a personal overrides file. These are user-specific calibrations that modify the default rules for this particular writer. Locations to check, in order:
 
@@ -139,7 +163,7 @@ If a runbook or overrides file exists, read the "Personal overrides" table and a
 
 If no overrides file exists, run at default strength across all 29 rules and note in the output that no personal overrides were loaded.
 
-### 7. AI-iness density check — choose pass strength
+### 8. AI-iness density check — choose pass strength
 
 Not every draft needs a full humanize pass. Some drafts are already human — the user wrote them first-person, with fragments and opinions. Running a full pass on a human draft wastes tokens and risks over-editing.
 
@@ -170,11 +194,11 @@ Before applying patterns, do a quick density check: count how many **Tier 1** AI
 
 **Record the density** and the chosen mode in the pre-flight summary, so the user can calibrate. If they disagree, they can override with an explicit invocation flag ("run a full pass on this").
 
-### 8. Announce the pre-flight summary
+### 9. Announce the pre-flight summary
 
 Before rewriting, output a one-line summary covering every pre-flight check:
 
-`Pre-flight: doc type = X, non-prose skipped = Y, mode = full/incremental, language = en/es/other, overrides loaded = yes/no, voice sample = [path or "generic"], AI-iness density = N tells/100 words, pass strength = light/mixed/full.`
+`Pre-flight: doc type = X, non-prose skipped = Y, mode = humanize/detect/diff, language = en/es/other, fingerprint = loaded (N files) / not found, overrides loaded = yes/no, voice sample = [path or "fingerprint-primary" or "generic"], AI-iness density = N tells/100 words, pass strength = light/mixed/full.`
 
 This makes the run legible and auditable. Future runs learn from the density numbers over time.
 
@@ -241,6 +265,43 @@ Fall back to the default behavior in the PERSONALITY AND SOUL section below — 
 - File: "Humanize this text. Use my writing style from [file path] as a reference."
 - Folder: "Use my writing style from [folder path]." The skill should pick the most recent substantial file in that folder.
 
+
+## Fingerprint-Diff Mode
+
+Invoked with `/humanizer --diff` or "how close is this to my voice" or "run a fingerprint diff."
+
+No rewriting. Scores the input text against `~/.claude/voice-fingerprint.json`. Useful before a writing session to calibrate, or after a draft to verify.
+
+**What to measure** (compute from the input, compare to fingerprint):
+
+1. **Sentence length** — extract all sentences, compute mean. Report deviation from fingerprint mean in standard deviations.
+2. **Connector frequency** — count the top-10 fingerprint connectors in the input. Report which are present vs. absent, and whether frequency ratio is higher/lower than fingerprint.
+3. **Punctuation density** — commas/sentence and em-dashes/100 words. Report the delta.
+4. **Spanish ratio** — word-level Spanish marker ratio. Report vs. fingerprint.
+5. **Overall similarity score** — 0–100. Weight: sentence length 30%, connectors 30%, punctuation 20%, Spanish ratio 20%.
+
+**Score interpretation:** >80 = very close to your voice. 60–80 = recognizable. <60 = drifted.
+
+**Output format:**
+
+```
+Fingerprint diff — [file or "input text"]
+
+Sentence length:    X.X words avg  (yours: Y.Y ± Z.Z)  → ON TARGET / +N σ longer / -N σ shorter
+Connector usage:    N/10 top connectors present          → HIGH MATCH / MODERATE / LOW
+Punctuation:        X.X commas/sentence (yours: Y.Y)    → ON TARGET / HIGHER / LOWER
+Spanish ratio:      X.XX  (yours: Y.YY)                 → MATCHING / MORE SPANISH / MORE ENGLISH
+
+Overall voice similarity: NN/100 — [Very close / Recognizable / Drifted]
+
+Biggest drifts from your voice:
+- [specific deviation with example sentence]
+- [specific deviation]
+```
+
+If the fingerprint file is missing, tell the user: "Run `python3 ~/.claude/skills/humanizer/voice-indexer.py` first." Do not guess or estimate without real fingerprint data.
+
+---
 
 ## PERSONALITY AND SOUL
 
