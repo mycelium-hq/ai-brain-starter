@@ -61,25 +61,39 @@ All accumulated edits written in parallel. No interleaved read-write cycles.
 
 **Append, never overwrite.** Wikilink people, projects, concepts. Enough context that entries make sense in 6 months.
 
-**Aggregators (background).** Run both after writes complete:
+**Aggregators (foreground, sequential).** Run both after writes complete. NO backgrounding (`&`), NO `run_in_background`. They take ~5s combined. Backgrounding aggregators alongside the git commit causes index races that can truncate `.git/index`:
+
 ```bash
-VAULT_ROOT="<vault>" python3 "<vault>/⚙️ Meta/scripts/aggregate-sessions.py" &
-VAULT_ROOT="<vault>" python3 "<vault>/⚙️ Meta/scripts/aggregate-decisions.py" &
+VAULT_ROOT="<vault>" python3 "<vault>/⚙️ Meta/scripts/aggregate-sessions.py"
+VAULT_ROOT="<vault>" python3 "<vault>/⚙️ Meta/scripts/aggregate-decisions.py"
 ```
 
 ## Phase 2b: Git snapshot + cleanup
 
-After Phase 2 writes, commit session changes and remove this session's worktree. Both steps run every session.
+After Phase 2 writes AND aggregators complete, commit session changes and remove this session's worktree. Both steps run every session.
 
-**Git snapshot (targeted paths only).** Never `git add -A` or `git add .` in a vault — full tree walks take minutes and lock the index. Stage only the files you actually wrote this session:
+**Cross-session lock contention (read this before debugging any "lock is in the way" failure).** If the user runs multiple Claude sessions concurrently on the same machine, they share ONE `.git/`. When several close at once they queue at `.git/index.lock`. The lock is a legitimate mutex — not a bug. Three rules:
+
+1. **NEVER `rm -f .git/index.lock` blindly.** Run `lsof "<vault>/.git/index.lock"` first. If a process owns it, another session is mid-commit — WAIT. Only remove if no process is attached AND the lock is older than 60s.
+2. **NEVER background a git operation** (`run_in_background: true`, trailing `&`). Background git racing with another session's git is what truncates the index.
+3. **NEVER `git add -A`, `git add .`, or any unscoped form.** Sweeping commits steal staged files from other sessions.
+
+**Polite cross-session commit pattern (use verbatim, foreground only):**
 
 ```bash
-cd "<vault-root>"
-git add \
-  "⚙️ Meta/Sessions/<this-session-file>.md" \
-  "⚙️ Meta/Decisions/<any-new-decision-files>" \
-  "<any-other-specific-paths-touched>"
-git commit -m "session: <slug> <date>"
+cd "<vault-root>" && \
+  ( WAITED=0; until [ ! -f .git/index.lock ]; do
+      sleep 2; WAITED=$((WAITED+2));
+      if [ $WAITED -ge 60 ]; then
+        if ! lsof .git/index.lock >/dev/null 2>&1; then rm -f .git/index.lock; fi
+        WAITED=0
+      fi
+    done ) && \
+  git add \
+    "⚙️ Meta/Sessions/<this-session-file>.md" \
+    "⚙️ Meta/Decisions/<any-new-decision-files>" \
+    "<any-other-specific-paths-touched>" && \
+  git commit -m "session: <slug> <date>"
 ```
 
 Skip this phase if the session made no file changes. Don't stage speculatively.

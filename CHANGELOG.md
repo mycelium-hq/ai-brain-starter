@@ -9,6 +9,19 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-17 (session-end-cascade.md) -- foreground-only git + cross-session lock contention rules
+
+**The problem this fixes:** If you run multiple Claude sessions on the same machine, they share one `.git/` and queue at `.git/index.lock` when closing. The old session-close protocol backgrounded aggregators (`&`) and sometimes deleted live locks (`rm -f .git/index.lock`), which in concurrent setups corrupted the git index and stalled commits for minutes. One session's session-close.md edit on 2026-04-17 lost a 10-minute window to this exact race.
+
+**What changed:**
+- Aggregators now run **foreground, sequential** — no `&`, no `run_in_background`. ~5s slower per close, eliminates the entire race class.
+- Added a **polite spin-wait commit pattern**: wait for `index.lock` to clear naturally, only `lsof`-check then remove if it's been orphaned 60s+, never blindly delete.
+- Hardened the existing "no `git add -A`" rule with the cross-session reasoning (sweeping commits steal staged files from other sessions).
+
+**No action needed** — fix lives in `templates/rules/session-end-cascade.md`. Re-run the install or pull the latest to pick it up.
+
+---
+
 ## 2026-04-17 (hooks audit) -- rotate-logs.sh gzip failure cleanup
 
 **The problem this fixes:** If gzip failed mid-write (disk full, permission error), a partial or zero-byte `.1.gz` was left on disk. On the next rotation cycle it would shift to `.2.gz`, polluting the rotation history. The original log was always safe, but the stale partial was never cleaned up.
