@@ -2,7 +2,7 @@
 
 **The operating system for Claude Code.**
 
-One command installs it. One conversation configures it. Every session after that compounds.
+One paste installs it. One conversation configures it. Every session after that compounds.
 
 ---
 
@@ -33,15 +33,47 @@ The whole system ships as one install command, works for non-technical users, an
 
 ### What you need before starting
 
-A Mac, Windows, or Linux computer. **That's it.** The bootstrap installs everything else for you: Obsidian, Claude Code, Python, Node.js, all tools. You don't need to download or set up anything in advance.
+The [Claude Code desktop app](https://claude.ai/download). That's it. Once it's open, Claude installs everything else for you.
 
-### Step 1 — Open your terminal
+### Step 1 — Open Claude Code
 
-- **On Mac:** press `Cmd + Space`, type `Terminal`, press Enter.
-- **On Windows:** click Start, type `PowerShell`, click **Windows PowerShell** (the blue icon, NOT cmd.exe).
-- **On Linux:** you already know.
+Download and open the [Claude Code desktop app](https://claude.ai/download). Navigate to an empty folder where you want your vault to live.
 
-### Step 2 — Paste and run
+### Step 2 — Paste this into the chat
+
+```
+Please set up my AI Brain Starter. First run this via your Bash tool:
+
+git clone https://github.com/adelaidasofia/ai-brain-starter.git ~/.claude/skills/ai-brain-starter 2>/dev/null || (cd ~/.claude/skills/ai-brain-starter && git pull)
+
+Then run the bootstrap: bash ~/.claude/skills/ai-brain-starter/bootstrap.sh
+
+Once that finishes, run /setup-brain to start my vault setup.
+```
+
+Claude clones the skill, runs the installer (Obsidian, Python, graphify, all tools), and starts the setup conversation. No terminal required.
+
+### Step 3 — Answer the questions
+
+Claude interviews you about your life, work, and goals, then builds your entire system around your answers. The basics take 30 minutes. The full setup takes about 2 hours.
+
+### Joining an existing team vault
+
+If a teammate already set up a vault and shared it with you, open Claude Code inside that folder and paste:
+
+```
+Please run /setup-brain join-team to wire me into this existing vault.
+```
+
+About 5 minutes.
+
+### Stay updated
+
+Just tell Claude: "Update my AI Brain Starter." Claude pulls the latest version and summarizes what changed. Check [docs/RELEASES.md](docs/RELEASES.md) for what's new in plain English.
+
+---
+
+### Prefer the terminal? (advanced)
 
 **Mac and Linux:**
 
@@ -55,38 +87,7 @@ curl -fsSL https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main
 irm https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main/bootstrap.ps1 | iex
 ```
 
-Paste it and press Enter. Let it run (5-10 minutes). Don't close the window until you see "Done."
-
-This installs everything: Obsidian, Claude Code, Python, Node.js, graphify, humanizer, meeting-todos, patterns, the Granola MCP, and the ai-brain-starter skill. Safe to re-run anytime.
-
-### Step 3 — Start the conversation
-
-```
-claude
-/setup-brain
-```
-
-Claude interviews you about your life, work, and goals, then builds your entire system around your answers. The basics take 30 minutes. The full setup takes about 2 hours.
-
-### Joining an existing team vault
-
-If a teammate already set up a vault and shared it with you:
-
-```
-cd "<path to the shared vault>"
-claude
-/setup-brain join-team
-```
-
-This skips structure creation, verifies your install, wires your tools, and confirms everything works. About 5 minutes.
-
-### Stay updated
-
-```bash
-cd ~/.claude/skills/ai-brain-starter && git pull
-```
-
-Or just tell Claude: "Update the ai-brain-starter skill." Check [CHANGELOG.md](CHANGELOG.md) for what's new in plain English.
+Then open Claude Code and type `/setup-brain`.
 
 ---
 
@@ -202,10 +203,10 @@ Every CLAUDE.md created by this system includes these rules. Claude is a thinkin
 - **[`docs/TOKEN_OPTIMIZATION.md`](docs/TOKEN_OPTIMIZATION.md)** — how to stop burning tokens on overhead: compress Claude-facing files, cap memory, route cheap work to cheap models
 - **[`skills/graphify/RUNBOOK.md`](skills/graphify/RUNBOOK.md)** — production playbook for running graphify on a large vault, with cost guardrails
 - **[`templates/dataview-queries.md`](templates/dataview-queries.md)** — reusable Dataview query library for journals, CRM, AI chats, decision logs
-- **[`OPTIMIZE.md`](OPTIMIZE.md)** — the deep vault optimization guide (11 phases, weekend project)
+- **[`docs/OPTIMIZE.md`](docs/OPTIMIZE.md)** — the deep vault optimization guide (11 phases, weekend project). Run `/optimize-brain` after setup to become a power user.
 - **[`EXAMPLES.md`](EXAMPLES.md)** — sample journal entry and weekly insight report showing output quality
 - **[`CONTRIBUTING.md`](CONTRIBUTING.md)** — how to contribute (the project is opinionated by design)
-- **[CHANGELOG.md](CHANGELOG.md)** — what's new in plain English
+- **[`docs/RELEASES.md`](docs/RELEASES.md)** — what's new in plain English. Full development history: [`docs/CHANGELOG.md`](docs/CHANGELOG.md).
 
 ---
 
