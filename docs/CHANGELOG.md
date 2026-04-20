@@ -9,6 +9,20 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-20 -- two new team workflows: Canonical Facts and playbook-to-task wiring
+
+**What changed:** `for-teams/team-workflows.md` gained two new sections that codify patterns every team with contractors or external-facing numeric claims will eventually need.
+
+**Section 5 — Canonical Facts registry.** Single source of truth for every numeric claim, source, and attribution that appears in external material (pitch deck, sales one-pager, investor memo, marketing site). Each entry carries the claim, a tier-1 primary source, the year, and the URL. Files that cite numbers must trace back to the registry. Drift = stop-ship defect before anything ships.
+
+**Section 6 — Playbook-to-task wiring.** An "Instructions for [Name]" playbook without a matching task in the team to-do file is orphan work: the contractor never sees it. Session close now scans every playbook modified this session against the team to-do file; if any is not referenced by a live task, close is blocked until a task is added or the playbook is explicitly marked reference-only.
+
+**Why it matters:** these two patterns address the same failure mode from opposite sides. Canonical Facts prevents contradictory numbers from reaching investors. Playbook-to-task wiring prevents careful instructions from becoming invisible work. Both patterns came out of a 2026-04-20 fabrication-audit session where four conflicting market-size numbers had propagated across five investor assets, and a rebuilt pitch-deck playbook failed to reach the contractor because no task pointed at it.
+
+**Also:** `CLAUDE.md` template gets the matching three lint rules (Canonical Facts source-of-truth, Canva URL resolution for shortlinks, playbook-to-task wiring) so Claude enforces them at write time, not just at session close.
+
+---
+
 ## 2026-04-17 -- bootstrap now auto-removes deprecated tools on re-run
 
 **What changed:** `bootstrap.sh` and `bootstrap.ps1` now have a "Cleanup deprecated tools" section that runs at the top of every re-run. If it finds something that's been removed from the bundled stack, it removes it automatically and tells you why. No prompts, no manual steps.
