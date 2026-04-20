@@ -263,6 +263,9 @@ def _walk_md_files(root):
 ### Lesson #13: Wire agents to real data sources — don't ship stubs
 **Rule:** When building an agent that depends on data from an already-built MCP, read that MCP's source and wire to it directly. Stubs are acceptable only for services not yet built. Flag all stubs with `# STUB — replace with {service name}`.
 
+### Lesson #14: Google Workspace calendar tools require explicit UTC offset in datetime strings
+**Rule:** Pass datetime strings with an explicit offset (`2026-04-20T09:30:00-05:00`), not naive strings (`2026-04-20T09:30:00`). The `time_zone` parameter sets display timezone only; it does not shift naive datetimes. Naive strings are treated as UTC, placing events hours early for users in negative-offset zones. Always compute and append the correct UTC offset before calling `cal_create_event` or `cal_update_event`.
+
 ---
 
 ## SELF-TEST PROTOCOL
