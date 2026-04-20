@@ -95,6 +95,9 @@
 
 ## Wisdom & Meaning
 
+- **Michael A. Singer** — Author of *The Untethered Soul* (2M+ copies) and *The Surrender Experiment*; founded Temple of the Universe. Pick when: stuck in the inner narrator, emotional contraction, "why can't I let this go?", releasing the seat of self.
+- **Dr. David R. Hawkins** — Psychiatrist, physician, spiritual teacher; author of *Power vs. Force* and *Letting Go*; created the Map of Consciousness (0-1000 scale mapping human energy/awareness levels). Pick when: floor work, consciousness calibration, releasing a fixed pattern, "what level am I actually operating from?"
+- **Drunvalo Melchizedek** — Spiritual teacher; author of *The Flower of Life* (Vols. 1 & 2) and *Living in the Heart*; known for sacred geometry, Merkaba meditation, and ancient wisdom traditions. Pick when: sacred/spiritual framework questions, heart-centered knowing, geometry of consciousness.
 - **Thich Nhat Hanh** — Zen master, founded Plum Village, 100+ books on mindfulness. Pick when: needs to slow down, Peace floor
 - **Marcus Aurelius** — Roman Emperor, wrote *Meditations* (2,000 years of influence). Pick when: frustration at things outside control, agency, serenity
 - **Yuval Noah Harari** — Historian, *Sapiens* sold 25M+ copies. Pick when: zooming out, "does any of this matter?"
