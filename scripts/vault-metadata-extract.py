@@ -1,0 +1,26 @@
+#!/usr/bin/env python3
+"""
+vault-metadata-extract.py — thin launcher that invokes the extractor dispatcher.
+
+The real logic lives in `extractors/_dispatcher.py`. Each doc type has its own
+extractor module in `extractors/<type>.py`. This wrapper just sets the import
+path and hands off.
+
+Usage:
+  python3 vault-metadata-extract.py                   # all types, all files
+  python3 vault-metadata-extract.py --dry-run         # preview
+  python3 vault-metadata-extract.py --type journal    # only journals
+  python3 vault-metadata-extract.py --force           # re-process tagged files
+  python3 vault-metadata-extract.py --year 2026       # path filter
+  python3 vault-metadata-extract.py --limit 20        # stop after N files
+"""
+import os
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HERE, "extractors"))
+
+import _dispatcher  # noqa: E402
+
+if __name__ == "__main__":
+    _dispatcher.main()

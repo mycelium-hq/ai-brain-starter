@@ -1,0 +1,213 @@
+# Vault metadata extraction schemas.
+#
+# Every doc type that gets structured extraction. One extractor module per type,
+# at `extractors/<type>.py`. This file is the contract — human-readable,
+# editable, and used by the ai-brain-starter setup wizard to generate new
+# extractor skeletons for community types.
+#
+# RULES:
+#   - Zero LLM paraphrase in any extractor. All fields are regex/enum/count/verbatim-section.
+#   - Opt-in `ai_summary` fields route to MiniMax, never Claude. Off by default.
+#   - Field values are only written when extractable. Missing → skip.
+#   - First field in `fields:` list is the idempotency marker.
+#
+# Adding your own type: drop a new block below, then run the wizard
+# (`/setup-vault-types --add-type <name>`) to scaffold an extractor module.
+
+version: 1
+last_updated: 2026-04-20
+
+# ── Infrastructure types (NEVER extracted) ─────────────────────────
+infrastructure_types:
+  - meta
+  - template
+  - runbook
+  - report
+  - imported
+  - dashboard
+  - rule
+  - skill
+  - hook
+  - changelog
+
+# ── Tier 1: highest ROI (build first) ──────────────────────────────
+
+journal:
+  folder_hint: "📓 Journals"
+  fields:
+    - smart_excerpt        # first prose sentence, verbatim, ≤200 chars
+    - concepts_extracted   # wikilinks from ## Concepts section
+    - people_mentioned     # CRM-matched wikilinks, Title Case only
+    - word_count
+    - floor_num            # Hawkins 1-17 from floor field
+    - date_iso             # YYYY-MM-DD from creationDate
+  example_query: |
+    TABLE date_iso, floor_num, smart_excerpt
+    WHERE contains(people_mentioned, "Silvia Diaz-Roa") AND floor_num <= 6
+
+book:
+  folder_hint: "📝 Notes/📚 Books"
+  fields:
+    - book_author          # from body pattern "by <name>" or "## Author"
+    - book_themes          # wikilinks from ## Themes section
+    - book_quotes_verbatim # first 5 blockquotes, max 200 chars each
+    - book_rating_1_5      # int if "Rating: N" or "⭐" count in body
+    - book_finished_iso    # YYYY-MM-DD from "Finished: …" line
+    - book_mentioned_people
+    - book_page_count      # int if "Pages: N"
+    - word_count           # note length, not book length
+  example_query: |
+    TABLE book_author, book_rating_1_5, book_themes
+    WHERE book_rating_1_5 >= 4 AND contains(book_themes, "[[Compound Interest]]")
+
+article:
+  folder_hint: "📝 Notes"
+  fields:
+    - article_author
+    - article_source_url    # first http(s) link in frontmatter or body
+    - article_read_iso      # date_iso from creationDate
+    - article_key_claims    # wikilinks from ## Key Claims or first bullet list
+    - article_concepts_extracted
+    - word_count
+
+concept:
+  folder_hint: "📝 Notes, 🌱 Curiosities, 🏫 School"
+  fields:
+    - concept_domain        # e.g. "psychology", "business", "colombia" from path
+    - concept_related       # wikilinks from ## Related or ## Connected
+    - concept_first_seen_iso # oldest creationDate of any backlinker (runtime compute)
+    - concept_mention_count # backlink count
+    - concept_last_mentioned_iso
+    - concept_dormant       # bool, true if >180d since last mention
+  example_query: |
+    TABLE concept_mention_count, concept_last_mentioned_iso
+    WHERE concept_dormant = true SORT concept_mention_count DESC
+
+person:
+  folder_hint: "👤 CRM"
+  fields:
+    - person_relationship_type  # from relationship field if present
+    - person_company
+    - person_last_journal_iso   # most recent journal that mentions them
+    - person_journal_mention_count
+    - person_floor_cooccurrence # list of floors they co-appear with
+    - person_priority           # high/mid/low from priority field
+    - person_next_step
+  example_query: |
+    TABLE person_priority, person_last_journal_iso, person_floor_cooccurrence
+    WHERE person_priority = "high" AND person_last_journal_iso < dateformat(date(today) - dur(60 days), "yyyy-MM-dd")
+
+business:
+  folder_hint: "💼 AI Consulting, 🚀 Onde Team, 📝 Notes/💼 Business"
+  fields:
+    - biz_doc_kind         # deck|memo|email|contract|pitch|update from filename/body
+    - biz_audience         # from ## Audience or first body line "Audience: X"
+    - biz_last_sent_iso    # from "Sent: YYYY-MM-DD" line
+    - biz_version          # from "v1"/"v2" in filename or header
+    - biz_key_numbers      # $Xk / $Xm / N% verbatim from first 2K of body
+    - biz_recipients       # CRM-matched names
+    - word_count
+
+# ── Tier 2: solid ROI ──────────────────────────────────────────────
+
+meeting:
+  folder_hint: "🚀 Onde Team/*/Meetings, **/Meetings"
+  fields:
+    - meeting_attendees         # CRM-matched from first body section
+    - meeting_date_iso
+    - meeting_decisions         # bullets under ## Decisions
+    - meeting_action_items      # bullets under ## Action Items / ## To-dos
+    - meeting_blockers          # bullets under ## Blockers
+    - meeting_source            # gemini|granola|manual from body marker
+    - word_count
+
+ai_chat:
+  folder_hint: "🤖 AI Chats"
+  fields:
+    - chat_model               # claude|gpt-5|gemini from filename or frontmatter
+    - chat_date_iso
+    - chat_topic               # from first h1 or filename
+    - chat_concepts_touched    # existing `concepts` field passthrough + extraction
+    - chat_insights_captured   # bullets under ## Insights
+    - chat_length_approx       # word_count bucket: short<300, mid<1500, long
+    - word_count
+
+writing_draft:
+  folder_hint: "✍️ Writing"
+  fields:
+    - draft_status             # draft|edit|ready|published from status field
+    - draft_publication        # substack|high-rise|after-shock from path
+    - draft_published_iso
+    - draft_word_count
+    - draft_themes             # wikilinks from ## Themes
+    - draft_chapter_of         # from path (e.g., "Moving Through the High-Rise")
+
+strategy:
+  folder_hint: "📋 Strategy"
+  fields:
+    - strategy_counterpart      # person or org from "With: X" or h1
+    - strategy_stakes           # high/mid/low from stakes field
+    - strategy_deadline_iso
+    - strategy_decisions_open   # count of lines matching "Decision:" or "?"
+    - word_count
+
+negotiation_prep:
+  folder_hint: "📋 Strategy/Negotiations"
+  fields:
+    - neg_counterpart
+    - neg_meeting_iso
+    - neg_batna_verbatim       # first blockquote or "BATNA: …" line
+    - neg_concessions          # bullets under ## Concessions
+    - neg_goals                # bullets under ## Goals
+
+company:
+  folder_hint: "📝 Notes/💼 Business"
+  fields:
+    - company_status            # active|exit|dead|paused from status field or body
+    - company_founded_year
+    - company_exit_year
+    - company_sector
+    - company_my_role           # founder|cofounder|advisor|investor
+  example_query: |
+    TABLE company_status, company_founded_year, company_exit_year
+    WHERE company_status = "exit" SORT company_exit_year
+
+# ── Tier 3: specialty ──────────────────────────────────────────────
+
+daily_log:
+  folder_hint: "📝 Notes/📅 Daily Logs"
+  fields:
+    - log_date_iso
+    - log_tasks_logged          # count of "- [ ]" and "- [x]"
+    - log_tasks_done
+    - log_linked_journal        # wikilink to same-day journal if exists
+    - word_count
+
+talk:
+  folder_hint: "📝 Notes/talks, speaking-opportunities.md"
+  fields:
+    - talk_venue
+    - talk_date_iso
+    - talk_audience_size        # int from "Audience: N"
+    - talk_recording_url
+    - talk_stories_used         # bullets under ## Stories
+    - talk_feedback_received    # blockquotes
+
+travel:
+  folder_hint: "🌱 Curiosities/Travel"
+  fields:
+    - travel_place
+    - travel_visit_iso
+    - travel_rating_1_5
+    - travel_vibe_tags          # wikilinks
+    - travel_would_return       # bool from "Would return: yes/no"
+    - travel_companions
+
+goal:
+  folder_hint: "🏠 Home/Vision & Goals"
+  fields:
+    - goal_horizon              # day|week|month|quarter|year|decade
+    - goal_status               # open|in-progress|done|archived
+    - goal_deadline_iso
+    - goal_sub_goals            # wikilinks
+    - goal_blockers

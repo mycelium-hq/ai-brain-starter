@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+# second-brain-mapping.sh
+# Adelaida's unified vault-mapping pipeline. Runs three steps:
+#   1. journal-metadata-extract   fast, no LLM, always runs
+#   2. graphify                   expensive LLM, skipped here (needs Claude)
+#   3. graphify_wikilink_gaps + graphify_apply_wikilinks  fast, interactive approval
+#
+# Graphify (Phase 2) cannot run from bash alone because it's LLM-orchestrated.
+# Invoke the /second-brain-mapping slash command from Claude Code to drive all three,
+# or run this script standalone to do Phase 1 + Phase 3 against the existing graph.
+#
+# Usage:
+#   ./second-brain-mapping.sh                      # full: metadata + wikilinks (no graphify)
+#   ./second-brain-mapping.sh --metadata-only      # only Phase 1
+#   ./second-brain-mapping.sh --wikilinks-only     # only Phase 3
+#   ./second-brain-mapping.sh --dry-run            # preview metadata + wikilink changes
+#   ./second-brain-mapping.sh --force              # re-process already-tagged journals
+#   ./second-brain-mapping.sh --year=2026          # scope metadata to one year
+#
+set -euo pipefail
+
+VAULT="/Users/adelaidadiaz-roa/Desktop/Adelaida Notes"
+SCRIPTS="$VAULT/⚙️ Meta/scripts"
+GRAPH_OUT="$VAULT/⚙️ Meta/graphify-out"
+
+METADATA_ONLY=0
+WIKILINKS_ONLY=0
+DRY_RUN=0
+FORCE_META=0
+YEAR_ARG=""
+
+for arg in "$@"; do
+  case $arg in
+    --metadata-only) METADATA_ONLY=1 ;;
+    --wikilinks-only) WIKILINKS_ONLY=1 ;;
+    --dry-run) DRY_RUN=1 ;;
+    --force) FORCE_META=1 ;;
+    --year=*) YEAR_ARG="$arg" ;;
+    --help|-h)
+      sed -n '2,19p' "$0"
+      exit 0
+      ;;
+    *) echo "Unknown flag: $arg (use --help)"; exit 2 ;;
+  esac
+done
+
+ts() { date '+%H:%M:%S'; }
+hr() { printf '%.0s─' {1..60}; echo; }
+
+hr
+echo "Second Brain Mapping   $(date '+%Y-%m-%d %H:%M %Z')"
+hr
+
+# ── Phase 1: vault-wide metadata extraction (all types) ──────────────
+if [[ $WIKILINKS_ONLY -eq 0 ]]; then
+  echo ""
+  echo "[$(ts)] Phase 1: Vault metadata extraction (all registered types)"
+  FLAGS=""
+  [[ $DRY_RUN -eq 1 ]] && FLAGS="$FLAGS --dry-run"
+  [[ $FORCE_META -eq 1 ]] && FLAGS="$FLAGS --force"
+  [[ -n "$YEAR_ARG" ]] && FLAGS="$FLAGS $YEAR_ARG"
+
+  python3 "$SCRIPTS/vault-metadata-extract.py" $FLAGS
+  echo "[$(ts)] Phase 1 done"
+fi
+
+[[ $METADATA_ONLY -eq 1 ]] && { echo ""; echo "Metadata-only run complete."; exit 0; }
+
+# ── Phase 2: graphify (NOTICE — not run from bash) ────────────────────
+if [[ $WIKILINKS_ONLY -eq 0 ]]; then
+  echo ""
+  echo "[$(ts)] Phase 2: Graphify"
+  echo "  Skipped in bash (graphify is LLM-orchestrated, needs Claude)."
+  echo "  To run: invoke /second-brain-mapping in Claude Code,"
+  echo "          or run /graphify separately before re-running this script."
+fi
+
+# ── Phase 3: wikilink gaps + apply ────────────────────────────────────
+echo ""
+echo "[$(ts)] Phase 3: Wikilink gaps + apply"
+
+if [[ ! -f "$GRAPH_OUT/graph.json" ]]; then
+  echo "  No graph.json at $GRAPH_OUT."
+  echo "  Run /graphify first; rerun this script with --wikilinks-only to finish."
+  exit 0
+fi
+
+cd "$VAULT"
+
+# Always regenerate the gaps report — fast, deterministic, non-interactive.
+if [[ $DRY_RUN -eq 1 ]]; then
+  echo "  [DRY RUN] Regenerating WIKILINK_GAPS.md"
+else
+  echo "  → Regenerating WIKILINK_GAPS.md from graph.json"
+fi
+python3 "$SCRIPTS/graphify_wikilink_gaps.py"
+
+# apply_wikilinks is interactive. Skip gracefully when stdin isn't a TTY
+# (hook invocation, piped run, scheduled task) — never silently abort mid-file.
+if [[ ! -t 0 ]]; then
+  echo ""
+  echo "  → Non-interactive shell detected. Skipping apply_wikilinks."
+  echo "    Review WIKILINK_GAPS.md, then run interactively:"
+  echo "    python3 \"\$SCRIPTS/graphify_apply_wikilinks.py\""
+elif [[ $DRY_RUN -eq 1 ]]; then
+  echo ""
+  echo "  [DRY RUN] apply_wikilinks preview (first prompts only):"
+  python3 "$SCRIPTS/graphify_apply_wikilinks.py" --dry-run
+else
+  echo ""
+  echo "  → Starting interactive apply (approve each candidate):"
+  python3 "$SCRIPTS/graphify_apply_wikilinks.py"
+fi
+
+
+# ── Phase 4: Insight engine ───────────────────────────────────────────
+# Zero-LLM cross-type surprise finder. Runs every time — it's fast and the
+# output changes whenever any metadata changes.
+echo ""
+echo "[$(ts)] Phase 4: Insight engine"
+if [[ $DRY_RUN -eq 1 ]]; then
+  echo "  [DRY RUN] Would scan typed files and write ⚙️ Meta/Second-Brain Insights.md"
+else
+  python3 "$SCRIPTS/vault-insight-engine.py" --top 5
+fi
+
+echo ""
+hr
+echo "Second Brain Mapping complete."
+echo "Insights report: ⚙️ Meta/Second-Brain Insights.md"
+hr
