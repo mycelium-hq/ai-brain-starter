@@ -25,6 +25,23 @@ import json, sys, re, os
 
 VAULT = os.environ.get("VAULT_ROOT", "")
 
+
+def _effective_cwd(command: str, initial: str) -> str:
+    """Resolve cwd after any leading `cd <path>` commands in the command string.
+
+    Without this, `cd ~/other-repo && git add .` gets blocked because the hook
+    sees the initial cwd (still the vault) and never notices the `cd` jump.
+    """
+    cwd = os.path.expanduser(initial) if initial else ""
+    for chunk in re.split(r"\s*(?:&&|\|\||;)\s*", command):
+        chunk = chunk.strip()
+        m = re.match(r"cd\s+(?:\"([^\"]+)\"|'([^']+)'|(\S+))", chunk)
+        if m:
+            new_path = os.path.expanduser(next(g for g in m.groups() if g is not None))
+            cwd = new_path if os.path.isabs(new_path) else os.path.normpath(os.path.join(cwd, new_path))
+    return cwd
+
+
 MUTATING = {
     "add", "commit", "checkout", "reset", "merge", "rebase",
     "restore", "switch", "stash", "cherry-pick", "revert", "am",
@@ -37,6 +54,7 @@ except Exception:
 
 command = data.get("tool_input", {}).get("command", "")
 cwd = os.environ.get("CLAUDE_CWD", data.get("cwd", ""))
+cwd = _effective_cwd(command, cwd)
 
 if not VAULT or not cwd.startswith(VAULT):
     sys.exit(0)
