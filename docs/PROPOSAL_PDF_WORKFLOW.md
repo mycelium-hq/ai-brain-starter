@@ -5,6 +5,8 @@ description: Turn a markdown proposal into a letterpress-quality branded PDF usi
 
 # Proposal PDF workflow
 
+> **Opt-in reference material.** This workflow is not installed by default and does not load into any Claude session automatically. Nothing happens unless you actively install pandoc + WeasyPrint, copy the CSS into your vault, and configure the two placeholder lines. If you don't send formal PDF proposals, skip this file.
+
 Ship a branded, professional-looking PDF proposal from a markdown source file — no design tool, no manual reformatting, no "paste into Word and tweak for an hour." Works for proposals, contracts, reports, one-pagers, or any formal business document where the container needs to match the content.
 
 ## When to use this
