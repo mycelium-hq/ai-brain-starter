@@ -113,28 +113,41 @@ The hook auto-detects the vault root by walking up from the working directory. I
 
 To add your own project-specific files, edit `~/.claude/hooks/vault-context.py` and uncomment the `TOPIC_MAP` example entries — each entry maps a list of keywords to a list of vault-relative file paths.
 
-### Optional advanced guardrails
+### Additional PreToolUse hooks
 
-The starter ships five additional PreToolUse hooks under `hooks/`. They're optional — install only if the corresponding risk applies to your setup. None are auto-installed.
+The starter ships five PreToolUse hooks under `hooks/`. Two install by default (they help every user with no behavior-change cost). Three are conditional — install only if the specific risk applies.
+
+**Install by default — run these two `cp` commands now:**
+
+```bash
+mkdir -p ~/.claude/hooks
+cp ~/.claude/skills/ai-brain-starter/hooks/retry-budget.py ~/.claude/hooks/
+cp ~/.claude/skills/ai-brain-starter/hooks/validate-mcp-json.py ~/.claude/hooks/
+```
+
+| Hook | What it does | Why it's default |
+|---|---|---|
+| `retry-budget.py` | Blocks the 4th identical Bash command within 30 minutes | Caps Claude's tendency to loop on failing commands and burn context. Bypass: `RETRY_BUDGET_BYPASS=1 <cmd>` |
+| `validate-mcp-json.py` | Blocks Write/Edit on `.mcp.json` if the result fails JSON parsing | Claude Code silently drops malformed `.mcp.json`, disabling every registered MCP. Catches a single misplaced brace before it takes the stack dark. |
+
+Both are already wired into `hooks.json` with file-exists guards — if the user removes the file, the hook chain stays clean (protection just goes away, no errors). To uninstall either: `rm ~/.claude/hooks/<name>.py`.
+
+**Conditional opt-ins — install only if the risk applies (read each file first):**
 
 | Hook | What it blocks | Install when |
 |---|---|---|
 | `block-raw-vault-git.py` | Raw `git add/commit/checkout/reset/merge/rebase` inside a git-tracked vault | Your vault has `.git/` and you run multiple Claude sessions against it (prevents cross-session lock races) |
 | `block-vault-git-fullwalk.py` | Unscoped `git add -A`, `git add .`, full-tree `git status` | Same vaults with >10K files — prevents 10+ minute walks and token burn |
-| `validate-mcp-json.py` | Invalid JSON writes to `.mcp.json` / `settings.json` | Always safe; prevents silent MCP config breakage |
 | `permission-denied.py` | (Hook event handler, informational) | Improves error surfacing on permission denials |
-| `retry-budget.py` | The 4th identical Bash command within 30 minutes | Always beneficial — caps Claude's tendency to loop on failing commands and burn context. Bypass with `RETRY_BUDGET_BYPASS=1` prefix for intentional re-runs |
-
-Install pattern (copy the hook, then register it in `.claude/settings.local.json` or `~/.claude/settings.json`):
 
 ```bash
+# Install the conditional ones that apply to your setup:
 cp ~/.claude/skills/ai-brain-starter/hooks/block-raw-vault-git.py ~/.claude/hooks/
 cp ~/.claude/skills/ai-brain-starter/hooks/block-vault-git-fullwalk.py ~/.claude/hooks/
-cp ~/.claude/skills/ai-brain-starter/hooks/validate-mcp-json.py ~/.claude/hooks/
-cp ~/.claude/skills/ai-brain-starter/hooks/retry-budget.py ~/.claude/hooks/
+cp ~/.claude/skills/ai-brain-starter/hooks/permission-denied.py ~/.claude/hooks/
 ```
 
-Each hook file documents its own matcher and the `hookEventName` it expects. Do not install all five blindly — read each file first.
+The two git-guard hooks read their vault path from the `VAULT_ROOT` environment variable; if unset, they no-op safely. Set it in `~/.zshrc` or `~/.claude/settings.json` pointing at your vault root. Emergency bypass for blocked git commands: `GIT_VAULT_BYPASS=1 git ...`.
 
 Tell them: "Done. From now on, the first thing I do every session is read your files — automatically, before I say anything. And whenever you ask something strategic, I'll pull your current priorities and open items into context before I respond. If there's an update to the skill, I'll pull it and apply it automatically — you'll just see a quick note about what changed."
 

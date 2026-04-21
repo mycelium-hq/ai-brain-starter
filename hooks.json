@@ -66,6 +66,15 @@
             "command": "[ -f ~/.claude/hooks/retry-budget.py ] && python3 ~/.claude/hooks/retry-budget.py || true"
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f ~/.claude/hooks/validate-mcp-json.py ] && python3 ~/.claude/hooks/validate-mcp-json.py || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'"
+          }
+        ]
       }
     ],
 
