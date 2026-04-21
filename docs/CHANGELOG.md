@@ -9,6 +9,23 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-20 -- proposal-PDF workflow: turn markdown into letterpress-quality branded PDFs
+
+**What changed:** New artifact pair for founders and consultants who ship formal business proposals:
+
+- `templates/obsidian-snippets/proposal-letterhead.css` — Obsidian CSS snippet (also usable with pandoc + WeasyPrint from the CLI) that transforms a plain markdown note into a letterpress-quality branded PDF on export. Two customization placeholders; everything else is ready to use.
+- `docs/PROPOSAL_PDF_WORKFLOW.md` — step-by-step guide covering install (`brew install pandoc weasyprint`), customization, Obsidian-UI path, command-line path, color alternatives, recommended proposal structure, and troubleshooting.
+
+**What it does:** Gives you a PDF that reads as "law firm" or "senior consulting firm" — Georgia body typography, deep navy section headers with hairline underlines, italic letterhead on pages 2+, "N / total" page numbers, clean business-document table styling, justified paragraphs with auto-hyphenation. First page has no running header so the opening letter / carta de presentación stands alone.
+
+**Why it matters:** The fastest way for an independent consultant or small agency to lose credibility against Big 4 or boutique-consultancy proposals is the visual container. A markdown-default PDF reads as "solo operator who couldn't be bothered." A designed Canva template reads as "marketing pitch, not business document." This workflow sits between the two: deliberately sober typography that signals professional services without investing in custom design per deal.
+
+**Originated in:** A 2026-04-20 Colombian consulting engagement where the proposal had to read as senior-professional-services to a traditional industrial patriarch. The same register works for any founder shipping proposals into traditional industry contexts — construction, legal, financial services, manufacturing, government — where formal register is expected and missing it is expensive.
+
+**To adopt:** Read `docs/PROPOSAL_PDF_WORKFLOW.md`. 15 minutes from install to first PDF.
+
+---
+
 ## 2026-04-20 -- two new team workflows: Canonical Facts and playbook-to-task wiring
 
 **What changed:** `for-teams/team-workflows.md` gained two new sections that codify patterns every team with contractors or external-facing numeric claims will eventually need.

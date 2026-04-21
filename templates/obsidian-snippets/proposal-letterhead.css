@@ -1,0 +1,280 @@
+/*
+ * Proposal Letterhead — Obsidian CSS snippet + pandoc/WeasyPrint print CSS
+ *
+ * Turns any markdown note into a letterpress-quality branded PDF when exported
+ * from Obsidian (reading mode -> Cmd+P -> Export to PDF), OR when run through
+ * pandoc + WeasyPrint from the command line.
+ *
+ * ============ HOW TO USE (Obsidian) ============
+ *   1. Copy this file to your vault's .obsidian/snippets/ folder
+ *   2. Customize the LETTERHEAD placeholders below (search for `{{CUSTOMIZE}}`)
+ *   3. Obsidian Settings -> Appearance -> CSS snippets -> toggle ON
+ *   4. Open the proposal note in Reading Mode, then Cmd+P -> Export to PDF
+ *
+ * ============ HOW TO USE (pandoc + WeasyPrint CLI) ============
+ *   brew install pandoc weasyprint
+ *   pandoc proposal.md --from markdown+yaml_metadata_block --to html5 \
+ *     --standalone --css /path/to/proposal-letterhead.css \
+ *     --metadata title="" -o /tmp/proposal.html
+ *   weasyprint /tmp/proposal.html ~/Desktop/proposal.pdf
+ *
+ * ============ WHAT YOU GET ============
+ *   - First page: no running header (clean, letter-style opening)
+ *   - Pages 2+: italic letterhead top-left, document name top-right, "N / total" page numbers bottom-center
+ *   - Georgia body typography, navy section headers with hairline underlines
+ *   - Clean business-document table styling (navy headers on pale-grey fill)
+ *   - Bold text in navy as a second hierarchy signal (quiet prestige)
+ *   - Short centered horizontal rules instead of black bars
+ *   - Justified paragraphs with auto-hyphenation
+ *
+ * ============ FONT REQUIREMENTS ============
+ *   - Georgia (pre-installed on macOS and Windows; equivalent fallback: Times New Roman)
+ *   - No web fonts required — everything runs offline
+ */
+
+
+/* =========================================================================
+   PAGE SETUP: letterhead, running headers, page numbers, margins
+   ========================================================================= */
+
+@media print {
+
+    @page {
+        size: letter;
+        margin: 1in 0.9in 0.85in 0.9in;
+
+        @top-left {
+            /* {{CUSTOMIZE}} Replace with your name + site. Example:
+               content: "Your Name  ·  yoursite.com"; */
+            content: "Your Name  ·  yoursite.com";
+            font-family: Georgia, "Times New Roman", serif;
+            font-size: 9pt;
+            color: #1a365d;
+            font-style: italic;
+        }
+
+        @top-right {
+            /* {{CUSTOMIZE}} Replace with short doc title. Example:
+               content: "Proposal for [Client]"; */
+            content: "Proposal Document";
+            font-family: Georgia, "Times New Roman", serif;
+            font-size: 9pt;
+            color: #1a365d;
+            font-style: italic;
+        }
+
+        @bottom-center {
+            content: counter(page) " / " counter(pages);
+            font-family: Georgia, "Times New Roman", serif;
+            font-size: 9pt;
+            color: #666;
+        }
+    }
+
+    /* First page: no running header (opening letter stands alone) */
+    @page :first {
+        @top-left { content: ""; }
+        @top-right { content: ""; }
+    }
+
+
+    /* ---------- Body typography ---------- */
+    body,
+    .markdown-preview-view,
+    .markdown-rendered,
+    .print {
+        font-family: Georgia, "Times New Roman", serif !important;
+        font-size: 11pt !important;
+        line-height: 1.55 !important;
+        color: #1a1a1a !important;
+        background: #ffffff !important;
+    }
+
+
+    /* ---------- Headings: serif, navy, hierarchical ---------- */
+    .markdown-preview-view h1, .markdown-rendered h1,
+    .markdown-preview-view h2, .markdown-rendered h2,
+    .markdown-preview-view h3, .markdown-rendered h3,
+    .markdown-preview-view h4, .markdown-rendered h4,
+    h1, h2, h3, h4 {
+        font-family: Georgia, "Times New Roman", serif !important;
+        color: #1a365d !important;
+        font-weight: 600 !important;
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+    }
+
+    .markdown-preview-view h1, .markdown-rendered h1, h1 {
+        font-size: 22pt !important;
+        margin-top: 24pt !important;
+        margin-bottom: 14pt !important;
+        border-bottom: 1pt solid #1a365d;
+        padding-bottom: 6pt;
+    }
+
+    .markdown-preview-view h2, .markdown-rendered h2, h2 {
+        font-size: 15pt !important;
+        margin-top: 22pt !important;
+        margin-bottom: 10pt !important;
+        border-bottom: 0.5pt solid #c5ced9;
+        padding-bottom: 4pt;
+    }
+
+    .markdown-preview-view h3, .markdown-rendered h3, h3 {
+        font-size: 12.5pt !important;
+        margin-top: 16pt !important;
+        margin-bottom: 6pt !important;
+    }
+
+    .markdown-preview-view h4, .markdown-rendered h4, h4 {
+        font-size: 11.5pt !important;
+        font-style: italic !important;
+        margin-top: 12pt !important;
+        margin-bottom: 4pt !important;
+    }
+
+
+    /* ---------- Paragraphs: justified for a letterpress feel ---------- */
+    .markdown-preview-view p, .markdown-rendered p, p {
+        margin-top: 0 !important;
+        margin-bottom: 10pt !important;
+        text-align: justify !important;
+        hyphens: auto !important;
+        orphans: 2;
+        widows: 2;
+    }
+
+
+    /* ---------- Emphasis: bold in navy for quiet prestige ---------- */
+    .markdown-preview-view strong, .markdown-rendered strong, strong {
+        color: #1a365d !important;
+        font-weight: 600 !important;
+    }
+
+    .markdown-preview-view em, .markdown-rendered em, em {
+        font-style: italic !important;
+        color: #1a1a1a !important;
+    }
+
+
+    /* ---------- Lists ---------- */
+    .markdown-preview-view ul, .markdown-rendered ul, ul,
+    .markdown-preview-view ol, .markdown-rendered ol, ol {
+        margin-top: 6pt !important;
+        margin-bottom: 10pt !important;
+        padding-left: 22pt !important;
+    }
+
+    .markdown-preview-view li, .markdown-rendered li, li {
+        margin-bottom: 5pt !important;
+        line-height: 1.5 !important;
+        text-align: left !important;
+    }
+
+    .markdown-preview-view li p, .markdown-rendered li p, li p {
+        text-align: left !important;
+        margin-bottom: 4pt !important;
+    }
+
+
+    /* ---------- Tables: business-document style ---------- */
+    .markdown-preview-view table, .markdown-rendered table, table {
+        border-collapse: collapse !important;
+        width: 100% !important;
+        margin: 14pt 0 !important;
+        font-size: 10pt !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+    }
+
+    .markdown-preview-view th, .markdown-rendered th, th {
+        background-color: #eef1f6 !important;
+        color: #1a365d !important;
+        font-weight: 600 !important;
+        text-align: left !important;
+        padding: 7pt 9pt !important;
+        border: 0.5pt solid #1a365d !important;
+    }
+
+    .markdown-preview-view td, .markdown-rendered td, td {
+        padding: 6pt 9pt !important;
+        border: 0.5pt solid #a0aec0 !important;
+        vertical-align: top !important;
+        text-align: left !important;
+    }
+
+
+    /* ---------- Horizontal rules: subtle dividers, not black bars ---------- */
+    .markdown-preview-view hr, .markdown-rendered hr, hr {
+        border: none !important;
+        border-top: 0.5pt solid #c5ced9 !important;
+        margin: 18pt auto !important;
+        width: 30% !important;
+        page-break-after: avoid !important;
+    }
+
+
+    /* ---------- Links: plain text color for print (no blue underline) ---------- */
+    .markdown-preview-view a, .markdown-rendered a, a,
+    .markdown-preview-view a:visited, .markdown-rendered a:visited, a:visited {
+        color: #1a365d !important;
+        text-decoration: none !important;
+    }
+
+
+    /* ---------- Blockquotes: legal-document indent ---------- */
+    .markdown-preview-view blockquote, .markdown-rendered blockquote, blockquote {
+        border-left: 2pt solid #1a365d !important;
+        margin: 10pt 0 10pt 18pt !important;
+        padding-left: 14pt !important;
+        font-style: italic !important;
+        color: #333 !important;
+    }
+
+
+    /* ---------- Inline code: subtle, non-intrusive ---------- */
+    .markdown-preview-view code, .markdown-rendered code, code {
+        background-color: #f4f4f4 !important;
+        padding: 1pt 4pt !important;
+        border-radius: 2pt !important;
+        font-family: "SF Mono", Consolas, "Courier New", monospace !important;
+        font-size: 9.5pt !important;
+        color: #444 !important;
+    }
+
+
+    /* ---------- Hide Obsidian UI in print ---------- */
+    .view-header,
+    .workspace-tab-header,
+    .workspace-tab-container-before,
+    .workspace-tab-container-after,
+    .status-bar,
+    .empty-state,
+    .view-actions,
+    .markdown-embed-link,
+    .collapse-indicator,
+    /* Hide pandoc's auto-title header if any */
+    header#title-block-header {
+        display: none !important;
+    }
+}
+
+
+/* =========================================================================
+   COLOR CUSTOMIZATION
+   =========================================================================
+
+   The default accent color is a deep navy (#1a365d) — reads as serious,
+   trustworthy, and formal in most business contexts. To change it:
+
+     Search this file for #1a365d and replace with your color of choice.
+
+   Recommended alternatives for formal business documents:
+     - Burgundy         #722f37   (authoritative, legal-document feel)
+     - Forest green     #2d4a3e   (stability, growth)
+     - Charcoal         #2d3748   (understated, modern)
+     - Oxford blue      #002147   (very traditional)
+
+   Avoid bright accent colors (red, orange, bright blue) for formal client
+   documents — they read as marketing, not professional services.
+*/
