@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # second-brain-mapping.sh
-# Adelaida's unified vault-mapping pipeline. Runs three steps:
+# Unified vault-mapping pipeline. Runs three steps:
 #   1. journal-metadata-extract   fast, no LLM, always runs
 #   2. graphify                   expensive LLM, skipped here (needs Claude)
 #   3. graphify_wikilink_gaps + graphify_apply_wikilinks  fast, interactive approval
@@ -19,9 +19,11 @@
 #
 set -euo pipefail
 
-VAULT="/Users/adelaidadiaz-roa/Desktop/Adelaida Notes"
-SCRIPTS="$VAULT/⚙️ Meta/scripts"
-GRAPH_OUT="$VAULT/⚙️ Meta/graphify-out"
+# Self-locate: this script lives at <vault-root>/scripts/, so VAULT = parent dir.
+# Override with VAULT_ROOT env var for non-standard installs.
+SCRIPTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VAULT="${VAULT_ROOT:-$(cd "$SCRIPTS/.." && pwd)}"
+GRAPH_OUT="$VAULT/graphify-out"
 
 # ── Concurrency guard (POSIX-portable, no flock dependency) ───────────
 # Uses atomic mkdir as the lock primitive. Works on macOS, Linux, WSL.
