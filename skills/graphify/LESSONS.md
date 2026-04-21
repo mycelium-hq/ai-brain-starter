@@ -2,7 +2,7 @@
 type: runbook
 ---
 
-# Graphify Lessons (1-104)
+# Graphify Lessons (1-113)
 
 > Consolidated operational lessons from many runs. Scope: general-purpose, no vault-specific paths or data. Pair with `OPTIMIZATIONS.md` (patterns) and `RUNBOOK.md` (pipeline).
 
@@ -243,6 +243,34 @@ type: runbook
 **103.** Cache contamination grep (`grep -rl "marker|stub|fake|placeholder"`) false-positives on legitimate node labels containing substrings like "biomarker". Not a real signal unless the match is in a metadata field, not a label. Visual inspection required on hits.
 
 **104.** `graphify_stage_finish.py` should accept `--vault-root` and `--report-title` args to avoid hardcoded vault paths.
+
+## Coverage audit + source_file semantics (105-106)
+
+**105.** `source_file` on a graph node points to the file where the node was FIRST extracted, not every file that contains that concept. A node labelled "X" with `source_file: Journals/Y.md` does NOT mean `Writing/X.md` was processed. When auditing coverage, "concept appears in graph" ≠ "file was run through the extractor." The audit script must distinguish: a file is CURRENT only if its own path + content SHA match a manifest entry; MOVED if only its basename appears in another store; MISSING if no trace at all. Don't collapse these categories.
+
+**106.** `graphify_stage_finish.py` can under-record the manifest two ways: (a) **Staged-path resolution** — if subagents write `source_file` as `graphify-input/<flattened>.md` (staging path with `_` instead of `/`), `VAULT / source_file` doesn't exist and `is_file()` fails silently. Fix: resolve by first trying `VAULT / sf`, then unflattening `graphify-input/A_B_C.md` → trying each `_` → `/` combination until a real file is found. (b) **Preflight-only files** — files with no LLM-new output never appear in canonical nodes/edges, so they never get a manifest entry even though they were processed. Fix: union staged-source-files with `.chunk_NN_files.txt` inputs so every file sent to the stage gets a manifest entry regardless of LLM yield.
+
+## Environment + multi-wave runs (107-108b)
+
+**107.** `~/.zshrc` is interactive-only. Any script launched by the Claude Code Bash tool runs in a non-interactive shell that never sources `.zshrc`. Scripts that grep-fallback to `~/.zshrc` for API keys silently fail with "key not found" even when the key exists in the user's real secrets file. Canonical fix: put secrets in `~/.zshenv` (or a dotenv file sourced by `.zshenv`), and any script reading a secret walks the full fallback chain `env → ~/.zshenv → ~/.zsh_secrets → ~/.zshrc → ~/.zprofile → ~/.bashrc → ~/.bash_profile → ~/.profile → ~/.env`.
+
+**108.** RUN `graphify_stage_finish.py`. Never write ad-hoc merge scripts. Hand-rolled pipelines get the step ordering wrong (cache save before canonicalize, no dangling-edge prune, no adjacency dedupe). The finish script does everything in correct order: validate → canonicalize → dedupe → merge → dangling-prune → recluster → report → cache save → verify.
+
+**108b.** `graphify_stage_finish.py` `--chunk-prefix` flag resolves to CWD instead of `<out_dir>`, making it useless for non-default prefixes. The script also always sequences chunks from 01, so multi-wave runs (where wave 2 chunks are named `.chunk_11_result.json` etc.) fail with "MISSING chunk 01". **Workaround:** before each finish call, copy/rename chunk results and file lists to `.chunk_01..N_*` in `<out_dir>`. **TODO:** add `--chunk-start` and `--chunk-end` params (or `--chunk-dir`) so wave N can pass `--chunk-start 11 --chunk-end 20` without manual renaming.
+
+## Coverage semantics — what "stale" and "missing" actually mean (109-111)
+
+**109.** Cloud-sync services (iCloud, Google Drive, Dropbox) trip file mtimes without content edits. Coverage audit flags files as "stale" (mtime > manifest.llm_time) even when the user never opened them. Likely causes: cloud re-downloading files on a machine move, OS indexing, Finder/Explorer metadata touches. **Implication:** don't interpret "stale count" as "user edits pending" — check content SHA, not mtime, before concluding content actually changed. Consider adding a SHA-based "truly stale" count alongside the mtime-based count in the coverage audit script.
+
+**110.** Coverage audit SKIP_PARTS excludes folders like `AI Chats/` by default. These files can be 1000+ strong and never appear as "missing" in COVERAGE_REPORT.json despite never being graphified. If the folder has `type: ai-chat` (or similar) in frontmatter rather than `[AI Extract]` in body, `graphify_stage_select.py` will include them when you target the folder directly as a positional arg — but the coverage audit still hides them. **Fix:** add excluded folders to the coverage audit output (either as a tracked folder, or surface the exclusion in the report header with file counts).
+
+**111.** "Missing" from coverage report ≠ "valuable content waiting to be graphified." Most missing files in established vaults are stubs (<500 words) — empty book notes, draft placeholders, single-line concept pages. Example measurement: 933 missing → only 58 eligible after ≥500-word filter. **Practical rule:** when filling a user request for "ungraphified only," run the 500-word filter against the missing list before quoting file counts. A naive "X has 140 ungraphified files" becomes "0 eligible files" after filtering. The real content gaps are usually recent journals and active research folders, not legacy stubs.
+
+## Corpus-specific baselines (112-113)
+
+**112.** AI Chat exports have higher concept density than journals. Measured first 10-chunk wave: ~802 concepts (nodes + edges + hyperedges) per 671K tokens = **1.20 concepts/Ktoken**. Journals baseline is 0.50-0.70. AI Chats land closer to Books (0.85-1.10) or above. Reason: each chat is topically focused around a specific project/problem/decision, so each file yields a dense entity cluster. Revised corpus baseline: **AI Chats 1.00-1.30 concepts/Ktoken**. Plan tokens accordingly — they're a high-ROI corpus, not a low-signal one, despite being "AI-generated."
+
+**113.** AI Chats require a different extractor frame than journals/writing. The value isn't "what happened in this chat" (transient conversational content) but **what the user was thinking, deciding, or building when they opened the chat**. Recommended prompt preamble: "Focus on TOPICS the user explored, DECISIONS made, CONCEPTS developed, PEOPLE/PROJECTS mentioned, PATTERNS in their thinking. Ignore boilerplate AI responses." Ship as default preamble in the AI Chat extraction prompt.
 
 ## Standing rules
 
