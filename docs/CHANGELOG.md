@@ -9,6 +9,26 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-21 — retry-budget hook: cap Claude's failing-command loops
+
+**Who this affects:** everyone. Optional but recommended for all setups.
+
+**What changed:**
+
+1. **New hook `hooks/retry-budget.py`** blocks the 4th invocation of an identical Bash command within a 30-minute window. Attempts 1-3 pass silently; attempt 4 exits with code 2 and a message asking Claude to surface the blocker to you instead of looping further.
+
+2. **Bypass flag** `RETRY_BUDGET_BYPASS=1` prefix lets Claude legitimately re-run a command more than 3 times (polling for a cron to finish, iterating on a fix where each attempt is a real change). The bypass is explicit so Claude has to tell you it's using it.
+
+3. **Scope guards** prevent false positives: commands under 15 characters (`ls`, `pwd`, `date`, `git status`) are exempt, and state is per-Claude-session (no leakage between parallel work).
+
+4. **Registered in `hooks.json`** under a new PreToolUse Bash matcher, so `/setup-brain` wires it up automatically on fresh installs. Existing users can install manually via the pattern in `phases/phase-05-context-layer.md`.
+
+5. **New rule 31 in `templates/rules/efficiency.md`** documents the behavior and when to invoke the bypass.
+
+**Why:** without a retry ceiling, Claude will cheerfully burn 200K context looping on a failing command before surrendering — this is the single highest-cost silent failure mode we see. Three attempts is enough to cover flaky-network hiccups; the fourth is almost always a signal to stop and plan. Pattern adapted from Devin 2.0 ("ask user for help if CI does not pass after the third attempt") and Cursor 2.0 ("don't loop more than 3 times to fix linter errors").
+
+---
+
 ## 2026-04-21 — first-run UX hardening for /second-brain-mapping
 
 **Who this affects:** everyone, especially first-time users running `/second-brain-mapping` on a fresh vault. Reduces silent failures and makes cold-start safer.

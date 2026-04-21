@@ -57,6 +57,18 @@
       }
     ],
 
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/retry-budget.py"
+          }
+        ]
+      }
+    ],
+
     "PostToolUse": [
       {
         "matcher": "Write",

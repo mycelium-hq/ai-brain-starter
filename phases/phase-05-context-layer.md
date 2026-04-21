@@ -115,7 +115,7 @@ To add your own project-specific files, edit `~/.claude/hooks/vault-context.py` 
 
 ### Optional advanced guardrails
 
-The starter ships four additional PreToolUse hooks under `hooks/`. They're optional — install only if the corresponding risk applies to your setup. None are auto-installed.
+The starter ships five additional PreToolUse hooks under `hooks/`. They're optional — install only if the corresponding risk applies to your setup. None are auto-installed.
 
 | Hook | What it blocks | Install when |
 |---|---|---|
@@ -123,6 +123,7 @@ The starter ships four additional PreToolUse hooks under `hooks/`. They're optio
 | `block-vault-git-fullwalk.py` | Unscoped `git add -A`, `git add .`, full-tree `git status` | Same vaults with >10K files — prevents 10+ minute walks and token burn |
 | `validate-mcp-json.py` | Invalid JSON writes to `.mcp.json` / `settings.json` | Always safe; prevents silent MCP config breakage |
 | `permission-denied.py` | (Hook event handler, informational) | Improves error surfacing on permission denials |
+| `retry-budget.py` | The 4th identical Bash command within 30 minutes | Always beneficial — caps Claude's tendency to loop on failing commands and burn context. Bypass with `RETRY_BUDGET_BYPASS=1` prefix for intentional re-runs |
 
 Install pattern (copy the hook, then register it in `.claude/settings.local.json` or `~/.claude/settings.json`):
 
@@ -130,6 +131,7 @@ Install pattern (copy the hook, then register it in `.claude/settings.local.json
 cp ~/.claude/skills/ai-brain-starter/hooks/block-raw-vault-git.py ~/.claude/hooks/
 cp ~/.claude/skills/ai-brain-starter/hooks/block-vault-git-fullwalk.py ~/.claude/hooks/
 cp ~/.claude/skills/ai-brain-starter/hooks/validate-mcp-json.py ~/.claude/hooks/
+cp ~/.claude/skills/ai-brain-starter/hooks/retry-budget.py ~/.claude/hooks/
 ```
 
 Each hook file documents its own matcher and the `hookEventName` it expects. Do not install all four blindly — read each file first.
