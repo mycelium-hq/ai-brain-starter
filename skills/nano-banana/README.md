@@ -1,3 +1,9 @@
+# nano-banana (image skill stub)
+
+> **Note from ai-brain-starter maintainers:** the folder you are reading is a local **skill stub** bundled with ai-brain-starter so Claude can discover the `/nano-banana` slash command. The actual image-generation plugin lives at [devonjones/devon-claude-skills](https://github.com/devonjones/devon-claude-skills) and is installed by `bootstrap.sh` via the marketplace instructions printed at the end of setup. You do **not** need to take any action based on the "archived" status below — the real plugin is actively maintained, just at the new location. This stub stays in place so the skill file is findable by Claude before the plugin install runs.
+
+---
+
 # ⚠️ ARCHIVED - Moved to devon-claude-skills
 
 ![ARCHIVED](https://img.shields.io/badge/status-ARCHIVED-red)
