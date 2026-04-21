@@ -87,13 +87,48 @@ if [ -n "$GRAPHIFY_BIN" ]; then
 else
     PYTHON="python3"
 fi
-"$PYTHON" -c "import graphify" 2>/dev/null || "$PYTHON" -m pip install graphifyy -q 2>/dev/null || "$PYTHON" -m pip install graphifyy -q --break-system-packages 2>&1 | tail -3
+mkdir -p graphify-out
+
+# Install path with real error surfacing. On failure, STOP and tell the user —
+# do not continue with a broken interpreter. Historical bug: pip errors were
+# swallowed by tail -3 + silent || chaining and the skill kept going.
+if ! "$PYTHON" -c "import graphify" 2>/dev/null; then
+    echo "graphify not importable — attempting install..."
+    INSTALL_LOG="graphify-out/.graphify_install.log"
+    if ! "$PYTHON" -m pip install graphifyy -q 2>"$INSTALL_LOG"; then
+        # PEP 668 environments (macOS system python, Debian 12+) need the flag
+        if ! "$PYTHON" -m pip install graphifyy -q --break-system-packages 2>>"$INSTALL_LOG"; then
+            echo ""
+            echo "ERROR: could not install graphify. Last install output:"
+            echo "---"
+            tail -20 "$INSTALL_LOG"
+            echo "---"
+            echo ""
+            echo "Common fixes:"
+            echo "  • Network / corporate proxy: check your pip config"
+            echo "  • Permissions: try 'pipx install graphifyy' instead"
+            echo "  • Python version: graphify needs Python 3.10+"
+            echo ""
+            echo "Stopping. Do not re-run /graphify until the import works:"
+            echo "  $PYTHON -c 'import graphify'"
+            exit 2
+        fi
+    fi
+    # Verify install actually took
+    if ! "$PYTHON" -c "import graphify" 2>/dev/null; then
+        echo "ERROR: graphify installed but still not importable by $PYTHON."
+        echo "This usually means a venv / pyenv mismatch. Run:"
+        echo "  which python3 && $PYTHON -c 'import sys; print(sys.path)'"
+        exit 2
+    fi
+    echo "graphify installed successfully."
+fi
+
 # Write interpreter path for all subsequent steps
 "$PYTHON" -c "import sys; open('graphify-out/.graphify_python', 'w').write(sys.executable)"
-mkdir -p graphify-out
 ```
 
-If the import succeeds, print nothing and move straight to Step 2.
+If the import succeeds on first try, print nothing and move straight to Step 2. If an install ran, the success line is the only output. If install failed, the skill has already exited — do not continue.
 
 **In every subsequent bash block, replace `python3` with `$(cat graphify-out/.graphify_python)` to use the correct interpreter.**
 
@@ -220,6 +255,15 @@ Concrete example for 3 chunks:
 [Agent tool call 3: files 31-45]
 ```
 All three in one message. Not three separate messages.
+
+**Rate-limit awareness (cold-start users on low API tiers).** If many subagents return errors mentioning `rate_limit`, `429`, `overloaded_error`, or `retry later`, do NOT pretend the extraction succeeded. Surface the issue plainly:
+
+> "Several subagents failed with rate-limit errors. Your Anthropic API tier is capping concurrent requests below what this vault needs. Options:
+> 1. Wait 1 minute and re-run `/graphify --update` — graphify caches completed chunks on disk, so only the failed ones re-dispatch.
+> 2. Split the corpus: `/graphify Notes/` then `/graphify Journals/` in separate runs.
+> 3. Raise your API tier at https://console.anthropic.com/settings/limits — Tier 2+ is enough for ~1000-file vaults."
+
+Do not try to workaround by reading files yourself. The cache handles partial runs gracefully. The user makes the tier decision.
 
 Each subagent receives this exact prompt (substitute FILE_LIST, CHUNK_NUM, TOTAL_CHUNKS, and DEEP_MODE):
 

@@ -9,6 +9,28 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-21 — first-run UX hardening for /second-brain-mapping
+
+**Who this affects:** everyone, especially first-time users running `/second-brain-mapping` on a fresh vault. Reduces silent failures and makes cold-start safer.
+
+**What changed:**
+
+1. **Setup-vault-types precheck.** Both `/second-brain-mapping` and `scripts/second-brain-mapping.sh` now check that at least one document-type extractor is configured before doing anything. Without this, Phase 1 used to run silently and report "no extractor" for every file in your vault, a confusing first-run experience. Now you get a clear message pointing you to `/setup-vault-types` instead.
+
+2. **`--sample [N]` mode.** New flag that picks N files per registered type (default 1), runs extraction, and shows you the actual fields that would be written, without writing anything. Use this on a cold start to verify the output looks right before committing to your whole vault. Example: `/second-brain-mapping --sample 3`.
+
+3. **Progress heartbeat in Phase 1.** On vaults of more than a few hundred files, Phase 1 used to run silently for minutes. Now it prints a progress line every 250 files showing files-per-second and ETA. Tunable with `--progress-every N`.
+
+4. **File-count-aware cost estimate before Phase 2.** The "Run graphify? ~100k-1M tokens" prompt is now backed by a vault-specific estimate: it counts your actual files and words, applies graphify's typical compression ratio, and shows you a dollar figure at current Sonnet pricing for both cold-start and incremental modes. Treat the number as order-of-magnitude, not a quote.
+
+5. **Hardened graphify install path.** `/graphify` Step 1 used to silently swallow pip install errors. Now it captures install output, surfaces the last 20 lines on failure, and stops with actionable next steps (network or proxy, PEP 668, pipx fallback, Python 3.10+ check) instead of continuing with a broken interpreter.
+
+6. **Rate-limit-aware subagent dispatch.** When many graphify subagents fail with `429 / rate_limit / overloaded_error`, the skill now surfaces a clear message about API tiers and offers three concrete options (wait and re-run, split corpus, raise tier) instead of pretending extraction succeeded.
+
+**Why:** with more people downloading and trying ai-brain-starter cold, the first 60 seconds of a `/second-brain-mapping` run determine whether they keep going or close the terminal. Six failure modes that previously looked like "the tool froze" or "the tool is broken" now produce explicit, actionable messages.
+
+---
+
 ## 2026-04-21 — graphify wikilink hard guards
 
 **Who this affects:** anyone who uses `scripts/graphify_apply_wikilinks.py` to apply graph-derived wikilinks. Tightens the script against path-form wikilink leaks, mirroring the hardening just shipped in `auto-wikilink.py`.

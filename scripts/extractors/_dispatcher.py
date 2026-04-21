@@ -16,7 +16,9 @@ import argparse
 import glob
 import importlib
 import os
+import random
 import sys
+import time
 import yaml
 
 # Make sibling modules importable (no package installs, emoji-path-safe)
@@ -148,6 +150,40 @@ def process_file(filepath, registry, context, dry_run=False, force=False):
     return "WROTE"
 
 
+def _peek_type(filepath):
+    """Read only the frontmatter header and return the type string (lowercase) or None."""
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            head = f.read(2048)
+    except Exception:
+        return None
+    fm_dict, _, _ = parse_frontmatter(head)
+    if not fm_dict:
+        return None
+    return (fm_dict.get("type") or "").strip().lower() or None
+
+
+def select_sample(all_files, registry, n_per_type):
+    """Pick up to n_per_type files for each registered extractor type.
+
+    Returns a list of filepaths spanning as many registered types as possible.
+    Pure function of the input set: deterministic for a given seed.
+    """
+    buckets = {t: [] for t in registry}
+    for fp in all_files:
+        t = _peek_type(fp)
+        if t and t in buckets:
+            buckets[t].append(fp)
+    rng = random.Random(42)  # deterministic sample
+    sample = []
+    for t, files in buckets.items():
+        if not files:
+            continue
+        rng.shuffle(files)
+        sample.extend(files[:n_per_type])
+    return sample
+
+
 def main():
     ap = argparse.ArgumentParser(description="Vault-wide metadata extractor (type-aware dispatcher).")
     ap.add_argument("--dry-run", action="store_true", help="Preview, no writes.")
@@ -155,13 +191,30 @@ def main():
     ap.add_argument("--type", help="Only process files with this type.")
     ap.add_argument("--year", help="Only process files whose path contains this year string.")
     ap.add_argument("--limit", type=int, help="Cap processing at N files (for testing).")
+    ap.add_argument("--sample", type=int, nargs="?", const=1, metavar="N",
+                    help="Sample N files per registered type (default 1). Random per-type "
+                         "pick with a fixed seed. Good for cold-start preview before a full run.")
+    ap.add_argument("--progress-every", type=int, default=250, metavar="N",
+                    help="Print a heartbeat every N files scanned (default 250). 0 = silent.")
     args = ap.parse_args()
 
-    print(f"vault-metadata-extract {'(DRY RUN)' if args.dry_run else ''}")
+    # --sample implies dry-run semantics visually, but we still write unless --dry-run.
+    # We DO flip dry_run on when sampling to avoid surprising the user — sample is a preview.
+    effective_dry_run = args.dry_run or args.sample is not None
+
+    mode_tag = "(DRY RUN)" if effective_dry_run else ""
+    if args.sample is not None:
+        mode_tag = f"(SAMPLE: {args.sample} per type, preview only)"
+    print(f"vault-metadata-extract {mode_tag}")
     print(f"Vault: {VAULT}")
 
     registry = discover_extractors()
     print(f"Registered extractors ({len(registry)}): {', '.join(sorted(registry.keys()))}")
+
+    if not registry:
+        print("\nNo extractors registered. Run /setup-vault-types first to choose which")
+        print("document types to extract. Nothing to do.")
+        return 2
 
     context = {
         "crm_names": get_crm_names(),
@@ -177,8 +230,24 @@ def main():
     no_extractor_types = {}
     errors = []
 
+    # Materialize file list (needed for sample + progress total). For very large vaults,
+    # this is one glob over .md files — cheap compared to per-file frontmatter parsing.
+    all_files = list(list_vault_files())
+
+    if args.sample is not None:
+        scan_files = select_sample(all_files, registry, args.sample)
+        print(f"Sample selected: {len(scan_files)} files across {len(registry)} types")
+    else:
+        scan_files = all_files
+
+    total = len(scan_files)
     files_done = 0
-    for fp in list_vault_files():
+    scanned = 0
+    t_start = time.monotonic()
+    heartbeat = args.progress_every if args.progress_every and args.progress_every > 0 else 0
+
+    for fp in scan_files:
+        scanned += 1
         if args.year and args.year not in fp:
             continue
         if args.limit and files_done >= args.limit:
@@ -186,14 +255,12 @@ def main():
 
         # If --type filter, peek at frontmatter first
         if args.type:
-            with open(fp, "r", encoding="utf-8") as f:
-                head = f.read(2048)
-            fm_dict, _, _ = parse_frontmatter(head)
-            if not fm_dict or (fm_dict.get("type") or "").lower() != args.type:
+            t = _peek_type(fp)
+            if t != args.type:
                 continue
 
         status = process_file(fp, registry, context,
-                              dry_run=args.dry_run, force=args.force)
+                              dry_run=effective_dry_run, force=args.force)
         files_done += 1
 
         if status in counters:
@@ -207,6 +274,16 @@ def main():
             errors.append((fp, status))
         else:
             errors.append((fp, status))
+
+        if heartbeat and scanned % heartbeat == 0:
+            elapsed = time.monotonic() - t_start
+            rate = scanned / elapsed if elapsed > 0 else 0
+            eta = (total - scanned) / rate if rate > 0 else 0
+            pct = (scanned / total * 100) if total else 0
+            print(f"  … {scanned}/{total} ({pct:.0f}%)  "
+                  f"{rate:.0f} files/s  ETA {eta:.0f}s  "
+                  f"wrote {counters['WROTE']+counters['DRY_OK']}",
+                  flush=True)
 
     wrote = counters["WROTE"] + counters["DRY_OK"]
     print(f"\nDone. Processed: {files_done}")

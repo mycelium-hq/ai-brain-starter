@@ -2,7 +2,7 @@
 name: second-brain-mapping
 description: Unified vault-mapping pipeline. Extracts structured metadata from every typed file in your vault (books, meetings, people, articles, goals, etc.), optionally runs knowledge-graph extraction, applies wikilinks, and surfaces cross-type insights you can't see from any single file. Zero LLM cost per run for metadata + insights. Use whenever you want to "map your second brain", refresh your vault's queryable index, or discover cross-doc patterns.
 trigger: /second-brain-mapping
-argument-hint: "[--metadata-only | --insights-only | --dry-run | --force | --type <name>]"
+argument-hint: "[--metadata-only | --insights-only | --dry-run | --sample [N] | --force | --type <name>]"
 ---
 
 # /second-brain-mapping
@@ -38,7 +38,11 @@ Interactive wizard asks which doc types you have (journal, book, article, meetin
 /second-brain-mapping --insights-only # only run Phase 4 on existing metadata
 /second-brain-mapping --type book     # only process files with `type: book`
 /second-brain-mapping --dry-run       # preview without writes
+/second-brain-mapping --sample        # preview 1 file per configured type (cold-start safe)
+/second-brain-mapping --sample 3      # preview 3 files per configured type
 ```
+
+**First-time cold-start?** Run `--sample` first. It processes one file per registered type, shows you the actual extracted fields, and exits without writing anything. If the output looks right, re-run without `--sample` for the full pipeline.
 
 ## Why this matters
 
@@ -58,6 +62,25 @@ Follow in order. Do not skip.
 ### Step 1 — Context + per-phase recency check
 
 Run `date` for timestamp. Parse any argument flags.
+
+**Precheck: was `/setup-vault-types` run?** Before anything else, confirm the vault has at least one document-type extractor configured. Without this, Phase 1 runs silently on every file and reports "no extractor registered" for the user's entire vault — a classic cold-start bounce.
+
+```bash
+EXTRACTOR_DIR="$(pwd)/scripts/extractors"
+EXTRACTOR_COUNT=0
+if [[ -d "$EXTRACTOR_DIR" ]]; then
+  EXTRACTOR_COUNT=$(find "$EXTRACTOR_DIR" -maxdepth 1 -name '*.py' -not -name '_*' 2>/dev/null | wc -l | tr -d ' ')
+fi
+if [[ "$EXTRACTOR_COUNT" -eq 0 ]]; then
+  echo "No document-type extractors are configured yet."
+  echo "Run /setup-vault-types first — that wizard asks which kinds of notes"
+  echo "you take (journal, book, meeting, person, etc.) and installs the matching"
+  echo "extractors. Then re-run /second-brain-mapping."
+  exit 4
+fi
+```
+
+If this check fails, stop. Do not proceed to any phase. Tell the user to run `/setup-vault-types` and offer to invoke it for them.
 
 Read the state file to see what was done and when:
 
@@ -108,15 +131,60 @@ On success, stamp `phase_1_metadata`. Report: X files written, Y already tagged,
 
 ### Step 3 — Phase 2: graphify (confirm first)
 
-Always ask, even if stamp is fresh. Graphify has its own internal staging and token cost varies wildly:
+Always ask, even if stamp is fresh. Graphify has its own internal staging and token cost varies wildly.
+
+**Before asking, compute a vault-specific cost estimate.** A generic "~100k-1M tokens" warning is useless to a first-time user. Show them numbers tied to their actual corpus:
 
 ```bash
-stat -f "%Sm" "$(vault-root)/graphify-out/graph.json" 2>/dev/null || echo "no graph yet"
+python3 <<'PY'
+import os, glob, pathlib, sys
+
+vault = os.getcwd()
+SKIP = {"⚙️ Meta", "Archive", ".git", ".obsidian", "graphify-out", "node_modules"}
+total_files = 0
+total_words = 0
+for fp in glob.glob(os.path.join(vault, "**", "*.md"), recursive=True):
+    parts = set(fp.split(os.sep))
+    if parts & SKIP:
+        continue
+    total_files += 1
+    try:
+        with open(fp, "r", encoding="utf-8", errors="ignore") as f:
+            total_words += len(f.read().split())
+    except Exception:
+        pass
+
+# Rough estimate: 1 word ≈ 1.3 tokens input; graphify wrappers reduce ~85% for a full run
+# Output is typically 10-15% of input for extraction.
+input_tok = int(total_words * 1.3 * 0.15)   # after dedupe + cache + preextract
+output_tok = int(input_tok * 0.12)
+
+# Sonnet 4.6 public pricing (as of 2025): $3/M input, $15/M output
+cost_usd = (input_tok / 1_000_000) * 3 + (output_tok / 1_000_000) * 15
+
+# Incremental run (cache warm): roughly 10% of cold-start
+cold_cost = cost_usd
+warm_cost = cost_usd * 0.10
+
+existing = pathlib.Path("graphify-out/graph.json").exists()
+mode = "incremental (cache warm)" if existing else "cold start (no cache yet)"
+est_cost = warm_cost if existing else cold_cost
+
+print(f"Corpus:   {total_files:,} files · ~{total_words:,} words")
+print(f"Mode:     {mode}")
+print(f"Tokens:   ~{input_tok:,} input · ~{output_tok:,} output (estimate)")
+print(f"Cost:     ~${est_cost:.2f} at Sonnet 4.6 public pricing")
+print(f"          (cold start would be ~${cold_cost:.2f}; incremental ~${warm_cost:.2f})")
+PY
+
+stat -f "%Sm" "$(pwd)/graphify-out/graph.json" 2>/dev/null || echo "Last graph: none yet"
 ```
 
-Ask: **"Run graphify? Last graph: {mtime}. ~100k-1M tokens depending on corpus size. y/N"**
+Then ask: **"Run graphify on this corpus? y/N"**
 
 If yes, invoke `/graphify --update`. Read `~/.claude/skills/graphify/SKILL.md` first. On success, stamp `phase_2_graphify`.
+
+**Pricing caveat:** the cost estimate uses public Sonnet rates and graphify's typical compression ratio. Actual cost depends on cache hit rate, chunk granularity, and whether `--mode deep` is used. Treat the number as an order-of-magnitude guide, not a quote.
 
 ### Step 4 — Phase 3: wikilinks
 

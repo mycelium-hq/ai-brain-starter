@@ -78,10 +78,32 @@ hr
 echo "Second Brain Mapping   $(date '+%Y-%m-%d %H:%M %Z')"
 hr
 
+# ── Precheck: was /setup-vault-types run? ────────────────────────────
+# The dispatcher discovers extractors by scanning scripts/extractors/ for
+# non-underscore .py files. If none exist in the vault's extractor dir, the
+# user never ran /setup-vault-types and Phase 1 would silently report
+# "no extractor" for every file. Bounce early with a clear message.
+EXTRACTOR_DIR="$SCRIPTS/extractors"
+if [[ -d "$EXTRACTOR_DIR" ]]; then
+  EXTRACTOR_COUNT=$(find "$EXTRACTOR_DIR" -maxdepth 1 -name '*.py' -not -name '_*' 2>/dev/null | wc -l | tr -d ' ')
+else
+  EXTRACTOR_COUNT=0
+fi
+if [[ "$EXTRACTOR_COUNT" -eq 0 && $WIKILINKS_ONLY -eq 0 ]]; then
+  echo ""
+  echo "No document-type extractors are configured in $EXTRACTOR_DIR."
+  echo "Run /setup-vault-types first to choose which kinds of notes you take"
+  echo "(journal, book, meeting, person, etc.). Then re-run /second-brain-mapping."
+  echo ""
+  echo "If you already ran /setup-vault-types and see this message, the symlinks"
+  echo "may be pointing to a moved starter repo — re-run /setup-vault-types to refresh."
+  exit 4
+fi
+
 # ── Phase 1: vault-wide metadata extraction (all types) ──────────────
 if [[ $WIKILINKS_ONLY -eq 0 ]]; then
   echo ""
-  echo "[$(ts)] Phase 1: Vault metadata extraction (all registered types)"
+  echo "[$(ts)] Phase 1: Vault metadata extraction ($EXTRACTOR_COUNT registered types)"
   FLAGS=""
   [[ $DRY_RUN -eq 1 ]] && FLAGS="$FLAGS --dry-run"
   [[ $FORCE_META -eq 1 ]] && FLAGS="$FLAGS --force"
