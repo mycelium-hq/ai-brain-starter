@@ -16,10 +16,20 @@ from _base import (
 )
 
 AUTO_FIELDS = (
-    "person_relationship_type", "person_company", "person_last_journal_iso",
-    "person_journal_mention_count", "person_floor_cooccurrence",
-    "person_priority", "person_next_step", "word_count",
+    "person_relationship_type", "person_company", "person_is_public_figure",
+    "person_last_journal_iso", "person_journal_mention_count",
+    "person_floor_cooccurrence", "person_priority", "person_next_step",
+    "word_count",
 )
+
+# Relationship-type strings that mark a CRM entry as a public figure / author
+# rather than a personal contact. These get person_is_public_figure: true and
+# are excluded from friend-group insights (drag people / lucky charm).
+PUBLIC_FIGURE_RELATIONSHIP_HINTS = {
+    "author", "author/thinker", "thinker", "writer", "public figure",
+    "celebrity", "influencer", "podcaster", "researcher", "speaker",
+    "teacher", "public intellectual", "academic",
+}
 
 JOURNALS_ROOT = os.path.join(VAULT, "📓 Journals")
 
@@ -79,6 +89,18 @@ def _priority(fm):
     return p if p in ("high", "mid", "medium", "low") else None
 
 
+def _is_public_figure(fm):
+    """True if relationship type or notes flag this as author/thinker/public figure."""
+    rel = (fm.get("relationship") or "").lower().strip()
+    if rel in PUBLIC_FIGURE_RELATIONSHIP_HINTS:
+        return True
+    # Also check if any hint word appears within a longer descriptor
+    for hint in PUBLIC_FIGURE_RELATIONSHIP_HINTS:
+        if hint in rel:
+            return True
+    return False
+
+
 def extract(filepath, body, fm, context):
     person_name = os.path.splitext(os.path.basename(filepath))[0]
     journal_idx = _build_journal_index()
@@ -100,6 +122,7 @@ def extract(filepath, body, fm, context):
     fields = {
         "person_relationship_type": fm.get("relationship"),
         "person_company": fm.get("company"),
+        "person_is_public_figure": _is_public_figure(fm),
         "person_last_journal_iso": last_iso,
         "person_journal_mention_count": len(appearances),
         "person_floor_cooccurrence": top_floors,

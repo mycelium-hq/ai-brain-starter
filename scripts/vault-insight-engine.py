@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.join(HERE, "extractors"))
 from _base import VAULT, SKIP_PARTS, iso_date_from  # noqa: E402
 
 # Insight report location: override with INSIGHTS_OUTPUT env var.
-# Default: picks the first folder that exists: Meta, ⚙️ Meta, else vault root.
+# Default: picks the first folder that exists: ⚙️ Meta, Meta, else vault root.
 def _default_output_path():
     env = os.environ.get("INSIGHTS_OUTPUT")
     if env:
@@ -43,10 +43,11 @@ def _default_output_path():
 
 OUTPUT_PATH = _default_output_path()
 
-# Names to filter out of person-based insights (self-references, templates).
+# Names to filter out of person-based insights (self-references).
 # Populate SELF_REFERENCE_NAMES env var (comma-separated) with your own variants.
+# Example: SELF_REFERENCE_NAMES="Jane Doe,Jane,Jane D."
 SELF_REFERENCE_NAMES = set(
-    filter(None, os.environ.get("SELF_REFERENCE_NAMES", "").split(","))
+    filter(None, (n.strip() for n in os.environ.get("SELF_REFERENCE_NAMES", "").split(",")))
 )
 
 
@@ -55,9 +56,70 @@ def _is_self_reference(name):
         return False
     if name in SELF_REFERENCE_NAMES:
         return True
-    # Also catch variants: if any self-ref name is a prefix, treat as self-ref.
     name_lower = name.lower()
-    return any(name_lower.startswith(s.lower().split()[0]) for s in SELF_REFERENCE_NAMES if s)
+    # Prefix-match first-name: "Jane Doe" self-ref also catches "Jane D."
+    return any(name_lower.startswith(s.lower().split()[0])
+               for s in SELF_REFERENCE_NAMES if s)
+
+
+# ── Baseline computation — thresholds self-tune per-vault ─────────────
+
+def _percentile(sorted_vals, pct):
+    """Percentile of a pre-sorted list. pct in 0..100. None if empty."""
+    if not sorted_vals:
+        return None
+    k = (len(sorted_vals) - 1) * pct / 100
+    f = int(k)
+    c = min(f + 1, len(sorted_vals) - 1)
+    if f == c:
+        return sorted_vals[f]
+    return sorted_vals[f] + (sorted_vals[c] - sorted_vals[f]) * (k - f)
+
+
+def compute_baseline(index):
+    """Derive thresholds from the user's ACTUAL vault distributions.
+
+    Returns a dict of percentiles. Every finder references these so thresholds
+    self-tune: a 50-journal user and a 5000-journal user both get meaningful
+    insights. The baseline is also rendered at the top of the report so the
+    reader knows WHY each finding is notable relative to this vault's data.
+    """
+    journal_word_counts = sorted(
+        x["fm"].get("word_count") or 0
+        for x in index if x["type"] == "journal" and (x["fm"].get("word_count") or 0) > 0
+    )
+    journal_floors = sorted(
+        x["fm"].get("floor_num") for x in index
+        if x["type"] == "journal" and x["fm"].get("floor_num") is not None
+    )
+    person_mentions = sorted(
+        x["fm"].get("person_journal_mention_count") or 0
+        for x in index if x["type"] == "person"
+    )
+    concept_mentions = sorted(
+        x["fm"].get("concept_mention_count") or 0
+        for x in index if x["type"] == "concept" and (x["fm"].get("concept_mention_count") or 0) > 0
+    )
+    book_ratings = [
+        x["fm"].get("book_rating_1_5") for x in index
+        if x["type"] == "book" and x["fm"].get("book_rating_1_5") is not None
+    ]
+
+    return {
+        "journal_count": len(journal_word_counts),
+        "journal_word_p50": _percentile(journal_word_counts, 50),
+        "journal_word_p80": _percentile(journal_word_counts, 80),
+        "journal_floor_mean": (sum(journal_floors) / len(journal_floors)) if journal_floors else None,
+        "journal_floor_p25": _percentile(journal_floors, 25),
+        "journal_floor_p75": _percentile(journal_floors, 75),
+        "person_count": len(person_mentions),
+        "person_mention_p75": _percentile(person_mentions, 75),
+        "person_mention_p90": _percentile(person_mentions, 90),
+        "concept_count": len(concept_mentions),
+        "concept_mention_p75": _percentile(concept_mentions, 75),
+        "book_count": len(book_ratings),
+        "book_rating_mean": (sum(book_ratings) / len(book_ratings)) if book_ratings else None,
+    }
 
 
 def load_vault_index():
@@ -90,8 +152,31 @@ def load_vault_index():
 
 # ── Insight finders ──────────────────────────────────────────────────
 
-def lucky_charm_people(index, min_mentions=8, high_floor_pct=0.75):
-    """People who appear in journals with high-floor ratio above threshold."""
+def lucky_charm_people(index, baseline):
+    """People who appear with high-floor ratio significantly above baseline.
+
+    Self-tuning cuts:
+      min_mentions = max(3, person_mention_p75)    # at least top-quartile presence
+      high_floor_cutoff = vault's journal_floor_p75 (top quartile of floor days)
+      ratio_required = 2x baseline high-floor share
+    """
+    if not baseline.get("journal_floor_mean") or not baseline.get("person_count"):
+        return []
+
+    # Use p90 as the floor for "significant presence" — p75 is often near 0
+    # because most CRM entries are rarely mentioned. Hard minimum of 5 prevents
+    # tiny-sample false positives on sparse vaults.
+    min_mentions = max(5, int(baseline.get("person_mention_p90") or 5))
+    high_floor_cutoff = baseline["journal_floor_p75"] or 12
+
+    # Baseline share of journals where floor >= high_floor_cutoff
+    high_floors = sum(1 for x in index
+                      if x["type"] == "journal"
+                      and (x["fm"].get("floor_num") or 0) >= high_floor_cutoff)
+    j_total = baseline["journal_count"] or 1
+    baseline_high_share = high_floors / j_total
+    ratio_required = max(0.5, min(0.9, baseline_high_share * 2.0))
+
     people = [x for x in index if x["type"] == "person"]
     out = []
     seen_names = set()
@@ -100,33 +185,54 @@ def lucky_charm_people(index, min_mentions=8, high_floor_pct=0.75):
         if _is_self_reference(name) or name in seen_names:
             continue
         fm = p["fm"]
+        if fm.get("person_is_public_figure"):
+            continue
         count = fm.get("person_journal_mention_count") or 0
         if count < min_mentions:
             continue
         floors = fm.get("person_floor_cooccurrence") or []
-        if not floors:
-            continue
         try:
             nums = [int(f) for f in floors]
         except Exception:
             continue
         if not nums:
             continue
-        high = sum(1 for n in nums if n >= 12)
+        high = sum(1 for n in nums if n >= high_floor_cutoff)
         ratio = high / len(nums)
-        if ratio >= high_floor_pct:
+        if ratio >= ratio_required:
             seen_names.add(name)
             out.append({
                 "name": name,
                 "mentions": count,
                 "top_floors": floors[:3],
                 "ratio": ratio,
+                "lift_vs_baseline": ratio / baseline_high_share if baseline_high_share else None,
             })
-    return sorted(out, key=lambda r: -r["mentions"])[:5]
+    return sorted(out, key=lambda r: -(r.get("lift_vs_baseline") or 0))[:5]
 
 
-def drag_people(index, min_mentions=8, low_floor_pct=0.6):
-    """People who mostly appear in low-floor journals (floor_num ≤ 6)."""
+def drag_people(index, baseline):
+    """People who appear with low-floor ratio significantly above baseline.
+
+    Same self-tuning pattern as lucky_charm. Low-floor = ≤ vault's p25 floor.
+    Requires ≥ 2x baseline low-floor share. Excludes public figures.
+    """
+    if not baseline.get("journal_floor_mean") or not baseline.get("person_count"):
+        return []
+
+    # Use p90 as the floor for "significant presence" — p75 is often near 0
+    # because most CRM entries are rarely mentioned. Hard minimum of 5 prevents
+    # tiny-sample false positives on sparse vaults.
+    min_mentions = max(5, int(baseline.get("person_mention_p90") or 5))
+    low_floor_cutoff = baseline["journal_floor_p25"] or 6
+
+    low_floors = sum(1 for x in index
+                     if x["type"] == "journal"
+                     and (x["fm"].get("floor_num") or 99) <= low_floor_cutoff)
+    j_total = baseline["journal_count"] or 1
+    baseline_low_share = low_floors / j_total
+    ratio_required = max(0.4, min(0.9, baseline_low_share * 2.0))
+
     people = [x for x in index if x["type"] == "person"]
     out = []
     seen_names = set()
@@ -135,6 +241,8 @@ def drag_people(index, min_mentions=8, low_floor_pct=0.6):
         if _is_self_reference(name) or name in seen_names:
             continue
         fm = p["fm"]
+        if fm.get("person_is_public_figure"):
+            continue
         count = fm.get("person_journal_mention_count") or 0
         if count < min_mentions:
             continue
@@ -145,17 +253,18 @@ def drag_people(index, min_mentions=8, low_floor_pct=0.6):
             continue
         if not nums:
             continue
-        low = sum(1 for n in nums if n <= 6)
+        low = sum(1 for n in nums if n <= low_floor_cutoff)
         ratio = low / len(nums)
-        if ratio >= low_floor_pct:
+        if ratio >= ratio_required:
             seen_names.add(name)
             out.append({
                 "name": name,
                 "mentions": count,
                 "top_floors": floors[:3],
                 "ratio": ratio,
+                "lift_vs_baseline": ratio / baseline_low_share if baseline_low_share else None,
             })
-    return sorted(out, key=lambda r: -r["ratio"])[:5]
+    return sorted(out, key=lambda r: -(r.get("lift_vs_baseline") or 0))[:5]
 
 
 def dormant_concepts(index, min_historical=5):
@@ -207,7 +316,15 @@ def resurrection_candidates(index, recent_days=30):
     return out[:7]
 
 
-def deep_processing_streaks(index, word_threshold=800, floor_ceiling=8, min_streak=3):
+def deep_processing_streaks(index, baseline, min_streak=3):
+    """Streaks of long journals on low floors. word_threshold = vault's 80th percentile
+    word count; floor_ceiling = vault's 25th percentile floor. Self-tuning."""
+    word_threshold = int(baseline.get("journal_word_p80") or 800)
+    floor_ceiling = baseline.get("journal_floor_p25") or 8
+    return _deep_processing_streaks_impl(index, word_threshold, floor_ceiling, min_streak)
+
+
+def _deep_processing_streaks_impl(index, word_threshold, floor_ceiling, min_streak):
     """Consecutive-ish days of long journal entries on low floors."""
     journals = sorted(
         [x for x in index if x["type"] == "journal"
@@ -246,8 +363,18 @@ def deep_processing_streaks(index, word_threshold=800, floor_ceiling=8, min_stre
     return out
 
 
-def highly_rated_books(index, min_rating=4):
-    """Best books you've recorded. Easy mind-blower: a list of the greatest hits."""
+def highly_rated_books(index, baseline):
+    """Books rated significantly above the vault's mean rating.
+
+    Self-tuning: if user rates lots of books 5, threshold climbs; if most are
+    3s, a single 4 still stands out.
+    """
+    mean = baseline.get("book_rating_mean")
+    if mean is None:
+        min_rating = 4
+    else:
+        # At least one point above mean, capped at 5
+        min_rating = max(4, min(5, int(round(mean + 1))))
     books = [x for x in index if x["type"] == "book"]
     out = []
     for b in books:
@@ -274,6 +401,8 @@ def high_priority_neglected_contacts(index, stale_days=60):
             continue
         name = os.path.splitext(os.path.basename(p["path"]))[0]
         if _is_self_reference(name) or name in seen_names:
+            continue
+        if p["fm"].get("person_is_public_figure"):
             continue
         last = p["fm"].get("person_last_journal_iso")
         if last is None or last < cutoff:
@@ -325,7 +454,7 @@ def concept_theme_crossovers(index, min_overlap=3):
 
 # ── Report rendering ─────────────────────────────────────────────────
 
-def render_report(index, findings):
+def render_report(index, findings, baseline):
     lines = []
     lines.append("---")
     lines.append("type: report")
@@ -335,6 +464,27 @@ def render_report(index, findings):
     lines.append(f"*Auto-generated by `vault-insight-engine.py`. Zero LLM. Read-only rendering of your structured vault.*")
     lines.append("")
     lines.append(f"**Index size**: {len(index):,} typed files across {len(set(x['type'] for x in index))} types.")
+    lines.append("")
+
+    # Baseline block — so Claude (the reader) knows WHY each finding is notable
+    lines.append("## Baseline (self-tuned from your actual vault)")
+    lines.append("")
+    lines.append("*Every threshold below is derived from your data, not hardcoded. Findings below are called out because they exceed these baselines significantly.*")
+    lines.append("")
+    lines.append("| Metric | Value | Used for |")
+    lines.append("|---|---|---|")
+    if baseline.get("journal_count"):
+        lines.append(f"| Journals with word_count | {baseline['journal_count']:,} | sample size |")
+    if baseline.get("journal_word_p50") is not None:
+        lines.append(f"| Journal words: median / p80 | {int(baseline['journal_word_p50'])} / {int(baseline['journal_word_p80'])} | deep-processing threshold = p80 |")
+    if baseline.get("journal_floor_mean") is not None:
+        lines.append(f"| Journal floor: mean / p25 / p75 | {baseline['journal_floor_mean']:.1f} / {baseline['journal_floor_p25']:.1f} / {baseline['journal_floor_p75']:.1f} | lucky-charm cutoff = p75, drag cutoff = p25 |")
+    if baseline.get("person_count"):
+        lines.append(f"| People indexed | {baseline['person_count']:,} (p75 mentions = {int(baseline.get('person_mention_p75') or 0)}, p90 = {int(baseline.get('person_mention_p90') or 0)}) | min_mentions floor for people insights |")
+    if baseline.get("concept_count"):
+        lines.append(f"| Concepts with mentions | {baseline['concept_count']:,} (p75 = {int(baseline.get('concept_mention_p75') or 0)}) | dormant-concept historical-weight cut |")
+    if baseline.get("book_count"):
+        lines.append(f"| Books rated | {baseline['book_count']} (mean rating = {baseline['book_rating_mean']:.1f}) | book standout cut = max(4, round(mean+1)) |")
     lines.append("")
 
     type_counts = Counter(x["type"] for x in index)
@@ -417,18 +567,23 @@ def main():
     index = load_vault_index()
     print(f"  {len(index):,} typed files loaded across {len(set(x['type'] for x in index))} types.")
 
+    baseline = compute_baseline(index)
+    print(f"  baseline computed: journal_count={baseline['journal_count']}, "
+          f"journal_word_p80={baseline.get('journal_word_p80')}, "
+          f"person_mention_p75={baseline.get('person_mention_p75')}")
+
     findings = {
-        "lucky_charm_people": lucky_charm_people(index),
-        "drag_people": drag_people(index),
+        "lucky_charm_people": lucky_charm_people(index, baseline),
+        "drag_people": drag_people(index, baseline),
         "high_priority_neglected_contacts": high_priority_neglected_contacts(index),
         "dormant_concepts": dormant_concepts(index),
         "resurrection_candidates": resurrection_candidates(index),
-        "deep_processing_streaks": deep_processing_streaks(index),
-        "highly_rated_books": highly_rated_books(index),
+        "deep_processing_streaks": deep_processing_streaks(index, baseline),
+        "highly_rated_books": highly_rated_books(index, baseline),
         "concept_theme_crossovers": concept_theme_crossovers(index),
     }
 
-    report = render_report(index, findings)
+    report = render_report(index, findings, baseline)
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
         f.write(report)
     print(f"  report written: {OUTPUT_PATH}")

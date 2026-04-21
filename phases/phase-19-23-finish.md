@@ -229,6 +229,84 @@ Tell the user: "Your vault has a proper look now. The Warm Earth theme has both 
 
 ---
 
+## Phase 23.5: Second-Brain Mapping (MUST BE LAST — token-aware)
+
+This is the last install phase because it's the most token-expensive if the user opts into graphify. Run it AFTER:
+- CRM is populated (Phase 11 + any manual additions in CLAUDE.md "People" section)
+- Book notes, health data, concept imports done (Phases 12-17)
+- Journal habit is rolling (Phase 10a + some practice)
+
+The metadata extractors need content to extract FROM. Running on an empty vault produces an empty index. After CRM + books + some journals, first run produces real insight.
+
+### Step 1: Explain what it is
+
+"One last thing. You now have a lot of typed notes — books, people, articles, journals. There's a skill called `/second-brain-mapping` that extracts structured metadata from all of them so you can run Dataview queries like 'every book I rated 4+ that mentions X' or 'every high-priority contact I haven't journaled about in 60 days.' More importantly, the output becomes a free context layer for Claude — your data gets queryable in every future session."
+
+"Four phases. Phases 1 (metadata) and 4 (insight engine) are **zero LLM tokens**. Phase 2 (`/graphify`) is expensive (~100k–1M tokens). Phase 3 (wikilinks) is cheap. We set it up now, you decide when to run the expensive one."
+
+### Step 2: Run /setup-vault-types
+
+```
+/setup-vault-types
+```
+
+Asks what kinds of notes they take, installs matching extractors. 18 types available; they pick their actual doc types. Custom types (podcaster = `podcast_episode`, consultant = `client_project`) get scaffolded.
+
+### Step 3: First metadata run (free — no LLM)
+
+```bash
+python3 "<VAULT>/scripts/vault-metadata-extract.py" --dry-run
+python3 "<VAULT>/scripts/vault-metadata-extract.py"
+```
+
+Fast. Zero tokens. Output: "Wrote: N, Already tagged: 0, Errors: 0."
+
+### Step 4: First insight run (free — no LLM)
+
+```bash
+python3 "<VAULT>/scripts/vault-insight-engine.py" --top 3
+```
+
+Writes `⚙️ Meta/Second-Brain Insights.md` with cross-type analyses (lucky-charm people, drag people, dormant concepts, deep-processing streaks, highly-rated books). Thresholds self-tune from their vault's actual distribution — a 50-journal user and a 5000-journal user both get meaningful cuts.
+
+Read the top 3 findings to the user.
+
+**Critical framing:**
+> "This file is the CONTEXT LAYER Claude reads on every strategic-decision session. It's not a dashboard you need to check. Don't worry about opening it. Claude opens it. That's what makes the system smart about YOU."
+
+### Step 5: Graphify — DEFER the decision
+
+Do NOT auto-run graphify during setup. Say:
+
+> "Phase 2 runs `/graphify` — a knowledge-graph extractor. Small vault (~300 files) costs ~50k tokens; large vault (2000+ files) costs ~500k–1M. Produces a graph that powers richer queries.
+>
+> You don't need it today. Diminishing returns without content. Wait until you have at least a month of journaling + notes, then fire `/second-brain-mapping` and say 'y' to the graphify prompt.
+>
+> Until then: `/second-brain-mapping --metadata-only` weekly. Free. Claude's context stays current."
+
+Leave graphify **off by default**. User decides when.
+
+### Step 6: Weekly cadence
+
+If they use `/plan week`, their week-plan already checks graph freshness and proposes a run if stale (>7 days).
+
+If not: recommend a Monday 10am calendar block for `/second-brain-mapping --metadata-only`. Takes under a minute. Zero tokens. Keeps Claude's context layer fresh.
+
+### Step 7: Confirm CRM auto-log
+
+Verify `/journal` skill calls `auto-crm-from-mentions.py` after each save. The skill template already includes this. Test by running:
+
+```bash
+python3 "<VAULT>/scripts/auto-crm-from-mentions.py" --dry-run
+```
+
+If it detects 0 candidates on a fresh install, that's correct — no journals yet.
+
+**Tell them:**
+> "Every time you journal and mention someone new with `[[Name]]`, I auto-create a CRM stub with `status: needs-review`. Fill in relationship + priority when you have a sec. If it's not actually a person, delete the stub."
+
+---
+
 ## Important Notes for Claude
 
 - GO SLOW. Wait for answers. Don't dump instructions.

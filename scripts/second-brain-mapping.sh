@@ -23,6 +23,31 @@ VAULT="/Users/adelaidadiaz-roa/Desktop/Adelaida Notes"
 SCRIPTS="$VAULT/⚙️ Meta/scripts"
 GRAPH_OUT="$VAULT/⚙️ Meta/graphify-out"
 
+# ── Concurrency guard (POSIX-portable, no flock dependency) ───────────
+# Uses atomic mkdir as the lock primitive. Works on macOS, Linux, WSL.
+# Second invocation sees the directory exists and exits immediately.
+LOCK_DIR="/tmp/second-brain-mapping.$(echo "$VAULT" | shasum -a 256 | cut -c1-12).lock"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  # Check if stale lock (owner PID no longer exists)
+  if [[ -f "$LOCK_DIR/pid" ]]; then
+    OWNER_PID=$(cat "$LOCK_DIR/pid" 2>/dev/null || echo "")
+    if [[ -n "$OWNER_PID" ]] && ! kill -0 "$OWNER_PID" 2>/dev/null; then
+      echo "Stale lock detected (PID $OWNER_PID gone). Clearing."
+      rm -rf "$LOCK_DIR"
+      mkdir "$LOCK_DIR" || { echo "Still locked after cleanup. Exiting."; exit 3; }
+    else
+      echo "Another /second-brain-mapping run is active (PID $OWNER_PID, lock: $LOCK_DIR)."
+      echo "Exit that session or wait for it to finish."
+      exit 3
+    fi
+  else
+    echo "Lock exists without PID marker: $LOCK_DIR. Manual cleanup needed."
+    exit 3
+  fi
+fi
+echo $$ > "$LOCK_DIR/pid"
+trap 'rm -rf "$LOCK_DIR"' EXIT
+
 METADATA_ONLY=0
 WIKILINKS_ONLY=0
 DRY_RUN=0
