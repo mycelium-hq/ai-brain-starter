@@ -37,7 +37,7 @@ This setup has 24 phases (0-23). Each phase is stored in its own file under `pha
 |-------|------|------|-------------|
 | 0 | `phases/phase-00-install.md` | both | Install efficiency tools (brew, python, node, graphify, skills, MCPs) |
 | 1 | `phases/phase-01-welcome.md` | both | Language detection, **plan tier selection**, mode detection (new/join/upgrade), welcome interview |
-| 2-3 | `phases/phase-02-03-plugins-folders.md` | both | Install Obsidian plugins, create folder structure + RESOLVERs |
+| 2-3 | `phases/phase-02-03-plugins-folders.md` | both | Install Obsidian plugins, create folder structure + `⚙️ Meta/Folder Resolvers/` |
 | 4 | `phases/phase-04-claude-md.md` | both | Build their CLAUDE.md (interview + template). Template at `templates/generated/claude-md-template.md` |
 | 5 | `phases/phase-05-context-layer.md` | both* | Context notes, session hooks, aggregator scripts, decision log. *Light mode skips graph-context-hook and panel-trigger-hook* |
 | 6-9 | `phases/phase-06-09-tools-templates.md` | both | Tool routing, import existing notes, templates, verify all skills |

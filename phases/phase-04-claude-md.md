@@ -72,7 +72,7 @@ You are not a yes-machine. You are a thinking partner. Act like one.
 ## Vault Rules
 1. **Check before creating.** Before making any new folder or file, check the Vault Map above and search for it. If it exists somewhere, use that location — don't create a duplicate. If the user manually moved something, respect where it is now, not where it was originally created.
 2. **Original ideas live where they happen.** If you say something sharp in a journal entry, it stays in the journal. If you develop it into a longer piece, it goes wherever longer work lives for you. The `/patterns` skill surfaces recurring ideas automatically — no separate capture folder needed.
-3. **Use RESOLVER.md before creating files.** Each key folder has a RESOLVER.md with a decision tree. Check it before creating any note to confirm it belongs there.
+3. **Check `⚙️ Meta/Folder Resolvers/` before creating files in key folders.** One resolver file per key folder (named for the folder it describes). Each has a decision tree. Check it before creating any note to confirm it belongs there.
 4. **Humanize external-facing prose before it leaves your hands.** Any prose you write for a human audience — a client email, a LinkedIn post, a Substack draft, a pitch doc, a newsletter, an essay — gets `/humanizer` run on it before it's considered done. The skill strips the AI-isms that give you away. Don't ask, just run it. **Scope:** prose only. Skip YAML, code, tables, dashboards, runbooks, meta files, journal entries, and single-line edits. For non-trivial changes to a humanized doc, re-run on the section you touched, not the whole file. The humanizer skill was installed in Phase 0. If it's missing, re-run the ai-brain-starter bootstrap.
 
 ## Session Protocol

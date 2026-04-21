@@ -9,7 +9,7 @@ Most vaults mix the user's own thinking with things they read and learned. Over 
 ## How to apply
 
 1. Create `💡 Originals/` at your vault root (if it doesn't exist)
-2. Create `💡 Originals/RESOLVER.md` with this decision tree:
+2. Create `⚙️ Meta/Folder Resolvers/💡 Originals.md` with this decision tree (see [2026-04-21 resolver migration](2026-04-21-resolvers-to-meta.md) for why resolvers now live in Meta):
 
 ```markdown
 # Does this live in Originals/?

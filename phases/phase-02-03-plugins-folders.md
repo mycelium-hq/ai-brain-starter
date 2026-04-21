@@ -172,9 +172,9 @@ Create these CORE folders in their vault (emojis are important — they make the
 ⚙️ Meta/scripts/
 ```
 
-**Conditional folders — only create if relevant based on what they told you in Phase 1. These are BLOCKING conditionals, not suggestions. If the user did not explicitly opt in, DO NOT create the folder, DO NOT add it to the vault map, DO NOT reference it in their CLAUDE.md or RESOLVER files.**
+**Conditional folders — only create if relevant based on what they told you in Phase 1. These are BLOCKING conditionals, not suggestions. If the user did not explicitly opt in, DO NOT create the folder, DO NOT add it to the vault map, DO NOT reference it in their CLAUDE.md or resolver files.**
 
-- `✍️ Writing/` — **ONLY if `WRITES_PUBLICLY = true` from Phase 1 question 5.** Journaling does NOT count (that's `📓 Journals/`). This folder is for content written with an audience in mind: blog posts, book drafts, newsletters, Substack, essays. If the user said no or was unclear, **skip this folder entirely**. Do not create `Writing/Drafts/`, do not add "Writing/" to the Notes RESOLVER.md decision tree, do not add writing-related rules to the Phase 4 CLAUDE.md template, do not reference Writing/ anywhere downstream. The default state for a new user is: no Writing folder.
+- `✍️ Writing/` — **ONLY if `WRITES_PUBLICLY = true` from Phase 1 question 5.** Journaling does NOT count (that's `📓 Journals/`). This folder is for content written with an audience in mind: blog posts, book drafts, newsletters, Substack, essays. If the user said no or was unclear, **skip this folder entirely**. Do not create `Writing/Drafts/`, do not add "Writing/" to the `⚙️ Meta/Folder Resolvers/📝 Notes.md` decision tree, do not add writing-related rules to the Phase 4 CLAUDE.md template, do not reference Writing/ anywhere downstream. The default state for a new user is: no Writing folder.
 - `📚 Books/` — **ONLY if they read books and highlight/annotate.** Ask in Phase 1 or infer from their answer about existing notes. If they mention Kindle, Readwise, book notes, or reading habits, create it. Otherwise skip. Most people don't need an empty Books folder sitting in their sidebar.
 - `🧠 Psychology/` — **ONLY if they explicitly mention inner work, therapy, self-help, psychology, behavioral patterns, or personal development as a focus area.** This is a niche folder. Most people's reflections live naturally in Journals/ and Notes/. Don't create it by default.
 - `💼 Business/` — only if they have a business, startup, or side project
@@ -189,19 +189,21 @@ Tell them: "Done — you should see the folders in your Obsidian sidebar now. Th
 
 **Add any custom folders they request. Always use emojis.**
 
-After creating folders, create a RESOLVER.md in each key directory. This is a short decision tree answering "does X live here?" — it prevents the vault from decaying into ambiguity as it grows.
+After creating folders, create resolver files in `⚙️ Meta/Folder Resolvers/` — one per key directory. Each is a short decision tree answering "does X live here?" — it prevents the vault from decaying into ambiguity as it grows. Centralized in Meta so the resolver doesn't clutter the folder it describes (a resolver file sitting in `👤 CRM/` shows up in every CRM Dataview query and next to every contact card).
 
-**👤 CRM/RESOLVER.md:**
+First create the `⚙️ Meta/Folder Resolvers/` directory, then create these files inside it. Name each file after the folder it describes (use the folder's emoji prefix):
+
+**⚙️ Meta/Folder Resolvers/👤 CRM.md:**
 ```markdown
 # Does this live in CRM/?
 
-1. Is this a real person you've interacted with or plan to? → YES: create [Name].md here
+1. Is this a real person you've interacted with or plan to? → YES: create [Name].md there
 2. Is it a company, org, or brand (not a specific person)? → NO: Business/ or Notes/
 3. Is it a public figure you've never met? → NO: Notes/ or Books/
 4. Is it a group you have a relationship with as a whole? → YES, if you interact with them as a unit
 ```
 
-**📝 Notes/RESOLVER.md:**
+**⚙️ Meta/Folder Resolvers/📝 Notes.md:**
 ```markdown
 # Does this live in Notes/?
 
