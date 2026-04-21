@@ -391,6 +391,30 @@ The next weekly maintenance run on the same corpus is targeted at **<200K LLM to
 
 ---
 
+## Direct-corpus vs staging-folder dispatch
+
+Two dispatch modes. Know which one you're in.
+
+**Direct-corpus** (default): `graphify_stage_select.py` reads vault paths directly (e.g. `"Books"` as positional arg). Subagents read from real vault paths. No staging step. Use for routine runs.
+- Skip preprocessor scripts (MiniMax, etc) — Lesson #115, staging-only.
+- Skip `graphify_prep.py --apply` on corpora without `* 2.md` dupes.
+
+**Staging-folder** (legacy): files copied into `graphify-input/` flattened as `A_B_C.md`. `graphify_prep.py` + preprocessors + preflight all apply. Use only when transforming inputs (merging drafts, flattening emoji paths, etc).
+
+## Pre-dispatch checklist (in addition to pre-flight)
+
+1. `ls <out_dir>/.chunk_*_result.json` → delete leftovers (Lesson #114). Silent contamination otherwise.
+2. Verify not in worktree (Lesson #85). `pwd` must not contain `.claude/worktrees/`.
+3. First wave = single parallel message, up to cap (typically 10) agents (Lesson #116). Never serial.
+
+## Coverage audits
+
+Never by hand. Use the coverage audit script — it reads manifest + cache + graph.json, unions all three, handles basename + flattened-form matching. After reading COVERAGE_REPORT:
+
+1. Apply ≥500w filter before quoting "missing" counts (Lesson #111). Most stubs are noise.
+2. Don't treat mtime-stale as content-stale (Lesson #109). Cloud sync bumps mtimes without edits.
+3. Folders in SKIP_PARTS (AI Chats, etc) don't appear in the report. Check separately (Lesson #110).
+
 ## When to update this runbook
 
 - After every `/graphify` run that surfaces a new optimization or gotcha

@@ -2,7 +2,7 @@
 type: runbook
 ---
 
-# Graphify Lessons (1-113)
+# Graphify Lessons (1-118)
 
 > Consolidated operational lessons from many runs. Scope: general-purpose, no vault-specific paths or data. Pair with `OPTIMIZATIONS.md` (patterns) and `RUNBOOK.md` (pipeline).
 
@@ -246,31 +246,43 @@ type: runbook
 
 ## Coverage audit + source_file semantics (105-106)
 
-**105.** `source_file` on a graph node points to the file where the node was FIRST extracted, not every file that contains that concept. A node labelled "X" with `source_file: Journals/Y.md` does NOT mean `Writing/X.md` was processed. When auditing coverage, "concept appears in graph" ≠ "file was run through the extractor." The audit script must distinguish: a file is CURRENT only if its own path + content SHA match a manifest entry; MOVED if only its basename appears in another store; MISSING if no trace at all. Don't collapse these categories.
+**105.** `source_file` points to first-extraction site, not every file containing the concept. "Concept in graph" ≠ "file was extracted." Audit categories: CURRENT (path + SHA match manifest), MOVED (only basename appears), MISSING (no trace). Don't collapse them.
 
-**106.** `graphify_stage_finish.py` can under-record the manifest two ways: (a) **Staged-path resolution** — if subagents write `source_file` as `graphify-input/<flattened>.md` (staging path with `_` instead of `/`), `VAULT / source_file` doesn't exist and `is_file()` fails silently. Fix: resolve by first trying `VAULT / sf`, then unflattening `graphify-input/A_B_C.md` → trying each `_` → `/` combination until a real file is found. (b) **Preflight-only files** — files with no LLM-new output never appear in canonical nodes/edges, so they never get a manifest entry even though they were processed. Fix: union staged-source-files with `.chunk_NN_files.txt` inputs so every file sent to the stage gets a manifest entry regardless of LLM yield.
+**106.** `graphify_stage_finish.py` under-records manifest two ways: (a) staged-path miss — `source_file: graphify-input/<flattened>.md` doesn't resolve to real file, 0 entries recorded; (b) preflight-only miss — files with only preflight wikilinks never appear in canon → no manifest entry → next audit flags MISSING. Fix: resolve via `VAULT / sf` then unflatten `A_B_C.md` with `_` → `/`; union staged sources with `.chunk_NN_files.txt`.
 
 ## Environment + multi-wave runs (107-108b)
 
-**107.** `~/.zshrc` is interactive-only. Any script launched by the Claude Code Bash tool runs in a non-interactive shell that never sources `.zshrc`. Scripts that grep-fallback to `~/.zshrc` for API keys silently fail with "key not found" even when the key exists in the user's real secrets file. Canonical fix: put secrets in `~/.zshenv` (or a dotenv file sourced by `.zshenv`), and any script reading a secret walks the full fallback chain `env → ~/.zshenv → ~/.zsh_secrets → ~/.zshrc → ~/.zprofile → ~/.bashrc → ~/.bash_profile → ~/.profile → ~/.env`.
+**107.** `~/.zshrc` is interactive-only. Subprocesses (Claude Code Bash) never source it. Scripts grep-falling back to `~/.zshrc` for secrets silently fail. Canonical: put secrets in `~/.zshenv` (or a dotenv sourced by `.zshenv`). Walk: `env → .zshenv → .zsh_secrets → .zshrc → .zprofile → .bashrc → .bash_profile → .profile → .env`.
 
-**108.** RUN `graphify_stage_finish.py`. Never write ad-hoc merge scripts. Hand-rolled pipelines get the step ordering wrong (cache save before canonicalize, no dangling-edge prune, no adjacency dedupe). The finish script does everything in correct order: validate → canonicalize → dedupe → merge → dangling-prune → recluster → report → cache save → verify.
+**108.** RUN `graphify_stage_finish.py`. Never hand-roll merge scripts. Hand-rolled pipelines get step ordering wrong. Finish script order: validate → canonicalize → dedupe → merge → dangling-prune → recluster → report → cache save → verify.
 
-**108b.** `graphify_stage_finish.py` `--chunk-prefix` flag resolves to CWD instead of `<out_dir>`, making it useless for non-default prefixes. The script also always sequences chunks from 01, so multi-wave runs (where wave 2 chunks are named `.chunk_11_result.json` etc.) fail with "MISSING chunk 01". **Workaround:** before each finish call, copy/rename chunk results and file lists to `.chunk_01..N_*` in `<out_dir>`. **TODO:** add `--chunk-start` and `--chunk-end` params (or `--chunk-dir`) so wave N can pass `--chunk-start 11 --chunk-end 20` without manual renaming.
+**108b.** `--chunk-prefix` resolves to CWD, not `<out_dir>`. Finish also hardcodes chunks starting at 01, so wave 2 (`.chunk_11_*`) fails "MISSING chunk 01". **Workaround:** rename wave chunks to `.chunk_01..N_*` before finish. **TODO:** add `--chunk-start`/`--chunk-end` (or `--chunk-dir`) params.
 
 ## Coverage semantics — what "stale" and "missing" actually mean (109-111)
 
-**109.** Cloud-sync services (iCloud, Google Drive, Dropbox) trip file mtimes without content edits. Coverage audit flags files as "stale" (mtime > manifest.llm_time) even when the user never opened them. Likely causes: cloud re-downloading files on a machine move, OS indexing, Finder/Explorer metadata touches. **Implication:** don't interpret "stale count" as "user edits pending" — check content SHA, not mtime, before concluding content actually changed. Consider adding a SHA-based "truly stale" count alongside the mtime-based count in the coverage audit script.
+**109.** Cloud sync (iCloud, GDrive, Dropbox) bumps mtimes without content edits. Coverage flags files as "stale" even when user never touched them. Causes: cloud re-downloads, OS indexing, Finder metadata touches. **Rule:** check SHA, not mtime, before concluding content changed. TODO: add SHA-based "truly stale" count to the audit.
 
-**110.** Coverage audit SKIP_PARTS excludes folders like `AI Chats/` by default. These files can be 1000+ strong and never appear as "missing" in COVERAGE_REPORT.json despite never being graphified. If the folder has `type: ai-chat` (or similar) in frontmatter rather than `[AI Extract]` in body, `graphify_stage_select.py` will include them when you target the folder directly as a positional arg — but the coverage audit still hides them. **Fix:** add excluded folders to the coverage audit output (either as a tracked folder, or surface the exclusion in the report header with file counts).
+**110.** Coverage audit SKIP_PARTS excludes folders like `AI Chats/`. Thousands of files never flagged missing. Folders with `type: ai-chat` frontmatter (not `[AI Extract]` body tag) are includable via direct `graphify_stage_select.py` targeting. **Fix:** add excluded folders to audit output with file counts.
 
-**111.** "Missing" from coverage report ≠ "valuable content waiting to be graphified." Most missing files in established vaults are stubs (<500 words) — empty book notes, draft placeholders, single-line concept pages. Example measurement: 933 missing → only 58 eligible after ≥500-word filter. **Practical rule:** when filling a user request for "ungraphified only," run the 500-word filter against the missing list before quoting file counts. A naive "X has 140 ungraphified files" becomes "0 eligible files" after filtering. The real content gaps are usually recent journals and active research folders, not legacy stubs.
+**111.** "Missing" ≠ "valuable ungraphified content." Most missing files are stubs (<500w). Example: 933 missing → 58 eligible after ≥500w filter. **Rule:** run 500w filter against missing list before quoting counts. Real gaps = recent journals + active research, not legacy stubs.
 
 ## Corpus-specific baselines (112-113)
 
-**112.** AI Chat exports have higher concept density than journals. Measured first 10-chunk wave: ~802 concepts (nodes + edges + hyperedges) per 671K tokens = **1.20 concepts/Ktoken**. Journals baseline is 0.50-0.70. AI Chats land closer to Books (0.85-1.10) or above. Reason: each chat is topically focused around a specific project/problem/decision, so each file yields a dense entity cluster. Revised corpus baseline: **AI Chats 1.00-1.30 concepts/Ktoken**. Plan tokens accordingly — they're a high-ROI corpus, not a low-signal one, despite being "AI-generated."
+**112.** AI Chat exports denser than journals. Wave 1: ~1.20 concepts/Ktoken vs journals 0.50-0.70. Each chat is topically focused around one project/problem/decision → dense entity cluster. **Revised baseline: AI Chats 1.00-1.30 concepts/Ktoken.** High-ROI corpus despite being "AI-generated."
 
-**113.** AI Chats require a different extractor frame than journals/writing. The value isn't "what happened in this chat" (transient conversational content) but **what the user was thinking, deciding, or building when they opened the chat**. Recommended prompt preamble: "Focus on TOPICS the user explored, DECISIONS made, CONCEPTS developed, PEOPLE/PROJECTS mentioned, PATTERNS in their thinking. Ignore boilerplate AI responses." Ship as default preamble in the AI Chat extraction prompt.
+**113.** AI Chats need different extractor frame. Value isn't "what happened" (transient) but "what the user was thinking/deciding/building when they opened the chat." Prompt preamble: "Focus on TOPICS explored, DECISIONS made, CONCEPTS developed, PEOPLE/PROJECTS mentioned, PATTERNS. Ignore boilerplate AI responses." Ship as default.
+
+## Pre-dispatch hygiene + gitignore (114-118)
+
+**114.** Delete stale `.chunk_*_result.json` before any new dispatch. Prior runs leave results in `<out_dir>/` that the finish step merges silently. Pre-dispatch: `ls <out_dir>/.chunk_*_result.json` → `rm -f` leftovers. Same for `.chunk_*_files.txt`. Silent contamination otherwise.
+
+**115.** Preprocessor scripts (MiniMax, other entity-extractors) are staging-folder-only. Direct-corpus dispatch (stage_select on vault paths like `"Books"`) doesn't read `.preextract.json` — subagents receive empty `{PREEXTRACT_BLOCK}`. Preprocess is wasted tokens + wall time for direct runs. Skip unless the workflow stages files into `<staging_dir>/` first.
+
+**116.** Always dispatch a full wave (up to parallel cap, typically 10) in a single parallel message. Serial dispatch costs the same per-chunk and burns wall time with zero parallelism gain. Single-message dispatch is the only way to hit the cap.
+
+**117.** (Reserved — environment-specific tooling lesson, not generalizable.)
+
+**118.** `graphify-out/` is typically gitignored. graph.json, GRAPH_REPORT.md, COVERAGE_REPORT.md cannot be committed. Only files outside it (insights markdown, CLAUDE.md, scripts) go into snapshots. `git add <out_dir>/...` is a silent no-op. Confirm with `git check-ignore <path>` if uncertain.
 
 ## Standing rules
 
