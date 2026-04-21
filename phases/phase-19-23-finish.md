@@ -311,25 +311,23 @@ If it detects 0 candidates on a fresh install, that's correct — no journals ye
 
 Install is done. This is the handoff from "installed" to "used." Close the loop with a brief, understated congratulations (not performative, no exclamation marks, Jackie-register), then point them to a short companion read that walks through the three commands and one habit that matter most in the first week.
 
-Tell the user, in the language they chose in Phase 1:
+Tell the user in their PRIMARY_LANGUAGE only. Show one link, matching their language. Do NOT show both — that feels like marketing. One block, one link, done.
 
-**English:**
+**If PRIMARY_LANGUAGE is English (or any non-Spanish language):**
 > "Well done. Vault is ready.
 >
 > A short read on what to do in your first week, three commands and one habit:
 >
-> - English: https://adelaidadiazroa.substack.com/p/your-first-week-with-your-second
-> - Español: https://perspectivasblog.substack.com/p/tu-primera-semana-con-tu-segundo
+> https://adelaidadiazroa.substack.com/p/your-first-week-with-your-second
 >
 > Read tonight. Run the first thing tomorrow."
 
-**Español:**
+**If PRIMARY_LANGUAGE is Spanish:**
 > "Bien hecho. El vault está listo.
 >
 > Un artículo corto sobre qué hacer la primera semana: tres comandos y un hábito.
 >
-> - English: https://adelaidadiazroa.substack.com/p/your-first-week-with-your-second
-> - Español: https://perspectivasblog.substack.com/p/tu-primera-semana-con-tu-segundo
+> https://perspectivasblog.substack.com/p/tu-primera-semana-con-tu-segundo
 >
 > Léelo esta noche. Corre el primero mañana."
 

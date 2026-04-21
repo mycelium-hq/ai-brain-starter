@@ -9,6 +9,22 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-21 — Phase 24: first-week handoff with recommended uses
+
+**Who this affects:** everyone running fresh `/setup-brain` installs. Post-install only, no effect on existing setups.
+
+**What changed:**
+
+1. **New Phase 24** appended to the setup flow. After install completes, Claude delivers a brief, understated congratulations (Jackie-register: no exclamation marks, no "Congrats!") and points to a short companion read on recommended first-week uses: three commands and one habit.
+
+2. **Language-conditional link.** Claude shows only the link that matches the user's `PRIMARY_LANGUAGE` from Phase 1. One block, one link. No dual-language dump at the end of install.
+
+3. **SKILL.md updated** to 25 phases (0-24). Phase 23.5 kept its "last INSTALL phase" marker; Phase 24 is the post-install handoff, not an install step.
+
+**Why:** the most common failure mode for a new install isn't a broken tool, it's a user who finishes setup and doesn't know where to start. A single short read with three concrete actions closes that gap.
+
+---
+
 ## 2026-04-21 — retry-budget hook: cap Claude's failing-command loops
 
 **Who this affects:** everyone. Optional but recommended for all setups.

@@ -48,7 +48,7 @@ This setup has 25 phases (0-24). Each phase is stored in its own file under `pha
 | 18 | `phases/phase-18-insights.md` | both* | Weekly/monthly insights setup + cron. *Light mode: weekly summary only, no pattern analysis or monthly reports*. Skill template at `templates/generated/insights-skill-template.md` |
 | 19-23 | `phases/phase-19-23-finish.md` | both | Test drive, team vault, what's next, Instinct Engine, theme. Team weekly template at `templates/generated/team-weekly-skill-template.md` |
 | **23.5** | `phases/phase-19-23-finish.md` (appended) | both | **MUST BE LAST INSTALL PHASE — token-aware.** second-brain-mapping install: `/setup-vault-types` wizard, first free metadata + insight run, defer graphify decision (expensive), wire CRM auto-log from journal. Phases 1 + 4 are zero-LLM; Phase 2 (graphify) is opt-in. |
-| 24 | `phases/phase-19-23-finish.md` (appended) | both | Handoff from installed to used. Point the user to a short companion Substack article (EN + ES) on the three commands and one habit that matter most in the first week. Closes the "now what?" gap. |
+| 24 | `phases/phase-19-23-finish.md` (appended) | both | Handoff from installed to used. Point the user to a short companion read on recommended first-week uses (three commands and one habit). Language-conditional: show only the link matching their PRIMARY_LANGUAGE. Closes the "now what?" gap. |
 
 **Tier key:** `both` = runs in both setup versions. `both*` = runs in both but with reduced scope in light mode. `full` = full version only, skipped in light mode. Version is chosen by usage cost, not subscription plan — both versions work on any plan.
 
