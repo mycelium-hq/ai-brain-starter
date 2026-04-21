@@ -9,6 +9,27 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-21 — wikilink misfire audit + auto-wikilink patch
+
+**Who this affects:** anyone who ran `auto-wikilink.py` before v2 (the v1 script wrote `[[folder/Name]]` path-form wikilinks instead of bare `[[Name]]` wikilinks — every vault that ever ran v1 has these).
+
+**What changed:**
+
+1. **New script: `scripts/wikilink_misfire_audit.py`** — detects and batch-fixes path-form wikilinks left by v1. Run with `--fix` to apply, `--dry-run` to preview. Generates a report at `⚙️ Meta/Reports/auto-wikilink-misfire-audit-{date}.md`. Configurable `WRONG_ALIAS_BASENAMES` set for notes whose v1 alias links were semantically wrong (strip the link, keep the display text instead of re-linking).
+
+2. **`scripts/auto-wikilink.py` patch** — added `try/except (FileNotFoundError, OSError)` in `add_wikilinks()`. Previously a file that disappeared between the directory walk and the file read (e.g. a git-deleted stub) would crash the whole run. Now those files are silently skipped.
+
+3. **`scripts/auto-wikilink.py` maintenance runbook** added to the docstring — correct run order (misfire audit first, then auto-wikilink), known quirks (multi-word note titles create aggressive alias matches), and `WRONG_ALIAS_BASENAMES` pointer.
+
+**Correct cleanup sequence:**
+```
+python3 "⚙️ Meta/scripts/wikilink_misfire_audit.py" --fix
+python3 "⚙️ Meta/scripts/auto-wikilink.py" --all --dry-run  # review first
+python3 "⚙️ Meta/scripts/auto-wikilink.py" --all
+```
+
+---
+
 ## 2026-04-21 -- graphify: two silent-failure bugs fixed
 
 **Who this affects:** anyone running `/graphify` with MiniMax pre-extract enabled, anyone running graphify stages on a vault with nested folder structure (journals, writing, notes with subfolders), or anyone who has ever looked at the `extraction_manifest.json` and found it under-counting what was actually processed.

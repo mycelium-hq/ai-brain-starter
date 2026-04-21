@@ -40,6 +40,30 @@ Usage:
 
   # Include team-vault files (uses team-vault terms only, strict firewall)
   python3 "⚙️ Meta/scripts/auto-wikilink.py" --all --allow-team
+
+Maintenance runbook:
+  CORRECT ORDER for a full wikilink cleanup pass:
+    1. python3 "⚙️ Meta/scripts/wikilink_misfire_audit.py" --fix
+       Cleans path-form misfires first ([[folder/Name]] → [[Name]]).
+       Run this BEFORE auto-wikilink so you're not adding bare links
+       on top of path-form ones that will get cleaned anyway.
+    2. python3 "⚙️ Meta/scripts/auto-wikilink.py" --all --dry-run
+       Preview: check for aggressive multi-word title matches (a note
+       titled "Seven Companies Seven Lessons" will match "seven companies"
+       anywhere via alias scanning). Review before applying.
+    3. python3 "⚙️ Meta/scripts/auto-wikilink.py" --all
+       Apply.
+
+  Known quirks:
+  - Notes whose titles are full phrases (not single concepts) create
+    aggressive alias matches. Before a --all run, scan PERSONAL_CONCEPT_DIRS
+    for phrase-title notes and consider excluding or renaming them.
+  - Files can vanish between the walk and the read (e.g. git-deleted stubs).
+    The script handles this with a try/except — missing files are skipped.
+  - WRONG_ALIAS_BASENAMES in wikilink_misfire_audit.py controls which notes'
+    alias-form path links get STRIPPED (display text kept, link removed) vs
+    fixed to bare form. Set it to the basenames of notes whose v1 alias links
+    were semantically wrong for your vault.
 """
 import os
 import re
@@ -235,8 +259,11 @@ def already_linked_terms(text: str):
 
 def add_wikilinks(filepath: str, terms, dry_run: bool = False):
     """Add missing wikilinks to a single file. Returns (count_added, details_list)."""
-    with open(filepath, "r", encoding="utf-8", errors="replace") as f:
-        content = f.read()
+    try:
+        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+    except (FileNotFoundError, OSError):
+        return 0, []
 
     original = content
 
