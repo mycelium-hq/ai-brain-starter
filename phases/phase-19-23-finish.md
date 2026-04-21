@@ -307,6 +307,38 @@ If it detects 0 candidates on a fresh install, that's correct — no journals ye
 
 ---
 
+## Phase 24: Your first week
+
+Install is done. This is the handoff from "installed" to "used." Close the loop with a brief, understated congratulations (not performative, no exclamation marks, Jackie-register), then point them to a short companion read that walks through the three commands and one habit that matter most in the first week.
+
+Tell the user, in the language they chose in Phase 1:
+
+**English:**
+> "Well done. The vault is ready, and honestly, that's the part most people never finish.
+>
+> What happens in the first week is what shifts it from an installed thing into a working one. Here's a short companion piece on the three commands and one habit that make the difference:
+>
+> - English: https://adelaidadiazroa.substack.com/p/your-first-week-with-your-second
+> - Español: https://perspectivasblog.substack.com/p/tu-primera-semana-con-tu-segundo
+>
+> Read it tonight. Run the first thing tomorrow."
+
+**Español:**
+> "Bien hecho. El vault está listo, y la verdad, esa es la parte que la mayoría nunca termina.
+>
+> Lo que pasa en la primera semana es lo que lo convierte de una cosa instalada en algo que realmente funciona. Aquí un artículo corto sobre los tres comandos y el hábito que hacen la diferencia:
+>
+> - English: https://adelaidadiazroa.substack.com/p/your-first-week-with-your-second
+> - Español: https://perspectivasblog.substack.com/p/tu-primera-semana-con-tu-segundo
+>
+> Léelo esta noche. Corre el primero mañana."
+
+Why this phase matters: the most common failure mode for a new install isn't a broken tool, it's a user who finishes setup and doesn't know where to start. A single short read with three concrete actions closes that gap.
+
+Voice note for Claude: resist the urge to add "Congrats!" or exclamation marks. The register is quiet confidence, not performance. "Well done" / "Bien hecho" lands harder than "You did it!" — and matches the voice of the whole setup.
+
+---
+
 ## Important Notes for Claude
 
 - GO SLOW. Wait for answers. Don't dump instructions.

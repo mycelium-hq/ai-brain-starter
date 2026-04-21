@@ -56,7 +56,7 @@ These rules ship to every user's vault CLAUDE.md via Phase 4 / `templates/genera
 - `phase-11-external-tools.md` — email/calendar/Slack/CRM, meeting tool wiring
 - `phase-12-17-imports-rules.md` — book notes, health, taxonomy, backup, obsidian rules
 - `phase-18-insights.md` — weekly/monthly insights + cron
-- `phase-19-23-finish.md` — test drive, team vault, patterns, theme
+- `phase-19-23-finish.md` — test drive, team vault, patterns, theme, second-brain-mapping install (23.5), first-week handoff to companion Substack article (24)
 
 ## Generated templates (templates/generated/)
 - `claude-md-template.md` — CLAUDE.md skeleton used by Phase 4
