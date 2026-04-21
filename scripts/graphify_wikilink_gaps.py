@@ -28,7 +28,10 @@ from collections import defaultdict
 from datetime import date
 from pathlib import Path
 
-SKIP_PARTS = {"⚙️ Meta", "Archive", "🗄 Archive", "_review_alternate_drafts"}
+SKIP_PARTS = {
+    "⚙️ Meta", "Archive", "🗄 Archive", "_review_alternate_drafts",
+    ".claude", ".git", ".obsidian", ".trash", "node_modules", "worktrees",
+}
 
 # Node types that are file nodes — already map to real vault files, skip them
 FILE_TYPES = {"document", "code", "image", "paper", "rationale"}

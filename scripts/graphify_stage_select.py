@@ -137,7 +137,10 @@ def main():
     # Lesson #89: exclude meta/archive folders from both vaults.
     # Also skip _review_alternate_drafts/ (quarantine folder) and conflict copies.
     # Lesson #89: also skip ⚙️ Meta (templates, GRAPH_REPORT, runbooks) and archived folders
-    SKIP_PARTS = {"_review_alternate_drafts", "Archive", "🗄 Archive", "⚙️ Meta"}
+    SKIP_PARTS = {
+        "_review_alternate_drafts", "Archive", "🗄 Archive", "⚙️ Meta",
+        ".claude", ".git", ".obsidian", ".trash", "node_modules", "worktrees",
+    }
     def skip(f):
         if any(p in SKIP_PARTS for p in f.parts):
             return True

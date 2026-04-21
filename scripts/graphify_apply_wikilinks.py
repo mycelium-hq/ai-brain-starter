@@ -55,7 +55,10 @@ import sys
 from datetime import date
 from pathlib import Path
 
-SKIP_PARTS = {"⚙️ Meta", "Archive", "🗄 Archive", "_review_alternate_drafts"}
+SKIP_PARTS = {
+    "⚙️ Meta", "Archive", "🗄 Archive", "_review_alternate_drafts",
+    ".claude", ".git", ".obsidian", ".trash", "node_modules", "worktrees",
+}
 EXISTING_LINK_RE = re.compile(r'\[\[[^\]]+\]\]')
 
 DATAVIEW_BACKLINKS = '''\
