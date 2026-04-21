@@ -137,6 +137,17 @@ Corruption happens when `.git/index.lock` is removed during a real write. Never 
 
 **Change impact audit (conditional).** Only if session modified rules, scripts, skills, hooks, schedules, paths, CLAUDE.md. Verify: paths resolve, skills trigger, hooks fire, cross-refs valid. Fix before closing.
 
+**Execution-session functional audit (mandatory when session shipped code/docs to a public repo users download).** Personal-data scrub + `git push` is NOT the audit. Before claiming done, verify shipped artifacts actually work for a stranger:
+
+1. **Syntax:** `python3 -m py_compile` every new/modified `.py`. `bash -n` every new/modified `.sh`. JSON-validate every new/modified `.json`.
+2. **Path resolution:** grep every absolute path in docs/templates against the actual filesystem. Every path must resolve.
+3. **Orphan scan:** grep every new file under `hooks/`, `scripts/`, `templates/` against the docs that should reference it (README, install phases, bootstrap). Unreferenced = invisible to users = shipped-but-unusable.
+4. **Smoke test:** invoke each new script with `--help` or minimal args. It should at least parse without crashing.
+5. **Misleading copy:** search shipped docs for phrases that imply auto-installation. If the artifact isn't auto-installed, rewrite to "opt-in, install via:".
+6. **Relative link check:** resolve every `](...)` relative link in modified README/docs against the filesystem.
+
+Report: "Audit: N python OK, M bash OK, K JSON OK, P paths resolved, Q orphans found + fixed, R smoke tests passed." Never claim "everything works" without running these.
+
 **Public repo propagation check.** If anything qualifies for a public companion repo: ASK first. Strip personal data. Update CHANGELOG if the repo has one.
 
 ## Summary format
