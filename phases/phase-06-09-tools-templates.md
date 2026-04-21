@@ -150,6 +150,27 @@ attendees: []
 
 Tell them: "Templates are set up. When you create a new note in Obsidian, Templater can auto-apply these."
 
+### Optional: pre-built Templater templates
+
+The starter ships six richer templates in `~/.claude/skills/ai-brain-starter/templates/obsidian/` — they use Templater syntax (date auto-fill, suggesters) so they need the Templater plugin installed (already covered in Phase 2-3). Copy any you want into your vault's `Meta/Templates/` folder:
+
+| File | What it does |
+|---|---|
+| `Journal Entry.md` | Clean journal scaffold with 16-floor suggester (Shame → Peace) |
+| `Theme Note.md` | Concept/theme page with Dataviewjs block listing connected files |
+| `CRM Entry.md` | Person note with context, connected, interactions sections |
+| `Writing Draft.md` | Substack/long-form draft with series suggester |
+| `Floor Check-In.md` | Emotional-floor check-in with body-awareness prompts |
+| `graphify-extraction-prompt.md` | Reference prompt for building a knowledge graph from this vault — uses `{VAULT_ROOT}` placeholder, works with any corpus |
+
+Copy command:
+```bash
+# Adjust the destination to your vault's Meta/Templates path
+cp ~/.claude/skills/ai-brain-starter/templates/obsidian/*.md "/path/to/your/vault/Meta/Templates/"
+```
+
+None are required. Pick the ones that match how you want to work.
+
 ## Phase 9: Verify All Skills
 
 Phase 0 installed everything. This phase verifies nothing was skipped or failed.

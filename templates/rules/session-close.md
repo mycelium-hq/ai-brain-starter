@@ -95,11 +95,13 @@ After Phase 2 writes AND aggregators complete, commit the session's changes as a
 2. **NEVER background a git operation** (`run_in_background: true`, trailing `&`). Background git racing with another session's git can truncate the index.
 3. **NEVER `git add -A`, `git add .`, or any unscoped form.** Sweeping commits steal staged files from other sessions and bloat your commit. Each session commits ONLY its own paths, listed explicitly.
 
-**Use the wrapper, not raw git.** `scripts/vault-safe-commit.sh` handles lock waiting, stale-lock detection, and the vault-wide mutex. Three gates enforce this pattern:
+**Use the wrapper, not raw git.** Copy `~/.claude/skills/ai-brain-starter/scripts/vault-safe-commit.sh` into your vault's `Meta/scripts/` (or any path on disk). It handles lock waiting, stale-lock detection, and a vault-wide mutex. For defense-in-depth, the starter ships three optional gates you can install:
 
-1. PreToolUse hook `hooks/block-raw-vault-git.py` blocks raw mutating git (`add`/`commit`/`checkout`/`reset`/`merge`/`rebase`/`restore`/`switch`/`stash`) inside the vault before Bash runs. Emergency bypass: prefix the command with `GIT_VAULT_BYPASS=1`.
+1. PreToolUse hook `~/.claude/skills/ai-brain-starter/hooks/block-raw-vault-git.py` — blocks raw mutating git (`add`/`commit`/`checkout`/`reset`/`merge`/`rebase`/`restore`/`switch`/`stash`) inside the vault before Bash runs. Copy into `~/.claude/hooks/` and register in settings.local.json. Emergency bypass: prefix the command with `GIT_VAULT_BYPASS=1`.
 2. The wrapper itself acquires `/tmp/vault-commit-<hash>.lock` to serialize concurrent wrapper calls.
-3. Native `.git/hooks/pre-commit` acquires the same mutex for any commit that sneaks past the PreToolUse hook (terminal, editor, cron).
+3. For defense-in-depth against commits that sneak past the PreToolUse hook (terminal, editor, cron), you can add a native `.git/hooks/pre-commit` that acquires the same `/tmp/vault-commit-<hash>.lock` before allowing any commit. Left as a bring-your-own snippet tailored to your vault path.
+
+None of these are auto-installed. Install only if your vault is git-tracked AND you run multiple concurrent sessions against it.
 
 ```bash
 cd "$VAULT_ROOT" && \

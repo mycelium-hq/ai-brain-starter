@@ -113,6 +113,27 @@ The hook auto-detects the vault root by walking up from the working directory. I
 
 To add your own project-specific files, edit `~/.claude/hooks/vault-context.py` and uncomment the `TOPIC_MAP` example entries — each entry maps a list of keywords to a list of vault-relative file paths.
 
+### Optional advanced guardrails
+
+The starter ships four additional PreToolUse hooks under `hooks/`. They're optional — install only if the corresponding risk applies to your setup. None are auto-installed.
+
+| Hook | What it blocks | Install when |
+|---|---|---|
+| `block-raw-vault-git.py` | Raw `git add/commit/checkout/reset/merge/rebase` inside a git-tracked vault | Your vault has `.git/` and you run multiple Claude sessions against it (prevents cross-session lock races) |
+| `block-vault-git-fullwalk.py` | Unscoped `git add -A`, `git add .`, full-tree `git status` | Same vaults with >10K files — prevents 10+ minute walks and token burn |
+| `validate-mcp-json.py` | Invalid JSON writes to `.mcp.json` / `settings.json` | Always safe; prevents silent MCP config breakage |
+| `permission-denied.py` | (Hook event handler, informational) | Improves error surfacing on permission denials |
+
+Install pattern (copy the hook, then register it in `.claude/settings.local.json` or `~/.claude/settings.json`):
+
+```bash
+cp ~/.claude/skills/ai-brain-starter/hooks/block-raw-vault-git.py ~/.claude/hooks/
+cp ~/.claude/skills/ai-brain-starter/hooks/block-vault-git-fullwalk.py ~/.claude/hooks/
+cp ~/.claude/skills/ai-brain-starter/hooks/validate-mcp-json.py ~/.claude/hooks/
+```
+
+Each hook file documents its own matcher and the `hookEventName` it expects. Do not install all four blindly — read each file first.
+
 Tell them: "Done. From now on, the first thing I do every session is read your files — automatically, before I say anything. And whenever you ask something strategic, I'll pull your current priorities and open items into context before I respond. If there's an update to the skill, I'll pull it and apply it automatically — you'll just see a quick note about what changed."
 
 Also create the **session-end-hook.sh** script. This script writes a per-worktree session stub (never to the shared `Last Session.md`) and then runs the aggregator. This design is race-safe against concurrent worktrees — see the "Why per-worktree writes" note below the script for the full explanation.

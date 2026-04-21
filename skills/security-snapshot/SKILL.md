@@ -13,10 +13,10 @@ Prospects rarely have budget for a full security audit upfront, but they will re
 ## Command
 
 ```bash
-python3 "$VAULT_ROOT/Meta/scripts/security-snapshot.py" <domain> --company "<Display Name>"
+python3 "$HOME/.claude/skills/ai-brain-starter/scripts/security-snapshot.py" <domain> --company "<Display Name>"
 ```
 
-Set `VAULT_ROOT` (and optional `SNAPSHOTS_DIR`) before running. The script prints the saved report path to stdout and progress to stderr. It takes 60-180 seconds because SSL Labs is slow.
+The script ships with the starter repo. Output goes to `$SNAPSHOTS_DIR` if set, otherwise `$VAULT_ROOT/security-snapshots/` if `VAULT_ROOT` is set, otherwise a `security-snapshots/` folder next to wherever you run the command from. It takes 60-180 seconds because SSL Labs is slow. The script prints the saved report path to stdout and progress to stderr.
 
 ## Workflow
 

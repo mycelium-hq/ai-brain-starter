@@ -201,8 +201,13 @@ Every CLAUDE.md created by this system includes these rules. Claude is a thinkin
 - **[`docs/POWER_TOOLS.md`](docs/POWER_TOOLS.md)** — every third-party skill, MCP server, and Obsidian plugin, with attribution and source links
 - **[`docs/MEMORY_SYSTEM.md`](docs/MEMORY_SYSTEM.md)** — how Claude accumulates knowledge across sessions using typed memories
 - **[`docs/TOKEN_OPTIMIZATION.md`](docs/TOKEN_OPTIMIZATION.md)** — how to stop burning tokens on overhead: compress Claude-facing files, cap memory, route cheap work to cheap models
+- **[`docs/BUILD_STANDARDS.md`](docs/BUILD_STANDARDS.md)** — read before any MCP/skill/script build. Pre-build checklist, optimization pass, pre-extraction patterns
 - **[`skills/graphify/RUNBOOK.md`](skills/graphify/RUNBOOK.md)** — production playbook for running graphify on a large vault, with cost guardrails
+- **[`skills/graphify/LESSONS.md`](skills/graphify/LESSONS.md)** — 104 operational lessons from running graphify on a 10K-file vault across 70+ sessions
 - **[`templates/dataview-queries.md`](templates/dataview-queries.md)** — reusable Dataview query library for journals, CRM, AI chats, decision logs
+- **[`templates/obsidian/`](templates/obsidian/)** — 6 pre-built Templater templates (journal, theme, CRM, writing draft, floor check-in, graphify extraction prompt)
+- **[`templates/rules/`](templates/rules/)** — opt-in rule files (voice-firewall, session-close, hookify-authoring, mcp-build-checks, repo-evaluation) to paste into your CLAUDE.md
+- **[`for-teams/`](for-teams/)** — extra docs for teams sharing a vault (working-with-me pages, team workflows)
 - **[`docs/OPTIMIZE.md`](docs/OPTIMIZE.md)** — the deep vault optimization guide (11 phases, weekend project). Run `/optimize-brain` after setup to become a power user.
 - **[`EXAMPLES.md`](EXAMPLES.md)** — sample journal entry and weekly insight report showing output quality
 - **[`CONTRIBUTING.md`](CONTRIBUTING.md)** — how to contribute (the project is opinionated by design)
