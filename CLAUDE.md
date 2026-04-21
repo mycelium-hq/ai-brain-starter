@@ -30,7 +30,7 @@ Many users of this skill will have their Obsidian vault under git for local snap
 1. Never run `git add -A`, `git add .`, or unscoped `git status`. Always pass explicit file paths you intend to stage.
 2. If a vault has no git remote (`git remote -v` empty), never attempt `git push`. Vaults are commonly local-only snapshot repos.
 3. When `git` is slow, check `wc -l <(git ls-files)` — if >10k files, you are in a vault repo; switch to targeted paths immediately.
-4. The generated session-close template (`templates/generated/session-close.md` or the user's equivalent) must include the "targeted-paths only" pattern for any git snapshot step. If a new setup phase is introducing git automation, ship the rule with it.
+4. The session-close template (`templates/rules/session-close.md` or the user's equivalent) must include the "targeted-paths only" pattern for any git snapshot step. If a new setup phase is introducing git automation, ship the rule with it.
 
 These rules ship to every user's vault CLAUDE.md via Phase 4 / `templates/generated/claude-md-template.md`. Keep them generic (no personal paths) per the public-repo rule at the top of this file.
 

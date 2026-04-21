@@ -98,7 +98,7 @@ person:
     WHERE person_priority = "high" AND person_last_journal_iso < dateformat(date(today) - dur(60 days), "yyyy-MM-dd")
 
 business:
-  folder_hint: "💼 AI Consulting, 🚀 Onde Team, 📝 Notes/💼 Business"
+  folder_hint: "📝 Notes/💼 Business, <team-vault>"
   fields:
     - biz_doc_kind         # deck|memo|email|contract|pitch|update from filename/body
     - biz_audience         # from ## Audience or first body line "Audience: X"
@@ -111,7 +111,7 @@ business:
 # ── Tier 2: solid ROI ──────────────────────────────────────────────
 
 meeting:
-  folder_hint: "🚀 Onde Team/*/Meetings, **/Meetings"
+  folder_hint: "<team-vault>/*/Meetings, **/Meetings"
   fields:
     - meeting_attendees         # CRM-matched from first body section
     - meeting_date_iso
@@ -215,7 +215,7 @@ goal:
 # ── Tier 4: discovered during vault audit ──────────────────────────
 
 playbook:
-  folder_hint: "💼 AI Consulting, 🚀 Onde Team"
+  folder_hint: "📝 Notes/💼 Business, <team-vault>"
   fields:
     - playbook_owner            # "Pao", "Beverly", team member
     - playbook_channel          # Apollo, LinkedIn, email
@@ -224,7 +224,7 @@ playbook:
     - playbook_shape            # sequence|one-off|bulk
 
 asset:
-  folder_hint: "💼 AI Consulting/🎨 Brand, 🚀 Onde Team/🎨 Brand"
+  folder_hint: "📝 Notes/💼 Business/🎨 Brand, <team-vault>/🎨 Brand"
   fields:
     - asset_kind                # logo|brand_kit|template|image|deck|copy
     - asset_last_updated_iso

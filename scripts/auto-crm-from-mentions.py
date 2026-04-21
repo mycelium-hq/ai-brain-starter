@@ -59,13 +59,18 @@ NON_PERSON_WORDS = {
     "Execution", "Presence", "Awareness", "Focus",
 }
 
-# Exact-match blacklist (phrases specifically known to be concept notes)
+# Exact-match blacklist — phrases that look like a Title Case name but are
+# concepts or place names, not people. Extend this set with your own
+# project names, book titles, or vault-specific concepts that keep getting
+# misclassified as people.
 CONCEPT_BLACKLIST = {
-    "High-Rise", "High Rise", "Moving Through", "Onde Event", "Onde Team",
-    "Raising Money", "After Shock", "Silicon Valley", "Ad Hoc",
-    "Earth Luxe", "Second Brain", "Apple Health", "About Me",
-    "New York", "New York City", "Los Angeles", "San Francisco",
-    "Google Meet", "Google Drive",
+    # Place names
+    "Silicon Valley", "New York", "New York City",
+    "Los Angeles", "San Francisco",
+    # Generic product/tool names
+    "Google Meet", "Google Drive", "Apple Health",
+    # Generic concept phrases
+    "Second Brain", "Ad Hoc", "About Me",
 }
 
 # Person name: exactly 2 or 3 Title-cased words, each 3-20 chars, no disqualifying word.

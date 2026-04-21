@@ -5,6 +5,10 @@ voice-indexer.py — Build a statistical voice fingerprint from journal entries.
 Usage:
     python3 voice-indexer.py [journals_path]
 
+    journals_path   Path to your journals directory. If omitted, falls back
+                    to the VAULT_PATH environment variable + "/📓 Journals",
+                    or prints an error.
+
 Output: ~/.claude/voice-fingerprint.json
 
 Re-run monthly or on demand. Zero external dependencies (stdlib only).
@@ -12,13 +16,22 @@ Re-run monthly or on demand. Zero external dependencies (stdlib only).
 
 import os
 import re
+import sys
 import json
 import statistics
 from pathlib import Path
 from collections import Counter
 
-VAULT_PATH = Path.home() / "Desktop" / "Adelaida Notes"
-JOURNALS_PATH = VAULT_PATH / "📓 Journals"
+# Resolve journals path: CLI arg > $VAULT_PATH env > error.
+# (Do not hardcode a personal vault path here — this script ships to anyone.)
+_cli_path = sys.argv[1] if len(sys.argv) > 1 else None
+_env_vault = os.environ.get("VAULT_PATH")
+if _cli_path:
+    JOURNALS_PATH = Path(_cli_path).expanduser()
+elif _env_vault:
+    JOURNALS_PATH = Path(_env_vault).expanduser() / "📓 Journals"
+else:
+    JOURNALS_PATH = None  # main() checks and exits with a helpful message
 OUTPUT_PATH = Path.home() / ".claude" / "voice-fingerprint.json"
 
 # High-frequency Spanish words unlikely to appear in English prose
@@ -292,8 +305,14 @@ def build_fingerprint(journals_path):
 
 
 def main():
-    import sys
-    journals = Path(sys.argv[1]) if len(sys.argv) > 1 else JOURNALS_PATH
+    journals = JOURNALS_PATH
+    if journals is None:
+        print(
+            "ERROR: journals path not provided.\n"
+            "  Pass it as an argument:   python3 voice-indexer.py /path/to/journals\n"
+            "  Or set an env var:        export VAULT_PATH=\"$HOME/Desktop/MyVault\""
+        )
+        sys.exit(1)
 
     if not journals.exists():
         print(f"ERROR: Path not found: {journals}")
