@@ -59,6 +59,15 @@ Follow in order. Do not skip.
 
 Run `date` for timestamp. Parse any argument flags.
 
+Check the run-stamp to avoid redundant work:
+
+```bash
+stat -f "%Sm" "$(vault-root)/⚙️ Meta/Second-Brain Insights.md" 2>/dev/null || echo "never"
+stat -f "%Sm" "$(vault-root)/⚙️ Meta/graphify-out/graph.json" 2>/dev/null || echo "no graph"
+```
+
+If the insights file is **less than 4 hours old** AND no `--force` flag was passed, report the last-run time and ask: **"Insights ran X ago. Re-run full pipeline or skip to [graphify/wikilinks/specific phase]?"** Do NOT silently proceed through expensive phases. Let the user decide what needs refreshing. Phase 3 (wikilink gaps) can take several minutes on a large vault, so avoid re-running it in the same session unless something has changed.
+
 ### Step 2 — Phase 1: vault-metadata-extract (always)
 
 ```bash
