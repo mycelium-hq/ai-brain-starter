@@ -45,7 +45,7 @@ If the user reached /setup-brain WITHOUT running bootstrap first (rare), the rep
 | Graphify | graphifyy Python package + `graphify install` (platform binary) |
 | Sub-skills | graphify, meeting-todos, patterns, insights, deconstruct, daily-journal, repurpose-talk, nano-banana (skill folder only; plugin install is deferred) |
 | Humanizer | cloned from its own public fork (idempotent, never touched on re-run) |
-| MCPs | granola, chatprd (registered in ~/.claude/.mcp.json with backup) |
+| MCPs | chatprd (registered in ~/.claude/.mcp.json with backup) |
 | Marketplaces / plugins | obsidian-skills (kepano); enables: obsidian, context7, playwright (registered in ~/.claude/settings.json with backup) |
 
 **Bootstrap does NOT touch:**
@@ -58,25 +58,20 @@ If the user reached /setup-brain WITHOUT running bootstrap first (rare), the rep
 
 ---
 
-### Step 0.2. Granola post-install authorization (conversational)
+### Step 0.2. Granola setup check (conversational)
 
-Registering the Granola MCP is only HALF the install. The user must ALSO have a Granola account and be signed in to the Granola Mac/Web app at least once, otherwise the MCP returns "not authenticated" silently and the meeting workflow fails with no obvious cause.
+Ask:
 
-After bootstrap finishes, ask:
-
-> "I just wired up Granola so meeting notes can auto-sync into your vault. One more step on YOUR side: Granola needs you to log in to their app at least once before the connection works. Want me to walk you through it?"
+> "Do you use Granola for meeting notes?"
 
 **If YES:**
-1. "Go to https://granola.ai and click 'Download for Mac' (or Windows if/when they support it). Install it like any other app."
-2. "Open Granola and log in. You can use Google or email, whichever you prefer. The free plan is fine for now."
-3. "Once you're logged in and you see the main Granola window, you're done. Come back and tell me 'Granola is set up' and I'll verify."
-4. After they confirm, run a quick MCP probe to verify connectivity.
-5. If the probe fails: "The MCP is registered but I can't reach Granola yet. Make sure you're actually logged in to the Granola app, then we'll retry."
+1. "Granola is wired via a local script — no API key or MCP needed. Run `python3 scripts/granola_sync.py --dry-run` to test it. It reads from Granola's local cache, so Granola must be installed and have recorded at least one meeting."
+2. For auto-export after every meeting, offer to install the LaunchAgent: "Edit the two placeholder paths in `scripts/com.granola-export.plist`, copy it to `~/Library/LaunchAgents/`, then run `launchctl load ~/Library/LaunchAgents/com.granola-export.plist`."
+3. Store `GRANOLA=local` so the meeting workflow rule knows to Glob for `*- Transcript.md` files.
 
 **If NO / "I don't use Granola":**
-- Remove the granola entry from `~/.claude/.mcp.json` (don't leave a dead MCP wired).
-- "No problem, I removed the Granola wiring. If you ever want meeting auto-sync later, we can re-wire it then."
-- Store `NO_GRANOLA=true` so the meeting workflow rule installs in 'manual' mode instead of expecting Granola.
+- Store `NO_GRANOLA=true` so the meeting workflow rule installs in 'manual' mode.
+- "No problem. If you ever want Granola auto-sync later, the script is at `scripts/granola_sync.py`."
 
 ---
 

@@ -40,10 +40,10 @@ Store the answer as `MEETING_TOOLS` (a list — could be multiple). Then for eac
 
 #### 1. Granola
 
-- **Verify the MCP is wired** (bootstrap registers it; if the `granola` entry is missing from `~/.claude/.mcp.json`, re-run the bootstrap).
-- **Tell them:** "The Granola MCP is wired. You'll need a Granola account at https://granola.ai — once it's recording, meeting notes auto-sync into your vault."
+- **No MCP needed.** `scripts/granola_sync.py` reads Granola's local cache directly and exports full transcripts to the meeting notes folder.
+- **Tell them:** "Granola is wired via a local script — no API key needed. Run `python3 scripts/granola_sync.py --dry-run` to test it. For auto-export after every meeting, install the LaunchAgent in `scripts/com.granola-export.plist` (edit the two placeholder paths, then `launchctl load` it)."
 - **Discovery rule for the meeting workflow CLAUDE.md section:**
-  > Search the meeting-notes folder via Glob for any file modified in the last 24 hours (Granola auto-sync drops files there). Read the freshest one fully — it's the source of truth.
+  > Glob the meeting-notes folder for files matching `*- Transcript.md` modified in the last 24 hours. The script auto-exports when Granola's cache changes. If missing, run `python3 scripts/granola_sync.py` manually. Read the file fully — it's the source of truth.
 
 #### 2. Google Meet + Gemini
 

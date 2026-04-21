@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!--
+  Granola auto-export LaunchAgent
+  Fires granola_sync.py whenever Granola updates its local cache (i.e. after each meeting).
+
+  Install:
+    1. Edit ProgramArguments below — set the path to granola_sync.py in your vault.
+    2. Edit StandardOutPath / StandardErrorPath to point to your vault's log directory.
+    3. Copy this file to ~/Library/LaunchAgents/
+    4. Run: launchctl load ~/Library/LaunchAgents/com.granola-export.plist
+-->
+<dict>
+    <key>Label</key>
+    <string>com.granola-export</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <!-- Replace with the absolute path to granola_sync.py in your vault -->
+        <string>/path/to/your/vault/scripts/granola_sync.py</string>
+    </array>
+    <key>WatchPaths</key>
+    <array>
+        <string>/Users/YOUR_USERNAME/Library/Application Support/Granola/cache-v6.json</string>
+    </array>
+    <key>StandardOutPath</key>
+    <!-- Replace with your vault's log directory -->
+    <string>/path/to/your/vault/.granola_export.log</string>
+    <key>StandardErrorPath</key>
+    <string>/path/to/your/vault/.granola_export.log</string>
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>

@@ -1,288 +1,223 @@
 #!/usr/bin/env python3
 """
-Granola -> Obsidian Vault Sync
-Pulls new meeting notes from Granola API and saves as Obsidian markdown.
-Runs via cron every 30 minutes.
+Granola local cache → Obsidian vault transcript export.
 
-Requires GRANOLA_API_KEY environment variable to be set.
+Reads Granola's local cache directly — no API key, no network call.
+Exports full timestamped transcripts as markdown to your vault's meeting
+notes folder. Works on any Mac with Granola installed.
+
+Auto-run setup (fires when Granola updates its cache after each meeting):
+  launchctl load ~/Library/LaunchAgents/com.granola-export.plist
 
 Usage:
-  GRANOLA_API_KEY=grn_... python3 granola_sync.py
-  GRANOLA_API_KEY=grn_... python3 granola_sync.py --vault-root /path/to/vault
-  GRANOLA_API_KEY=grn_... python3 granola_sync.py --meeting-dir "Meeting Notes"
+  python3 granola_sync.py              # export all cached transcripts
+  python3 granola_sync.py --dry-run   # show what would be exported
+  python3 granola_sync.py --vault-root /path/to/vault
+  python3 granola_sync.py --meeting-dir "Meeting Notes"
 """
 
 import argparse
-import os
 import json
+import os
 import re
 import sys
-import requests
 from datetime import datetime, timezone
 from pathlib import Path
 
+CACHE_PATH = Path.home() / "Library/Application Support/Granola/cache-v6.json"
+
 
 def detect_vault_root() -> Path:
-    """Detect vault root from $VAULT_ROOT env var or script location."""
     env_root = os.environ.get("VAULT_ROOT")
     if env_root:
         return Path(env_root)
     script_dir = Path(__file__).resolve().parent
-    candidate = script_dir.parent.parent
-    if (candidate / "⚙️ Meta").is_dir():
-        return candidate
+    for candidate in [script_dir.parent, script_dir.parent.parent]:
+        if (candidate / "⚙️ Meta").is_dir() or (candidate / ".obsidian").is_dir():
+            return candidate
     return Path.cwd()
 
 
-# --- CONFIG ---
-BASE_URL = "https://public-api.granola.ai/v1"
+def detect_meeting_dir(vault_root: Path, override: str = None) -> Path:
+    if override:
+        return vault_root / override
+    for pattern in ["**/📝 Meeting Notes", "**/Meeting Notes"]:
+        matches = list(vault_root.glob(pattern))
+        if matches:
+            return matches[0]
+    return vault_root / "Meeting Notes"
 
 
-def log(msg, log_file):
-    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    line = f"[{ts}] {msg}"
-    print(line)
-    with open(log_file, "a") as f:
-        f.write(line + "\n")
-
-
-def get_last_sync(state_file):
-    """Read last sync timestamp."""
-    if os.path.exists(state_file):
+def load_state(state_file: Path) -> dict:
+    if state_file.exists():
         with open(state_file) as f:
-            return f.read().strip()
-    return None
+            return json.load(f)
+    return {"exported": []}
 
 
-def set_last_sync(state_file, ts):
-    """Save last sync timestamp."""
-    os.makedirs(os.path.dirname(state_file), exist_ok=True)
+def save_state(state_file: Path, state: dict):
+    state_file.parent.mkdir(parents=True, exist_ok=True)
     with open(state_file, "w") as f:
-        f.write(ts)
+        json.dump(state, f, indent=2)
 
 
-def safe_filename(title, date):
-    """Create safe Obsidian filename from title and date."""
-    clean = re.sub(r'[/\\:*?"<>|]', '-', title)
-    clean = clean.strip()[:60]
-    return f"{clean} - {date}.md"
+def safe_filename(title: str, date: str) -> str:
+    clean = re.sub(r'[/\\:*?"<>|]', "-", title).strip()[:60]
+    return f"{date} - {clean} - Transcript.md"
 
 
-def note_exists(meeting_dir, filename):
-    """Check if note already exists in vault."""
-    return os.path.exists(os.path.join(meeting_dir, filename))
+def format_transcript(utterances: list, meeting_start: datetime) -> str:
+    """Group consecutive utterances by source into labeled paragraphs."""
+    paragraphs = []
+    current_source = None
+    current_texts = []
+    current_start = None
 
+    def flush():
+        if not current_texts:
+            return
+        text = " ".join(current_texts)
+        if current_source == "microphone":
+            label = "**You**"
+        elif current_source and current_source != "system":
+            label = f"**{current_source.replace('_', ' ').title()}**"
+        else:
+            return  # skip system messages
+        elapsed = max(0, (current_start - meeting_start).total_seconds())
+        mins, secs = divmod(int(elapsed), 60)
+        paragraphs.append(f"`{mins:02d}:{secs:02d}` {label}: {text}")
 
-def format_transcript(transcript_items):
-    """Format transcript array into readable text."""
-    if not transcript_items:
-        return ""
-
-    lines = []
-    current_speaker = None
-    current_text = []
-
-    for item in transcript_items:
-        speaker = item.get("speaker", {}).get("name", item.get("speaker", {}).get("source", "Unknown"))
-        text = item.get("text", "").strip()
-
+    for u in utterances:
+        source = u.get("source", "unknown")
+        if source == "system":
+            continue
+        text = u.get("text", "").strip()
         if not text:
             continue
+        ts_str = u.get("start_timestamp", "")
+        try:
+            ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+        except (ValueError, AttributeError):
+            ts = meeting_start
 
-        if speaker != current_speaker:
-            if current_text:
-                lines.append(f"**{current_speaker}:** {' '.join(current_text)}")
-            current_speaker = speaker
-            current_text = [text]
+        if source != current_source:
+            flush()
+            current_source = source
+            current_texts = [text]
+            current_start = ts
         else:
-            current_text.append(text)
+            current_texts.append(text)
 
-    # Flush last speaker
-    if current_text:
-        lines.append(f"**{current_speaker}:** {' '.join(current_text)}")
-
-    return "\n\n".join(lines)
+    flush()
+    return "\n\n".join(paragraphs)
 
 
-def format_note(note_data):
-    """Convert Granola API response to Obsidian markdown."""
-    title = note_data.get("title", "Untitled Meeting")
-    created = note_data.get("created_at", "")
+def export_one(doc_id: str, doc: dict, utterances: list,
+               meeting_dir: Path, dry_run: bool = False):
+    title = doc.get("title", "Untitled Meeting")
+    created = doc.get("created_at", "")
     date = created[:10] if created else datetime.now().strftime("%Y-%m-%d")
 
-    # Calendar event details
-    cal = note_data.get("calendar_event") or {}
-    start_time = cal.get("scheduled_start_time", "")
-    end_time = cal.get("scheduled_end_time", "")
+    try:
+        meeting_start = datetime.fromisoformat(created.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        meeting_start = datetime.now(timezone.utc)
 
-    # Attendees
-    attendees = note_data.get("attendees", [])
-    attendee_names = [a.get("name", a.get("email", "Unknown")) for a in attendees]
-    attendee_list = "\n".join(f"- {name}" for name in attendee_names) if attendee_names else "- (none recorded)"
+    non_system = [u for u in utterances if u.get("source") != "system"]
+    utterance_count = len(non_system)
 
-    # Panels / notes content
-    panels = note_data.get("panels", [])
-    notes_content = ""
-    if panels:
-        for panel in panels:
-            panel_title = panel.get("title", "")
-            panel_html = panel.get("html", "")
-            clean = re.sub(r'<[^>]+>', '', panel_html)
-            clean = clean.strip()
-            if clean:
-                if panel_title:
-                    notes_content += f"\n### {panel_title}\n{clean}\n"
-                else:
-                    notes_content += f"\n{clean}\n"
+    filename = safe_filename(title, date)
+    filepath = meeting_dir / filename
 
-    # Transcript
-    transcript = note_data.get("transcript", [])
-    transcript_text = format_transcript(transcript) if transcript else ""
+    if filepath.exists():
+        return None, f"SKIP (exists): {filename}"
 
-    # Build markdown
-    md = f"""---
+    transcript_text = format_transcript(utterances, meeting_start)
+    notes_md = (doc.get("notes_markdown") or "").strip()
+
+    content = f"""---
 creationDate: {date}
 type: meeting
-source: granola
-granola_id: {note_data.get('id', '')}
-attendees: [{', '.join(attendee_names)}]
+source: granola-local
+granola_id: {doc_id}
+utterances: {utterance_count}
 ---
 
-*Auto-imported from [[Granola]] - {date}*
+# {title}
 
-## Attendees
-{attendee_list}
+*Exported from Granola local cache — {date}*
+
 """
-
-    if start_time:
-        start_fmt = start_time[:16].replace("T", " ")
-        end_fmt = end_time[:16].replace("T", " ") if end_time else ""
-        md += f"\n**Time:** {start_fmt} -> {end_fmt}\n"
-
-    if notes_content:
-        md += f"\n## Notes\n{notes_content}\n"
+    if notes_md:
+        content += f"## Granola Notes\n\n{notes_md}\n\n"
 
     if transcript_text:
-        md += f"\n## Transcript\n\n{transcript_text}\n"
+        content += f"## Full Transcript\n\n{transcript_text}\n"
+    else:
+        content += "*No transcript available for this meeting.*\n"
 
-    md += f"\n---\n*See also: [[Meeting Notes Index]]*\n"
+    if dry_run:
+        return filename, f"DRY RUN: {filename} ({utterance_count} utterances)"
 
-    return md
-
-
-def sync(vault_root, meeting_dir, state_file, log_file, api_key):
-    """Main sync: fetch new notes from Granola, save to vault."""
-    headers = {"Authorization": f"Bearer {api_key}"}
-    log("Starting Granola sync...", log_file)
-
-    last_sync = get_last_sync(state_file)
-
-    # Fetch notes list
-    params = {"limit": 20}
-    resp = requests.get(f"{BASE_URL}/notes", headers=headers, params=params)
-
-    if resp.status_code != 200:
-        log(f"ERROR: API returned {resp.status_code}: {resp.text[:200]}", log_file)
-        return
-
-    data = resp.json()
-    notes = data.get("notes", [])
-
-    if not notes:
-        log("No notes found.", log_file)
-        return
-
-    new_count = 0
-    skip_count = 0
-    latest_ts = last_sync or ""
-
-    for note_summary in notes:
-        note_id = note_summary["id"]
-        created = note_summary.get("created_at", "")
-        title = note_summary.get("title", "Untitled")
-        date = created[:10] if created else datetime.now().strftime("%Y-%m-%d")
-
-        if last_sync and created <= last_sync:
-            skip_count += 1
-            continue
-
-        filename = safe_filename(title, date)
-        if note_exists(meeting_dir, filename):
-            log(f"SKIP (exists): {filename}", log_file)
-            skip_count += 1
-            continue
-
-        detail_resp = requests.get(
-            f"{BASE_URL}/notes/{note_id}?include=transcript",
-            headers=headers
-        )
-
-        if detail_resp.status_code != 200:
-            log(f"ERROR fetching {note_id}: {detail_resp.status_code}", log_file)
-            continue
-
-        note_data = detail_resp.json()
-
-        md_content = format_note(note_data)
-        filepath = os.path.join(meeting_dir, filename)
-
-        os.makedirs(meeting_dir, exist_ok=True)
-        with open(filepath, "w", encoding="utf-8") as f:
-            f.write(md_content)
-
-        log(f"SAVED: {filename}", log_file)
-        new_count += 1
-
-        if created > latest_ts:
-            latest_ts = created
-
-    if latest_ts:
-        set_last_sync(state_file, latest_ts)
-
-    log(f"Done. {new_count} new, {skip_count} skipped.", log_file)
+    meeting_dir.mkdir(parents=True, exist_ok=True)
+    filepath.write_text(content, encoding="utf-8")
+    return filename, f"SAVED: {filename} ({utterance_count} utterances)"
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Sync Granola meeting notes to Obsidian vault")
-    parser.add_argument("--vault-root", type=Path, default=None,
-                        help="Path to vault root (default: auto-detected)")
-    parser.add_argument("--meeting-dir", default=None,
-                        help="Meeting notes folder relative to vault root (default: auto-detected)")
+    parser = argparse.ArgumentParser(
+        description="Export Granola meeting transcripts to Obsidian vault"
+    )
+    parser.add_argument("--vault-root", type=Path)
+    parser.add_argument("--meeting-dir", help="Meeting notes folder (relative to vault root)")
+    parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    api_key = os.environ.get("GRANOLA_API_KEY")
-    if not api_key:
-        print("ERROR: GRANOLA_API_KEY environment variable not set.", file=sys.stderr)
-        print("  Set it with: export GRANOLA_API_KEY=grn_...", file=sys.stderr)
+    if not CACHE_PATH.exists():
+        print(f"Granola cache not found: {CACHE_PATH}")
+        print("Make sure Granola is installed and has been run at least once.")
         sys.exit(1)
 
+    with open(CACHE_PATH, encoding="utf-8") as f:
+        state_data = json.load(f)["cache"]["state"]
+
+    transcripts = state_data.get("transcripts", {})
+    documents = state_data.get("documents", {})
+
+    if not transcripts:
+        print("No transcripts in Granola cache.")
+        return
+
     vault_root = (args.vault_root or detect_vault_root()).resolve()
+    meeting_dir = detect_meeting_dir(vault_root, args.meeting_dir)
+    state_file = vault_root / "⚙️ Meta" / "scripts" / ".granola_export_state.json"
+    if not (vault_root / "⚙️ Meta").exists():
+        state_file = vault_root / ".granola_export_state.json"
 
-    # Auto-detect meeting notes directory
-    if args.meeting_dir:
-        meeting_dir = str(vault_root / args.meeting_dir)
-    else:
-        # Look for common meeting note folder patterns
-        for candidate in vault_root.rglob("Meeting Notes"):
-            if candidate.is_dir():
-                meeting_dir = str(candidate)
-                break
-        else:
-            meeting_dir = str(vault_root / "Meeting Notes")
+    state = load_state(state_file)
+    exported_ids = set(state.get("exported", []))
 
-    # Auto-detect Meta folder for state/log files
-    meta_dir = None
-    for candidate in vault_root.iterdir():
-        if candidate.is_dir() and candidate.name.endswith("Meta"):
-            meta_dir = candidate
-            break
-    if meta_dir is None:
-        meta_dir = vault_root / "Meta"
+    newly_exported = []
+    for doc_id, utterances in transcripts.items():
+        if doc_id in exported_ids:
+            continue
 
-    state_file = str(meta_dir / "scripts" / ".granola_last_sync")
-    log_file = str(meta_dir / "scripts" / ".granola_sync.log")
+        doc = documents.get(doc_id)
+        if not doc:
+            print(f"SKIP (no document): {doc_id[:8]}...")
+            continue
 
-    sync(vault_root, meeting_dir, state_file, log_file, api_key)
+        filename, msg = export_one(doc_id, doc, utterances, meeting_dir, args.dry_run)
+        print(msg)
+
+        if filename and not args.dry_run:
+            newly_exported.append(doc_id)
+
+    if newly_exported:
+        state["exported"].extend(newly_exported)
+        save_state(state_file, state)
+
+    print(f"Done. {len(newly_exported)} exported.")
 
 
 if __name__ == "__main__":

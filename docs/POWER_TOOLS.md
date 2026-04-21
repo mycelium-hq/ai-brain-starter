@@ -115,32 +115,28 @@ See [`docs/TOKEN_OPTIMIZATION.md`](TOKEN_OPTIMIZATION.md) for the full routing g
 
 MCP (Model Context Protocol) servers extend Claude Code with structured tool access to external systems. Configured in `~/.claude/.mcp.json`.
 
-### Granola — meeting notes auto-sync
+### Granola — meeting transcript export
 
-**What it does:** [Granola](https://granola.ai/) is a meeting notes tool that records and transcribes Zoom/Meet/Teams calls with AI-generated summaries. The Granola MCP lets Claude Code pull meeting notes directly into your vault — the meeting workflow rule in CLAUDE.md (see SKILL.md Phase 4) uses this to auto-cascade meeting takeaways into:
+**What it does:** [Granola](https://granola.ai/) records and transcribes Zoom/Meet/Teams calls with AI-generated summaries. `scripts/granola_sync.py` reads Granola's local cache directly and exports the full timestamped transcript to your vault's meeting notes folder — no API key, no network call, no MCP needed. The meeting workflow rule in CLAUDE.md (see SKILL.md Phase 4) uses this to auto-cascade meeting takeaways into:
 
 - The meeting note itself (enriched with decisions, action items, verbatim quotes)
 - The CRM contact files for every attendee (last_interaction updated, meeting note linked)
 - Your team to-do file (action items extracted and assigned)
 - Canonical strategy/pitch docs (decisions cascaded to the relevant doc)
 
-**Why it matters:** without this, you spend 20 minutes after every meeting transcribing handwritten notes and updating CRM cards. With it, Claude does the cascade in one command.
+**Why it matters:** without this, you spend 20 minutes after every meeting transcribing handwritten notes and updating CRM cards. With it, Claude reads the full transcript and does the cascade in one command.
 
-**Install:** Add to `~/.claude/.mcp.json`:
-```json
-{
-  "mcpServers": {
-    "granola": {
-      "type": "url",
-      "url": "https://mcp.granola.ai/mcp"
-    }
-  }
-}
-```
+**Install:**
+1. Granola must be installed and have recorded at least one meeting.
+2. Run once manually to test: `python3 scripts/granola_sync.py --dry-run`
+3. For auto-export after every meeting, install the LaunchAgent:
+   - Copy `scripts/com.granola-export.plist` to `~/Library/LaunchAgents/`
+   - Edit the two placeholder paths inside it (script path + your username)
+   - Run: `launchctl load ~/Library/LaunchAgents/com.granola-export.plist`
 
-You'll also need a Granola account and API access. See [granola.ai](https://granola.ai/).
+**Note on speaker labels:** The local cache captures your microphone as `[You]` and remote audio as a single stream (no per-person diarization). The Granola-generated summary notes are also included in the exported file.
 
-**Source:** Granola team.
+**Source:** Reverse-engineered from Granola's local cache format by the ai-brain-starter community.
 
 ---
 

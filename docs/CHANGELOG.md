@@ -9,6 +9,20 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-21 — Granola: local cache export replaces API sync
+
+**Who this affects:** anyone using Granola for meeting notes.
+
+**What changed:**
+
+`scripts/granola_sync.py` now reads Granola's local cache directly instead of calling the Granola API. No API key or MCP required — works on any Mac with Granola installed, on any plan (free, pro, business). Exports full timestamped transcripts as markdown to your meeting notes folder, firing automatically via a LaunchAgent whenever Granola updates its cache after a meeting.
+
+A companion `scripts/com.granola-export.plist` is included for the LaunchAgent install (edit the two placeholder paths, then `launchctl load` it).
+
+The Granola MCP entry has been removed from Phase 0 bootstrap and all docs — the local cache approach covers the same use case without the network dependency or plan restriction.
+
+---
+
 ## 2026-04-21 — Phase 24: first-week handoff with recommended uses
 
 **Who this affects:** everyone running fresh `/setup-brain` installs. Post-install only, no effect on existing setups.
