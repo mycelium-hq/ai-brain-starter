@@ -63,7 +63,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ~/.claude/hooks/retry-budget.py"
+            "command": "[ -f ~/.claude/hooks/retry-budget.py ] && python3 ~/.claude/hooks/retry-budget.py || true"
           }
         ]
       }
