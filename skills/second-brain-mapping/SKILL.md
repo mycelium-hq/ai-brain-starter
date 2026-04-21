@@ -55,40 +55,72 @@ Dataview handles the queries. This skill handles the structured fields that make
 
 Follow in order. Do not skip.
 
-### Step 1 — Context
+### Step 1 — Context + per-phase recency check
 
 Run `date` for timestamp. Parse any argument flags.
 
-Check the run-stamp to avoid redundant work:
+Read the state file to see what was done and when:
 
 ```bash
-stat -f "%Sm" "$(vault-root)/⚙️ Meta/Second-Brain Insights.md" 2>/dev/null || echo "never"
-stat -f "%Sm" "$(vault-root)/⚙️ Meta/graphify-out/graph.json" 2>/dev/null || echo "no graph"
+STATE_FILE="$(vault-root)/⚙️ Meta/.second-brain-mapping-state.json"
+[[ -f "$STATE_FILE" ]] && cat "$STATE_FILE" || echo '{}'
 ```
 
-If the insights file is **less than 4 hours old** AND no `--force` flag was passed, report the last-run time and ask: **"Insights ran X ago. Re-run full pipeline or skip to [graphify/wikilinks/specific phase]?"** Do NOT silently proceed through expensive phases. Let the user decide what needs refreshing. Phase 3 (wikilink gaps) can take several minutes on a large vault, so avoid re-running it in the same session unless something has changed.
+State file format (JSON):
+```json
+{
+  "phase_1_metadata":  "2026-04-21T10:02:00-05:00",
+  "phase_2_graphify":  "2026-04-21T09:04:26-05:00",
+  "phase_3_wikilinks": null,
+  "phase_4_insights":  "2026-04-21T10:02:00-05:00"
+}
+```
 
-### Step 2 — Phase 1: vault-metadata-extract (always)
+`null` means never completed OR killed mid-run. A timestamp means last successful completion.
+
+**Decision rule:**
+- If `--force` flag: run everything regardless.
+- Else for each phase: if stamp < 4 hours old AND not null → skip (report "Phase X: skipped, ran Y ago"). If stamp is null OR > 4 hours old → run it. Phase 2 (graphify) always confirms before running regardless of stamp.
+- Report the plan BEFORE running: "Will run: Phase 3 (null), Phase 4 (>4h). Skipping: Phase 1 (1h ago). OK? y/N"
+
+After each phase succeeds, update its stamp with the current ISO-8601 timestamp. If a phase is killed or errors, leave the stamp untouched so next run sees it as incomplete.
+
+Helper to write stamp (use after each phase):
+```bash
+python3 -c "
+import json, pathlib, datetime
+p = pathlib.Path('$STATE_FILE')
+d = json.loads(p.read_text()) if p.exists() else {}
+d['$PHASE_KEY'] = datetime.datetime.now().astimezone().isoformat(timespec='seconds')
+p.write_text(json.dumps(d, indent=2))
+"
+```
+
+### Step 2 — Phase 1: vault-metadata-extract
+
+If Step 1 decided to skip, skip. Else:
 
 ```bash
 python3 "$(vault-root)/scripts/vault-metadata-extract.py" $FLAGS
 ```
 
-Report: X files written, Y already tagged, types with no registered extractor.
+On success, stamp `phase_1_metadata`. Report: X files written, Y already tagged, types with no registered extractor.
 
 ### Step 3 — Phase 2: graphify (confirm first)
 
-Check graph state:
+Always ask, even if stamp is fresh. Graphify has its own internal staging and token cost varies wildly:
 
 ```bash
 stat -f "%Sm" "$(vault-root)/graphify-out/graph.json" 2>/dev/null || echo "no graph yet"
 ```
 
-Ask: **"Run graphify? ~100k-1M tokens depending on corpus size. y/N"**
+Ask: **"Run graphify? Last graph: {mtime}. ~100k-1M tokens depending on corpus size. y/N"**
 
-If yes, invoke `/graphify --update`. Read `~/.claude/skills/graphify/SKILL.md` first for the optimization wrappers.
+If yes, invoke `/graphify --update`. Read `~/.claude/skills/graphify/SKILL.md` first. On success, stamp `phase_2_graphify`.
 
 ### Step 4 — Phase 3: wikilinks
+
+If Step 1 decided to skip, skip. Else:
 
 ```bash
 python3 "$(vault-root)/scripts/graphify_wikilink_gaps.py"
@@ -99,13 +131,17 @@ else
 fi
 ```
 
-### Step 5 — Phase 4: insights (always)
+On success (both commands exit 0), stamp `phase_3_wikilinks`. If killed mid-run or errors, DO NOT stamp — next invocation will see it as null and re-run.
+
+### Step 5 — Phase 4: insights
+
+If Step 1 decided to skip, skip. Else:
 
 ```bash
 python3 "$(vault-root)/scripts/vault-insight-engine.py" --top 5
 ```
 
-Read the top 5 findings aloud. Don't summarize — paste the report section verbatim so the user sees the raw signal.
+On success, stamp `phase_4_insights`. Read the top 5 findings aloud. Don't summarize — paste the report section verbatim so the user sees the raw signal.
 
 ### Step 6 — Summary + cross-type query suggestions
 
