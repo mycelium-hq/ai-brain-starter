@@ -121,6 +121,16 @@ sync_skill_folder() {
     return 0
   fi
 
+  # Skip if the installed skill dir has its own .git. The user has put this
+  # skill under independent version control (typically a fork they maintain),
+  # and overwriting from the starter would clobber their commits and corrupt
+  # their working tree mid-edit. The user keeps responsibility for pulling
+  # their own updates. See 2026-04-20 humanizer fork PR-corruption incident.
+  if [ -d "$dest_dir/.git" ] || [ -f "$dest_dir/.git" ]; then
+    SKIPPED+=("$skill_name: $dest_dir has its own git repo (independently managed)")
+    return 0
+  fi
+
   mkdir -p "$dest_dir"
 
   # Walk every file in the source, preserving relative paths

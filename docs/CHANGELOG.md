@@ -9,6 +9,20 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-20 -- skill sync skips skills with their own .git
+
+**Who this affects:** anyone who has put a bundled skill (like `humanizer`) under independent version control after installing it. Most commonly: forking a skill on GitHub and tracking your changes there.
+
+**What changed in `scripts/sync-skills.sh`:** the sync now skips any installed skill directory that contains its own `.git` (file or directory). The same way it already skips symlinked skills.
+
+**Why:** if you fork a skill and develop it independently, the old behavior would clobber your local commits with the bundled version on every sync. Worst-case: the overwrite would race with an in-flight Edit and corrupt a commit you were about to push to your fork. Skipping is safer; you keep responsibility for `git pull`-ing your fork on your own schedule.
+
+**What you'll see:** when sync runs, your forked skill shows up in the SKIPPED line as `<skill>: <path> has its own git repo (independently managed)`. No files written, nothing backed up, nothing changed in your fork's working tree.
+
+**If you want bundled-version updates anyway:** delete `.git` from the installed skill (turns it back into a plain copy), or remove the install entirely and let the bundled version reinstall fresh on next sync.
+
+---
+
 ## 2026-04-20 -- proposal-PDF workflow (opt-in reference, not a default install)
 
 **Who this is for:** founders and consultants who ship formal business proposals as PDFs. If you don't send PDF proposals, ignore this update — nothing auto-installed, nothing got added to your active Claude environment, nothing to remove.
