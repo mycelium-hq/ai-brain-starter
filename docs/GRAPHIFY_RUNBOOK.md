@@ -1,6 +1,6 @@
 ---
 type: runbook
-last_updated: 2026-04-20
+last_updated: 2026-04-21
 ---
 
 # Graphify Runbook
@@ -132,6 +132,8 @@ Symptoms → fixes:
 | `--update` re-extracts everything | Forgot `--cache` on canonicalize | Rerun canonicalize with `--cache`, then next update |
 | `/graphify query "X"` returns nothing | graph.json missing "links" key | Load with `d.get('links', d.get('edges', []))` — networkx uses 'links', not 'edges' |
 | Wildly high token burn | Skipped optimization wrappers | Always run the full pipeline in the order above |
+| `manifest updated: 0 files recorded` | Staged-path resolution failure + preflight-only file gap | `graphify_stage_finish.py` was doing `VAULT / source_file` on `graphify-input/<flattened>.md` (path doesn't exist in vault). Also: files whose only coverage came from preflight wikilinks (no LLM-new canonical items) were silently skipped. Fix shipped: resolver now tries flat path first, then tries each `_` → `/` combination until a real vault file matches; manifest also unions all `.chunk_NN_files.txt` lines so every dispatched file is recorded regardless of LLM yield. |
+| `MINIMAX_API_KEY not found` despite key being set | `~/.zshrc` is interactive-only; Python subprocesses never source it | Scripts launched via Claude Code Bash tool run in non-interactive shells that skip `.zshrc`. Fix shipped in `graphify_minimax_preprocess.py`: walks full fallback chain `env → ~/.zshenv → ~/.zsh_secrets → ~/.zshrc → ~/.zprofile → ~/.bashrc → ~/.bash_profile → ~/.profile → ~/.env`. Also add `[ -f "$HOME/.zsh_secrets" ] && source "$HOME/.zsh_secrets"` to your `~/.zshenv` so secrets inherit into every subprocess automatically. |
 
 ---
 
@@ -142,6 +144,7 @@ Symptoms → fixes:
 3. **Never run concurrent operations on the cache directory.** Two graphifies at once corrupts state.
 4. **The graph.json edge key is `"links"`, not `"edges"`.** `to_json()` uses networkx `node_link_data` format. Custom scripts that read `"edges"` silently return 0 edges.
 5. **Every `--update` requires a preceding `--cache` on the prior canonicalize.** Otherwise you pay the full cost twice.
+6. **New lessons in vault Graphify Lessons Advanced.md must be mirrored here.** When any lesson is appended to the vault runbook, add a matching row to the "When the graph breaks" table or a new absolute rule in the same session before closing. This file is the public-facing equivalent of the vault lessons file.
 
 ---
 
