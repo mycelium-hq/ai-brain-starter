@@ -55,6 +55,16 @@ sync_file() {
     return 0
   fi
 
+  # Maintainer-safe guard: never follow a symlinked destination.
+  # If the installed skill path, or any parent within the install dir, is a
+  # symlink, the user is a maintainer editing the skill upstream in their own
+  # repo. Following the symlink would overwrite their private working tree
+  # with the public copy. Skip the write and record it.
+  if [ -L "$dest" ] || [ -L "$(dirname "$dest")" ] || [ -L "$(dirname "$(dirname "$dest")")" ]; then
+    SKIPPED+=("$skill_name: $(basename "$dest") (symlinked install, maintainer workflow)")
+    return 0
+  fi
+
   if [ -f "$dest" ]; then
     if cmp -s "$src" "$dest"; then
       # Identical — no-op, no noise
@@ -102,6 +112,15 @@ sync_skill_folder() {
     return 0
   fi
 
+  # Skip if the installed skill dir is a symlink. The user is managing this
+  # skill from another location (e.g. a private skills repo symlinked into
+  # ~/.claude/skills/) and writes would land in that repo, clobbering their
+  # personal customizations.
+  if [ -L "$dest_dir" ]; then
+    SKIPPED+=("$skill_name: $dest_dir is a symlink (managed elsewhere)")
+    return 0
+  fi
+
   mkdir -p "$dest_dir"
 
   # Walk every file in the source, preserving relative paths
@@ -140,6 +159,8 @@ fi
   for f in "${UPDATED[@]}"; do echo "  ~ $f"; done
   echo "Backed up: ${#BACKED_UP[@]} file(s) (local customizations preserved)"
   for f in "${BACKED_UP[@]}"; do echo "  b $f"; done
+  echo "Skipped: ${#SKIPPED[@]} skill(s)"
+  for f in "${SKIPPED[@]}"; do echo "  s $f"; done
   echo "Errors: ${#ERRORS[@]}"
   for f in "${ERRORS[@]}"; do echo "  ! $f"; done
   echo ""
