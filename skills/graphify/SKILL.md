@@ -201,6 +201,14 @@ Only dispatch subagents for files listed in `graphify-out/.graphify_uncached.txt
 
 Load files from `graphify-out/.graphify_uncached.txt`. Split into chunks of 20-25 files each. Each image gets its own chunk (vision needs separate context). When splitting, group files from the same directory together so related artifacts land in the same chunk and cross-file relationships are more likely to be extracted.
 
+**Step B1b - Recovery check (compaction guard)**
+
+Before dispatching, check if chunk files from a previous interrupted run already exist:
+```bash
+ls graphify-out/.graphify_chunk_*.json 2>/dev/null | wc -l
+```
+If files exist: print "Found N chunk files from previous run — skipping dispatch for those chunks." Skip to Step B3 to merge what's already on disk. Only re-dispatch chunks whose file is missing.
+
 **Step B2 - Dispatch ALL subagents in a single message**
 
 Call the Agent tool multiple times IN THE SAME RESPONSE - one call per chunk. This is the only way they run in parallel. If you make one Agent call, wait, then make another, you are doing it sequentially and defeating the purpose.
@@ -266,15 +274,50 @@ confidence_score is REQUIRED on every edge - never omit it, never use 0.5 as a d
 
 Output exactly this JSON (no other text):
 {"nodes":[{"id":"filestem_entityname","label":"Human Readable Name","file_type":"code|document|paper|image","source_file":"relative/path","source_location":null,"source_url":null,"captured_at":null,"author":null,"contributor":null}],"edges":[{"source":"node_id","target":"node_id","relation":"calls|implements|references|cites|conceptually_related_to|shares_data_with|semantically_similar_to|rationale_for","confidence":"EXTRACTED|INFERRED|AMBIGUOUS","confidence_score":1.0,"source_file":"relative/path","source_location":null,"weight":1.0}],"hyperedges":[{"id":"snake_case_id","label":"Human Readable Label","nodes":["node_id1","node_id2","node_id3"],"relation":"participate_in|implement|form","confidence":"EXTRACTED|INFERRED","confidence_score":0.75,"source_file":"relative/path"}],"input_tokens":0,"output_tokens":0}
+
+**After outputting the JSON, write it to disk as your final action** — this protects against data loss if the parent session undergoes context compaction before collecting results. Use the Write tool (or Bash) to save to `graphify-out/.graphify_chunk_CHUNK_NUM.json` (replace CHUNK_NUM with the actual chunk number substituted into this prompt). If the directory does not exist, create it first.
 ```
 
 **Step B3 - Collect, cache, and merge**
 
-Wait for all subagents. For each result:
-- If a subagent returned valid JSON with `nodes` and `edges`, include it and save each file's nodes/edges to the cache
-- If a subagent failed or returned invalid JSON, print a warning and skip that chunk - do not abort
+Wait for all subagents. Then collect results **from disk** (chunk files written by each subagent), not from the agent return values in memory. This is compaction-safe: if Claude compacts context between subagent completion and this step, the data is already on disk.
 
-If more than half the chunks failed, stop and tell the user.
+```bash
+$(cat graphify-out/.graphify_python) -c "
+import json
+from pathlib import Path
+
+chunk_files = sorted(Path('graphify-out').glob('.graphify_chunk_*.json'))
+all_nodes, all_edges, all_hyperedges, in_tok, out_tok = [], [], [], 0, 0
+failed = []
+
+for f in chunk_files:
+    try:
+        data = json.loads(f.read_text())
+        if 'nodes' not in data and 'edges' not in data:
+            raise ValueError('missing nodes/edges keys')
+        all_nodes.extend(data.get('nodes', []))
+        all_edges.extend(data.get('edges', []))
+        all_hyperedges.extend(data.get('hyperedges', []))
+        in_tok += data.get('input_tokens', 0)
+        out_tok += data.get('output_tokens', 0)
+    except Exception as e:
+        failed.append(f.name)
+        print(f'Warning: skipping {f.name}: {e}')
+
+if failed:
+    print(f'Failed chunks ({len(failed)}): {failed}')
+if len(failed) > len(chunk_files) // 2:
+    raise SystemExit('More than half the chunks failed. Stopping.')
+
+result = {'nodes': all_nodes, 'edges': all_edges, 'hyperedges': all_hyperedges,
+          'input_tokens': in_tok, 'output_tokens': out_tok}
+Path('graphify-out/.graphify_semantic_new.json').write_text(json.dumps(result))
+print(f'Collected {len(all_nodes)} nodes, {len(all_edges)} edges from {len(chunk_files)} chunks ({len(failed)} failed)')
+"
+```
+
+If more than half the chunks have no file on disk (subagent never wrote), stop and tell the user.
 
 Save new results to cache:
 ```bash
@@ -320,7 +363,7 @@ Path('graphify-out/.graphify_semantic.json').write_text(json.dumps(merged, inden
 print(f'Extraction complete - {len(deduped)} nodes, {len(all_edges)} edges ({len(cached[\"nodes\"])} from cache, {len(new.get(\"nodes\",[]))} new)')
 "
 ```
-Clean up temp files: `rm -f graphify-out/.graphify_cached.json graphify-out/.graphify_uncached.txt graphify-out/.graphify_semantic_new.json`
+Clean up temp files: `rm -f graphify-out/.graphify_cached.json graphify-out/.graphify_uncached.txt graphify-out/.graphify_semantic_new.json graphify-out/.graphify_chunk_*.json`
 
 #### Part C - Merge AST + semantic into final extraction
 
