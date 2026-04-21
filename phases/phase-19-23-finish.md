@@ -314,19 +314,19 @@ Install is done. This is the handoff from "installed" to "used." Close the loop 
 Tell the user, in the language they chose in Phase 1:
 
 **English:**
-> "Well done. The vault is ready, and honestly, that's the part most people never finish.
+> "Well done. Vault is ready.
 >
-> What happens in the first week is what shifts it from an installed thing into a working one. Here's a short companion piece on the three commands and one habit that make the difference:
+> A short read on what to do in your first week, three commands and one habit:
 >
 > - English: https://adelaidadiazroa.substack.com/p/your-first-week-with-your-second
 > - Español: https://perspectivasblog.substack.com/p/tu-primera-semana-con-tu-segundo
 >
-> Read it tonight. Run the first thing tomorrow."
+> Read tonight. Run the first thing tomorrow."
 
 **Español:**
-> "Bien hecho. El vault está listo, y la verdad, esa es la parte que la mayoría nunca termina.
+> "Bien hecho. El vault está listo.
 >
-> Lo que pasa en la primera semana es lo que lo convierte de una cosa instalada en algo que realmente funciona. Aquí un artículo corto sobre los tres comandos y el hábito que hacen la diferencia:
+> Un artículo corto sobre qué hacer la primera semana: tres comandos y un hábito.
 >
 > - English: https://adelaidadiazroa.substack.com/p/your-first-week-with-your-second
 > - Español: https://perspectivasblog.substack.com/p/tu-primera-semana-con-tu-segundo
