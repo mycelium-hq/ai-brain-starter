@@ -1,31 +1,50 @@
 # AI Brain Starter
 
-**The operating system for Claude Code.**
-
-One paste installs it. One conversation configures it. Every session after that compounds.
+**The operating system for founders running a company and a life.**
 
 ---
 
-## The Problem
+## Sunday, 11:47 PM
 
-Claude Code is powerful out of the box. But every session starts from zero. It doesn't know who you are, what you're working on, what you decided last week, or what patterns you keep repeating. You re-explain context. You lose insights to chat transcripts. You get generic answers when you need specific ones.
+47 unread threads in your inbox. Three of them are investors you promised to get back to this week. The meeting you had Tuesday is already blurry. Three contractors are waiting for briefs you half-wrote. Your journal streak broke fourteen days ago. You don't actually remember what you decided about Q3 pricing, who owns the partnership conversation, or whether you followed up with the angel who said "let's talk next week" six weeks ago.
 
-This system fixes that.
+You open ChatGPT. You start re-explaining who you are, what you're raising, and what you decided last month. Again. For the fifth time this week.
 
-## What This Actually Is
+**This is the operating system that stops that loop.**
 
-AI Brain Starter turns Claude Code into a persistent, opinionated collaborator that accumulates real understanding of your life and work over time. It is not a note-taking template. It is a full behavioral layer:
+## They say entrepreneurship is the greatest growth school
+
+It is. The problem is the school forgets everything you learn the moment you walk out of the classroom.
+
+This accelerates the growth and cuts the mistakes. That acceleration comes from two things most AI tools for founders don't give you:
+
+- **Inner knowledge.** A daily journal with an advisory panel of 90+ real voices (Naval, Brene Brown, Hormozi, Buffett, your own custom advisors) that track your emotional patterns, catch your blind spots, and surface the avoidance behaviors you cannot see from the inside.
+- **Honest feedback.** Fifteen accountability rules baked into every session. Claude corrects you when you are wrong, calls out avoidance, checks your ego, and reminds you who you said you wanted to be. Not a yes-machine. A thinking partner.
+
+Plus everything that makes a founder's week compound instead of reset:
 
 - **Memory that compounds** — Claude reads your context file (CLAUDE.md) every session. Corrections stick. Preferences persist. You never re-explain yourself.
 - **Session lifecycle hooks** — every session start loads your last context and current priorities. Every session end captures decisions, insights, ideas, and to-dos to the right files. Nothing stays trapped in a chat transcript.
-- **A daily journal that pushes back** — not a diary prompt. A structured interview with an advisory panel of 90+ real voices (Naval, Brene Brown, Hormozi, Buffett, your own custom advisors) that challenge your thinking, catch your blind spots, and track your emotional patterns over time.
-- **Knowledge graphs** — Graphify turns your entire vault into a queryable graph. Claude answers "what does my vault say about X?" from structured data instead of grepping thousands of files.
-- **Pattern recognition** — weekly and monthly insight reports surface trends you can't see from inside a single day: recurring emotional states, decision patterns, avoidance behaviors, wins you forgot to celebrate.
+- **Knowledge graphs** — Graphify turns your entire vault into a queryable graph. Claude answers "what did I decide about pricing in February?" from structured data instead of grepping thousands of files.
+- **Pattern recognition** — weekly and monthly insight reports surface what you avoided, what stalled, what you promised and did not deliver. Your system catches the founder-shame loop before it catches you.
 - **First-principles analysis** — the /deconstruct skill auto-triggers on high-stakes decisions. Surfaces hidden assumptions, finds foundational truths, rebuilds from scratch.
 - **Writing that sounds like you, not AI** — the Humanizer (v3.0.0) strips AI patterns and rewrites in your actual voice, statistically anchored to your own writing corpus. Run `/humanizer --diff` to score how close any draft is to your voice before publishing.
-- **Accountability rules** — Claude is not a yes-machine. It corrects you, checks your ego, calls out avoidance, and reminds you who you said you wanted to be.
 
-The whole system ships as one install command, works for non-technical users, and auto-updates itself.
+The whole system ships as one install command, works for non-technical founders, and auto-updates itself.
+
+---
+
+## What a Monday looks like after the system is installed
+
+**7:04 AM.** You run `/journal`. The panel names the investor email you have been avoiding for three days. Brene Brown asks what you are afraid they will say. You write two sentences to yourself, then draft the reply in ten minutes.
+
+**11:20 AM.** A one-hour meeting ends. You drop the transcript in. The system files it, tags participants, extracts five action items, routes each one to the right owner by role, and drafts the follow-up message for you to review. Thirty-five minutes of post-meeting work compressed to two.
+
+**3:00 PM.** You write a one-liner for a contractor. A hook blocks the save: missing the four required fields (source, location, shape, channel). You rewrite the task in ninety seconds. She ships in one pass. You save a $500 week.
+
+**Sunday, 9:00 PM.** The weekly ritual runs. Fourteen-day open loops surface in one view: the investor promise you forgot, the hiring decision you postponed, the board update you told yourself you would send Tuesday. You clear three. You consciously defer two. You stop carrying the invisible weight of the last two.
+
+Monday starts with context, not amnesia.
 
 ---
 
@@ -187,11 +206,14 @@ Every CLAUDE.md created by this system includes these rules. Claude is a thinkin
 
 ## Who This Is For
 
+Built for founders. The people running a company and a life, carrying a dozen contexts at once, losing the thread between investor calls, contractor handoffs, board updates, and the actual work. If that is you, the rest of this list is people the system also fits, but you are the bullseye.
+
+- **Founders** running a company and a life, tired of re-explaining context to AI every session and losing decisions to chat transcripts
+- **Operators, Chiefs of Staff, co-founders** carrying the context for a founder who is too busy to carry it themselves
 - **Claude Code power users** who want every session to build on the last one
-- **Founders** running a company and a life and tired of re-explaining context to AI
 - **Writers** with years of notes scattered everywhere who want them connected and queryable
-- **Anyone who journals** (or wants to) and wants an AI that actually remembers what you said
-- **Teams** who want a shared knowledge system with personal vaults that stay private
+- **Anyone who journals** (or wants to) and wants an AI that remembers what you said, challenges you, and surfaces your patterns
+- **Teams** who want a shared knowledge system with personal vaults that stay private. See [for-teams/](for-teams/) for what changes when more than one person uses the vault.
 - **Non-technical people** — the entire setup is a conversation, not a config file
 
 ---
@@ -220,6 +242,16 @@ Every CLAUDE.md created by this system includes these rules. Claude is a thinkin
 This system was built by [Adelaida Diaz-Roa](https://adelaidadiazroa.substack.com), founder of [Onde](https://www.planwithonde.com), across weeks of intensive optimization with Claude Code. 5,000+ notes, 12 years of journals, two books in progress, a startup to raise for, all connected, compressed, and navigable.
 
 Read the full story: [How I Built a Second Brain That Actually Works With AI](https://adelaidadiazroa.substack.com/p/how-i-built-a-second-brain-that-actually)
+
+---
+
+## Working with me
+
+The repo is free. The full custom setup is not.
+
+I install the full version for a small number of founders and teams each quarter. 2-hour deep-dive, custom vault architecture, knowledge graph densification across your existing notes, MCP integrations with your actual stack, one week of async training. Packages and pricing: [for-teams/working-with-me.md](for-teams/working-with-me.md).
+
+Free 20-minute AI diagnostic at [diazroa.com](https://diazroa.com) if you want to see whether it is a fit before a package conversation. No pitch deck, no follow-up sequence. I audit your workflow live and tell you where you are losing time to work AI should be doing. If it is a fit, we talk packages. If it is not, you keep the audit and we part as friends.
 
 ---
 
