@@ -1,5 +1,7 @@
 # For Teams
 
+*En español: [para-equipos/README.md](../para-equipos/README.md)*
+
 The rest of this repo is written for individuals. One person, one vault, one brain that compounds.
 
 This folder is for teams. Co-founders, operating partners, Chiefs of Staff, small-company execs who read the root README and wondered what the system looks like when more than one person uses it.
