@@ -1,0 +1,184 @@
+#!/bin/bash
+# vault-safe-commit.sh — safe targeted commit for a large Obsidian vault.
+#
+# Solves lock-conflict and index-corruption problems from leaked git processes
+# and concurrent Claude sessions all competing for .git/index.lock.
+#
+# Usage:
+#   VAULT_ROOT="/path/to/vault" vault-safe-commit.sh [--kill-leaked] "commit message" path1 path2 ...
+#
+# Configuration:
+#   VAULT_ROOT   Absolute path to the vault. Required.
+#
+# Flags:
+#   --kill-leaked   Kill leaked git-status/diff children of Claude.app
+#                   before attempting the commit. Use when you know
+#                   Claude.app is actively polling this vault.
+#
+# Refuses: -A, --all, ., * as paths; empty path list; missing message.
+#
+# Lock safety:
+#   1. If lock is 0 bytes AND no real write process running: stale, remove.
+#   2. If lock is non-empty: read PID inside, check kill -0 $pid. If dead:
+#      stale, remove. If alive: real write, wait.
+#   3. Wait up to MAX_WAIT_SECONDS, then fail loudly.
+#
+# Vault-wide mutex: uses /tmp/vault-commit-<hash>.lock to serialize
+# concurrent vault-safe-commit.sh invocations. Prevents two sessions from
+# racing each other even if the index.lock check passes.
+
+set -euo pipefail
+
+if [ -z "${VAULT_ROOT:-}" ]; then
+    echo "vault-safe-commit: VAULT_ROOT env var not set" >&2
+    exit 1
+fi
+
+LOCK_FILE="${VAULT_ROOT}/.git/index.lock"
+LOG_FILE="${VAULT_ROOT}/.vault-snapshot.log"
+MAX_WAIT_SECONDS=60
+VAULT_MUTEX="/tmp/vault-commit-$(echo "${VAULT_ROOT}" | md5 2>/dev/null | cut -c1-8 || echo "${VAULT_ROOT}" | md5sum | cut -c1-8).lock"
+GIT_BIN=$(command -v git)
+
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') | $1" >> "${LOG_FILE}"
+}
+
+die() {
+    log "FAIL: $1"
+    echo "vault-safe-commit: $1" >&2
+    exit 1
+}
+
+# --- parse --kill-leaked flag ---
+KILL_LEAKED=0
+if [ "${1:-}" = "--kill-leaked" ]; then
+    KILL_LEAKED=1
+    shift
+fi
+
+# --- argument validation ---
+if [ $# -lt 2 ]; then
+    die "usage: vault-safe-commit.sh [--kill-leaked] \"message\" path1 [path2 ...]"
+fi
+
+MESSAGE="$1"
+shift
+PATHS=("$@")
+
+if [ -z "${MESSAGE}" ]; then
+    die "commit message is empty"
+fi
+
+for p in "${PATHS[@]}"; do
+    case "$p" in
+        -A|--all|.|\*)
+            die "refusing path '${p}' — vault rule forbids unscoped staging"
+            ;;
+    esac
+done
+
+cd "${VAULT_ROOT}"
+
+# --- kill leaked Claude.app git children (optional, macOS) ---
+if [ "${KILL_LEAKED}" = "1" ]; then
+    CLAUDE_PID=$(pgrep -f "Claude.app/Contents/MacOS/Claude" 2>/dev/null | head -1 || true)
+    if [ -n "${CLAUDE_PID}" ]; then
+        pkill -P "${CLAUDE_PID}" -f "git " 2>/dev/null && \
+            log "killed leaked git children of Claude.app PID ${CLAUDE_PID}" || \
+            log "--kill-leaked: no children matched (ok)"
+    fi
+fi
+
+# --- vault-wide mutex: serialize concurrent invocations ---
+_MUTEX_ACQUIRED=0
+cleanup_mutex() {
+    if [ "${_MUTEX_ACQUIRED}" = "1" ]; then
+        rm -f "${VAULT_MUTEX}"
+    fi
+}
+trap cleanup_mutex EXIT
+
+mutex_wait=0
+while ! (set -C; echo "$$" > "${VAULT_MUTEX}") 2>/dev/null; do
+    if [ "${mutex_wait}" = "0" ]; then
+        log "waiting for vault mutex (another vault-safe-commit is running)"
+        echo "vault-safe-commit: waiting for vault mutex..." >&2
+    fi
+    sleep 2
+    mutex_wait=$((mutex_wait + 2))
+    if [ "${mutex_wait}" -ge "${MAX_WAIT_SECONDS}" ]; then
+        die "vault mutex held for ${MAX_WAIT_SECONDS}s — investigate ${VAULT_MUTEX}"
+    fi
+done
+_MUTEX_ACQUIRED=1
+log "acquired vault mutex ($$)"
+
+# --- is_real_write_process: check if any ACTUAL git binary write is running ---
+is_real_write_process() {
+    ps -ax -o pid,command 2>/dev/null \
+        | grep -E "^\s*[0-9]+ .*${GIT_BIN}.*(add|commit|checkout|reset|merge|rebase)" \
+        | grep -v grep \
+        | wc -l | tr -d ' '
+}
+
+# --- lock safety check loop ---
+waited=0
+while [ -e "${LOCK_FILE}" ]; do
+    lock_size=$(stat -f%z "${LOCK_FILE}" 2>/dev/null || stat -c%s "${LOCK_FILE}" 2>/dev/null || echo "999")
+    write_procs=$(is_real_write_process)
+
+    stale=0
+
+    if [ "${lock_size}" = "0" ] && [ "${write_procs}" = "0" ]; then
+        stale=1
+    elif [ "${lock_size}" != "0" ] && [ "${write_procs}" = "0" ]; then
+        lock_pid=$(cat "${LOCK_FILE}" 2>/dev/null | tr -d '[:space:]' || echo "")
+        if [ -n "${lock_pid}" ] && [[ "${lock_pid}" =~ ^[0-9]+$ ]]; then
+            if ! kill -0 "${lock_pid}" 2>/dev/null; then
+                log "stale non-empty lock: PID ${lock_pid} is dead — removing"
+                stale=1
+            fi
+        else
+            lock_age=$(( $(date +%s) - $(stat -f%m "${LOCK_FILE}" 2>/dev/null || stat -c%Y "${LOCK_FILE}" 2>/dev/null || date +%s) ))
+            if [ "${lock_age}" -gt 60 ]; then
+                log "stale non-empty lock (non-PID content, ${lock_age}s old) — removing"
+                stale=1
+            fi
+        fi
+    fi
+
+    if [ "${stale}" = "1" ]; then
+        rm -f "${LOCK_FILE}"
+        break
+    fi
+
+    if [ "${waited}" -ge "${MAX_WAIT_SECONDS}" ]; then
+        die "lock held for ${MAX_WAIT_SECONDS}s (size=${lock_size}, write_procs=${write_procs}). Investigate before retry."
+    fi
+
+    if [ "${waited}" = "0" ]; then
+        echo "vault-safe-commit: lock held (size=${lock_size}, write_procs=${write_procs}), waiting up to ${MAX_WAIT_SECONDS}s..." >&2
+    fi
+    sleep 3
+    waited=$((waited + 3))
+done
+
+# --- stage paths ---
+log "staging: ${PATHS[*]}"
+git add -- "${PATHS[@]}" 2>&1 | while IFS= read -r line; do
+    log "git add: ${line}"
+done
+
+# --- check there's actually something to commit ---
+if git diff --cached --quiet; then
+    log "no changes staged — skipping commit"
+    echo "vault-safe-commit: nothing to commit (staged tree matches HEAD)" >&2
+    exit 0
+fi
+
+# --- commit ---
+git commit --quiet -m "${MESSAGE}" || die "commit failed"
+COMMIT_HASH=$(git log --oneline -1 | awk '{print $1}')
+log "committed ${COMMIT_HASH}: ${MESSAGE}"
+echo "vault-safe-commit: ${COMMIT_HASH} — ${MESSAGE}"

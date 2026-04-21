@@ -6,10 +6,11 @@
 
 - [ ] `SKILL.md`
 - [ ] `README.md`
-- [ ] `CHANGELOG.md`
+- [ ] `docs/CHANGELOG.md`
+- [ ] `docs/RELEASES.md`
 - [ ] `CONTRIBUTING.md`
 - [ ] `EXAMPLES.md`
-- [ ] `migrations/`
+- [ ] `docs/migrations/`
 - [ ] Other: 
 
 ## Is this a breaking change?
@@ -18,7 +19,7 @@
 - [ ] No
 - [ ] Yes — describe what changes for existing users:
 
-## Did you update CHANGELOG.md?
+## Did you update `docs/CHANGELOG.md`?
 
 - [ ] Yes
 - [ ] Not needed (typo fix, README clarification, etc.)

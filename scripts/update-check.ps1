@@ -70,8 +70,9 @@ try {
     Write-Output "LATEST_HEAD: $((git rev-parse --short $latest).Trim())"
     Write-Output "---CHANGELOG_NEW---"
 
-    $newChangelog = git show "origin/main:CHANGELOG.md" 2>$null
-    $currentChangelogContent = if (Test-Path "CHANGELOG.md") { Get-Content "CHANGELOG.md" -Raw } else { "" }
+    $newChangelog = git show "origin/main:docs/CHANGELOG.md" 2>$null
+    if (-not $newChangelog) { $newChangelog = git show "origin/main:CHANGELOG.md" 2>$null }
+    $currentChangelogContent = if (Test-Path "docs/CHANGELOG.md") { Get-Content "docs/CHANGELOG.md" -Raw } elseif (Test-Path "CHANGELOG.md") { Get-Content "CHANGELOG.md" -Raw } else { "" }
 
     if ($newChangelog -and $currentChangelogContent) {
         $firstCurrentH2 = ($currentChangelogContent -split "`n" | Where-Object { $_ -match '^## ' } | Select-Object -First 1)

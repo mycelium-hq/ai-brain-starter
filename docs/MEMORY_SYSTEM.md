@@ -11,7 +11,7 @@ This is one of the most underrated patterns in this whole setup. CLAUDE.md is wh
 Without memory, every Claude Code session starts cold:
 
 - You correct a mistake. Next session, Claude makes the same mistake.
-- You explain that "Sergio" is your co-founder and works at the World Bank. Next session, Claude treats him as a generic team member.
+- You explain that a specific teammate is your co-founder (not a direct report). Next session, Claude treats them as a generic team member.
 - You discover that one of your scripts has a footgun. Next session, Claude steps on it again.
 - You give nuanced feedback ("don't summarize at the end of every response, I can read the diff"). Next session, Claude summarizes.
 
@@ -33,20 +33,20 @@ Inside that directory, you write **one memory file per fact**, with YAML frontma
 
 ```markdown
 ---
-name: Sergio is co-founder
-description: Sergio Perez is co-founder, not just a team member. Works at the World Bank.
+name: Teammate X is co-founder
+description: Teammate X is co-founder, not just a team member. Works at a partner institution.
 type: feedback
 ---
 
-Sergio Perez is co-founder of Onde, not just a team member. Works full-time at the World Bank
-in DC. Treat him as a peer-level decision-maker, not as a direct report.
+Teammate X is co-founder of the company, not just a team member. Works full-time at a partner
+institution. Treat them as a peer-level decision-maker, not as a direct report.
 ```
 
 Then you maintain an **index file** at `memory/MEMORY.md`:
 
 ```markdown
-- [Sergio is co-founder](feedback_sergio_role.md) — Co-founder, not team member. Works at World Bank
-- [April 11 is Andres meeting](project_apr11_meeting.md) — Raising strategy + deck feedback, NOT a World Bank pitch
+- [Teammate X is co-founder](feedback_teammate_x_role.md) — Co-founder, not team member
+- [April 11 meeting context](project_apr11_meeting.md) — Fundraising strategy, not the main pitch meeting
 - [Bilingual aliases](feedback_bilingual_aliases.md) — Spanish/English map to the same wikilink
 ```
 
@@ -153,7 +153,7 @@ The rule or fact in one sentence.
 **How to apply:** When this kicks in. What contexts to check it against.
 ```
 
-The `description` field is critical — it's what Claude scans to decide whether to load the full memory file. Vague descriptions like "stuff about Sergio" are useless. Specific descriptions like "Sergio is co-founder, not team member, works at World Bank" tell Claude exactly when to load it.
+The `description` field is critical — it's what Claude scans to decide whether to load the full memory file. Vague descriptions like "stuff about teammate X" are useless. Specific descriptions like "teammate X is co-founder, not a direct report, works at a partner institution" tell Claude exactly when to load it.
 
 ---
 
@@ -220,7 +220,7 @@ There are several persistence layers in this setup. They serve different purpose
 | Layer | Lifetime | Loaded when | Best for |
 |---|---|---|---|
 | **CLAUDE.md** | Indefinite, broad scope | Every session start | Universal rules: tone, file structure, vault conventions, accountability rules |
-| **Memory** | Indefinite, narrow scope | On-demand based on description | Specific facts: who Sergio is, why we don't mock the DB, where Linear lives |
+| **Memory** | Indefinite, narrow scope | On-demand based on description | Specific facts: who a given teammate is, why we don't mock the DB, where Linear lives |
 | **Plans** | Single conversation | When working on a multi-step implementation | Reaching alignment on approach before executing |
 | **Tasks** | Single conversation or short cycle | When tracking progress through discrete steps | In-flight work for the current session |
 

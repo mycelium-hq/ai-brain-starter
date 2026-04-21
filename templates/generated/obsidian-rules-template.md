@@ -93,9 +93,9 @@ On every session start, check if the ai-brain-starter skill has updates:
 ```bash
 cd ~/.claude/skills/ai-brain-starter && git fetch origin main --quiet 2>/dev/null && [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ] && echo "UPDATE AVAILABLE" || echo "UP TO DATE"
 ```
-If an update is available, tell the user: "There's a newer version of the AI Brain Starter skill. Want me to update? (`git pull` — takes 2 seconds)." If yes, run `git pull`, read CHANGELOG.md, and tell them what's new in plain English. If they say no, don't ask again this session.
+If an update is available, tell the user: "There's a newer version of the AI Brain Starter skill. Want me to update? (`git pull` — takes 2 seconds)." If yes, run `git pull`, read `docs/CHANGELOG.md`, and tell them what's new in plain English. If they say no, don't ask again this session.
 
-**After any pull, check for pending migrations.** Read `migrations/` for any `.md` files newer than the user's last applied version. Each migration file explains what changed and what questions to ask the existing user. Apply them conversationally — don't dump a wall of text, just ask the questions one at a time and update the user's skill files based on their answers.
+**After any pull, check for pending migrations.** Read `docs/migrations/` for any `.md` files newer than the user's last applied version. Each migration file explains what changed and what questions to ask the existing user. Apply them conversationally — don't dump a wall of text, just ask the questions one at a time and update the user's skill files based on their answers.
 
 ## Token Efficiency Rules
 

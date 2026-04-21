@@ -66,7 +66,7 @@ Check if `.claude/settings.local.json` exists in the vault. If it does, merge th
 }
 ```
 
-Also add an auto-update hook that pulls updates and applies them automatically once per session. Create or update `.claude/settings.local.json` to include a second hook:
+Also add an auto-update hook that checks GitHub for updates at most once per week (gated by a timestamp file at `~/.claude/.ai-brain-starter-last-update`). Create or update `.claude/settings.local.json` to include a second hook:
 
 ```json
 {
@@ -82,7 +82,7 @@ Also add an auto-update hook that pulls updates and applies them automatically o
           },
           {
             "type": "command",
-            "command": "cd ~/.claude/skills/ai-brain-starter 2>/dev/null && git fetch origin main --quiet 2>/dev/null && if [ \"$(git rev-parse HEAD 2>/dev/null)\" != \"$(git rev-parse origin/main 2>/dev/null)\" ]; then git pull --quiet origin main 2>/dev/null && CHANGES=$(git log --oneline HEAD@{1}..HEAD 2>/dev/null) && SYNC_OUTPUT=$(bash ~/.claude/skills/ai-brain-starter/scripts/sync-skills.sh 2>&1) && echo \"{\\\"hookSpecificOutput\\\":{\\\"hookEventName\\\":\\\"UserPromptSubmit\\\",\\\"additionalContext\\\":\\\"AI Brain Starter was auto-updated. Commits: $CHANGES. Skill sync result: $SYNC_OUTPUT. Any file that changed was backed up to <file>.bak-YYYY-MM-DD-HHMM before being overwritten — preserving local customizations. Now: 1) Read CHANGELOG.md and tell the user in 1-2 plain sentences what changed and why. 2) If the sync output lists backed-up files, mention it casually so they know their customizations are recoverable. 3) Check if hooks.json differs from .claude/settings.local.json — if so, update settings.local.json to match. Keep it casual, not a changelog dump.\\\"}}\"; else echo '{\"continue\":true,\"suppressOutput\":true}'; fi",
+            "command": "LAST=~/.claude/.ai-brain-starter-last-update; if [ ! -f \"$LAST\" ] || [ -n \"$(find \"$LAST\" -mtime +6 2>/dev/null)\" ]; then touch \"$LAST\" && cd ~/.claude/skills/ai-brain-starter 2>/dev/null && git fetch origin main --quiet 2>/dev/null && if [ \"$(git rev-parse HEAD 2>/dev/null)\" != \"$(git rev-parse origin/main 2>/dev/null)\" ]; then git pull --quiet origin main 2>/dev/null && CHANGES=$(git log --oneline HEAD@{1}..HEAD 2>/dev/null) && SYNC_OUTPUT=$(bash ~/.claude/skills/ai-brain-starter/scripts/sync-skills.sh 2>&1) && echo \"{\\\"hookSpecificOutput\\\":{\\\"hookEventName\\\":\\\"UserPromptSubmit\\\",\\\"additionalContext\\\":\\\"AI Brain Starter was auto-updated. Commits: $CHANGES. Skill sync result: $SYNC_OUTPUT. Any file that changed was backed up to <file>.bak-YYYY-MM-DD-HHMM before being overwritten — preserving local customizations. Now: 1) Read docs/CHANGELOG.md and tell the user in 1-2 plain sentences what changed and why. 2) If the sync output lists backed-up files, mention it casually so they know their customizations are recoverable. 3) Check if hooks.json differs from .claude/settings.local.json — if so, update settings.local.json to match. Keep it casual, not a changelog dump.\\\"}}\"; else echo '{\"continue\":true,\"suppressOutput\":true}'; fi; else echo '{\"continue\":true,\"suppressOutput\":true}'; fi",
             "once": true,
             "statusMessage": "Checking for skill updates..."
           }

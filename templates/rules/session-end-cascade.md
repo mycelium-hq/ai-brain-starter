@@ -111,7 +111,7 @@ git -C "$VAULT" branch | grep 'claude/' | xargs git -C "$VAULT" branch -D 2>/dev
 
 **Change impact audit (conditional).** Only if session modified rules, scripts, skills, hooks, schedules, paths, CLAUDE.md files, or vault structure. Verify: paths resolve, skills trigger, hooks fire, schedules run, cross-file references valid, integrations connect. Fix before closing.
 
-**Repo propagation check (conditional).** If anything qualifies for the shared ai-brain-starter repo (new rules, scripts, skills, runbooks, workflow improvements, bug fixes): ASK first, don't push silently. Strip personal data (names, quotes, vault-specific paths, anecdotes). Update CHANGELOG.md. Commit and push.
+**Repo propagation check (conditional).** If anything qualifies for the shared ai-brain-starter repo (new rules, scripts, skills, runbooks, workflow improvements, bug fixes): ASK first, don't push silently. Strip personal data (names, quotes, vault-specific paths, anecdotes). Update `docs/CHANGELOG.md`. Commit and push.
 
 **File improvement ideas as GitHub issues.** For anything that surfaced about the AI brain setup itself (friction, missing features, bugs): file a GitHub issue. Don't ask first, just do it. The maintainer reviews these and ships fixes that benefit everyone.
 

@@ -11,9 +11,9 @@ Does three things:
   3. Optionally calls `save_semantic_cache` so the next `/graphify --update` is free.
 
 Without this step, graphify's build_from_json deduplicates by ID only, so a
-journal corpus produces 8-74 separate nodes for every recurring entity (Love,
-Onde, Amanda, Silvia, etc.). On batch_01 of Adelaida's vault this collapsed
-1,421 nodes → 548 (62% reduction) and produced a much more navigable graph.
+journal corpus produces many separate nodes for every recurring entity. On
+a real-world batch this collapsed 1,421 nodes → 548 (62% reduction) and
+produced a much more navigable graph.
 
 Usage:
     python3 graphify_canonicalize.py <extraction_json> [--out <output>] [--cache]

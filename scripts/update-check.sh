@@ -108,8 +108,8 @@ echo "---CHANGELOG_NEW---"
 # current CHANGELOG.md (i.e. an entry they already have). Print everything
 # above that line — those are the new entries.
 
-NEW_CHANGELOG="$(git show origin/main:CHANGELOG.md 2>/dev/null || echo '')"
-CURRENT_CHANGELOG="$(cat CHANGELOG.md 2>/dev/null || echo '')"
+NEW_CHANGELOG="$(git show origin/main:docs/CHANGELOG.md 2>/dev/null || git show origin/main:CHANGELOG.md 2>/dev/null || echo '')"
+CURRENT_CHANGELOG="$(cat docs/CHANGELOG.md 2>/dev/null || cat CHANGELOG.md 2>/dev/null || echo '')"
 
 if [[ -n "$NEW_CHANGELOG" && -n "$CURRENT_CHANGELOG" ]]; then
   # Find the first H2 line in the current changelog

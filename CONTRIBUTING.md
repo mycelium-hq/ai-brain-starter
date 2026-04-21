@@ -25,7 +25,7 @@ Same thing — open an issue. Describe the problem you're trying to solve, not j
 
 **For SKILL.md changes:** The most important thing is that instructions stay prescriptive and complete. Vague instructions like "ask about habits" produce inconsistent results across different users and models. If you're changing how the skill behaves, spell out exactly what Claude should do, in what order, and with what fallbacks. See the existing phases for the right level of detail.
 
-**For CHANGELOG.md:** Add an entry in plain English explaining what changed and why it matters to the user — not what file was edited.
+**For `docs/CHANGELOG.md`:** Add an entry in plain English explaining what changed and why it matters to the user — not what file was edited. For user-facing release notes, also add a short summary to `docs/RELEASES.md`.
 
 ---
 
