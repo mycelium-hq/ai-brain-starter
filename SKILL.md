@@ -86,3 +86,23 @@ These are collected during early phases and used by later ones. Keep them in mem
 - **NEVER FAIL SILENTLY.** After every file write, verify the file exists. After every install, verify it worked. If ANYTHING fails, TELL THE USER IMMEDIATELY. Say what failed, why, and how to fix it. Then FIX IT. People are trusting this skill with their personal data.
 
 **Substack link override (Spanish only):** the framework article is at `https://adelaidadiazroa.substack.com/s/internal-design` (English). **Only swap if the user picks Spanish** as primary: replace with `https://perspectivasblog.substack.com/s/el-rascacielos` (title: "El Rascacielos, el modelo del diseño interno"). For every other language, leave the English URL.
+
+---
+
+## Visual Reassurance Protocol
+
+Non-tech users quit at first scary screen, not real failures. Pre-empt panic.
+
+Say in PRIMARY_LANGUAGE BEFORE the scary moment:
+
+| Moment | Say first |
+|---|---|
+| Terminal text flood (brew/npm/git clone) | ES: "Va a pasar mucho texto. Normal. Si tarda 2-3 min, normal. No canceles." · EN: "Lots of text incoming. Normal. 2-3 min wait normal. Don't cancel." |
+| Sudo/password prompt | ES: "Pide tu contraseña del computador. Escríbela, enter. No vas a ver los caracteres. Normal." · EN: "Asks for your computer password. Type, enter. Won't see characters. Normal." |
+| Silent pause (no progress bar) | ES: "Se ve como si nada pasara. Sí pasa. Espera 30s." · EN: "Looks frozen. Isn't. Wait 30s." |
+| Yellow/red warning text | ES: "Vas a ver amarillo o rojo. Si dice 'warning', sigue." · EN: "Yellow/red text. If it says 'warning', keep going." |
+| Claude Code permission prompt | ES: "Cuadro pide permiso. Dale 'Allow'. Soy yo." · EN: "Box asks permission. Click 'Allow'. That's me." |
+
+After scary moment passes: ES: "Listo. Sigamos." · EN: "Done. Moving on."
+
+Don't skip. Obvious to you, not to them. Single biggest non-tech conversion lever.
