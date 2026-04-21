@@ -29,6 +29,24 @@ Usage:
     --people-dir PATH     Where to create person stubs (default: 👤 CRM)
     --concepts-dir PATH   Where to create concept stubs (default: 📝 Notes)
     --dry-run             Show changes without writing files
+
+Maintenance runbook:
+    1. Always run with --dry-run first. Review the proposed insertions before
+       committing. Graph-derived labels occasionally include phrase fragments
+       that look like concepts but over-match inline text.
+    2. Hard guard: this script refuses to write path-form wikilinks
+       ([[folder/Name]]). If a label or user-supplied full name contains "/",
+       the slashes are stripped before writing. Path-form links break Obsidian's
+       alias resolution and pollute the graph.
+    3. FileNotFoundError / OSError on rglob is caught per-file. Dangling
+       references (git-deleted stubs, temp files) skip cleanly.
+    4. Pairs with graphify_wikilink_gaps.py — run gaps.py first to produce
+       WIKILINK_GAPS.md, edit to remove unwanted rows, then run this script.
+    5. If a graph node label is a multi-word phrase rather than a named concept,
+       delete it from WIKILINK_GAPS.md before applying. Phrase-title notes
+       produce aggressive matches across the vault.
+    6. Companion audit: wikilink_misfire_audit.py detects and fixes path-form
+       wikilinks if anything slips through. Run it after big apply passes.
 """
 
 import argparse
@@ -320,6 +338,18 @@ def find_contexts(vault: Path, search_term: str, max_results: int = 2) -> list[t
 
 
 def apply_wikilink(vault: Path, search_term: str, link_target: str, display: str, dry_run: bool) -> int:
+    # Hard guard: never write path-form wikilinks. They break Obsidian alias
+    # resolution and require a separate audit pass to clean up. Strip slashes
+    # from link_target and fall back to basename if a path slipped through.
+    if "/" in link_target:
+        print(f"  ⚠ path-form link_target '{link_target}' — using basename only")
+        link_target = link_target.rsplit("/", 1)[-1]
+    if "/" in search_term:
+        print(f"  ⚠ path-form search_term '{search_term}' — refusing to apply")
+        return 0
+    if "/" in display:
+        display = display.rsplit("/", 1)[-1]
+
     is_alias = link_target != display
     replacement = f"[[{link_target}|{display}]]" if is_alias else f"[[{search_term}]]"
     pattern = re.compile(r'\b' + re.escape(search_term) + r'\b', re.IGNORECASE)
@@ -354,6 +384,11 @@ def create_stub(
     concepts_dir: str,
     dry_run: bool,
 ) -> Path | None:
+    # Hard guard: note_name must not contain path separators. A "/" would
+    # silently create a subdirectory under CRM/ or Notes/ and orphan the stub.
+    if "/" in note_name:
+        print(f"  ⚠ path-form note_name '{note_name}' — using basename only")
+        note_name = note_name.rsplit("/", 1)[-1]
     is_person = ntype.lower() == "person" or (
         len(note_name.split()) >= 2
         and all(w[0].isupper() for w in note_name.split() if w)
@@ -496,6 +531,10 @@ def main() -> None:
                 ).strip()
             except (EOFError, KeyboardInterrupt):
                 full_name = ""
+            # Sanitize: reject path-form input. User may paste "👤 CRM/Diego".
+            if "/" in full_name:
+                print(f"  ⚠ '/' in full name — stripping path prefix")
+                full_name = full_name.rsplit("/", 1)[-1].strip()
             if full_name:
                 link_target = full_name
                 display = label

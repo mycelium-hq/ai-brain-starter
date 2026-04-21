@@ -12,12 +12,11 @@ Usage:
     python3 graphify_wikilink_gaps.py [options]
 
 Options:
-    --vault-root PATH       Vault root (default: current directory)
-    --graph PATH            Override graph.json path
-    --top N                 Max candidates to report (default: 30)
-    --min-degree N          Minimum connections to qualify (default: 3)
-    --output PATH           Write markdown report here (default: <graph_dir>/WIKILINK_GAPS.md)
-    --exclude LABEL [...]   Labels to skip entirely (e.g. your own name)
+    --vault-root PATH   Vault root (default: current directory)
+    --graph PATH        Override graph.json path
+    --top N             Max candidates to report (default: 30)
+    --min-degree N      Minimum connections to qualify (default: 3)
+    --output PATH       Write markdown report here (default: <graph_dir>/WIKILINK_GAPS.md)
 """
 
 import argparse
@@ -46,14 +45,14 @@ NOISE_SEPARATORS = {" - ", " → ", " > ", " :: "}
 
 WIKILINK_RE = re.compile(r'\[\[([^\]|#\n]+?)(?:\|([^\]\n]+?))?\]\]')
 
-# Labels to always exclude — set via --exclude or populated at runtime from args
-EXCLUDED_LABELS: set[str] = set()
+# Author's own name — never a wikilink candidate in a personal vault
+AUTHOR_NAMES = {"Adelaida", "Adelaida Diaz-Roa", "Adelaida Díaz-Roa"}
 
 
 def is_wikilink_candidate(label: str, ntype: str) -> bool:
     """Return True if this graph node looks like a genuine wikilink candidate."""
-    # User-supplied exclusions (e.g. vault author's own name)
-    if label in EXCLUDED_LABELS or label.lower() in {e.lower() for e in EXCLUDED_LABELS}:
+    # Skip author's own name
+    if label in AUTHOR_NAMES:
         return False
 
     # Skip file-type nodes
@@ -62,6 +61,11 @@ def is_wikilink_candidate(label: str, ntype: str) -> bool:
 
     # Too long to be a wikilink
     if len(label) > 55:
+        return False
+
+    # Path-form labels ([[folder/Name]]) are never valid — they break Obsidian
+    # alias resolution. If the graph produced one, skip it.
+    if "/" in label:
         return False
 
     words = label.split()
@@ -175,12 +179,7 @@ def main() -> None:
     parser.add_argument("--top", type=int, default=30, metavar="N")
     parser.add_argument("--min-degree", type=int, default=3, metavar="N")
     parser.add_argument("--output", default=None, metavar="PATH")
-    parser.add_argument(
-        "--exclude", nargs="+", default=[], metavar="LABEL",
-        help="Labels to exclude from candidates (e.g. your own name: --exclude 'Jane Doe' 'Jane')"
-    )
     args = parser.parse_args()
-    EXCLUDED_LABELS.update(args.exclude)
 
     vault = Path(args.vault_root).resolve()
     graph_path = find_graph(vault, args.graph)

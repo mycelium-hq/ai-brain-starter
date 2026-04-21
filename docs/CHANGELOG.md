@@ -9,6 +9,26 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-21 — graphify wikilink hard guards
+
+**Who this affects:** anyone who uses `scripts/graphify_apply_wikilinks.py` to apply graph-derived wikilinks. Tightens the script against path-form wikilink leaks, mirroring the hardening just shipped in `auto-wikilink.py`.
+
+**What changed:**
+
+1. **Hard guard in `apply_wikilink()`** — if `link_target`, `search_term`, or `display` contains a `/`, the script strips the path prefix or refuses to apply. Prevents path-form links like `[[folder/Name]]` from ever reaching the vault.
+
+2. **User input sanitization** — at the first-name disambiguation prompt, pasted path-form input (`👤 CRM/Diego`) is stripped to the basename before use. You can no longer accidentally write a path-form alias by pasting a full vault path.
+
+3. **Hard guard in `create_stub()`** — `note_name` with `/` is sanitized to basename. Stops stubs from being created as orphaned subdirectory children of CRM/ or Notes/.
+
+4. **Defense in depth in `graphify_wikilink_gaps.py`** — graph labels containing `/` are filtered out during candidate collection so the apply script never sees them.
+
+5. **Maintenance runbook** added to the docstring — dry-run first, path-form guard behavior, FileNotFoundError handling, pairing with `graphify_wikilink_gaps.py`, and pointer to `wikilink_misfire_audit.py` for cleanup.
+
+**Why:** the v1 `auto-wikilink.py` bug (writing `[[folder/Name]]` across thousands of files) was discoverable only after a full vault audit. The graphify apply script had the same structural vulnerability — no hard guard, no input sanitization — even though the graph rarely produces path-form labels. This patch closes that gap before it causes the same mess.
+
+---
+
 ## 2026-04-21 — wikilink misfire audit + auto-wikilink patch
 
 **Who this affects:** anyone who ran `auto-wikilink.py` before v2 (the v1 script wrote `[[folder/Name]]` path-form wikilinks instead of bare `[[Name]]` wikilinks — every vault that ever ran v1 has these).
