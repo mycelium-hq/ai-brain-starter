@@ -211,3 +211,28 @@ goal:
     - goal_deadline_iso
     - goal_sub_goals            # wikilinks
     - goal_blockers
+
+# ── Tier 4: discovered during vault audit ──────────────────────────
+
+playbook:
+  folder_hint: "💼 AI Consulting, 🚀 Onde Team"
+  fields:
+    - playbook_owner            # "Pao", "Beverly", team member
+    - playbook_channel          # Apollo, LinkedIn, email
+    - playbook_source           # where leads come from
+    - playbook_location         # where output lives
+    - playbook_shape            # sequence|one-off|bulk
+
+asset:
+  folder_hint: "💼 AI Consulting/🎨 Brand, 🚀 Onde Team/🎨 Brand"
+  fields:
+    - asset_kind                # logo|brand_kit|template|image|deck|copy
+    - asset_last_updated_iso
+    - asset_status
+
+reference:
+  folder_hint: "⚙️ Meta/rules, 📝 Notes, anywhere cheat-sheets live"
+  fields:
+    - reference_topic
+    - reference_last_updated_iso
+    - reference_related         # wikilinks to related docs
