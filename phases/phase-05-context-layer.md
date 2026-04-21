@@ -134,7 +134,7 @@ cp ~/.claude/skills/ai-brain-starter/hooks/validate-mcp-json.py ~/.claude/hooks/
 cp ~/.claude/skills/ai-brain-starter/hooks/retry-budget.py ~/.claude/hooks/
 ```
 
-Each hook file documents its own matcher and the `hookEventName` it expects. Do not install all four blindly — read each file first.
+Each hook file documents its own matcher and the `hookEventName` it expects. Do not install all five blindly — read each file first.
 
 Tell them: "Done. From now on, the first thing I do every session is read your files — automatically, before I say anything. And whenever you ask something strategic, I'll pull your current priorities and open items into context before I respond. If there's an update to the skill, I'll pull it and apply it automatically — you'll just see a quick note about what changed."
 
