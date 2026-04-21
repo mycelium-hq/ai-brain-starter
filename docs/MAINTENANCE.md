@@ -46,7 +46,7 @@ Set these up as Claude Code scheduled tasks for hands-off maintenance:
 ### Quarterly Vault Audit (optional)
 - **Schedule:** 1st of Jan/Apr/Jul/Oct, 10am
 - **Cron:** `0 10 1 1,4,7,10 *`
-- **Prompt:** "Run a full vault health audit. Check file counts per folder, folders over 500 files, frontmatter consistency, and wikilink health. Write findings to Meta/."
+- **Prompt:** See [QUARTERLY-RUNBOOK.md](QUARTERLY-RUNBOOK.md) — a 10-step runbook that refreshes About Me, vault map counts, domain summaries, CRM spot checks, wikilink reference, and trend files. Goes deeper than the monthly scan. Paste the runbook body into your scheduled task prompt.
 
 ### Weekly Graphify Backup Rotation (recommended if using graphify)
 - **Schedule:** Sundays, 3am
