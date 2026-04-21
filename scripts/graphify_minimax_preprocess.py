@@ -73,21 +73,49 @@ Rules:
 
 
 def get_api_key():
+    """Resolve MINIMAX_API_KEY from the environment, with a fallback grep
+    across common shell config files.
+
+    Why the full fallback chain: ~/.zshrc is interactive-only. Scripts launched
+    by IDE agents or CI runners run under a non-interactive shell that never
+    sources .zshrc, so a key defined only there is invisible. Users commonly
+    keep secrets in ~/.zsh_secrets or ~/.zshenv (which every shell sources).
+    Walking all of them makes the script Just Work without requiring users to
+    reshape their dotfiles.
+    """
     key = os.environ.get("MINIMAX_API_KEY")
     if not key:
-        try:
-            result = subprocess.run(
-                ["grep", "^export MINIMAX_API_KEY=", os.path.expanduser("~/.zshrc")],
-                capture_output=True, text=True
-            )
-            for line in result.stdout.strip().splitlines():
-                if '"' in line:
-                    key = line.split('"')[1]
+        candidates = [
+            "~/.zshenv", "~/.zsh_secrets", "~/.zshrc", "~/.zprofile",
+            "~/.bashrc", "~/.bash_profile", "~/.profile", "~/.env",
+        ]
+        for path in candidates:
+            full = os.path.expanduser(path)
+            if not os.path.exists(full):
+                continue
+            try:
+                result = subprocess.run(
+                    ["grep", "^export MINIMAX_API_KEY=", full],
+                    capture_output=True, text=True
+                )
+                for line in result.stdout.strip().splitlines():
+                    if '"' in line:
+                        key = line.split('"')[1]
+                        break
+                    if "=" in line:
+                        key = line.split("=", 1)[1].strip().strip("'").strip('"')
+                        break
+                if key:
                     break
-        except Exception:
-            pass
+            except Exception:
+                pass
     if not key:
-        print("Error: MINIMAX_API_KEY not found in environment or ~/.zshrc", file=sys.stderr)
+        print(
+            "Error: MINIMAX_API_KEY not found in environment or any of "
+            "~/.zshenv, ~/.zsh_secrets, ~/.zshrc, ~/.zprofile, ~/.bashrc, "
+            "~/.bash_profile, ~/.profile, ~/.env",
+            file=sys.stderr,
+        )
         sys.exit(1)
     return key
 

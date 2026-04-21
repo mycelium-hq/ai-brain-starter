@@ -484,37 +484,102 @@ def main():
         print(f"  WARN: cache save failed: {e}")
 
     # Lesson #93: update the extraction manifest so future select runs can
-    # short-circuit on file mtime instead of SHA. One entry per source_file
-    # that appears in this stage's canonical nodes/edges/hyperedges.
+    # short-circuit on file mtime instead of SHA.
+    #
+    # Lesson #106 (2026-04-21): record EVERY file sent to the stage (from
+    # .chunk_NN_files.txt), not just files whose LLM outputs produced canonical
+    # nodes/edges. Files covered only by preflight-wikilink edges (no LLM-new
+    # items) were silently missed, so coverage audits kept flagging them as
+    # MISSING on subsequent runs.
+    #
+    # Lesson #106b: source_file on chunk items can be the STAGED path
+    # (graphify-input/flattened_name.md). That path does not resolve to a real
+    # file after cleanup. Unflatten to the original vault path by trying each
+    # `_` → `/` combination against the actual filesystem.
     try:
         manifest_path = (VAULT / base / "extraction_manifest.json").resolve()
         manifest = {"version": 1, "entries": {}}
         if manifest_path.exists():
             try:
                 manifest = json.loads(manifest_path.read_text())
+                if "entries" not in manifest:
+                    manifest = {"version": 1, "entries": {}}
             except Exception:
                 manifest = {"version": 1, "entries": {}}
 
         now = time.time()
-        files_in_stage = set()
+
+        def resolve_source_file(sf):
+            """Map source_file (possibly staged/flattened) to an absolute vault
+            path. Returns Path or None."""
+            if not sf or not isinstance(sf, str):
+                return None
+            p = (VAULT / sf).resolve() if not Path(sf).is_absolute() else Path(sf).resolve()
+            if p.is_file():
+                return p
+            stripped = sf
+            for prefix in ("graphify-input/",):
+                if stripped.startswith(prefix):
+                    stripped = stripped[len(prefix):]
+                    break
+            parts = stripped.split("_")
+            if len(parts) > 1:
+                from itertools import combinations
+                for k in range(1, len(parts)):
+                    for slash_positions in combinations(range(1, len(parts)), k):
+                        segs = []
+                        cur = []
+                        for i, piece in enumerate(parts):
+                            cur.append(piece)
+                            if i + 1 in slash_positions:
+                                segs.append("_".join(cur))
+                                cur = []
+                        segs.append("_".join(cur))
+                        cand = VAULT / "/".join(segs)
+                        if cand.is_file():
+                            return cand.resolve()
+            return None
+
+        staged_source_files = set()
         for item_list in [canon["nodes"], canon["edges"], canon.get("hyperedges") or []]:
             for item in item_list:
                 sf = item.get("source_file")
-                if not sf or not isinstance(sf, str):
-                    continue
-                # Resolve to absolute path. source_file is relative to VAULT.
-                p = (VAULT / sf).resolve() if not Path(sf).is_absolute() else Path(sf).resolve()
-                if p.is_file():
-                    files_in_stage.add(str(p))
+                if sf and isinstance(sf, str):
+                    staged_source_files.add(sf)
 
-        node_counts = Counter(
-            str((VAULT / n["source_file"]).resolve()) if n.get("source_file") and not Path(n["source_file"]).is_absolute()
-            else str(Path(n.get("source_file", "")).resolve()) if n.get("source_file")
-            else ""
-            for n in canon["nodes"]
+        node_counts_by_staged = Counter(
+            n.get("source_file", "") for n in canon["nodes"] if n.get("source_file")
         )
 
-        for abs_path in files_in_stage:
+        # Also read chunk input lists so preflight-only files get manifest entries.
+        stage_input_files = set()
+        chunk_prefix = args.chunk_prefix
+        for i in range(1, args.num_chunks + 1):
+            list_path = Path(f"{chunk_prefix}{i:02d}_files.txt")
+            if not list_path.is_file():
+                continue
+            for line in list_path.read_text().splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                stage_input_files.add(line)
+
+        all_refs = staged_source_files | stage_input_files
+
+        files_in_stage = {}
+        unresolved = []
+        for sf in all_refs:
+            abs_p = resolve_source_file(sf)
+            if abs_p:
+                prev_sf = files_in_stage.get(str(abs_p))
+                if sf in staged_source_files and (prev_sf is None or prev_sf not in staged_source_files):
+                    files_in_stage[str(abs_p)] = sf
+                elif prev_sf is None:
+                    files_in_stage[str(abs_p)] = sf
+            else:
+                unresolved.append(sf)
+
+        for abs_path, staged_sf in files_in_stage.items():
             try:
                 content = Path(abs_path).read_bytes()
                 sha = hashlib.sha256(content + b"\x00" + abs_path.encode()).hexdigest()
@@ -523,12 +588,16 @@ def main():
             manifest["entries"][abs_path] = {
                 "llm_time": now,
                 "sha": sha,
-                "node_count": node_counts.get(abs_path, 0),
+                "node_count": node_counts_by_staged.get(staged_sf or "", 0),
                 "stage": args.stage_name,
             }
 
-        manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
         print(f"  manifest updated: {len(files_in_stage)} files recorded in {manifest_path}")
+        if unresolved:
+            print(f"  WARN: {len(unresolved)} source_file refs could not be resolved to vault paths:")
+            for sf in list(unresolved)[:5]:
+                print(f"    {sf}")
     except Exception as e:
         print(f"  WARN: manifest update failed: {e}")
 

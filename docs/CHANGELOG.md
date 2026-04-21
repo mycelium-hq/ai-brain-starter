@@ -9,6 +9,28 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-21 -- graphify: two silent-failure bugs fixed
+
+**Who this affects:** anyone running `/graphify` with MiniMax pre-extract enabled, anyone running graphify stages on a vault with nested folder structure (journals, writing, notes with subfolders), or anyone who has ever looked at the `extraction_manifest.json` and found it under-counting what was actually processed.
+
+**What changed:**
+
+1. `scripts/graphify_minimax_preprocess.py` now walks the full shell-config fallback chain to find `MINIMAX_API_KEY` — `~/.zshenv`, `~/.zsh_secrets`, `~/.zshrc`, `~/.zprofile`, `~/.bashrc`, `~/.bash_profile`, `~/.profile`, `~/.env`. Previously it only grepped `~/.zshrc` and failed silently for users whose keys lived anywhere else.
+
+2. `scripts/graphify_stage_finish.py` now records a manifest entry for every file sent to a stage, not just files that produced LLM-novel canonical nodes. It also unflattens staged `graphify-input/A_B_C.md` source-file references back to their original nested paths by trying each `_` → `/` combination against the real filesystem.
+
+**Why #1:** `~/.zshrc` is an *interactive* shell config. Scripts launched by IDE agents or subprocesses run under a non-interactive shell that never sources `.zshrc`, so a key defined only there is invisible. Users commonly keep API keys in `~/.zsh_secrets` (private, sourced from `.zshenv`) or directly in `.zshenv`. The old fallback missed both of those cases. The error was silent and expensive — the script errored out mid-pipeline, the stage ran without the cheap pre-extract, and the main model burned more tokens than it should have.
+
+**Why #2:** When you stage files for a graphify chunk, the script flattens the nested path into a single filename (`✍️ Writing/High-Rise/Floor.md` → `✍️ Writing_High-Rise_Floor.md`) so every file lives in one directory. Subagents then set `source_file` on every node they produce to this flattened staged path. After the run, `graphify_stage_finish.py` was trying to map those staged paths back to the real vault file to record a manifest entry — but it only tried the direct path, which no longer exists once staging is cleaned up. The staged path stopped resolving, `is_file()` returned False silently, and the manifest recorded zero entries despite 100% of the stage succeeding. Next coverage audit would then report every one of those files as "MISSING" and re-run them.
+
+Separately, the manifest only pulled entries from canonical nodes/edges. Files whose content was already covered by the regex-preflight wikilink pass never produced any *new* LLM items, so they never appeared in canon and never got a manifest entry — even though the agent read them and decided they didn't need additional inference. Those files also kept showing up as "MISSING" forever.
+
+**What you'll see:** `manifest updated: N files recorded` where N matches the number of files you actually sent to the stage. Previously it could print `0 files recorded` on a stage that processed dozens of files successfully. If the resolver can't map some source files back, you'll get a `WARN:` line naming the first five unresolved refs.
+
+**Who should update:** everyone running graphify stages regularly. The bugs compound over time — every stage with missing manifest entries adds noise to future coverage audits and causes unnecessary re-runs.
+
+---
+
 ## 2026-04-20 -- skill sync skips skills with their own .git
 
 **Who this affects:** anyone who has put a bundled skill (like `humanizer`) under independent version control after installing it. Most commonly: forking a skill on GitHub and tracking your changes there.
