@@ -43,7 +43,7 @@ journal:
     - date_iso             # YYYY-MM-DD from creationDate
   example_query: |
     TABLE date_iso, floor_num, smart_excerpt
-    WHERE contains(people_mentioned, "Silvia Diaz-Roa") AND floor_num <= 6
+    WHERE contains(people_mentioned, "Sarah Smith") AND floor_num <= 6
 
 book:
   folder_hint: "📝 Notes/📚 Books"
@@ -217,7 +217,7 @@ goal:
 playbook:
   folder_hint: "📝 Notes/💼 Business, <team-vault>"
   fields:
-    - playbook_owner            # "Pao", "Beverly", team member
+    - playbook_owner            # team member name (e.g. "Alex", "Jordan")
     - playbook_channel          # Apollo, LinkedIn, email
     - playbook_source           # where leads come from
     - playbook_location         # where output lives

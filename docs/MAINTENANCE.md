@@ -34,6 +34,26 @@ python3 scripts/rotate_graphify_backups.py --vault-root /path/to/vault
 python3 scripts/rotate_graphify_backups.py --vault-root /path/to/vault --keep 5 --bak-max-age 14
 ```
 
+### rotate-last-session.py
+
+Keeps `Last Session.md` lean by archiving older sessions to monthly files. `Last Session.md` is read on every UserPromptSubmit, so every stale session in it pays a token tax on every prompt.
+
+```bash
+python3 scripts/rotate-last-session.py --vault-root /path/to/vault          # keep last 3 (default)
+python3 scripts/rotate-last-session.py --vault-root /path/to/vault --keep 1 # keep only the newest
+python3 scripts/rotate-last-session.py --vault-root /path/to/vault --dry-run
+```
+
+### decision-outcome-check.py
+
+Walks the Decision Log and surfaces decisions older than N days (default 30) with a blank `Outcome:` field. A decision log without outcomes can't teach you about your own patterns. Run weekly or wire into a scheduled task.
+
+```bash
+python3 scripts/decision-outcome-check.py --vault-root /path/to/vault           # default 30 days
+python3 scripts/decision-outcome-check.py --vault-root /path/to/vault --days 14 # more aggressive
+python3 scripts/decision-outcome-check.py --vault-root /path/to/vault --dry-run
+```
+
 ## Scheduled Tasks
 
 Set these up as Claude Code scheduled tasks for hands-off maintenance:

@@ -4,11 +4,11 @@
 
 ---
 
-A founder's job is to carry context other people cannot carry. Investor relationships. Board decisions. Team dynamics. Contractor handoffs. The patterns inside your own thinking that compound quietly into wins, or quietly into drift.
+A founder's job is to carry context other people cannot carry. Investor relationships. Board decisions. Team dynamics. Contractor handoffs. And the parts of a life that do not fit inside a company: the book draft, the consulting clients on the side, the friends you want to keep close, the kids' schedules, the side projects that aren't the company. The patterns inside your own thinking that compound quietly into wins, or quietly into drift.
 
-Most AI tools handle tasks. This is the operating system that handles the context.
+Most AI tools handle tasks. This is the operating system that handles the context. All of it, not just the company's.
 
-No more re-explaining who you are and what you are building. No more insights lost to chat transcripts. No more decisions you cannot find when you need them. Every session compounds. Every meeting becomes memory. Every pattern surfaces before it becomes a problem.
+No more re-explaining who you are, what you are building, or everything else you are holding in parallel. No more insights lost to chat transcripts. No more decisions you cannot find when you need them. Every session compounds. Every meeting becomes memory. Every pattern surfaces before it becomes a problem.
 
 ## They say entrepreneurship is the greatest growth school
 
@@ -19,7 +19,7 @@ This accelerates the growth and cuts the mistakes. That acceleration comes from 
 - **Inner knowledge.** A daily journal with an advisory panel of 90+ real voices (Naval, Brene Brown, Hormozi, Buffett, your own custom advisors) that track your emotional patterns, catch your blind spots, and surface the avoidance behaviors you cannot see from the inside.
 - **Honest feedback.** Fifteen accountability rules baked into every session. Claude corrects you when you are wrong, calls out avoidance, checks your ego, and reminds you who you said you wanted to be. Not a yes-machine. A thinking partner.
 
-Plus everything that makes a founder's week compound instead of reset:
+Plus everything that makes a founder's week compound instead of reset, whether the week holds investor meetings, book chapters, a consulting deliverable, a friend's birthday, or a school pickup:
 
 - **Memory that compounds** — Claude reads your context file (CLAUDE.md) every session. Corrections stick. Preferences persist. You never re-explain yourself.
 - **Session lifecycle hooks** — every session start loads your last context and current priorities. Every session end captures decisions, insights, ideas, and to-dos to the right files. Nothing stays trapped in a chat transcript.
@@ -38,9 +38,13 @@ The whole system ships as one install command, works for non-technical founders,
 
 **11:20 AM.** A one-hour meeting ends. You drop the transcript in. The system files it, tags participants, extracts five action items, routes each one to the right owner by role, and drafts the follow-up message for you to review. Thirty-five minutes of post-meeting work compressed to two.
 
+**1:00 PM.** Thirty minutes between blocks. You open the book draft. Claude reads the new scene against every previous chapter in the vault, flags a continuity break in chapter three, and scores the voice match against your own corpus. You fix the weak sentence in two minutes and close the tab.
+
 **3:00 PM.** You write a one-liner for a contractor. A hook blocks the save: missing the four required fields (source, location, shape, channel). You rewrite the task in ninety seconds. She ships in one pass. You save a $500 week.
 
-**Sunday, 9:00 PM.** The weekly ritual runs. Every open loop from the last fourteen days surfaces in a single view: decisions pending, promises outstanding, follow-ups due. You resolve three, deliberately defer two, and close the week with a clean runway into the next one.
+**6:45 PM.** A close friend texts about something the two of you talked through six months ago. You ask Claude. Three seconds later you have the thread, the date, what was unresolved, and what you promised. You reply from context, not from guesswork.
+
+**Sunday, 9:00 PM.** The weekly ritual runs. Every open loop from the last fourteen days surfaces in a single view, across the whole life: the company, the book, the consulting, the people you care about. Decisions pending, promises outstanding, follow-ups due. You resolve three, deliberately defer two, and close the week with a clean runway into the next one.
 
 Monday starts with context, not amnesia.
 
@@ -204,7 +208,7 @@ Every CLAUDE.md created by this system includes these rules. Claude is a thinkin
 
 ## Who This Is For
 
-Built for founders. The people running a company and a life, carrying a dozen contexts at once, losing the thread between investor calls, contractor handoffs, board updates, and the actual work. If that is you, the rest of this list is people the system also fits, but you are the bullseye.
+Built for founders. The people running a company and a life, carrying a dozen contexts at once, losing the thread between investor calls, board updates, contractor handoffs, the book draft open in parallel, the consulting clients on the side, the friendships they want to tend, the kids' schedules, and the actual work. If that is you, the rest of this list is people the system also fits, but you are the bullseye.
 
 - **Founders** running a company and a life, tired of re-explaining context to AI every session and losing decisions to chat transcripts
 - **Operators, Chiefs of Staff, co-founders** carrying the context for a founder who is too busy to carry it themselves
