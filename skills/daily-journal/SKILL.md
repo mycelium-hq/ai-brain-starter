@@ -107,6 +107,12 @@ This includes:
 
 **0b. Session Captures.** Read `⚙️ Meta/Session Captures.md` (or your vault's equivalent staging file) in full. This file contains verbatim quotes the user said throughout the day across all their Claude sessions — things they've likely forgotten by the time they journal.
 
+**Day boundary is 3:45 AM, not midnight.** Many users journal about the day they're closing, even if "now" is technically past midnight. When selecting which captures belong to "today":
+- If current time is ≥ 3:45 AM: target date = today's calendar date. Include captures from 3:45 AM today through now.
+- If current time is < 3:45 AM: target date = yesterday's calendar date. Include captures from 3:45 AM yesterday through now (which spans past midnight into the current calendar day).
+
+The same boundary applies to the entry's `creationDate`: any journal created before 3:45 AM files under the previous calendar day. A 2:00 AM entry on the 18th has `creationDate: 2026-04-17T02:00`. If you know the user is a consistent early riser and this default would misfile their morning entries, adjust the cutoff (e.g. to 2:30 AM) in the user's `CLAUDE.md` and reference it here.
+
 **Show them the seeds at the very top of the conversation** before asking the check-in question:
 
 > "Before we start — here's what you said today across your sessions. I don't want you to forget any of it:
