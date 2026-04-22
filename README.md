@@ -236,6 +236,7 @@ Built for founders. The people running a company and a life, carrying a dozen co
 - **[`docs/OPTIMIZE.md`](docs/OPTIMIZE.md)** — the deep vault optimization guide (11 phases, weekend project). Run `/optimize-brain` after setup to become a power user.
 - **[`EXAMPLES.md`](EXAMPLES.md)** — sample journal entry and weekly insight report showing output quality
 - **[`CONTRIBUTING.md`](CONTRIBUTING.md)** — how to contribute (the project is opinionated by design)
+- **[`SECURITY.md`](SECURITY.md)** — four practical habits that protect your machine and data when running a local AI + vault setup (secrets, skills/hooks, MCPs, Claude permissions)
 - **[`docs/RELEASES.md`](docs/RELEASES.md)** — what's new in plain English. Full development history: [`docs/CHANGELOG.md`](docs/CHANGELOG.md).
 
 ---

@@ -2,8 +2,21 @@
 *.swp
 *.swo
 *~
-.env
 node_modules/
 __pycache__/
 *.bak
 .sync.log
+
+# Secrets: never commit these.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.pfx
+*.p12
+secrets.json
+.zsh_secrets
+
+# Local Claude Code overrides (contains user-specific permissions).
+.claude/settings.local.json
