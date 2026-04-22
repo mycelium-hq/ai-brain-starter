@@ -18,11 +18,12 @@ Your tone: warm, clear, encouraging. They might not be technical. Explain things
 If they've already run setup and are coming back to fix or upgrade something, ask: "Are you looking to (1) add a new feature like book notes or a team vault, (2) fix something that's broken, or (3) upgrade your CLAUDE.md with the latest improvements?"
 
 - **Add a feature:** Jump to the relevant phase. Book notes → Phase 12. Team vault → Phase 20. Don't re-run the full setup.
-- **Fix something broken:** Ask what's wrong and diagnose. Common issues:
+- **Fix something broken:** Run `/diagnose` first — it checks 10 common failure points (CLAUDE.md, hooks, journal index, .ps1 BOM, freshness, MCPs) and reports green/yellow/red with a one-line fix for each. If `/diagnose` doesn't surface the issue, ask what's wrong. Common issues:
   - Vault map empty → open their CLAUDE.md and fill in the `## Vault Map` section
   - Journal skill not saving → check `~/.claude/skills/daily-journal/SKILL.md` exists
   - Insights not finding entries → check `⚙️ Meta/journal-index.json` exists; if not, re-run index generation from Phase 18
   - Claude creating duplicate folders → vault map is missing or wrong; fix it first
+  - Windows PowerShell parser errors → re-run `bootstrap.ps1` after `git pull` (BOM fix shipped 2026-04-22)
 - **Upgrade CLAUDE.md:** Read their existing CLAUDE.md. Compare to the Phase 4 template. Add missing sections without overwriting personal content. Never replace, only add.
 
 ---
@@ -33,24 +34,24 @@ This setup has 25 phases (0-24). Each phase is stored in its own file under `pha
 
 ### Phase Routing Table
 
-| Phase | File | Tier | What it does |
-|-------|------|------|-------------|
-| 0 | `phases/phase-00-install.md` | both | Install efficiency tools (brew, python, node, graphify, skills, MCPs) |
-| 1 | `phases/phase-01-welcome.md` | both | Language detection, **plan tier selection**, mode detection (new/join/upgrade), welcome interview |
-| 2-3 | `phases/phase-02-03-plugins-folders.md` | both | Install Obsidian plugins, create folder structure + `⚙️ Meta/Folder Resolvers/` |
-| 4 | `phases/phase-04-claude-md.md` | both | Build their CLAUDE.md (interview + template). Template at `templates/generated/claude-md-template.md` |
-| 5 | `phases/phase-05-context-layer.md` | both* | Context notes, session hooks, aggregator scripts, decision log. *Light mode skips graph-context-hook and panel-trigger-hook* |
-| 6-9 | `phases/phase-06-09-tools-templates.md` | both | Tool routing, import existing notes, templates, verify all skills |
-| 10a | `phases/phase-10a-journaling.md` | both | Daily journaling setup: interview, floor framework, skill generation, trigger |
-| 10b | `phases/phase-10b-panel-roster.md` | full | Advisory panel roster + voice routing trigger table. *Light mode skips entirely* |
-| 11 | `phases/phase-11-external-tools.md` | both | Connect email/calendar/Slack/CRM, meeting tool wiring |
-| 12-17 | `phases/phase-12-17-imports-rules.md` | both | Book notes, health data, concept taxonomy, backup, Obsidian rules, tool check. Obsidian rules template at `templates/generated/obsidian-rules-template.md` |
-| 18 | `phases/phase-18-insights.md` | both* | Weekly/monthly insights setup + cron. *Light mode: weekly summary only, no pattern analysis or monthly reports*. Skill template at `templates/generated/insights-skill-template.md` |
-| 19-23 | `phases/phase-19-23-finish.md` | both | Test drive, team vault, what's next, Instinct Engine, theme. Team weekly template at `templates/generated/team-weekly-skill-template.md` |
-| **23.5** | `phases/phase-19-23-finish.md` (appended) | both | **MUST BE LAST INSTALL PHASE — token-aware.** second-brain-mapping install: `/setup-vault-types` wizard, first free metadata + insight run, defer graphify decision (expensive), wire CRM auto-log from journal. Phases 1 + 4 are zero-LLM; Phase 2 (graphify) is opt-in. |
-| 24 | `phases/phase-19-23-finish.md` (appended) | both | Handoff from installed to used. Point the user to a short companion read on recommended first-week uses (three commands and one habit). Language-conditional: show only the link matching their PRIMARY_LANGUAGE. Closes the "now what?" gap. |
+| Phase | File | What it does |
+|-------|------|-------------|
+| 0 | `phases/phase-00-install.md` | Install efficiency tools (brew, python, node, graphify, skills, MCPs) |
+| 1 | `phases/phase-01-welcome.md` | Language detection, mode detection (new/join/upgrade), welcome interview |
+| 2-3 | `phases/phase-02-03-plugins-folders.md` | Install Obsidian plugins, create folder structure + `⚙️ Meta/Folder Resolvers/` |
+| 4 | `phases/phase-04-claude-md.md` | Build their CLAUDE.md (interview + template). Template at `templates/generated/claude-md-template.md` |
+| 5 | `phases/phase-05-context-layer.md` | Context notes, session hooks, aggregator scripts, decision log, graph-context-hook, panel-trigger-hook |
+| 6-9 | `phases/phase-06-09-tools-templates.md` | Tool routing, import existing notes, templates, verify all skills |
+| 10a | `phases/phase-10a-journaling.md` | Daily journaling setup: interview, floor framework, skill generation, trigger |
+| 10b | `phases/phase-10b-panel-roster.md` | Advisory panel roster + voice routing trigger table |
+| 11 | `phases/phase-11-external-tools.md` | Connect email/calendar/Slack/CRM, meeting tool wiring |
+| 12-17 | `phases/phase-12-17-imports-rules.md` | Book notes, health data, concept taxonomy, backup, Obsidian rules, tool check. Obsidian rules template at `templates/generated/obsidian-rules-template.md` |
+| 18 | `phases/phase-18-insights.md` | Weekly/monthly insights setup + cron, with pattern analysis. Skill template at `templates/generated/insights-skill-template.md` |
+| 19-23 | `phases/phase-19-23-finish.md` | Test drive, team vault, what's next, Instinct Engine, theme. Team weekly template at `templates/generated/team-weekly-skill-template.md` |
+| **23.5** | `phases/phase-19-23-finish.md` (appended) | **MUST BE LAST INSTALL PHASE — token-aware.** second-brain-mapping install: `/setup-vault-types` wizard, first free metadata + insight run, defer graphify decision (expensive), wire CRM auto-log from journal. Phases 1 + 4 are zero-LLM; Phase 2 (graphify) is opt-in. |
+| 24 | `phases/phase-19-23-finish.md` (appended) | Handoff from installed to used. Point the user to a short companion read on recommended first-week uses (three commands and one habit). Language-conditional: show only the link matching their PRIMARY_LANGUAGE. Closes the "now what?" gap. |
 
-**Tier key:** `both` = runs in both setup versions. `both*` = runs in both but with reduced scope in light mode. `full` = full version only, skipped in light mode. Version is chosen by usage cost, not subscription plan — both versions work on any plan.
+Every phase runs unconditionally. There is no light/full split — everyone gets the full second-brain experience (advisory panel, knowledge graph, automatic context routing, monthly insights, Instinct Engine).
 
 ### How to Execute
 
@@ -65,7 +66,6 @@ This setup has 25 phases (0-24). Each phase is stored in its own file under `pha
 These are collected during early phases and used by later ones. Keep them in memory:
 
 - `PRIMARY_LANGUAGE` / `SECONDARY_LANGUAGES` — from Phase 1
-- `PLAN_TIER` (`"light"` or `"full"`) — from Phase 1 step 1.0b. Gates Phase 5 hooks, Phase 10b panel, Phase 18 insights depth, and Rule 19 size
 - `WRITES_PUBLICLY` (true/false) — from Phase 1 question 5
 - `VAULT_PATH` — from Phase 1 step 8
 - `MEETING_TOOLS` / `MEETING_DRIVE_FOLDER` etc. — from Phase 11
@@ -80,11 +80,13 @@ These are collected during early phases and used by later ones. Keep them in mem
 - If context gets compressed mid-setup (long session), re-read SKILL.md to pick up where you left off. Check which phases are done by looking at what exists in the vault.
 - If they seem overwhelmed, say: "We can stop here and pick up the rest tomorrow." But default is KEEP GOING.
 - Adapt the folder structure to their life, not a template.
-- If they're not technical, explain terminal commands step by step.
+- **NEVER ask the user to open a terminal during setup.** Claude runs all bash commands via its own tools. Users should not see a terminal after bootstrap runs. If something needs a shell command, Claude does it — it never says "open terminal and run X."
+- If they're not technical, explain what's happening in plain language, not bash.
 - Celebrate milestones: "Your CLAUDE.md is done, that's the biggest piece."
 - Match their energy. If they're excited, move fast. If they're cautious, explain more.
 - This should feel like a conversation with a smart friend, not a software installer.
 - **NEVER FAIL SILENTLY.** After every file write, verify the file exists. After every install, verify it worked. If ANYTHING fails, TELL THE USER IMMEDIATELY. Say what failed, why, and how to fix it. Then FIX IT. People are trusting this skill with their personal data.
+- **Windows .ps1 files MUST be saved as UTF-8 with BOM.** Windows PowerShell 5.1 (the default on Windows 10/11) reads BOM-less .ps1 as Windows-1252 and crashes on the first non-ASCII byte (em dash, the ⚙️ in vault paths, box-drawing chars). Any .ps1 file Claude writes during setup, or any .ps1 template the user is told to save, MUST start with the UTF-8 BOM bytes `EF BB BF`. When using Write, prepend `\ufeff` to the content. Verify after writing with `file <path>` (should report "UTF-8 (with BOM)"). The bootstrap.ps1, drift-check.ps1, and update-check.ps1 in this repo are already BOM-saved; preserve that on edit.
 
 **Substack link override (Spanish only):** the framework article is at `https://adelaidadiazroa.substack.com/s/internal-design` (English). **Only swap if the user picks Spanish** as primary: replace with `https://perspectivasblog.substack.com/s/el-rascacielos` (title: "El Rascacielos, el modelo del diseño interno"). For every other language, leave the English URL.
 
@@ -103,7 +105,8 @@ Say in PRIMARY_LANGUAGE BEFORE the scary moment:
 | Silent pause (no progress bar) | ES: "Se ve como si nada pasara. Sí pasa. Espera 30s." · EN: "Looks frozen. Isn't. Wait 30s." |
 | Yellow/red warning text | ES: "Vas a ver amarillo o rojo. Si dice 'warning', sigue." · EN: "Yellow/red text. If it says 'warning', keep going." |
 | Claude Code permission prompt | ES: "Cuadro pide permiso. Dale 'Allow'. Soy yo." · EN: "Box asks permission. Click 'Allow'. That's me." |
+| **⌘↩ vs typing — this is the most common point of confusion** | When Claude is waiting to run a tool (gray box with a tool name), press **⌘↩** (Mac) or **Ctrl↩** (Windows). When Claude asks you a question and is waiting for YOUR answer, just **type normally and press Enter**. Rule: if you see a gray tool box → ⌘↩. If Claude ends with a question mark → type your answer. ES: "Si ves una caja gris con un nombre de herramienta → ⌘↩. Si Claude te hace una pregunta → escribe tu respuesta normal y enter." |
 
 After scary moment passes: ES: "Listo. Sigamos." · EN: "Done. Moving on."
 
-Don't skip. Obvious to you, not to them. Single biggest non-tech conversion lever.
+**Say the ⌘↩ rule out loud before Phase 0 starts.** It's the single most common stall point. People see a gray tool box and think they need to type something. They don't — they just press ⌘↩. Say it once early, remind once if they stall.

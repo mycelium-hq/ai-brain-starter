@@ -1,4 +1,4 @@
-# update-check.ps1 — daily drift detector for the ai-brain-starter setup (Windows)
+﻿# update-check.ps1, daily drift detector for the ai-brain-starter setup (Windows)
 #
 # See update-check.sh for full docs. This is the PowerShell port for Windows users.
 #

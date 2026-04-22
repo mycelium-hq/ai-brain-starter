@@ -1,0 +1,153 @@
+name: lint
+
+# Catches the bug class that historically slipped through:
+#   - bash syntax errors in bootstrap.sh and other shell scripts
+#   - PowerShell parser errors in bootstrap.ps1, drift-check.ps1, update-check.ps1
+#   - missing UTF-8 BOM on .ps1 files (Windows PS 5.1 reads BOM-less as Windows-1252,
+#     crashes on first non-ASCII byte: em dash, the gear emoji, box-drawing chars)
+#   - em dashes in shell/PS scripts (defense-in-depth + matches voice rules)
+#   - invalid JSON in hooks.json and any *.mcp.json
+#   - phase docs that reference scripts which do not exist
+#
+# Runs on every push and PR. ~60 seconds. $0 on public repos.
+# No untrusted user input used in any run: command (safe by construction).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  shell:
+    name: bash syntax (.sh)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: bash -n every .sh
+        run: |
+          set -e
+          fail=0
+          while IFS= read -r f; do
+            if ! bash -n "$f" 2>err; then
+              echo "::error file=$f::bash -n failed"
+              cat err | sed "s|^|  |"
+              fail=1
+            fi
+          done < <(find . -name '*.sh' -not -path './.git/*' -not -path './node_modules/*')
+          exit $fail
+
+  powershell:
+    name: PowerShell parse (.ps1)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: pwsh ParseFile every .ps1
+        shell: pwsh
+        run: |
+          $fail = 0
+          Get-ChildItem -Recurse -Filter '*.ps1' | ForEach-Object {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              $_.FullName, [ref]$tokens, [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              foreach ($e in $errors) {
+                Write-Host "::error file=$($_.FullName),line=$($e.Extent.StartLineNumber)::$($e.Message)"
+              }
+              $fail = 1
+            }
+          }
+          if ($fail) { exit 1 }
+
+  bom:
+    name: UTF-8 BOM on .ps1 (Windows PS 5.1 fix)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: every .ps1 must start with EF BB BF
+        run: |
+          set -e
+          fail=0
+          while IFS= read -r f; do
+            head=$(head -c 3 "$f" | od -An -tx1 | tr -d ' \n')
+            if [ "$head" != "efbbbf" ]; then
+              echo "::error file=$f::missing UTF-8 BOM (Windows PowerShell 5.1 will crash on non-ASCII bytes). Fix: prepend the bytes EF BB BF to the file."
+              fail=1
+            fi
+          done < <(find . -name '*.ps1' -not -path './.git/*')
+          exit $fail
+
+  no-em-dash-ps1:
+    name: no em dashes in .ps1 (Windows PS 5.1 hazard)
+    runs-on: ubuntu-latest
+    # Em dashes in bash are stylistic. Em dashes in .ps1 are technical: they were the
+    # exact byte that crashed the Windows PowerShell 5.1 parser before the BOM fix.
+    # Even with BOM, keeping .ps1 ASCII-clean is defense-in-depth against the next
+    # time someone saves a file without BOM.
+    steps:
+      - uses: actions/checkout@v4
+      - name: scan .ps1
+        run: |
+          set -e
+          fail=0
+          while IFS= read -r f; do
+            if grep -n $'\xe2\x80\x94' "$f" >/dev/null 2>&1; then
+              echo "::error file=$f::contains em dash. Replace with ASCII hyphen or comma. Em dashes break Windows PowerShell 5.1 parsing if the BOM is ever lost."
+              grep -n $'\xe2\x80\x94' "$f" | head -5 | sed "s|^|  |"
+              fail=1
+            fi
+          done < <(find . -name '*.ps1' -not -path './.git/*')
+          exit $fail
+
+  json:
+    name: JSON validity (hooks.json, *.mcp.json)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: validate
+        run: |
+          set -e
+          fail=0
+          while IFS= read -r f; do
+            if ! python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$f" 2>err; then
+              echo "::error file=$f::invalid JSON"
+              cat err | sed "s|^|  |"
+              fail=1
+            fi
+          done < <(find . \( -name 'hooks.json' -o -name '*.mcp.json' \) -not -path './.git/*')
+          exit $fail
+
+  references:
+    name: phase docs reference real repo files
+    runs-on: ubuntu-latest
+    # Phase docs distinguish between two kinds of `scripts/foo.sh` references:
+    #
+    #   1. Backticked relative paths like `scripts/foo.sh` -> should exist in the repo.
+    #      Used for "copy this from `scripts/foo.sh` in this repo" instructions.
+    #   2. Vault-write paths like `[VAULT_PATH]/<gear> Meta/scripts/foo.sh` -> a file
+    #      Claude WRITES to the user's vault, not something that exists in the repo.
+    #
+    # We only enforce category 1: backticked, repo-relative, no [VAULT_PATH] prefix,
+    # no `<VAULT>` prefix, no leading slash, no `~/`.
+    steps:
+      - uses: actions/checkout@v4
+      - name: scan repo-relative backticked references
+        run: |
+          set -e
+          fail=0
+          # Match: `scripts/foo.sh` (backtick + scripts/ + path + ext + backtick)
+          while IFS=: read -r file linenum content; do
+            # Extract every backticked scripts/... reference on this line
+            echo "$content" | grep -oE '`scripts/[A-Za-z0-9_./-]+\.(sh|ps1|py|plist)`' | while IFS= read -r match; do
+              ref=$(echo "$match" | tr -d '`')
+              if [ ! -f "$ref" ]; then
+                echo "::error file=$file,line=$linenum::backticked reference $match points to missing file $ref"
+                fail=1
+                echo "1" > /tmp/lint-ref-fail
+              fi
+            done
+          done < <(grep -rn -E '`scripts/[A-Za-z0-9_./-]+\.(sh|ps1|py|plist)`' phases/ 2>/dev/null || true)
+          [ -f /tmp/lint-ref-fail ] && exit 1 || exit 0

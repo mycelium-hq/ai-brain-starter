@@ -92,6 +92,10 @@ About 5 minutes.
 
 Just tell Claude: "Update my AI Brain Starter." Claude pulls the latest version and summarizes what changed. Check [docs/RELEASES.md](docs/RELEASES.md) for what's new in plain English.
 
+### Something feels off?
+
+Type `/diagnose` in Claude Code. It runs ~10 checks against your vault (CLAUDE.md present, hooks registered, journal index fresh, skills installed, etc.) and tells you in plain English what's working and what isn't. Safe to run any time.
+
 ---
 
 ### Prefer the terminal? (advanced)

@@ -2,15 +2,7 @@
 
 This file is a continuation of Phase 10a (journaling setup). Read this when generating Step 5 of the journal skill.
 
-### Tier Gate (check PLAN_TIER from Phase 1)
-
-**If `PLAN_TIER == "light"`:** Skip the advisory panel entirely. The journal still works, it just won't have panel voices pushing back on entries or appearing in insight reports. Tell the user:
-
-> "The advisory panel is part of the full setup. It brings in named advisors who challenge your decisions and add perspective to your journal entries — and it uses more of your daily budget each entry. Your journal works great without it. You can always add it later by running setup again."
-
-Then skip directly to Step 6 (confirm and save) and Step 7 (save the journal entry). In the journal entry template, remove the `## Panel dialogue` section and the dissent/omission lines. The `## Journal` section and floor tagging still apply. Skip Step 5 (panel commentary) and Step 9 (panel feedback log). Everything else in this file runs normally.
-
-**If `PLAN_TIER == "full"`:** run the full panel setup as written below.
+Run the full panel setup as written below. Every user gets the advisory panel — it's the feature that makes journaling generative instead of confessional.
 
 ---
 

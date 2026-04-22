@@ -335,44 +335,24 @@ fi
 have pipx && ok "pipx $(pipx --version 2>/dev/null || echo installed)"
 
 # ───────────────────────────────────────────────────────────────────────────────
-# gh (GitHub CLI)
+# gh (GitHub CLI) — installed silently, NO auth prompt
+# Auth is never required for the core setup. If the user wants to log in
+# later (for issue filing), they can run: gh auth login
 # ───────────────────────────────────────────────────────────────────────────────
 
 if ! have gh; then
   hdr "Installing gh (GitHub CLI)"
-  log "gh lets the session-end capture cascade file improvement ideas as GitHub issues automatically."
   if is_mac; then
-    brew install gh || err "gh install failed"
+    brew install gh || warn "gh install failed — non-blocking, continue"
   else
     sudo apt-get install -y gh 2>/dev/null \
       || sudo dnf install -y gh 2>/dev/null \
       || sudo pacman -S --noconfirm github-cli 2>/dev/null \
-      || warn "couldn't auto-install gh — install it manually later if you need it"
+      || warn "couldn't auto-install gh — non-blocking, install later if needed"
   fi
 fi
-have gh && ok "gh $(gh --version 2>/dev/null | head -1 | awk '{print $3}')"
-
-# gh authentication — OPTIONAL. Used by the session-end cascade to file
-# improvement ideas as GitHub issues automatically. Skip cleanly if the user
-# doesn't have a GitHub account or doesn't want to set it up right now.
-if have gh && ! gh auth status >/dev/null 2>&1; then
-  hdr "GitHub login (OPTIONAL — skip with Ctrl+C)"
-  echo "  This step is OPTIONAL. You only need it if you want your AI brain to"
-  echo "  automatically file improvement ideas as GitHub issues for the maintainer."
-  echo
-  echo "  ❓ Do you have a GitHub account?"
-  echo "     YES → press Enter, a browser window opens, log in, done."
-  echo "     NO  → press Ctrl+C right now to skip. Everything else still works."
-  echo "     NOT SURE → press Ctrl+C to skip. You can come back to this later"
-  echo "                with: gh auth login"
-  echo
-  echo "  (If you press Enter, you'll see options like 'GitHub.com → HTTPS →"
-  echo "   Login with web browser.' Just pick those defaults — they're fine.)"
-  echo
-  read -p "  Press Enter to log in, or Ctrl+C to skip: " _
-  gh auth login || warn "gh auth skipped or failed — run 'gh auth login' later if you want issue filing"
-fi
-gh auth status >/dev/null 2>&1 && ok "gh authenticated" || warn "gh not authenticated (issue filing disabled until you run: gh auth login)"
+have gh && ok "gh $(gh --version 2>/dev/null | head -1 | awk '{print $3}')" || true
+# No auth prompt — connecting GitHub is never required for the brain setup.
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Obsidian — REQUIRED, the entire setup writes notes into an Obsidian vault.
@@ -747,7 +727,6 @@ CHECKS=(
   "node:node"
   "npm:npm"
   "pipx:pipx"
-  "gh:gh"
 )
 for check in "${CHECKS[@]}"; do
   name="${check%%:*}"
@@ -759,7 +738,7 @@ for check in "${CHECKS[@]}"; do
   fi
 done
 # Skill folders (full bundled set + humanizer + ai-brain-starter itself)
-for sub in graphify meeting-todos patterns insights deconstruct daily-journal repurpose-talk nano-banana humanizer ai-brain-starter; do
+for sub in graphify meeting-todos patterns insights deconstruct daily-journal repurpose-talk nano-banana humanizer ai-brain-starter diagnose; do
   if [[ -d "$HOME/.claude/skills/$sub" ]]; then
     ok "skill: $sub"
   else
@@ -840,6 +819,9 @@ cat <<'EOF'
 
 ━━━ Next steps ━━━
 
+  ✅ This is the ONLY time you need the terminal.
+     Everything from here on happens inside Claude Code — no more terminal commands.
+
   1. Open Claude Code in the directory where you want your vault to live.
      (For a NEW personal vault: a fresh empty folder.)
      (For JOINING an existing team vault: cd into the team vault folder first.)
@@ -850,7 +832,10 @@ cat <<'EOF'
        /setup-brain join-team        # Joining an existing team vault — minimal, no
                                      # structure changes, just verifies + wires meeting tool
 
-  3. The setup is conversational. Answer the questions Claude asks.
+  3. The setup is conversational. Answer Claude's questions.
+
+  4. ⌘↩ vs typing: when you see a gray tool box → press ⌘↩ (Mac) or Ctrl+Enter (Windows).
+     When Claude asks you a question → just type your answer and press Enter.
 
 ━━━ Optional — image generation ━━━
 

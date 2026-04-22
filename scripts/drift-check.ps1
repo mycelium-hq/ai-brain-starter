@@ -1,4 +1,4 @@
-# drift-check.ps1 — detect file drift between the ai-brain-starter repo and
+﻿# drift-check.ps1 - detect file drift between the ai-brain-starter repo and
 # the user's installed copies. READ-ONLY: never modifies anything.
 #
 # See drift-check.sh for full docs and rationale. This is the PowerShell port
@@ -10,7 +10,7 @@
 #   powershell -File drift-check.ps1 -Vault "C:\path\to\vault"
 #   powershell -File drift-check.ps1 -Vault "C:\path\to\vault" -Force
 #
-# Output format (stable, parseable — matches drift-check.sh):
+# Output format (stable, parseable - matches drift-check.sh):
 #   STATUS: <OK | SKIPPED_TODAY | ERROR>
 #   DRIFT_COUNT: <integer>
 #   ---DRIFT_FILES---
@@ -152,7 +152,7 @@ function Normalize-ForCompare {
     return ($lines -join "`n") + "`n"
 }
 
-# ── Scope A — installed skills ────────────────────────────────────────────
+# ── Scope A - installed skills ────────────────────────────────────────────
 $SkillsRepoDir = Join-Path $StarterDir "skills"
 if (Test-Path -LiteralPath $SkillsRepoDir) {
     Get-ChildItem -LiteralPath $SkillsRepoDir -Directory -ErrorAction SilentlyContinue | ForEach-Object {
@@ -177,11 +177,11 @@ if (Test-Path -LiteralPath $SkillsRepoDir) {
     }
 }
 
-# ── Scope B — vault-installed scripts ─────────────────────────────────────
+# ── Scope B - vault-installed scripts ─────────────────────────────────────
 if ($Vault -and (Test-Path -LiteralPath $Vault)) {
     $VaultScriptsDir = Join-Path $Vault "⚙️ Meta\scripts"
     if (Test-Path -LiteralPath $VaultScriptsDir) {
-        # Curated list — must match drift-check.sh
+        # Curated list - must match drift-check.sh
         $VaultScriptNames = @(
             "aggregate-sessions.py",
             "aggregate-decisions.py",
@@ -198,7 +198,7 @@ if ($Vault -and (Test-Path -LiteralPath $Vault)) {
             if (-not (Test-FilesIdentical $src $dest)) {
                 $note = ""
                 if ($name -eq "graph-context-hook.sh") {
-                    $note = "hand-edited CONFIG block at top of file — cherry-pick changes, do NOT overwrite wholesale"
+                    $note = "hand-edited CONFIG block at top of file - cherry-pick changes, do NOT overwrite wholesale"
                 }
                 Add-Drift -Scope "vault-script" -InstalledPath $dest -RepoSourcePath $src -Note $note
             }
@@ -206,7 +206,7 @@ if ($Vault -and (Test-Path -LiteralPath $Vault)) {
     }
 }
 
-# ── Scope C — vault CLAUDE.md rule blocks ─────────────────────────────────
+# ── Scope C - vault CLAUDE.md rule blocks ─────────────────────────────────
 if ($Vault) {
     $VaultClaudeMd = Join-Path $Vault "CLAUDE.md"
     $RulesDir = Join-Path $StarterDir "templates\rules"
