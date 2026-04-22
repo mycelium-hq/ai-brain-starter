@@ -1,17 +1,29 @@
 #!/usr/bin/env python3
 """
-UserPromptSubmit hook: auto-inject key vault files as context for strategic questions.
+UserPromptSubmit hook: auto-inject personalized vault context on strategic prompts.
 
-Fires before Claude responds. Detects strategic keywords in the prompt and injects
-⚙️ Meta/Current Priorities.md and ⚙️ Meta/Open Loops.md as additionalContext so
-Claude has your actual current state — not generic knowledge — when answering.
+Fires on every prompt. If the prompt contains a strategic keyword, reads
+`⚙️ Meta/Current Priorities.md` and `⚙️ Meta/Open Loops.md` (always), plus any
+files routed by the user's topic map for the keywords it detects.
+
+Personalization:
+  Edit `⚙️ Meta/topic-map.json` in your vault to define your own topics.
+  Each topic has a name, a list of trigger keywords, and a list of vault files
+  to inject when any trigger matches.
+
+  Example entry:
+      {
+        "name": "fundraising",
+        "triggers": ["raise", "investor", "pitch", "seed", "angel"],
+        "files": ["🚀 Company/💰 Raise/Dashboard.md"]
+      }
+
+  If `topic-map.json` does not exist, the hook ships core files only.
 
 Vault root auto-detection (in order):
-  1. VAULT_ROOT env var (set in settings.json "env" section)
+  1. VAULT_ROOT env var
   2. Walk up from cwd looking for ⚙️ Meta/Current Priorities.md
-  3. Silent fallback: no injection if vault can't be found
-
-Customization: add your own TOPIC_MAP entries for project-specific files.
+  3. Silent exit if not found
 
 Wire into settings.json:
   "UserPromptSubmit": [{"matcher": "", "hooks": [
@@ -28,7 +40,6 @@ from pathlib import Path
 
 MAX_CHARS = 4000  # per-file truncation
 
-
 # ─── Files always injected for strategic questions ─────────────────────────
 
 CORE_FILES = [
@@ -36,21 +47,11 @@ CORE_FILES = [
     "⚙️ Meta/Open Loops.md",
 ]
 
-# ─── Optional topic-specific extras ───────────────────────────────────────
-# Format: (list_of_keyword_patterns, list_of_vault_relative_paths)
-# Add your own project files here. All paths are relative to vault root.
+# ─── Default strategic keyword signals ─────────────────────────────────────
+# Override by creating a "_signals" key at the top of topic-map.json:
+#   {"_signals": ["strateg", "plan", ...], "topics": [...]}
 
-TOPIC_MAP: list[tuple[list[str], list[str]]] = [
-    # Example: fundraising/investor questions → load your raise dashboard
-    # (
-    #     [r"\braise\b", r"\binvestor", r"\bpitch\b", r"\bseed\b"],
-    #     ["🚀 Company/💰 Raise/Raise Dashboard.md"],
-    # ),
-]
-
-# ─── Strategic keyword signals ─────────────────────────────────────────────
-
-STRATEGIC_SIGNALS = [
+DEFAULT_SIGNALS = [
     r"\bstrateg", r"\braise\b", r"\binvestor", r"\bpitch\b",
     r"\bdecision\b", r"\bprioritiz", r"\bpriorities\b",
     r"\bplan\b", r"\bfocus\b", r"\bnext step", r"\bopen loop",
@@ -60,24 +61,67 @@ STRATEGIC_SIGNALS = [
     r"\bwhat (am|are) (i|we) (doing|working)\b",
     r"\brevenue\b", r"\bclient\b", r"\bproduct\b",
     r"\bsales\b", r"\bconsulting\b", r"\bgoal\b",
-    r"\bwriting\b", r"\bproject\b",
+    r"\bwriting\b", r"\bproject\b", r"\bmeeting\b",
 ]
 
 
 def find_vault_root() -> str | None:
-    # 1. Explicit env var override
     if env := os.environ.get("VAULT_ROOT"):
         p = Path(env)
         if (p / "⚙️ Meta" / "Current Priorities.md").exists():
             return str(p)
 
-    # 2. Walk up from cwd
     cwd = Path(os.getcwd()).resolve()
     for candidate in [cwd, *cwd.parents]:
         if (candidate / "⚙️ Meta" / "Current Priorities.md").exists():
             return str(candidate)
 
     return None
+
+
+def load_topic_map(vault_root: str) -> tuple[list[str], list[tuple[list[str], list[str]]]]:
+    """
+    Returns (signals, topics) where signals is a list of regex strings and
+    topics is a list of (triggers, files) tuples. Falls back to defaults if
+    the config is missing or malformed.
+    """
+    config_path = Path(vault_root) / "⚙️ Meta" / "topic-map.json"
+    if not config_path.exists():
+        return DEFAULT_SIGNALS, []
+
+    try:
+        raw = json.loads(config_path.read_text(encoding="utf-8"))
+    except Exception:
+        return DEFAULT_SIGNALS, []
+
+    # Supports two shapes:
+    #   [ {name, triggers, files}, ... ]                  (simple)
+    #   { "_signals": [...], "topics": [...] }            (extended)
+    if isinstance(raw, dict):
+        signals = raw.get("_signals") or DEFAULT_SIGNALS
+        topics_raw = raw.get("topics") or []
+    elif isinstance(raw, list):
+        signals = DEFAULT_SIGNALS
+        topics_raw = raw
+    else:
+        return DEFAULT_SIGNALS, []
+
+    topics: list[tuple[list[str], list[str]]] = []
+    for entry in topics_raw:
+        if not isinstance(entry, dict):
+            continue
+        triggers = entry.get("triggers") or []
+        files = entry.get("files") or []
+        if not isinstance(triggers, list) or not isinstance(files, list):
+            continue
+        # Wrap bare keywords in word-boundary regex for safety
+        patterns = [t if any(c in t for c in r".*+?^$()[]{}\|") else rf"\b{re.escape(t)}\b"
+                    for t in triggers if isinstance(t, str)]
+        file_list = [f for f in files if isinstance(f, str)]
+        if patterns and file_list:
+            topics.append((patterns, file_list))
+
+    return signals, topics
 
 
 def read_file(vault_root: str, rel_path: str) -> str | None:
@@ -100,21 +144,20 @@ def main() -> None:
     if not prompt:
         sys.exit(0)
 
-    # Only fire on strategic topics
-    if not any(re.search(sig, prompt) for sig in STRATEGIC_SIGNALS):
-        sys.exit(0)
-
     vault_root = find_vault_root()
     if not vault_root:
         sys.exit(0)
 
-    # Build file list: core + any matched topic extras
+    signals, topics = load_topic_map(vault_root)
+
+    if not any(re.search(sig, prompt) for sig in signals):
+        sys.exit(0)
+
     files_to_load = list(CORE_FILES)
-    for signals, extras in TOPIC_MAP:
-        if any(re.search(s, prompt) for s in signals):
+    for triggers, extras in topics:
+        if any(re.search(t, prompt) for t in triggers):
             files_to_load.extend(extras)
 
-    # Deduplicate preserving order
     seen: set[str] = set()
     unique: list[str] = []
     for f in files_to_load:

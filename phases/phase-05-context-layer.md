@@ -23,6 +23,19 @@ Read these in order at the start of every session:
 
 **Open Loops.md** — Ask them: "What are you waiting on from other people? What do you need to do but haven't? What decisions are you sitting on?" Organize into three sections: Waiting On Others, Needs Action, Decisions Pending.
 
+**⚙️ Meta/topic-map.json** — Copy `templates/topic-map.json` from this repo to `⚙️ Meta/topic-map.json` in their vault, then personalize it with them.
+
+This file is what makes the vault-context hook routes *their* important files (not just generic examples) into context when they ask about the topics that matter to them. Without it, the hook only injects Current Priorities and Open Loops.
+
+Ask them: "When you ask Claude about certain topics, which vault files should auto-load? For example, when you say 'raise' or 'investor,' we can pull your raise dashboard. When you say 'client' or 'pipeline,' we can pull your sales tracker."
+
+For each of their top 4-6 focus areas, capture:
+- A short name (e.g. `fundraising`, `writing`, `sales-pipeline`)
+- 4-8 trigger keywords they'd actually type
+- The 1-3 vault files that matter most for that topic
+
+Replace the example entries in `topic-map.json` with their answers. Remove anything they don't need. If they want to redefine what counts as a "strategic" question, edit the `_signals` array at the top — otherwise leave the defaults.
+
 **Last Session.md:**
 ```markdown
 ---

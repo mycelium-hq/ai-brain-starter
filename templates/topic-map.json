@@ -1,0 +1,59 @@
+{
+  "_comment": "Edit this file to personalize what vault files auto-load when you ask strategic questions. The vault-context hook reads this on every prompt. Add your own topics as entries in the topics list. Each topic has a name (for your own reference), triggers (keywords that activate it), and files (vault-relative paths to inject). Remove or edit any example below. Delete this file entirely if you only want the core files (Current Priorities, Open Loops).",
+
+  "_signals": [
+    "\\bstrateg", "\\bplan\\b", "\\bfocus\\b", "\\bnext step",
+    "\\bpriorities\\b", "\\bopen loop", "\\bpending\\b",
+    "\\bwhat should (i|we)\\b", "\\bhow (should|do) (i|we)\\b",
+    "\\bwhere (am|are) (i|we)\\b",
+    "\\brevenue\\b", "\\bclient\\b", "\\bproduct\\b",
+    "\\bgoal\\b", "\\bproject\\b", "\\bdecision\\b", "\\bmeeting\\b"
+  ],
+
+  "topics": [
+    {
+      "name": "fundraising",
+      "triggers": ["raise", "investor", "pitch", "seed", "angel", "valuation", "term sheet", "data room"],
+      "files": [
+        "🚀 Company/💰 Raise/Raise Dashboard.md"
+      ]
+    },
+    {
+      "name": "product-strategy",
+      "triggers": ["product", "roadmap", "feature", "launch", "go-to-market", "gtm"],
+      "files": [
+        "🚀 Company/📋 Strategy/Product.md",
+        "🚀 Company/📋 Strategy/Strategy Index.md"
+      ]
+    },
+    {
+      "name": "sales-pipeline",
+      "triggers": ["sales", "pipeline", "client", "deal", "prospect", "outreach"],
+      "files": [
+        "🚀 Company/🎯 Sales/Pipeline.md"
+      ]
+    },
+    {
+      "name": "writing-content",
+      "triggers": ["substack", "newsletter", "article", "draft", "publish", "essay", "post", "chapter"],
+      "files": [
+        "✍️ Writing/Writing Pipeline.md"
+      ]
+    },
+    {
+      "name": "team-delegation",
+      "triggers": ["contractor", "delegate", "team task", "my tasks", "waiting on"],
+      "files": [
+        "🚀 Company/✅ To-dos/Team To-dos.md",
+        "✅ To-dos/✅ Waiting On.md"
+      ]
+    },
+    {
+      "name": "meetings",
+      "triggers": ["meeting", "transcript", "just had a (call|meeting)", "note-todos"],
+      "files": [
+        "⚙️ Meta/rules/meeting-workflow.md"
+      ]
+    }
+  ]
+}
