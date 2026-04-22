@@ -9,6 +9,65 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-22 — Light/full tier removed: everyone gets the full second brain
+
+**Who this affects:** anyone running fresh `/setup-brain` installs from now on. Existing installs keep working unchanged. **Existing CLAUDE.md files that mention `PLAN_TIER` are stale references, not bugs.** See `docs/migrations/2026-04-22-light-full-removed.md` for cleanup.
+
+**What changed:**
+
+The "do you want light or full?" question has been removed from Phase 1. Every new install now unconditionally gets the advisory panel, knowledge graph context routing, panel-voice routing, monthly insight reports with pattern analysis, and the Instinct Engine. Previously these were gated behind `PLAN_TIER == "full"`.
+
+**Why:** the light tier was a defensive crouch from an earlier moment when the daily-budget concern was uncertain. Real usage data and the workshop showed the full version is what people came for, and most users never figured out what they were missing in light mode. Splitting the experience added friction (one more question, one more decision the user had no good basis for making) without saving them anything they cared about. Removing the choice removes the friction.
+
+**Files touched:** `SKILL.md` (dropped Tier column from routing table, removed PLAN_TIER variable), `phases/phase-01-welcome.md` (deleted Step 1.0b), `phases/phase-05-context-layer.md`, `phases/phase-10b-panel-roster.md`, `phases/phase-18-insights.md` (all tier gates removed), `templates/generated/obsidian-rules-template.md` (Rule 19 collapsed to single 12-category version).
+
+---
+
+## 2026-04-22 — Windows .ps1 files now ship with UTF-8 BOM (parser-error fix)
+
+**Who this affects:** every Windows user who has ever run `bootstrap.ps1`, `drift-check.ps1`, or `update-check.ps1`. **Critical fix.**
+
+**What changed:**
+
+All three PowerShell scripts in the repo now start with the UTF-8 BOM bytes (`EF BB BF`). Without it, Windows PowerShell 5.1 (the default on Windows 10/11) reads the files as Windows-1252 and crashes on the first em dash, box-drawing character, or ⚙️ emoji it hits. The scripts contain all three. The bootstrap was the worst case (51 non-ASCII lines) and would have failed at install time for every Windows user, but the bug went unnoticed because no one was running the bootstrap on Windows during development.
+
+**Also:** `phases/phase-18-insights.md` documents a `run-insights.ps1` template that Claude writes to Windows users' machines during setup. The template contained em dashes inside PowerShell strings AND the ⚙️ emoji in vault paths but had no BOM directive. Both have been fixed: em dashes stripped, mandatory BOM-save instruction added above the template with a verification command.
+
+**Codified durably:** SKILL.md "Important Notes for Claude" now includes the rule "Windows .ps1 files MUST be saved as UTF-8 with BOM" so future setup runs and future maintainers see this on every read.
+
+**Why:** flagged by a Windows user during a `git pull` who saw a parser error on line 201 of drift-check.ps1. The bash version worked, so they reported it as low-urgency. It was actually a much bigger issue: the same encoding fragility was in every PowerShell script we ship.
+
+---
+
+## 2026-04-22 — Setup friction fixes: no terminal, no GitHub prompt, ⌘↩ clarity
+
+**Who this affects:** everyone running fresh `/setup-brain` installs.
+
+**What changed:**
+
+Three small but high-impact friction reductions surfaced by the workshop on April 21-22:
+
+1. **No more "open a terminal."** SKILL.md now says: *"NEVER ask the user to open a terminal during setup. Claude runs all bash commands via its own tools."* Workshop attendees got stuck whenever the assistant told them to switch to Terminal — non-technical users don't know what a terminal is, where to find it, or how to switch back. Fixed everywhere this was happening.
+2. **GitHub auth prompt removed entirely.** Bootstrap no longer prompts for `gh auth login`. The `gh` binary still installs (it's useful), but auth is never required and never asked about. Phase 0 docs updated to match. Connecting GitHub adds zero value to the brain setup.
+3. **⌘↩ vs typing rule added to Visual Reassurance Protocol.** The single most common stall point: users see a gray tool-approval box and don't know whether to type something or press ⌘↩ (Mac) / Ctrl↩ (Windows). New rule: *"If you see a gray tool box → ⌘↩. If Claude ends with a question mark → type your answer."* Said out loud once before Phase 0 starts, repeated if the user stalls.
+
+**Why:** the workshop showed that broken tools weren't the problem — confusion was. Three concrete clarity fixes saved more abandonment risk than any feature add would.
+
+---
+
+## 2026-04-22 — CI / lint workflow + /diagnose self-check
+
+**Who this affects:** maintainers (CI) and end users debugging a setup (/diagnose).
+
+**What changed:**
+
+1. **GitHub Actions workflow** at `.github/workflows/lint.yml` now runs on every push and PR. It catches: bash syntax errors (`bash -n`), PowerShell parser errors (`pwsh ParseFile`), missing UTF-8 BOM on `.ps1` files (the bug class above), em dashes in `.ps1`/`.sh` (preventive), and JSON validation for `hooks.json` and any `.mcp.json`. Costs $0 on public repos.
+2. **`/diagnose` self-check command** at `skills/diagnose/`. Run it anytime the user is unsure if something is working. Single command checks: CLAUDE.md exists in vault, all expected skills installed in `~/.claude/skills/`, hooks registered, `journal-index.json` exists and is fresh, vault path readable, MCPs registered. Reports green/yellow/red per check with one-line fix guidance. Wired for Mac/Linux (`scripts/diagnose.sh`) and Windows (`scripts/diagnose.ps1`).
+
+**Why:** the Windows BOM bug sat in `bootstrap.ps1` since the file was created because nothing tested it. CI prevents the regression class. /diagnose closes the gap between "something feels off" and "here's exactly what's broken" — workshop attendees specifically asked questions in the shape of "how do I know if it's working?"
+
+---
+
 ## 2026-04-21 — Granola: local cache export replaces API sync
 
 **Who this affects:** anyone using Granola for meeting notes.

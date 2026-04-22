@@ -1,26 +1,6 @@
 ## Phase 18: Weekly & Monthly Insights
 
-### Tier Gate (check PLAN_TIER from Phase 1)
-
-**If `PLAN_TIER == "light"`:** install a simpler version of the insights skill. Tell the user:
-
-> "I'm setting up a weekly summary for you. Type /weekly anytime and I'll pull together what happened that week: how many entries you wrote, which floors you were on, and the highlights worth remembering. Clean and quick."
-
-The light-mode insights skill includes sections 1 (Week at a Glance), 2 (What Stood Out), and 6 (Wins to Celebrate) from the full template. It skips sections 3 (Life Coach patterns), 4 (Therapist patterns), 5 (Panel Thoughts), and the post-report floor-note updates and graph integration steps. No /monthly command in light mode (weekly only). Still install the journal index builder and the cron job for weekly generation (same schedule), but the cron prompt should reference the simplified skill. Skip the /patterns auto-run at the end of the cron job.
-
-When generating the light-mode skill file at `~/.claude/skills/insights/SKILL.md`, use the full template as a base but include only:
-- The date-finding logic (journal index)
-- Section 1: The Week at a Glance (entry count, floor distribution, floor trend, habit tracking)
-- Section 2: What Stood Out (2-3 significant moments, recurring themes, accountability check)
-- Section 6: Wins to Celebrate
-- Section 7: One Question to Sit With
-- The save-to-vault section (weekly only)
-
-Add a note at the top of the generated skill: "This is the light-mode insights skill. For pattern analysis, advisory panel thoughts, and monthly reports, upgrade to the full setup by running /setup-brain again."
-
-Then continue with the cron/schedule setup below (weekly only, skip monthly).
-
-**If `PLAN_TIER == "full"`:** run the full setup as written below, including monthly reports and all sections.
+Run the full setup as written below, including monthly reports, pattern analysis, panel commentary, and all sections.
 
 ---
 
@@ -197,10 +177,12 @@ crontab -e
 
 ### Windows
 
-Create `run-insights.ps1` in the vault's `⚙️ Meta/scripts/` folder:
+Create `run-insights.ps1` in the vault's `⚙️ Meta/scripts/` folder.
+
+**CRITICAL: save the file as UTF-8 with BOM.** Windows PowerShell 5.1 (the default on Windows 10/11) reads BOM-less .ps1 files as Windows-1252 and chokes on any non-ASCII byte (em dashes, the ⚙️ in the vault path, box-drawing chars). The script below contains the ⚙️ emoji in `⚙️ Meta\scripts\`, so a no-BOM save will produce a parser error on the first run. When using the Write tool, prepend `\ufeff` to the content; when piping from Python, write `b'\xef\xbb\xbf' + content.encode('utf-8')`. After writing, verify with `file run-insights.ps1` (should report "UTF-8 (with BOM)") or PowerShell `(Get-Content run-insights.ps1 -Encoding Byte -TotalCount 3) -join ','` (should output `239,187,191`).
 
 ```powershell
-# run-insights.ps1 — Generate weekly or monthly journal insight reports via Claude Code CLI
+# run-insights.ps1 - Generate weekly or monthly journal insight reports via Claude Code CLI
 # Usage: .\run-insights.ps1 -Period weekly
 #        .\run-insights.ps1 -Period monthly
 param([string]$Period = "weekly")
@@ -226,7 +208,7 @@ if (-not $ClaudeBin) {
 }
 
 if (-not $ClaudeBin) {
-  Add-Content $LogFile "$(Get-Date): ERROR — Claude CLI not found"
+  Add-Content $LogFile "$(Get-Date): ERROR - Claude CLI not found"
   exit 1
 }
 
@@ -237,7 +219,7 @@ Set-Location $VaultDir
   --model claude-sonnet-4-6 `
   --allowedTools "Read,Write,Edit,Glob,Grep,Bash" `
   --permission-mode acceptEdits `
-  "Run the /insights skill for a $Period report. Read the skill at ~/.claude/skills/insights/SKILL.md first, then follow its instructions exactly. Read all journal entries for the $Period calendar period and generate the full report. Save it to the correct folder. After the report is saved, run /patterns in auto mode: read ~/.claude/skills/patterns/SKILL.md, scan for patterns, then automatically capture all findings without asking for confirmation — this is a headless cron run with no user present. Save pattern captures as concept notes, CLAUDE.md rules, or writing seeds — wherever they fit best." `
+  "Run the /insights skill for a $Period report. Read the skill at ~/.claude/skills/insights/SKILL.md first, then follow its instructions exactly. Read all journal entries for the $Period calendar period and generate the full report. Save it to the correct folder. After the report is saved, run /patterns in auto mode: read ~/.claude/skills/patterns/SKILL.md, scan for patterns, then automatically capture all findings without asking for confirmation, this is a headless cron run with no user present. Save pattern captures as concept notes, CLAUDE.md rules, or writing seeds, wherever they fit best." `
   2>&1 | Add-Content $LogFile
 
 Add-Content $LogFile "$(Get-Date): Finished $Period insights (exit code: $LASTEXITCODE)"
@@ -246,12 +228,12 @@ Add-Content $LogFile "$(Get-Date): Finished $Period insights (exit code: $LASTEX
 Then set up Windows Task Scheduler:
 
 ```powershell
-# Weekly — every Monday at 9am
+# Weekly - every Monday at 9am
 $WeeklyAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-File `"C:\path\to\vault\⚙️ Meta\scripts\run-insights.ps1`" -Period weekly"
 $WeeklyTrigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday -At 9am
 Register-ScheduledTask -TaskName "AI Brain Weekly Insights" -Action $WeeklyAction -Trigger $WeeklyTrigger -Description "Generate weekly journal insights"
 
-# Monthly — 2nd of each month at 9am
+# Monthly - 2nd of each month at 9am
 $MonthlyAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-File `"C:\path\to\vault\⚙️ Meta\scripts\run-insights.ps1`" -Period monthly"
 $MonthlyTrigger = New-ScheduledTaskTrigger -Once -At 9am -RepetitionInterval (New-TimeSpan -Days 30)
 # Note: For exact "2nd of month" scheduling, use Task Scheduler GUI or schtasks:

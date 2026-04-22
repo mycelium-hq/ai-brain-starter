@@ -342,13 +342,11 @@ After creating both scripts, run: `chmod +x "[VAULT_PATH]/⚙️ Meta/scripts/se
 
 **Note:** If the user was already set up with `originals-hook.sh`, migrate by copying its contents into `write-hook.sh` and updating the hook path in `.claude/settings.local.json`.
 
-### Tier-Gated Hooks (check PLAN_TIER from Phase 1)
+### Context-Routing Hooks
 
-**If `PLAN_TIER == "light"`:** skip the graph-context-hook and panel-trigger-hook below. Light-mode users still get the session-end-hook, write-hook, session protocol hook, and auto-update hook installed above. The skipped hooks are the ones that fire on every prompt to route context and panel voices, which adds up fast in daily usage. Tell the user: "I'm skipping the graph-routing and panel hooks to keep things lean. You still get full session memory, automatic meeting detection, and the session protocol. If you want the full version later, just run setup again and I'll add the rest."
+Install everything below as written. These are the hooks that fire on every prompt to route the right graph context and panel voices into the conversation — the connective tissue that makes the vault feel like a second brain instead of a notes folder.
 
-**If `PLAN_TIER == "full"`:** install everything below as written.
-
-**Optional: graph-context-hook.sh (if the user has graphify installed AND PLAN_TIER == "full").**
+**graph-context-hook.sh (install if the user has graphify installed).**
 
 If the vault uses `/graphify` to build a knowledge graph, install the **graph-context-hook.sh** companion. It's a `UserPromptSubmit` hook that fires on every prompt, regex-matches the prompt against routing keywords, and (on match) injects `additionalContext` pointing the assistant at the right `GRAPH_REPORT.md` with a freshness note. Silent passthrough on no match.
 

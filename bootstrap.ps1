@@ -1,4 +1,4 @@
-# ai-brain-starter — one-command bootstrap (Windows)
+﻿# ai-brain-starter, one-command bootstrap (Windows)
 #
 # This script installs everything Phase 0 of /setup-brain installs, but without
 # requiring you to launch Claude Code first. Run this once, then open Claude
@@ -10,7 +10,7 @@
 # Dry run (preview changes without making them):
 #     iex "& { $(irm https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main/bootstrap.ps1) } -DryRun"
 #
-# SAFETY GUARANTEES — same as bootstrap.sh:
+# SAFETY GUARANTEES, same as bootstrap.sh:
 #   - Existing settings.json/.mcp.json keys preserved (setdefault never overwrites)
 #   - Local uncommitted changes to ai-brain-starter clone are stashed before pull
 #   - DIVERGENT forks of ai-brain-starter (commits on both sides) are skipped
@@ -73,10 +73,10 @@ if ($claudeMemPresent) {
         if ($s.extraKnownMarketplaces) { $s.extraKnownMarketplaces.PSObject.Properties.Remove("thedotmack") }
         if ($s.enabledPlugins)         { $s.enabledPlugins.PSObject.Properties.Remove("claude-mem@thedotmack") }
         $s | ConvertTo-Json -Depth 10 | Set-Content $settingsPath
-        Ok "Removed claude-mem — had security issues (open local HTTP port, file-read surface). Built-in memory covers everything it did."
+        Ok "Removed claude-mem, had security issues (open local HTTP port, file-read surface). Built-in memory covers everything it did."
         $script:Cleaned += "claude-mem"
     }
-} else { Ok "claude-mem not present — nothing to clean" }
+} else { Ok "claude-mem not present, nothing to clean" }
 
 # notebooklm: browser automation + Google login dance wasn't worth it for most users.
 $notebooklmDir = "$env:USERPROFILE\.claude\skills\notebooklm"
@@ -84,12 +84,12 @@ if (Test-Path $notebooklmDir) {
     if ($DryRun) { Dry "would remove $notebooklmDir (notebooklm skill)" }
     else {
         Remove-Item -Recurse -Force $notebooklmDir
-        Ok "Removed notebooklm — rarely used, required browser automation + Google login on every session. To restore: git clone https://github.com/PleasePrompto/notebooklm-skill.git `$env:USERPROFILE\.claude\skills\notebooklm"
+        Ok "Removed notebooklm, rarely used, required browser automation + Google login on every session. To restore: git clone https://github.com/PleasePrompto/notebooklm-skill.git `$env:USERPROFILE\.claude\skills\notebooklm"
         $script:Cleaned += "notebooklm"
     }
-} else { Ok "notebooklm not present — nothing to clean" }
+} else { Ok "notebooklm not present, nothing to clean" }
 
-Hdr "ai-brain-starter — one-command install"
+Hdr "ai-brain-starter, one-command install"
 Write-Host ""
 if ($DryRun) {
     Write-Host "  DRY RUN MODE - showing what would be installed without making any changes." -ForegroundColor Magenta
@@ -107,13 +107,13 @@ Start-Sleep -Seconds 1
 
 # ─── winget bootstrap ─────────────────────────────────────────────────────────
 # winget ships with Windows 11 and recent Windows 10. On older Windows 10 it's
-# missing — auto-install App Installer (which provides winget) before doing
+# missing, auto-install App Installer (which provides winget) before doing
 # anything else. Never abort with "go install something from the Microsoft
-# Store yourself" — that defeats the one-command promise.
+# Store yourself", that defeats the one-command promise.
 if (-not (Have winget)) {
     Hdr "Installing winget (App Installer)"
     Log "winget is the Windows package manager we use to install everything else."
-    Log "Your Windows version is missing it — we'll install it for you now."
+    Log "Your Windows version is missing it, we'll install it for you now."
 
     # Method 1: Microsoft's official MSIX bundle. URL aka.ms/getwinget always
     # resolves to the latest stable release on GitHub.
@@ -137,10 +137,10 @@ if (Have winget) {
     Ok "winget available"
     $UseWinget = $true
 } else {
-    # Final fallback — winget could not be installed. Use direct downloads for
+    # Final fallback, winget could not be installed. Use direct downloads for
     # the things we need. The user is on a very old Windows; mark $UseWinget so
     # later sections can branch.
-    Warn "Continuing without winget — using direct installer downloads."
+    Warn "Continuing without winget, using direct installer downloads."
     $UseWinget = $false
 }
 
@@ -155,7 +155,7 @@ if (-not $pythonOk) {
     if ($UseWinget) {
         winget install -e --id Python.Python.3.12 --accept-source-agreements --accept-package-agreements
     } else {
-        Log "winget unavailable — downloading Python installer directly."
+        Log "winget unavailable, downloading Python installer directly."
         $pyInstaller = "$env:TEMP\python-installer.exe"
         try {
             Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe" -OutFile $pyInstaller -UseBasicParsing
@@ -175,7 +175,7 @@ if (-not (Have node)) {
     if ($UseWinget) {
         winget install -e --id OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements
     } else {
-        Log "winget unavailable — downloading Node.js LTS installer directly."
+        Log "winget unavailable, downloading Node.js LTS installer directly."
         $nodeInstaller = "$env:TEMP\node-installer.msi"
         try {
             Invoke-WebRequest -Uri "https://nodejs.org/dist/v20.18.0/node-v20.18.0-x64.msi" -OutFile $nodeInstaller -UseBasicParsing
@@ -189,18 +189,18 @@ if (-not (Have node)) {
 }
 if (Have node) { Ok "node $(node --version)" } else { Err "node install failed" }
 
-# ─── Claude Code (Anthropic's CLI/desktop app — REQUIRED) ─────────────────────
+# ─── Claude Code (Anthropic's CLI/desktop app, REQUIRED) ─────────────────────
 # Without this, the user has no way to actually run /setup-brain after the
 # bootstrap finishes. Distributed via npm so the install path is identical
 # across Mac, Linux, and Windows once Node is present.
 if (-not (Have claude)) {
     Hdr "Installing Claude Code"
     Log "Claude Code is Anthropic's developer tool that runs the AI brain skill."
-    Log "It's different from claude.ai (the chat website) — this one lives in your"
+    Log "It's different from claude.ai (the chat website), this one lives in your"
     Log "terminal and can read and write files in your vault. Installing via npm."
     npm install -g @anthropic-ai/claude-code 2>$null
     if ($LASTEXITCODE -ne 0) {
-        Err "Claude Code install failed — install manually with: npm install -g @anthropic-ai/claude-code"
+        Err "Claude Code install failed, install manually with: npm install -g @anthropic-ai/claude-code"
     }
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 }
@@ -222,7 +222,7 @@ if (-not (Have fastmcp)) {
     Hdr "Installing fastmcp"
     pipx install fastmcp 2>$null
 }
-if (Have fastmcp) { Ok "fastmcp" } else { Warn "fastmcp not installed (non-blocking — install later with: pipx install fastmcp)" }
+if (Have fastmcp) { Ok "fastmcp" } else { Warn "fastmcp not installed (non-blocking, install later with: pipx install fastmcp)" }
 
 # ─── gh (GitHub CLI) ──────────────────────────────────────────────────────────
 if (-not (Have gh)) {
@@ -231,15 +231,15 @@ if (-not (Have gh)) {
     winget install -e --id GitHub.cli --accept-source-agreements --accept-package-agreements
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 }
-if (Have gh) { Ok "gh installed" } else { Warn "gh not installed — install manually if needed" }
+if (Have gh) { Ok "gh installed" } else { Warn "gh not installed, install manually if needed" }
 
-# gh authentication — required for the session-end capture cascade to file
+# gh authentication, required for the session-end capture cascade to file
 # improvement ideas as GitHub issues automatically. Walk the user through it
 # the first time only.
 if (Have gh) {
     gh auth status 2>$null | Out-Null
     if ($LASTEXITCODE -ne 0) {
-        Hdr "GitHub login (OPTIONAL — skip with Ctrl+C)"
+        Hdr "GitHub login (OPTIONAL, skip with Ctrl+C)"
         Write-Host "  This step is OPTIONAL. You only need it if you want your AI brain to"
         Write-Host "  automatically file improvement ideas as GitHub issues for the maintainer."
         Write-Host ""
@@ -249,18 +249,18 @@ if (Have gh) {
         Write-Host "     NOT SURE -> press Ctrl+C to skip. You can come back later with: gh auth login"
         Write-Host ""
         Write-Host "  (If you press Enter, you'll see options like 'GitHub.com -> HTTPS ->"
-        Write-Host "   Login with web browser.' Just pick those defaults — they're fine.)"
+        Write-Host "   Login with web browser.' Just pick those defaults, they're fine.)"
         Write-Host ""
         Read-Host "  Press Enter to log in, or Ctrl+C to skip"
         gh auth login
-        if ($LASTEXITCODE -ne 0) { Warn "gh auth skipped or failed — run 'gh auth login' later if you want issue filing" }
+        if ($LASTEXITCODE -ne 0) { Warn "gh auth skipped or failed, run 'gh auth login' later if you want issue filing" }
     }
     gh auth status 2>$null | Out-Null
     if ($LASTEXITCODE -eq 0) { Ok "gh authenticated" } else { Warn "gh not authenticated (issue filing disabled until you run: gh auth login)" }
 }
 
-# ─── Obsidian — REQUIRED, the entire setup writes notes into an Obsidian vault.
-# Auto-install via winget. Never ask the user to "go download" anything — that
+# ─── Obsidian, REQUIRED, the entire setup writes notes into an Obsidian vault.
+# Auto-install via winget. Never ask the user to "go download" anything, that
 # breaks the one-command promise and assumes they know what Obsidian is and
 # how to install a desktop app on Windows.
 $ObsidianInstalled = $false
@@ -283,7 +283,7 @@ if (-not $ObsidianInstalled) {
             Log "Installing via winget so you don't have to download anything yourself."
             winget install -e --id Obsidian.Obsidian --accept-source-agreements --accept-package-agreements
         } else {
-            Log "winget unavailable — downloading Obsidian installer directly from obsidian.md."
+            Log "winget unavailable, downloading Obsidian installer directly from obsidian.md."
             $obsInstaller = "$env:TEMP\Obsidian-Installer.exe"
             try {
                 # Resolve latest Windows installer from Obsidian's GitHub releases.
@@ -294,10 +294,10 @@ if (-not $ObsidianInstalled) {
                     Start-Process -Wait -FilePath $obsInstaller -ArgumentList "/S"
                     Remove-Item $obsInstaller -Force -ErrorAction SilentlyContinue
                 } else {
-                    Err "Could not resolve latest Obsidian installer URL — download manually from https://obsidian.md/download"
+                    Err "Could not resolve latest Obsidian installer URL, download manually from https://obsidian.md/download"
                 }
             } catch {
-                Err "Obsidian install failed: $_ — download manually from https://obsidian.md/download and re-run this script"
+                Err "Obsidian install failed: $_, download manually from https://obsidian.md/download and re-run this script"
             }
         }
         if ($LASTEXITCODE -eq 0 -or -not $UseWinget) {
@@ -410,7 +410,7 @@ foreach ($sub in @("graphify", "meeting-todos", "patterns", "insights", "deconst
         continue
     }
 
-    # Regular folder or missing — eligible for sync
+    # Regular folder or missing, eligible for sync
     if ($DryRun) {
         Dry "would sync $sub skill from $src to $dst (with backup-before-overwrite)"
         continue
@@ -457,7 +457,7 @@ if (Test-Path $humDir) { Ok "humanizer skill installed" } else { Err "humanizer 
 # ─── Granola MCP ─────────────────────────────────────────────────────────────
 # SAFETY: backup .mcp.json before editing. Existing MCP servers (custom
 # integrations, other URL or stdio MCPs the user wired themselves) are
-# preserved — setdefault() only adds the granola entry if missing.
+# preserved, setdefault() only adds the granola entry if missing.
 Hdr "Registering MCPs (Granola + ChatPRD)"
 $mcpPath = "$env:USERPROFILE\.claude\.mcp.json"
 Backup-File $mcpPath
@@ -522,7 +522,7 @@ if ($DryRun) {
 foreach ($pair in @(@("graphify","graphify"), @("node","node"), @("npm","npm"), @("pipx","pipx"), @("gh","gh"))) {
     if (Have $pair[1]) { Ok $pair[0] } else { Err "$($pair[0]) not callable" }
 }
-foreach ($sub in @("graphify","meeting-todos","patterns","insights","deconstruct","daily-journal","repurpose-talk","nano-banana","humanizer","ai-brain-starter")) {
+foreach ($sub in @("graphify","meeting-todos","patterns","insights","deconstruct","daily-journal","repurpose-talk","nano-banana","humanizer","ai-brain-starter","diagnose")) {
     if (Test-Path "$env:USERPROFILE\.claude\skills\$sub") { Ok "skill: $sub" } else { Err "skill missing: $sub" }
 }
 if (Test-Path "$env:USERPROFILE\.claude\skills\graphify\scripts") { Ok "graphify scripts" } else { Err "graphify scripts missing" }
@@ -592,12 +592,12 @@ Write-Host "     (For JOINING an existing team vault: cd into the team vault fol
 Write-Host ""
 Write-Host "  2. Type ONE of these:"
 Write-Host ""
-Write-Host "       /setup-brain                  # New personal vault — full conversational setup"
-Write-Host "       /setup-brain join-team        # Joining an existing team vault — minimal setup"
+Write-Host "       /setup-brain                  # New personal vault, full conversational setup"
+Write-Host "       /setup-brain join-team        # Joining an existing team vault, minimal setup"
 Write-Host ""
 Write-Host "  3. The setup is conversational. Answer the questions Claude asks."
 Write-Host ""
-Write-Host "━━━ Optional — image generation ━━━" -ForegroundColor Cyan
+Write-Host "━━━ Optional, image generation ━━━" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  Nano Banana requires running /plugin commands inside Claude Code:"
 Write-Host ""

@@ -106,9 +106,9 @@ The nano-banana skill folder is synced by bootstrap so `/nano-banana` is discove
 
 ---
 
-### Step 0.5. GitHub auth (OPTIONAL, handled by bootstrap)
+### Step 0.5. GitHub — no action needed
 
-Bootstrap prompts the user for `gh auth login` interactively. If they skip it, the session-end capture cascade can still file improvement ideas, it just won't auto-post them as GitHub issues. No Phase 0 action needed. Bootstrap already printed the "skip with Ctrl+C" UX.
+Bootstrap installs `gh` silently but does NOT prompt for auth. Connecting GitHub is never required. If the user asks about it later, say: "If you ever want it, just run `gh auth login` once and it'll wire up automatically." Don't mention it proactively.
 
 ---
 
