@@ -9,6 +9,24 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-23 — To-do system: capture inbox + Eisenhower four-quadrant view
+
+**Who this affects:** anyone running fresh `/setup-brain` installs from now on who opts into the `✅ To-dos/` folder. Existing installs can upgrade by re-installing `templates/generated/todo-system-template.md`; the new four-quadrant Dataview block is additive and can be pasted into the top of an existing `Get to-do.md` without breaking anything.
+
+**What changed:**
+
+The to-do template now installs two files instead of one for the main list: `Get to-do.md` (prioritized queue) and `From Meetings.md` (raw capture inbox). Captures from journaling, meetings, and session close land in `From Meetings.md` grouped by source, then get triaged into `Get to-do.md` once a week.
+
+At the top of `Get to-do.md`, a new "Four Quadrants" section auto-renders every open task from both files through an Eisenhower matrix: Q1 (Important + Urgent), Q2 (Important, Not Urgent), Q3 (Urgent, Less Important), Q4 (Backlog), plus a NEEDS TRIAGE quadrant for tasks without a `[priority::]` tag. Importance is read from the existing `[priority:: 1-3]` inline field; urgency is derived from `[due::]` within 7 days (or a P1 with no due date). Nothing changes about how you write tasks, the quadrants are just a new lens over the same inline fields.
+
+`This Week.md` was also updated to pull P1s from both files so priority captures sitting in the inbox still surface during weekly planning.
+
+**Why:** a single mixed file forced you to scroll past raw capture clutter to see what actually needed doing. The split keeps the prioritized queue clean. And a text list of P1/P2/P3 does not answer the question "what do I do right now?" as directly as a four-quadrant matrix does, which is the question you are actually asking when you open the file. Eisenhower has been the textbook answer to this for decades; rendering it through Dataview means it is always current with zero maintenance.
+
+**Files touched:** `templates/generated/todo-system-template.md` (added File 2 `From Meetings.md`, added Four Quadrants Dataview block at top of File 1, updated `This Week.md` query to read from both files, added "Why two files" explainer, added "How the quadrants work" in the usage section), `phases/phase-02-03-plugins-folders.md` (updated `✅ To-dos/` install description to mention the two-file + four-quadrant model).
+
+---
+
 ## 2026-04-22 — Light/full tier removed: everyone gets the full second brain
 
 **Who this affects:** anyone running fresh `/setup-brain` installs from now on. Existing installs keep working unchanged. **Existing CLAUDE.md files that mention `PLAN_TIER` are stale references, not bugs.** See `docs/migrations/2026-04-22-light-full-removed.md` for cleanup.

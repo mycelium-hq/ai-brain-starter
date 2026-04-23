@@ -240,7 +240,7 @@ These queries work with the inline-field to-do system. Every task needs `[area::
 
 ```dataview
 TASK
-FROM "To-dos/Get to-do"
+FROM "To-dos/Get to-do" OR "To-dos/From Meetings"
 WHERE !completed AND priority = 1
 SORT due ASC
 ```
@@ -249,10 +249,54 @@ SORT due ASC
 
 ```dataview
 TASK
-FROM "To-dos/Get to-do"
+FROM "To-dos/Get to-do" OR "To-dos/From Meetings"
 WHERE !completed AND priority = 2 AND due AND date(due) <= date(today) + dur(7 days)
 SORT due ASC
 LIMIT 5
+```
+
+### Eisenhower four-quadrant view (paste at top of Get to-do.md)
+
+A five-block set that auto-sorts every task in your personal to-do files into Eisenhower quadrants. Importance = `[priority::]` (1 = high, 2 = mid, 3 = low). Urgency = `[due::]` within 7 days, or a P1 with no due date.
+
+**Q1: DO NOW (Important + Urgent)**
+```dataview
+TASK
+FROM "To-dos/Get to-do" OR "To-dos/From Meetings"
+WHERE !completed AND priority = 1 AND (!due OR date(due) <= date(today) + dur(7 days))
+SORT due ASC
+```
+
+**Q2: SCHEDULE (Important, Not Urgent)**
+```dataview
+TASK
+FROM "To-dos/Get to-do" OR "To-dos/From Meetings"
+WHERE !completed AND ((priority = 1 AND due AND date(due) > date(today) + dur(7 days)) OR (priority = 2 AND (!due OR date(due) > date(today) + dur(7 days))))
+SORT due ASC
+```
+
+**Q3: DELEGATE / CUT (Urgent, Less Important)**
+```dataview
+TASK
+FROM "To-dos/Get to-do" OR "To-dos/From Meetings"
+WHERE !completed AND priority = 2 AND due AND date(due) <= date(today) + dur(7 days)
+SORT due ASC
+```
+
+**Q4: BACKLOG (Neither)**
+```dataview
+TASK
+FROM "To-dos/Get to-do" OR "To-dos/From Meetings"
+WHERE !completed AND priority = 3
+SORT file.ctime DESC
+```
+
+**NEEDS TRIAGE (no priority tag yet)**
+```dataview
+TASK
+FROM "To-dos/Get to-do" OR "To-dos/From Meetings"
+WHERE !completed AND !priority
+SORT file.ctime DESC
 ```
 
 ### Combined P1s (personal + team, for a unified This Week view)

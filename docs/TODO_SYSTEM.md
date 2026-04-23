@@ -20,10 +20,11 @@ A single flat to-do file breaks down when:
 
 ```
 Your Vault/
-  Home/
-    ✅ Get to-do.md          ← personal tasks (writing, health, errands)
-    ✅ This Week.md           ← focusing lens: max 7 items, updated Mondays
-    ✅ Waiting On.md          ← Dataview-powered: what you've delegated
+  To-dos/
+    Get to-do.md              ← prioritized personal queue (P1/P2/P3) + Eisenhower four-quadrant view at top
+    From Meetings.md          ← capture inbox: raw tasks from journal, meetings, sessions, grouped by source
+    This Week.md              ← focusing lens: auto-pulls P1s from both files
+    Waiting On.md             ← what you've delegated or are blocked on
   Team Vault/ (or Work/ folder)
     Home/
       Team To-dos.md          ← canonical source for all team tasks
@@ -35,7 +36,10 @@ Your Vault/
         Due This Week.md      ← next 7 days
 ```
 
-**Key principle:** Team To-dos is the single source of truth. View files are Dataview projections, never copies. Edit tasks in the source file; views update automatically.
+**Key principles:**
+- **Two files for personal, one for team.** `Get to-do.md` holds triaged items. `From Meetings.md` holds raw captures until triage. Team vaults use a single source file because the team needs one shared surface.
+- **Views are Dataview projections, never copies.** This Week, Waiting On, per-person team views, By Area, Sprint Progress are all auto-generated. Edit tasks in the source file; views update automatically.
+- **The four-quadrant view at the top of `Get to-do.md` is also a projection.** It reads `[priority::]` and `[due::]` from every task in both personal files and sorts them into Eisenhower quadrants (Q1 DO NOW, Q2 SCHEDULE, Q3 DELEGATE/CUT, Q4 BACKLOG, plus NEEDS TRIAGE for unscored items). Nothing is duplicated; the quadrants are just a different lens on the same inline fields.
 
 ## Inline Fields
 
