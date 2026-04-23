@@ -254,7 +254,7 @@ Read the full story: [How I Built a Second Brain That Actually Works With AI](ht
 
 The repo is free. The full custom setup is not.
 
-I install the full version for a small number of founders and teams each quarter. 2-hour deep-dive, custom vault architecture, knowledge graph densification across your existing notes, MCP integrations with your actual stack, one week of async training. Packages and pricing: [for-teams/working-with-me.md](for-teams/working-with-me.md).
+I install the full version for a small number of founders, solo operators, and teams each quarter. The Personal Install is for one person whose work is decision-heavy and context-rich: founders running a company and a life, writers, product managers, consultants. The Team Install is for a co-founder pair or small company. Either way: 2-hour deep-dive, custom vault architecture, knowledge graph densification across your existing notes, MCP integrations with your actual stack, async training. Packages and pricing: [for-teams/working-with-me.md](for-teams/working-with-me.md).
 
 Free 20-minute AI diagnostic at [diazroa.com](https://diazroa.com) if you want to see whether it is a fit before a package conversation. No pitch deck, no follow-up sequence. I audit your workflow live and tell you where you are losing time to work AI should be doing. If it is a fit, we talk packages. If it is not, you keep the audit and we part as friends.
 
