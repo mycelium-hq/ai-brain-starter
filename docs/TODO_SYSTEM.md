@@ -75,6 +75,27 @@ Assign priority by asking three questions in order:
 
 **Target distribution:** ~15 p1 items max. If you have 40+ p1 items, your criteria are too loose. P1 means "if I don't do this in the next 5 days, something breaks."
 
+## Optional: Weighted Scoring Formula
+
+For users who find pure P1/P2/P3 judgment too loose, or who want an auditable reason for every priority assignment, the personal template also ships an optional weighted scoring formula. Four numeric inputs per task (impact, urgency, effort, commitment), one computed score, deterministic thresholds.
+
+| Field | Scale | Weight |
+|---|---|---|
+| `[impact:: 1-5]` | Goal alignment (5 = moves top goal directly) | 0.40 |
+| `[urgency:: 1-5]` | Time consequence (5 = today, 1 = someday) | 0.30 |
+| `[effort:: S\|M\|L]` | Execution cost (S=1, M=2, L=3) | 0.15 (inverted: `(4 - effort_score)`) |
+| `[commit:: Y\|N]` | External promise (Y=1, N=0) | 0.75 (flat bonus) |
+
+**Formula:** `score = impact*0.40 + urgency*0.30 + (4 - effort_score)*0.15 + commit_bonus*0.75`
+
+**Thresholds:** P1 ≥ 3.75 | P2 2.75–3.74 | P3 < 2.75
+
+**When to use it:** you keep mis-prioritizing, you want an auditable trail for each assignment, or you have an LLM doing triage for you and need deterministic output.
+
+**When NOT to use it:** the three-question framework above feels sufficient. Most people do not need this. Overbuilding your to-do system is a classic form of productive procrastination.
+
+**Calibration is required before trust.** Score 20 known tasks, compare the formula's P1/P2/P3 output against your gut. Adjust weights until they agree. Only then use the formula for new items. Full details in `templates/generated/todo-system-template.md` under "Optional: Weighted Scoring System."
+
 ## View File Templates
 
 ### Per-person view (My Tasks - Alice.md)

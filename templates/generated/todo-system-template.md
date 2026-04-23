@@ -1,18 +1,18 @@
 ---
 type: template
-description: To-do system with capture inbox, prioritized queue, Eisenhower four-quadrant view, done archive, stale decay, and auto-refreshing weekly lens
+description: To-do system with capture inbox, prioritized queue, Eisenhower four-quadrant view, optional weighted scoring formula, done archive, stale decay, and auto-refreshing weekly lens
 install_target: "To-dos/"
 ---
 
 # To-do System Template
 
-A two-file to-do system for Obsidian with Dataview integration. One inbox for raw captures, one prioritized queue, and an Eisenhower four-quadrant view rendered at the top of the queue so your top priorities are visible every time you open the file.
+A two-file to-do system for Obsidian with Dataview integration. One inbox for raw captures, one prioritized queue, and an Eisenhower four-quadrant view rendered at the top of the queue so your top priorities are visible every time you open the file. Also ships an optional weighted scoring formula for users who want more rigor than pure P1/P2/P3 judgment calls.
 
 ## What this installs
 
 | File | Purpose |
 |------|---------|
-| `To-dos/Get to-do.md` | Prioritized personal queue. P1/P2/P3 tiers + four-quadrant Dataview view at top. |
+| `To-dos/Get to-do.md` | Prioritized personal queue. P1/P2/P3 tiers + four-quadrant Dataview view at top + optional weighted scoring system. |
 | `To-dos/From Meetings.md` | Capture inbox. Raw tasks from journal entries, meetings, and sessions land here first, grouped by source. Triaged weekly. |
 | `To-dos/This Week.md` | Auto-pulls all P1 items from both files via Dataview (never needs manual refresh). |
 | `To-dos/Waiting On.md` | Tracks delegated items and external blockers. |
@@ -24,6 +24,15 @@ A two-file to-do system for Obsidian with Dataview integration. One inbox for ra
 ## Why two files instead of one
 
 Capture and execution are different modes. Mixing them means every time you open the list, raw inbox clutter distracts you from what actually needs doing. The split keeps `Get to-do.md` clean and actionable, while `From Meetings.md` holds everything you captured during journaling or meetings until you have time to triage. The four-quadrant view at the top of `Get to-do.md` reads from both files, so nothing urgent gets lost just because it lives in the inbox.
+
+## Two prioritization modes: pick one
+
+You can run this template with either:
+
+1. **Pure P1/P2/P3 judgment.** Fast, low-ceremony, no math. Assign priority using the three-question framework below. Best if you trust your gut and hate scoring.
+2. **Weighted scoring formula (optional).** Four numeric inputs per task (impact, urgency, effort, commitment), one computed score, and deterministic thresholds map to P1/P2/P3. Best if you find yourself mis-prioritizing, want an auditable reason for each assignment, or have an LLM doing triage for you.
+
+Mode (1) is the default because pure Eisenhower works for most people. Mode (2) is documented below under "Optional: Weighted Scoring System" so you can opt in without rewriting anything. Both modes produce the same `[priority:: 1|2|3]` output, so the four-quadrant view works identically either way.
 
 ---
 
@@ -155,6 +164,49 @@ Every task has **Dataview inline fields** at the end of the line:
 **Tiebreaker:** "Which one, if I skip it today, creates a problem I can't fix tomorrow?"
 
 **How the quadrants work:** the Eisenhower view at top reads `[priority::]` (importance) and `[due::]` (urgency) from every task. P1 with due within 7 days or no due date = Q1 (do now). P1 or P2 without near due = Q2 (schedule). P2 with near due = Q3 (delegate or cut). P3 = Q4 (backlog). Items without `[priority::]` surface as "NEEDS TRIAGE" so nothing gets silently dropped.
+
+---
+
+## Optional: Weighted Scoring System
+
+*Skip this section if the three-question framework above works for you. It does for most people.*
+
+If you find yourself repeatedly mis-prioritizing, want an auditable reason for every assignment, or have an LLM (Claude or similar) doing triage on your behalf, you can upgrade P1/P2/P3 from a judgment call to a deterministic calculation. Every new task gets four inputs; a formula computes a score; thresholds map to priority tiers.
+
+**Four inline fields per task (in addition to `[area::]` and `[due::]`):**
+
+| Field | Scale | Meaning |
+|---|---|---|
+| `[impact:: 1-5]` | 5 = moves a top goal directly. 1 = nice to have. | Goal alignment |
+| `[urgency:: 1-5]` | 5 = today, 4 = this week, 3 = sprint, 2 = month, 1 = someday | Time consequence of delay |
+| `[effort:: S\|M\|L]` | S = <30min, M = 1-3hrs, L = half day+ | Execution cost |
+| `[commit:: Y\|N]` | Y = promised to someone external (client, teammate, partner) | Integrity weight |
+
+**Formula:** `score = impact*0.40 + urgency*0.30 + (4 - effort_score)*0.15 + commit_bonus*0.75`
+(where effort: S=1, M=2, L=3; commit: Y=1, N=0)
+
+**Thresholds:**
+- **P1** (execute this week): score ≥ 3.75
+- **P2** (this sprint): 2.75–3.74
+- **P3** (backlog): < 2.75
+
+Example: a task tagged `[impact:: 5] [urgency:: 4] [effort:: M] [commit:: Y]` scores `5*0.40 + 4*0.30 + (4-2)*0.15 + 1*0.75 = 2.0 + 1.2 + 0.3 + 0.75 = 4.25` → P1.
+
+**Why these weights?** Impact is weighted highest because the single biggest mistake in to-do systems is letting urgent-but-unimportant work crowd out important-but-patient work. Urgency is still significant but not dominant. Effort is inverted (lower effort = bonus toward P1) so a small task with big impact beats a big task with medium impact, which matches how most people actually get unstuck. The commit bonus is a flat boost because breaking commitments has a nonlinear cost (trust damage) that the impact/urgency scales don't capture.
+
+**Calibrate before you trust the numbers.** These weights are a sensible first guess, not evidence. Run this calibration before you rely on the formula:
+
+1. Take 20 existing tasks with known "correct" priorities.
+2. Score them manually using the formula.
+3. Compare the computed P1/P2/P3 assignments against your gut.
+4. If the formula systematically over- or under-rates certain categories (e.g., all your writing tasks come out P1 because `impact` is inflated), adjust the weights or the scale definitions.
+5. Only then start using the formula on new tasks.
+
+**When to fall back to pure judgment:** if after two weeks of using the formula your daily execution hasn't actually changed, the formula is plumbing, not value. Go back to P1/P2/P3 gut calls. The four-quadrant view works either way.
+
+**Claude-assisted triage:** if you want Claude to do the scoring when items flow from `From Meetings.md` to `Get to-do.md`, tell Claude: "Triage the capture inbox. Score each new item using the Weighted Scoring System in Get to-do.md. Show me the score and assigned priority before moving the item." Claude computes `[score:: X.X]` and sets `[priority::]` based on the thresholds.
+
+**Back-compat for existing items:** tasks that were written before you opted into scoring keep their current `[priority::]` tag. Only new items need the full four-field set. The four-quadrant view reads `[priority::]` regardless of how it was assigned, so pre-scoring and post-scoring tasks render side by side.
 
 **Done archive:** When tasks are checked off, move them to the Done Archive below during weekly reviews. Keeps active sections clean.
 

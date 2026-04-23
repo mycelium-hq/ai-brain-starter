@@ -9,6 +9,33 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-23 — To-do system: optional weighted scoring formula
+
+**Who this affects:** anyone using the to-do template who wants more rigor than pure P1/P2/P3 judgment. Everyone else can ignore this; the three-question prioritization framework still works unchanged, and the four-quadrant Dataview view works identically regardless of how priority was assigned.
+
+**What changed:**
+
+The to-do template now documents an opt-in weighted scoring formula alongside the default three-question framework. Every new task can take four numeric inputs:
+
+- `[impact:: 1-5]` — goal alignment (weight 0.40)
+- `[urgency:: 1-5]` — time consequence of delay (weight 0.30)
+- `[effort:: S|M|L]` — execution cost, inverted (weight 0.15)
+- `[commit:: Y|N]` — external promise bonus (weight 0.75)
+
+A formula turns these into a score; thresholds map to P1/P2/P3 deterministically. This is especially useful if an LLM is doing your triage from the capture inbox into the prioritized queue, because deterministic scoring beats "Claude, please prioritize these tasks" on consistency.
+
+**Why:** the pure three-question framework works for most people but has two failure modes. First, some users repeatedly mis-assign priority and want an auditable reason per task. Second, LLM-assisted triage produces inconsistent results when the criteria are purely linguistic; a formula removes that drift. This ships both modes in the same template, labeled clearly, with the formula marked optional and explicitly secondary to gut judgment.
+
+**Important caveats (read before using):**
+
+- **Calibration is required before trust.** The weights (0.40 / 0.30 / 0.15 / 0.75) are a sensible first guess, not evidence. Score 20 known tasks manually, compare against your gut, adjust until they agree, then use the formula.
+- **When the formula is procrastination:** if after two weeks of using the scoring system your daily execution has not actually changed, the formula is plumbing without payoff. Go back to the three-question framework. The four-quadrant view works either way.
+- **Overbuilding your to-do system is a real hazard.** If you are tempted to add scoring because you want more "rigor," ask first whether the rigor will change what you do today. If not, skip it.
+
+**Files touched:** `templates/generated/todo-system-template.md` (added "Two prioritization modes" callout in the top README, added "Optional: Weighted Scoring System" section inside the Get to-do.md file template with formula, example calculation, calibration instructions, fallback rule, and Claude-assisted triage prompt), `docs/TODO_SYSTEM.md` (added a summary table under "Optional: Weighted Scoring Formula" pointing to the full template for details).
+
+---
+
 ## 2026-04-23 — To-do system: capture inbox + Eisenhower four-quadrant view
 
 **Who this affects:** anyone running fresh `/setup-brain` installs from now on who opts into the `✅ To-dos/` folder. Existing installs can upgrade by re-installing `templates/generated/todo-system-template.md`; the new four-quadrant Dataview block is additive and can be pasted into the top of an existing `Get to-do.md` without breaking anything.
