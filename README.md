@@ -10,6 +10,8 @@ Most AI tools handle tasks. This is the operating system that handles the contex
 
 No more re-explaining who you are, what you are building, or everything else you are holding in parallel. No more insights lost to chat transcripts. No more decisions you cannot find when you need them. Every session compounds. Every meeting becomes memory. Every pattern surfaces before it becomes a problem.
 
+> **Want the team version installed?** I do this with a small number of founders each quarter: vault architecture mapped to your business, MCP integrations with your stack, knowledge graph densification across your existing notes, async training. Free 20-minute diagnostic at [diazroa.com](https://diazroa.com).
+
 ## They say entrepreneurship is the greatest growth school
 
 It is. The problem is the school forgets everything you learn the moment you walk out of the classroom.
@@ -47,6 +49,24 @@ The whole system ships as one install command, works for non-technical founders,
 **Sunday, 9:00 PM.** The weekly ritual runs. Every open loop from the last fourteen days surfaces in a single view, across the whole life: the company, the book, the consulting, the people you care about. Decisions pending, promises outstanding, follow-ups due. You resolve three, deliberately defer two, and close the week with a clean runway into the next one.
 
 Monday starts with context, not amnesia.
+
+---
+
+## When your team joins
+
+The personal version of this system already runs your half: your context, your decisions, your patterns. The leverage step is wiring your team into the same brain without giving them access to your personal vault.
+
+Here is what that looks like:
+
+- Your personal vault contains everything: business, team, family, projects, writing, journals.
+- Inside it, a team folder syncs bidirectionally with a separate team vault that your co-founders, operators, or contractors share.
+- They get the team vault. You get the integrated view across all of it.
+- Your business decisions can pull insight from your personal patterns. Your team folder routes work to specific people by role. Your to-dos shuffle between personal and team without ever leaking either way.
+- On top of that, a marketplace of skills and MCP servers custom-built for your team's exact workflows, optimized to your stack, your voice, your decision logic.
+
+The personal version of the repo handles your half. The team version handles theirs, plus the sync, plus the per-team customization.
+
+Read the four problems the team version solves: [`for-teams/why-teams-are-different.md`](for-teams/why-teams-are-different.md). Read the four workflows it runs that a personal vault cannot: [`for-teams/team-workflows.md`](for-teams/team-workflows.md). If you want it built for you, [`for-teams/working-with-me.md`](for-teams/working-with-me.md) has the menu, or once your personal vault is installed, just ask Claude: *"how do I add my team to this without mixing in my personal stuff?"* and it will walk you through.
 
 ---
 

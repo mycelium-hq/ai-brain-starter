@@ -837,6 +837,22 @@ cat <<'EOF'
   4. ⌘↩ vs typing: when you see a gray tool box → press ⌘↩ (Mac) or Ctrl+Enter (Windows).
      When Claude asks you a question → just type your answer and press Enter.
 
+━━━ When you are ready for your team ━━━
+
+  Once your personal vault is running, the next step is wiring your team into
+  the same brain without giving them access to your personal stuff.
+
+  Just ask Claude, in your own words. Any of these will work:
+
+       "How do I add my team to this without mixing in my personal stuff?"
+       "Optimize this for my company"
+       "What does the team version look like?"
+
+  Claude will walk you through it: how the team folder syncs, how to keep
+  your business and personal worlds separate, and how to build skills and
+  MCPs custom to your team's workflows. If you want it built for you,
+  diazroa.com has the menu and a free 20-minute diagnostic.
+
 ━━━ Optional — image generation ━━━
 
   Nano Banana (image generation via Google Gemini 3 Pro Image) is the one tool
