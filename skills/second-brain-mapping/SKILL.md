@@ -211,6 +211,17 @@ python3 "$(vault-root)/scripts/vault-insight-engine.py" --top 5
 
 On success, stamp `phase_4_insights`. Read the top 5 findings aloud. Don't summarize — paste the report section verbatim so the user sees the raw signal.
 
+**Scoping to a recent batch.** When Phase 2 only processed a subset of files (e.g. a `/graphify --update` of 200 new files), the same vault-wide patterns dominate every run. To surface insights specific to the batch instead, pass `--scope-files`:
+
+```bash
+python3 "$(vault-root)/scripts/vault-insight-engine.py" \
+  --scope-files "$(vault-root)/path/to/file-list.txt" \
+  --scope-label "batch-YYYY-MM-DD" \
+  --top 5
+```
+
+File list = one path per line (relative to vault-root or absolute). Findings restrict to those files; baselines still derive from the full vault so "surprise" is measured against your whole history. Without the flag, behavior is unchanged.
+
 ### Step 6 — Summary + cross-type query suggestions
 
 Print a compact summary. Then suggest 2-3 concrete Dataview queries the user could now run based on what got extracted. Examples:

@@ -122,6 +122,22 @@ def compute_baseline(index):
     }
 
 
+def load_scope_paths(scope_file):
+    """Load newline-delimited file paths from a scope file. Returns set of absolute paths."""
+    if not scope_file:
+        return None
+    paths = set()
+    with open(scope_file, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if not os.path.isabs(line):
+                line = os.path.join(VAULT, line)
+            paths.add(os.path.normpath(line))
+    return paths
+
+
 def load_vault_index():
     """One-pass scan: for every file, return (filepath, type, frontmatter dict)."""
     index = []
@@ -146,8 +162,20 @@ def load_vault_index():
         doc_type = (fm.get("type") or "").strip().lower().replace("-", "_")
         if not doc_type:
             continue
-        index.append({"path": fp, "type": doc_type, "fm": fm})
+        index.append({"path": fp, "type": doc_type, "fm": fm, "in_scope": True})
     return index
+
+
+def mark_scope(index, scope_paths):
+    """Set in_scope flag on each index entry based on scope_paths set. Returns (scoped, total)."""
+    if scope_paths is None:
+        return len(index), len(index)
+    scoped = 0
+    for x in index:
+        x["in_scope"] = os.path.normpath(x["path"]) in scope_paths
+        if x["in_scope"]:
+            scoped += 1
+    return scoped, len(index)
 
 
 # ── Insight finders ──────────────────────────────────────────────────
@@ -177,7 +205,7 @@ def lucky_charm_people(index, baseline):
     baseline_high_share = high_floors / j_total
     ratio_required = max(0.5, min(0.9, baseline_high_share * 2.0))
 
-    people = [x for x in index if x["type"] == "person"]
+    people = [x for x in index if x["type"] == "person" and x.get("in_scope", True)]
     out = []
     seen_names = set()
     for p in people:
@@ -233,7 +261,7 @@ def drag_people(index, baseline):
     baseline_low_share = low_floors / j_total
     ratio_required = max(0.4, min(0.9, baseline_low_share * 2.0))
 
-    people = [x for x in index if x["type"] == "person"]
+    people = [x for x in index if x["type"] == "person" and x.get("in_scope", True)]
     out = []
     seen_names = set()
     for p in people:
@@ -269,7 +297,7 @@ def drag_people(index, baseline):
 
 def dormant_concepts(index, min_historical=5):
     """Concepts marked dormant with historical weight."""
-    concepts = [x for x in index if x["type"] == "concept"]
+    concepts = [x for x in index if x["type"] == "concept" and x.get("in_scope", True)]
     out = []
     for c in concepts:
         fm = c["fm"]
@@ -304,7 +332,7 @@ def resurrection_candidates(index, recent_days=30):
     # Intersect with dormant concepts
     out = []
     for x in index:
-        if x["type"] != "concept":
+        if x["type"] != "concept" or not x.get("in_scope", True):
             continue
         name = os.path.splitext(os.path.basename(x["path"]))[0]
         if x["fm"].get("concept_dormant") and name in recent_concepts:
@@ -328,6 +356,7 @@ def _deep_processing_streaks_impl(index, word_threshold, floor_ceiling, min_stre
     """Consecutive-ish days of long journal entries on low floors."""
     journals = sorted(
         [x for x in index if x["type"] == "journal"
+         and x.get("in_scope", True)
          and (x["fm"].get("word_count") or 0) >= word_threshold
          and x["fm"].get("floor_num") is not None
          and x["fm"]["floor_num"] <= floor_ceiling
@@ -375,7 +404,7 @@ def highly_rated_books(index, baseline):
     else:
         # At least one point above mean, capped at 5
         min_rating = max(4, min(5, int(round(mean + 1))))
-    books = [x for x in index if x["type"] == "book"]
+    books = [x for x in index if x["type"] == "book" and x.get("in_scope", True)]
     out = []
     for b in books:
         r = b["fm"].get("book_rating_1_5")
@@ -395,7 +424,7 @@ def high_priority_neglected_contacts(index, stale_days=60):
     out = []
     seen_names = set()
     for p in index:
-        if p["type"] != "person":
+        if p["type"] != "person" or not p.get("in_scope", True):
             continue
         if p["fm"].get("person_priority") != "high":
             continue
@@ -423,6 +452,8 @@ def concept_theme_crossovers(index, min_overlap=3):
     journal_concepts = Counter()
     writing_themes = Counter()
     for x in index:
+        if not x.get("in_scope", True):
+            continue
         if x["type"] == "book":
             for t in (x["fm"].get("book_themes") or []):
                 book_themes[t] += 1
@@ -454,16 +485,21 @@ def concept_theme_crossovers(index, min_overlap=3):
 
 # ── Report rendering ─────────────────────────────────────────────────
 
-def render_report(index, findings, baseline):
+def render_report(index, findings, baseline, scope_label=None, scoped_n=None, total_n=None, is_scoped=False):
     lines = []
     lines.append("---")
     lines.append("type: report")
     lines.append(f"last_updated: {date.today().isoformat()}")
+    if scope_label:
+        lines.append(f"scope: {scope_label}")
     lines.append("---")
     lines.append("")
     lines.append(f"*Auto-generated by `vault-insight-engine.py`. Zero LLM. Read-only rendering of your structured vault.*")
     lines.append("")
     lines.append(f"**Index size**: {len(index):,} typed files across {len(set(x['type'] for x in index))} types.")
+    if is_scoped:
+        lines.append("")
+        lines.append(f"**Scope**: findings restricted to **{scoped_n:,} of {total_n:,}** files" + (f" (`{scope_label}`)" if scope_label else "") + ". Baselines (below) still derived from the whole vault so surprise is measured against your full history.")
     lines.append("")
 
     # Baseline block — so Claude (the reader) knows WHY each finding is notable
@@ -561,11 +597,19 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--top", type=int, default=3, help="How many insights to print to stdout (default 3).")
     ap.add_argument("--quiet", action="store_true", help="Write file but don't print stdout summary.")
+    ap.add_argument("--scope-files", help="Path to newline-delimited file list. Findings restricted to these files; baseline still vault-wide for meaningful surprise.")
+    ap.add_argument("--scope-label", default=None, help="Label for the scope (e.g. 'batch200-2026-04-23'), shown in report header.")
     args = ap.parse_args()
+
+    scope_paths = load_scope_paths(args.scope_files)
 
     print(f"vault-insight-engine  loading index…", flush=True)
     index = load_vault_index()
     print(f"  {len(index):,} typed files loaded across {len(set(x['type'] for x in index))} types.")
+
+    scoped_n, total_n = mark_scope(index, scope_paths)
+    if scope_paths is not None:
+        print(f"  scope: {scoped_n:,} / {total_n:,} files in scope (baseline still vault-wide)")
 
     baseline = compute_baseline(index)
     print(f"  baseline computed: journal_count={baseline['journal_count']}, "
@@ -583,7 +627,7 @@ def main():
         "concept_theme_crossovers": concept_theme_crossovers(index),
     }
 
-    report = render_report(index, findings, baseline)
+    report = render_report(index, findings, baseline, scope_label=args.scope_label, scoped_n=scoped_n, total_n=total_n, is_scoped=scope_paths is not None)
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
         f.write(report)
     print(f"  report written: {OUTPUT_PATH}")
