@@ -12,7 +12,7 @@ I built this repo to run my own startup. Open-sourced the core because the patte
 
 **$1,500 one-time, founding rate.** Post-founding price: $2,500.
 
-For solo founders, independent operators, and individual creators who want a personal AI brain built professionally. Installed within 5 business days.
+For solo founders, writers (Substack, books, longform), product managers, consultants, and anyone whose work is decision-heavy and context-rich. If your notes, decisions, and patterns matter beyond the day you wrote them, this is for you. Installed within 5 business days.
 
 - 90-minute deep-dive to map your work, your decisions, your knowledge architecture, your stack.
 - Full install of Claude Code plus Obsidian, vault structured for you, custom skills tuned to how you actually work, knowledge graph, MCP integrations with your personal tools (Substack, calendar, journal, RescueTime, whatever you actually use).
