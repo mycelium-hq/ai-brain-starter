@@ -179,7 +179,8 @@ echo "  This installs the full AI brain stack: graphify, humanizer,"
 echo "  meeting-todos, patterns, the Granola MCP, plus the ai-brain-starter"
 echo "  skill itself. Takes ~5 minutes the first time, ~10 seconds on re-runs."
 echo
-echo "  After this finishes, open Claude Code and type /setup-brain."
+echo "  When it's done, Claude continues with the setup interview automatically."
+echo "  You don't need to type anything."
 echo
 [[ $DRY_RUN -eq 0 ]] && sleep 1
 
@@ -770,7 +771,7 @@ else
   printf "\033[31m━━━ %d check(s) failed: ━━━\033[0m\n" "${#FAILED[@]}"
   for f in "${FAILED[@]}"; do printf "  • %s\n" "$f"; done
   echo
-  echo "Don't proceed silently — fix these before running /setup-brain."
+  echo "Don't proceed silently. Fix these before continuing the setup interview."
   echo "Re-running this script is safe and skips anything already installed."
 fi
 
@@ -817,56 +818,25 @@ echo
 
 cat <<'EOF'
 
-━━━ Next steps ━━━
+━━━ Install complete ━━━
 
-  ✅ This is the ONLY time you need the terminal.
-     Everything from here on happens inside Claude Code — no more terminal commands.
+  Tools are ready. Claude continues with the setup interview automatically
+  from here. No commands to type, no folders to open, no terminal to touch.
 
-  1. Open Claude Code in the directory where you want your vault to live.
-     (For a NEW personal vault: a fresh empty folder.)
-     (For JOINING an existing team vault: cd into the team vault folder first.)
+  ⌘↩ vs typing: when you see a gray tool-approval box, press ⌘↩ (Mac) or
+  Ctrl+Enter (Windows). When Claude asks you a question, just type your
+  answer and press Enter.
 
-  2. Type ONE of these:
-
-       /setup-brain                  # New personal vault — full conversational setup
-       /setup-brain join-team        # Joining an existing team vault — minimal, no
-                                     # structure changes, just verifies + wires meeting tool
-
-  3. The setup is conversational. Answer Claude's questions.
-
-  4. ⌘↩ vs typing: when you see a gray tool box → press ⌘↩ (Mac) or Ctrl+Enter (Windows).
-     When Claude asks you a question → just type your answer and press Enter.
-
-━━━ When you are ready for your team ━━━
-
-  Once your personal vault is running, the next step is wiring your team into
-  the same brain without giving them access to your personal stuff.
-
-  Just ask Claude, in your own words. Any of these will work:
+  When your personal vault is running, you can ask Claude any of these to
+  wire up the team version:
 
        "How do I add my team to this without mixing in my personal stuff?"
-       "Optimize this for my company"
+       "Optimize this for my company."
        "What does the team version look like?"
 
-  Claude will walk you through it: how the team folder syncs, how to keep
-  your business and personal worlds separate, and how to build skills and
-  MCPs custom to your team's workflows. If you want it built for you,
-  diazroa.com has the menu and a free 20-minute diagnostic.
-
-━━━ Optional — image generation ━━━
-
-  Nano Banana (image generation via Google Gemini 3 Pro Image) is the one tool
-  that can't auto-install from this script — it requires running /plugin
-  commands inside Claude Code. After /setup-brain finishes, run these:
-
-       /plugin marketplace add devonjones/devon-claude-skills
-       /plugin install nano-banana@devon-claude-skills
-
-  And add a Gemini API key to your shell profile (one time, persists forever):
-
-       echo 'export GEMINI_API_KEY=your_key_here' >> ~/.zshrc
-       source ~/.zshrc
-
-  Get the key at https://ai.google.dev/
+  Image generation (Nano Banana, via Gemini) is the one thing that can't
+  auto-install here. It needs /plugin commands inside Claude Code and a
+  Gemini API key from https://ai.google.dev/. Ask Claude to turn it on when
+  you actually want image generation; you don't need it for the core setup.
 
 EOF

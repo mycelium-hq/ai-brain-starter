@@ -74,25 +74,20 @@ Read the four problems the team version solves: [`for-teams/why-teams-are-differ
 
 ### What you need before starting
 
-The [Claude Code desktop app](https://claude.ai/download). That's it. Once it's open, Claude installs everything else for you.
+1. The [Claude Code desktop app](https://claude.ai/download) with a paid Claude account (Pro or Max).
+2. Git. On Mac, that means Homebrew is installed (`brew --version` works); if it isn't, [install Homebrew first](https://brew.sh), then Claude handles the rest.
 
 ### Step 1 — Open Claude Code
 
-Download and open the [Claude Code desktop app](https://claude.ai/download). Navigate to an empty folder where you want your vault to live.
+Open the Claude Code desktop app. You don't have to be in any particular folder. Claude will ask where your vault should live during setup.
 
 ### Step 2 — Paste this into the chat
 
 ```
-Please set up my AI Brain Starter. First run this via your Bash tool:
-
-git clone https://github.com/adelaidasofia/ai-brain-starter.git ~/.claude/skills/ai-brain-starter 2>/dev/null || (cd ~/.claude/skills/ai-brain-starter && git pull)
-
-Then run the bootstrap: bash ~/.claude/skills/ai-brain-starter/bootstrap.sh
-
-Once that finishes, run /setup-brain to start my vault setup.
+Please set up my AI Brain Starter end-to-end in this session. Clone https://github.com/adelaidasofia/ai-brain-starter.git into ~/.claude/skills/ai-brain-starter (git pull if it already exists), run bash ~/.claude/skills/ai-brain-starter/bootstrap.sh, then start the setup interview by running the setup-brain skill. Keep going through every phase without stopping. I shouldn't have to type any commands between steps.
 ```
 
-Claude clones the skill, runs the installer (Obsidian, Python, graphify, all tools), and starts the setup conversation. No terminal required.
+Claude clones the skill, runs the installer (Obsidian, Python, graphify, all tools), and walks you through the setup interview. One paste is the whole thing.
 
 ### Step 3 — Answer the questions
 
@@ -103,7 +98,7 @@ Claude interviews you about your life, work, and goals, then builds your entire 
 If a teammate already set up a vault and shared it with you, open Claude Code inside that folder and paste:
 
 ```
-Please run /setup-brain join-team to wire me into this existing vault.
+A teammate already set up an AI Brain Starter vault here and shared it with me. Wire me into it. Don't create a new one.
 ```
 
 About 5 minutes.
@@ -114,25 +109,7 @@ Just tell Claude: "Update my AI Brain Starter." Claude pulls the latest version 
 
 ### Something feels off?
 
-Type `/diagnose` in Claude Code. It runs ~10 checks against your vault (CLAUDE.md present, hooks registered, journal index fresh, skills installed, etc.) and tells you in plain English what's working and what isn't. Safe to run any time.
-
----
-
-### Prefer the terminal? (advanced)
-
-**Mac and Linux:**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main/bootstrap.sh | bash
-```
-
-**Windows (PowerShell):**
-
-```powershell
-irm https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main/bootstrap.ps1 | iex
-```
-
-Then open Claude Code and type `/setup-brain`.
+Tell Claude: "Diagnose my AI Brain Starter." It runs ~10 checks against your vault (CLAUDE.md present, hooks registered, journal index fresh, skills installed, etc.) and reports in plain English what's working and what isn't. Safe any time.
 
 ---
 

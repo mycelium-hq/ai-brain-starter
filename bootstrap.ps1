@@ -101,7 +101,8 @@ Write-Host "  repurpose-talk, nano-banana (skill docs), Granola + ChatPRD MCPs,"
 Write-Host "  the obsidian-skills marketplace, plus the ai-brain-starter skill"
 Write-Host "  itself. Takes ~5 minutes the first time."
 Write-Host ""
-Write-Host "  After this finishes, open Claude Code and type /setup-brain."
+Write-Host "  When it's done, Claude continues with the setup interview automatically."
+Write-Host "  You don't need to type anything."
 Write-Host ""
 Start-Sleep -Seconds 1
 
@@ -543,7 +544,7 @@ if ($Failed.Count -eq 0) {
     Write-Host "━━━ $($Failed.Count) check(s) failed: ━━━" -ForegroundColor Red
     foreach ($f in $Failed) { Write-Host "  - $f" }
     Write-Host ""
-    Write-Host "Don't proceed silently - fix these before running /setup-brain."
+    Write-Host "Don't proceed silently - fix these before continuing the setup interview."
 }
 
 # ─── Change summary ──────────────────────────────────────────────────────────
@@ -584,29 +585,12 @@ if ($Installed.Count -eq 0 -and $Updated.Count -eq 0 -and $Skipped.Count -eq 0 -
 Write-Host ""
 
 Write-Host ""
-Write-Host "━━━ Next steps ━━━" -ForegroundColor Cyan
+Write-Host "━━━ Install complete ━━━" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "  1. Open Claude Code in the directory where you want your vault to live."
-Write-Host "     (For a NEW personal vault: a fresh empty folder.)"
-Write-Host "     (For JOINING an existing team vault: cd into the team vault folder first.)"
+Write-Host "  Tools are ready. Claude continues with the setup interview automatically"
+Write-Host "  from here, no commands to type and no folders to open."
 Write-Host ""
-Write-Host "  2. Type ONE of these:"
-Write-Host ""
-Write-Host "       /setup-brain                  # New personal vault, full conversational setup"
-Write-Host "       /setup-brain join-team        # Joining an existing team vault, minimal setup"
-Write-Host ""
-Write-Host "  3. The setup is conversational. Answer the questions Claude asks."
-Write-Host ""
-Write-Host "━━━ Optional, image generation ━━━" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "  Nano Banana requires running /plugin commands inside Claude Code:"
-Write-Host ""
-Write-Host "       /plugin marketplace add devonjones/devon-claude-skills"
-Write-Host "       /plugin install nano-banana@devon-claude-skills"
-Write-Host ""
-Write-Host "  And set GEMINI_API_KEY as a Windows env var (persists across sessions):"
-Write-Host ""
-Write-Host "       setx GEMINI_API_KEY your_key_here"
-Write-Host ""
-Write-Host "  Get the key at https://ai.google.dev/"
+Write-Host "  Image generation (Nano Banana via Gemini) is the one thing that can't"
+Write-Host "  auto-install here. Ask Claude to turn it on when you want image"
+Write-Host "  generation. You don't need it for the core setup."
 Write-Host ""
