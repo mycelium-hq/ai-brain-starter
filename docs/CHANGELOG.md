@@ -9,6 +9,22 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-23 — To-do system: self-contained task rule
+
+**Who this affects:** anyone using the to-do template, especially the new Four Quadrants view. No breaking change, just a new rule documented in the template.
+
+**What changed:**
+
+Added an explicit rule that every captured task MUST stand on its own when surfaced out of context. Every task needs at least one of: a `[Context prefix in brackets]` naming the project/entity/file, a direct URL, a wikilink to the source note, or a file path. Tasks without any of these get tagged `[needs-context]` so the user (or Claude on next triage) knows to enrich before execution.
+
+**Why:** the Four Quadrants view and Dataview queries in general strip the surrounding session header. A task like "Verify PDF has all 9 pages" made perfect sense when written inside a "## 📋 From Workshop PDF build" capture block. A week later, rendered alone in Q1, it is gibberish. The user has to dig through session notes to remember which PDF, which workshop, which pages. That archaeology kills execution velocity, which is the whole point of a to-do system.
+
+This rule applies when Claude is helping capture tasks during `/journal`, meeting-todos, or session close. Claude must either pull context from the transcript and inline it, or flag the task for the user to complete.
+
+**Files touched:** `templates/generated/todo-system-template.md` (added "Self-contained task rule" paragraph in the How to Use section with four concrete anchor types and examples of what fails).
+
+---
+
 ## 2026-04-23 — To-do system: optional weighted scoring formula
 
 **Who this affects:** anyone using the to-do template who wants more rigor than pure P1/P2/P3 judgment. Everyone else can ignore this; the three-question prioritization framework still works unchanged, and the four-quadrant Dataview view works identically regardless of how priority was assigned.

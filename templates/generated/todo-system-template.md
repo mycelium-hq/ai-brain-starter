@@ -165,6 +165,15 @@ Every task has **Dataview inline fields** at the end of the line:
 
 **How the quadrants work:** the Eisenhower view at top reads `[priority::]` (importance) and `[due::]` (urgency) from every task. P1 with due within 7 days or no due date = Q1 (do now). P1 or P2 without near due = Q2 (schedule). P2 with near due = Q3 (delegate or cut). P3 = Q4 (backlog). Items without `[priority::]` surface as "NEEDS TRIAGE" so nothing gets silently dropped.
 
+**Self-contained task rule (critical once the quadrants are rendering):** every task you capture MUST stand on its own when it surfaces out of context. The Four Quadrants view strips the surrounding session or meeting header, so a task like "Verify PDF has all 9 pages" will surface alone a week later and you will have no idea which PDF. Every task MUST include at least one of:
+
+1. **A `[Context prefix in brackets]` at the start** naming the project, entity, or file the task operates on. Examples: `[30X workshop pre-work PDF]`, `[Apollo AI Ops sequence]`, `[Q3 marketing plan]`, `[launch-landing-page Stripe integration]`.
+2. **A direct URL** the task begins at. Apollo sequence URL, Canva design URL, Google Doc link, GitHub issue, Linear ticket, Notion page, etc.
+3. **A wikilink** to the source note, playbook, or related concept (e.g., `[[Speaker Application Packet]]`, `[[NYC trip plan]]`).
+4. **A file path** the work touches (e.g., `scripts/extract.py`, `drafts/Q3-plan.md`).
+
+Tasks without any of these fail the rule. When Claude is writing or enriching tasks on your behalf, Claude must either add this context from the source session transcript, or tag the task `[needs-context]` so you know to fill it in before trying to execute it. The alternative is a Q1 full of cryptic one-liners that require archaeology to act on.
+
 ---
 
 ## Optional: Weighted Scoring System
