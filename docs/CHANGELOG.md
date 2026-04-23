@@ -9,6 +9,22 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-23 — To-do system: strengthened task contract + area-casing warning
+
+**Who this affects:** anyone using the to-do template. No breaking change, two strengthenings of existing rules.
+
+**What changed (1/2): every task stands alone — stricter contract.** The "self-contained task" rule (shipped earlier today) now requires all four of: (a) action verb + concrete object ("Draft Q3 plan outline" not "Work on Q3 plan"), (b) a context anchor (prefix, URL, wikilink, or file path), (c) an expected output named (deck page, CSV row count, Slack DM sent, PR opened), (d) how you report done (mark `[x]` + reply in thread, push to branch X, send to collaborator). Tasks like "Follow up with friend" or "Verify PDF" still fail the rule even with a wikilink because the expected output and done-reporting channel are missing.
+
+**Why:** shipping a wikilink is necessary but not sufficient. A reader with zero context still can't tell "done" from "in progress" without a named output and a report channel. Multi-owner delegated work breaks most often at the hand-off, not the hand-out.
+
+**What changed (2/2): `[area::]` values must be lowercase.** Dataview `GROUP BY area` is case-sensitive. `[area:: sales]` and `[area:: Sales]` render as two separate "sales" buckets in per-person views — silently. Docs now tell you to pick a fixed set of 3-8 canonical lowercase values up front and lint drift on every touch.
+
+**Why:** caught in a real audit where team member views had ghost GROUP BY sections because different sessions used different casings. The user saw duplicate headers and couldn't tell at a glance whether it was two different workstreams or one with drift.
+
+**Files touched:** `templates/generated/todo-system-template.md` (minimum-contract rule strengthened), `docs/TODO_SYSTEM.md` (Dataview-only projections emphasis + area-casing key principle).
+
+---
+
 ## 2026-04-23 — To-do system: self-contained task rule
 
 **Who this affects:** anyone using the to-do template, especially the new Four Quadrants view. No breaking change, just a new rule documented in the template.

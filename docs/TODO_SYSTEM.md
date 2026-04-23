@@ -38,8 +38,9 @@ Your Vault/
 
 **Key principles:**
 - **Two files for personal, one for team.** `Get to-do.md` holds triaged items. `From Meetings.md` holds raw captures until triage. Team vaults use a single source file because the team needs one shared surface.
-- **Views are Dataview projections, never copies.** This Week, Waiting On, per-person team views, By Area, Sprint Progress are all auto-generated. Edit tasks in the source file; views update automatically.
+- **One canonical source per task pool. Views are Dataview projections, never copies.** This Week, Waiting On, per-person team views, By Area, Sprint Progress are all auto-generated `TASK FROM ... WHERE ...` queries. Edit tasks in the source file; views update automatically. If you ever find yourself copy-pasting tasks from the canonical file into a view, stop: hand-typed mirrors drift within hours (someone marks done in one file, the other stays open, the system loses trust). Delete the hand-typed copy and replace with a Dataview block.
 - **The four-quadrant view at the top of `Get to-do.md` is also a projection.** It reads `[priority::]` and `[due::]` from every task in both personal files and sorts them into Eisenhower quadrants (Q1 DO NOW, Q2 SCHEDULE, Q3 DELEGATE/CUT, Q4 BACKLOG, plus NEEDS TRIAGE for unscored items). Nothing is duplicated; the quadrants are just a different lens on the same inline fields.
+- **Pick a fixed set of `[area::]` values and stick to lowercase.** Dataview `GROUP BY area` is case-sensitive. `[area:: sales]` and `[area:: Sales]` produce two separate "sales" groups in per-person views, silently. Agree on 3-8 canonical lowercase values up front (e.g., `work | writing | tools | health | people` for personal; `raise | marketing | sales | product | ops` for team) and lint drift on every touch.
 
 ## Inline Fields
 
