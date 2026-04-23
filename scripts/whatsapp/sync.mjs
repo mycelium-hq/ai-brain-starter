@@ -1,27 +1,24 @@
 /**
- * whatsapp-vault-sync
- * Exports your personal WhatsApp chat history to markdown files in your Obsidian vault.
- * Uses Baileys to connect via QR code (same as WhatsApp Web).
+ * whatsapp-vault-sync (ai-brain-starter edition)
  *
- * What gets exported:
- *   - Personal conversations (one file per contact)
- *   - Full message history (as far back as WhatsApp retains)
- *   - Text, images/video captions, voice notes, documents (no media downloaded)
- *   - Groups skipped on first pass
+ * Connects to personal WhatsApp via QR code (WhatsApp Web protocol),
+ * pulls full chat history, and writes one markdown file per contact
+ * to your Obsidian vault. Re-runs are incremental — only new messages.
  *
- * Files land at: <vault>/🤖 AI Chats/WhatsApp/<Contact Name>.md
+ * Usage:
+ *   cd scripts/whatsapp && npm install
+ *   VAULT_ROOT=/path/to/vault node sync.mjs
+ *   VAULT_ROOT=/path/to/vault node sync.mjs --groups   # include group chats
  *
- * Setup:
- *   cd scripts/whatsapp
- *   npm install
- *   VAULT_ROOT=/path/to/your/vault node sync.mjs
+ * VAULT_ROOT is optional if this script lives inside your vault
+ * (e.g. <vault>/scripts/whatsapp/sync.mjs) — it auto-detects 3 levels up.
  *
- * Re-run any time to pick up new messages.
+ * Session is saved in baileys_auth/ — no re-scan on subsequent runs.
+ * Output: $VAULT_ROOT/🤖 AI Chats/WhatsApp/  (override with WA_OUTPUT env var)
  */
 
 import makeWASocket, {
   useMultiFileAuthState,
-  makeInMemoryStore,
   fetchLatestBaileysVersion,
   DisconnectReason,
   isJidGroup,
@@ -35,83 +32,103 @@ import { fileURLToPath } from 'url'
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const __dir = path.dirname(fileURLToPath(import.meta.url))
+const INCLUDE_GROUPS = process.argv.includes('--groups')
 
-if (!process.env.VAULT_ROOT) {
-  console.error('Error: VAULT_ROOT environment variable is required.')
-  console.error('Example: VAULT_ROOT="/Users/you/My Vault" node sync.mjs')
-  process.exit(1)
+// Auto-detect vault root: env override, or walk 3 levels up from this file
+// (scripts/whatsapp/sync.mjs → scripts/whatsapp → scripts → vault root)
+const VAULT_ROOT = process.env.VAULT_ROOT || path.resolve(__dir, '..', '..')
+
+const OUTPUT_DIR = path.join(VAULT_ROOT, process.env.WA_OUTPUT || '🤖 AI Chats/WhatsApp')
+const AUTH_DIR   = path.join(__dir, 'baileys_auth')
+const STORE_FILE = path.join(__dir, 'baileys_store.json')
+
+const silent = pino({ level: 'silent' })
+
+// ── Store: load / save ────────────────────────────────────────────────────────
+
+function loadStore() {
+  if (fs.existsSync(STORE_FILE)) {
+    try {
+      const raw = JSON.parse(fs.readFileSync(STORE_FILE, 'utf8'))
+      return {
+        contacts: raw.contacts || {},
+        messages: new Map(Object.entries(raw.messages || {})),
+      }
+    } catch { /* corrupt — start fresh */ }
+  }
+  return { contacts: {}, messages: new Map() }
 }
 
-const VAULT_ROOT   = process.env.VAULT_ROOT
-const OUTPUT_DIR   = path.join(VAULT_ROOT, process.env.WA_OUTPUT || '🤖 AI Chats/WhatsApp')
-const AUTH_DIR     = path.join(__dir, 'baileys_auth')
-const STORE_FILE   = path.join(__dir, 'baileys_store.json')
-const SYNC_STAMP   = path.join(__dir, '.last_sync')
-
-const silentLogger = pino({ level: 'silent' })
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function ensureDirs() {
-  fs.mkdirSync(OUTPUT_DIR, { recursive: true })
-  fs.mkdirSync(AUTH_DIR,   { recursive: true })
+function saveStore(store) {
+  fs.writeFileSync(STORE_FILE, JSON.stringify({
+    contacts: store.contacts,
+    messages: Object.fromEntries(store.messages),
+  }), 'utf8')
 }
 
-function formatTime(unixSeconds) {
-  return new Date(unixSeconds * 1000).toLocaleTimeString('en-US', {
+// ── Formatting ────────────────────────────────────────────────────────────────
+
+function formatTime(unix) {
+  return new Date(Number(unix) * 1000).toLocaleTimeString('en-US', {
     hour: '2-digit', minute: '2-digit', hour12: true,
   })
 }
 
-function formatDate(unixSeconds) {
-  return new Date(unixSeconds * 1000).toISOString().split('T')[0]
+function formatDate(unix) {
+  return new Date(Number(unix) * 1000).toISOString().split('T')[0]
 }
 
 function sanitizeFilename(name) {
-  return name.replace(/[/\\?%*:|"<>[\]]/g, '-').trim()
+  return name.replace(/[/\\?%*:|"<>[\]]/g, '-').trim() || 'Unknown'
 }
 
 function getContactName(jid, contacts) {
-  const c = contacts[jid] || contacts[jid.replace(/@.+$/, '') + '@c.us']
-  return c?.notify || c?.name || ('+' + jid.split('@')[0])
+  const bare = jid.split('@')[0]
+  const c = contacts[jid]
+           || contacts[bare + '@c.us']
+           || contacts[bare + '@s.whatsapp.net']
+  return c?.notify || c?.name || ('+' + bare)
 }
 
-function extractText(msgObj) {
-  if (!msgObj?.message) return null
-  const m = msgObj.message
+// ── Message text extraction ───────────────────────────────────────────────────
+
+function extractText(msg) {
+  if (!msg?.message) return null
+  const m = msg.message
 
   if (m.conversation)              return m.conversation
   if (m.extendedTextMessage?.text) return m.extendedTextMessage.text
-  if (m.imageMessage)              return m.imageMessage.caption ? `[Image: ${m.imageMessage.caption}]` : '[Image]'
-  if (m.videoMessage)              return m.videoMessage.caption ? `[Video: ${m.videoMessage.caption}]` : '[Video]'
-  if (m.audioMessage)              return m.audioMessage.ptt ? '[Voice note]' : '[Audio]'
+  if (m.imageMessage)              return m.imageMessage.caption  ? `[Image: ${m.imageMessage.caption}]`  : '[Image]'
+  if (m.videoMessage)              return m.videoMessage.caption  ? `[Video: ${m.videoMessage.caption}]`  : '[Video]'
+  if (m.audioMessage)              return m.audioMessage.ptt      ? '[Voice note]'                        : '[Audio]'
   if (m.documentMessage)           return `[Document: ${m.documentMessage.fileName || 'file'}]`
   if (m.stickerMessage)            return '[Sticker]'
   if (m.contactMessage)            return `[Contact shared: ${m.contactMessage.displayName}]`
   if (m.locationMessage)           return '[Location]'
-  if (m.reactionMessage)           return null
-  if (m.protocolMessage)           return null
   if (m.pollCreationMessage)       return `[Poll: ${m.pollCreationMessage.name}]`
   if (m.ephemeralMessage)          return extractText({ message: m.ephemeralMessage.message })
   if (m.viewOnceMessage)           return '[View-once media]'
+  if (m.reactionMessage)           return null   // skip emoji reactions
+  if (m.protocolMessage)           return null   // skip system events
+  if (m.pollUpdateMessage)         return null   // skip vote events
   return null
 }
 
 // ── Markdown builder ──────────────────────────────────────────────────────────
 
-function buildMarkdown(contactName, phone, messages) {
+function buildMarkdown(displayName, phone, messages) {
   const byDate = {}
   let count = 0
 
   for (const msg of messages) {
     const ts = Number(msg.messageTimestamp)
-    if (!ts) continue
+    if (!ts || ts < 1000) continue
     const text = extractText(msg)
     if (!text) continue
 
     const date = formatDate(ts)
     if (!byDate[date]) byDate[date] = []
-    byDate[date].push(`**${formatTime(ts)}** ${msg.key.fromMe ? 'You' : contactName}: ${text}`)
+    byDate[date].push(`**${formatTime(ts)}** ${msg.key?.fromMe ? 'You' : displayName}: ${text}`)
     count++
   }
 
@@ -123,7 +140,7 @@ function buildMarkdown(contactName, phone, messages) {
   const lines = [
     '---',
     `type: whatsapp-chat`,
-    `contact: "${contactName}"`,
+    `contact: "${displayName}"`,
     `phone: "+${phone}"`,
     `message_count: ${count}`,
     `first_message: ${dates[0]}`,
@@ -131,7 +148,7 @@ function buildMarkdown(contactName, phone, messages) {
     `last_sync: ${today}`,
     '---',
     '',
-    `# WhatsApp: ${contactName}`,
+    `# WhatsApp: ${displayName}`,
     '',
   ]
 
@@ -142,116 +159,166 @@ function buildMarkdown(contactName, phone, messages) {
   return lines.join('\n')
 }
 
-// ── Sync core ─────────────────────────────────────────────────────────────────
+// ── Export ────────────────────────────────────────────────────────────────────
 
-async function syncToVault(store) {
+function exportToVault(store) {
   console.log('\nExporting to vault...')
+  fs.mkdirSync(OUTPUT_DIR, { recursive: true })
 
-  const chats    = store.chats.all()
-  const contacts = store.contacts
-  let synced = 0, skipped = 0
+  let synced = 0, skippedGroups = 0, skippedEmpty = 0
 
-  for (const chat of chats) {
-    const jid = chat.id
-    if (isJidGroup(jid) || jid.includes('@broadcast')) { skipped++; continue }
+  for (const [jid, messages] of store.messages) {
+    const isGroup = isJidGroup(jid) || jid.includes('@broadcast')
+    if (isGroup && !INCLUDE_GROUPS) { skippedGroups++; continue }
 
     const phone       = jid.split('@')[0]
-    const contactName = getContactName(jid, contacts)
-    const messages    = store.messages[jid]?.array || []
-    if (messages.length === 0) continue
+    const displayName = isGroup
+      ? (store.contacts[jid]?.name || store.contacts[jid]?.notify || jid.split('@')[0])
+      : getContactName(jid, store.contacts)
 
-    const markdown = buildMarkdown(contactName, phone, messages)
-    if (!markdown) continue
+    if (!messages?.length) { skippedEmpty++; continue }
 
-    const filePath = path.join(OUTPUT_DIR, sanitizeFilename(contactName) + '.md')
-    fs.writeFileSync(filePath, markdown, 'utf8')
+    const markdown = buildMarkdown(displayName, phone, messages)
+    if (!markdown) { skippedEmpty++; continue }
+
+    fs.writeFileSync(
+      path.join(OUTPUT_DIR, sanitizeFilename(displayName) + '.md'),
+      markdown, 'utf8'
+    )
     synced++
-    if (synced % 20 === 0) process.stdout.write(`  ${synced} contacts...\r`)
+    if (synced % 25 === 0) process.stdout.write(`  ${synced} written...\r`)
   }
 
-  store.writeToFile(STORE_FILE)
-  fs.writeFileSync(SYNC_STAMP, new Date().toISOString())
+  saveStore(store)
+  fs.writeFileSync(path.join(__dir, '.last_sync'), new Date().toISOString())
 
-  console.log(`\nDone. ${synced} conversations saved to:`)
-  console.log(`  ${OUTPUT_DIR}`)
-  console.log(`(${skipped} groups skipped)`)
+  console.log(`\nDone.`)
+  console.log(`  ${synced} conversations → ${OUTPUT_DIR}`)
+  if (skippedGroups > 0) console.log(`  ${skippedGroups} groups skipped  (re-run with --groups to include)`)
+  console.log(`\nSafe to close this window.`)
 }
 
 // ── Connection ────────────────────────────────────────────────────────────────
 
 async function connect() {
-  ensureDirs()
+  fs.mkdirSync(AUTH_DIR, { recursive: true })
+
+  const isFirstRun = !fs.existsSync(STORE_FILE)
+  const store      = loadStore()
+
+  console.log(isFirstRun
+    ? 'First run — requesting full history from WhatsApp...'
+    : 'Previous session found — fetching new messages only...')
+  console.log(`Output: ${OUTPUT_DIR}\n`)
 
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR)
   const { version }          = await fetchLatestBaileysVersion()
 
-  const store = makeInMemoryStore({ logger: silentLogger })
-  if (fs.existsSync(STORE_FILE)) {
-    store.readFromFile(STORE_FILE)
-    console.log('Previous session found. Fetching new messages only...')
-  } else {
-    console.log('First run. Requesting full history from WhatsApp...')
-  }
-
   const sock = makeWASocket({
     version,
     auth:                state,
-    logger:              silentLogger,
+    logger:              silent,
     printQRInTerminal:   false,
     syncFullHistory:     true,
     markOnlineOnConnect: false,
     browser:             ['WhatsApp Vault Sync', 'Desktop', '1.0.0'],
   })
 
-  store.bind(sock.ev)
   sock.ev.on('creds.update', saveCreds)
 
-  let historyReceived = false
-
-  sock.ev.on('messaging-history.set', async ({ chats, messages, isLatest }) => {
-    console.log(`History chunk: ${chats?.length || 0} chats, ${messages?.length || 0} messages (complete: ${isLatest})`)
-    if (isLatest && !historyReceived) {
-      historyReceived = true
-      await new Promise(r => setTimeout(r, 3000))
-      await syncToVault(store)
-      process.exit(0)
+  // ── Accumulate contacts from all sources
+  const mergeContacts = (contacts) => {
+    for (const c of contacts || []) {
+      if (c.id) store.contacts[c.id] = { ...store.contacts[c.id], ...c }
     }
+  }
+  sock.ev.on('contacts.set',    ({ contacts }) => mergeContacts(contacts))
+  sock.ev.on('contacts.upsert', (contacts)     => mergeContacts(contacts))
+
+  // ── Accumulate messages, deduplicating by message ID
+  const mergeMessages = (msgs) => {
+    for (const msg of msgs || []) {
+      const jid = msg.key?.remoteJid
+      if (!jid) continue
+      if (!store.messages.has(jid)) store.messages.set(jid, [])
+      const arr = store.messages.get(jid)
+      if (!arr.find(m => m.key?.id === msg.key?.id)) arr.push(msg)
+    }
+  }
+  sock.ev.on('messages.set', ({ messages }) => mergeMessages(messages))
+
+  // ── History sync — fires in chunks; export when stream goes quiet for 5 s
+  let historyDone = false
+  let idleTimer   = null
+
+  const scheduleIdleCheck = () => {
+    if (idleTimer) clearTimeout(idleTimer)
+    idleTimer = setTimeout(() => {
+      if (!historyDone) {
+        historyDone = true
+        exportToVault(store)
+        process.exit(0)
+      }
+    }, 5_000)
+  }
+
+  sock.ev.on('messaging-history.set', ({ chats, contacts, messages, isLatest }) => {
+    mergeContacts(contacts || [])
+    mergeMessages(messages || [])
+
+    process.stdout.write(
+      `  History: ${store.messages.size} chats | +${(messages || []).length} messages\r`
+    )
+
+    if (isLatest && !historyDone) {
+      historyDone = true
+      if (idleTimer) clearTimeout(idleTimer)
+      setTimeout(() => { exportToVault(store); process.exit(0) }, 1_500)
+      return
+    }
+
+    scheduleIdleCheck()
   })
 
-  sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
+  // ── Connection lifecycle
+  sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
     if (qr) {
-      console.clear()
-      console.log('────────────────────────────────────────────────')
-      console.log(' WhatsApp Vault Sync')
-      console.log('────────────────────────────────────────────────')
-      console.log(' Phone: Settings > Linked Devices > Link a Device\n')
+      process.stdout.write('\x1Bc')
+      console.log('────────────────────────────────────────────────────────')
+      console.log('  whatsapp-vault-sync — Scan to connect')
+      console.log('────────────────────────────────────────────────────────')
+      console.log('  On your phone:')
+      console.log('  Settings › Linked Devices › Link a Device\n')
       qrcodeTerminal.generate(qr, { small: true })
-      console.log('\n(QR refreshes automatically if it expires)')
+      console.log('\n  (QR expires in ~20 s and refreshes automatically)\n')
     }
 
     if (connection === 'open') {
-      console.log('\nConnected. Waiting for history...')
-      console.log('(Large histories may take a few minutes)\n')
-      // Fallback: if history event never fires (already-synced session), export after 30s
-      setTimeout(async () => {
-        if (!historyReceived) {
-          historyReceived = true
-          await syncToVault(store)
+      console.log('\nConnected. Receiving history...\n')
+      // Fallback for already-synced sessions that emit no history events
+      setTimeout(() => {
+        if (!historyDone) {
+          historyDone = true
+          if (idleTimer) clearTimeout(idleTimer)
+          exportToVault(store)
           process.exit(0)
         }
-      }, 30_000)
+      }, 20_000)
     }
 
     if (connection === 'close') {
       const code = lastDisconnect?.error?.output?.statusCode
       if (code === DisconnectReason.loggedOut) {
-        console.log('Logged out. Delete baileys_auth/ and run again.')
+        console.log('\nLogged out. Delete baileys_auth/ and run again.')
         process.exit(1)
-      } else {
-        setTimeout(connect, 3000)
       }
+      console.log('Connection dropped — reconnecting...')
+      setTimeout(connect, 3_000)
     }
   })
 }
 
-connect().catch(err => { console.error('Fatal:', err.message); process.exit(1) })
+connect().catch(err => {
+  console.error('\nFatal error:', err.message)
+  process.exit(1)
+})
