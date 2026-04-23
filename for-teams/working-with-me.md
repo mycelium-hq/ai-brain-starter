@@ -1,12 +1,30 @@
 # Working With Me
 
-If you want the team version installed and customized instead of building it yourself, here is the menu. Three packages, founding rate, risk reversal.
+If you want this installed and customized instead of building it yourself, here is the menu. Four packages, founding rate, risk reversal.
 
 ## Background
 
-I built this repo to run my own startup. Open-sourced the core because the pattern should be free. I install the full version for a small number of teams each quarter. Full bio, credentials, and case studies at [diazroa.com](https://diazroa.com).
+I built this repo to run my own startup. Open-sourced the core because the pattern should be free. I install the full version for a small number of founders and teams each quarter. Full bio, credentials, and case studies at [diazroa.com](https://diazroa.com).
 
-## The three packages
+## The four packages
+
+### Personal Install
+
+**$1,500 one-time, founding rate.** Post-founding price: $2,500.
+
+For solo founders, independent operators, and individual creators who want a personal AI brain built professionally. Installed within 5 business days.
+
+- 90-minute deep-dive to map your work, your decisions, your knowledge architecture, your stack.
+- Full install of Claude Code plus Obsidian, vault structured for you, custom skills tuned to how you actually work, knowledge graph, MCP integrations with your personal tools (Substack, calendar, journal, RescueTime, whatever you actually use).
+- Knowledge graph densification across whatever notes you already have. Notion, Apple Notes, scattered Markdown, old Roam exports. References you wrote three years ago start surfacing when they are relevant to today.
+- Async training: Loom walkthroughs sized for one person, not a team rollout.
+- Private GitHub repo access for ongoing updates.
+
+Not for teams, not for businesses, not for anyone who will need to add a co-founder or operator inside the next 12 months. If any of those describe you, the team Brain Setup below is the right starting point and saves you a migration later.
+
+Founding rate cap: 5 slots per quarter.
+
+**Upgrade path:** if you add a team within 12 months and move up to the team Brain Setup, the full $1,500 credits toward it. No double-paying for the foundation.
 
 ### AI Brain Setup
 
@@ -52,9 +70,9 @@ Month-to-month after the first 3 months with 30-day cancellation. Founding rate 
 
 ## Risk reversal
 
-We start with the 2-hour deep-dive. If after that session you do not see at least 10 hours a month coming back to you and your team, you pay nothing. I keep the notes, you keep the clarity, and we part as friends.
+We start with the deep-dive (90 minutes for Personal, 2 hours for team packages). If after that session you do not see at least 10 hours a month coming back to you (or to you and your team), you pay nothing. I keep the notes, you keep the clarity, and we part as friends.
 
-Applies to the Brain Setup and the Sprint. The Fractional does not need it because you have already seen the system work.
+Applies to the Personal Install, Brain Setup, and Sprint. The Fractional does not need it because you have already seen the system work.
 
 ## Not included
 
@@ -62,7 +80,7 @@ The packages do not include custom software development, data migration from leg
 
 ## Who this is not for
 
-- Teams under 10 people where one person can still hold all the context in their head. The personal version in the rest of this repo is enough.
+- Teams under 5 people where one person still holds all the context in their head. The open-source repo or the Personal Install handles you.
 - Pre-revenue or pre-seed companies without a clear runway.
 - Anyone who needs to "talk to the team" before a $3,500 decision. Either the deal is dead or the wrong person is in the room.
 - Teams that want a custom chatbot, a GPT wrapper, or a prompt library. That is a different kind of work.
