@@ -9,6 +9,20 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-23 — Install flow: one paste, zero commands to type
+
+**Who this affects:** anyone installing AI Brain Starter for the first time. No breaking change for existing users, big UX improvement for new users.
+
+**What changed:** The install is now truly one paste, end to end. The README's Step 2 is a single natural-language prompt that tells Claude to clone the repo into `~/.claude/skills/ai-brain-starter/`, run bootstrap, and walk you through every setup phase without stopping. No typing `/setup-brain`. No "open Claude Code in your vault folder" instruction. No terminal navigation. The only prerequisites remain: install git (Homebrew does this) and have a paid Claude account.
+
+**Bootstrap now dual-mode.** `bootstrap.sh` and `bootstrap.ps1` detect whether they're running inside Claude Code (via `$CLAUDE_CODE_ENTRYPOINT`). If yes, the "Next Steps" banner says Claude will continue the setup interview automatically. If no (i.e., invoked standalone from a terminal), it tells the user to open Claude Code and paste the setup prompt. One script, two correct messages.
+
+**Why:** the previous flow had five friction points for non-technical users (install Claude Code → open in vault path → clone repo → run bootstrap → type slash command). Every decision point is an abandonment point. The blog-post funnel aims at writers and founders who are not developers; the defining characteristic of this audience is that they don't know how to navigate a filesystem or a terminal. "Zero decisions" is the actual bar, not "low friction."
+
+**Files touched:** `README.md` (Step 2 rewritten, "Prefer the terminal?" advanced section removed, team-join paste simplified), `bootstrap.sh` + `bootstrap.ps1` (header comments rewritten, Next-Steps branch on `$CLAUDE_CODE_ENTRYPOINT`).
+
+---
+
 ## 2026-04-23 — To-do system: strengthened task contract + area-casing warning
 
 **Who this affects:** anyone using the to-do template. No breaking change, two strengthenings of existing rules.
