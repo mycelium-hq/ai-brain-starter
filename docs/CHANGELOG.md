@@ -1326,5 +1326,8 @@ For sessions 1–18 (April 8–11, 2026), see [`CHANGELOG_archive_2026Q1.md`](CH
 
 ## [Unreleased]
 
+### Added
+- `docs/RELEASES.md` entry for Claude Code v2.1.118: `/usage` command, `type: "mcp_tool"` hooks, agent frontmatter hooks/MCPs in main-thread, `Bash(find:*)` permission change.
+
 ### Changed
 - `templates/rules/advisory-panel.md` Rule 1: confidence scoring is now internal only. Panel filters by lens-fit score (0-100) but NEVER prints the number in output. No `[confidence: N]`, no `(72)`, no score annotations. Background filter, not visible ink.

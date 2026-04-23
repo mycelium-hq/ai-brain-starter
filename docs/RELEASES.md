@@ -11,6 +11,19 @@ For full development history including internal refactors and bug fixes, see [`C
 
 ---
 
+## 2026-04-23 — Claude Code v2.1.118 improvements
+
+Upstream Claude Code shipped several improvements worth knowing about.
+
+- **New `/usage` command.** Merges `/cost` and `/stats` into one. Both old commands still work as shortcuts, but `/usage` is now the canonical way to check your session token spend.
+- **Hooks can now invoke MCP tools directly.** Set `"type": "mcp_tool"` in a hook definition to call an MCP server as a side effect. Useful for cross-tool automation: PostToolUse on a Substack publish, for example, could call a Slack MCP to notify you. This is an advanced pattern — see the hookify docs for structure.
+- **Agent skill frontmatter now supports `hooks:` and `mcpServers:`.** Previously these only applied in subagent contexts. Now they fire in main-thread sessions too. If you're building a skill that needs a specific MCP, you can declare it in the skill's frontmatter rather than requiring it to be in global config.
+- **`Bash(find:*)` blanket allow rules no longer cover `-exec` or `-delete`.** If you added a broad `Bash(find:*)` permission to skip prompts, that rule will no longer auto-approve `find -exec ...` or `find -delete`. **Action required if you have this:** either add explicit allow rules for the specific find commands you use, or leave them as prompted (safer default). Specific allow rules (e.g. `Bash(find /my/path -name "*.md")`) are unaffected.
+
+**No action required** for most users. The `find` permission change is the only one that could break an existing setup.
+
+---
+
 ## 2026-04-18 — Pre-event polish
 
 - **Auto-update is now weekly, not every session.** The hook that checks GitHub for skill updates used to run on every session start (slow, network round-trip every time you opened Claude). Now it runs at most once per 7 days, gated by a timestamp at `~/.claude/.ai-brain-starter-last-update`. Sessions start faster.
