@@ -1,0 +1,4 @@
+node_modules/
+baileys_auth/
+baileys_store.json
+.last_sync

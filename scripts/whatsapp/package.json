@@ -1,0 +1,14 @@
+{
+  "name": "whatsapp-vault-sync",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Export personal WhatsApp chats to Obsidian vault markdown files via Baileys",
+  "scripts": {
+    "sync": "node sync.mjs"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.18",
+    "qrcode-terminal": "^0.12.0",
+    "pino": "^9.5.0"
+  }
+}
