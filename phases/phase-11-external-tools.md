@@ -7,6 +7,30 @@ Ask: "Do you use Gmail? Google Calendar? Outlook?"
 - "In Claude Code, go to Settings → Connectors. Connect Gmail and Google Calendar. Once connected, I can search your email, draft replies with full context, check your schedule, and create events."
 - If they use Outlook/Microsoft 365: "Same thing — connect Microsoft 365 from the connectors page."
 
+**If they use Gmail, offer the upgrade path:**
+
+Say:
+
+> "If you want multi-account and token efficiency while connecting to Google, there's an open-source MCP, [google-workspace-mcp](https://github.com/adelaidasofia/google-workspace-mcp). 61 tools across Gmail, Calendar, Drive, Docs, and Sheets. Setup is ~45 min the first time (mostly Google Cloud OAuth consent screen config), then ~90 sec per additional account. Want to install it?"
+
+If yes:
+1. Clone: `git clone https://github.com/adelaidasofia/google-workspace-mcp ~/.claude/google-workspace-mcp`
+2. Install deps: `cd ~/.claude/google-workspace-mcp && pip install -r requirements.txt`
+3. Walk them through `SETUP.md` for the OAuth consent screen (this is the slow part — GCP console UI, creating an OAuth client, downloading `client_secret.json`, dropping it in the repo folder).
+4. Register in `~/.claude.json` mcpServers block:
+   ```json
+   "google-workspace": {
+     "command": "python3",
+     "args": ["/Users/<user>/.claude/google-workspace-mcp/server.py"]
+   }
+   ```
+5. Authorize each account: `python3 -c "from accounts import add_account; add_account()"` — browser opens, they grant consent, refresh token lands in macOS Keychain.
+6. Verify: restart Claude Code, check Settings → MCP, confirm `google-workspace` is listed with 61 tools.
+
+**Tell them:** "Once this is installed, you can keep the official Gmail connector on OR turn it off. The MCP version replaces it with more power. If you only have one Gmail account and don't care about tokens, the official connector is fine — skip this."
+
+**Non-mac users:** the MCP stores tokens in macOS Keychain today. On Windows/Linux, tokens fall back to an encrypted file (the `keyring` library picks the right backend). Flag this if they're not on macOS so they know tokens aren't in Keychain-level security.
+
 ### Communication
 Ask: "Do you use Slack?"
 - "Connect Slack from Settings → Connectors. I'll be able to search messages, read channels, and draft messages with your vault context."
