@@ -1,8 +1,12 @@
 ﻿# ai-brain-starter, one-command bootstrap (Windows)
 #
-# This script installs everything Phase 0 of /setup-brain installs, but without
-# requiring you to launch Claude Code first. Run this once, then open Claude
-# Code and type /setup-brain.
+# This script installs everything Phase 0 of the setup-brain skill installs.
+# It runs in two modes:
+#   - Inside Claude Code (from the README paste-flow): Claude invokes this
+#     as part of end-to-end setup and continues into the interview after.
+#   - Standalone (irm-to-iex from PowerShell): tools get installed, then
+#     the Next-Steps block tells the user to open Claude Code and paste the
+#     setup prompt. Detection is via $env:CLAUDE_CODE_ENTRYPOINT.
 #
 # Usage (run from PowerShell, NOT cmd.exe):
 #     irm https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main/bootstrap.ps1 | iex
@@ -587,10 +591,29 @@ Write-Host ""
 Write-Host ""
 Write-Host "━━━ Install complete ━━━" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "  Tools are ready. Claude continues with the setup interview automatically"
-Write-Host "  from here, no commands to type and no folders to open."
-Write-Host ""
-Write-Host "  Image generation (Nano Banana via Gemini) is the one thing that can't"
-Write-Host "  auto-install here. Ask Claude to turn it on when you want image"
-Write-Host "  generation. You don't need it for the core setup."
-Write-Host ""
+if ($env:CLAUDE_CODE_ENTRYPOINT) {
+    # Running inside Claude Code (the paste-flow from the README). Claude will
+    # continue with the setup interview automatically; no user action needed.
+    Write-Host "  Tools are ready. Claude continues with the setup interview automatically"
+    Write-Host "  from here, no commands to type and no folders to open."
+    Write-Host ""
+    Write-Host "  Image generation (Nano Banana via Gemini) is the one thing that can't"
+    Write-Host "  auto-install here. Ask Claude to turn it on when you want image"
+    Write-Host "  generation. You don't need it for the core setup."
+    Write-Host ""
+} else {
+    # Running standalone (irm-to-iex from PowerShell). Guide the user into the
+    # paste-flow inside the Claude Code desktop app.
+    Write-Host "  Tools are ready. Now open the Claude Code desktop app and paste this"
+    Write-Host "  into the chat to run the setup interview:"
+    Write-Host ""
+    Write-Host "      Please set up my AI Brain Starter end-to-end in this session. The"
+    Write-Host "      ai-brain-starter skill is already installed at"
+    Write-Host "      ~/.claude/skills/ai-brain-starter. Start the setup interview by"
+    Write-Host "      running the setup-brain skill and walk me through every phase"
+    Write-Host "      without stopping."
+    Write-Host ""
+    Write-Host "  Claude will ask where your vault should live and build everything"
+    Write-Host "  around your answers. You don't need to type any other commands."
+    Write-Host ""
+}

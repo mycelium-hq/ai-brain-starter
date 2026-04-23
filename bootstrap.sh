@@ -2,9 +2,13 @@
 #
 # ai-brain-starter — one-command bootstrap (Mac + Linux)
 #
-# This script installs everything Phase 0 of /setup-brain installs, but without
-# requiring you to launch Claude Code first. It's the "I just want to get
-# started" path: run this once, then open Claude Code and type /setup-brain.
+# This script installs everything Phase 0 of the setup-brain skill installs.
+# It runs in two modes:
+#   - Inside Claude Code (from the README paste-flow): Claude invokes this
+#     as part of end-to-end setup and continues into the interview after.
+#   - Standalone (curl-to-bash from a terminal): tools get installed, then
+#     the Next-Steps block tells the user to open Claude Code and paste the
+#     setup prompt. Detection is via $CLAUDE_CODE_ENTRYPOINT.
 #
 # Usage:
 #     curl -fsSL https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main/bootstrap.sh | bash
@@ -816,7 +820,10 @@ echo
 # Next steps
 # ───────────────────────────────────────────────────────────────────────────────
 
-cat <<'EOF'
+if [[ -n "${CLAUDE_CODE_ENTRYPOINT:-}" ]]; then
+  # Running inside Claude Code (the paste-flow from the README). Claude will
+  # continue with the setup interview automatically; no user action needed.
+  cat <<'EOF'
 
 ━━━ Install complete ━━━
 
@@ -840,3 +847,24 @@ cat <<'EOF'
   you actually want image generation; you don't need it for the core setup.
 
 EOF
+else
+  # Running standalone (curl-to-bash from a plain terminal). The user has no
+  # active Claude session to continue into; guide them to the paste-flow.
+  cat <<'EOF'
+
+━━━ Install complete ━━━
+
+  Tools are ready. Now open the Claude Code desktop app and paste this
+  into the chat to run the setup interview:
+
+      Please set up my AI Brain Starter end-to-end in this session. The
+      ai-brain-starter skill is already installed at
+      ~/.claude/skills/ai-brain-starter. Start the setup interview by
+      running the setup-brain skill and walk me through every phase
+      without stopping.
+
+  Claude will ask where your vault should live and build everything
+  around your answers. You don't need to type any other commands.
+
+EOF
+fi
