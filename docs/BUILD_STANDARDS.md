@@ -60,6 +60,21 @@ Not everything needs an LLM. Flag and remove LLM calls where:
 - The operation is just format conversion (JSON to markdown, YAML parsing)
 - **Rule:** LLM API calls add latency and cost. Use only where the LLM is genuinely making a judgment call.
 
+### 4a. Structured-signal-first audit (mandatory before any LLM batch over vault files)
+
+Before iterating an LLM over a folder of files, audit what structured signal already exists in those files. Past automation passes (extractors, mappers, prior LLM runs) almost always leave extracted fields, wikilinks, themes, or numeric tags behind. Reaching for the LLM as the first tool when existing signal already covers 60%+ of the judgment burns hours and dollars for no gain.
+
+The pre-batch audit (≤5 minutes, mandatory):
+
+1. **Frontmatter scan.** Read 5-10 sample files and list every field. Look especially for: `concepts_extracted`, `themes`, `tags`, `entities`, anything with `_extracted`, `_score`, or `_confidence`. These are usually prior LLM output already on disk.
+2. **Wikilink density.** Count `[[X]]` references per file. If the body links to the concepts you're about to classify, the wikilinks ARE the classification — count them, don't re-derive them.
+3. **Cross-reference against the question.** Ask: "If I just used this existing signal, what % of files would resolve unambiguously?" If ≥60%, build a Python heuristic FIRST, then LLM only the residual ambiguous cases.
+4. **LLM as tiebreaker, not first pass.** The LLM call should be last-resort, not default. Pure-Python over structured signal is seconds and free; LLM over the same files is hours and dollars.
+
+**Failure mode this prevents:** A "classify N files against schema X" task goes straight to an LLM batch at ~10s per call × 2,000 files = ~5 hours and significant API spend. The frontmatter and body of each file already contained the schema labels in machine-readable form, but the audit wasn't run, so the existing signal was re-derived. A high-precision Python pass (only flag cases where existing signal is overwhelming, punt the residual ambiguous tail to LLM) handles 80%+ of cases in under a minute, with LLM reserved for the genuinely contextual cases. Skipping the audit costs orders of magnitude more time and money than running it.
+
+**Codification:** When a build calls for "iterate an LLM over N files in folder X," the pre-build checklist MUST include a frontmatter sample + wikilink count + a one-paragraph "what existing signal covers" before code is written. If the audit shows ≥60% existing-signal coverage, the build is Python-first with LLM as tiebreaker.
+
 ### 4b. Financial math goes in Excel — not Python, not LLM
 Any build that outputs money amounts (invoices, commissions, budgets, tax calculations) must generate an Excel file with formulas. Excel's engine does the math. Python only writes input values and formula strings.
 - Use `openpyxl` — formula strings like `"=B3*0.11"` are written as cell values
