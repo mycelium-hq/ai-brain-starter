@@ -9,6 +9,18 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-24 — New build rule: structured-signal-first audit before LLM batches
+
+**Who this affects:** anyone building scripts, skills, or agents that iterate an LLM over a folder of vault files (classify, extract, label, score, summarize). No breaking change.
+
+**What changed:** Build Standards Optimization Pass gains a new section 4a — *Structured-signal-first audit*. Before iterating an LLM over a folder of files, the pre-build checklist now mandates a five-minute audit of what structured signal already lives in those files (frontmatter fields like `concepts_extracted`, `themes`, `tags`, body wikilinks pointing at the concepts you're about to classify, prior extractor output). If existing signal already covers ≥60% of the judgment, the build is Python-first with the LLM as tiebreaker on the residual ambiguous tail.
+
+**Why:** vault automation tends to leave structured signal behind on every pass. When a later build needs to do the "same kind" of classification, going straight to an LLM batch re-derives what's already on disk. A 2,000-file batch at ~10s per call is hours of runtime and meaningful API spend; a Python pass over existing wikilinks + frontmatter handles the obvious cases in seconds, with the LLM reserved for genuinely contextual judgment. The audit takes five minutes; skipping it costs orders of magnitude more.
+
+**Files touched:** `docs/BUILD_STANDARDS.md` (new section 4a between LLM usage check and Excel financial math).
+
+---
+
 ## 2026-04-23 — Install flow: one paste, zero commands to type
 
 **Who this affects:** anyone installing AI Brain Starter for the first time. No breaking change for existing users, big UX improvement for new users.
