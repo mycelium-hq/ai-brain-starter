@@ -69,22 +69,22 @@ This rule isn't just for floors — apply it to every concept note you create fo
 
 ### Create floor concept notes
 
-Create a concept note for each of the 16 floors in their vault. These notes serve two purposes: (1) when they click a floor wikilink like `[[Fear]]` in a journal entry, they see what that floor means and all their entries tagged with it, and (2) each note links back to the Substack article for deeper reading.
+Create a concept note for each of the 34 floors in their vault. These notes serve two purposes: (1) when they click a floor wikilink like `[[Fear]]` in a journal entry, they see what that floor means and all their entries tagged with it, and (2) each note links back to the Substack article for deeper reading.
 
-Save each floor note to `[VAULT_PATH]/Notes/` (or whatever their concept folder is called). Create all 16:
+Save each floor note to `[VAULT_PATH]/Notes/` (or whatever their concept folder is called). Create all 34:
 
 ```markdown
 ---
 creationDate: [today]
 type: concept
 floor_tier: [low/middle/high]
-floor_number: [1-16]
+floor_number: [1-34]
 aliases: [english variants + translations in every language the user journals in]
 # e.g. monolingual: [fear, fearful, afraid, scared]
 # e.g. English + Spanish: [fear, fearful, afraid, scared, miedo, temor, miedoso, asustado]
 ---
 
-**Floor [number] of 16** · [[{Level} Floors]]
+**Floor [number] of 34** · [[{Level} Floors]]
 
 [2-3 sentence description of what this floor feels like. Write it in second person — "You feel..." Make it recognizable, not clinical.]
 
@@ -104,42 +104,84 @@ SORT creationDate DESC
 ```
 ```
 
-**The 16 floors (create one note each):**
-1. **Shame** (low) — Self-disgust, hiding, "I am the problem." The lowest floor. Everything feels broken and it's your fault.
-2. **Guilt** (low) — "I should be doing more." Not enough. Letting people down. Productive self-blame.
-3. **Apathy** (low) — "Nothing matters." Checked out, numb, Netflix spiral. The floor where you stop trying.
-4. **Grief** (low) — Loss, sadness, missing. Something was taken or ended. The floor of letting go.
-5. **Fear** (low) — Anxiety, "what if," imposter feelings. The floor that keeps you from starting.
-6. **Desire** (low) — Wanting, craving, reaching. Ambition mixed with lack. "If I just had X, then..."
-7. **Anger** (low) — Frustration, injustice, someone not matching effort. Energy that needs direction.
-8. **Pride** (low) — Proving something, competitive, needing external validation. The top of the low floors.
-9. **Courage** (middle) — Taking action despite fear. Showing up. The floor where everything changes.
-10. **Neutrality** (middle) — Calm observation. "It is what it is." Processing without emotional charge.
-11. **Willingness** (middle) — Open, optimistic restart. "I'm getting back on track."
-12. **Acceptance** (middle) — Making peace with reality. Letting go of control. Not resignation — release.
-13. **Reason** (middle) — Clear-headed, analytical, strategic. The thinking floor.
-14. **Love** (high) — Connection, gratitude, warmth. Giving freely. The floor where relationships transform.
-15. **Joy** (high) — Delight, laughter, alive. "Best day ever" energy. Rare in journals — capture it when it shows up.
-16. **Peace** (high) — Stillness, presence, nothing to fix. Enough as-is. The top floor. Not happiness — something deeper.
+**The 34 floors (create one note each):**
+
+*Low (1-18) — reactive floors:*
+1. **Disgust** (low) — Visceral rejection. "Ew." Body recoils before words form.
+2. **Shame** (low) — Self-disgust, hiding, "I am the problem." Everything feels broken and it's your fault.
+3. **Embarrassment** (low) — Lighter than shame. "Oh god." Cringe, social replay, but recoverable.
+4. **Guilt** (low) — "I should be doing more." Not enough. Letting people down. Productive self-blame.
+5. **Apathy** (low) — "Nothing matters." Checked out, numb, Netflix spiral. The floor where you stop trying.
+6. **Resignation** (low) — Flat affect, "it is what it is" without relief. Defeated-without-spiral.
+7. **Confusion** (low) — Contradictory toggles, "but then again," circular logic, "idk."
+8. **Loneliness** (low) — "No one gets it." Surrounded but unseen.
+9. **Boredom** (low) — Restless, understimulated, "I don't know what I want to do." Not collapsed — searching.
+10. **Grief** (low) — Loss, sadness, missing. Something was taken or ended. The floor of letting go.
+11. **Disappointment** (low) — "I thought it would be different." Quiet heaviness, gap between expectation and reality.
+12. **Hurt** (low) — Relational pain. "How could they?" Short sentences, pulls inward.
+13. **Fear** (low) — Anxiety, "what if," imposter feelings. The floor that keeps you from starting.
+14. **Frustration** (low) — Blocked-energy. "This should be working." Short patience, "ugh."
+15. **Desire** (low) — Wanting, craving, reaching. Ambition mixed with lack. "If I just had X, then..."
+16. **Anger** (low) — Injustice, someone not matching effort. ALL CAPS, profanity at someone, second-person attack.
+17. **Contempt** (low) — Clipped, dismissive, certain. "Pathetic." The opposite of curiosity.
+18. **Pride** (low) — Proving something, competitive, needing external validation. The top of the low floors.
+
+*Middle (19-24) — transitional floors:*
+19. **Courage** (middle) — Taking action despite fear. "I sent it." The floor where everything changes.
+20. **Hope** (middle) — Future-tense forward momentum. "I think this could." Steady, not manic.
+21. **Neutrality** (middle) — Calm observation. "It is what it is." Processing without emotional charge.
+22. **Willingness** (middle) — Open, optimistic restart. "I'm getting back on track."
+23. **Acceptance** (middle) — Making peace with reality. Letting go of control. Not resignation — release.
+24. **Reason** (middle) — Clear-headed, analytical, strategic. Numbered lists. The thinking floor.
+
+*High (25-34) — generative floors:*
+25. **Trust** (high) — Quiet confidence. "It'll work out." Less hedging, fewer contingencies.
+26. **Compassion** (high) — Other-oriented warmth. "I can see why they..." Holding pain without fixing.
+27. **Humility** (high) — Quiet self-correction. "I was wrong about." Accurate without drama.
+28. **Belonging** (high) — Quiet certainty. "This is my room." "I'm home." Less writing, not more.
+29. **Love** (high) — Connection, warmth toward others. Bilingual (other languages emerge). Names people.
+30. **Gratitude** (high) — "I'm so grateful." Recognition without forcing it, often mid-difficulty.
+31. **Excitement** (high) — Anticipatory bouncing. "Ahhh." "I'm so excited." Body saying yes.
+32. **Wonder** (high) — "I just sat in awe." Amazement vocabulary, expansion language.
+33. **Joy** (high) — Short bouncing sentences, light exclamation, "fuck it" decisions, brevity.
+34. **Peace** (high) — The shortest entries in the vault. Simple words, no spirals, nothing to process.
 
 **Spanish translation reference (use this if the user journals in Spanish):**
 
 | Floor | Spanish aliases to add |
 |---|---|
+| Disgust | asco, asqueroso, repugnancia |
 | Shame | vergüenza, avergonzado, avergonzada |
+| Embarrassment | pena, vergüenza social, qué oso |
 | Guilt | culpa, culpable |
 | Apathy | apatía, apático, apática, indiferencia |
+| Resignation | resignación, resignado |
+| Confusion | confusión, confundido, no sé |
+| Loneliness | soledad, solo, sola |
+| Boredom | aburrimiento, aburrido, aburrida |
 | Grief | duelo, luto, pena |
+| Disappointment | decepción, decepcionado, defraudado |
+| Hurt | herido, lastimado, dolido |
 | Fear | miedo, temor, miedoso, asustado |
+| Frustration | frustración, frustrado, frustrada |
 | Desire | deseo, anhelo, ansia |
 | Anger | ira, rabia, enojo, enfado, furia |
+| Contempt | desprecio, desdén |
 | Pride | orgullo, orgulloso, soberbia |
 | Courage | valentía, coraje, valor, valiente |
+| Hope | esperanza, esperanzado |
 | Neutrality | neutralidad, neutral |
 | Willingness | disposición, voluntad, dispuesto |
 | Acceptance | aceptación, aceptar |
 | Reason | razón, razonar, racional |
+| Trust | confianza, confiar |
+| Compassion | compasión, compasivo |
+| Humility | humildad, humilde |
+| Belonging | pertenencia, pertenecer, en casa |
 | Love | amor, amar, amando, amada |
+| Gratitude | gratitud, agradecido, agradecida |
+| Excitement | entusiasmo, emoción, emocionado |
+| Wonder | asombro, maravilla, asombrado |
 | Joy | alegría, gozo, alegre, dichoso |
 | Peace | paz, sereno, tranquilidad, paz interior |
 
@@ -156,9 +198,9 @@ floor_tier: low
 aliases: [low floors, reactive floors]
 ---
 
-Floors 1–8. You're responding to the world, not choosing. These are the reactive floors — shame, guilt, apathy, grief, fear, desire, anger, pride. They don't mean something is wrong with you. They mean you're human.
+Floors 1–18. You're responding to the world, not choosing. These are the reactive floors — disgust, shame, embarrassment, guilt, apathy, resignation, confusion, loneliness, boredom, grief, disappointment, hurt, fear, frustration, desire, anger, contempt, pride. They don't mean something is wrong with you. They mean you're human.
 
-**Floors in this tier:** [[Shame]], [[Guilt]], [[Apathy]], [[Grief]], [[Fear]], [[Desire]], [[Anger]], [[Pride]]
+**Floors in this tier:** [[Disgust]], [[Shame]], [[Embarrassment]], [[Guilt]], [[Apathy]], [[Resignation]], [[Confusion]], [[Loneliness]], [[Boredom]], [[Grief]], [[Disappointment]], [[Hurt]], [[Fear]], [[Frustration]], [[Desire]], [[Anger]], [[Contempt]], [[Pride]]
 
 **Read more:** [Internal Design — The High-Rise Model on Substack](https://adelaidadiazroa.substack.com/s/internal-design)
 
@@ -167,7 +209,7 @@ Floors 1–8. You're responding to the world, not choosing. These are the reacti
 ```dataview
 TABLE creationDate as Date, floor as Floor
 FROM "📓 Journals"
-WHERE floor_level = "low"
+WHERE floor_level = "Low"
 SORT creationDate DESC
 LIMIT 20
 ```
@@ -182,9 +224,9 @@ floor_tier: middle
 aliases: [middle floors, transitional floors]
 ---
 
-Floors 9–13. You're starting to choose how you respond. These are the transitional floors — courage, neutrality, willingness, acceptance, reason. The shift from reacting to deciding happens here.
+Floors 19–24. You're starting to choose how you respond. These are the transitional floors — courage, hope, neutrality, willingness, acceptance, reason. The shift from reacting to deciding happens here.
 
-**Floors in this tier:** [[Courage]], [[Neutrality]], [[Willingness]], [[Acceptance]], [[Reason]]
+**Floors in this tier:** [[Courage]], [[Hope]], [[Neutrality]], [[Willingness]], [[Acceptance]], [[Reason]]
 
 **Read more:** [Internal Design — The High-Rise Model on Substack](https://adelaidadiazroa.substack.com/s/internal-design)
 
@@ -193,7 +235,7 @@ Floors 9–13. You're starting to choose how you respond. These are the transiti
 ```dataview
 TABLE creationDate as Date, floor as Floor
 FROM "📓 Journals"
-WHERE floor_level = "middle"
+WHERE floor_level = "Middle"
 SORT creationDate DESC
 LIMIT 20
 ```
@@ -208,9 +250,9 @@ floor_tier: high
 aliases: [high floors, generative floors]
 ---
 
-Floors 14–16. You're creating, not reacting. Love, joy, peace — the generative floors. These aren't destinations you reach permanently. They're floors you visit, live in for stretches, and return to.
+Floors 25–34. You're creating, not reacting. Trust, compassion, humility, belonging, love, gratitude, excitement, wonder, joy, peace — the generative floors. These aren't destinations you reach permanently. They're floors you visit, live in for stretches, and return to.
 
-**Floors in this tier:** [[Love]], [[Joy]], [[Peace]]
+**Floors in this tier:** [[Trust]], [[Compassion]], [[Humility]], [[Belonging]], [[Love]], [[Gratitude]], [[Excitement]], [[Wonder]], [[Joy]], [[Peace]]
 
 **Read more:** [Internal Design — The High-Rise Model on Substack](https://adelaidadiazroa.substack.com/s/internal-design)
 
@@ -219,7 +261,7 @@ Floors 14–16. You're creating, not reacting. Love, joy, peace — the generati
 ```dataview
 TABLE creationDate as Date, floor as Floor
 FROM "📓 Journals"
-WHERE floor_level = "high"
+WHERE floor_level = "High"
 SORT creationDate DESC
 LIMIT 20
 ```

@@ -7,13 +7,13 @@ type: meta
 creationDate: <% tp.date.now("YYYY-MM-DD") %>
 ---
 
-**Floor today:** <!-- 1-16 -->
+**Floor today:** <!-- 1-34 -->
 **Floor name:** <!-- See list below -->
 
-## Quick reference (16-floor canonical)
-Low (1-8): Shame, Guilt, Apathy, Grief, Fear, Desire, Anger, Pride
-Middle (9-13): Courage, Neutrality, Willingness, Acceptance, Reason
-High (14-16): Love, Joy, Peace
+## Quick reference (34-floor canonical)
+Low (1-18): Disgust, Shame, Embarrassment, Guilt, Apathy, Resignation, Confusion, Loneliness, Boredom, Grief, Disappointment, Hurt, Fear, Frustration, Desire, Anger, Contempt, Pride
+Middle (19-24): Courage, Hope, Neutrality, Willingness, Acceptance, Reason
+High (25-34): Trust, Compassion, Humility, Belonging, Love, Gratitude, Excitement, Wonder, Joy, Peace
 
 ## What's here
 <!-- What's on this floor right now? What brought you here? -->

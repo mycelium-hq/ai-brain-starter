@@ -31,7 +31,7 @@ from collections import defaultdict
 from pathlib import Path
 
 
-# High-Rise floor suffix variants. The framework's 16 floors (Shame...Peace)
+# High-Rise floor suffix variants. The framework's 34 floors (Disgust...Peace)
 # get referenced inconsistently across files: "Love", "Love Floor", "Love (Floor)".
 # Canonicalize all of them to the bare name. ai-brain-starter installs this
 # framework into every vault, so these variants apply to all repo users.

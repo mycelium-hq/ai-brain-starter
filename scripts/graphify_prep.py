@@ -43,12 +43,19 @@ LIST_ITEM_RE = re.compile(r"^\s*-\s*(.+)$", re.MULTILINE)
 # comments, blank lines ignored. Place at <vault>/Meta/concept_whitelist.txt
 # or pass --whitelist-path.
 
-# The 16 floors of the High-Rise framework. ai-brain-starter installs this
-# framework into every vault, so these names apply to all repo users.
+# The 34 floors of the High-Rise framework (expanded from 16 in April 2026
+# by mapping 150+ named human emotions onto the building). ai-brain-starter
+# installs this framework into every vault, so these names apply to all repo users.
 CANONICAL_FLOORS = {
-    "shame", "guilt", "apathy", "grief", "fear", "desire", "anger", "pride",
-    "courage", "neutrality", "willingness", "acceptance", "reason",
-    "love", "joy", "peace",
+    # Low (1-18): reactive
+    "disgust", "shame", "embarrassment", "guilt", "apathy", "resignation",
+    "confusion", "loneliness", "boredom", "grief", "disappointment", "hurt",
+    "fear", "frustration", "desire", "anger", "contempt", "pride",
+    # Middle (19-24): transitional
+    "courage", "hope", "neutrality", "willingness", "acceptance", "reason",
+    # High (25-34): generative
+    "trust", "compassion", "humility", "belonging", "love", "gratitude",
+    "excitement", "wonder", "joy", "peace",
 }
 
 
