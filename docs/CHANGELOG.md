@@ -9,6 +9,20 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-25 — Framework expanded from 16 to 34 floors across templates, scripts, and phase docs
+
+**Who this affects:** anyone setting up a new AI Brain Starter vault, or anyone whose existing vault has the older 16-floor framework wired into templates and the graphify pipeline. No breaking change for users who already manually expanded their framework — this just makes the public repo match.
+
+**What changed:** The High-Rise framework was expanded from 16 floors to 34 by mapping ~150 named human emotions onto the building. The setup phase that creates concept notes, the Templater suggester for new journal entries, the Floor Check-In quick-reference template, and the graphify scripts that build floor edges in the knowledge graph were all still on the original 16. New users would have a vault that silently lost the 18 added floors at every layer (template → frontmatter → graph). This catches all four layers up.
+
+**The new floors:** Disgust (1), Embarrassment (3), Resignation (6), Confusion (7), Loneliness (8), Boredom (9), Disappointment (11), Hurt (12), Frustration (14), Contempt (17), Hope (20), Trust (25), Compassion (26), Humility (27), Belonging (28), Gratitude (30), Excitement (31), Wonder (32). Tier ranges shifted: Low is now 1-18 (was 1-8), Middle is 19-24 (was 9-13), High is 25-34 (was 14-16).
+
+**Why it matters:** Several common emotional states were collapsed into the wrong floor under the 16-schema — anger and frustration treated as one floor when they have distinct voice signatures (Anger = ALL CAPS at someone; Frustration = blocked-energy "ugh"), love and gratitude conflated when one is "I give to you" and the other is "I'm so grateful." Vault dashboards and pattern-recognition queries get sharper when the labels match the actual emotional resolution.
+
+**Files touched:** `templates/obsidian/Journal Entry.md`, `templates/obsidian/Floor Check-In.md`, `phases/phase-10a-journaling.md` (concept-note generator + Spanish translation table + tier notes), `scripts/graphify_prep.py`, `scripts/graphify_canonicalize.py`.
+
+---
+
 ## 2026-04-24 — New build rule: structured-signal-first audit before LLM batches
 
 **Who this affects:** anyone building scripts, skills, or agents that iterate an LLM over a folder of vault files (classify, extract, label, score, summarize). No breaking change.
