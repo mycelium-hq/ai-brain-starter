@@ -518,6 +518,62 @@ def generate_report(sessions_data, agents_data, days):
 
 MEMORY_FILE = Path.home() / ".claude" / "CLAUDE.md"
 
+
+def _load_dedupe_sources(vault_root: Path) -> str:
+    """Collect text from all places a shipped rule might already live.
+
+    Checks: ~/.claude/CLAUDE.md, vault CLAUDE.md, cross-session MEMORY.md
+    files under ~/.claude/projects/, vault rules files, and ~/.claude/hooks/*.py.
+    Returns a single concatenated string for tag-presence checks.
+    """
+    chunks = []
+
+    # 1. ~/.claude/CLAUDE.md (global)
+    global_claude = Path.home() / ".claude" / "CLAUDE.md"
+    if global_claude.exists():
+        try:
+            chunks.append(global_claude.read_text(errors="ignore"))
+        except OSError:
+            pass
+
+    # 2. Vault CLAUDE.md
+    vault_claude = vault_root / "CLAUDE.md"
+    if vault_claude.exists():
+        try:
+            chunks.append(vault_claude.read_text(errors="ignore"))
+        except OSError:
+            pass
+
+    # 3. Cross-session memory files under ~/.claude/projects/
+    projects_root = Path.home() / ".claude" / "projects"
+    if projects_root.exists():
+        for mem in projects_root.rglob("MEMORY.md"):
+            try:
+                chunks.append(mem.read_text(errors="ignore"))
+            except OSError:
+                pass
+
+    # 4. Vault rules files (⚙️ Meta/rules/*.md)
+    rules_dir = vault_root / "⚙️ Meta" / "rules"
+    if rules_dir.exists():
+        for f in rules_dir.glob("*.md"):
+            try:
+                chunks.append(f.read_text(errors="ignore"))
+            except OSError:
+                pass
+
+    # 5. ~/.claude/hooks/*.py (tags embedded in hook comments/code)
+    hooks_dir = Path.home() / ".claude" / "hooks"
+    if hooks_dir.exists():
+        for f in hooks_dir.glob("*.py"):
+            try:
+                chunks.append(f.read_text(errors="ignore"))
+            except OSError:
+                pass
+
+    return "\n".join(chunks)
+
+
 # Map prescription types to MEMORY.md rules (behavioral) vs to-dos (investigation)
 BEHAVIORAL_RULES = {
     "VERBOSE AGENTS": "Agent briefings must include: specific file paths, expected output format, and scope boundary. Target: <8 turns per agent. Current avg: {value}.",
@@ -537,24 +593,22 @@ def apply_prescriptions(prescriptions, prescription_types):
     todos_written = 0
 
     # ── Behavioral rules -> MEMORY.md ──
-    memory_text = ""
-    if MEMORY_FILE.exists():
-        with open(MEMORY_FILE, "r") as f:
-            memory_text = f.read()
+    # Check ALL knowledge stores so already-shipped rules don't re-fire.
+    dedupe_text = _load_dedupe_sources(VAULT_ROOT)
 
     new_rules = []
+    written_types = []  # track which types were actually written (not deduped)
     for rx, rx_type in zip(prescriptions, prescription_types):
         if rx_type in BEHAVIORAL_RULES:
-            # Extract the metric value for the rule template
-            value = rx.split("is ")[-1].split(".")[0] if "is " in rx else "see digest"
-            rule_text = BEHAVIORAL_RULES[rx_type].format(value=value)
-            # Idempotent: check if a similar rule already exists
             rule_key = rx_type.lower().replace(" ", "_")
             tag = f"performance_{rule_key}"
-            if tag in memory_text:
-                # Update existing rule in place
+            if tag in dedupe_text:
+                # Rule already exists somewhere in the knowledge stack — skip
                 continue
+            value = rx.split("is ")[-1].split(".")[0] if "is " in rx else "see digest"
+            rule_text = BEHAVIORAL_RULES[rx_type].format(value=value)
             new_rules.append(f"- [{rx_type} fix]({tag}.md) | {rule_text} (updated {today}, {marker})")
+            written_types.append(rx_type)
 
     if new_rules:
         with open(MEMORY_FILE, "a") as f:
@@ -577,9 +631,9 @@ def apply_prescriptions(prescriptions, prescription_types):
                 continue
             new_todos.append(f"- [ ] **Performance: {rx[:80]}...** {rx} ({today}, {marker})")
 
-    # Also add a to-do pointing to the behavioral rules that were written
+    # Add a to-do only for rule types that were actually written (not deduped)
     if rules_written > 0:
-        rule_summary = f"- [ ] **Performance: {rules_written} behavioral rule(s) written to CLAUDE.md.** Review and validate: {', '.join(r for r in prescription_types if r in BEHAVIORAL_RULES)}. ({today}, {marker})"
+        rule_summary = f"- [ ] **Performance: {rules_written} behavioral rule(s) written to CLAUDE.md.** Review and validate: {', '.join(written_types)}. ({today}, {marker})"
         if "behavioral rule(s) written" not in existing_todos:
             new_todos.append(rule_summary)
 
