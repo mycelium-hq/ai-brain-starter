@@ -73,6 +73,32 @@
           {
             "type": "command",
             "command": "[ -f ~/.claude/hooks/validate-mcp-json.py ] && python3 ~/.claude/hooks/validate-mcp-json.py || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'"
+          },
+          {
+            "type": "command",
+            "command": "[ -f ~/.claude/hooks/pre-write-settings-lint.py ] && python3 ~/.claude/hooks/pre-write-settings-lint.py || true"
+          }
+        ]
+      }
+    ],
+
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f ~/.claude/hooks/lint-claude-settings.py ] && python3 ~/.claude/hooks/lint-claude-settings.py || true",
+            "statusMessage": "Linting Claude Code settings..."
+          },
+          {
+            "type": "command",
+            "command": "[ -f ~/.claude/hooks/lint-claude-settings.py ] && python3 ~/.claude/hooks/lint-claude-settings.py --test || true",
+            "statusMessage": "Self-testing settings linter..."
+          },
+          {
+            "type": "command",
+            "command": "[ -f ~/.claude/hooks/check-claude-code-version.sh ] && bash ~/.claude/hooks/check-claude-code-version.sh || true",
+            "statusMessage": "Checking Claude Code version..."
           }
         ]
       }

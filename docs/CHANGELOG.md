@@ -9,6 +9,33 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-28 — Claude Code config integrity guards (5-layer defense against silently corrupt settings.json)
+
+**Who this affects:** anyone who has ever hand-edited `~/.claude/settings.json` or `.mcp.json`. No breaking change — all three guards are additive and warn-only by default.
+
+**What changed:** Three new hooks land in `hooks/`, wired into PreToolUse and SessionStart in `hooks.json`. They form a layered defense against the most common silent failure mode in Claude Code config: a duplicate top-level key (especially a second `"permissions": {...}` block at the bottom of settings.json) that wipes the original allowlist because JSON's last-key-wins semantics are silently tolerated by `json.load()`. The user keeps re-approving the same gh/git push permissions every session, never realizing the config has been corrupt for weeks.
+
+- `lint-claude-settings.py` — detects duplicate keys at any depth, unknown enum values for `model` and `theme`, hooks pointing at files that don't exist on disk, and bare-command permissions missing the `Bash(...)` wrapper. Runs in three modes: warn-only (default, for SessionStart drift detection), `--strict` (exit 2 on BLOCK-severity issues, for the PreToolUse blocker), and `--test` (5 self-test fixtures including duplicate-key and false-positive guard, so the linter itself can't silently rot).
+- `pre-write-settings-lint.py` — PreToolUse Write|Edit blocker. If you (or Claude) try to write a config file that contains a duplicate top-level key, the write is blocked with a stderr explanation pointing at the exact issue. Edit operations are projected (current file + old/new substitution) before linting so the check matches the post-edit shape.
+- `check-claude-code-version.sh` — SessionStart-cached check (24h TTL) against `gh api repos/anthropics/claude-code/releases/latest`. Warns if you're behind by 3 or more patch versions. Catches the silent-drift class of bug: Claude Code has no built-in "you're behind" notification, so users routinely miss memory-leak fixes and reliability patches that ship every couple weeks.
+
+**Why it matters:** The duplicate-permissions bug is a real failure mode that's easy to introduce and hard to detect. JSON parsers don't complain. Claude Code doesn't complain. The only signal is "huh, why is this permission not working" weeks later. Catching it at the write boundary is cheap; debugging it cold is hours. The version check closes the same kind of gap on the upgrade axis — no nag, just a one-line surface at SessionStart if you've drifted enough that it matters.
+
+**The defense layers:**
+1. PreToolUse blocks bad writes (write boundary)
+2. FileChanged (if your Claude Code version supports it) warns at write-time
+3. SessionStart audits drift introduced by external editors
+4. SessionStart runs the linter's self-test so guard rot fails loud
+5. Wire the version-check output into your existing UserPromptSubmit hook to surface drift inline
+
+**Files touched:** `hooks/lint-claude-settings.py` (new), `hooks/pre-write-settings-lint.py` (new), `hooks/check-claude-code-version.sh` (new), `hooks.json` (PreToolUse Write|Edit chain extended, new SessionStart block).
+
+**Existing users:** the next sync run picks up the new hooks via your hooks.json. The new SessionStart block is gated on `[ -f ~/.claude/hooks/<file> ] && ... || true` so missing files exit silently — no breakage if a sync is incomplete.
+
+**Requires:** `gh` CLI for the version check (silently no-ops if missing).
+
+---
+
 ## 2026-04-25 — Framework expanded from 16 to 34 floors across templates, scripts, and phase docs
 
 **Who this affects:** anyone setting up a new AI Brain Starter vault, or anyone whose existing vault has the older 16-floor framework wired into templates and the graphify pipeline. No breaking change for users who already manually expanded their framework — this just makes the public repo match.
