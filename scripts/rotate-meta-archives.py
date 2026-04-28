@@ -1,26 +1,17 @@
 #!/usr/bin/env python3
-"""
-rotate-meta-archives.py - move old Sessions/ and Decisions/ stubs into
-Archive/YYYY-MM/ subfolders so the live folders stay small.
+"""rotate-meta-archives.py - move old Sessions/Decisions stubs to Archive/YYYY-MM/.
 
-Without rotation, Sessions/ and Decisions/ accumulate forever (one new file
-per session-close). After a few months you have hundreds of stubs in a
-single flat folder, and Obsidian's file list becomes unusable. Rotation
-keeps the live folders bounded by month while preserving full history.
+Solves: live folders accumulate one stub per session-close, become unusable.
 
 Retention by filename ISO prefix (YYYY-MM-DDTHH-MM-...):
-  - Sessions:  keep current month + previous month (older -> Archive)
-  - Decisions: keep current month + previous 2 months (older -> Archive)
+  Sessions:  current + previous month
+  Decisions: current + previous 2 months
 
 Usage:
   VAULT_ROOT=/path/to/vault python3 scripts/rotate-meta-archives.py
   python3 scripts/rotate-meta-archives.py --dry-run
 
-Idempotent. Safe to run on a cron, a session-close hook, or by hand.
-
-Environment variables:
-  VAULT_ROOT  - absolute path to the Obsidian vault root.
-                Defaults to two levels above this script (Meta/scripts/).
+VAULT_ROOT defaults to two levels above this script. Idempotent.
 """
 import argparse
 import os

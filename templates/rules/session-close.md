@@ -86,7 +86,7 @@ VAULT_ROOT="<vault>" python3 "<vault>/Meta/scripts/aggregate-decisions.py"
 VAULT_ROOT="<vault>" python3 "<vault>/Meta/scripts/rotate-meta-archives.py"
 ```
 
-`rotate-meta-archives.py` keeps `Sessions/` to current + previous month and `Decisions/` to current + previous 2 months; older stubs move to `Sessions/Archive/YYYY-MM/` and `Decisions/Archive/YYYY-MM/`. Without this, Sessions/ accumulates forever (one stub per session-close) and the flat folder becomes unusable after a few months. Idempotent and bounded - the no-op runs cost nothing.
+`rotate-meta-archives.py` bounds `Sessions/` (current + 1mo) and `Decisions/` (current + 2mo); older stubs → `*/Archive/YYYY-MM/`. Without it, the flat folder accumulates forever (one stub per session-close) and becomes unusable. Idempotent.
 
 ## Phase 2b: Git snapshot (targeted, never full-tree, foreground only)
 
