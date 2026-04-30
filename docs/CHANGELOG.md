@@ -9,6 +9,46 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-30 — Hooks now install at USER level (closes #6, fires universally in worktrees)
+
+**Who this affects:** anyone whose Claude Code work happens in git worktrees (most active users do, since each `claude/<branch>` worktree is how feature work is isolated).
+
+**The bug:** ai-brain-starter hooks were installed at project level (`<vault>/.claude/settings.json`). When Claude Code runs from inside `<vault>/.claude/worktrees/<name>/`, project-level hooks silently don't fire. UserPromptSubmit hooks specifically — the ones that detect "bye", catch malformed YAML at write time, log skill usage — would never get a chance to run. Reports of "I said bye and the cascade didn't trigger" had this as a quiet root cause even after the cascade detection itself was fixed.
+
+**The fix is structural:** hooks now install at user level (`~/.claude/settings.json`), which fires universally regardless of cwd. The hooks themselves are unchanged — only the install path moved.
+
+### What shipped
+
+- **`scripts/install-hooks-user-level.py`** — idempotent installer that reads `hooks.json` (the canonical source-of-truth in this repo) and merges entries into `~/.claude/settings.json` while preserving every existing user-defined hook. Custom hooks are never touched. Backup at `~/.claude/settings.json.bak-{timestamp}-abs` before any edit. Post-write JSON validity verified; auto-rollback on parse error. Fingerprint-based matching means re-running the installer is a no-op when nothing has changed.
+- **`hooks/migrate-to-user-level.py`** — SessionStart hook that detects existing project-level installs and prompts the user once to migrate. Tracks state per-vault at `~/.claude/.abs-migration-state.json` so the prompt fires at most once per vault. Easy opt-out: `migrationDeclined: true` in CLAUDE.md frontmatter.
+- **`scripts/test-hooks-in-worktree.sh`** — regression test that creates a temp git repo + worktree, fires the detector hook from inside the worktree, and asserts it responds correctly. **6/6 checks pass:** main-worktree firing, child-worktree firing, worktree name derivation, installer preservation of custom hooks, installer adding ABS hooks, installer idempotency. CI-runnable.
+- **`bootstrap.sh`** updated with `--install-hooks-user-level` flag (manual escape hatch) AND inline call at the end of normal install runs (so new users get user-level hooks by default without thinking about it).
+- **`docs/HOOKS_INSTALL.md`** — full architecture doc covering install/migration/troubleshooting/why.
+- **`hooks.json`** — added the migrate-to-user-level entry to the SessionStart chain so the migration prompt is part of the canonical install surface.
+
+### Why this is the right fix
+
+Two alternative fixes considered and rejected:
+
+1. *"Detect worktrees and install hooks at the worktree level too."* Project-level config inside `.claude/worktrees/<name>/.claude/settings.json` would still be brittle and require reinstalling on every new worktree. User-level wins on simplicity.
+2. *"File a Claude Code bug and wait for an upstream fix."* Issue is open ([#6](https://github.com/adelaidasofia/ai-brain-starter/issues/6)) but waiting blocks every user. The user-level install is a structural workaround that's actually cleaner — global hooks belong at global scope.
+
+### What's preserved
+
+The full session-close cascade, all 14 bundled skills, all the Phase 5 setup, every existing user-defined hook in `~/.claude/settings.json`, every project-level hook the user installed manually. The only change is that ai-brain-starter's specific hooks now live at user level. Project-level installs are not removed automatically — they coexist (additive migration). Once the user verifies the user-level hooks work, they can manually delete the project-level entries.
+
+### Migration paths
+
+- **New users via bootstrap.sh:** automatic — installer runs at end of bootstrap.
+- **Existing users on a current update:** the SessionStart migration hook detects project-level installs and prompts once with the migration command.
+- **Manual:** `python3 ~/.claude/skills/ai-brain-starter/scripts/install-hooks-user-level.py`
+- **Verification:** `bash ~/.claude/skills/ai-brain-starter/scripts/test-hooks-in-worktree.sh` (6/6 expected).
+- **Uninstall:** `python3 ~/.claude/skills/ai-brain-starter/scripts/install-hooks-user-level.py --uninstall` removes ONLY ai-brain-starter entries, preserves everything else.
+
+**Closes [adelaidasofia/ai-brain-starter#6](https://github.com/adelaidasofia/ai-brain-starter/issues/6).**
+
+---
+
 ## 2026-04-30 — Compounding reliability + stewardship layer (10 features in one drop)
 
 **Who this affects:** everyone. This is a single coordinated drop that addresses every reliability gap the maintainer's panel review surfaced and closes 4 of 4 oldest open issues simultaneously.

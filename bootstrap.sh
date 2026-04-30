@@ -177,6 +177,22 @@ for arg in "$@"; do
         echo "ERROR: detect-partial-installs.sh not found." >&2
         exit 2
       fi ;;
+    --install-hooks-user-level)
+      # Closes adelaidasofia/ai-brain-starter#6 — install hooks at user level
+      # so they fire universally, including inside .claude/worktrees/<name>/.
+      INSTALLER="$SKILL_DIR/scripts/install-hooks-user-level.py"
+      [[ ! -f "$INSTALLER" ]] && [[ -f "$HOME/Desktop/ai-brain-starter/scripts/install-hooks-user-level.py" ]] && \
+        INSTALLER="$HOME/Desktop/ai-brain-starter/scripts/install-hooks-user-level.py"
+      if [[ -f "$INSTALLER" ]]; then
+        forward_args=()
+        for a in "$@"; do
+          [[ "$a" == "--install-hooks-user-level" ]] || forward_args+=("$a")
+        done
+        exec python3 "$INSTALLER" "${forward_args[@]}"
+      else
+        echo "ERROR: install-hooks-user-level.py not found." >&2
+        exit 2
+      fi ;;
     --help|-h)
       cat <<'HELP'
 Usage: bash bootstrap.sh [OPTIONS]
@@ -184,11 +200,13 @@ Usage: bash bootstrap.sh [OPTIONS]
 Install or update the ai-brain-starter setup. Safe to re-run.
 
 Options:
-  --dry-run, -n         Show what would be installed without making changes
-  --restore             Interactive restore from .bak files (closes #2)
-  --smoke-test          Run end-to-end verification of the installed setup
-  --detect-partial      Scan for half-installed components (closes #4)
-  --help, -h            This help
+  --dry-run, -n                 Show what would be installed without making changes
+  --restore                     Interactive restore from .bak files (closes #2)
+  --smoke-test                  Run end-to-end verification of the installed setup
+  --detect-partial              Scan for half-installed components (closes #4)
+  --install-hooks-user-level    Install hooks at user level (closes #6 — fires
+                                universally including inside git worktrees)
+  --help, -h                    This help
 
 Logs: every run is appended to ~/.claude/.bootstrap.log (closes #3).
 HELP
@@ -886,6 +904,20 @@ else
   fi
 fi
 echo
+
+# ───────────────────────────────────────────────────────────────────────────────
+# User-level hook install (closes #6 — fires universally inside worktrees)
+# ───────────────────────────────────────────────────────────────────────────────
+
+USER_HOOK_INSTALLER="$SKILL_DIR/scripts/install-hooks-user-level.py"
+if [[ -f "$USER_HOOK_INSTALLER" ]] && [[ "$DRY_RUN" -eq 0 ]]; then
+  hdr "Installing hooks at user level (so they fire inside worktrees)"
+  if python3 "$USER_HOOK_INSTALLER" --quiet 2>&1 | tee -a "$BOOTSTRAP_LOG"; then
+    ok "User-level hooks installed (~/.claude/settings.json)"
+  else
+    warn "User-level hook install had issues; check $BOOTSTRAP_LOG"
+  fi
+fi
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Next steps
