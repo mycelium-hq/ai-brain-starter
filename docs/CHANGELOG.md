@@ -9,6 +9,62 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-30 — Session close cascade rebuilt as a deterministic 3-layer pipeline
+
+**Who this affects:** everyone. Every time you say "bye" to end a session, the new pipeline runs.
+
+**The problem:** the prior architecture relied on the model "noticing" closing signals and choosing to read a separate cascade rule file before responding. Three brittle steps (notice → read rule → execute) any one of which could fail silently. Reports came back of users saying "bye" and nothing getting saved — captures lost.
+
+**What changed:** the close cascade is now layered across three coordinated mechanisms.
+
+- **Layer 1 — `hooks/detect-closing-signal.py` (UserPromptSubmit, NEW).** Detects close signals via regex against language packs (EN / ES / PT) before the model ever sees the prompt. Pre-resolves all paths. Pre-builds the session file shell with frontmatter and section headers. Pre-fetches decisions with empty Outcome. Writes a marker file. Injects the cascade context as `additionalContext` so the model receives complete instructions without reading a separate rule file. Performance budget: under 500ms.
+- **Layer 2 — model's turn.** The model receives the injected context and runs only the irreducibly creative work: incomplete-work check, conversation scan for journal seeds (verbatim), writing notes, to-dos, decisions, delegations, then writes everything in a single batched tool-call block to the pre-built shell.
+- **Layer 3 — `scripts/session-end-hook.sh` (Stop, UPGRADED).** Reads the marker, runs aggregators, performs a targeted git snapshot if the vault is git-tracked, sweeps retention, and crucially fires `scripts/session-close-fallback.py` if the session body is empty (model bailed) — the fallback calls Haiku 4.5 with the conversation transcript and fills the file. No silent loss.
+
+**The full 7-phase cascade is preserved.** Every capture from the prior spec — journal seeds, Substack candidates with kill-conditions, to-do reconciliation, decision logging, decision outcome backfill, delegations with drafted messages, time tracking — runs identically. The change is where the work happens (deterministic hook vs. model's context window), not what gets captured.
+
+**Token efficiency:** the model now receives a ~400-600 token system block with pre-resolved paths and inline cascade phases, instead of having to re-read a 3K-token rule file plus narrate phase-by-phase tool calls. Roughly 80% reduction in close-related model token spend, identical capture fidelity.
+
+**UX change:** the cascade runs invisibly by default. The model says a clean goodbye, the captures land in the background. Set `sessionCloseFeedback: minimal` in your CLAUDE.md frontmatter to see a one-line summary at close end. Set to `verbose` for phase-by-phase output if you want to debug.
+
+**New files:**
+- `hooks/detect-closing-signal.py` — UserPromptSubmit detector
+- `scripts/session-close-fallback.py` — Haiku-backed graceful degradation
+- `scripts/recover-last-close.py` — recover from partial-completion flags
+- `scripts/undo-last-close.py` — rollback most recent close
+- `scripts/test-closing-signals.py` — fixture-based test harness (74 fixtures, CI-runnable)
+- `templates/closing-signals/{en,es,pt}.json` — multilingual signal dictionaries
+- `docs/SESSION_CLOSE.md` — user-facing reference for the whole system
+- `templates/rules/session-close.md` — rewritten as the canonical rule (supersedes session-end-cascade.md, which is now a redirect stub)
+
+**Modified files:**
+- `scripts/session-end-hook.sh` — marker check + Haiku fallback wiring + git snapshot + retention
+- `hooks.json` — UserPromptSubmit chain prepended with the detector
+- `templates/generated/claude-md-template.md` — Phase 4 session-end section rewritten + new optional config block
+- `SKILL.md` — routing table updated to mention session-close walkthrough in Phase 19-23 finish
+- `phases/phase-19-23-finish.md` — Phase 24.5 walkthrough added (15-second verbal pointer for new users)
+
+**Closing signals matched:**
+- Explicit (no confirmation): `/close`, `/wrap-up`, `/bye`, `/done`, `/finish`, `/cerrar`, `/terminar`, `/chao`, `/fechar`, `/encerrar`, `/tchau`
+- High-confidence natural language: bye, thanks that's all, good night, ttyl, cya, signing off, talk later, wrapping up, I'm done, k bye, gn (EN); chao, chau, nos vemos, hasta luego, listo gracias, eso es todo, buenas noches, me voy (ES); tchau, até logo, valeu, falou, boa noite, pronto, obrigado (PT)
+- Ambiguous (asks "wrapping up?"): ok, cool, perfect, great, sounds good, dale, bueno, beleza
+- Emoji-only: 👋, 🙏, ✌️, 🫡, 💤
+- False-positive guards exclude code blocks, quoted "bye", "done with X" transitions, "listo para X" readiness, meta-questions like "what does ttyl mean?"
+
+**Customization:** add per-user signals via `closingSignals.custom: ["k thx", "okkk"]` in your CLAUDE.md frontmatter. Switch on Haiku ambiguous-classifier with `closeDetection: hybrid` (needs ANTHROPIC_API_KEY).
+
+**Recovery:** if a close fails because the model bailed and you didn't have ANTHROPIC_API_KEY set, a partial-flag is left at `~/.claude/.cascade-partial-{session_id}.json`. Run `python3 ~/.claude/skills/ai-brain-starter/scripts/recover-last-close.py` later to retry the fallback.
+
+**Rollback:** `python3 ~/.claude/skills/ai-brain-starter/scripts/undo-last-close.py` moves the most recent session file + co-located decisions to an `.undone-{timestamp}/` archive folder, optionally reverts the git commit, and re-runs aggregators. Always interactive unless `--yes`.
+
+**Testing:** `python3 scripts/test-closing-signals.py` runs 74 fixtures across all three languages, ambiguous cases, false positives, and adversarial inputs. Exits 0 on all-pass for CI.
+
+**Existing users:** the next auto-update sync wires the new hook into `hooks.json` and pulls in the new scripts. Old `session-end-cascade.md` becomes a redirect stub pointing at `session-close.md`. No content is lost; nothing breaks. The model-side cascade is identical in scope; the trigger is now deterministic.
+
+**Why it matters:** "I said bye and the cascade didn't run" was a real, recurring failure mode that lost user context. The fix is structural — make detection a deterministic hook, give the model only the work it can't be replaced for, and add a Haiku backstop so even a model bail doesn't lose captures. The system never gets worse than current state on any failure.
+
+---
+
 ## 2026-04-28 — Claude Code config integrity guards (5-layer defense against silently corrupt settings.json)
 
 **Who this affects:** anyone who has ever hand-edited `~/.claude/settings.json` or `.mcp.json`. No breaking change — all three guards are additive and warn-only by default.

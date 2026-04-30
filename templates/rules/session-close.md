@@ -1,160 +1,143 @@
 ---
+creationDate: {{DATE}}
 type: rule
-purpose: Session close protocol. Run before goodbye or context compaction.
+purpose: Session close protocol — full cascade preserved, hook-orchestrated. Run before goodbye or context compaction.
 trigger: User signals session end OR context compaction imminent
+supersedes: session-end-cascade.md (deprecated; this file is the canonical source)
 ---
 
 # Session close protocol
 
-Run BEFORE goodbye or compaction. Every phase runs every session. Report zeros ("0 decisions, 0 delegations"), never skip silently.
+The session close cascade is layered across three coordinated mechanisms. **You don't need to read this file when the cascade fires** — the `detect-closing-signal.py` hook injects all paths and instructions into your context automatically. This file exists for documentation, debugging, and the rare manual run.
 
-**Skip condition:** <5 user messages, no decisions/info/learnings.
+## Architecture
 
-**Closing signals:** "bye", "thanks that's all", "done", "good night", "ttyl", "wrapping up", `/wrap-up`, or equivalent in any language.
+| Layer | Mechanism | Responsibility |
+|---|---|---|
+| 1 | `hooks/detect-closing-signal.py` (UserPromptSubmit) | Detect close signal; pre-resolve timestamp/worktree/paths; pre-build session file shell; pre-fetch decisions-with-empty-Outcome list; write marker file; inject cascade context for the model |
+| 2 | The model's turn | Run Phase 0b incomplete-work check, then scan conversation and write captures to pre-built paths in one batched tool-call block. No tool-call narration. |
+| 3 | `scripts/session-end-hook.sh` (Stop) | If marker exists: run `session-close-fallback.py` only when model bailed (empty body), then aggregators, targeted git snapshot, retention cleanup, marker cleanup. If no marker: cheap-path turn-end log only. |
 
-## Model
+**Skip condition.** When the user has fewer than 5 messages this session AND no captures detected, the hook injects a "trivial — skip" instruction. The model says a clean goodbye, the Stop hook still logs a timestamp.
 
-Switch to a cheaper/faster model (Sonnet-class) before starting this protocol. The session close is structured, write-heavy work, scanning, filing, batch writes, running aggregators. That is not judgment-call territory. Announce the switch so the user knows what model is running the close.
+**Closing signals.** EN/ES/PT language packs at `templates/closing-signals/*.json`. Includes explicit slash commands (`/close`, `/wrap-up`, `/bye`, `/cerrar`, `/tchau`), high-confidence natural-language closes ("bye", "thanks that's all", "good night", "ttyl", "chao", "nos vemos", "tchau", "valeu"), emoji-only farewells, and ambiguous signals ("ok", "cool", "perfect") that trigger a one-line confirmation before the cascade. False-positive guards exclude code blocks, quoted "bye", "done with X" mid-conversation transitions, and meta-questions about close signals.
 
-## Phase 0: Timestamp
+**Custom signals.** Users can extend per-language via `closingSignals.custom: ["k thx", "okkk"]` in CLAUDE.md frontmatter or inline.
 
-Run `date "+%Y-%m-%d %I:%M %p"`. Reuse this for ALL writes (session file, time tracking, to-do dates, session captures entries).
+## Phase 0b — Incomplete-work gate (model, FIRST)
 
-## Phase 1: Single-pass conversation scan
+Before any writes. Surface anything that did not finish this session:
 
-One pass through the conversation, seven output buckets. Compose everything in memory before writing anything.
+- Background tasks still running (`run_in_background: true` Bash calls).
+- Tasks killed mid-run (any `TaskStop` or pipeline phase aborted).
+- Pipeline phases that didn't complete (graphify stage, second-brain-mapping phase, imports/exports that errored).
+- Commands that errored and were not retried.
 
-**Pattern auto-detection (silent).** If your vault has a `/patterns` skill, evaluate its triggers (tool friction, user correction, dead-end recovery, discovery). If 1+ fires, surface one suggestion. Don't auto-run.
+For each, ask the user: "Finish now, or close and leave for next session?" Wait for the call. Do NOT proceed until every incomplete item is finished or explicitly deferred.
 
-**Belief shift check.** "What does the user believe differently now?" If anything, that's the first journal seed.
+If nothing is incomplete: say "No incomplete work" and continue.
 
-**Journal seeds.** Verbatim quotes where the user revealed a belief, changed their mind, made an observation, or said something new. Never reworded. Emotional signals tagged `[emotional]`. Destination: a single Session Captures file (e.g. `Meta/Session Captures.md`) with date + context tag.
+## Phase 1 — Single-pass conversation scan (model)
 
-**Public-writing note candidates (if the user publishes).** Destination: a staging queue file, never published-content files directly.
+One pass through the conversation. All output buckets composed in memory before writing.
 
-**Forcing function for public writing. Execute in order before writing ANY note:**
-1. Read 3 random notes from the user's published work. Full notes, not scanned.
-2. Classify the draft against the user's actual format types.
-3. **Structural match test.** Does the draft structurally resemble the 3 notes you just read? Sentence cadence, opening pattern, ratio of observation to personal detail, ending structure?
-4. **Kill conditions (do not write the note if any are true):**
-   - Starts with "I" + something that happened today ("I checked", "I shipped", "I felt")
-   - Startup-blogger / LinkedIn-thought-leader tone
-   - "Look at me" ego framing
-   - Requires context from the session to land
-   - Reads like diary instead of universal observation
-5. **Filter test before filing:** Could this live in the user's published file without anyone knowing where it came from? If no, drop it.
+**Belief shift check.** Does the user end the session believing something different? If yes, that's the first journal seed.
 
-**Why this matters.** Taste is not computable through abstract instruction. The model must pattern-match against concrete exemplars or it produces generic content-marketing prose.
+**Journal seeds.** VERBATIM quotes where the user revealed a belief, observation, or change of mind. Tag emotional ones `[emotional]`. Never reword. Destination: `Session Captures.md`.
 
-**Actionable content.** Strategy ideas, product insights, pitch angles, partnership leads, writing seeds. File to where it belongs. No clear home: Session Captures under an "Ideas & Strategy" heading.
+**Writing note candidates.** If the user has a Substack/blog setup configured in CLAUDE.md, apply kill conditions before drafting:
+- No "I" + something that happened today ("I checked", "I shipped", "I felt")
+- No startup-blogger / LinkedIn-thought-leader tone
+- No "look at me" ego framing
+- Must read as universal observation, not diary
+- Must stand alone without session context
+- If bilingual configured (e.g., EN+ES Substack pair), draft both.
+- File to user's Content Drafts file (path defined in CLAUDE.md) or Captures under "Ideas & Strategy."
 
-**To-dos.** Personal: a personal to-do file. Team/project: relevant project to-do file. Format: `- [ ]` under `## From [context] - YYYY-MM-DD`.
+**Actionable content.** Strategy fragments, product insights, partnership leads. File to canonical location per the vault map; default to Captures.
 
-**To-do reconciliation.** Check off (`- [x]`) completed items in Current Priorities, to-do files, team files. Match by substance. Partial: leave unchecked, append progress note.
+**To-dos** (separated by canonical destination — personal vs team). Apply self-contained capture rule: every task includes a `[Context prefix in brackets]` OR a wikilink OR a direct URL OR a file path so it stands alone when surfaced out of session context.
 
-**Decision outcome backfill.** Check decision files with blank `Outcome:`. If resolved this session, fill in.
+**To-do reconciliation.** Check off (`- [x]`) completed items in Get to-do, team to-do, Current Priorities. Match by substance, not exact wording. Partial completion: leave unchecked, append progress note.
 
-**Decision logging.** New decisions: create a dated decision file (What/Why/Stakes/Speed/Outcome placeholder).
+**Decision logging.** New decisions: create per-decision file in `Decisions/{timestamp}-{slug}.md` with frontmatter (`type: decision`, worktree, decision_date, floor, stakes, speed, outcome placeholder, pattern placeholder). Include the reasoning, not just the outcome.
 
-**Delegations.** Items for others (teammates, contractors): add to team to-do with `@Name`. Draft the message, offer to send.
+**Decision outcome backfill.** The hook pre-fetches files in `Decisions/` with blank Outcome (listed in the injected context). If this session resolved any of those, fill in the Outcome.
 
-**Contractor task clarity gate.** If the user works with contractors or non-technical teammates, verify every task assigned this session contains: a wikilink to a playbook AND the linked doc covers 4 fields: **Source** (where input lives), **Location** (where output goes), **Shape** (what done looks like), **Channel** (how to report back). Naked tasks ("do X") get sent back for enrichment before close.
+**Delegations.** Items for others: add to team to-do with `@Name`. Draft the message (Slack, WhatsApp, email) the user can send in one click.
 
-**Orphan playbook scan (prevents invisible work).** Any playbook or instructions doc created/modified this session must be referenced by a live (unchecked) task in the relevant to-do file. Orphan playbooks = invisible work: the contractor never sees them and never executes. Stop-ship defect.
+**GitHub issues.** If any filed this session: log to `Open GitHub Issues.md`.
 
-**Issue tracker entries.** If any issues/PRs were filed this session in GitHub/Linear/Jira: log to a single open-issues file.
+**Time tracking entry** (if vault uses it, per CLAUDE.md). Format: `- HH:MMam/pm - HH:MMam/pm | Category | Brief`. Categories defined in the time-tracking file. Verify start < end. Infer category from conversation.
 
-**Time tracking entry.** Format: `- HH:MMam/pm - HH:MMam/pm | Category | Brief`. Categories can be whatever the user uses (Writing, Work, Vault, Personal, Admin). Verify start < end.
+## Phase 2 — Batch writes (model, single tool-call block)
 
-## Phase 2: Batch writes
+All accumulated edits written in parallel. No interleaved read-write cycles. No tool-call narration.
 
-All accumulated edits written in parallel. No interleaved read-write cycles.
+**Session file.** Fill the pre-built shell at the path the hook injected. Sections (`## What happened`, `## Decisions`, `## Captures`, `## To-dos filed`, `## Delegations`, `## Pending / incomplete`) are already there — just fill the bodies. Verbatim rule: capture commitments in the user's exact words.
 
-**Session file.** Write to `Meta/Sessions/{timestamp}-{worktree}.md`. Never write to an auto-generated "Last Session" file directly. Include: what happened, key outputs, decisions, delegations, pending items. Verbatim rule: capture commitments in exact words used.
-
-**Per-worktree writes (race-safety).** Decisions: `Meta/Decisions/{timestamp}-{slug}.md` with frontmatter (type, worktree, decision_date, stakes, speed, outcome).
-
-**Vault firewall.** Personal content → personal vault. Team/business content → team vault. Ambiguous defaults to personal.
+**Per-decision files.** Create at the pre-resolved Decisions/ path with frontmatter.
 
 **Append, never overwrite.** Wikilink people, projects, concepts. Enough context for 6 months.
 
-**Aggregators (foreground, sequential).** Run aggregator scripts after writes complete. NO backgrounding. They take a few seconds combined. Backgrounded aggregators racing with a git commit can corrupt `.git/index`; foreground-sequential is the only way to prevent it.
+**Vault firewall.** Personal to personal vault. Team/business to team vault. Ambiguous defaults to personal. Never let personal content leak into the team vault.
 
-```bash
-VAULT_ROOT="<vault>" python3 "<vault>/Meta/scripts/aggregate-sessions.py"
-VAULT_ROOT="<vault>" python3 "<vault>/Meta/scripts/aggregate-decisions.py"
-VAULT_ROOT="<vault>" python3 "<vault>/Meta/scripts/rotate-meta-archives.py"
-```
+## Phase 3 — Final summary (model, one line)
 
-`rotate-meta-archives.py` bounds `Sessions/` (current + 1mo) and `Decisions/` (current + 2mo); older stubs → `*/Archive/YYYY-MM/`. Without it, the flat folder accumulates forever (one stub per session-close) and becomes unusable. Idempotent.
+"Filed X seeds, Y to-dos (yours: A, delegations: B), Z decisions, checked off M items. Anything I missed?"
 
-## Phase 2b: Git snapshot (targeted, never full-tree, foreground only)
+Then say goodbye in the user's primary language. Warm, no machinery narration.
 
-After Phase 2 writes AND aggregators complete, commit the session's changes as a local snapshot. **Run foreground only**, never use `run_in_background` for git operations in session close. Git creates `.git/index.lock` during writes; backgrounding races with anything else touching the index and can truncate it.
+## Phase 4 — Hook finalization (automatic, runs after model's turn ends)
 
-**Cross-session lock contention (the real cause of every "lock is in the way" failure).** Multiple agent sessions on the same machine share ONE `.git/`. When several close at once, they queue at `.git/index.lock`. The lock is a legitimate mutex, not a bug. If you encounter it:
+The Stop hook runs without your involvement:
 
-1. **NEVER `rm -f .git/index.lock` blindly.** Run `lsof "<vault>/.git/index.lock"` first. If a process owns it, another session is mid-commit, WAIT. Only remove if no process is attached AND the lock is older than 60s (proven orphan).
-2. **NEVER background a git operation** (`run_in_background: true`, trailing `&`). Background git racing with another session's git can truncate the index.
-3. **NEVER `git add -A`, `git add .`, or any unscoped form.** Sweeping commits steal staged files from other sessions and bloat your commit. Each session commits ONLY its own paths, listed explicitly.
+1. **Haiku fallback.** If the session file body is still empty (you bailed), `scripts/session-close-fallback.py` calls Haiku 4.5 with the conversation transcript and fills the file. Flagged for next-session review. Requires `ANTHROPIC_API_KEY`; without it, leaves a "fallback unavailable" notice + partial-flag for `recover-last-close.py` to retry later.
+2. **Aggregators.** `aggregate-sessions.py` rebuilds Last Session.md, `aggregate-decisions.py` rebuilds Decision Log.md.
+3. **Targeted git snapshot.** Only if the vault is git-tracked. Stages explicit paths only (session file, decision files, captures file, aggregated views). Never `git add -A`. Waits up to 60s for any concurrent index lock. No push (vaults are typically local-only snapshot repos).
+4. **Retention cleanup.** Stubs older than 7 days deleted; substantive sessions older than 7 days archived to `Sessions/Archive/`.
+5. **Marker cleanup.** Removes `~/.claude/.closing-signal-{session_id}.json`.
 
-**Use the wrapper, not raw git.** Copy `~/.claude/skills/ai-brain-starter/scripts/vault-safe-commit.sh` into your vault's `Meta/scripts/` (or any path on disk). It handles lock waiting, stale-lock detection, and a vault-wide mutex. For defense-in-depth, the starter ships three optional gates you can install:
+## Recovery + rollback
 
-1. PreToolUse hook `~/.claude/skills/ai-brain-starter/hooks/block-raw-vault-git.py` — blocks raw mutating git (`add`/`commit`/`checkout`/`reset`/`merge`/`rebase`/`restore`/`switch`/`stash`) inside the vault before Bash runs. Copy into `~/.claude/hooks/` and register in settings.local.json. Emergency bypass: prefix the command with `GIT_VAULT_BYPASS=1`.
-2. The wrapper itself acquires `/tmp/vault-commit-<hash>.lock` to serialize concurrent wrapper calls.
-3. For defense-in-depth against commits that sneak past the PreToolUse hook (terminal, editor, cron), you can add a native `.git/hooks/pre-commit` that acquires the same `/tmp/vault-commit-<hash>.lock` before allowing any commit. Left as a bring-your-own snippet tailored to your vault path.
+- `python3 scripts/recover-last-close.py` — if a partial-flag exists (model bailed + no API key), retry the fallback now that the API key is available, OR open the file in `$EDITOR` for manual completion.
+- `python3 scripts/recover-last-close.py --list` — list all partial flags.
+- `python3 scripts/undo-last-close.py` — move the most recent session file + co-located decisions to an `.undone-{timestamp}/` archive folder, optionally revert the git commit, re-run aggregators. Always interactive unless `--yes`.
 
-None of these are auto-installed. Install only if your vault is git-tracked AND you run multiple concurrent sessions against it.
+## Manual invocation (for power users)
 
-```bash
-cd "$VAULT_ROOT" && \
-  bash scripts/vault-safe-commit.sh \
-    "session: <worktree-slug> <date>" \
-    "Meta/Sessions/<this-session-file>.md" \
-    "Meta/Decisions/<any-new-decision-files>" \
-    "Meta/rules/<any-edited-rule-files>" \
-    "Meta/Session Captures.md" \
-    "To-dos/Get to-do.md" \
-    "<any-other-specific-paths-touched-this-session>"
-```
+If you want to trigger the cascade explicitly without saying "bye" out loud, type any of these and the detector treats them as explicit close commands:
 
-Rules:
-1. List every path explicitly. No wildcards that expand beyond what you edited.
-2. If a path goes through a symlink to cloud storage (Google Drive, iCloud Drive, Dropbox), `git add` through the symlink fails ("beyond a symbolic link"). Cloud storage handles that vault's version history separately. Skip.
-3. If the vault has no git remote, it is a local-only snapshot repo. Never attempt `git push`.
-4. Worktree branches share HEAD with master once master is committed, no merge step needed. Delete the worktree branch after the session with `git worktree remove` if done.
-5. If the session made NO tracked-file edits, skip this phase entirely. Don't stage speculatively.
+- `/close`, `/wrap-up`, `/bye`, `/done`, `/finish`
+- `/cerrar`, `/terminar`, `/chao`
+- `/fechar`, `/encerrar`, `/tchau`
 
-### Recovering from index corruption
+These are not registered slash commands — they are detector keywords. Typing them in any conversation fires Layer 1 the same as a natural-language close, with explicit-confidence routing (no ambiguity check).
 
-If `git add` or `git commit` fails with "index file smaller than expected" or similar corruption:
+## Configuration (CLAUDE.md frontmatter or settings)
 
-1. Working tree is safe, every file is still on disk.
-2. Run `git reset` (NOT `--hard`) at vault root. Rebuilds `.git/index` from HEAD.
-3. Re-stage with explicit paths (or rerun `vault-safe-commit.sh`).
-4. Commit normally.
+- `closingSignals.custom: ["..."]` — extra patterns to match as explicit closes.
+- `closeDetection: regex | hybrid` — `hybrid` adds a Haiku fallback for ambiguous prompts (requires `ANTHROPIC_API_KEY`).
+- `sessionCloseFeedback: silent | minimal | verbose` — visibility of the cascade. Default `silent`. `minimal` adds one summary line. `verbose` shows phase-by-phase.
 
-Corruption happens when `.git/index.lock` is removed during a real write. Never remove the lock unless: (a) it is 0 bytes AND (b) no `git add/commit/checkout/reset/merge/rebase` process is running. Use `lsof .git/index.lock` to verify. Or call `vault-safe-commit.sh`, it handles this automatically.
+## Skip + opt-out
 
-## Phase 3: Verification + propagation
+- Trivial sessions (<5 user messages, no captures) skip the cascade automatically.
+- To temporarily disable detection in a session: `export CLOSING_SIGNAL_DETECTION=off` in the shell where Claude Code launched.
+- To uninstall entirely: remove the UserPromptSubmit + Stop hook entries from `hooks.json` and the `hooks/detect-closing-signal.py` script.
 
-**Change impact audit (conditional).** Only if session modified rules, scripts, skills, hooks, schedules, paths, CLAUDE.md. Verify: paths resolve, skills trigger, hooks fire, cross-refs valid. Fix before closing.
+## Errors
 
-**Execution-session functional audit (mandatory when session shipped code/docs to a public repo users download).** Personal-data scrub + `git push` is NOT the audit. Before claiming done, verify shipped artifacts actually work for a stranger:
+All hook errors fail-open (never block the user) and are logged to `~/.claude/logs/session-close-errors.log` for debugging. Common issues:
 
-1. **Syntax:** `python3 -m py_compile` every new/modified `.py`. `bash -n` every new/modified `.sh`. JSON-validate every new/modified `.json`.
-2. **Path resolution:** grep every absolute path in docs/templates against the actual filesystem. Every path must resolve.
-3. **Orphan scan:** grep every new file under `hooks/`, `scripts/`, `templates/` against the docs that should reference it (README, install phases, bootstrap). Unreferenced = invisible to users = shipped-but-unusable.
-4. **Smoke test:** invoke each new script with `--help` or minimal args. It should at least parse without crashing.
-5. **Misleading copy:** search shipped docs for phrases that imply auto-installation. If the artifact isn't auto-installed, rewrite to "opt-in, install via:".
-6. **Relative link check:** resolve every `](...)` relative link in modified README/docs against the filesystem.
+- "fallback unavailable" — `ANTHROPIC_API_KEY` not set; run `recover-last-close.py` later.
+- "git index.lock held >60s" — concurrent session is mid-commit; snapshot skipped, will retry next close.
+- "language pack not found" — check `templates/closing-signals/*.json` exists and `CLOSING_SIGNAL_LANGS` env var is correct.
 
-Report: "Audit: N python OK, M bash OK, K JSON OK, P paths resolved, Q orphans found + fixed, R smoke tests passed." Never claim "everything works" without running these.
+## Telemetry (opt-in)
 
-**Public repo propagation check.** If anything qualifies for a public companion repo: ASK first. Strip personal data. Update CHANGELOG if the repo has one.
+Set `cascadeTelemetry: true` in CLAUDE.md frontmatter to log anonymized cascade-fire rate, completion rate, and language-match distribution to `~/.claude/logs/cascade-telemetry.jsonl`. Useful for the maintainer's quarterly runbook iteration. No content captured, only structural counts.
 
-## Summary format
+## Why this rule exists
 
-Single message: "Filed X journal seeds, Y note candidates, Z to-dos (yours: A, delegations: B), logged N decision(s), checked off M items, filed P content items. Anything I missed?"
-
-**DO NOT SKIP ANY PHASE.** Run before compacting.
+Prior architecture relied entirely on the model "noticing" closing signals and choosing to read this rule file before responding. Three brittle steps (notice signal → read rule → execute), any one failing silently. The new architecture moves detection to a deterministic hook (Layer 1), preserves all model-required creative work in Phase 1, and adds a Haiku backstop (Layer 3) that guarantees no silent loss even if the model bails. The full cascade — every capture from the prior 7-phase spec — is preserved.

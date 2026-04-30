@@ -1,0 +1,87 @@
+{
+  "language": "en",
+  "_comment": "English closing signals. Patterns are Python regex with case-insensitive matching. The hook compiles them with re.IGNORECASE | re.MULTILINE. Add to 'custom' in CLAUDE.md frontmatter to extend per-user.",
+
+  "explicit": [
+    "^/(close|wrap-?up|bye|done|finish)\\b",
+    "\\b/(close|wrap-?up|bye|done|finish)\\b"
+  ],
+
+  "high_confidence": [
+    "^(ok(ay)?[,.\\s]+)?bye\\b",
+    "^(ok(ay)?[,.\\s]+)?bye!*$",
+    "\\bgood ?night\\b",
+    "\\bttyl\\b",
+    "\\bcya\\b",
+    "\\bsee ya\\b",
+    "\\bsigning off\\b",
+    "\\bcatch you (later|tomorrow)\\b",
+    "\\btalk (to you )?(later|tomorrow|soon)\\b",
+    "\\bwrapping (up|it up)\\b",
+    "\\bcalling it (a (day|night))\\b",
+    "\\bthat'?s? (all|it) for (today|now)\\b",
+    "\\bthanks?,? that'?s? (all|it)\\b",
+    "\\bi'?m (out|done|good)\\b",
+    "^(ok(ay)?[,.\\s]+)?done(\\s+for\\s+(today|now))?[!.\\s]*$",
+    "^(ok(ay)?[,.\\s]+)?(thanks|thx|ty)[,!.\\s]*$",
+    "\\blater[!.\\s]*$",
+    "^later$",
+    "^bye+$",
+    "^k(ay)? bye\\b",
+    "^k(ay)? thx\\b",
+    "^k thanks\\b",
+    "\\bsee you (later|tomorrow|soon)\\b",
+    "\\bgnight\\b",
+    "\\bgn$",
+    "^gn[!.\\s]*$"
+  ],
+
+  "ambiguous": [
+    "\\bok(ay)?[!.\\s]*$",
+    "\\bcool[!.\\s]*$",
+    "\\bgreat[!.\\s]*$",
+    "\\bperfect[!.\\s]*$",
+    "\\bnice[!.\\s]*$",
+    "\\bsounds good[!.\\s]*$",
+    "\\bawesome[!.\\s]*$"
+  ],
+
+  "emoji_only": [
+    "^[\\s]*👋[\\s]*$",
+    "^[\\s]*🙏[\\s]*$",
+    "^[\\s]*✌️?[\\s]*$",
+    "^[\\s]*🫡[\\s]*$",
+    "^[\\s]*💤[\\s]*$"
+  ],
+
+  "false_positive_guards": [
+    {
+      "_comment": "Don't match 'bye' inside quotes — user is asking how to say bye",
+      "pattern": "[\"'`].*\\bbye\\b.*[\"'`]"
+    },
+    {
+      "_comment": "Don't match 'say bye to X' — user is referring to losing something",
+      "pattern": "\\bsay\\s+(good)?bye\\s+to\\b"
+    },
+    {
+      "_comment": "Don't match inside code fences",
+      "pattern": "```[\\s\\S]*?\\b(bye|done|ttyl)\\b[\\s\\S]*?```"
+    },
+    {
+      "_comment": "Don't match 'done with X' — user describing state, not closing",
+      "pattern": "\\bdone\\s+with\\s+\\w+"
+    },
+    {
+      "_comment": "Don't match 'ok let's' / 'ok now' / 'ok so' — user transitioning, not closing",
+      "pattern": "^ok(ay)?[,.\\s]+(let'?s|now|so|next|continue|keep)\\b"
+    },
+    {
+      "_comment": "Don't match meta-questions about close signals ('what does ttyl mean?')",
+      "pattern": "\\b(what|how|why|when|where|who|define|explain|mean[s]?|stand[s]?\\s+for)\\b.{0,40}\\b(bye|ttyl|cya|gn|done|wrapping|signing\\s+off)\\b"
+    },
+    {
+      "_comment": "Don't match question-form prompts ending in '?'",
+      "pattern": "\\b(bye|ttyl|cya|done|good\\s+night|wrapping|signing\\s+off)\\b[^?]*\\?\\s*$"
+    }
+  ]
+}

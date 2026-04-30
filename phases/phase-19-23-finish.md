@@ -337,6 +337,20 @@ Voice note for Claude: resist the urge to add "Congrats!" or exclamation marks. 
 
 ---
 
+## Phase 24.5 — Session-close walkthrough (15 seconds)
+
+After the handoff link, do a quick verbal pointer to how the close works. This is the last setup beat. Say in PRIMARY_LANGUAGE:
+
+**EN:** "One more thing. When you're done with a session, just say 'bye' or 'thanks, that's all' and the system will save everything automatically — your decisions, journal seeds, to-dos, all of it. You don't need to type a special command. If you ever want to be explicit, type `/wrap-up` or `/close`. To roll back the most recent close, run `python3 ~/.claude/skills/ai-brain-starter/scripts/undo-last-close.py`. That's it."
+
+**ES:** "Una última cosa. Cuando termines una sesión, solo di 'chao' o 'listo, gracias' y el sistema guarda todo automáticamente — decisiones, semillas para el diario, to-dos, todo. No tienes que escribir un comando especial. Si quieres ser explícito, escribe `/cerrar` o `/wrap-up`. Para deshacer el último cierre: `python3 ~/.claude/skills/ai-brain-starter/scripts/undo-last-close.py`. Eso es todo."
+
+Why this phase matters: the close cascade is the most active piece of the setup, firing on every "bye". If users don't know it exists or don't trust it, they keep typing `/wrap-up` defensively (annoying) or skip closes entirely (lost context). One sentence pointing at the natural-language path is enough to flip default behavior to trust.
+
+Do NOT explain the layered architecture, the hooks, the language packs, the Haiku fallback. Those are documented in `docs/SESSION_CLOSE.md` for users who go looking. The verbal pointer is "natural language works, bye saves your work, undo if you regret it."
+
+---
+
 ## Important Notes for Claude
 
 - GO SLOW. Wait for answers. Don't dump instructions.

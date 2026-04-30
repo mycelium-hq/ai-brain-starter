@@ -1,0 +1,81 @@
+{
+  "language": "es",
+  "_comment": "Spanish closing signals. Includes Colombian, Mexican, Argentine variants.",
+
+  "explicit": [
+    "^/(cerrar|terminar|bye|chao)\\b",
+    "\\b/(cerrar|terminar|bye|chao)\\b"
+  ],
+
+  "high_confidence": [
+    "^(ok(ay)?[,.\\s]+)?cha[ou]+\\b",
+    "^(ok(ay)?[,.\\s]+)?cha[ou]+!*$",
+    "\\bnos vemos\\b",
+    "\\bhasta (luego|mañana|pronto|la próxima)\\b",
+    "\\bbuenas noches\\b",
+    "\\bya (está|estuvo|fue)\\b",
+    "\\bya quedó\\b",
+    "\\b(eso|esto) es todo\\b",
+    "\\blisto[,.!\\s]*(gracias)?[!.\\s]*$",
+    "\\bgracias,? (eso|esto) es todo\\b",
+    "\\bnos hablamos\\b",
+    "\\bme voy\\b",
+    "\\bcerremos (acá|aquí|esto|por (hoy|ahora))\\b",
+    "\\b(termin(amos|emos)|listo)\\s+por\\s+(hoy|ahora)\\b",
+    "\\bhasta luego\\b",
+    "^chao+[!.\\s]*$",
+    "^bye+[!.\\s]*$",
+    "^listo[!.\\s]*$",
+    "^gracias[!.\\s]*$",
+    "^muchas gracias[!.\\s]*$",
+    "\\bdale,?\\s+chao\\b",
+    "\\bok(ay)?,?\\s+chao\\b"
+  ],
+
+  "ambiguous": [
+    "\\bok(ay)?[!.\\s]*$",
+    "\\bdale[!.\\s]*$",
+    "\\bbueno[!.\\s]*$",
+    "\\bperfecto[!.\\s]*$",
+    "\\bgenial[!.\\s]*$",
+    "\\bsuena bien[!.\\s]*$",
+    "\\bva[!.\\s]*$"
+  ],
+
+  "emoji_only": [
+    "^[\\s]*👋[\\s]*$",
+    "^[\\s]*🙏[\\s]*$",
+    "^[\\s]*✌️?[\\s]*$"
+  ],
+
+  "false_positive_guards": [
+    {
+      "_comment": "Don't match 'chao' or 'bye' inside quotes",
+      "pattern": "[\"'`].*\\b(chao|bye|listo)\\b.*[\"'`]"
+    },
+    {
+      "_comment": "Don't match 'listo para X' — user describing readiness, not closing",
+      "pattern": "\\blisto\\s+para\\s+\\w+"
+    },
+    {
+      "_comment": "Don't match 'listo el X' — user announcing completion of subtask",
+      "pattern": "\\blisto\\s+(el|la|los|las)\\s+\\w+"
+    },
+    {
+      "_comment": "Don't match 'ya está + más' — user wants to keep going",
+      "pattern": "\\bya\\s+est(á|a),?\\s+(ahora|sigamos|continuemos|qué sigue)\\b"
+    },
+    {
+      "_comment": "Don't match 'ok dale + más' transitions",
+      "pattern": "^(ok(ay)?|dale)[,.\\s]+(sigue|sigamos|ahora|entonces|pasemos)\\b"
+    },
+    {
+      "_comment": "Don't match meta-questions about close signals",
+      "pattern": "\\b(qué|cómo|por qué|cuándo|dónde|quién|define|explica|significa)\\b.{0,40}\\b(chao|chau|listo|gracias|tchau|bye)\\b"
+    },
+    {
+      "_comment": "Don't match question-form prompts ending in '?'",
+      "pattern": "\\b(chao|chau|listo|hasta luego|nos vemos|gracias)\\b[^?]*\\?\\s*$"
+    }
+  ]
+}

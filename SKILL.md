@@ -47,7 +47,7 @@ This setup has 25 phases (0-24). Each phase is stored in its own file under `pha
 | 11 | `phases/phase-11-external-tools.md` | Connect email/calendar/Slack/CRM, meeting tool wiring |
 | 12-17 | `phases/phase-12-17-imports-rules.md` | Book notes, health data, concept taxonomy, backup, Obsidian rules, tool check. Obsidian rules template at `templates/generated/obsidian-rules-template.md` |
 | 18 | `phases/phase-18-insights.md` | Weekly/monthly insights setup + cron, with pattern analysis. Skill template at `templates/generated/insights-skill-template.md` |
-| 19-23 | `phases/phase-19-23-finish.md` | Test drive, team vault, what's next, Instinct Engine, theme. Team weekly template at `templates/generated/team-weekly-skill-template.md` |
+| 19-23 | `phases/phase-19-23-finish.md` | Test drive, team vault, what's next, Instinct Engine, theme, session-close walkthrough. Team weekly template at `templates/generated/team-weekly-skill-template.md` |
 | **23.5** | `phases/phase-19-23-finish.md` (appended) | **MUST BE LAST INSTALL PHASE — token-aware.** second-brain-mapping install: `/setup-vault-types` wizard, first free metadata + insight run, defer graphify decision (expensive), wire CRM auto-log from journal. Phases 1 + 4 are zero-LLM; Phase 2 (graphify) is opt-in. |
 | 24 | `phases/phase-19-23-finish.md` (appended) | Handoff from installed to used. Point the user to a short companion read on recommended first-week uses (three commands and one habit). Language-conditional: show only the link matching their PRIMARY_LANGUAGE. Closes the "now what?" gap. |
 

@@ -12,6 +12,24 @@ Nothing in this catalog is built by this repo. They're all open-source tools by 
 
 These get installed into `~/.claude/skills/` and become available as `/skill-name` commands.
 
+### Session close cascade — automatic context capture on goodbye
+
+**What it does:** When you finish a session ("bye", "thanks that's all", "good night", "/wrap-up", emoji-only farewells, or any equivalent in EN/ES/PT), a 3-layer pipeline saves your decisions, journal seeds, to-dos, time tracking, and a rebuilt session/decision log — without you typing a special command. Layer 1 is a UserPromptSubmit hook that detects close signals via regex against language packs and pre-resolves all paths before the model sees the prompt. Layer 2 is the model writing captures into a pre-built session file shell. Layer 3 is a Stop hook that runs aggregators, performs a targeted git snapshot, sweeps retention, and fires a Haiku 4.5 fallback if the model bails on the cascade (so context never gets silently lost).
+
+**Why it matters:** the prior architecture relied entirely on the model "noticing" closing signals and choosing to read a separate cascade rule file before responding. Three brittle steps (notice → read rule → execute), any one of which could fail silently. Now detection is deterministic, the model only does the irreducibly creative conversation-scan work, and a Haiku backstop guarantees no silent loss even if the primary model bails.
+
+**Install:** ships with `/setup-brain`. The hook entry lives in `hooks.json`, the detector in `hooks/detect-closing-signal.py`, the language packs in `templates/closing-signals/`, and the rest in `scripts/`.
+
+**Trigger:** any natural-language close, OR explicit detector keywords `/close`, `/wrap-up`, `/bye`, `/cerrar`, `/tchau`.
+
+**Configuration:** add `closingSignals.custom: [...]`, `closeDetection: hybrid`, or `sessionCloseFeedback: minimal` to your CLAUDE.md frontmatter. Full reference in [`docs/SESSION_CLOSE.md`](SESSION_CLOSE.md).
+
+**Recovery:** `python3 ~/.claude/skills/ai-brain-starter/scripts/recover-last-close.py` (resume after partial close). `python3 ~/.claude/skills/ai-brain-starter/scripts/undo-last-close.py` (rollback).
+
+**Testing:** `python3 ~/.claude/skills/ai-brain-starter/scripts/test-closing-signals.py` runs 74 fixtures.
+
+---
+
 ### graphify — knowledge graph from any folder
 
 **What it does:** Turns any folder of markdown files (or code, or papers) into a navigable knowledge graph with community detection, god-node ranking, and surprising connections. The output is one HTML graph + one JSON dump + one `GRAPH_REPORT.md` summary.

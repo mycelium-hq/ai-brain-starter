@@ -1,22 +1,37 @@
 #!/bin/bash
-# Session End Hook — logs timestamp, cleans old files, runs aggregator
-# Called by Claude Code Stop hook.
+# Session End Hook — Stop hook backstop + finalization.
+# Called by Claude Code Stop hook (every turn end).
 #
-# NO STUBS: Claude writes session files directly during session close
-# (see templates/rules/session-end-cascade.md Phase 2). This hook only:
-#   1. Appends a timestamp to Session Log
-#   2. Cleans up: deletes stubs >7d old, archives substantive files >7d old
-#   3. Runs the aggregator to refresh Last Session.md
-#   4. Emits the session-close prompt for Claude
+# Layered architecture:
+#   Layer 1: hooks/detect-closing-signal.py (UserPromptSubmit) detects close,
+#            pre-resolves paths, writes marker, pre-builds session shell,
+#            injects cascade context.
+#   Layer 2: model writes captures using injected paths.
+#   Layer 3 (this file): finalize — Haiku fallback if model bailed,
+#            aggregators, retention, git snapshot.
 #
-# Prior versions wrote a "stub" file every time the hook fired, expecting
-# Claude to fill it in. In practice most sessions end without running the
-# full protocol (short sessions, abrupt exits, worktree subagents), and
-# stubs piled up — one user had 966 of 1,046 files as empty stubs. This
-# version trusts Claude to write the real file during session close.
+# Flow:
+#   1. Append timestamp to Session Log (every turn, cheap).
+#   2. If marker exists for this session_id: this is a close turn.
+#      a. If session file body is empty: model bailed, fire Haiku fallback.
+#      b. Run aggregators (rebuild Last Session.md + Decision Log.md).
+#      c. Targeted git snapshot (if vault is git-tracked + has remote OR is local snapshot).
+#      d. Retention cleanup (stubs >7d delete, substantive >7d archive).
+#      e. Clean up marker file.
+#   3. If no marker: normal turn end, just timestamp + retention. Skip everything else.
+#
+# Performance: cheap path (no marker) ~50ms. Close path 5-10s including aggregators.
+# Failures fail-open: never block the user, log to ~/.claude/logs/session-close-errors.log.
+
+set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VAULT="${VAULT_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+
+# Read hook input (Stop hook contract: {session_id, transcript_path, cwd, ...})
+HOOK_INPUT="$(cat || true)"
+SESSION_ID=$(echo "$HOOK_INPUT" | python3 -c "import json,sys; d=json.loads(sys.stdin.read() or '{}'); print(d.get('session_id',''))" 2>/dev/null || echo "")
+TRANSCRIPT_PATH=$(echo "$HOOK_INPUT" | python3 -c "import json,sys; d=json.loads(sys.stdin.read() or '{}'); print(d.get('transcript_path',''))" 2>/dev/null || echo "")
 
 # Auto-detect the Meta folder (with or without emoji prefix)
 META_DIR=""
@@ -32,6 +47,10 @@ SESSIONS_DIR="$META_DIR/Sessions"
 ARCHIVE_DIR="$SESSIONS_DIR/Archive"
 SESSION_LOG="$META_DIR/Session Log.md"
 AGGREGATE_SESSIONS="$META_DIR/scripts/aggregate-sessions.py"
+AGGREGATE_DECISIONS="$META_DIR/scripts/aggregate-decisions.py"
+ERROR_LOG="$HOME/.claude/logs/session-close-errors.log"
+mkdir -p "$HOME/.claude/logs"
+
 DATE=$(date +%Y-%m-%d)
 TIME=$(date +%H:%M)
 TIMESTAMP_FILE=$(date +%Y-%m-%dT%H-%M)
@@ -43,7 +62,7 @@ else
   CUTOFF=$(date -d '7 days ago' +%Y-%m-%d)
 fi
 
-# Derive worktree name (3 methods: path match, .git file, PID fallback)
+# Derive worktree name
 WORKTREE_NAME=""
 PWD_PATH="$(pwd)"
 case "$PWD_PATH" in
@@ -57,20 +76,20 @@ if [ -z "$WORKTREE_NAME" ] && [ -f "$PWD_PATH/.git" ]; then
     WORKTREE_NAME=$(echo "$GITDIR" | sed 's|worktrees/||' | tr -d '[:space:]')
   fi
 fi
-if [ -z "$WORKTREE_NAME" ]; then
-  WORKTREE_NAME="main-$$"
-fi
+[ -z "$WORKTREE_NAME" ] && WORKTREE_NAME="main"
 
-SESSION_FILE="$SESSIONS_DIR/${TIMESTAMP_FILE}-${WORKTREE_NAME}.md"
+mkdir -p "$SESSIONS_DIR" "$ARCHIVE_DIR"
 
-mkdir -p "$SESSIONS_DIR"
-mkdir -p "$ARCHIVE_DIR"
+log_err() {
+  echo "[$(date +'%Y-%m-%dT%H:%M:%S')] $1" >> "$ERROR_LOG" 2>/dev/null || true
+}
 
-# Step 1: Append timestamp to Session Log (atomic for small writes)
-echo "- $DATE $TIME — session ended ($WORKTREE_NAME)" >> "$SESSION_LOG"
+# === Step 1: Cheap-path work — runs every turn ===
 
-# Step 2: Retention cleanup — delete stubs >7d, archive substantive >7d.
-# Runs every hook invocation but only touches files past the cutoff.
+# Append turn-end timestamp to Session Log
+echo "- $DATE $TIME — turn ended ($WORKTREE_NAME)" >> "$SESSION_LOG" 2>/dev/null || true
+
+# Retention cleanup (cheap, file-system only)
 for f in "$SESSIONS_DIR"/*.md; do
   [ -f "$f" ] || continue
   fname=$(basename "$f")
@@ -82,18 +101,125 @@ for f in "$SESSIONS_DIR"/*.md; do
   fi
   [[ "$fdate" > "$CUTOFF" || "$fdate" == "$CUTOFF" ]] && continue
   if grep -q 'session_label: "update pending"' "$f" 2>/dev/null; then
-    rm "$f"
+    rm "$f" 2>/dev/null || true
   else
-    mv "$f" "$ARCHIVE_DIR/"
+    mv "$f" "$ARCHIVE_DIR/" 2>/dev/null || true
   fi
 done
 
-# Step 3: Run aggregator
-if [ -f "$AGGREGATE_SESSIONS" ]; then
-  VAULT_ROOT="$VAULT" python3 "$AGGREGATE_SESSIONS" >/dev/null 2>&1 || true
+# === Step 2: Marker check — only fires on a close turn ===
+
+MARKER=""
+if [ -n "$SESSION_ID" ]; then
+  MARKER="$HOME/.claude/.closing-signal-${SESSION_ID}.json"
 fi
 
-# Step 4: Emit session-close prompt for Claude
-cat <<EOF
-{"continue":true,"stopReason":"session-end-cascade","systemMessage":"SESSION ENDING (${DATE} ${TIME}, worktree: ${WORKTREE_NAME}): Run session close protocol (⚙️ Meta/rules/session-end-cascade.md). Write session file to '${SESSION_FILE}' — do NOT write to Last Session.md (auto-generated). For any decisions, create per-decision files at '${META_DIR}/Decisions/${TIMESTAMP_FILE}-{slug}.md'. After writing, run: VAULT_ROOT='${VAULT}' python3 '${AGGREGATE_SESSIONS}' && VAULT_ROOT='${VAULT}' python3 '${META_DIR}/scripts/aggregate-decisions.py'."}
-EOF
+if [ -z "$MARKER" ] || [ ! -f "$MARKER" ]; then
+  # No close signal this turn — emit minimal continue and exit.
+  echo '{"continue":true,"suppressOutput":true}'
+  exit 0
+fi
+
+# This is a close turn. Read marker for the session file path.
+SESSION_FILE=$(python3 -c "
+import json, sys
+try:
+    with open('$MARKER') as f:
+        d = json.load(f)
+    print(d.get('session_file', ''))
+except Exception:
+    print('')
+" 2>/dev/null || echo "")
+
+IS_TRIVIAL=$(python3 -c "
+import json
+try:
+    with open('$MARKER') as f:
+        d = json.load(f)
+    print('1' if d.get('is_trivial') else '0')
+except Exception:
+    print('0')
+" 2>/dev/null || echo "0")
+
+# === Step 2a: Trivial close — clean up marker, no further work ===
+
+if [ "$IS_TRIVIAL" = "1" ]; then
+  rm -f "$MARKER" 2>/dev/null || true
+  echo '{"continue":true,"suppressOutput":true}'
+  exit 0
+fi
+
+# === Step 2b: Haiku fallback if model bailed ===
+
+FALLBACK_SCRIPT="$SCRIPT_DIR/session-close-fallback.py"
+if [ -f "$FALLBACK_SCRIPT" ] && [ -n "$TRANSCRIPT_PATH" ]; then
+  python3 "$FALLBACK_SCRIPT" \
+    --session-id "$SESSION_ID" \
+    --transcript-path "$TRANSCRIPT_PATH" \
+    >/dev/null 2>>"$ERROR_LOG" || log_err "fallback exited non-zero"
+fi
+
+# === Step 2c: Aggregators (foreground, sequential) ===
+
+if [ -f "$AGGREGATE_SESSIONS" ]; then
+  VAULT_ROOT="$VAULT" python3 "$AGGREGATE_SESSIONS" >/dev/null 2>>"$ERROR_LOG" \
+    || log_err "aggregate-sessions failed"
+fi
+if [ -f "$AGGREGATE_DECISIONS" ]; then
+  VAULT_ROOT="$VAULT" python3 "$AGGREGATE_DECISIONS" >/dev/null 2>>"$ERROR_LOG" \
+    || log_err "aggregate-decisions failed"
+fi
+
+# === Step 2d: Targeted git snapshot (only if vault is git-tracked) ===
+# Conservative: only commit if we're inside a git repo, and only stage the
+# session file + any decisions touched. Never `git add -A`. Never push (vaults
+# are typically local-only snapshot repos).
+
+if [ -d "$VAULT/.git" ] || git -C "$VAULT" rev-parse --git-dir >/dev/null 2>&1; then
+  # Wait for any concurrent index lock (up to 60s, then give up gracefully)
+  WAITED=0
+  while [ -f "$VAULT/.git/index.lock" ] && [ $WAITED -lt 60 ]; do
+    sleep 2
+    WAITED=$((WAITED + 2))
+  done
+
+  if [ ! -f "$VAULT/.git/index.lock" ]; then
+    # Stage only paths we know about
+    PATHS_TO_STAGE=()
+    [ -f "$SESSION_FILE" ] && PATHS_TO_STAGE+=("$SESSION_FILE")
+    # Recently-touched decision files (within this minute)
+    while IFS= read -r decision_file; do
+      [ -f "$decision_file" ] && PATHS_TO_STAGE+=("$decision_file")
+    done < <(find "$META_DIR/Decisions" -maxdepth 1 -name "${TIMESTAMP_FILE:0:10}*.md" -mmin -10 2>/dev/null)
+
+    # Captures file if modified
+    if [ -f "$META_DIR/Session Captures.md" ]; then
+      if [ "$(find "$META_DIR/Session Captures.md" -mmin -10 2>/dev/null)" ]; then
+        PATHS_TO_STAGE+=("$META_DIR/Session Captures.md")
+      fi
+    fi
+
+    # Aggregator outputs
+    [ -f "$META_DIR/Last Session.md" ] && PATHS_TO_STAGE+=("$META_DIR/Last Session.md")
+    [ -f "$META_DIR/Decision Log.md" ] && PATHS_TO_STAGE+=("$META_DIR/Decision Log.md")
+
+    if [ ${#PATHS_TO_STAGE[@]} -gt 0 ]; then
+      cd "$VAULT" && {
+        git add "${PATHS_TO_STAGE[@]}" 2>>"$ERROR_LOG" \
+          && git diff --cached --quiet \
+          || git commit -m "session: ${WORKTREE_NAME} ${DATE}" >/dev/null 2>>"$ERROR_LOG" \
+          || log_err "git snapshot commit failed"
+      }
+    fi
+  else
+    log_err "git index.lock held >60s; skipped snapshot"
+  fi
+fi
+
+# === Step 3: Clean up marker ===
+
+rm -f "$MARKER" 2>/dev/null || true
+
+# === Done — emit minimal continue ===
+echo '{"continue":true,"suppressOutput":true}'
+exit 0

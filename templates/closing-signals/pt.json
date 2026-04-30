@@ -1,0 +1,68 @@
+{
+  "language": "pt",
+  "_comment": "Portuguese closing signals. Brazilian + European variants.",
+
+  "explicit": [
+    "^/(fechar|encerrar|bye|tchau)\\b",
+    "\\b/(fechar|encerrar|bye|tchau)\\b"
+  ],
+
+  "high_confidence": [
+    "^(ok(ay)?[,.\\s]+)?tchau+\\b",
+    "^(ok(ay)?[,.\\s]+)?tchau+!*$",
+    "\\baté (logo|mais|amanhã|breve|a próxima)\\b",
+    "\\bboa noite\\b",
+    "\\bfalou[!.\\s]*$",
+    "\\bvaleu[,.!\\s]*(tchau)?[!.\\s]*$",
+    "\\b(é|foi) isso\\b",
+    "\\bera isso\\b",
+    "\\bencerrar\\b",
+    "\\bencerrando\\b",
+    "\\b(termina|fecha|encerra)\\s+por\\s+(hoje|agora)\\b",
+    "\\bnos falamos\\b",
+    "\\btô indo\\b",
+    "\\bestou indo\\b",
+    "^pronto[!.\\s]*$",
+    "^obrigad[oa][!.\\s]*$",
+    "^valeu[!.\\s]*$",
+    "\\bobrigad[oa],? (é|foi|era) isso\\b"
+  ],
+
+  "ambiguous": [
+    "\\bok(ay)?[!.\\s]*$",
+    "\\bbeleza[!.\\s]*$",
+    "\\blegal[!.\\s]*$",
+    "\\bperfeito[!.\\s]*$",
+    "\\bótim[oa][!.\\s]*$",
+    "\\bparece bom[!.\\s]*$"
+  ],
+
+  "emoji_only": [
+    "^[\\s]*👋[\\s]*$",
+    "^[\\s]*🙏[\\s]*$",
+    "^[\\s]*✌️?[\\s]*$"
+  ],
+
+  "false_positive_guards": [
+    {
+      "_comment": "Don't match 'tchau' inside quotes",
+      "pattern": "[\"'`].*\\b(tchau|bye|valeu)\\b.*[\"'`]"
+    },
+    {
+      "_comment": "Don't match 'pronto para X' — user describing readiness",
+      "pattern": "\\bpronto\\s+para\\s+\\w+"
+    },
+    {
+      "_comment": "Don't match 'beleza, agora/então' transitions",
+      "pattern": "^(beleza|ok(ay)?)[,.\\s]+(agora|então|continua|vamos)\\b"
+    },
+    {
+      "_comment": "Don't match meta-questions about close signals",
+      "pattern": "\\b(o que|como|por que|quando|quem|define|explica|significa)\\b.{0,40}\\b(tchau|valeu|falou|obrigad[oa]|pronto)\\b"
+    },
+    {
+      "_comment": "Don't match question-form prompts ending in '?'",
+      "pattern": "\\b(tchau|valeu|falou|obrigad[oa]|pronto)\\b[^?]*\\?\\s*$"
+    }
+  ]
+}
