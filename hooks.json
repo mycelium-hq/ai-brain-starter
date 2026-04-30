@@ -14,6 +14,11 @@
           },
           {
             "type": "command",
+            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/log-skill-usage.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "statusMessage": "Logging skill usage (opt-in)..."
+          },
+          {
+            "type": "command",
             "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"SESSION START: CLAUDE.md is already auto-loaded in your system prompt (do NOT re-read it). Read these two files: 1) ⚙️ Meta/Last Session.md 2) ⚙️ Meta/Current Priorities.md.\\n\\nALWAYS-ACTIVE RULES (apply every session, every message, regardless of work type):\\n- Advisory panel: CLAUDE.md already contains the trigger rule. At ANY judgment moment (decisions, strategy, crises, trade-offs, client problems, cash flow, legal, fundraising), read advisory-panel.md and bring 3-5 voices BEFORE responding. Do not wait to be asked.\\n- Efficiency rules (⚙️ Meta/rules/efficiency.md): Contains 29 rules including panel triggers, model routing, never-fabricate, humanizer, math/counting rules. Read on first session message.\\n\\nCONDITIONAL RULES (read when doing that type of work):\\n- obsidian.md for vault edits\\n- graphify.md for graph questions\\n- tool-routing.md for task routing\\n- meeting-workflow.md for meetings\\n\\nSESSION CLOSE: When the user says bye/done/thanks-thats-all/good-night/ttyl/wrapping-up (or equivalent in any language), the detect-closing-signal.py hook fires automatically and injects the full cascade with pre-resolved paths. Trust the injected context, don't re-read separate rule files.\\n\\nGRAPH ROUTING: If your vault has a knowledge graph, pick the right graph for the question scope BEFORE drilling into source files. Use /graphify query for targeted lookups instead of reading full reports. The keyword-triggered graph-context-hook.sh (if installed) will fire a second routing reminder with freshness info.\"}}'",
             "once": true,
             "statusMessage": "Loading session context..."
@@ -82,6 +87,10 @@
           {
             "type": "command",
             "command": "[ -f ~/.claude/hooks/pre-write-settings-lint.py ] && python3 ~/.claude/hooks/pre-write-settings-lint.py || true"
+          },
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/lint-vault-frontmatter.py 2>/dev/null || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'"
           }
         ]
       }
@@ -104,6 +113,11 @@
             "type": "command",
             "command": "[ -f ~/.claude/hooks/check-claude-code-version.sh ] && bash ~/.claude/hooks/check-claude-code-version.sh || true",
             "statusMessage": "Checking Claude Code version..."
+          },
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/first-week-checkin.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "statusMessage": "First-week check-in (day 3 / 7 / 14)..."
           }
         ]
       }

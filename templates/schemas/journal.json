@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Daily journal frontmatter",
+  "type": "object",
+  "_comment": "Schema for files in 📓 Journals/. journal-index.json builder + insights skill both depend on these fields. Malformed YAML silently drops the entry.",
+  "properties": {
+    "creationDate": {
+      "type": "string",
+      "description": "ISO 8601 timestamp"
+    },
+    "type": {
+      "type": "string"
+    },
+    "floor": {
+      "oneOf": [
+        {"type": "integer", "minimum": 1, "maximum": 34},
+        {"type": "string", "minLength": 1}
+      ],
+      "description": "Floor framework level (numeric 1-34 or named)"
+    },
+    "tags": {
+      "type": ["array", "string", "null"],
+      "items": {"type": "string"}
+    },
+    "energy": {
+      "oneOf": [
+        {"type": "integer", "minimum": 1, "maximum": 10},
+        {"type": "string"},
+        {"type": "null"}
+      ]
+    },
+    "mood": {
+      "type": ["string", "null"]
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Session frontmatter",
+  "type": "object",
+  "_comment": "Schema for files in ⚙️ Meta/Sessions/. aggregate-sessions.py depends on these fields. Malformed YAML silently drops the file from Last Session.md.",
+  "required": ["type"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "session"
+    },
+    "creationDate": {
+      "type": "string",
+      "description": "ISO 8601 timestamp when session ended"
+    },
+    "worktree": {
+      "type": "string",
+      "description": "Worktree slug or 'main'"
+    },
+    "session_date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "session_label": {
+      "type": "string",
+      "description": "Short human-readable label. 'update pending' marks stub files."
+    }
+  },
+  "additionalProperties": true
+}

@@ -9,6 +9,67 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-04-30 — Compounding reliability + stewardship layer (10 features in one drop)
+
+**Who this affects:** everyone. This is a single coordinated drop that addresses every reliability gap the maintainer's panel review surfaced and closes 4 of 4 oldest open issues simultaneously.
+
+**The shape:** these aren't 10 independent features. They're a layered architecture where each piece compounds on the previous one. Foundational reliability first (schema linter, bootstrap bundle), then telemetry, then stewardship surfaces, then periodic processes, then infrastructure.
+
+### Layer 1 — Reliability foundations
+
+- **Vault schema linter.** Same permanent-fix pattern that saved settings.json. New `hooks/lint-vault-frontmatter.py` is a PreToolUse hook that catches malformed YAML in Decisions/, Sessions/, and journal frontmatter before it lands. New `scripts/vault-schema-validator.py` is a standalone validator with 9-fixture self-test, runnable in CI or on-demand. Per-type schemas at `templates/schemas/{decision,session,journal}.json`. Closes the same class of bug that nuked Sergio's CRM 2026-04-27 (silent YAML parse error → empty re-marshal over real content).
+- **Bootstrap reliability bundle (closes [#2](https://github.com/adelaidasofia/ai-brain-starter/issues/2), [#3](https://github.com/adelaidasofia/ai-brain-starter/issues/3), [#4](https://github.com/adelaidasofia/ai-brain-starter/issues/4) at once).** New flags: `--restore` for interactive recovery from .bak files, `--smoke-test` for end-to-end install verification, `--detect-partial` for finding half-installed components. Persistent log at `~/.claude/.bootstrap.log` with size-based rotation. Three new scripts: `bootstrap-restore.sh`, `detect-partial-installs.sh`, `post-install-smoke-test.sh`. The smoke test runs Python syntax, bash syntax, JSON validity, hook smoke tests, aggregator smoke tests, schema validator self-test, and the closing-signal fixture harness — 130+ checks in one command.
+
+### Layer 2 — Telemetry foundation
+
+- **Skill-usage telemetry (opt-in).** New `hooks/log-skill-usage.py` (UserPromptSubmit) detects `/skill-name` invocations and logs structured records to `~/.claude/logs/skill-usage.jsonl` AND vault `⚙️ Meta/skill-usage-log.jsonl` (matches the existing reporter schema, dual-location write so vault-aware analytics still work). Privacy-first: OFF by default, opt-in via `cascadeTelemetry: true` in CLAUDE.md frontmatter or `SKILL_USAGE_TELEMETRY=1` env var. Anonymized session IDs (SHA-256 truncated). Length bucketed, never full prompts. Local only, never sent over network. Erase any time with `rm ~/.claude/logs/skill-usage.jsonl`.
+
+### Layer 3 — Stewardship surfaces
+
+- **First-week check-ins (day 3 / day 7 / day 14).** New `hooks/first-week-checkin.py` is a SessionStart hook that fires once per milestone with a one-paragraph "how's it going?" prompt and 1-2 specific suggestions tailored to which skills the user has and hasn't tried (read from telemetry if opted in, generic hints otherwise). Closes the cohort dropout cliff. State tracked at `~/.claude/.ai-brain-checkin-state.json`. Easy opt-out via `firstWeekCheckin: false` in CLAUDE.md.
+- **CLAUDE.md drift detection.** New `scripts/check-claude-md-drift.py` flags people in `## People` not mentioned in any session/decision/journal in the last 90 days, archived projects, broken wikilinks, duplicate headings, and `Codified YYYY-MM-DD` markers older than a year. Read-only; writes a review document to `⚙️ Meta/CLAUDE-md drift.md` for the user to act on. The drift detector is the meta-rule for the memory durability rule: it catches the case where the rule itself rotted.
+- **Curatorial pass surface.** New `scripts/curate-skills-surface.py` reads usage telemetry and ranks skills, outputs a "most-used skills" badge, and optionally patches a managed region in README.md (between `<!-- top-skills:BEGIN -->` and `<!-- top-skills:END -->` markers). Once 4 weeks of data accumulate, the README re-ranks itself; until then, it stays static.
+
+### Layer 4 — Periodic processes
+
+- **Vault hygiene auto-pass.** New `scripts/vault-hygiene.py` walks the vault and reports broken wikilinks, empty notes, stale notes (>365 days untouched by default), duplicate concept candidates (same stem in multiple folders), and graphify staleness. Read-only; writes a summary to `⚙️ Meta/Vault Hygiene.md`. Designed to run weekly via cron OR as part of /sunday-review.
+- **/sunday-review meta-skill.** New skill at `skills/sunday-review/SKILL.md`. Orchestrates `/weekly` + `/patterns` + vault-hygiene + claude-md-drift + decision-retrospective + skill-usage curatorial pass in a single ordered flow, then synthesizes one note at `📓 Journals/Reviews/Sunday Review {YYYY-MM-DD}.md` with linked drill-downs. Matuschak's panel critique fix: existing skills don't compound unless you force them to interlock once a week. This is that forcing function.
+- **Decision retrospective loop.** New `scripts/decision-retrospective.py` finds Decisions/ files older than 90 days with empty Outcome and produces review-ready prompts. The `--apply-prompt` mode appends a "Retrospective candidates" section to `⚙️ Meta/Decision Retrospective.md` with one entry per stale decision, ready to fill in during /sunday-review or /monthly. Without this, Outcome fields stay empty forever and the quarterly retro never happens.
+
+### Layer 5 — Infrastructure
+
+- **Multi-machine vault sync helper.** New `scripts/vault-multi-machine-sync.sh` ships the missing piece for users who work from multiple machines on the same vault. Uses git as transport (vault must have a remote). Three modes: `status`, `pull`, `push`, `sync`. Targeted paths only (never `git add -A`). Refuses to run if no remote, refuses to push during concurrent index lock, fail-loud on merge conflicts. Closes the gap in the memory durability rule (which says "always also write to vault" but didn't ship the sync between machines).
+
+### What this drop deliberately does NOT do
+
+It does not add new content skills. The Matuschak/Jackie panel reads were correct: more shipping isn't the answer; reliability + stewardship + curatorial discipline is. Every new artifact in this drop strengthens what already exists — it does not introduce new dormant features.
+
+### Compounding diagram
+
+```
+Schema linter + Bootstrap bundle  → reliable foundation
+             ↓
+   Skill-usage telemetry (opt-in) → real usage data
+             ↓
+   First-week check-ins, drift, curatorial → stewardship informed by data
+             ↓
+   Vault hygiene + Sunday review + decision retro → periodic deepening
+             ↓
+   Multi-machine sync                → infrastructure for compound use
+```
+
+### Existing users
+
+The next auto-update sync wires every new hook into `hooks.json` and pulls in the new scripts. Telemetry stays OFF unless explicitly opted in. First-week check-ins compute days-since-install via the git clone date or a marker file; existing users will see the day-14 check-in fire on their next session if they're past day 14, which is intended (mid-flight stewardship).
+
+### Issues closed
+
+- [#2](https://github.com/adelaidasofia/ai-brain-starter/issues/2) bootstrap: --restore mode (shipped as `bootstrap.sh --restore` + `scripts/bootstrap-restore.sh`)
+- [#3](https://github.com/adelaidasofia/ai-brain-starter/issues/3) bootstrap: persistent log file (shipped as `~/.claude/.bootstrap.log` with size-rotation)
+- [#4](https://github.com/adelaidasofia/ai-brain-starter/issues/4) bootstrap: detect partially-installed graphify (shipped as `bootstrap.sh --detect-partial` + `scripts/detect-partial-installs.sh`)
+
+---
+
 ## 2026-04-30 — Session close cascade rebuilt as a deterministic 3-layer pipeline
 
 **Who this affects:** everyone. Every time you say "bye" to end a session, the new pipeline runs.

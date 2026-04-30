@@ -118,16 +118,87 @@ SKIPPED=()
 BACKUPS=()
 CLEANED=()
 
-# Parse args
+# === Forensics: persistent log file ===
+# Closes adelaidasofia/ai-brain-starter#3 — every bootstrap run writes a
+# timestamped log to ~/.claude/.bootstrap.log (rotated when >5MB). When something
+# breaks weeks later, the log is the forensic source of truth.
+BOOTSTRAP_LOG="$HOME/.claude/.bootstrap.log"
+mkdir -p "$HOME/.claude" 2>/dev/null || true
+
+# Rotate if log is large
+if [[ -f "$BOOTSTRAP_LOG" ]]; then
+  log_size=$(stat -f %z "$BOOTSTRAP_LOG" 2>/dev/null || stat -c %s "$BOOTSTRAP_LOG" 2>/dev/null || echo 0)
+  if [[ "$log_size" -gt 5242880 ]]; then
+    mv "$BOOTSTRAP_LOG" "${BOOTSTRAP_LOG}.$(date +%Y%m%d-%H%M%S)" 2>/dev/null || true
+  fi
+fi
+
+# Parse args (must happen before tee setup so --help doesn't pollute the log)
 for arg in "$@"; do
   case "$arg" in
     --dry-run|-n) DRY_RUN=1 ;;
+    --restore)
+      # Closes adelaidasofia/ai-brain-starter#2 — auto-restore from .bak files
+      RESTORE_SCRIPT="$SKILL_DIR/scripts/bootstrap-restore.sh"
+      if [[ ! -f "$RESTORE_SCRIPT" ]]; then
+        # Fallback: maintainer location
+        [[ -f "$HOME/Desktop/ai-brain-starter/scripts/bootstrap-restore.sh" ]] && \
+          RESTORE_SCRIPT="$HOME/Desktop/ai-brain-starter/scripts/bootstrap-restore.sh"
+      fi
+      if [[ -f "$RESTORE_SCRIPT" ]]; then
+        shift_args=("$@")
+        # Drop --restore from args we forward
+        forward_args=()
+        for a in "${shift_args[@]}"; do
+          [[ "$a" == "--restore" ]] || forward_args+=("$a")
+        done
+        exec bash "$RESTORE_SCRIPT" "${forward_args[@]}"
+      else
+        echo "ERROR: bootstrap-restore.sh not found. Run bootstrap.sh first to install it." >&2
+        exit 2
+      fi ;;
+    --smoke-test|--verify)
+      SMOKE_SCRIPT="$SKILL_DIR/scripts/post-install-smoke-test.sh"
+      [[ ! -f "$SMOKE_SCRIPT" ]] && [[ -f "$HOME/Desktop/ai-brain-starter/scripts/post-install-smoke-test.sh" ]] && \
+        SMOKE_SCRIPT="$HOME/Desktop/ai-brain-starter/scripts/post-install-smoke-test.sh"
+      if [[ -f "$SMOKE_SCRIPT" ]]; then
+        exec bash "$SMOKE_SCRIPT"
+      else
+        echo "ERROR: post-install-smoke-test.sh not found." >&2
+        exit 2
+      fi ;;
+    --detect-partial)
+      DETECT_SCRIPT="$SKILL_DIR/scripts/detect-partial-installs.sh"
+      [[ ! -f "$DETECT_SCRIPT" ]] && [[ -f "$HOME/Desktop/ai-brain-starter/scripts/detect-partial-installs.sh" ]] && \
+        DETECT_SCRIPT="$HOME/Desktop/ai-brain-starter/scripts/detect-partial-installs.sh"
+      if [[ -f "$DETECT_SCRIPT" ]]; then
+        exec bash "$DETECT_SCRIPT"
+      else
+        echo "ERROR: detect-partial-installs.sh not found." >&2
+        exit 2
+      fi ;;
     --help|-h)
-      echo "Usage: bash bootstrap.sh [--dry-run]"
-      echo "  --dry-run, -n   Show what would be installed without making changes"
+      cat <<'HELP'
+Usage: bash bootstrap.sh [OPTIONS]
+
+Install or update the ai-brain-starter setup. Safe to re-run.
+
+Options:
+  --dry-run, -n         Show what would be installed without making changes
+  --restore             Interactive restore from .bak files (closes #2)
+  --smoke-test          Run end-to-end verification of the installed setup
+  --detect-partial      Scan for half-installed components (closes #4)
+  --help, -h            This help
+
+Logs: every run is appended to ~/.claude/.bootstrap.log (closes #3).
+HELP
       exit 0 ;;
   esac
 done
+
+# Tee subsequent output to the log (header + everything that follows)
+exec > >(tee -a "$BOOTSTRAP_LOG") 2>&1
+printf "\n=== bootstrap run %s (PID %d) ===\n" "$(date +%Y-%m-%dT%H:%M:%S)" "$$" >> "$BOOTSTRAP_LOG"
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Helpers

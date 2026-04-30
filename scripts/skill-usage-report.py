@@ -32,6 +32,26 @@ def detect_vault_root() -> Path:
     return Path.cwd()
 
 
+def find_default_log_file(vault_root: Path) -> Path:
+    """Pick the right log path. Vault-side preferred, ~/.claude fallback.
+
+    Order:
+      1. <vault>/⚙️ Meta/skill-usage-log.jsonl (vault-aware install)
+      2. <vault>/Meta/skill-usage-log.jsonl (no-emoji install)
+      3. ~/.claude/logs/skill-usage.jsonl (vault-less install or stranger)
+    """
+    candidates = [
+        vault_root / "⚙️ Meta" / "skill-usage-log.jsonl",
+        vault_root / "Meta" / "skill-usage-log.jsonl",
+        Path.home() / ".claude" / "logs" / "skill-usage.jsonl",
+    ]
+    for c in candidates:
+        if c.is_file():
+            return c
+    # Default to the first vault-side candidate (will be created on first write)
+    return candidates[0]
+
+
 def parse_args():
     vault_root = detect_vault_root()
     parser = argparse.ArgumentParser(
@@ -57,7 +77,7 @@ def parse_args():
     )
     args = parser.parse_args()
     if args.log_file is None:
-        args.log_file = args.vault_root / "⚙️ Meta" / "skill-usage-log.jsonl"
+        args.log_file = find_default_log_file(args.vault_root)
     if args.report_file is None:
         args.report_file = args.vault_root / "⚙️ Meta" / "Skill Usage Report.md"
     return args
