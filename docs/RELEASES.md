@@ -11,6 +11,20 @@ For full development history including internal refactors and bug fixes, see [`C
 
 ---
 
+## 2026-04-30 — `/extract-rules-from-vault` skill
+
+New skill for onboarding companies that already have history in Slack, Notion, GDocs, or any markdown corpus. Reads the dump, finds recurring decision phrases, owner-of-process patterns, and template-shaped rituals, and emits draft `CLAUDE.md` entries, draft hookify rules, and draft skill scaffolds.
+
+Nothing is auto-applied. The output is a folder of drafts plus a `REVIEW.md` checklist the founder walks through before merging anything into a live install.
+
+Structured-signal-first: deterministic Python parser does the heavy lifting (channels, users, headings, paths, frequencies). The model only synthesizes the residual ambiguous cases. Drafts without provenance are a bug, not a feature.
+
+Run with `/extract-rules-from-vault <dump-path>`. See [`skills/extract-rules-from-vault/SKILL.md`](../skills/extract-rules-from-vault/SKILL.md) for full input shapes and output layout.
+
+**No action required** for existing installs. The skill is opt-in.
+
+---
+
 ## 2026-04-23 — Claude Code v2.1.118 improvements
 
 Upstream Claude Code shipped several improvements worth knowing about.
