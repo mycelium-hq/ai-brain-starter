@@ -29,6 +29,9 @@ from typing import Any
 # _shared is a sibling directory; add it to sys.path so we can import.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "_shared"))
 from connector_utils import (
+    canonicalize_entity,
+    extract_entity_mentions,
+    load_entity_aliases,
     read_existing_or_none,
     render_frontmatter,
     sha8,
@@ -173,6 +176,31 @@ def build_body(name: str, steps: list[dict[str, Any]], pr_id: str, source_path: 
     return "\n".join(lines)
 
 
+def build_entity_mentions(
+    raw_text: str,
+    title: str,
+    aliases: dict[str, str],
+) -> list[dict[str, str]]:
+    """Scan body and title for capitalized phrases, fold each into the alias
+    index. Emit one entry per unique raw mention with both raw_mention and
+    canonical_entity. Stable sort by raw_mention.
+    """
+    seen_raw: set[str] = set()
+    out: list[dict[str, str]] = []
+    candidates = extract_entity_mentions(title or "") + extract_entity_mentions(raw_text or "")
+    for raw in candidates:
+        if raw in seen_raw:
+            continue
+        seen_raw.add(raw)
+        canonical = canonicalize_entity(raw, aliases)
+        out.append({
+            "raw_mention": raw,
+            "canonical_entity": canonical,
+        })
+    out.sort(key=lambda d: d["raw_mention"])
+    return out
+
+
 def synth_one(pr_path: Path, vault_root: Path, dry_run: bool, force: bool) -> Path | None:
     text = read_pr_markdown(pr_path)
     _meta_in, body = split_frontmatter(text)
@@ -191,6 +219,9 @@ def synth_one(pr_path: Path, vault_root: Path, dry_run: bool, force: bool) -> Pa
             return None
 
     now = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+
+    aliases = load_entity_aliases(vault_root)
+    entity_mentions = build_entity_mentions(body or text, title, aliases)
 
     meta_out: dict[str, Any] = {
         "type": "workflow",
@@ -213,6 +244,8 @@ def synth_one(pr_path: Path, vault_root: Path, dry_run: bool, force: bool) -> Pa
         "source_count": 1,
         "entity_ids": {"github_pr": pr_id},
     }
+    if entity_mentions:
+        meta_out["entity_mentions"] = entity_mentions
     if topic:
         meta_out["topic"] = topic
 

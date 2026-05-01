@@ -4,6 +4,22 @@ Three components turn external tool data into typed memory entries and aggregate
 
 ## Components
 
+### 0. `scripts/entity-disambiguator.py` (CLI)
+
+Builds the alias index at `Meta/.entity-aliases.json`. Walks `Meta/Decisions/`, `Meta/Workflows/`, `Meta/Exceptions/`, `Meta/Facts/` for capitalized noun phrases and slug-like tokens, clusters variant spellings using Jaccard on character bigrams plus a Levenshtein ratio, and picks a canonical form per cluster (most-frequent spelling wins; ties go to longest, then alphabetic).
+
+```bash
+python3 scripts/entity-disambiguator.py --vault-root <vault> --rebuild
+```
+
+Operator overrides at `Meta/entity-aliases-overrides.json` (committed) always win over the auto-built index. Override schema:
+
+```json
+{"aliases": {"<variant>": "<canonical>"}}
+```
+
+The two synthesizers below consult this index when extracting entity mentions and write both `raw_mention` and `canonical_entity` into the output frontmatter. Stdlib only. Idempotent.
+
 ### 1. `/synth-pr-to-sop` (skill)
 
 Path: `skills/synth-pr-to-sop/`

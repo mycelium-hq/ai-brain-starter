@@ -116,6 +116,10 @@ The script counts hits for each class:
 
 Highest score wins. Ties resolve toward decision (the most common shape). Use `--classify-as` to override.
 
+## Entity disambiguation
+
+When `Meta/.entity-aliases.json` exists (built by `scripts/entity-disambiguator.py`), this skill consults it during entity extraction. Each detected mention writes both `raw_mention` and `canonical_entity` into the `entity_mentions` frontmatter list, so downstream queries can group variant spellings under one canonical form. Operator overrides at `Meta/entity-aliases-overrides.json` always win. When the index is missing, `canonical_entity` falls back to the raw mention.
+
 ## Rules
 
 - Never overwrite a file that has been hand-edited unless `--force`.

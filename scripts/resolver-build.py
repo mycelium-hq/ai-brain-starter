@@ -62,6 +62,11 @@ TYPE_BY_FOLDER = {
     "Facts": "fact",
 }
 
+# Branch-merge window. Two decisions are treated as parallel branches
+# (rather than a clean supersession) when they share `pattern`, contradict
+# in outcome, and their last_verified dates are within this many days.
+BRANCH_MERGE_WINDOW_DAYS = 30
+
 
 def find_meta_dir(vault_root: Path) -> Path | None:
     """Auto-detect the Meta folder. Supports '⚙️ Meta' and 'Meta'."""
@@ -241,10 +246,150 @@ def collect_rules(meta_dir: Path) -> list[dict[str, Any]]:
                 "pattern": derive_pattern(fm),
                 "subject_tokens": derive_subject_tokens(fm, h1),
                 "h1": h1,
+                "outcome": str(fm.get("outcome") or "").strip(),
+                "abs_path": str(path),
                 "superseded_by": "",
+                "branch_merge_with": "",
             })
 
     return rules
+
+
+_NEGATION_TOKENS = {
+    "no", "not", "never", "without", "stop", "kill", "block", "deny",
+    "reject", "off", "disable", "drop", "skip", "decline", "exclude",
+    "abort",
+}
+_AFFIRM_TOKENS = {
+    "yes", "always", "ship", "approve", "approved", "enable", "allow",
+    "permit", "include", "go", "launch", "publish", "accept",
+}
+
+
+def _outcome_polarity(outcome: str) -> tuple[set[str], set[str]]:
+    """Split an outcome into (negation_tokens, affirm_tokens) seen.
+
+    A naive contradiction signal: when one outcome carries negation tokens
+    the other does not, and the other carries affirmation tokens the first
+    does not, treat them as opposites. This is intentionally cheap; the
+    operator review at the merge prompt is where real reconciliation happens.
+    """
+    text = (outcome or "").lower()
+    tokens = set(re.findall(r"[a-z][a-z0-9'-]*", text))
+    neg = tokens & _NEGATION_TOKENS
+    aff = tokens & _AFFIRM_TOKENS
+    return neg, aff
+
+
+def outcomes_contradict(a: str, b: str) -> bool:
+    """Return True when two outcome strings look like opposites.
+
+    Cheap signal: one carries a negation lexeme the other does not, and the
+    other carries an affirmation lexeme the first does not. Or, neither
+    carries affirmations and one carries negations the other lacks. Falls
+    back to a token-overlap check: when stems share <40% of non-stopword
+    tokens AND both are non-empty, treat as contradicting too.
+    """
+    a = (a or "").strip()
+    b = (b or "").strip()
+    if not a or not b:
+        return False
+    if a.lower() == b.lower():
+        return False
+
+    neg_a, aff_a = _outcome_polarity(a)
+    neg_b, aff_b = _outcome_polarity(b)
+    if (neg_a and not neg_b and (aff_b or not aff_a)) or (
+        neg_b and not neg_a and (aff_a or not aff_b)
+    ):
+        return True
+    if aff_a and aff_b and not (neg_a or neg_b):
+        return False
+
+    stop = {
+        "the", "a", "an", "is", "are", "was", "were", "be", "to", "of",
+        "and", "or", "for", "with", "in", "on", "at", "by", "this", "that",
+    }
+    ta = {t for t in re.findall(r"[a-z][a-z0-9'-]*", a.lower()) if t not in stop}
+    tb = {t for t in re.findall(r"[a-z][a-z0-9'-]*", b.lower()) if t not in stop}
+    if not ta or not tb:
+        return False
+    overlap = len(ta & tb) / max(len(ta), len(tb))
+    return overlap < 0.40
+
+
+def detect_branch_merges(
+    rules: list[dict[str, Any]],
+    window_days: int = BRANCH_MERGE_WINDOW_DAYS,
+) -> list[dict[str, Any]]:
+    """Find pairs of rules that share `pattern` AND contradict in outcome
+    AND have last_verified within `window_days` of each other.
+
+    These are NOT supersessions (neither is clearly newer); they are parallel
+    branches that need an operator merge. Returns one record per pair:
+
+      {
+        "pattern": "...",
+        "branch_a": {"rule_id", "source_path", "abs_path",
+                     "last_verified", "outcome", "type"},
+        "branch_b": {...},
+        "delta_days": int,
+      }
+
+    Side effect: each branch rule gets `branch_merge_with` set to the other
+    rule_id so the rendered table can carry the marker. Status is left
+    untouched (these are not superseded).
+    """
+    branches: list[dict[str, Any]] = []
+    by_pattern: dict[str, list[dict[str, Any]]] = {}
+    for r in rules:
+        if not r["pattern"] or not r.get("outcome"):
+            continue
+        if not r.get("last_verified_date"):
+            continue
+        by_pattern.setdefault(r["pattern"], []).append(r)
+
+    seen: set[tuple[str, str]] = set()
+    for pattern, group in by_pattern.items():
+        n = len(group)
+        for i in range(n):
+            for j in range(i + 1, n):
+                a, b = group[i], group[j]
+                shared = a["subject_tokens"] & b["subject_tokens"]
+                if not shared:
+                    continue
+                if not outcomes_contradict(a["outcome"], b["outcome"]):
+                    continue
+                delta = abs((a["last_verified_date"] - b["last_verified_date"]).days)
+                if delta > window_days:
+                    continue
+                pair = tuple(sorted([a["rule_id"], b["rule_id"]]))
+                if pair in seen:
+                    continue
+                seen.add(pair)
+                a["branch_merge_with"] = b["rule_id"]
+                b["branch_merge_with"] = a["rule_id"]
+                branches.append({
+                    "pattern": pattern,
+                    "branch_a": {
+                        "rule_id": a["rule_id"],
+                        "source_path": a["source_path"],
+                        "abs_path": a.get("abs_path", ""),
+                        "last_verified": a["last_verified"],
+                        "outcome": a["outcome"],
+                        "type": a["type"],
+                    },
+                    "branch_b": {
+                        "rule_id": b["rule_id"],
+                        "source_path": b["source_path"],
+                        "abs_path": b.get("abs_path", ""),
+                        "last_verified": b["last_verified"],
+                        "outcome": b["outcome"],
+                        "type": b["type"],
+                    },
+                    "delta_days": delta,
+                })
+    return branches
 
 
 def detect_conflicts(rules: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -346,6 +491,7 @@ def render_resolver(
     rules: list[dict[str, Any]],
     vault_root: Path,
     conflicts: list[dict[str, Any]] | None = None,
+    branch_merges: list[dict[str, Any]] | None = None,
 ) -> str:
     """Emit the stable RESOLVER.md body."""
     today = dt.date.today().isoformat()
@@ -360,6 +506,7 @@ def render_resolver(
         counts[r["status"]] = counts.get(r["status"], 0) + 1
 
     conflicts = conflicts or []
+    branch_merges = branch_merges or []
 
     lines: list[str] = []
     lines.append("---")
@@ -367,6 +514,7 @@ def render_resolver(
     lines.append(f"last_built: {today}")
     lines.append(f"vault_root: {vault_root}")
     lines.append(f"conflict_count: {len(conflicts)}")
+    lines.append(f"branch_merge_count: {len(branch_merges)}")
     lines.append("---")
     lines.append("")
     lines.append("# RESOLVER")
@@ -412,7 +560,32 @@ def render_resolver(
     lines.append(f"- unknown: {counts['unknown']}")
     lines.append(f"- total rules: {len(rules)}")
     lines.append(f"- conflict groups: {len(conflicts)}")
+    lines.append(f"- branch-merge candidates: {len(branch_merges)}")
     lines.append("")
+
+    if branch_merges:
+        lines.append("## Branch-merge candidates")
+        lines.append("")
+        lines.append(
+            "Each pair below shares a `pattern`, contradicts in `outcome`, "
+            "and has `last_verified` within "
+            f"{BRANCH_MERGE_WINDOW_DAYS} days. Neither is clearly newer, so "
+            "this is not a supersession; an operator merge decision is "
+            "required. Run `scripts/resolver-branch-merge-prompt.py` to "
+            "draft a per-pair merge prompt."
+        )
+        lines.append("")
+        for bm in branch_merges:
+            lines.append(f"### Pattern: `{bm['pattern']}` (delta {bm['delta_days']}d)")
+            lines.append("")
+            for label, branch in (("branch A", bm["branch_a"]), ("branch B", bm["branch_b"])):
+                lines.append(
+                    f"- {label}: `{branch['rule_id']}` "
+                    f"(last_verified {branch['last_verified'] or 'unknown'}, "
+                    f"outcome \"{branch['outcome']}\") "
+                    f"[[{branch['source_path']}]]"
+                )
+            lines.append("")
 
     if conflicts:
         lines.append("## Conflicts")
@@ -444,14 +617,14 @@ def render_resolver(
     lines.append("")
     lines.append(
         "| rule_id | type | status | last_verified | freshness_days | "
-        "owner | source | skill | superseded_by |"
+        "owner | source | skill | superseded_by | branch_merge_with |"
     )
     lines.append(
-        "|---|---|---|---|---|---|---|---|---|"
+        "|---|---|---|---|---|---|---|---|---|---|"
     )
 
     if not rules:
-        lines.append("| (no rules found) |  |  |  |  |  |  |  |  |")
+        lines.append("| (no rules found) |  |  |  |  |  |  |  |  |  |")
     else:
         for r in sorted(
             rules,
@@ -472,10 +645,14 @@ def render_resolver(
             superseded_by = (
                 f"`{r['superseded_by']}`" if r.get("superseded_by") else ""
             )
+            branch_merge = (
+                f"`{r['branch_merge_with']}`" if r.get("branch_merge_with") else ""
+            )
             lines.append(
                 f"| {r['rule_id']} | {r['type']} | {r['status']} | "
                 f"{r['last_verified']} | {r['freshness_days']} | "
-                f"{r['owner']} | {source_link} | {skill} | {superseded_by} |"
+                f"{r['owner']} | {source_link} | {skill} | {superseded_by} | "
+                f"{branch_merge} |"
             )
 
     lines.append("")
@@ -519,7 +696,8 @@ def main() -> int:
 
     rules = collect_rules(meta_dir)
     conflicts = detect_conflicts(rules)
-    rendered = render_resolver(rules, vault_root, conflicts)
+    branch_merges = detect_branch_merges(rules)
+    rendered = render_resolver(rules, vault_root, conflicts, branch_merges)
 
     out_path = args.out if args.out is not None else (meta_dir / "RESOLVER.md")
 
@@ -533,6 +711,7 @@ def main() -> int:
     print(
         f"Wrote {out_path} ({len(rules)} rule(s), "
         f"{len(conflicts)} conflict group(s), "
+        f"{len(branch_merges)} branch-merge candidate(s), "
         f"{len(rendered):,} bytes)"
     )
     return 0

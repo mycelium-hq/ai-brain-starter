@@ -13,6 +13,7 @@ JSON shape:
     "checked_at": "YYYY-MM-DD",
     "rule_count": <int>,
     "conflict_count": <int>,
+    "branch_merge_count": <int>,
     "conflicts": [
       {
         "pattern": "...",
@@ -26,6 +27,16 @@ JSON shape:
         ]
       },
       ...
+    ],
+    "branch_merges": [
+      {
+        "pattern": "...",
+        "branch_a": {"rule_id", "source_path", "last_verified",
+                     "outcome", "type"},
+        "branch_b": {...},
+        "delta_days": <int>
+      },
+      ...
     ]
   }
 
@@ -33,9 +44,9 @@ Usage:
   python3 scripts/resolver-conflict-report.py --vault-root PATH
 
 Exit codes:
-  0 = clean (no conflicts)
+  0 = clean (no conflicts and no branch merges)
   1 = error (e.g. Meta folder not found)
-  2 = conflicts surfaced
+  2 = conflicts or branch-merge candidates surfaced
 
 Stdlib + PyYAML only.
 """
@@ -77,8 +88,23 @@ def _strip_unserializable(rules: list[dict[str, Any]]) -> list[dict[str, Any]]:
         copy = dict(r)
         copy.pop("subject_tokens", None)
         copy.pop("last_verified_date", None)
+        copy.pop("abs_path", None)
         cleaned.append(copy)
     return cleaned
+
+
+def _strip_branch_merge_internal(branches: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop the abs_path side-channel from branch-merge records before JSON."""
+    out: list[dict[str, Any]] = []
+    for bm in branches:
+        copy = dict(bm)
+        for side in ("branch_a", "branch_b"):
+            if isinstance(copy.get(side), dict):
+                inner = dict(copy[side])
+                inner.pop("abs_path", None)
+                copy[side] = inner
+        out.append(copy)
+    return out
 
 
 def main() -> int:
@@ -116,20 +142,23 @@ def main() -> int:
 
     rules = aggregator.collect_rules(meta_dir)
     conflicts = aggregator.detect_conflicts(rules)
+    branch_merges = aggregator.detect_branch_merges(rules)
 
     report: dict[str, Any] = {
         "vault_root": str(vault_root),
         "checked_at": dt.date.today().isoformat(),
         "rule_count": len(rules),
         "conflict_count": len(conflicts),
+        "branch_merge_count": len(branch_merges),
         "conflicts": conflicts,
+        "branch_merges": _strip_branch_merge_internal(branch_merges),
     }
     if args.include_rules:
         report["rules"] = _strip_unserializable(rules)
 
     print(json.dumps(report, indent=2, default=str))
 
-    return 2 if conflicts else 0
+    return 2 if (conflicts or branch_merges) else 0
 
 
 if __name__ == "__main__":

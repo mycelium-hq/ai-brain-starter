@@ -446,3 +446,94 @@ def slugify_unicode(title: str, fallback: str = "unknown", max_len: int = 60) ->
 def slug_repo(repo: str) -> str:
     """'owner/repo' -> 'owner-repo' for filesystem use."""
     return repo.replace("/", "-")
+
+
+# ---------------------------------------------------------------------------
+# Entity alias helpers (consume Meta/.entity-aliases.json built by
+# scripts/entity-disambiguator.py). Synth-* skills use this to resolve a
+# raw_mention to a canonical_entity in entity-mention frontmatter.
+# ---------------------------------------------------------------------------
+
+def find_meta_dir(vault_root: Path | str) -> Path | None:
+    """Locate the Meta folder under the vault. Supports plain and
+    emoji-prefixed names. Returns None when not found.
+    """
+    root = Path(vault_root)
+    if not root.is_dir():
+        return None
+    for child in sorted(root.iterdir()):
+        if child.is_dir() and child.name.endswith("Meta"):
+            return child
+    return None
+
+
+def load_entity_aliases(vault_root: Path | str) -> dict[str, str]:
+    """Read Meta/.entity-aliases.json and return {variant: canonical}.
+
+    Returns an empty dict if the index is missing or unparseable. Operator
+    overrides at Meta/entity-aliases-overrides.json are also folded in here
+    so callers do not need to know the override file exists.
+    """
+    import json
+    meta_dir = find_meta_dir(vault_root)
+    if meta_dir is None:
+        return {}
+    out: dict[str, str] = {}
+    idx_path = meta_dir / ".entity-aliases.json"
+    if idx_path.is_file():
+        try:
+            data = json.loads(idx_path.read_text(encoding="utf-8"))
+            aliases = data.get("aliases") if isinstance(data, dict) else None
+            if isinstance(aliases, dict):
+                for k, v in aliases.items():
+                    if isinstance(k, str) and isinstance(v, str):
+                        out[k] = v
+        except (OSError, json.JSONDecodeError):
+            pass
+    override_path = meta_dir / "entity-aliases-overrides.json"
+    if override_path.is_file():
+        try:
+            data = json.loads(override_path.read_text(encoding="utf-8"))
+            aliases = data.get("aliases") if isinstance(data, dict) else None
+            if isinstance(aliases, dict):
+                for k, v in aliases.items():
+                    if isinstance(k, str) and isinstance(v, str):
+                        out[k] = v
+        except (OSError, json.JSONDecodeError):
+            pass
+    return out
+
+
+def canonicalize_entity(raw_mention: str, aliases: dict[str, str]) -> str:
+    """Look up a raw mention in the alias index. Returns the canonical form
+    if found, else the raw mention untouched. Case-insensitive fallback so
+    minor capitalization drift still resolves.
+    """
+    if not raw_mention:
+        return raw_mention
+    if raw_mention in aliases:
+        return aliases[raw_mention]
+    folded = raw_mention.casefold()
+    for variant, canonical in aliases.items():
+        if variant.casefold() == folded:
+            return canonical
+    return raw_mention
+
+
+def extract_entity_mentions(text: str) -> list[str]:
+    """Pull capitalized noun phrases from a body for entity-mention scanning.
+    Scoped to single capitalized tokens or two-word phrases, length >= 4.
+    """
+    import re
+    pattern = re.compile(r"\b([A-Z][a-z0-9]+(?:[ \-]?[A-Z][a-z0-9]+){0,2})\b")
+    seen: set[str] = set()
+    out: list[str] = []
+    for m in pattern.finditer(text or ""):
+        candidate = m.group(1).strip()
+        if len(candidate) < 4:
+            continue
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        out.append(candidate)
+    return out

@@ -32,6 +32,9 @@ from typing import Any
 # _shared is a sibling directory; add it to sys.path so we can import.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "_shared"))
 from connector_utils import (
+    canonicalize_entity,
+    extract_entity_mentions,
+    load_entity_aliases,
     read_existing_or_none,
     render_frontmatter,
     sha8,
@@ -237,6 +240,29 @@ def build_meta_workflow(name: str, steps: list[dict[str, Any]], file_sha: str, t
     }
 
 
+def build_entity_mentions(
+    raw_text: str,
+    aliases: dict[str, str],
+) -> list[dict[str, str]]:
+    """Scan body for capitalized phrases, fold each into the alias index.
+    Emit one entry per unique raw mention with both raw_mention and
+    canonical_entity. Stable sort by raw_mention.
+    """
+    seen_raw: set[str] = set()
+    out: list[dict[str, str]] = []
+    for raw in extract_entity_mentions(raw_text or ""):
+        if raw in seen_raw:
+            continue
+        seen_raw.add(raw)
+        canonical = canonicalize_entity(raw, aliases)
+        out.append({
+            "raw_mention": raw,
+            "canonical_entity": canonical,
+        })
+    out.sort(key=lambda d: d["raw_mention"])
+    return out
+
+
 def synth(thread_path: Path, vault_root: Path, classify_override: str | None, dry_run: bool, force: bool) -> Path | None:
     text = thread_path.read_text(encoding="utf-8")
     meta_in, body = split_frontmatter(text)
@@ -251,6 +277,9 @@ def synth(thread_path: Path, vault_root: Path, classify_override: str | None, dr
     summary = extract_summary(full_text)
 
     now = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+
+    aliases = load_entity_aliases(vault_root)
+    entity_mentions = build_entity_mentions(full_text, aliases)
 
     if classification == "decision":
         out_dir = vault_root / "Meta" / "Decisions"
@@ -277,6 +306,9 @@ def synth(thread_path: Path, vault_root: Path, classify_override: str | None, dr
     else:
         print(f"unknown classification: {classification}", file=sys.stderr)
         return None
+
+    if entity_mentions:
+        meta_out["entity_mentions"] = entity_mentions
 
     out_path = out_dir / f"{file_sha}.md"
 
