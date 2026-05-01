@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-promote-episodic-to-procedural.py — Background consolidation for closed-loop
+promote-episodic-to-procedural.py - Background consolidation for closed-loop
 learning.
 
 Walks <vault-root>/Meta/Learnings/ (the episodic capture sink populated by the
@@ -17,9 +17,26 @@ exception, because the hook only writes Learnings on failures or explicit
 annotations, so the recurring case is overwhelmingly a failure pattern.
 
 The candidate is `status: candidate`. A human reviews the file, edits it
-into shape, moves it to the appropriate folder (`⚙️ Meta/Workflows/` or
-`⚙️ Meta/Exceptions/`), and only then does the procedural memory go live.
+into shape, moves it to the appropriate folder (`Meta/Workflows/` or
+`Meta/Exceptions/`), and only then does the procedural memory go live.
 The script never promotes directly: human review is the gate.
+
+Confidence-weighted promotion (Deliverable C):
+  - When all entries in a cluster carry confidence >= AUTO_CONFIDENCE_THRESHOLD
+    (default 0.85) AND the cluster spans >= AUTO_SPAN_DAYS (default 7) days,
+    the candidate's status becomes `ready-for-auto-promote`. A human still
+    has to flip the status to live (the gate stays human-in-the-loop), but
+    these high-confidence candidates surface separately so reviewers can
+    triage them faster.
+  - Lower-confidence clusters (any entry below threshold, or span too short)
+    keep `status: candidate`.
+
+Cron-friendly behavior (Deliverable A):
+  - State file at <vault-root>/.promote-state.json tracks the last-run
+    timestamp and the count of Learning files seen. Skip work entirely when
+    no new Learnings have appeared since the last run.
+  - --quiet flag suppresses output unless candidates were drafted, so cron
+    invocations do not generate inbox noise on no-op runs.
 
 Heuristic for grouping (deliberately simple; we want false-positive bias
 toward surfacing patterns):
@@ -38,7 +55,15 @@ CLI:
     python3 promote-episodic-to-procedural.py \\
         --vault-root /path/to/vault \\
         --min-occurrences 3 \\
-        --dry-run
+        --dry-run \\
+        --quiet \\
+        --auto-confidence 0.85 \\
+        --auto-span-days 7
+
+Cron pattern (every 6 hours, quiet on no-ops):
+    0 */6 * * * cd /path/to/vault && python3 \
+        /path/to/ai-brain-starter/scripts/promote-episodic-to-procedural.py \
+        --vault-root /path/to/vault --quiet
 
 Stdlib + PyYAML only.
 """
@@ -64,6 +89,9 @@ except ImportError:
 WORD_RE = re.compile(r"[a-z0-9]+")
 NGRAM_N = 5
 JACCARD_THRESHOLD = 0.30
+STATE_FILENAME = ".promote-state.json"
+DEFAULT_AUTO_CONFIDENCE = 0.85
+DEFAULT_AUTO_SPAN_DAYS = 7
 
 
 def parse_frontmatter(text: str) -> tuple[dict, str]:
@@ -178,15 +206,63 @@ def common_excerpt(cluster: list[dict]) -> str:
     return excerpts[0][:300]
 
 
-def build_candidate(cluster: list[dict], vault_root: Path) -> tuple[str, dict, str]:
+def parse_iso_dt(value) -> datetime | None:
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if not isinstance(value, str):
+        return None
+    s = value.strip()
+    if not s:
+        return None
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    try:
+        return datetime.fromisoformat(s)
+    except ValueError:
+        # Fall back to date-only.
+        if len(s) >= 10:
+            try:
+                return datetime.fromisoformat(s[:10])
+            except ValueError:
+                return None
+        return None
+
+
+def cluster_meets_auto_promote(
+    cluster: list[dict],
+    auto_confidence: float,
+    auto_span_days: int,
+) -> bool:
+    """High-confidence + sufficient span check for auto-promote eligibility."""
+    confidences = [c.get("confidence") for c in cluster]
+    if not all(isinstance(c, (int, float)) and c >= auto_confidence for c in confidences):
+        return False
+
+    timestamps = [c.get("captured_dt") for c in cluster if c.get("captured_dt")]
+    if len(timestamps) < 2:
+        return False
+
+    span_days = (max(timestamps) - min(timestamps)).days
+    return span_days >= auto_span_days
+
+
+def build_candidate(
+    cluster: list[dict],
+    vault_root: Path,
+    auto_confidence: float,
+    auto_span_days: int,
+) -> tuple[str, dict, str]:
     """Return (filename_stem, frontmatter_dict, body_string)."""
     source_tool = cluster[0]["source_tool"]
     excerpt = common_excerpt(cluster)
     seed = f"{source_tool}|{excerpt}|{len(cluster)}"
     sha8 = stable_sha8(seed)
 
-    # Default to exception (recurring failure pattern). Could be workflow
-    # later if the human reviewer reframes it as a positive recipe.
+    auto_eligible = cluster_meets_auto_promote(cluster, auto_confidence, auto_span_days)
+    status = "ready-for-auto-promote" if auto_eligible else "candidate"
+
     summary = (
         f"{source_tool} repeatedly produces the same failure "
         f"(observed {len(cluster)} times)."
@@ -194,15 +270,26 @@ def build_candidate(cluster: list[dict], vault_root: Path) -> tuple[str, dict, s
 
     sources = []
     for c in cluster:
-        rel = str(c["path"].relative_to(vault_root)) if vault_root in c["path"].parents else str(c["path"])
+        rel = (
+            str(c["path"].relative_to(vault_root))
+            if vault_root in c["path"].parents
+            else str(c["path"])
+        )
         sources.append(rel)
+
+    confidences = [c.get("confidence") for c in cluster if isinstance(c.get("confidence"), (int, float))]
+    timestamps = [c.get("captured_dt") for c in cluster if c.get("captured_dt")]
+    span_days = (max(timestamps) - min(timestamps)).days if len(timestamps) >= 2 else 0
+    min_conf = min(confidences) if confidences else None
 
     frontmatter = {
         "type": "exception",
         "memory_class": "procedural",
-        "status": "candidate",
+        "status": status,
         "exception_summary": summary,
         "frequency_observed": len(cluster),
+        "cluster_span_days": span_days,
+        "min_confidence": min_conf,
         "source_episodic_files": sources,
         "captured_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "provenance": [
@@ -233,8 +320,15 @@ def build_candidate(cluster: list[dict], vault_root: Path) -> tuple[str, dict, s
     body_parts.append("")
     body_parts.append("## Reviewer notes")
     body_parts.append("")
-    body_parts.append("Status: candidate. Awaiting human review.")
+    body_parts.append(f"Status: {status}. Awaiting human review.")
     body_parts.append("")
+    if status == "ready-for-auto-promote":
+        body_parts.append(
+            "This cluster cleared the auto-promote bar (every captured entry "
+            f"has confidence >= {auto_confidence} and the cluster spans >= "
+            f"{auto_span_days} days). The reviewer can fast-track this candidate."
+        )
+        body_parts.append("")
     body_parts.append(
         "If this pattern reflects a real reusable failure mode, edit this file into the exception schema "
         "(see `templates/schemas/exception.json`) and move it to `Meta/Exceptions/`. "
@@ -261,21 +355,51 @@ def load_learnings(learnings_dir: Path) -> list[dict]:
             continue
         excerpt = (fm.get("error_excerpt") or "").strip()
         if not excerpt:
-            # Fall back to the body's "Error excerpt" code block, if any.
             m = re.search(r"## Error excerpt\s*```(.*?)```", body, re.DOTALL)
             if m:
                 excerpt = m.group(1).strip()
         source_tool = (fm.get("source_tool") or "").strip() or "unknown"
         tokens = tokenize(excerpt)
+        confidence = fm.get("confidence")
+        if isinstance(confidence, str):
+            try:
+                confidence = float(confidence)
+            except ValueError:
+                confidence = None
+        captured_dt = parse_iso_dt(fm.get("captured_at"))
         items.append(
             {
                 "path": path,
                 "source_tool": source_tool,
                 "error_excerpt": excerpt,
                 "ngrams": ngrams(tokens, NGRAM_N),
+                "confidence": confidence,
+                "captured_dt": captured_dt,
             }
         )
     return items
+
+
+def load_state(state_path: Path) -> dict:
+    if not state_path.is_file():
+        return {}
+    try:
+        return json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def save_state(state_path: Path, state: dict) -> None:
+    try:
+        state_path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+    except OSError as e:
+        print(f"WARN: could not write state file {state_path}: {e}", file=sys.stderr)
+
+
+def count_learnings(learnings_dir: Path) -> int:
+    if not learnings_dir.is_dir():
+        return 0
+    return sum(1 for _ in learnings_dir.glob("*.md"))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -297,15 +421,63 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Print what would be drafted without writing any files.",
     )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress output unless candidates were drafted (cron-friendly).",
+    )
+    parser.add_argument(
+        "--auto-confidence",
+        type=float,
+        default=DEFAULT_AUTO_CONFIDENCE,
+        help=(
+            f"Minimum confidence on every clustered entry to mark a candidate "
+            f"ready-for-auto-promote (default {DEFAULT_AUTO_CONFIDENCE})."
+        ),
+    )
+    parser.add_argument(
+        "--auto-span-days",
+        type=int,
+        default=DEFAULT_AUTO_SPAN_DAYS,
+        help=(
+            f"Minimum span (days between earliest and latest entry) for "
+            f"auto-promote eligibility (default {DEFAULT_AUTO_SPAN_DAYS})."
+        ),
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Ignore the state file and re-scan all Learnings.",
+    )
     args = parser.parse_args(argv)
 
     vault_root = args.vault_root.expanduser().resolve()
     learnings_dir = vault_root / "Meta" / "Learnings"
     candidates_dir = vault_root / "Meta" / "Promotion-Candidates"
+    state_path = vault_root / STATE_FILENAME
+
+    state = load_state(state_path)
+    learning_count = count_learnings(learnings_dir)
+    last_count = state.get("last_learning_count", -1)
+
+    if not args.force and learning_count == last_count and learning_count > 0:
+        if not args.quiet:
+            print(
+                f"No new Learnings since last run ({learning_count} files). "
+                "Skipping. Use --force to rescan."
+            )
+        return 0
 
     items = load_learnings(learnings_dir)
     if not items:
-        print(f"No learning files found at {learnings_dir}")
+        if not args.quiet:
+            print(f"No learning files found at {learnings_dir}")
+        # Persist state so empty runs do not retrigger.
+        new_state = dict(state)
+        new_state["last_run_utc"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        new_state["last_learning_count"] = learning_count
+        if not args.dry_run:
+            save_state(state_path, new_state)
         return 0
 
     by_tool: dict[str, list[dict]] = defaultdict(list)
@@ -314,16 +486,29 @@ def main(argv: list[str] | None = None) -> int:
 
     drafted = 0
     skipped = 0
+    auto_ready = 0
+    drafted_messages: list[str] = []
+
     for tool, group in by_tool.items():
         clusters = cluster_learnings(group, JACCARD_THRESHOLD)
         for cluster in clusters:
             if len(cluster) < args.min_occurrences:
                 continue
-            sha8, fm, body = build_candidate(cluster, vault_root)
+            sha8, fm, body = build_candidate(
+                cluster,
+                vault_root,
+                args.auto_confidence,
+                args.auto_span_days,
+            )
             target = candidates_dir / f"{sha8}.md"
             content = "---\n" + render_frontmatter(fm).rstrip() + "\n---\n\n" + body
+            status = fm.get("status", "candidate")
+            if status == "ready-for-auto-promote":
+                auto_ready += 1
             if args.dry_run:
-                print(f"[dry-run] would write {target} ({len(cluster)} captures, tool={tool})")
+                drafted_messages.append(
+                    f"[dry-run] would write {target} ({len(cluster)} captures, tool={tool}, status={status})"
+                )
                 drafted += 1
                 continue
             if target.exists():
@@ -332,11 +517,41 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 candidates_dir.mkdir(parents=True, exist_ok=True)
                 target.write_text(content, encoding="utf-8")
+                drafted_messages.append(
+                    f"Wrote {target} ({len(cluster)} captures, tool={tool}, status={status})"
+                )
                 drafted += 1
             except OSError as e:
                 print(f"Failed to write {target}: {e}", file=sys.stderr)
 
-    print(f"Drafted {drafted} candidate(s). Skipped {skipped} pre-existing.")
+    # Update state file (skip when --dry-run so dry runs do not gate next live run).
+    if not args.dry_run:
+        new_state = dict(state)
+        new_state["last_run_utc"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        new_state["last_learning_count"] = learning_count
+        new_state["last_drafted"] = drafted
+        new_state["last_auto_ready"] = auto_ready
+        save_state(state_path, new_state)
+
+    # Output gating: --quiet only speaks when we drafted something new.
+    if drafted == 0 and skipped == 0:
+        if not args.quiet:
+            print(
+                f"Scanned {len(items)} learning file(s). No clusters reached "
+                f"min-occurrences={args.min_occurrences}."
+            )
+        return 0
+
+    if args.quiet and drafted == 0:
+        # Pure no-op skip-by-existing case under --quiet: stay silent.
+        return 0
+
+    for msg in drafted_messages:
+        print(msg)
+    print(
+        f"Drafted {drafted} candidate(s), {auto_ready} ready-for-auto-promote. "
+        f"Skipped {skipped} pre-existing."
+    )
     return 0
 
 

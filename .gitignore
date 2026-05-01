@@ -22,3 +22,6 @@ secrets.json
 
 # Local Claude Code overrides (contains user-specific permissions).
 .claude/settings.local.json
+
+# Closed-loop learning state (per-vault, regenerated automatically).
+.promote-state.json

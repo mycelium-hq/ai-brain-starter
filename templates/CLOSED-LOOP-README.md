@@ -91,7 +91,14 @@ hooks/post-tool-use-learnings.py
 scripts/promote-episodic-to-procedural.py
     CLI consolidation script. Walks Meta/Learnings/, clusters by similarity,
     drafts procedural candidates at Meta/Promotion-Candidates/. Never
-    promotes directly. Stdlib + PyYAML.
+    promotes directly. State file at .promote-state.json + --quiet make it
+    cron-friendly. Stdlib + PyYAML.
+
+scripts/demote-stale-procedural.py
+    CLI decay script. Walks Meta/Workflows/, Meta/Exceptions/, Meta/Facts/.
+    Surfaces stale procedural rules (past multiplier x freshness_days, with
+    empty outcome or unset pattern) as demotion candidates at
+    Meta/Demotion-Candidates/. Never auto-deletes. Stdlib + PyYAML.
 
 templates/schemas/*.json
     All eight typed-memory schemas now carry `memory_class` and
@@ -144,10 +151,90 @@ python3 scripts/promote-episodic-to-procedural.py \
 Drop the flag to actually draft candidates. The script is safe to re-run; if
 a candidate already exists at the target path, the script skips it.
 
-A reasonable cadence is once a day, run from cron or a launchd plist or
-the session-close cascade. Daily is enough because the failure cluster has
-to reach `--min-occurrences` to surface, and that takes several days of
-real usage in practice.
+### Cron / scheduled runs
+
+The script keeps a state file at `<vault-root>/.promote-state.json`
+recording the last-run timestamp and the count of Learning files seen. On
+re-invocation, if the file count has not changed since the last run, the
+script exits early without doing any clustering work. Pair this with the
+`--quiet` flag and the script becomes a no-op on idle vaults: zero output,
+zero cost.
+
+One-line cron pattern (every 6 hours):
+
+```
+0 */6 * * * cd /path/to/vault && python3 \
+    /path/to/ai-brain-starter/scripts/promote-episodic-to-procedural.py \
+    --vault-root /path/to/vault --quiet
+```
+
+The state file lives at the vault root, so add it to `.gitignore` if the
+vault is a git repo. Use `--force` to ignore the state file and re-scan
+every Learning file (useful when the clustering parameters change).
+
+### Confidence-weighted promotion
+
+When every entry in a cluster carries `confidence >= --auto-confidence`
+(default 0.85) AND the cluster spans at least `--auto-span-days` days
+(default 7) between earliest and latest capture, the candidate is written
+with `status: ready-for-auto-promote` instead of `status: candidate`. Both
+statuses still require human review before the procedural memory goes live;
+the difference is triage speed. A reviewer scanning a backlog can clear
+`ready-for-auto-promote` candidates faster because they already cleared
+the high-confidence bar.
+
+Confidence semantics:
+- `confidence` lives on each Learning file's frontmatter as a float in
+  `[0.0, 1.0]`. The PostToolUse hook sets it from the captured signal
+  (an explicit `<learning confidence="0.92">...` annotation, or a default
+  if the hook had no better signal).
+- The threshold is intentionally high (0.85) so that auto-ready candidates
+  are conservative. A single low-confidence entry in the cluster downgrades
+  the whole candidate to `status: candidate`.
+- The span requirement (default 7 days) prevents a single bad afternoon
+  of repeated failures from minting a high-confidence candidate. Real
+  recurring patterns show up across days, not minutes.
+
+A reasonable cadence is every 6 hours, run from cron or a launchd plist or
+the session-close cascade. The state file means most invocations are
+no-ops, so the cadence cost is negligible.
+
+## Decay: the demotion path
+
+The promotion path turns episodic captures into procedural candidates. The
+decay path catches procedural rules that have gone stale.
+`scripts/demote-stale-procedural.py` walks `Meta/Workflows/`,
+`Meta/Exceptions/`, and `Meta/Facts/`. For each entry it computes
+`(today - last_verified)`. When that value exceeds
+`--multiplier x freshness_days` (default multiplier 2) AND the entry shows
+signs of never having been confirmed working (empty `outcome`, no `pattern`
+field set), the script writes a demotion candidate to
+`<vault-root>/Meta/Demotion-Candidates/<sha8>.md`.
+
+The candidate frontmatter records:
+- `type` matching the source type (`workflow`, `exception`, or `fact`)
+- `memory_class: procedural`
+- `status: demotion-candidate`
+- `source_procedural_file` (path relative to the vault root)
+- `reason` (one of `stale-no-outcome`, `stale-no-pattern`)
+- `days_since_verified` (integer)
+
+Operator workflow:
+1. Read the candidate. Decide whether the rule is still alive.
+2. If alive: open the source file, set `last_verified` to today, optionally
+   fill in `outcome` or `pattern`. Delete the candidate.
+3. If decayed: change the source's `status` to `archived` (or move it to
+   an archive folder). Delete the candidate.
+
+The script never auto-deletes a source file. Human review is the only
+demotion gate, mirroring the promotion side.
+
+```
+python3 scripts/demote-stale-procedural.py \
+    --vault-root /path/to/vault \
+    --multiplier 2 \
+    --dry-run
+```
 
 ## Entity IDs cross-source linking
 
