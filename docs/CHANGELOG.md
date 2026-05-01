@@ -9,6 +9,54 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-01 — Catalect architecture: 5 primitives + memory runtime + integration test
+
+**Who this affects:** anyone using ai-brain-starter as a substrate for AI agents. Single users get richer typed memory and a queryable HTTP runtime; teams and operators get the connector pattern + autonomous synthesis + bi-temporal resolver as a foundation for company-brain workflows. Anyone who wanted the repo to demonstrate the full "company brain" primitive coverage from the catalect framing rather than just substrate.
+
+**The shape:** the catalect "company brain" architecture names 5 primitives. Before today the repo shipped only the substrate layer (vault as ground truth, typed memory at the schema level, deterministic hooks). Today closes the gap to all 5 primitives with a passing end-to-end integration test (11 steps green) and an honest scorecard of what shipped vs what is sequenced as follow-up.
+
+### What shipped
+
+- **Typed memory primitives.** Five new JSON Schemas at `templates/schemas/`: `fact.json`, `workflow.json`, `exception.json`, `relationship.json`, `outcome.json`. The three existing schemas (decision, journal, session) extended with the cross-type contract: `provenance`, `confidence`, `freshness_days`, `last_verified`, `source_count`, plus `memory_class` (episodic/procedural typology) and `entity_ids` (cross-source linking field for slack/github/notion/linear/gmail/whatsapp). Plus a sixth typed primitive: `skill.json`, which defines skills as structured executable objects rather than just markdown instructions.
+- **Memory runtime as REST API.** New `services/memory-api/` ships a read-only FastAPI app mirroring the `graph-query` MCP surface: 8 endpoints with bearer-token auth and an OpenAPI 3.1 spec. Generic `personal` / `team` scopes; operators rename per deployment.
+- **Bi-temporal resolver primitive.** New `templates/RESOLVER.md.template` + `scripts/resolver-build.py` aggregate active rules from `Meta/Decisions/`, `Meta/Workflows/`, `Meta/Exceptions/`, `Meta/Facts/`. `scripts/stale-rule-check.py` flags entries past their `freshness_days`. `scripts/proposed-update-drafter.py` annotates downstream files when a source rule changes. Vault git is transaction-time, frontmatter `decision_date` / `last_verified` / `observed_at` are validity-time.
+- **Structured agentic execution.** New `hooks/validate-skill-frontmatter.py` enforces `skill.json` shape at Write/Edit time. Three reference `SKILL.md` files updated (`diagnose`, `security-snapshot`, `setup-vault-types`) showing how to declare `tool_access`, `policy_constraints`, `required_inputs`, `output_shape`.
+- **Closed-loop learning.** New `hooks/post-tool-use-learnings.py` captures execution failures and explicit `<learning>` annotations as episodic memory at `Meta/Learnings/`. New `scripts/promote-episodic-to-procedural.py` clusters recurring episodic entries (3+) and drafts procedural-memory candidates at `Meta/Promotion-Candidates/`.
+- **Four new ingestion connectors.** `skills/ingest-github/`, `skills/ingest-notion/`, `skills/ingest-linear/`, `skills/ingest-gmail/` follow the proven `ingest-slack` pattern. Each writes typed external-input markdown with cross-source `entity_ids` baked in. `skills/_shared/connector_utils.py` extracts the duplicated logic (~480 lines across the six skills) into shared helpers.
+- **Two autonomous synthesizers + wiki maintainer.** `skills/synth-pr-to-sop/` reads merged-PR markdown and emits `workflow.json`-conforming SOPs. `skills/synth-thread-to-sop/` reads resolved Slack threads and classifies them as decision / exception / workflow with the right frontmatter. `scripts/ground-truth-wiki-maintain.py` regenerates wiki pages at `Meta/Wiki/<topic>.md` from typed memory, idempotent.
+- **Cross-cutting integration test.** `tests/integration/test_e2e_pipeline.py` exercises all five primitives end-to-end in 11 steps. Bare `python3 tests/integration/test_e2e_pipeline.py`, exit 0 on full pass. Verifies that ingest → synth → resolver → stale-check → promotion → wiki maintenance compose correctly with realistic synthetic data.
+- **Documentation.** `docs/AGENTS.md` is the technical positioning page for AI builders, with bi-temporal architecture section, primitive coverage scorecard (honest, 5-6/10), and build-standards compliance. `docs/DOGFOOD.md` names the vertical pattern thesis (operations as the wedge, not just notes). `docs/EXISTING-IMPL-AUDIT.md` is the per-source existing-implementation audit (per MCP Build Runbook Lesson #16) covering all four new connectors + two synthesizers.
+
+### Why this is the right fix
+
+The catalect "company brain" framing crystallized the architecture as a five-piece composition rather than one-piece "memory tool." Shipping all five primitives with a passing integration test demonstrates the substrate composes; agents reading and writing typed memory through one runtime is the wedge, not just the typed memory itself.
+
+Two alternatives considered and rejected:
+
+1. *Wait for an upstream "MCP-memory" standard before shipping.* The standard is still being defined. Shipping our own typed primitives with a documented schema (`templates/schemas/README.md`) means we adopt whatever crystallizes; without our own primitives there is nothing to bridge from.
+2. *Ship one primitive at a time across multiple drops.* Each primitive in isolation works but does not demonstrate composition. The integration test was what turned six isolated agent reports into actual end-to-end evidence the architecture holds.
+
+### Build standards compliance
+
+Per the operator's `Build Standards.md` + `MCP Build Runbook.md` runbooks (vault-internal). Today's build pass codified two new lessons in those runbooks (Lesson #22: read both runbooks BEFORE briefing parallel agents; Lesson #23: shared utils + integration test as Day-1 deliverables, not follow-up).
+
+Applied during this build: shared utilities extracted (`skills/_shared/connector_utils.py` saved 321 net lines across six skills); idempotent connectors verified; schema validation hooks at write time; personal-data scrub gate clean across all 56 new files; no em dashes; cross-type frontmatter contract populated on every connector write; integration test shipped as a deliverable.
+
+PRD: ChatPRD UUID `97b2c7ad-4c31-46d5-aa49-457006b47ba3`.
+
+### What's preserved
+
+All existing skills, hooks, schemas, scripts, the session-close cascade, the bootstrap, the install pipeline. Nothing renamed or removed. The new primitives compose with existing artifacts: `RESOLVER.md` aggregates entries that `aggregate-decisions.py` already rebuilds; `validate-skill-frontmatter.py` runs alongside existing hooks at write time; the new schemas are additive (existing journal/session/decision frontmatter still validates against their schemas, just with optional new fields available).
+
+### Migration paths
+
+- **New users via `bootstrap.sh`:** automatic. New templates + scripts + hooks land in fresh installs.
+- **Existing users on `git pull`:** the new architecture is additive. The three existing schemas gained new optional fields; existing entries continue to validate. New typed primitives (`fact`, `workflow`, `exception`, `relationship`, `outcome`, `skill`) are opt-in: write entries against them when ready.
+- **Activating new hooks (opt-in):** `hooks/validate-skill-frontmatter.py` and `hooks/post-tool-use-learnings.py` ship in the public repo but are not auto-registered in user `settings.json`. To activate, link into `~/.claude/hooks/` and add the hook entries to `settings.json` under `PreToolUse` (validator) + `PostToolUse` (learnings) respectively.
+- **Trying the runtime:** `cd services/memory-api/ && pip install -r requirements.txt && cp .env.example .env && uvicorn app:app --port 8765`. Curl `/openapi.json` for the spec, `/healthz` for liveness, `/search?query=test&scope=personal` for a query (returns 404 if no graph.json is configured, which is fine).
+
+---
+
 ## 2026-04-30 — Hooks now install at USER level (closes #6, fires universally in worktrees)
 
 **Who this affects:** anyone whose Claude Code work happens in git worktrees (most active users do, since each `claude/<branch>` worktree is how feature work is isolated).
