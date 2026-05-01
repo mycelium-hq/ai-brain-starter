@@ -223,6 +223,7 @@ Built for founders. The people running a company and a life, carrying a dozen co
 
 ## Deeper Documentation
 
+- **[`RELIABILITY_MANIFESTO.md`](RELIABILITY_MANIFESTO.md)** — the five architectural pillars (vault as ground truth, hooks as deterministic guards, rule extraction, decision-outcome trail, session-close cascade) and the five failure modes they prevent (hallucination, silent failure, cold start, drift, knowledge loss). Read this if you want to understand why the system is shaped the way it is.
 - **[`docs/POWER_TOOLS.md`](docs/POWER_TOOLS.md)** — every third-party skill, MCP server, and Obsidian plugin, with attribution and source links
 - **[`docs/MEMORY_SYSTEM.md`](docs/MEMORY_SYSTEM.md)** — how Claude accumulates knowledge across sessions using typed memories
 - **[`docs/TOKEN_OPTIMIZATION.md`](docs/TOKEN_OPTIMIZATION.md)** — how to stop burning tokens on overhead: compress Claude-facing files, cap memory, route cheap work to cheap models
