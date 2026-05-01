@@ -266,7 +266,7 @@ Deferred for follow-up builds, named so they do not get lost:
 
 - Existing-implementation audit at `docs/EXISTING-IMPL-AUDIT.md`. Per-source audit deferred to per-source PRDs when each connector hits load.
 - Full API surface scan deferred to per-source PRDs. The four connectors shipped here use minimal-viable endpoint coverage.
-- Integration tests at `tests/integration/`. Smoke tests live alongside each component today; the cross-cutting integration suite lands in a follow-up build.
+- Integration test suite at `tests/integration/test_e2e_pipeline.py`. Cross-cutting end-to-end suite shipped today: 11 steps exercising all five primitives in sequence, exit 0 on full pass. Per-component smoke tests live alongside each component as well. Load-testing across multiple operators and parallel-ingest stress lands in a follow-up build.
 
 ## Building with this
 
