@@ -1,7 +1,38 @@
 ---
+type: skill
 name: security-snapshot
 description: Generate a client-ready security hygiene snapshot for a prospect domain. Free lead magnet for consulting practices. Outputs a markdown report covering SSL/TLS grade, HTTP security headers, email authentication (SPF/DMARC), and server fingerprint leaks. Use when the user says /security-snapshot, /snapshot [domain], "run a security check on X", or "generate a security report for [company]". Do NOT use for penetration testing, internal infrastructure audits, or application-layer vulnerability assessment. This is a passive, unauthenticated scan for conversation-starter value, not a full audit.
 argument-hint: "<domain> [--company 'Display Name']"
+tool_access:
+  - Bash
+  - Read
+  - Write
+policy_constraints:
+  - rule: Only run passive, unauthenticated scans against the public-facing domain
+    exception_handling: Refuse to run if the request implies authenticated probing or penetration testing
+  - rule: Never store credentials or PII in the report or output directory
+    exception_handling: Strip any unexpected credential-shaped strings before writing the markdown file
+  - rule: Cap external API usage to the documented endpoints (SSL Labs, public DNS lookups, headers fetch)
+    exception_handling: Abort and report partial results if a required endpoint is unavailable rather than fall back to an undocumented service
+required_inputs:
+  - name: domain
+    type: string
+    required: true
+    description: The public domain to scan (e.g. example.com). Must resolve via public DNS.
+  - name: company
+    type: string
+    required: false
+    description: Display name for the company, used in the report header. Defaults to the domain.
+output_shape:
+  format: markdown-file
+  fields:
+    report_path: absolute path to the saved markdown report
+    sections:
+      - ssl_tls_grade
+      - http_security_headers
+      - email_authentication
+      - server_fingerprint
+    summary_grade: overall hygiene grade (A through F) printed to stdout
 ---
 
 When the user types /security-snapshot [domain] or asks for a security check on a prospect, run the security snapshot generator and deliver a client-ready report.

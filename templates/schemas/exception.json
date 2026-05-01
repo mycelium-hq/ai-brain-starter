@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Exception frontmatter",
+  "type": "object",
+  "_comment": "Schema for exception primitives. An exception is a documented deviation from a workflow, fact, or rule, with the conditions under which the deviation applies. Downstream consumers (workflow consumers, audit reviewers, future exception-rebuild aggregator) depend on these fields. Malformed YAML hides the exception from automation, which can re-cause the underlying defect. Includes the cross-type frontmatter contract (provenance, confidence, freshness_days, last_verified, source_count, memory_class, entity_ids) shared across all 8 typed memory primitives. memory_class default for exception is procedural. entity_ids cross-source linking (slack, github_pr, github_issue, jira, notion, gmail, linear).",
+  "required": ["type", "exception_summary"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "exception"
+    },
+    "rule_id": {
+      "type": ["string", "null"],
+      "description": "Pointer to the workflow, fact, or rule the exception deviates from. Free-form id or wikilink target."
+    },
+    "exception_summary": {
+      "type": "string",
+      "description": "One-sentence description of the exception and when it applies."
+    },
+    "frequency_observed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Count of times this exception has been observed."
+    },
+    "owner": {
+      "type": ["string", "null"],
+      "description": "Person or role who carries the exception."
+    },
+    "approved_by": {
+      "type": ["string", "null"],
+      "description": "Person or role who approved the deviation."
+    },
+    "provenance": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source_type": {
+            "type": "string",
+            "enum": ["slack", "email", "notion", "gdoc", "whatsapp", "calendar", "claude-session", "manual"]
+          },
+          "source_id": {"type": "string"},
+          "source_url": {"type": "string"},
+          "captured_at": {"type": "string"}
+        }
+      }
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "freshness_days": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "last_verified": {
+      "type": "string"
+    },
+    "source_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "memory_class": {
+      "type": "string",
+      "enum": ["episodic", "procedural"],
+      "description": "Episodic captures one-time events; procedural captures repeatable, time-stable knowledge. Default for exception is procedural."
+    },
+    "entity_ids": {
+      "type": "object",
+      "additionalProperties": {"type": "string"},
+      "description": "Cross-source identifiers. Keys: slack, github_pr, github_issue, jira, notion, gmail, linear. Values: source-system IDs."
+    }
+  },
+  "additionalProperties": true
+}

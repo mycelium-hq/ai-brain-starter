@@ -1,0 +1,125 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Workflow frontmatter",
+  "type": "object",
+  "_comment": "Schema for workflow primitives. A workflow is a named, repeatable process: ordered steps, owners, approvals, handoffs, failure modes, edge cases. Downstream consumers (runbook generators, agent task planners, future workflow-rebuild aggregator) depend on these fields. Malformed YAML silently drops the workflow from automation. Includes the cross-type frontmatter contract (provenance, confidence, freshness_days, last_verified, source_count, memory_class, entity_ids) shared across all 8 typed memory primitives. memory_class default for workflow is procedural. entity_ids cross-source linking (slack, github_pr, github_issue, jira, notion, gmail, linear).",
+  "required": ["type", "name"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "workflow"
+    },
+    "name": {
+      "type": "string",
+      "description": "Short, human-readable workflow name."
+    },
+    "owner": {
+      "type": ["string", "null"],
+      "description": "Person or role accountable for the workflow as a whole."
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "step_number": {"type": "integer", "minimum": 1},
+          "description": {"type": "string"},
+          "owner": {"type": "string"},
+          "expected_duration": {
+            "type": "string",
+            "description": "Free-form duration (e.g. '15 minutes', '1 business day')."
+          }
+        }
+      },
+      "description": "Ordered list of steps in the workflow."
+    },
+    "approvals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "approver": {"type": "string"},
+          "condition": {"type": "string"}
+        }
+      },
+      "description": "Approval gates required to advance the workflow."
+    },
+    "handoffs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "from": {"type": "string"},
+          "to": {"type": "string"},
+          "trigger": {"type": "string"}
+        }
+      },
+      "description": "Transitions between owners, with the event that triggers each transition."
+    },
+    "failure_modes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "mode": {"type": "string"},
+          "mitigation": {"type": "string"}
+        }
+      },
+      "description": "Known ways the workflow fails, paired with the documented mitigation."
+    },
+    "edge_cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "case": {"type": "string"},
+          "branch": {"type": "string"}
+        }
+      },
+      "description": "Atypical inputs and the branch the workflow takes for each."
+    },
+    "provenance": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source_type": {
+            "type": "string",
+            "enum": ["slack", "email", "notion", "gdoc", "whatsapp", "calendar", "claude-session", "manual"]
+          },
+          "source_id": {"type": "string"},
+          "source_url": {"type": "string"},
+          "captured_at": {"type": "string"}
+        }
+      }
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "freshness_days": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "last_verified": {
+      "type": "string",
+      "description": "ISO 8601 date when the workflow was last confirmed."
+    },
+    "source_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "memory_class": {
+      "type": "string",
+      "enum": ["episodic", "procedural"],
+      "description": "Episodic captures one-time events; procedural captures repeatable, time-stable knowledge. Default for workflow is procedural."
+    },
+    "entity_ids": {
+      "type": "object",
+      "additionalProperties": {"type": "string"},
+      "description": "Cross-source identifiers. Keys: slack, github_pr, github_issue, jira, notion, gmail, linear. Values: source-system IDs."
+    }
+  },
+  "additionalProperties": true
+}

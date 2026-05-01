@@ -1,0 +1,77 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Outcome frontmatter",
+  "type": "object",
+  "_comment": "Schema for outcome primitives. An outcome is the observed result of a previously logged decision: what actually happened, how it compared to expectation, and what was learned. Downstream consumers (decision retrospective, /patterns, future outcome-rebuild aggregator) depend on these fields. Malformed YAML breaks the decision-to-outcome join. Includes the cross-type frontmatter contract (provenance, confidence, freshness_days, last_verified, source_count, memory_class, entity_ids) shared across all 8 typed memory primitives. memory_class default for outcome is episodic. entity_ids cross-source linking (slack, github_pr, github_issue, jira, notion, gmail, linear).",
+  "required": ["type", "decision_id"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "outcome"
+    },
+    "decision_id": {
+      "type": "string",
+      "description": "Pointer to the decision file this outcome resolves. Filename, wikilink target, or stable id."
+    },
+    "observed_at": {
+      "type": "string",
+      "description": "ISO 8601 timestamp when the outcome was observed."
+    },
+    "observed_outcome": {
+      "type": "string",
+      "description": "What actually happened, in plain prose."
+    },
+    "vs_expected": {
+      "type": "string",
+      "enum": ["better", "worse", "as-expected", "unclear"],
+      "description": "How the observed outcome compared to the expectation logged at decision time."
+    },
+    "lessons_learned": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Distilled lessons, one per array entry."
+    },
+    "provenance": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source_type": {
+            "type": "string",
+            "enum": ["slack", "email", "notion", "gdoc", "whatsapp", "calendar", "claude-session", "manual"]
+          },
+          "source_id": {"type": "string"},
+          "source_url": {"type": "string"},
+          "captured_at": {"type": "string"}
+        }
+      }
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "freshness_days": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "last_verified": {
+      "type": "string"
+    },
+    "source_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "memory_class": {
+      "type": "string",
+      "enum": ["episodic", "procedural"],
+      "description": "Episodic captures one-time events; procedural captures repeatable, time-stable knowledge. Default for outcome is episodic."
+    },
+    "entity_ids": {
+      "type": "object",
+      "additionalProperties": {"type": "string"},
+      "description": "Cross-source identifiers. Keys: slack, github_pr, github_issue, jira, notion, gmail, linear. Values: source-system IDs."
+    }
+  },
+  "additionalProperties": true
+}

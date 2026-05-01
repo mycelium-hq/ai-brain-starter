@@ -6,9 +6,15 @@
 
 A founder's job is to carry context other people cannot carry. Investor relationships. Board decisions. Team dynamics. Contractor handoffs. And the parts of a life that do not fit inside a company: the book draft, the consulting clients on the side, the friends you want to keep close, the kids' schedules, the side projects that aren't the company. The patterns inside your own thinking that compound quietly into wins, or quietly into drift.
 
-Most AI tools handle tasks. This is the operating system that handles the context. All of it, not just the company's.
+Most AI tools handle tasks. This is the operating system that handles the context: a second brain for the founder, with the architecture to become the company's. All of it, not just the company's.
 
 No more re-explaining who you are, what you are building, or everything else you are holding in parallel. No more insights lost to chat transcripts. No more decisions you cannot find when you need them. Every session compounds. Every meeting becomes memory. Every pattern surfaces before it becomes a problem.
+
+**Why now.** AI agents stopped being demos and started being colleagues. They work brilliantly inside a session and lose everything between sessions, between tools, between teammates. Memory is the wall. This is the substrate that gets agents past the wall: vault as ground truth, hooks as deterministic guards, decisions logged with outcomes, sessions that compound instead of resetting. Five architectural pillars, four AI-agent failure modes prevented. Read the [Reliability Manifesto](RELIABILITY_MANIFESTO.md).
+
+**Used by** the founder who built this, running an active startup, an AI consulting practice, two long-form writing projects, and twelve years of journals on the same brain. New installs each week through the consulting practice.
+
+**Free to install. Free to run.** Your Claude subscription is the inference. No vector database to provision, no fine-tune to run, no per-seat license. The vault is on your disk; the substrate is in your repo.
 
 > **Want the team version installed?** I do this with a small number of founders each quarter: vault architecture mapped to your business, MCP integrations with your stack, knowledge graph densification across your existing notes, async training. Free 20-minute diagnostic at [diazroa.com](https://diazroa.com).
 

@@ -1,8 +1,37 @@
 ---
+type: skill
 name: setup-vault-types
-description: Interactive wizard to configure which document types your vault uses. Asks the user what kinds of notes they take (journals, books, meetings, clients, podcasts, etc.), enables the matching extractors, and scaffolds extractors for custom types. Run once after installing ai-brain-starter, and again whenever you add a new kind of doc. Do NOT use this to run extraction — use /second-brain-mapping.
+description: Interactive wizard to configure which document types your vault uses. Asks the user what kinds of notes they take (journals, books, meetings, clients, podcasts, etc.), enables the matching extractors, and scaffolds extractors for custom types. Run once after installing ai-brain-starter, and again whenever you add a new kind of doc. Do NOT use this to run extraction. Use /second-brain-mapping for that.
 trigger: /setup-vault-types
 argument-hint: "[--add <typename> | --list | --remove <typename>]"
+tool_access:
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Bash
+policy_constraints:
+  - rule: Never delete an extractor file the user has customized
+    exception_handling: If the user requests removal of a customized extractor, prompt for explicit confirmation before deleting
+  - rule: Never enable an extractor whose target type the user did not confirm
+    exception_handling: List the type and ask the user to confirm before enabling
+  - rule: When scaffolding a new extractor, write to the extractors directory only
+    exception_handling: Refuse to write outside the extractors path even if a path argument suggests it
+required_inputs:
+  - name: mode
+    type: string
+    required: false
+    description: One of --add, --list, --remove. If omitted, runs interactive wizard mode.
+  - name: typename
+    type: string
+    required: false
+    description: Extractor type slug. Required when mode is --add or --remove.
+output_shape:
+  format: terminal-report
+  fields:
+    enabled_types: list of extractor type slugs now enabled in the vault
+    scaffolded_types: list of new extractor files written, with their paths
+    summary_line: one-line confirmation of what changed
 ---
 
 # /setup-vault-types

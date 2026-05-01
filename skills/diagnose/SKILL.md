@@ -1,8 +1,32 @@
 ---
+type: skill
 name: diagnose
 description: Run a self-check against an installed AI Brain Starter vault. Verifies CLAUDE.md, Meta folder, skills, hooks, journal index, MCPs, .ps1 BOM/em-dash hazards, and ai-brain-starter freshness. Prints a green/yellow/red report. Run any time something feels off, or after a git pull, or when onboarding someone else's vault.
 trigger: /diagnose
 argument-hint: "[vault path, defaults to $VAULT_PATH or current directory]"
+tool_access:
+  - Bash
+  - Read
+  - Glob
+  - Grep
+policy_constraints:
+  - rule: Never modify vault files; this is a read-only self-check
+    exception_handling: Surface the issue to the user with a remediation hint, do not auto-fix
+  - rule: Never write findings outside the user's terminal report
+    exception_handling: Print to stdout only; no log files or vault writes
+  - rule: Treat missing CLAUDE.md, missing Meta folder, or stale journal index as red findings, not silent skips
+    exception_handling: Emit a red status row naming the missing artifact
+required_inputs:
+  - name: vault_path
+    type: path
+    required: false
+    description: Path to the vault root. Defaults to $VAULT_PATH env var or current working directory.
+output_shape:
+  format: terminal-report
+  fields:
+    status_rows: list of {check_name, color (green/yellow/red), detail}
+    summary_line: one-line overall health status
+    exit_code: 0 if all green, 1 if any yellow, 2 if any red
 ---
 
 # /diagnose

@@ -1,0 +1,119 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Skill frontmatter",
+  "type": "object",
+  "_comment": "Schema for skill primitives. A skill is a STRUCTURED executable object, not just SKILL.md prose. Declares tool_access (allowed tools), policy_constraints (rules + exception handling), required_inputs (what callers must pass), and output_shape (what callers receive). Validator: hooks/validate-skill-frontmatter.py blocks malformed Write/Edit at skills/**/SKILL.md. Bypass: SKILL_VALIDATION_BYPASS=1. Includes the cross-type frontmatter contract (provenance, confidence, freshness_days, last_verified, source_count) shared across all 6 typed memory primitives.",
+  "required": ["type", "name"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "skill"
+    },
+    "name": {
+      "type": "string",
+      "description": "Slug-style skill name (matches the skill folder name)."
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable summary used for skill discovery."
+    },
+    "trigger": {
+      "type": "string",
+      "description": "Slash command or invocation hint (e.g. '/diagnose')."
+    },
+    "argument-hint": {
+      "type": "string",
+      "description": "Free-form hint shown to the user about expected arguments."
+    },
+    "tool_access": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Whitelist of tool names this skill is permitted to call. Empty array means the skill takes no tool actions (pure prose/analysis). Names match the canonical tool ids (Read, Write, Edit, Bash, Grep, Glob, etc.) or MCP tool ids (mcp__server__tool)."
+    },
+    "policy_constraints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["rule"],
+        "properties": {
+          "rule": {
+            "type": "string",
+            "description": "A single constraint expressed as an imperative (e.g. 'Never write to public repos without scrub')."
+          },
+          "exception_handling": {
+            "type": "string",
+            "description": "What the skill does when the rule would be violated (e.g. 'abort and surface to user', 'fall back to dry-run')."
+          }
+        }
+      },
+      "description": "Hard rules the skill must respect. Paired with the failure path so callers and reviewers know what happens at the edge."
+    },
+    "required_inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "type"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Input parameter name."
+          },
+          "type": {
+            "type": "string",
+            "description": "Type hint (string, integer, path, url, list, etc.). Free-form for now; tighten later."
+          },
+          "required": {
+            "type": "boolean",
+            "description": "True if the skill cannot run without it."
+          },
+          "description": {
+            "type": "string",
+            "description": "What this input means to the skill."
+          }
+        }
+      },
+      "description": "Inputs the caller must (or may) supply. A skill with no inputs uses an empty array."
+    },
+    "output_shape": {
+      "type": "object",
+      "description": "Recommended description of what the skill returns. Free-form for now: callers benefit from any structure (keys, types, example), and the schema does not enforce a fixed shape so different skills can document return values that range from a markdown report to a JSON record. Tighten in a future revision."
+    },
+    "provenance": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source_type": {
+            "type": "string",
+            "enum": ["slack", "email", "notion", "gdoc", "whatsapp", "calendar", "claude-session", "manual"]
+          },
+          "source_id": {"type": "string"},
+          "source_url": {"type": "string"},
+          "captured_at": {"type": "string"}
+        }
+      },
+      "description": "List of independent sources that back this skill definition."
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "How sure the system is the skill definition is accurate, 0.0 to 1.0."
+    },
+    "freshness_days": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "How many days the skill definition stays fresh before re-verification is recommended."
+    },
+    "last_verified": {
+      "type": "string",
+      "description": "ISO 8601 date when the skill was last confirmed."
+    },
+    "source_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "How many independent sources back this skill definition."
+    }
+  },
+  "additionalProperties": true
+}

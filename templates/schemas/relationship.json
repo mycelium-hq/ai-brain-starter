@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Relationship frontmatter",
+  "type": "object",
+  "_comment": "Schema for relationship primitives. A relationship is a directed link between two entities (people, companies, projects) with a typed kind and a strength signal. Downstream consumers (graph builder, second-brain-mapping, future relationship-rebuild aggregator) depend on these fields. Malformed YAML drops the edge from the graph. Includes the cross-type frontmatter contract (provenance, confidence, freshness_days, last_verified, source_count, memory_class, entity_ids) shared across all 8 typed memory primitives. memory_class default for relationship is procedural. entity_ids cross-source linking (slack, github_pr, github_issue, jira, notion, gmail, linear).",
+  "required": ["type", "source_entity", "target_entity"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "relationship"
+    },
+    "source_entity": {
+      "type": "string",
+      "description": "The entity the relationship originates from (person, company, or project name, or wikilink target)."
+    },
+    "target_entity": {
+      "type": "string",
+      "description": "The entity the relationship points to."
+    },
+    "relationship_kind": {
+      "type": "string",
+      "enum": ["reports_to", "owns", "blocks", "depends_on", "knows", "advises", "mentions", "colocated", "other"],
+      "description": "Typed kind of relationship. Use 'other' only when none of the named kinds fit."
+    },
+    "strength": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Strength of the relationship, 0.0 (weakest) to 1.0 (strongest)."
+    },
+    "provenance": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source_type": {
+            "type": "string",
+            "enum": ["slack", "email", "notion", "gdoc", "whatsapp", "calendar", "claude-session", "manual"]
+          },
+          "source_id": {"type": "string"},
+          "source_url": {"type": "string"},
+          "captured_at": {"type": "string"}
+        }
+      }
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "freshness_days": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "last_verified": {
+      "type": "string"
+    },
+    "source_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "memory_class": {
+      "type": "string",
+      "enum": ["episodic", "procedural"],
+      "description": "Episodic captures one-time events; procedural captures repeatable, time-stable knowledge. Default for relationship is procedural."
+    },
+    "entity_ids": {
+      "type": "object",
+      "additionalProperties": {"type": "string"},
+      "description": "Cross-source identifiers. Keys: slack, github_pr, github_issue, jira, notion, gmail, linear. Values: source-system IDs."
+    }
+  },
+  "additionalProperties": true
+}
