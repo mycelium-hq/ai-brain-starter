@@ -19,7 +19,7 @@
           },
           {
             "type": "command",
-            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"SESSION START: CLAUDE.md is already auto-loaded in your system prompt (do NOT re-read it). Read these two files: 1) ⚙️ Meta/Last Session.md 2) ⚙️ Meta/Current Priorities.md.\\n\\nALWAYS-ACTIVE RULES (apply every session, every message, regardless of work type):\\n- Advisory panel: CLAUDE.md already contains the trigger rule. At ANY judgment moment (decisions, strategy, crises, trade-offs, client problems, cash flow, legal, fundraising), read advisory-panel.md and bring 3-5 voices BEFORE responding. Do not wait to be asked.\\n- Efficiency rules (⚙️ Meta/rules/efficiency.md): Contains 29 rules including panel triggers, model routing, never-fabricate, humanizer, math/counting rules. Read on first session message.\\n\\nCONDITIONAL RULES (read when doing that type of work):\\n- obsidian.md for vault edits\\n- graphify.md for graph questions\\n- tool-routing.md for task routing\\n- meeting-workflow.md for meetings\\n\\nSESSION CLOSE: When the user says bye/done/thanks-thats-all/good-night/ttyl/wrapping-up (or equivalent in any language), the detect-closing-signal.py hook fires automatically and injects the full cascade with pre-resolved paths. Trust the injected context, don't re-read separate rule files.\\n\\nGRAPH ROUTING: If your vault has a knowledge graph, pick the right graph for the question scope BEFORE drilling into source files. Use /graphify query for targeted lookups instead of reading full reports. The keyword-triggered graph-context-hook.sh (if installed) will fire a second routing reminder with freshness info.\"}}'",
+            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/session-start-context.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "once": true,
             "statusMessage": "Loading session context..."
           },
@@ -60,7 +60,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo '{\"continue\":true,\"systemMessage\":\"BEFORE COMPACTING: You are about to lose context. Before compaction proceeds, update ⚙️ Meta/Last Session.md with: what was done, what is pending, and any decisions made. VERBATIM RULE: For commitments (by anyone), preserve EXACT words used — not summaries. For key decisions, keep the original reasoning phrasing. Also preserve file paths and specific details you will need after compaction. Save any non-obvious technical discoveries as memory files (type: discovery).\"}'",
+            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/pre-compact-context.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Preserving session context before compaction..."
           }
         ]
