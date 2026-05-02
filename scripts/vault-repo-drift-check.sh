@@ -124,8 +124,8 @@ if [ -d "$VAULT/.obsidian/plugins" ]; then
     plugin_name=$(basename "$plugin_dir")
     rel="obsidian-plugin:$plugin_name"
     is_ignored "$rel" && continue
-    # Check if plugin is in the SKILL.md auto-install list
-    if ! grep -q "\"$plugin_name\"" "$REPO_ROOT/SKILL.md" 2>/dev/null; then
+    # Check if plugin is in the SKILL.md or any phases/*.md auto-install list.
+    if ! grep -rq "\"$plugin_name\"" "$REPO_ROOT/SKILL.md" "$REPO_ROOT/phases/" 2>/dev/null; then
       echo "  DRIFT: Obsidian plugin $plugin_name installed but not in repo auto-install"
       DRIFT_FOUND=1
     fi
