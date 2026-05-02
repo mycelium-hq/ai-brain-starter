@@ -10,6 +10,8 @@ The schemas are deliberately permissive: every schema sets `additionalProperties
 
 A logged choice point: what was decided, when, at what stakes, at what speed. Lives in `⚙️ Meta/Decisions/`. Each decision file is a small, append-only record. The decision retrospective and `/patterns` skill both query this set. Outcome is left blank at write time and filled in later, which is what makes the decision-outcome trail (manifesto pillar 4) work.
 
+**Field-specific note: `floor`.** The `floor` field is `oneOf [int 1-34, string]` per the schema. `null` is NOT allowed; downstream linters will reject Edit operations on files that have `floor: null`. If a decision is architectural, strategic, or otherwise not tied to the emotional High-Rise framework, OMIT the `floor` field entirely rather than setting it to null. The same rule applies to `journal` and `session` schemas where they reference floor. Codified 2026-05-02 after three 2026-05-01 decision files used `floor: null` and blocked subsequent Edits behind the vault linter until manually stripped.
+
 ### journal
 
 A daily entry. Lives in `📓 Journals/`. Carries floor, energy, mood, and tags. Consumed by `journal-index.json`, the `insights` skill (weekly and monthly digests), and the graph builder.
