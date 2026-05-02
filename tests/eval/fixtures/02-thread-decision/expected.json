@@ -1,0 +1,22 @@
+{
+  "synth": "thread",
+  "type": "decision",
+  "frontmatter_must_have": [
+    "type",
+    "memory_class",
+    "sha8",
+    "creationDate",
+    "provenance",
+    "source_thread_url"
+  ],
+  "expected_field_values": {
+    "type": "decision",
+    "memory_class": "episodic"
+  },
+  "body_keywords": [
+    "five",
+    "pricing",
+    "decision",
+    "tier"
+  ]
+}

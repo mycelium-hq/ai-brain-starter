@@ -263,3 +263,61 @@ amplifies noise (transient errors, environmental flakes, one-off network
 hiccups) into spurious procedural rules. With it, the loop captures the
 real, recurring failure modes and converts them into stable knowledge the
 agent can apply on the next run.
+
+## Daemon mode (added 2026-05-02)
+
+The hourly `cron` entry that runs `promote-episodic-to-procedural.py` has
+up to 1 hour of latency. For operators who tune the loop in real time and
+want the resolver to see new procedural rules within seconds of capture,
+the repo now ships a long-running daemon at
+`scripts/closed-loop-daemon.py`.
+
+The daemon watches `<vault>/⚙️ Meta/Learnings/` (path configurable via
+`--meta-dir-name`). On every new `.md` file it runs the same promote
+script with `--quiet`. Two backends:
+
+1. **`watchdog`-based** (default if installed): inotify on Linux, FSEvents
+   on macOS. Latency = milliseconds. Install: `pip install watchdog`.
+2. **Stat-poll fallback** (zero deps): polls every 30 seconds. Latency =
+   up to 30s. Force this with `--use-polling`.
+
+Crash protection: a single-instance pidfile at
+`<vault>/⚙️ Meta/.closed-loop-daemon.pid`. Restarting the daemon while
+the previous PID is still alive errors out with exit 3, so launchd
+respawns and pidfile races stay safe.
+
+### macOS launchd install
+
+A launchd plist template ships at
+`templates/launchd/com.abs.closed-loop-daemon.plist.template`. The script
+`scripts/install-closed-loop-daemon.sh /abs/path/to/vault` substitutes
+operator paths, drops the plist into `~/Library/LaunchAgents/`, loads
+it, and starts the agent. Logs land at
+`~/.local/state/ai-brain-starter/closed-loop-daemon.{out,err}.log`.
+
+```bash
+./scripts/install-closed-loop-daemon.sh /Users/me/Desktop/MyVault
+```
+
+Stop with:
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.abs.closed-loop-daemon.plist
+```
+
+### Linux systemd
+
+For Linux operators: write a systemd user unit pointing at
+`closed-loop-daemon.py`. The polling backend works without `watchdog`,
+but installing it gives inotify latency.
+
+### When to use which
+
+- Default to the **hourly cron** entry. It is zero-config, runs without
+  a long-lived process, and the 1-hour latency is acceptable for most
+  operators who batch their Claude Code sessions.
+- Switch to the **daemon** when you tune the loop in real time and want
+  the resolver to surface new rules within seconds of capture.
+- Run **both** if you want belt-and-suspenders: the daemon catches
+  real-time captures, and the cron sweeps anything the daemon missed
+  (e.g. files created while the daemon was offline).

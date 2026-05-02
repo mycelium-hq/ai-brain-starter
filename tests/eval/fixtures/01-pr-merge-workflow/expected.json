@@ -1,0 +1,27 @@
+{
+  "synth": "pr",
+  "type": "workflow",
+  "frontmatter_must_have": [
+    "type",
+    "name",
+    "steps",
+    "source_pr_id",
+    "sha8",
+    "memory_class",
+    "creationDate",
+    "provenance"
+  ],
+  "expected_field_values": {
+    "type": "workflow",
+    "memory_class": "procedural",
+    "source_pr_id": "88"
+  },
+  "body_keywords": [
+    "idempotent",
+    "sha8",
+    "hand_edited",
+    "provenance",
+    "source"
+  ],
+  "min_step_count": 4
+}

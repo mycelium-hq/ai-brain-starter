@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  com.abs.closed-loop-daemon.plist.template
+
+  macOS launchd template for ai-brain-starter's closed-loop daemon.
+
+  Replace the three placeholders below with absolute paths on your machine,
+  then drop the rendered file at ~/Library/LaunchAgents/ and load with
+  `launchctl load`. The install script at scripts/install-closed-loop-daemon.sh
+  does both substitution and load in one step.
+
+  Placeholders:
+    {{REPO_ROOT}}    absolute path to the ai-brain-starter clone
+                     example: /Users/me/Desktop/ai-brain-starter
+    {{VAULT_ROOT}}   absolute path to the operator's vault
+                     example: /Users/me/Desktop/MyVault
+    {{LOG_DIR}}      absolute directory for stdout/stderr logs
+                     example: /Users/me/.local/state/ai-brain-starter
+
+  After the file lands at ~/Library/LaunchAgents/, run:
+    launchctl load ~/Library/LaunchAgents/com.abs.closed-loop-daemon.plist
+    launchctl start com.abs.closed-loop-daemon
+  Stop with:
+    launchctl stop com.abs.closed-loop-daemon
+    launchctl unload ~/Library/LaunchAgents/com.abs.closed-loop-daemon.plist
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.abs.closed-loop-daemon</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>{{REPO_ROOT}}/scripts/closed-loop-daemon.py</string>
+        <string>--vault-root</string>
+        <string>{{VAULT_ROOT}}</string>
+    </array>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>{{LOG_DIR}}/closed-loop-daemon.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>{{LOG_DIR}}/closed-loop-daemon.err.log</string>
+
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+</dict>
+</plist>

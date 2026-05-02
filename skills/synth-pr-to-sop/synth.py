@@ -38,6 +38,7 @@ from connector_utils import (
     split_frontmatter,
     write_typed_memory,
 )
+import llm_synth  # noqa: E402  (only imported when --use-llm is set; safe to import unconditionally — graceful when deps missing)
 
 
 PR_ID_PATTERNS = [
@@ -201,13 +202,45 @@ def build_entity_mentions(
     return out
 
 
-def synth_one(pr_path: Path, vault_root: Path, dry_run: bool, force: bool) -> Path | None:
+def synth_one(pr_path: Path, vault_root: Path, dry_run: bool, force: bool, use_llm: bool = False) -> Path | None:
     text = read_pr_markdown(pr_path)
     _meta_in, body = split_frontmatter(text)
     pr_id = extract_pr_id(text, pr_path.name)
     title = extract_title(text, pr_path.stem)
     steps = parse_steps(body or text)
     topic = detect_topic(text, body or text)
+
+    llm_summary = None
+    if use_llm:
+        refined, err = llm_synth.refine_extraction(
+            raw_text=body or text,
+            memory_type="workflow",
+            kind="merged GitHub PR",
+        )
+        if err:
+            print(f"[--use-llm warning] {err}; falling back to heuristic only", file=sys.stderr)
+        elif refined:
+            if isinstance(refined.get("title"), str) and refined["title"].strip():
+                title = refined["title"].strip()
+            llm_steps = refined.get("steps")
+            if isinstance(llm_steps, list) and llm_steps:
+                cleaned: list[dict[str, Any]] = []
+                for i, raw in enumerate(llm_steps[:20], start=1):
+                    if not isinstance(raw, dict):
+                        continue
+                    desc = raw.get("description") or raw.get("text")
+                    if not isinstance(desc, str) or not desc.strip():
+                        continue
+                    step: dict[str, Any] = {
+                        "step_number": int(raw.get("step_number") or i),
+                        "description": desc.strip(),
+                    }
+                    if raw.get("owner"):
+                        step["owner"] = str(raw["owner"]).lstrip("@")
+                    cleaned.append(step)
+                if cleaned:
+                    steps = cleaned
+            llm_summary = refined.get("summary") if isinstance(refined.get("summary"), str) else None
 
     file_sha = sha8(pr_id)
     out_path = vault_root / "Meta" / "Workflows" / f"{file_sha}.md"
@@ -248,6 +281,11 @@ def synth_one(pr_path: Path, vault_root: Path, dry_run: bool, force: bool) -> Pa
         meta_out["entity_mentions"] = entity_mentions
     if topic:
         meta_out["topic"] = topic
+    if llm_summary:
+        meta_out["llm_summary"] = llm_summary
+        meta_out["synthesis_mode"] = "llm-refined"
+    else:
+        meta_out["synthesis_mode"] = "heuristic"
 
     body_out = build_body(title, steps, pr_id, pr_path)
 
@@ -274,6 +312,11 @@ def main() -> int:
     parser.add_argument("--vault-root", type=Path, default=Path.cwd())
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--force", action="store_true", help="Overwrite hand-edited files")
+    parser.add_argument(
+        "--use-llm",
+        action="store_true",
+        help="Refine extraction via Anthropic API (claude-haiku-4-5). Requires `pip install anthropic` and ANTHROPIC_API_KEY. Default off; heuristic-only.",
+    )
     args = parser.parse_args()
 
     if not args.pr_path.exists():
@@ -290,7 +333,7 @@ def main() -> int:
 
     written = 0
     for t in targets:
-        result = synth_one(t, args.vault_root, args.dry_run, args.force)
+        result = synth_one(t, args.vault_root, args.dry_run, args.force, use_llm=args.use_llm)
         if result is not None:
             written += 1
 

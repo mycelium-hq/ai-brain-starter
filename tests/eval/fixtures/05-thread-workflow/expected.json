@@ -1,0 +1,22 @@
+{
+  "synth": "thread",
+  "type": "workflow",
+  "frontmatter_must_have": [
+    "type",
+    "memory_class",
+    "sha8",
+    "creationDate",
+    "provenance",
+    "source_thread_url"
+  ],
+  "expected_field_values": {
+    "type": "workflow",
+    "memory_class": "procedural"
+  },
+  "body_keywords": [
+    "standup",
+    "step",
+    "blocker"
+  ],
+  "min_step_count": 3
+}

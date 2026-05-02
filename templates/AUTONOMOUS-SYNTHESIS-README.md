@@ -1,6 +1,8 @@
 # Autonomous Wiki Synthesis
 
-Three components turn external tool data into typed memory entries and aggregate them into ground-truth wiki pages. All three are stdlib + PyYAML only. None of them call an external LLM. The synthesis is operator-driven from a Claude Code session.
+Three components turn external tool data into typed memory entries and aggregate them into ground-truth wiki pages. The default mode is stdlib + PyYAML only and never calls an external LLM. The synthesis is operator-driven from a Claude Code session.
+
+An optional `--use-llm` mode (added in the 2026-05-02 push) refines the extraction via the Anthropic API (`claude-haiku-4-5`). Default off. When enabled, the heuristic still owns the idempotency key (sha8) and the LLM only refines title, steps, and summary. See "Optional LLM mode" below.
 
 ## Components
 
@@ -147,3 +149,79 @@ The session-close cascade in `ai-brain-starter` already handles in-Claude-sessio
 - Wiki maintainer: turns scattered typed entries into a single ground-truth page per topic.
 
 Each component is idempotent, schema-conformant, and operator-driven. Running them on the same input twice gives the same output. Hand-edits are protected. The wiki page is regenerated from the typed entries, never the other way around, so the typed entries remain the source of truth.
+
+## Optional LLM mode (`--use-llm`)
+
+Both synthesizers accept `--use-llm` to refine the extraction via the Anthropic API. Default off. When enabled:
+
+- The heuristic pass still owns the idempotency key (sha8 derived from PR ID or thread root_ts), so re-running with `--use-llm` on the same source produces the same filename and overwrites in place.
+- The LLM only refines title, steps, summary, and (for decisions) rationale + dissent + parent_rule.
+- The frontmatter records `synthesis_mode: llm-refined` (or `synthesis_mode: heuristic` in default mode) so a downstream eval can tell which path produced the entry.
+- The LLM call uses `claude-haiku-4-5-20251001` with prompt caching on the system block (TTL 1h). The system prompt is identical across all invocations of the same memory_class, so once the cache is warm later runs only pay output tokens.
+- If `anthropic` is not installed or `ANTHROPIC_API_KEY` is unset, the synthesizer prints a one-line warning to stderr and falls back to heuristic-only mode. Default-off keeps the install footprint minimal.
+
+### Install
+
+```bash
+pip install anthropic>=0.40.0
+export ANTHROPIC_API_KEY=...
+```
+
+Per-skill `requirements.txt` files at `skills/synth-pr-to-sop/requirements.txt` and `skills/synth-thread-to-sop/requirements.txt` list the optional deps.
+
+### Use
+
+```bash
+python3 skills/synth-pr-to-sop/synth.py <pr-path> --vault-root <vault> --use-llm
+python3 skills/synth-thread-to-sop/synth.py <thread-path> --vault-root <vault> --use-llm
+```
+
+### Test
+
+`tests/integration/test_synth_llm_mode.py` exercises both modes with a monkeypatched Anthropic client. It verifies (1) the system prompt has cache_control TTL=1h, (2) LLM-refined fields override heuristic fields, (3) heuristic-only writes the right `synthesis_mode` marker, (4) missing-dep / missing-key paths fail soft. Run bare:
+
+```bash
+python3 tests/integration/test_synth_llm_mode.py
+```
+
+Eval framework (operator-driven mode): `scripts/eval-synthesizers.py` runs the deterministic synthesizer against `tests/eval/` golden pairs and reports per-fixture scores. See the Eval section below for fixture format and scoring.
+
+## Eval framework (`scripts/eval-synthesizers.py`)
+
+The eval framework lets you measure regression risk on the deterministic (no-LLM) synth path without paying any API tokens. It is independent of the `--use-llm` mode; running the eval after a heuristic refactor tells you whether the refactor improved or regressed extraction quality on the golden corpus.
+
+### Fixture format
+
+Each fixture is a folder under `tests/eval/fixtures/` containing two files:
+
+- `input.md` — the raw PR markdown or Slack thread markdown the synthesizer ingests.
+- `expected.json` — a small dict naming what the produced typed-memory file should contain. Keys:
+  - `synth`: `"pr"` or `"thread"` (which synthesizer to run).
+  - `type`: the expected memory_type (`workflow` / `decision` / `exception`).
+  - `frontmatter_must_have`: list of YAML keys that MUST appear in the produced file's frontmatter.
+  - `expected_field_values`: dict of frontmatter keys → required values.
+  - `body_keywords`: list of strings; the body must contain each (case-insensitive) for full body-score.
+  - `min_step_count` (workflow only): the body should contain at least this many numbered list items.
+  - `step_order_hint` (workflow only): list of substrings that should appear in the body in this order.
+
+Five fixtures ship with the repo: PR-merge workflow, thread decision, thread exception, PR step-ordering, thread workflow. Adding a sixth is one folder + two files; the eval script picks it up automatically.
+
+### Scoring
+
+Per fixture, total = 100:
+
+- **60 pts** — frontmatter completeness (required keys present) + value match against expected_field_values. Weighted 0.6 / 0.4.
+- **25 pts** — body keyword hit rate.
+- **15 pts** — step count factor (workflow only) + step order hint match.
+
+The script prints a markdown table with per-fixture scores and an average at the end.
+
+### Run
+
+```bash
+python3 scripts/eval-synthesizers.py
+python3 scripts/eval-synthesizers.py --fail-below 80   # exit 1 if any fixture scores < 80
+python3 scripts/eval-synthesizers.py --keep-work       # leave the intermediate vault for inspection
+```
+
+The current heuristic baseline is around 95-100/100 per fixture (avg ~97/100). A refactor that drops average below 90 should be re-examined before shipping.

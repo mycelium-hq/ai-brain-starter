@@ -1,0 +1,29 @@
+{
+  "synth": "pr",
+  "type": "workflow",
+  "frontmatter_must_have": [
+    "type",
+    "name",
+    "steps",
+    "source_pr_id",
+    "sha8"
+  ],
+  "expected_field_values": {
+    "type": "workflow",
+    "source_pr_id": "142"
+  },
+  "body_keywords": [
+    "snapshot",
+    "encrypt",
+    "off-site",
+    "verify"
+  ],
+  "min_step_count": 5,
+  "step_order_hint": [
+    "snapshot",
+    "tar",
+    "encrypt",
+    "push",
+    "verify"
+  ]
+}

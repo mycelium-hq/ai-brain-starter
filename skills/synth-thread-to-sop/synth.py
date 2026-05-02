@@ -41,6 +41,7 @@ from connector_utils import (
     split_frontmatter,
     write_typed_memory,
 )
+import llm_synth  # graceful fallback if anthropic dep / API key missing
 
 
 THREAD_URL_PATTERNS = [
@@ -263,7 +264,7 @@ def build_entity_mentions(
     return out
 
 
-def synth(thread_path: Path, vault_root: Path, classify_override: str | None, dry_run: bool, force: bool) -> Path | None:
+def synth(thread_path: Path, vault_root: Path, classify_override: str | None, dry_run: bool, force: bool, use_llm: bool = False) -> Path | None:
     text = thread_path.read_text(encoding="utf-8")
     meta_in, body = split_frontmatter(text)
     full_text = body or text
@@ -275,6 +276,21 @@ def synth(thread_path: Path, vault_root: Path, classify_override: str | None, dr
 
     classification = classify_override or classify(full_text)[0]
     summary = extract_summary(full_text)
+
+    llm_refined = None
+    if use_llm and classification in ("decision", "exception", "workflow"):
+        refined, err = llm_synth.refine_extraction(
+            raw_text=full_text,
+            memory_type=classification,
+            kind="resolved Slack thread",
+        )
+        if err:
+            print(f"[--use-llm warning] {err}; falling back to heuristic only", file=sys.stderr)
+        elif refined:
+            llm_refined = refined
+            llm_summary = refined.get("summary")
+            if isinstance(llm_summary, str) and llm_summary.strip():
+                summary = llm_summary.strip()
 
     now = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
 
@@ -309,6 +325,16 @@ def synth(thread_path: Path, vault_root: Path, classify_override: str | None, dr
 
     if entity_mentions:
         meta_out["entity_mentions"] = entity_mentions
+    if llm_refined:
+        meta_out["synthesis_mode"] = "llm-refined"
+        if isinstance(llm_refined.get("rationale"), str) and llm_refined["rationale"].strip():
+            meta_out["llm_rationale"] = llm_refined["rationale"].strip()
+        if isinstance(llm_refined.get("dissent"), str) and llm_refined["dissent"].strip():
+            meta_out["llm_dissent"] = llm_refined["dissent"].strip()
+        if isinstance(llm_refined.get("parent_rule"), str) and llm_refined["parent_rule"].strip():
+            meta_out["llm_parent_rule"] = llm_refined["parent_rule"].strip()
+    else:
+        meta_out["synthesis_mode"] = "heuristic"
 
     out_path = out_dir / f"{file_sha}.md"
 
@@ -342,6 +368,11 @@ def main() -> int:
     parser.add_argument("--classify-as", choices=["decision", "exception", "workflow"], default=None)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--force", action="store_true", help="Overwrite hand-edited files")
+    parser.add_argument(
+        "--use-llm",
+        action="store_true",
+        help="Refine extraction via Anthropic API (claude-haiku-4-5). Requires `pip install anthropic` and ANTHROPIC_API_KEY. Default off; heuristic-only.",
+    )
     args = parser.parse_args()
 
     if not args.thread_path.exists():
@@ -351,7 +382,7 @@ def main() -> int:
         print(f"thread path must be a single file, not a folder", file=sys.stderr)
         return 2
 
-    result = synth(args.thread_path, args.vault_root, args.classify_as, args.dry_run, args.force)
+    result = synth(args.thread_path, args.vault_root, args.classify_as, args.dry_run, args.force, use_llm=args.use_llm)
     return 0 if result is not None else 1
 
 

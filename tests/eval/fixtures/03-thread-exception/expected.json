@@ -1,0 +1,21 @@
+{
+  "synth": "thread",
+  "type": "exception",
+  "frontmatter_must_have": [
+    "type",
+    "memory_class",
+    "sha8",
+    "creationDate",
+    "provenance",
+    "source_thread_url"
+  ],
+  "expected_field_values": {
+    "type": "exception"
+  },
+  "body_keywords": [
+    "exception",
+    "client",
+    "deviate",
+    "one-off"
+  ]
+}

@@ -1,0 +1,5 @@
+# Optional deps. Default operator-driven mode is stdlib + PyYAML only.
+# Install these only if you want to use --use-llm to refine extractions
+# via the Anthropic API.
+anthropic>=0.40.0
+PyYAML>=6.0
