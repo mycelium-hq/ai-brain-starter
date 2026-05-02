@@ -1,0 +1,26 @@
+# .driftignore — patterns the vault-repo drift check should NOT flag.
+#
+# Copy this to `.driftignore` in your repo clone (it's gitignored locally so
+# your personal patterns never get committed):
+#
+#     cp .driftignore.example .driftignore
+#
+# One pattern per line. Matched as a substring against the path the drift
+# check emits (e.g. `rules/voice-style.md`, `scripts/audit-foo.py`,
+# `skills/my-private-skill`, `hooks/my-business.sh`).
+#
+# Add a pattern when an item is permanently personal: tied to your name,
+# your company, your psychological framework, your domain, or your private
+# workflow. Generic patterns are universal and should be contributed
+# upstream as PRs instead.
+
+# --- Examples (delete or edit) ---
+# rules/my-voice-style.md
+# rules/my-company-brand-guide.md
+# scripts/my-business-digest.sh
+# skills/my-private-skill
+# hooks/my-business.sh
+
+# --- Patterns that are universal-personal and always safe to ignore ---
+# (uncomment if you don't want them flagged)
+# scripts/__pycache__

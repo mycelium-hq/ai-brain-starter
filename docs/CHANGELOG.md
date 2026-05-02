@@ -9,6 +9,39 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-01 — Drift-ignore + 5 universal scripts/rules/skills propagated upstream
+
+**Who this affects:** maintainers running the monthly `vault-repo-drift-check.sh` against a personal vault, plus anyone who wanted the new universal artifacts (timezone calendar rule, handoff lifecycle, graphify coverage audit, CRM collision check, stub audit, Slack ingest connector, Remotion-React video best-practices skill).
+
+**The shape:** the drift check used to flag every personal rule, script, skill, and hook on every run, drowning genuinely-ambiguous candidates in 40+ items of personal noise. Now there's a `.driftignore` mechanism so each maintainer keeps a private list of "I've decided this stays local" patterns without seeing them re-flagged each month. And five long-lived universal artifacts that had been living only in the personal vault are now upstream.
+
+### What shipped
+
+- **`.driftignore` mechanism.** New `.driftignore.example` template at repo root. Each clone copies it to `.driftignore` (gitignored locally) and adds personal patterns. The drift check loads them as substring matches and suppresses any drift line whose path contains a pattern. `scripts/vault-repo-drift-check.sh` updated to read the file and prefix every drift line with a stable relative-path key (`rules/X.md`, `scripts/X.py`, `skills/X`, `hooks/X.sh`, `obsidian-plugin:X`) that pattern matching can target.
+- **`templates/rules/calendar.md` — explicit-timezone rule for Google Calendar MCP calls.** Naive datetimes in `cal_create_event` / `cal_update_event` get reinterpreted as UTC and the event lands at the wrong hour. Hook + rule require an explicit `±HH:MM` offset on every start/end, plus a list-after-write verification step. Codified after a real-world case where a 10 AM event landed five hours off.
+- **`templates/rules/handoff-files.md` — handoff lifecycle rule.** Cross-session handoff files accumulate at the top of `Meta/` if nobody deletes them after the bridged work ships. New rule defines: identification (frontmatter `type:` or filename pattern), location convention (`Meta/Handoffs/` active, `Meta/Handoffs/Archive/` consumed), required `consumes_when:` frontmatter (a concrete completion signal, hook-enforced at write time), and a four-bucket close-time scan that classifies each handoff as archive / keep / audit / leave-alone. Generalizes to any `consumes_when:` artifact (PRD drafts, journal seeds, contribution drafts).
+- **`scripts/graphify_coverage_audit.py` — single source of truth for "what has and hasn't been graphified."** Unions the manifest, cache, and graph stores; classifies every eligible `.md` file as current / stale / moved / missing; handles flat staging paths, absolute and relative source_file fields, vault reorgs, and both root and meta layouts (`<vault>/graphify-out/` or `<vault>/⚙️ Meta/graphify-out/`). Configurable `SKIP_PARTS` via `--skip` flag or `VAULT_SKIP_PARTS` env var. Outputs `COVERAGE_REPORT.md` (human) and `COVERAGE_REPORT.json` (machine).
+- **`scripts/crm-collision-check.py` — CRM dedupe pre-check.** Run before creating a new CRM card; warns if the candidate name is an alias of an existing card or a single-word prefix of a fuller name (e.g., "Alex" colliding with "Alex Rivera"). Three exit codes (safe / collision / error). Configurable via `VAULT_ROOT` and `CRM_DIR` env vars.
+- **`scripts/stub_audit.py` — bucketed signal-density audit.** Six buckets from "empty / URL-only" through "substantive," with per-folder counts and 10-sample previews. Does NOT delete; surfaces distribution so the user picks a threshold. Configurable `SKIP_PARTS`.
+- **`skills/ingest-slack/`.** Pulls recent messages from a Slack channel into the vault as queryable markdown. Writes one file per channel per day to `External Inputs/Slack/<channel>/<date>.md`. Auto-creates Decision Log stubs when trigger keywords (exception, incident, pricing, escalation, outage, edge case, refund) appear. Idempotent: re-running on the same day overwrites cleanly. Builds on the existing connector pattern (matches `ingest-github`, `ingest-notion`, `ingest-linear`, `ingest-gmail` from the catalect drop).
+- **`skills/remotion-best-practices/`.** Domain-specific knowledge for Remotion (video creation in React) — 38 rule files covering animations, audio, captions, compositions, sequencing, transitions, fonts, light leaks, Lottie, charts, transparent video, and FFmpeg integration. Loads on demand when a Remotion project is in the conversation.
+
+### Why this is the right fix
+
+The drift check is meant to surface universal candidates worth contributing upstream, not to nag about the maintainer's private vault layer. Without `.driftignore`, every monthly run produced 40+ flags and the universal candidates were buried. Now the noise is suppressed and only genuinely-ambiguous items show up.
+
+The five propagated artifacts had earned their place via repeated use in the source vault. Each one fixes a real problem (wrong-hour calendar events, accumulating stale handoffs, "is this graphified?", duplicate CRM cards, "which folders have stub files?", "pull this Slack channel into the brain", "best practice for this Remotion animation").
+
+### Personal-data scrub
+
+Every new file in this drop passed a word-boundary regex scrub for personal tokens before commit. Generic placeholder names used where examples were needed.
+
+### What's preserved
+
+All existing skills, hooks, schemas, scripts, the catalect primitives, the session-close cascade, the bootstrap. No renames, no removals. New rules slot into `templates/rules/` alongside the existing 18; new scripts into `scripts/` alongside the existing ~80; new skills into `skills/` alongside the existing 24.
+
+---
+
 ## 2026-05-01 — Catalect architecture: 5 primitives + memory runtime + integration test
 
 **Who this affects:** anyone using ai-brain-starter as a substrate for AI agents. Single users get richer typed memory and a queryable HTTP runtime; teams and operators get the connector pattern + autonomous synthesis + bi-temporal resolver as a foundation for company-brain workflows. Anyone who wanted the repo to demonstrate the full "company brain" primitive coverage from the catalect framing rather than just substrate.

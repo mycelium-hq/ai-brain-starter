@@ -25,3 +25,6 @@ secrets.json
 
 # Closed-loop learning state (per-vault, regenerated automatically).
 .promote-state.json
+
+# Per-clone drift-check personal-pattern list (use .driftignore.example as starting point).
+.driftignore
