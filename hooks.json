@@ -91,6 +91,11 @@
           {
             "type": "command",
             "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/lint-vault-frontmatter.py 2>/dev/null || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'"
+          },
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/validate-skill-frontmatter.py 2>/dev/null || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'",
+            "statusMessage": "Validating skill frontmatter (skill.json schema)..."
           }
         ]
       }
@@ -136,6 +141,15 @@
             "type": "command",
             "command": "bash '[VAULT_PATH]/⚙️ Meta/scripts/write-hook.sh'",
             "statusMessage": "Checking write triggers..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Edit|Write|Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/post-tool-use-learnings.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'"
           }
         ]
       }
