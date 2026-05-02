@@ -9,6 +9,36 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-02 — Synthesizer LLM mode + closed-loop daemon + eval framework
+
+**Who this affects:** anyone running the `synth-pr-to-sop` / `synth-thread-to-sop` skills, anyone who wanted lower-latency feedback from `Meta/Learnings/` capture into procedural memory, and maintainers who want a regression-risk score on synthesizer changes.
+
+**The shape:** the deterministic synthesizers and the hourly closed-loop cron worked, but had three soft edges. (1) Heuristic extraction missed nuance the operator could fix in-session; an opt-in LLM refinement would cover the gap when the operator is willing to spend tokens. (2) The hourly promote cron has up-to-1-hour latency; an operator tuning the loop in real time wanted seconds. (3) Refactors to the synthesizer regex paths had no objective measurement of whether quality went up or down. Today's drop ships an opt-in LLM mode for both synthesizers, a real-time daemon alongside the cron, and a golden-pair eval framework.
+
+### What shipped
+
+- **`skills/_shared/llm_synth.py` — optional Anthropic-API refinement.** A thin wrapper around `claude-haiku-4-5-20251001` with prompt caching on the system block (TTL 1h, since the extraction template repeats across runs). Returns `(parsed_json, error)` tuples; never raises. Both synthesizers now accept `--use-llm`; when set, the LLM refines title, steps, summary (and rationale + dissent + parent_rule for thread classifications). The heuristic still owns the idempotency key (`sha8` from PR ID or thread root_ts), so re-running with `--use-llm` on the same source overwrites the same file. Output frontmatter records `synthesis_mode: llm-refined` or `synthesis_mode: heuristic`. Default is off; `pip install anthropic` + `ANTHROPIC_API_KEY` are only required when the flag is set. Missing dep or missing key falls through to heuristic-only with a one-line stderr warning, never a hard crash.
+- **`scripts/closed-loop-daemon.py` — real-time alternative to the hourly promote cron.** Watches `<vault>/⚙️ Meta/Learnings/` via `watchdog` (inotify on Linux, FSEvents on macOS) when installed, otherwise falls back to a 30-second stat-poll loop. On every new `.md` learning capture it runs `promote-episodic-to-procedural.py --quiet`. Pidfile-protected (single instance), signal-handled (SIGTERM/SIGINT/SIGHUP). New `templates/launchd/com.abs.closed-loop-daemon.plist.template` + `scripts/install-closed-loop-daemon.sh` give a one-shot macOS launchd install path. Linux operators can write a systemd user unit pointing at the same script. The hourly cron stays as a belt-and-suspenders sweep.
+- **`scripts/eval-synthesizers.py` + `tests/eval/fixtures/*` — synthesizer regression-risk score.** Five golden-pair fixtures (PR-merge workflow, thread decision, thread exception, PR step-ordering, thread workflow). Each fixture has `input.md` + `expected.json`; the script runs the deterministic synthesizer in operator-driven mode (no LLM cost) and scores the produced typed-memory file 0-100 (60 pts frontmatter completeness + value match, 25 pts body keyword overlap, 15 pts step count + step ordering hint match). Baseline on the shipped fixtures: average 97.8 / 100. `--fail-below N` flag exits non-zero if any fixture scores below N, so CI can guard against quality regressions on synthesizer refactors.
+- **`tests/integration/test_synth_llm_mode.py` — 5 unit tests.** Monkeypatches the Anthropic client (no real API calls) to verify (1) the system prompt has `cache_control` with TTL=1h, (2) LLM-refined fields override heuristic fields when valid JSON returns, (3) the `synthesis_mode` marker writes correctly in both modes, (4) missing-dep and missing-key paths return clean errors, (5) unknown memory-type is rejected.
+- **Documentation.** `templates/AUTONOMOUS-SYNTHESIS-README.md` gets two new sections: "Optional LLM mode (`--use-llm`)" and "Eval framework (`scripts/eval-synthesizers.py`)". `templates/CLOSED-LOOP-README.md` gets a "Daemon mode" section with macOS launchd install + Linux systemd guidance + when-to-use guidance (default cron, switch to daemon for real-time tuning, run both for belt-and-suspenders).
+
+### Why this is the right fix
+
+The three improvements target three different primitives in the catalect architecture without touching the heuristic core. The LLM mode is opt-in by design — default users keep the stdlib-only install footprint and zero per-run cost. The daemon is alongside, not replacing, the cron — operators who want simple zero-config keep what they have. The eval framework lives at `tests/eval/` so it runs cleanly without an Anthropic key, which means CI can use it on every PR.
+
+The integration test (11 of 11 passing, unchanged) is preserved and exercises the same end-to-end pipeline. The new LLM-mode test adds 5 more checks. Memory-runtime-pro (the private SaaS-ready runtime) added a parallel webhook retry harness in the same session.
+
+### Personal-data scrub
+
+Every new file in this drop passed a word-boundary regex scrub for personal tokens before commit. The eval fixtures use generic placeholder names ("alice", "bob", "carol", "dana", "erik", "manager", "engineer") and synthetic PR/thread URLs at example.com / generic Slack workspaces.
+
+### What's preserved
+
+All existing skills, hooks, schemas, scripts, the catalect primitives, the connector pattern, the session-close cascade, the bootstrap. No renames, no removals. The 11/11 integration test still passes. Default invocation of either synthesizer behaves exactly as before; `--use-llm` is the only new flag.
+
+---
+
 ## 2026-05-01 — Drift-ignore + 5 universal scripts/rules/skills propagated upstream
 
 **Who this affects:** maintainers running the monthly `vault-repo-drift-check.sh` against a personal vault, plus anyone who wanted the new universal artifacts (timezone calendar rule, handoff lifecycle, graphify coverage audit, CRM collision check, stub audit, Slack ingest connector, Remotion-React video best-practices skill).
