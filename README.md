@@ -83,6 +83,8 @@ Read the four problems the team version solves: [`for-teams/why-teams-are-differ
 1. The [Claude Code desktop app](https://claude.ai/download) with a paid Claude account (Pro or Max).
 2. Git. On Mac, that means Homebrew is installed (`brew --version` works); if it isn't, [install Homebrew first](https://brew.sh), then Claude handles the rest.
 
+*Local install. Skills and hooks are open-source. Read [`SECURITY.md`](SECURITY.md) before adding any third-party skills, and the safety guarantees at the top of [`bootstrap.sh`](bootstrap.sh) if you have an existing Claude Code setup you want preserved (existing settings, MCPs, and skills are not overwritten).*
+
 ### Step 1 — Open Claude Code
 
 Open the Claude Code desktop app. You don't have to be in any particular folder. Claude will ask where your vault should live during setup.
@@ -94,6 +96,8 @@ Please set up my AI Brain Starter end-to-end in this session. Clone https://gith
 ```
 
 Claude clones the skill, runs the installer (Obsidian, Python, graphify, all tools), and walks you through the setup interview. One paste is the whole thing.
+
+**Or install as a Claude Code plugin.** Inside Claude Code, run `/plugin marketplace add adelaidasofia/ai-brain-starter` then `/plugin install ai-brain-starter@ai-brain-starter`. That gives you the skills, hooks, and commands. The paste-prompt above is the only path that also runs the vault-setup interview.
 
 ### Step 3 — Answer the questions
 
@@ -224,6 +228,14 @@ Built for founders. The people running a company and a life, carrying a dozen co
 - **Anyone who journals** (or wants to) and wants an AI that remembers what you said, challenges you, and surfaces your patterns
 - **Teams** who want a shared knowledge system with personal vaults that stay private. See [for-teams/](for-teams/) for what changes when more than one person uses the vault.
 - **Non-technical people** — the entire setup is a conversation, not a config file
+
+---
+
+## What this isn't
+
+Not an enterprise multi-agent orchestration platform. Not a SaaS. No shared database, no per-seat license, no fine-tune to provision, no agent swarm to coordinate across machines. The vault lives on your disk. The intelligence lives in your Claude subscription. The skills and hooks are open-source files you can read in fifteen minutes.
+
+If what you need is agent federation, swarm topologies, or a 300-tool MCP server, this is the wrong product. This one is for the founder who wants their second brain to compound, not their orchestration layer to scale.
 
 ---
 
