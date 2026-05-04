@@ -55,6 +55,17 @@ python3 "$VAULT_ROOT/⚙️ Meta/scripts/check-rule-conflicts.py" --scan-all
 
 It writes a report to `⚙️ Meta/Rule Conflicts.md`. Engram-inspired (github.com/Gentleman-Programming/engram) keyword-anchor detector — catches `always X` vs `never X` contradictions across the rules corpus. Add `--semantic` if `ANTHROPIC_API_KEY` is set for vocabulary-different contradiction detection via claude-haiku. Capture: any candidate conflicts at confidence ≥0.5 that need reconciliation. Pair signal with drift detection: drift = single-document shift over time; conflicts = cross-document clash at write time. Skip silently if the script is missing.
 
+### Step 4d — Passive captures triage (if the script exists in this vault)
+
+Run:
+```bash
+SINCE=$(date -v-7d +%Y-%m-%d 2>/dev/null || date -d "7 days ago" +%Y-%m-%d)
+python3 "$VAULT_ROOT/⚙️ Meta/scripts/passive-capture.py" --scan-since "$SINCE"
+python3 "$VAULT_ROOT/⚙️ Meta/scripts/passive-capture.py" --triage
+```
+
+Engram-inspired (`mem_capture_passive`) — scans the past week's session transcripts for utterances pattern-matched as rules, decisions, or lessons that were NOT explicitly filed via `/journal` or `/decision`. Writes triageable stubs to `⚙️ Meta/Passive Captures/{date}-{slug}.md`. Idempotent via state file. Capture: how many pending captures, broken down by type (rule/decision/lesson). Adopt the load-bearing ones into CLAUDE.md or rules/ files; reject and archive the rest. Skip silently if the script is missing.
+
 ### Step 5 — Decision retrospective
 
 Run:
