@@ -162,6 +162,8 @@ Every tool is installed and wired during setup. They work together, not in isola
 - **Nano Banana** — image generation via Google Gemini 3 Pro Image
 - **Granola MCP** — meeting transcription with automatic cascade to downstream files
 - **Dataview + Bases** — live database queries over your markdown files in Obsidian
+- **Drift detection** — `scripts/drift-detection.py` flags vault files edited 5+ times in the last 30 days as candidates for human review of cumulative semantic drift. Inspired by Microsoft DELEGATE-52 ([arxiv.org/abs/2604.15597](https://arxiv.org/abs/2604.15597)) which found frontier LLMs corrupt ~25% of professional content over 20 edits. Optional `--semantic` mode adds claude-haiku intent-shift judgment.
+- **Rule conflict detection** — `scripts/check-rule-conflicts.py` catches cross-document contradictions (`always X` vs `never X` on shared nouns) at write time. Engram-inspired ([github.com/Gentleman-Programming/engram](https://github.com/Gentleman-Programming/engram)). Default keyword-anchor mode is deterministic and free; `--semantic` adds vocabulary-different contradiction detection via claude-haiku.
 
 Full catalog with attribution and source links: [`docs/POWER_TOOLS.md`](docs/POWER_TOOLS.md)
 
