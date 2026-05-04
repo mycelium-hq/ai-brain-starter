@@ -19,7 +19,7 @@ Requires: pip install anthropic
 Env var:  ANTHROPIC_API_KEY
 
 For single first names, prompts for the full name and uses alias syntax:
-    [[George Trimis|George]]
+    [[Full Name|First]]
 
 Usage:
     python3 graphify_apply_wikilinks.py [options]
@@ -29,6 +29,7 @@ Usage:
     --people-dir PATH     Where to create person stubs (default: 👤 CRM)
     --concepts-dir PATH   Where to create concept stubs (default: 📝 Notes)
     --dry-run             Show changes without writing files
+    --auto-yes            Auto-approve unambiguous candidates (see --auto-yes help below)
 
 Maintenance runbook:
     1. Always run with --dry-run first. Review the proposed insertions before
@@ -47,6 +48,11 @@ Maintenance runbook:
        produce aggressive matches across the vault.
     6. Companion audit: wikilink_misfire_audit.py detects and fixes path-form
        wikilinks if anything slips through. Run it after big apply passes.
+    7. Ambiguity gate (--auto-yes): single-word person identifiers with multiple
+       potential referents are SKIPPED to force interactive review. See
+       detect_ambiguity() and the COMMON_FIRST_NAMES blocklist for the rules.
+       Companion script disambiguate_first_name.py handles the targeted re-link
+       once you've identified era/company/role markers per person.
 """
 
 import argparse
@@ -60,6 +66,60 @@ SKIP_PARTS = {
     ".claude", ".git", ".obsidian", ".trash", "node_modules", "worktrees",
 }
 EXISTING_LINK_RE = re.compile(r'\[\[[^\]]+\]\]')
+
+# Common single-word first names that ALWAYS require interactive disambiguation,
+# regardless of CRM glob count. Codified after a --auto-yes pass applied a
+# common first name across ~100 files spanning 6+ distinct people (some in CRM,
+# some public figures, some not in CRM at all). Without this gate, every future
+# auto-yes pass on a vault with multiple people sharing a first name re-corrupts
+# attribution. Lowercase for case-insensitive comparison. Add to this set as new
+# collisions surface in your own vault. Companion: disambiguate_first_name.py
+# for surgical per-occurrence re-linking via era/company/role markers.
+COMMON_FIRST_NAMES = frozenset({
+    # Latin American
+    "ana", "andres", "andrea", "carlos", "daniel", "diana", "diego",
+    "felipe", "gabriel", "javier", "jorge", "jose", "juan", "laura",
+    "luis", "manuel", "maria", "miguel", "nicolas", "pablo", "paola",
+    "pedro", "rafael", "santiago", "sebastian", "sofia", "valentina",
+    # English / American
+    "alex", "amy", "andrew", "ben", "bill", "bob", "brian", "carl",
+    "chris", "dan", "david", "ed", "eric", "frank", "gary", "george",
+    "greg", "henry", "jack", "james", "jeff", "jen", "jenny", "jim",
+    "joe", "john", "jon", "jordan", "joy", "ken", "kevin", "kim",
+    "larry", "lee", "leo", "linda", "lisa", "mark", "mary", "matt",
+    "michael", "mike", "nick", "pat", "paul", "peter", "phil", "ray",
+    "rick", "rob", "ron", "roy", "sam", "sarah", "scott", "steve",
+    "sue", "taylor", "tim", "todd", "tom", "tony", "victor", "will",
+})
+
+# Spans that must NEVER be touched by wikilink insertion — emails, URLs, code,
+# markdown link targets. Applied alongside EXISTING_LINK_RE in apply_wikilink.
+# Codified after a run that wrapped a domain wikilink inside email addresses
+# and URL paths across many files (e.g., turning user@example.com into
+# user@[[example.com]]).
+EXCLUSION_SPANS = [
+    re.compile(r'```.*?```', re.DOTALL),                  # fenced code blocks
+    re.compile(r'`[^`\n]+`'),                             # inline code
+    re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b'),  # email
+    re.compile(r'https?://[^\s)\]>]+'),                   # URL with scheme
+    re.compile(r'(?<!\w)//[^\s)\]>]+'),                   # protocol-less URL
+    re.compile(r'\]\([^)]*\)'),                           # markdown link target (..)
+    re.compile(r'\[\[dayone-moment:[^\]]+\]\]'),          # Day One attachment refs
+]
+
+
+def _collect_protected_spans(text: str) -> list[tuple[int, int]]:
+    """Return sorted list of (start, end) spans that should never be wrapped."""
+    spans: list[tuple[int, int]] = []
+    for pat in EXCLUSION_SPANS:
+        spans.extend((m.start(), m.end()) for m in pat.finditer(text))
+    spans.extend((m.start(), m.end()) for m in EXISTING_LINK_RE.finditer(text))
+    return spans
+
+
+def _in_protected_span(start: int, end: int, spans: list[tuple[int, int]]) -> bool:
+    """True if [start, end] falls inside any protected span."""
+    return any(s <= start and end <= e for s, e in spans)
 
 DATAVIEW_BACKLINKS = '''\
 ```dataviewjs
@@ -306,6 +366,58 @@ def load_report(report_path: Path) -> list[dict]:
     return terms
 
 
+def detect_ambiguity(
+    vault: Path,
+    label: str,
+    people_dir: str = "👤 CRM",
+) -> tuple[bool, str, list[str]]:
+    """
+    Decide whether a candidate label is too ambiguous for --auto-yes apply.
+
+    Returns (is_ambiguous, reason, crm_matches).
+
+    Heuristics (any one triggers ambiguity for single-word labels only):
+      1. Label appears in COMMON_FIRST_NAMES blocklist → likely matches
+         multiple distinct people across vault references.
+      2. Multiple CRM files start with the label as a first-name token
+         (e.g., 'Alex' matches 'Alex Smith.md' AND 'Alex Jones.md').
+
+    Multi-word labels ('Some Two-Word Name') skip this check — they're unique
+    enough to apply unambiguously.
+
+    Single-word concept labels ('Adaptability', 'Logotherapy') skip the
+    blocklist check but DO get the CRM-glob check, which won't match them.
+
+    Codified after an auto-yes pass on a common first name across ~100 files
+    spanned 6+ distinct people (some in CRM, some public-figure book authors).
+    """
+    # Multi-word labels are unique enough — skip ambiguity check.
+    if " " in label:
+        return False, "", []
+
+    crm_dir = vault / people_dir
+    matches: list[str] = []
+    if crm_dir.exists():
+        # Glob all CRM files; check for first-token match.
+        for md in crm_dir.glob("*.md"):
+            stem = md.stem
+            first_token = stem.split()[0] if stem else ""
+            if first_token.lower() == label.lower():
+                matches.append(stem)
+
+    # Common-first-name blocklist always triggers, even with 0 or 1 CRM match.
+    # Reason: the label may match book authors / public figures / journal
+    # mentions of people who never made it into CRM. Better to ask.
+    if label.lower() in COMMON_FIRST_NAMES:
+        return True, "common-first-name blocklist", matches
+
+    # 2+ CRM matches → ambiguous regardless of blocklist.
+    if len(matches) >= 2:
+        return True, f"{len(matches)} CRM files share first name", matches
+
+    return False, "", matches
+
+
 def find_note(vault: Path, name: str) -> Path | None:
     stem = name.lower()
     for md in vault.rglob("*.md"):
@@ -327,9 +439,9 @@ def find_contexts(vault: Path, search_term: str, max_results: int = 2) -> list[t
             text = md.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
-        linked_spans = {(m.start(), m.end()) for m in EXISTING_LINK_RE.finditer(text)}
+        protected = _collect_protected_spans(text)
         for m in pattern.finditer(text):
-            if any(s <= m.start() and m.end() <= e for s, e in linked_spans):
+            if _in_protected_span(m.start(), m.end(), protected):
                 continue
             start = max(0, m.start() - 90)
             end = min(len(text), m.end() + 90)
@@ -364,9 +476,9 @@ def apply_wikilink(vault: Path, search_term: str, link_target: str, display: str
             text = md.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
-        linked_spans = {(m.start(), m.end()) for m in EXISTING_LINK_RE.finditer(text)}
+        protected = _collect_protected_spans(text)
         for m in pattern.finditer(text):
-            if any(s <= m.start() and m.end() <= e for s, e in linked_spans):
+            if _in_protected_span(m.start(), m.end(), protected):
                 continue
             new_text = text[: m.start()] + replacement + text[m.end():]
             if dry_run:
@@ -401,7 +513,7 @@ def create_stub(
     # Collect mentions with settings tuned to entity type
     if is_person:
         # No cap — read every mention chronologically so Claude sees the full arc.
-        # For journal people (Vanessa, George) this can be 50-200+ mentions.
+        # For frequently mentioned people this can be 50-200+ mentions.
         # For book authors this naturally returns a handful.
         mentions = collect_mentions(
             vault, first_name or note_name,
@@ -463,6 +575,13 @@ def main() -> None:
     parser.add_argument("--people-dir", default="👤 CRM", metavar="PATH")
     parser.add_argument("--concepts-dir", default="📝 Notes", metavar="PATH")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--auto-yes", action="store_true",
+                        help="Auto-approve unambiguous wikilink insertions. Ambiguous candidates "
+                             "(common first names from the COMMON_FIRST_NAMES blocklist, or "
+                             "single-word labels with 2+ CRM matches) are SKIPPED to force "
+                             "interactive review — see detect_ambiguity() for the rules. "
+                             "Stub notes are never auto-created in this mode (left dangling for "
+                             "manual review).")
     args = parser.parse_args()
 
     vault = Path(args.vault_root).resolve()
@@ -506,14 +625,33 @@ def main() -> None:
         for _, snippet in contexts:
             print(f"  > {snippet}")
 
+        # Ambiguity gate — block --auto-yes on common first names + CRM collisions.
+        is_ambiguous, ambig_reason, crm_matches = detect_ambiguity(
+            vault, label, args.people_dir,
+        )
+        if is_ambiguous:
+            print(f"  ⚠ AMBIGUOUS ({ambig_reason}).")
+            if crm_matches:
+                print(f"     CRM matches: {', '.join(crm_matches)}")
+            else:
+                print(f"     No CRM file yet — likely public figure or pattern-name.")
+            if args.auto_yes:
+                print(f"  [auto-yes] SKIPPING — disambiguation requires interactive review.")
+                skipped.append(f"{label} (ambiguous)")
+                continue
+
         if term_info["needs_disambiguation"]:
             print("  ⚠ Looks like a first name. You'll be prompted for the full name.")
 
-        try:
-            choice = input("  Add wikilink? [y/n/q]: ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            print("\nAborted.")
-            break
+        if args.auto_yes:
+            choice = "y"
+            print("  [auto-yes] Adding wikilink.")
+        else:
+            try:
+                choice = input("  Add wikilink? [y/n/q]: ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                print("\nAborted.")
+                break
 
         if choice == "q":
             print("Quitting.")
@@ -527,14 +665,18 @@ def main() -> None:
         display = label
         first_name = ""
         if term_info["needs_disambiguation"]:
-            try:
-                full_name = input(
-                    f"  Full name for [[Full Name|{label}]]? "
-                    f"(Enter to use '{label}' as-is): "
-                ).strip()
-            except (EOFError, KeyboardInterrupt):
-                full_name = ""
-            # Sanitize: reject path-form input. User may paste "👤 CRM/Diego".
+            if args.auto_yes:
+                full_name = ""  # use label as-is — leave for manual review
+                print(f"  [auto-yes] First name detected, using '{label}' as-is (no disambiguation).")
+            else:
+                try:
+                    full_name = input(
+                        f"  Full name for [[Full Name|{label}]]? "
+                        f"(Enter to use '{label}' as-is): "
+                    ).strip()
+                except (EOFError, KeyboardInterrupt):
+                    full_name = ""
+            # Sanitize: reject path-form input.
             if "/" in full_name:
                 print(f"  ⚠ '/' in full name — stripping path prefix")
                 full_name = full_name.rsplit("/", 1)[-1].strip()
@@ -551,6 +693,9 @@ def main() -> None:
         existing = find_note(vault, link_target)
         if existing:
             print(f"  Note exists: {existing.relative_to(vault)}")
+        elif args.auto_yes:
+            stub_choice = "n"  # auto-yes does NOT create stubs — leaves dangling for manual review
+            print(f"  [auto-yes] No note for '{link_target}', skipping stub creation (manual review).")
         else:
             try:
                 stub_choice = input(f"  No note for '{link_target}'. Create stub? [y/n]: ").strip().lower()
