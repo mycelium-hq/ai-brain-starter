@@ -44,3 +44,8 @@ Your message when this rule triggers.
 | `fact-check-template` | block | Template for catching specific misattributions or wrong facts |
 | `public-repo-firewall` | block | Personal names/data leaking into public repos |
 | `dangerous-rm` | block | `rm -rf` commands without confirmation |
+
+## Authoring guide and regression harness
+
+- **Authoring cheatsheet:** `templates/rules/hookify-authoring.md` covers operators, supported fields, the negative-lookahead pattern (no `regex_not_match` operator exists), YAML quoting gotchas (`[` and `\` patterns must be single-quoted), companion PreToolUse hooks for logic that goes beyond regex, and how to test a rule manually.
+- **Regression harness:** `templates/scripts/hookify-rule-tests.py` is a copy-then-edit script for running a list of `(rule_name, tool_type, path, content, expect_fire, label)` tuples through the hookify subprocess. Catches three classes of bug: (1) non-existent operators that silently never fire, (2) YAML parse errors that drop a rule at load time, (3) pattern logic regressions after a rule edit. Run it after any rule change OR after upgrading the hookify plugin. Exit 0 means all pass.
