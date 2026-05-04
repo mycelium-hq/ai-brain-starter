@@ -37,6 +37,24 @@ python3 ~/.claude/skills/ai-brain-starter/scripts/check-claude-md-drift.py --qui
 
 It writes a report to `⚙️ Meta/CLAUDE-md drift.md`. Capture: any dormant people, archived projects, broken links, or old codifications that need review.
 
+### Step 4b — Multi-edit semantic drift (if the script exists in this vault)
+
+Run:
+```bash
+python3 "$VAULT_ROOT/⚙️ Meta/scripts/drift-detection.py"
+```
+
+It writes a report to `⚙️ Meta/Drift Audit.md`. Lists vault files edited 5+ times in the last 30 days (configurable via `--days`, `--min-edits`, `--top`, `--include`). Codified-rule files at the top are highest-leverage drift candidates. Capture: which rule file shows highest churn, and whether any of the diffs softened a guard or shifted a number without a Decisions/ entry. Skip silently if the script is missing (vault hasn't installed it yet). Inspired by Microsoft DELEGATE-52 (arxiv.org/abs/2604.15597) finding that frontier LLMs corrupt ~25% of professional content over 20 edits.
+
+### Step 4c — Cross-document rule conflicts (if the script exists in this vault)
+
+Run:
+```bash
+python3 "$VAULT_ROOT/⚙️ Meta/scripts/check-rule-conflicts.py" --scan-all
+```
+
+It writes a report to `⚙️ Meta/Rule Conflicts.md`. Engram-inspired (github.com/Gentleman-Programming/engram) keyword-anchor detector — catches `always X` vs `never X` contradictions across the rules corpus. Add `--semantic` if `ANTHROPIC_API_KEY` is set for vocabulary-different contradiction detection via claude-haiku. Capture: any candidate conflicts at confidence ≥0.5 that need reconciliation. Pair signal with drift detection: drift = single-document shift over time; conflicts = cross-document clash at write time. Skip silently if the script is missing.
+
 ### Step 5 — Decision retrospective
 
 Run:
