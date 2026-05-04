@@ -59,7 +59,8 @@ It writes a report to `⚙️ Meta/Rule Conflicts.md`. Engram-inspired (github.c
 
 Run:
 ```bash
-python3 "$VAULT_ROOT/⚙️ Meta/scripts/passive-capture.py" --scan-since $(date -v-7d +%Y-%m-%d)
+SINCE=$(date -v-7d +%Y-%m-%d 2>/dev/null || date -d "7 days ago" +%Y-%m-%d)
+python3 "$VAULT_ROOT/⚙️ Meta/scripts/passive-capture.py" --scan-since "$SINCE"
 python3 "$VAULT_ROOT/⚙️ Meta/scripts/passive-capture.py" --triage
 ```
 

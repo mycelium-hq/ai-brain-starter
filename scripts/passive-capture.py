@@ -92,7 +92,7 @@ RULE_PATTERNS = [
     (r"\bmake (?:this|that|it) a rule\b", "explicit_rule_flag"),
     (r"\bshould be a rule\b", "explicit_rule_flag"),
     (r"\bcodify (?:this|that)\b", "explicit_rule_flag"),
-    (r"\balways (?:do|use|run|check|read|write|use|prefer|avoid)\b", "imperative"),
+    (r"\balways (?:do|use|run|check|read|write|prefer|avoid)\b", "imperative"),
     (r"\bnever (?:do|use|run|check|skip|forget|miss|ignore)\b", "imperative"),
     (r"\bmust (?:always|never|read|run|check|enforce)\b", "imperative"),
 ]
