@@ -33,6 +33,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _meta_resolver import find_meta_dir  # noqa: E402
+
 
 TYPED_FOLDERS = ("Decisions", "Workflows", "Exceptions", "Facts")
 TYPE_BY_FOLDER = {
@@ -41,15 +44,6 @@ TYPE_BY_FOLDER = {
     "Exceptions": "exception",
     "Facts": "fact",
 }
-
-
-def find_meta_dir(vault_root: Path) -> Path | None:
-    if not vault_root.is_dir():
-        return None
-    for child in sorted(vault_root.iterdir()):
-        if child.is_dir() and child.name.endswith("Meta"):
-            return child
-    return None
 
 
 def parse_frontmatter(text: str) -> dict[str, Any] | None:

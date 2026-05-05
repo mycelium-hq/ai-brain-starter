@@ -32,6 +32,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _meta_resolver import find_meta_dir as _find_meta_dir_helper  # noqa: E402
+
+
 SKIP_FOLDERS = {
     ".obsidian", ".trash", ".smart-env", "node_modules", ".git", "Archive",
     ".DS_Store", "__pycache__",
@@ -39,10 +43,8 @@ SKIP_FOLDERS = {
 
 
 def find_meta_dir(vault: Path) -> Path:
-    for child in (vault.iterdir() if vault.is_dir() else []):
-        if child.is_dir() and child.name.endswith("Meta"):
-            return child
-    return vault / "Meta"
+    return _find_meta_dir_helper(vault, prefer_subfolders=("graphify-out", "Decisions")) \
+        or (vault / "Meta")
 
 
 def walk_md_files(vault: Path):

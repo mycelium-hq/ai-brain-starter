@@ -50,6 +50,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _meta_resolver import find_meta_dir  # noqa: E402
+
 
 # Folder names the aggregator walks. The auto-detect supports both
 # emoji-prefixed ("⚙️ Meta") and plain ("Meta") layouts.
@@ -66,16 +69,6 @@ TYPE_BY_FOLDER = {
 # (rather than a clean supersession) when they share `pattern`, contradict
 # in outcome, and their last_verified dates are within this many days.
 BRANCH_MERGE_WINDOW_DAYS = 30
-
-
-def find_meta_dir(vault_root: Path) -> Path | None:
-    """Auto-detect the Meta folder. Supports '⚙️ Meta' and 'Meta'."""
-    if not vault_root.is_dir():
-        return None
-    for child in sorted(vault_root.iterdir()):
-        if child.is_dir() and child.name.endswith("Meta"):
-            return child
-    return None
 
 
 def parse_frontmatter(text: str) -> dict[str, Any] | None:

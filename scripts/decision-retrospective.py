@@ -30,12 +30,12 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _meta_resolver import find_meta_dir as _find_meta_dir_helper  # noqa: E402
+
 
 def find_meta_dir(vault: Path) -> Path:
-    for child in (vault.iterdir() if vault.is_dir() else []):
-        if child.is_dir() and child.name.endswith("Meta"):
-            return child
-    return vault / "Meta"
+    return _find_meta_dir_helper(vault) or (vault / "Meta")
 
 
 def parse_frontmatter(text: str) -> dict | None:

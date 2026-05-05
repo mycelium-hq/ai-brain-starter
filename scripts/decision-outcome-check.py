@@ -27,6 +27,9 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _meta_resolver import find_meta_dir  # noqa: E402
+
 
 def detect_vault_root() -> Path:
     """Detect vault root from $VAULT_ROOT env var or script location."""
@@ -168,14 +171,7 @@ def main() -> int:
     args = parser.parse_args()
 
     vault_root = (args.vault_root or detect_vault_root()).resolve()
-    # Auto-detect the Meta folder (with or without emoji prefix)
-    meta_dir = None
-    for candidate in vault_root.iterdir():
-        if candidate.is_dir() and candidate.name.endswith("Meta"):
-            meta_dir = candidate
-            break
-    if meta_dir is None:
-        meta_dir = vault_root / "Meta"
+    meta_dir = find_meta_dir(vault_root) or (vault_root / "Meta")
 
     decision_log = meta_dir / "Decision Log.md"
     priorities = meta_dir / "Current Priorities.md"

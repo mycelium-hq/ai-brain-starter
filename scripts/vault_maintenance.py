@@ -25,9 +25,13 @@ The report is written to {vault-root}/Meta/Maintenance Report.md
 import argparse
 import os
 import subprocess
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _meta_resolver import find_meta_dir as _find_meta_dir_helper  # noqa: E402
 
 SKIP_DIRS = {".git", ".claude", "node_modules", "graphify-input", ".obsidian"}
 
@@ -49,11 +53,7 @@ INBOX_MAX_AGE_DAYS = 7
 
 
 def find_meta_dir(vault_root: Path) -> Path:
-    """Auto-detect the Meta folder (with or without emoji prefix)."""
-    for candidate in vault_root.iterdir():
-        if candidate.is_dir() and candidate.name.endswith("Meta"):
-            return candidate
-    return vault_root / "Meta"
+    return _find_meta_dir_helper(vault_root) or (vault_root / "Meta")
 
 
 def find_inbox_dir(vault_root: Path) -> Path:
