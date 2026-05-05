@@ -66,6 +66,16 @@ python3 "$VAULT_ROOT/⚙️ Meta/scripts/passive-capture.py" --triage
 
 Engram-inspired (`mem_capture_passive`) — scans the past week's session transcripts for utterances pattern-matched as rules, decisions, or lessons that were NOT explicitly filed via `/journal` or `/decision`. Writes triageable stubs to `⚙️ Meta/Passive Captures/{date}-{slug}.md`. Idempotent via state file. Capture: how many pending captures, broken down by type (rule/decision/lesson). Adopt the load-bearing ones into CLAUDE.md or rules/ files; reject and archive the rest. Skip silently if the script is missing.
 
+### Step 4f — Closed-loop week report (if the script exists in this vault)
+
+Run:
+```bash
+python3 ~/.claude/skills/ai-brain-starter/scripts/closed-loop-week-report.py \
+  --vault-root "$VAULT_ROOT" --days 7
+```
+
+Reports the previous week's automatic activity in the episodic→procedural memory loop: how many promotion candidates landed in `Meta/Promotion-Candidates/` awaiting human ratification, how many got auto-promoted into `Meta/Workflows/` / `Meta/Exceptions/` / `Meta/Facts/`, how many rules were demoted to `status: superseded`, and the current resolver conflict count. Inline the script's output into the synthesis under "Closed-loop activity." If candidates are pending, the user's "One thing to do this week" should be reviewing them. The closed-loop runs hourly (promote) and weekly (demote/conflicts), but the human ratification gate only fires once a week, here. Skip silently if the script is missing.
+
 ### Step 5 — Decision retrospective
 
 Run:
