@@ -82,14 +82,15 @@ STOPWORDS = {
 }
 
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _meta_resolver import find_meta_dir as _find_meta_dir_helper  # noqa: E402
+
+
 def find_meta_dir(vault_root: Path) -> Path | None:
-    """Auto-detect the Meta folder. Supports plain and emoji-prefixed names."""
-    if not vault_root.is_dir():
-        return None
-    for child in sorted(vault_root.iterdir()):
-        if child.is_dir() and child.name.endswith("Meta"):
-            return child
-    return None
+    return _find_meta_dir_helper(
+        vault_root,
+        prefer_subfolders=("RESOLVER.md", "Decisions"),
+    )
 
 
 def normalize_key(value: str) -> str:

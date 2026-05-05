@@ -11,19 +11,20 @@ Usage:
 """
 
 import argparse
+import sys
 import time
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _meta_resolver import find_meta_dir as _find_meta_dir_helper  # noqa: E402
 
 DEFAULT_KEEP = 3
 DEFAULT_BAK_MAX_AGE_DAYS = 7
 
 
 def find_meta_dir(vault_root: Path) -> Path:
-    """Auto-detect the Meta folder (with or without emoji prefix)."""
-    for candidate in vault_root.iterdir():
-        if candidate.is_dir() and candidate.name.endswith("Meta"):
-            return candidate
-    return vault_root / "Meta"
+    return _find_meta_dir_helper(vault_root, prefer_subfolders=("graphify-out", "Decisions")) \
+        or (vault_root / "Meta")
 
 
 def rotate_graphify(vault_root: Path, keep: int) -> list[str]:

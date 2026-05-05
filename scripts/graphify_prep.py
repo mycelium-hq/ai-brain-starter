@@ -32,6 +32,9 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _meta_resolver import find_meta_dir  # noqa: E402
+
 # --- regex patterns ---
 WIKILINK_RE = re.compile(r"\[\[([^\[\]|#]+?)(?:\|([^\[\]]+?))?(?:#[^\[\]]*)?\]\]")
 YAML_FENCE_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
@@ -484,16 +487,11 @@ def main():
     # Auto-detect whitelist path if not provided
     whitelist_path = args.whitelist_path
     if whitelist_path is None:
-        # Try to find it relative to input dir's vault
-        for candidate_name in ["concept_whitelist.txt"]:
-            for meta_candidate in input_dir.parent.iterdir():
-                if meta_candidate.is_dir() and meta_candidate.name.endswith("Meta"):
-                    wl = meta_candidate / candidate_name
-                    if wl.exists():
-                        whitelist_path = wl
-                        break
-            if whitelist_path:
-                break
+        meta = find_meta_dir(input_dir.parent, prefer_subfolders=("concept_whitelist.txt",))
+        if meta is not None:
+            wl = meta / "concept_whitelist.txt"
+            if wl.exists():
+                whitelist_path = wl
 
     if args.no_dedupe:
         print("[1/2] Dedupe SKIPPED (--no-dedupe set; input is treated as read-only)")

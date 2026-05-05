@@ -30,6 +30,9 @@ import time
 from collections import Counter
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _meta_resolver import find_meta_dir  # noqa: E402
+
 
 def load_records(log_paths: list[Path], since_epoch: int) -> list[dict]:
     """Load JSONL records from any of the given paths. Tolerant of multiple schemas."""
@@ -117,14 +120,18 @@ def main() -> int:
 
     home = Path.home()
     log_paths = [home / ".claude" / "logs" / "skill-usage.jsonl"]
-    # Also check vault Meta
+    # Also check vault Meta. Walks UP from cwd looking for a vault root with a
+    # Meta folder that contains skill-usage-log.jsonl. Prefers '⚙️ Meta' over
+    # plain 'Meta' when both exist (the log lives in the human-rules variant).
     cwd = Path.cwd()
     for parent in [cwd] + list(cwd.parents)[:5]:
-        for child in parent.iterdir() if parent.is_dir() else []:
-            if child.is_dir() and child.name.endswith("Meta"):
-                vault_log = child / "skill-usage-log.jsonl"
-                if vault_log.is_file():
-                    log_paths.append(vault_log)
+        meta = find_meta_dir(parent, prefer_subfolders=("skill-usage-log.jsonl", "Decisions"))
+        if meta is None:
+            continue
+        vault_log = meta / "skill-usage-log.jsonl"
+        if vault_log.is_file():
+            log_paths.append(vault_log)
+            break
 
     since = int(time.time()) - args.days * 86400
     records = load_records(log_paths, since)

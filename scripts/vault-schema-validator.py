@@ -73,11 +73,12 @@ def load_schema(schema_path: Path) -> dict:
         return json.load(f)
 
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _meta_resolver import find_meta_dir as _find_meta_dir_helper  # noqa: E402
+
+
 def find_meta_dir(vault: Path) -> Path:
-    for child in sorted(vault.iterdir()) if vault.is_dir() else []:
-        if child.is_dir() and child.name.endswith("Meta"):
-            return child
-    return vault / "Meta"
+    return _find_meta_dir_helper(vault) or (vault / "Meta")
 
 
 def find_journals_dir(vault: Path) -> Path | None:
