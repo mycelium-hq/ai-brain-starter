@@ -1,46 +1,33 @@
 # AI Brain Starter
 
-**The operating system for founders running a company and a life.**
+A verification harness around your AI agent. So memory compounds instead of corrupts.
 
 ---
 
-A founder's job is to carry context other people cannot carry. Investor relationships. Board decisions. Team dynamics. Contractor handoffs. And the parts of a life that do not fit inside a company: the book draft, the consulting clients on the side, the friends you want to keep close, the kids' schedules, the side projects that aren't the company. The patterns inside your own thinking that compound quietly into wins, or quietly into drift.
+Microsoft DELEGATE-52 ([arxiv.org/abs/2604.15597](https://arxiv.org/abs/2604.15597), April 2026) measured what most operators already feel: frontier LLMs corrupt 25% of professional content over 20 edit interactions. Document size amplifies the failure 5×. The paper concludes the only reliable mitigation is a domain-specific verification harness around the model.
 
-Most AI tools handle tasks. This is the operating system that handles the context: a second brain for the founder, with the architecture to become the company's. All of it, not just the company's.
+This is one.
 
-No more re-explaining who you are, what you are building, or everything else you are holding in parallel. No more insights lost to chat transcripts. No more decisions you cannot find when you need them. Every session compounds. Every meeting becomes memory. Every pattern surfaces before it becomes a problem.
+**Four moving parts.**
 
-**Why now.** AI agents stopped being demos and started being colleagues. They work brilliantly inside a session and lose everything between sessions, between tools, between teammates. Memory is the wall. This is the substrate that gets agents past the wall: vault as ground truth, hooks as deterministic guards, decisions logged with outcomes, sessions that compound instead of resetting. Five architectural pillars, four AI-agent failure modes prevented. Read the [Reliability Manifesto](RELIABILITY_MANIFESTO.md).
+- **Vault as ground truth.** Markdown on disk. Decisions, patterns, context. The model reads from the vault, not from chat history.
+- **Hooks as deterministic guards.** Pre-write hooks block bad edits before they land. Em dashes in external prose. Frontmatter without required fields. Calendar events without timezone offsets. Raw `git add -A` on a 60K-file vault.
+- **Bi-temporal rule lineage.** Every codified rule carries two clocks: when it was written, and when it was last verified. The resolver detects conflicts. Drift detection scans high-edit files weekly for cumulative semantic shift. The closed loop promotes hardened patterns into procedural memory and demotes stale ones.
+- **Session lifecycle.** Each session start loads context. Each session end cascades decisions, insights, and to-dos to the right files. Nothing stays trapped in a chat transcript.
 
-**Used by** the founder who built this, running an active startup, an AI consulting practice, two long-form writing projects, and twelve years of journals on the same brain. New installs each week through the consulting practice.
+**Free to install. Free to run.** Your Claude subscription is the inference. No vector database, no fine-tune, no per-seat license.
 
-**Free to install. Free to run.** Your Claude subscription is the inference. No vector database to provision, no fine-tune to run, no per-seat license. The vault is on your disk; the substrate is in your repo.
-
-> **Want the team version installed?** I do this with a small number of founders each quarter: vault architecture mapped to your business, MCP integrations with your stack, knowledge graph densification across your existing notes, async training. Free 20-minute diagnostic at [diazroa.com](https://diazroa.com).
-
-## They say entrepreneurship is the greatest growth school
-
-It is. The problem is the school forgets everything you learn the moment you walk out of the classroom.
-
-This accelerates the growth and cuts the mistakes. That acceleration comes from two things most AI tools for founders don't give you:
-
-- **Inner knowledge.** A daily journal with an advisory panel of 90+ real voices (Naval, Brene Brown, Hormozi, Buffett, your own custom advisors) that track your emotional patterns, catch your blind spots, and surface the avoidance behaviors you cannot see from the inside.
-- **Honest feedback.** Fifteen accountability rules baked into every session. Claude corrects you when you are wrong, calls out avoidance, checks your ego, and reminds you who you said you wanted to be. Not a yes-machine. A thinking partner.
-
-Plus everything that makes a founder's week compound instead of reset, whether the week holds investor meetings, book chapters, a consulting deliverable, a friend's birthday, or a school pickup:
-
-- **Memory that compounds** — Claude reads your context file (CLAUDE.md) every session. Corrections stick. Preferences persist. You never re-explain yourself.
-- **Session lifecycle hooks** — every session start loads your last context and current priorities. Every session end captures decisions, insights, ideas, and to-dos to the right files. Nothing stays trapped in a chat transcript.
-- **Knowledge graphs** — Graphify turns your entire vault into a queryable graph. Claude answers "what did I decide about pricing in February?" from structured data instead of grepping thousands of files.
-- **Pattern recognition** — weekly and monthly insight reports surface what you avoided, what stalled, what you promised and did not deliver. Your system catches the founder-shame loop before it catches you.
-- **First-principles analysis** — the /deconstruct skill auto-triggers on high-stakes decisions. Surfaces hidden assumptions, finds foundational truths, rebuilds from scratch.
-- **Writing that sounds like you, not AI** — the Humanizer (v3.0.0) strips AI patterns and rewrites in your actual voice, statistically anchored to your own writing corpus. Run `/humanizer --diff` to score how close any draft is to your voice before publishing.
-
-The whole system ships as one install command, works for non-technical founders, and auto-updates itself.
+[Install in one paste →](#install)
 
 ---
 
-## What a Monday looks like after the system is installed
+## Built under load
+
+The repo is shaped by an active vault: 10,000 markdown files, twelve years of journals, two writing projects, a startup to raise for, an AI consulting practice. The system was forced into shape by the work, not designed in a lab. It's used by the founder who built it; new installs land each week through the consulting practice.
+
+If you carry context professionally (investor relationships, board decisions, team dynamics, contractor handoffs) plus the parts of a life that don't fit inside the company, this is for you.
+
+## A Monday after the system is installed
 
 **7:04 AM.** You run `/journal`. The advisory panel (Naval, Brene Brown, Hormozi, Buffett, plus the custom voices you build) meets your draft and pushes back where your thinking is soft. You walk into the day with ten-minute clarity on something that would have taken an hour of spinning.
 
