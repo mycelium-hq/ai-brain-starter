@@ -108,6 +108,10 @@ This includes:
 
 **Edge case — very long pastes:** If the user pastes a large block (500+ words), the full block still goes in the verbatim section. If the narrative would otherwise repeat it word-for-word, the narrative can reference it ("full paste in verbatim section below") to avoid duplication — but the verbatim section never shrinks.
 
+**Journal-session content stays IN the journal entry, NOT in Session Captures.** Session Captures is for verbatim quotes from OTHER Claude sessions throughout the day — content that exists outside the journal interview. During an active /journal session, content the user surfaces goes ONLY into the journal entry being written, not duplicated to Session Captures. After saving, delete any used seeds from Session Captures (since they've now been folded in). Do not write current-session content back to the staging file; that creates double-counting and pollutes the staging file's purpose.
+
+**Initial context dump goes IN the journal too.** Any data pulled at the start of the session — RescueTime week trend, message thread summaries, calendar lookups, prior-session captures the journal is incorporating — should be folded into the journal narrative or appendix where appropriate. Don't keep it as scratch context that disappears after the session ends. The user's day-context becomes part of the day's journal record.
+
 ### Step 0: Pull Session Captures AND RescueTime (ALWAYS — do both before saying anything)
 
 **0a. RescueTime.** If the RescueTime MCP is connected, pull today's summary immediately so the Productivity Pulse, productive/distracting hours, and top 3 apps are in the room from sentence one. Do NOT defer this to Step 3. If the MCP is not connected, note it and move on.
