@@ -11,6 +11,24 @@ For full development history including internal refactors and bug fixes, see [`C
 
 ---
 
+## 2026-05-06 — `--plugin-url` quick-try path + tagged releases
+
+Existing Claude Code 2.1.129+ users can now try AI Brain Starter skills against an existing vault without running the full bootstrap:
+
+```
+claude --plugin-url https://github.com/adelaidasofia/ai-brain-starter/releases/latest/download/ai-brain-starter.zip
+```
+
+The plugin loads for the current session only. You get the skills (journaling, graphify, weekly insights, etc.); your home directory and vault structure are not modified. This is an evaluation path, not a substitute for the full bootstrap, which sets up the Obsidian vault, hooks, resolver, and everything that compounds across sessions.
+
+The full email-gated install at [`myceliumai.co/install`](https://myceliumai.co/install) remains the recommended path for new users. It gives you the system, not just the skills.
+
+Tagged releases (`v1.1.0` and forward) are now built and signed by `.github/workflows/release.yml` on every `v*` tag push. Each release includes the zip, a tarball, and SHA256 sums. See `docs/RELEASE_PROCESS.md` for the maintainer procedure.
+
+**No action required** for existing installs.
+
+---
+
 ## 2026-04-30 — `/extract-rules-from-vault` skill
 
 New skill for onboarding companies that already have history in Slack, Notion, GDocs, or any markdown corpus. Reads the dump, finds recurring decision phrases, owner-of-process patterns, and template-shaped rituals, and emits draft `CLAUDE.md` entries, draft hookify rules, and draft skill scaffolds.
