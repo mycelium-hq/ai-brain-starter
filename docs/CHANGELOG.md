@@ -9,6 +9,30 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-06 — Release workflow + `--plugin-url` quick-try path
+
+**Who this affects:** anyone who wants to try ai-brain-starter skills against an existing vault without running the full bootstrap, plus maintainers who want a tagged-release distribution path alongside the email-gated install funnel.
+
+**The shape:** Claude Code 2.1.129 added a `--plugin-url <url>` flag that fetches a plugin .zip archive from a URL for the current session. The repo was already a valid Claude Code plugin (`.claude-plugin/plugin.json` + `marketplace.json`), but had no published release artifact for `--plugin-url` to point at. This drop adds the release pipeline and a one-line quick-try path in the README, alongside the existing email-gated full install.
+
+### What shipped
+
+- **`.github/workflows/release.yml` — tag-triggered release builder.** Fires on `v*` tag push (or manual `workflow_dispatch` with a tag input). Validates `.claude-plugin/plugin.json` + `marketplace.json` parse as JSON, runs a private-context scrub against word-boundary tokens that must never appear in this public repo, builds a clean `ai-brain-starter.zip` + `ai-brain-starter.tar.gz` (excluding `.git`, `.github`, secrets, build artifacts, local settings), generates SHA256 sums, and creates the GitHub release with auto-generated release notes. The release URL is stable: `https://github.com/adelaidasofia/ai-brain-starter/releases/latest/download/ai-brain-starter.zip`.
+- **README quick-try section.** A new "Quick-try (existing Claude Code users)" subsection inside the install block documents the `--plugin-url` invocation. Frames the path as session-scoped evaluation, not a replacement for the full bootstrap (which still sets up the Obsidian vault + hooks + resolver). Existing email-gated install remains the primary path.
+
+### How to release
+
+Tag a version on `main` and push the tag:
+
+```
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The workflow runs in a few seconds, scrubs the diff, builds both archives, and publishes the release. Re-runs on the same tag via `workflow_dispatch` will overwrite the assets (`--clobber`) without recreating the release.
+
+---
+
 ## 2026-05-02 — Synthesizer LLM mode + closed-loop daemon + eval framework
 
 **Who this affects:** anyone running the `synth-pr-to-sop` / `synth-thread-to-sop` skills, anyone who wanted lower-latency feedback from `Meta/Learnings/` capture into procedural memory, and maintainers who want a regression-risk score on synthesizer changes.

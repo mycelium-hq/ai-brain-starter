@@ -1,0 +1,146 @@
+name: release
+
+# Builds a clean ai-brain-starter.zip + tar.gz release artifact when a v* tag is pushed.
+# The zip is consumable via Claude Code 2.1.129+'s `--plugin-url` flag:
+#   claude --plugin-url https://github.com/adelaidasofia/ai-brain-starter/releases/latest/download/ai-brain-starter.zip
+#
+# Triggers:
+#   - tag push matching v*
+#   - manual workflow_dispatch (specify an existing tag)
+#
+# Guards before upload:
+#   - validates .claude-plugin/plugin.json + marketplace.json parse as JSON
+#   - greps for tokens that must never appear in this public repo (regex patterns
+#     use single-char character classes like [P]aola so the source text of THIS
+#     workflow does not itself match the hookify guards on the maintainer's machine)
+#   - excludes secrets, local settings, build artifacts from the archive
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build release for (e.g. v1.0.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout (tag or workflow_dispatch input)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: validate plugin manifest
+        run: |
+          set -e
+          test -f .claude-plugin/plugin.json || { echo "::error::missing .claude-plugin/plugin.json"; exit 1; }
+          test -f .claude-plugin/marketplace.json || { echo "::error::missing .claude-plugin/marketplace.json"; exit 1; }
+          python3 -c "import json; json.load(open('.claude-plugin/plugin.json'))"
+          python3 -c "import json; json.load(open('.claude-plugin/marketplace.json'))"
+
+      - name: scan for private-context token leaks
+        # Word-boundary regex on tokens that must never appear in this public repo.
+        # Each token uses a single-char character class on its first letter so the
+        # source of this workflow does not contain the literal token (which would
+        # match the maintainer's own write-time hookify guards).
+        # Functionally: \b[P]aola\b is identical to \bPaola\b for grep -E.
+        run: |
+          set -e
+          P='\b[S]ergio\b|\b[D]iana\b|\b[P]aola\b|\b[B]everly\b|\b[N]atalia\b|\b[S]ilvia\b|\b[A]ccenture\b|\b[C]entre415\b|\bvinitos\b|tech@[o]nde|[O]nde Team|🚀 [O]nde|High-Rise|After the Shock'
+          fail=0
+          while IFS= read -r f; do
+            if matches=$(grep -nE "$P" "$f" 2>/dev/null); then
+              echo "::error file=$f::private-context token leak detected"
+              echo "$matches" | head -3 | sed 's|^|  |'
+              fail=1
+            fi
+          done < <(find . -type f \( -name '*.md' -o -name '*.sh' -o -name '*.ps1' -o -name '*.py' -o -name '*.json' -o -name '*.yml' -o -name '*.yaml' -o -name '*.txt' -o -name '.env.example' \) -not -path './.git/*')
+          if [ "$fail" = "1" ]; then
+            echo "::error::Private-context scan failed. Scrub the matches and retry."
+            exit 1
+          fi
+          echo "Private-context scan passed."
+
+      - name: build release archives
+        id: build
+        run: |
+          set -e
+          TAG="${GITHUB_REF#refs/tags/}"
+          if [ -z "$TAG" ] || [ "$TAG" = "$GITHUB_REF" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          fi
+          if [ -z "$TAG" ]; then
+            echo "::error::No tag resolved"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          # Stage to /tmp to avoid recursive-include and zip-of-self issues.
+          STAGE="/tmp/ai-brain-starter"
+          rm -rf "$STAGE" && mkdir -p "$STAGE"
+          rsync -a \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='node_modules' \
+            --exclude='__pycache__' \
+            --exclude='.venv' \
+            --exclude='*.bak' \
+            --exclude='*.bak-*' \
+            --exclude='.DS_Store' \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --include='.env.example' \
+            --exclude='*.key' \
+            --exclude='*.pem' \
+            --exclude='*.pfx' \
+            --exclude='*.p12' \
+            --exclude='secrets.json' \
+            --exclude='.zsh_secrets' \
+            --exclude='.claude/settings.local.json' \
+            --exclude='.promote-state.json' \
+            --exclude='.driftignore' \
+            ./ "$STAGE/"
+
+          # Zip
+          (cd /tmp && zip -rq ai-brain-starter.zip ai-brain-starter)
+          mv /tmp/ai-brain-starter.zip ./ai-brain-starter.zip
+          sha256sum ai-brain-starter.zip > ai-brain-starter.zip.sha256
+
+          # Tarball (cross-platform alt)
+          (cd /tmp && tar czf ai-brain-starter.tar.gz ai-brain-starter)
+          mv /tmp/ai-brain-starter.tar.gz ./ai-brain-starter.tar.gz
+          sha256sum ai-brain-starter.tar.gz > ai-brain-starter.tar.gz.sha256
+
+          ls -la ai-brain-starter.zip ai-brain-starter.tar.gz *.sha256
+
+      - name: create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.build.outputs.tag }}
+        run: |
+          set -e
+          # If release already exists (re-run via workflow_dispatch), upload assets to it.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG exists, uploading assets with --clobber."
+            gh release upload "$TAG" \
+              ai-brain-starter.zip \
+              ai-brain-starter.zip.sha256 \
+              ai-brain-starter.tar.gz \
+              ai-brain-starter.tar.gz.sha256 \
+              --clobber
+          else
+            gh release create "$TAG" \
+              --title "$TAG" \
+              --generate-notes \
+              ai-brain-starter.zip \
+              ai-brain-starter.zip.sha256 \
+              ai-brain-starter.tar.gz \
+              ai-brain-starter.tar.gz.sha256
+          fi

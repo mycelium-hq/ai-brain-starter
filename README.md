@@ -91,6 +91,16 @@ One paste, no terminal commands to type. Mac, Windows, and Linux all use the sam
 
 *Local install. Your vault data never leaves your machine. The signup form is the only piece that touches our servers, and it captures only what's listed in [`SECURITY.md`](SECURITY.md) and the [privacy policy](https://myceliumai.co/privacy).*
 
+### Quick-try (existing Claude Code users)
+
+If you already have Claude Code 2.1.129+ and just want to try the skills against an existing vault (no full bootstrap, no Obsidian setup), load the plugin from the latest release archive:
+
+```
+claude --plugin-url https://github.com/adelaidasofia/ai-brain-starter/releases/latest/download/ai-brain-starter.zip
+```
+
+This loads the plugin **for the current session only**, giving you the skills (journaling, graphify, weekly insights, etc.) without touching your home directory or vault structure. Use it to evaluate whether the skill set fits your workflow before committing to the full bootstrap. The full install above remains the recommended path: it sets up the Obsidian vault, the hooks, the resolver, the meeting workflow, and everything else that makes the system compound across sessions.
+
 ---
 
 ## Instalar (Español)
