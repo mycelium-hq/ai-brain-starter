@@ -234,6 +234,50 @@ is_linux() { [[ "$(uname -s)" == "Linux" ]]; }
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# ───────────────────────────────────────────────────────────────────────────────
+# Locale detection + bilingual translation helper
+# Override via BOOTSTRAP_LANG=es|en. Otherwise: $LC_ALL > $LANG > AppleLocale > en.
+# ───────────────────────────────────────────────────────────────────────────────
+detect_lang() {
+  local raw="${BOOTSTRAP_LANG:-${LC_ALL:-${LANG:-}}}"
+  if [[ -z "$raw" ]] && is_mac; then
+    raw="$(defaults read -g AppleLocale 2>/dev/null || true)"
+  fi
+  [[ -z "$raw" ]] && raw="en_US"
+  [[ "${raw:0:2}" == "es" ]] && echo "es" || echo "en"
+}
+LANG_CODE="$(detect_lang)"
+t() { [[ "$LANG_CODE" == "es" ]] && echo "$2" || echo "$1"; }
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Pre-flight gate (skip with PREFLIGHT_BYPASS=1)
+# Refuses to install on RED. Continues on YELLOW/GREEN.
+# ───────────────────────────────────────────────────────────────────────────────
+PREFLIGHT_SCRIPT_LOCAL="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)/scripts/preflight.sh"
+PREFLIGHT_SCRIPT_INSTALLED="$HOME/.claude/skills/ai-brain-starter/scripts/preflight.sh"
+PREFLIGHT_TO_RUN=""
+[[ -f "$PREFLIGHT_SCRIPT_LOCAL" ]] && PREFLIGHT_TO_RUN="$PREFLIGHT_SCRIPT_LOCAL"
+[[ -z "$PREFLIGHT_TO_RUN" && -f "$PREFLIGHT_SCRIPT_INSTALLED" ]] && PREFLIGHT_TO_RUN="$PREFLIGHT_SCRIPT_INSTALLED"
+
+if [[ "${PREFLIGHT_BYPASS:-0}" != "1" && -n "$PREFLIGHT_TO_RUN" && $DRY_RUN -eq 0 ]]; then
+  hdr "$(t "Pre-flight check" "Verificación previa")"
+  log "$(t \
+    "Verifying every prerequisite before any tool is installed." \
+    "Verificando cada requisito antes de instalar nada.")"
+  set +e
+  bash "$PREFLIGHT_TO_RUN"
+  PREFLIGHT_RC=$?
+  set -e
+  if [[ $PREFLIGHT_RC -eq 2 ]]; then
+    printf "\n\033[31m%s\033[0m\n" "$(t \
+      "Bootstrap aborted: pre-flight found blockers. Fix them and re-run." \
+      "Bootstrap detenido: la verificación previa encontró bloqueantes. Arreglalos y volvé a correr.")"
+    printf "  %s\n" "$(t "To bypass during development: PREFLIGHT_BYPASS=1 bash bootstrap.sh" \
+                          "Para saltarla en desarrollo: PREFLIGHT_BYPASS=1 bash bootstrap.sh")"
+    exit 2
+  fi
+fi
+
 # Run a command, OR print what it would do in dry-run mode.
 # Usage: do_cmd "human description" actual command...
 do_cmd() {
@@ -262,18 +306,28 @@ backup_file() {
 # Header
 # ───────────────────────────────────────────────────────────────────────────────
 
-hdr "ai-brain-starter — one-command install"
+hdr "$(t "ai-brain-starter — one-command install" "ai-brain-starter — instalación de un solo comando")"
 echo
 if [[ $DRY_RUN -eq 1 ]]; then
-  echo "  \033[35mDRY RUN MODE\033[0m — showing what would be installed without making any changes."
-  echo
+  printf "  \033[35m%s\033[0m %s\n\n" \
+    "$(t "DRY RUN MODE" "MODO DE PRUEBA")" \
+    "$(t "— showing what would be installed without making any changes." \
+         "— mostrando lo que se instalaría sin hacer cambios reales.")"
 fi
-echo "  This installs the full AI brain stack: graphify, humanizer,"
-echo "  meeting-todos, patterns, the Granola MCP, plus the ai-brain-starter"
-echo "  skill itself. Takes ~5 minutes the first time, ~10 seconds on re-runs."
+echo "  $(t \
+  "This installs the full AI brain stack: graphify, humanizer," \
+  "Esto instala el stack completo de AI brain: graphify, humanizer,")"
+echo "  $(t \
+  "meeting-todos, patterns, the Granola MCP, plus the ai-brain-starter" \
+  "meeting-todos, patterns, el MCP de Granola, y la skill ai-brain-starter")"
+echo "  $(t \
+  "skill itself. Takes ~5 minutes the first time, ~10 seconds on re-runs." \
+  "misma. Tarda ~5 minutos la primera vez, ~10 segundos en recorridas siguientes.")"
 echo
-echo "  When it's done, Claude continues with the setup interview automatically."
-echo "  You don't need to type anything."
+echo "  $(t \
+  "When it's done, Claude continues with the setup interview automatically." \
+  "Cuando termine, Claude continúa con la entrevista de setup automáticamente.")"
+echo "  $(t "You don't need to type anything." "No necesitás tipear nada.")"
 echo
 [[ $DRY_RUN -eq 0 ]] && sleep 1
 
@@ -344,15 +398,22 @@ fi
 # ───────────────────────────────────────────────────────────────────────────────
 
 if is_mac && ! have brew; then
-  hdr "Installing Homebrew"
-  log "Homebrew is the package manager Mac uses for everything else here."
+  hdr "$(t "Installing Homebrew" "Instalando Homebrew")"
+  log "$(t \
+    "Homebrew is the package manager Mac uses for everything else here." \
+    "Homebrew es el gestor de paquetes que Mac usa para todo lo demás acá.")"
   log ""
-  log "  ⚠️  HEADS UP: Homebrew will ask for your Mac password in a moment."
-  log "  ⚠️  When the prompt appears, type your password and press Enter."
-  log "  ⚠️  YOU WILL NOT SEE CHARACTERS AS YOU TYPE — that's normal Mac security."
-  log "  ⚠️  DO NOT CLOSE THIS WINDOW. The install takes ~2 minutes after the password."
+  log "  ⚠️  $(t "HEADS UP: Homebrew will ask for your Mac password in a moment." \
+                  "AVISO: Homebrew va a pedirte tu contraseña de Mac en un momento.")"
+  log "  ⚠️  $(t "When the prompt appears, type your password and press Enter." \
+                  "Cuando aparezca el prompt, tipeá tu contraseña y presioná Enter.")"
+  log "  ⚠️  $(t "YOU WILL NOT SEE CHARACTERS AS YOU TYPE — that's normal Mac security." \
+                  "NO VAS A VER LOS CARACTERES MIENTRAS TIPIÁS — es normal en Mac.")"
+  log "  ⚠️  $(t "DO NOT CLOSE THIS WINDOW. The install takes ~2 minutes after the password." \
+                  "NO CIERRES ESTA VENTANA. La instalación tarda ~2 minutos después de la contraseña.")"
   log ""
-  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || err "homebrew install failed"
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" \
+    || err "$(t "homebrew install failed" "falló la instalación de Homebrew")"
   # Add brew to PATH for the current session (Apple Silicon vs Intel)
   if [[ -x /opt/homebrew/bin/brew ]]; then
     eval "$(/opt/homebrew/bin/brew shellenv)"
@@ -404,11 +465,19 @@ have npm  && ok "npm $(npm --version)"
 # ───────────────────────────────────────────────────────────────────────────────
 
 if ! have claude; then
-  hdr "Installing Claude Code"
-  log "Claude Code is Anthropic's developer tool that runs the AI brain skill."
-  log "It's different from claude.ai (the chat website) — this one lives in your terminal"
-  log "and can read and write files in your vault. We're installing it via npm."
-  npm install -g @anthropic-ai/claude-code 2>/dev/null || err "Claude Code install failed — install manually with: npm install -g @anthropic-ai/claude-code"
+  hdr "$(t "Installing Claude Code" "Instalando Claude Code")"
+  log "$(t \
+    "Claude Code is Anthropic's developer tool that runs the AI brain skill." \
+    "Claude Code es la herramienta de Anthropic para developers que corre la skill del AI brain.")"
+  log "$(t \
+    "It's different from claude.ai (the chat website) — this one lives in your terminal" \
+    "Es diferente de claude.ai (el sitio web de chat) — este vive en tu terminal")"
+  log "$(t \
+    "and can read and write files in your vault. We're installing it via npm." \
+    "y puede leer y escribir archivos en tu vault. Lo instalamos vía npm.")"
+  npm install -g @anthropic-ai/claude-code 2>/dev/null \
+    || err "$(t "Claude Code install failed — install manually with: npm install -g @anthropic-ai/claude-code" \
+               "Falló la instalación de Claude Code — instalalo manual con: npm install -g @anthropic-ai/claude-code")"
 fi
 have claude && ok "claude $(claude --version 2>/dev/null | head -1 || echo installed)"
 
@@ -457,13 +526,21 @@ have gh && ok "gh $(gh --version 2>/dev/null | head -1 | awk '{print $3}')" || t
 
 if is_mac; then
   if [[ ! -d "/Applications/Obsidian.app" ]]; then
-    hdr "Installing Obsidian"
-    log "Obsidian is the note-taking app this whole setup writes into. Free, runs locally, no account."
-    log "Installing via Homebrew so you don't have to download anything yourself."
-    brew install --cask obsidian || err "Obsidian install failed — install manually from https://obsidian.md and re-run this script"
+    hdr "$(t "Installing Obsidian" "Instalando Obsidian")"
+    log "$(t \
+      "Obsidian is the note-taking app this whole setup writes into. Free, runs locally, no account." \
+      "Obsidian es la app de notas en la que todo este setup escribe. Gratis, corre local, sin cuenta.")"
+    log "$(t \
+      "Installing via Homebrew so you don't have to download anything yourself." \
+      "Instalando vía Homebrew para que no tengas que descargar nada manual.")"
+    brew install --cask obsidian \
+      || err "$(t \
+        "Obsidian install failed — install manually from https://obsidian.md and re-run this script" \
+        "Falló la instalación de Obsidian — instalalo manual desde https://obsidian.md y volvé a correr este script")"
   fi
   if [[ -d "/Applications/Obsidian.app" ]]; then
-    ok "Obsidian installed at /Applications/Obsidian.app"
+    ok "$(t "Obsidian installed at /Applications/Obsidian.app" \
+            "Obsidian instalado en /Applications/Obsidian.app")"
   fi
 else
   # Linux — try snap, then flatpak, then AppImage download. Never ask the user to
@@ -859,13 +936,19 @@ fi  # end: if [[ $SKIP_VERIFY -eq 0 ]]
 
 echo
 if [[ ${#FAILED[@]} -eq 0 ]]; then
-  printf "\033[32m━━━ All checks passed. ━━━\033[0m\n\n"
+  printf "\033[32m━━━ %s ━━━\033[0m\n\n" \
+    "$(t "All checks passed." "Todas las verificaciones pasaron.")"
 else
-  printf "\033[31m━━━ %d check(s) failed: ━━━\033[0m\n" "${#FAILED[@]}"
+  printf "\033[31m━━━ %d %s ━━━\033[0m\n" "${#FAILED[@]}" \
+    "$(t "check(s) failed:" "verificación(es) fallaron:")"
   for f in "${FAILED[@]}"; do printf "  • %s\n" "$f"; done
   echo
-  echo "Don't proceed silently. Fix these before continuing the setup interview."
-  echo "Re-running this script is safe and skips anything already installed."
+  echo "$(t \
+    "Don't proceed silently. Fix these before continuing the setup interview." \
+    "No sigas en silencio. Arreglá esto antes de continuar con la entrevista de setup.")"
+  echo "$(t \
+    "Re-running this script is safe and skips anything already installed." \
+    "Volver a correr este script es seguro y saltea lo que ya está instalado.")"
 fi
 
 # ───────────────────────────────────────────────────────────────────────────────
@@ -924,9 +1007,36 @@ fi
 # ───────────────────────────────────────────────────────────────────────────────
 
 if [[ -n "${CLAUDE_CODE_ENTRYPOINT:-}" ]]; then
-  # Running inside Claude Code (the paste-flow from the README). Claude will
-  # continue with the setup interview automatically; no user action needed.
-  cat <<'EOF'
+  # Running inside Claude Code (paste-flow from README). Claude will continue
+  # with the setup interview automatically; no user action needed.
+  if [[ "$LANG_CODE" == "es" ]]; then
+    cat <<'EOF'
+
+━━━ Instalación completa ━━━
+
+  Las herramientas están listas. Claude continúa con la entrevista de setup
+  automáticamente desde acá. Sin comandos que tipear, sin carpetas que abrir,
+  sin terminal que tocar.
+
+  ⌘↩ vs tipear: cuando veas un cuadro gris de aprobación de herramienta,
+  presioná ⌘↩ (Mac) o Ctrl+Enter (Windows). Cuando Claude te haga una pregunta,
+  solo tipeá tu respuesta y presioná Enter.
+
+  Cuando tu vault personal esté corriendo, podés pedirle a Claude cualquiera
+  de estas para conectar la versión de equipo:
+
+       "¿Cómo agrego a mi equipo sin mezclar mis cosas personales?"
+       "Optimizá esto para mi empresa."
+       "¿Cómo se ve la versión de equipo?"
+
+  Generación de imágenes (Nano Banana, vía Gemini) es lo único que no se
+  puede auto-instalar acá. Necesita comandos /plugin dentro de Claude Code
+  y una API key de Gemini en https://ai.google.dev/. Pedile a Claude que la
+  prenda cuando quieras generar imágenes; no la necesitás para el setup base.
+
+EOF
+  else
+    cat <<'EOF'
 
 ━━━ Install complete ━━━
 
@@ -950,10 +1060,29 @@ if [[ -n "${CLAUDE_CODE_ENTRYPOINT:-}" ]]; then
   you actually want image generation; you don't need it for the core setup.
 
 EOF
+  fi
 else
   # Running standalone (curl-to-bash from a plain terminal). The user has no
   # active Claude session to continue into; guide them to the paste-flow.
-  cat <<'EOF'
+  if [[ "$LANG_CODE" == "es" ]]; then
+    cat <<'EOF'
+
+━━━ Instalación completa ━━━
+
+  Las herramientas están listas. Ahora abrí la app de escritorio de Claude
+  Code y pegá esto en el chat para correr la entrevista de setup:
+
+      Por favor configurá mi AI Brain Starter completo en esta sesión.
+      La skill ai-brain-starter ya está instalada en
+      ~/.claude/skills/ai-brain-starter. Empezá la entrevista de setup
+      corriendo la skill setup-brain y guiame por cada fase sin parar.
+
+  Claude te va a preguntar dónde vivirá tu vault y va a construir todo
+  alrededor de tus respuestas. No necesitás tipear ningún otro comando.
+
+EOF
+  else
+    cat <<'EOF'
 
 ━━━ Install complete ━━━
 
@@ -970,4 +1099,5 @@ else
   around your answers. You don't need to type any other commands.
 
 EOF
+  fi
 fi

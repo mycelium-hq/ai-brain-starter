@@ -55,6 +55,46 @@ function Backup-File($path) {
     else { Copy-Item $path $bak; $script:Backups += $bak }
 }
 
+# ─── Locale detection + bilingual helper ──────────────────────────────────────
+# Override via $env:BOOTSTRAP_LANG = "es"|"en". Otherwise: LC_ALL > LANG > Get-Culture > en.
+function Detect-Lang {
+    $raw = $env:BOOTSTRAP_LANG
+    if (-not $raw) { $raw = $env:LC_ALL }
+    if (-not $raw) { $raw = $env:LANG }
+    if (-not $raw) { try { $raw = (Get-Culture).Name } catch { $raw = "en-US" } }
+    if ($raw.Substring(0, [Math]::Min(2, $raw.Length)) -eq "es") { return "es" }
+    return "en"
+}
+$script:LangCode = Detect-Lang
+function T([string]$en, [string]$es) {
+    if ($script:LangCode -eq "es") { return $es } else { return $en }
+}
+
+# ─── Pre-flight gate (skip with $env:PREFLIGHT_BYPASS = "1") ──────────────────
+$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$preflightLocal = Join-Path $scriptRoot "scripts\preflight.ps1"
+$preflightInstalled = "$env:USERPROFILE\.claude\skills\ai-brain-starter\scripts\preflight.ps1"
+$preflightToRun = ""
+if (Test-Path $preflightLocal) { $preflightToRun = $preflightLocal }
+elseif (Test-Path $preflightInstalled) { $preflightToRun = $preflightInstalled }
+
+if ($env:PREFLIGHT_BYPASS -ne "1" -and $preflightToRun -and -not $DryRun) {
+    Hdr (T "Pre-flight check" "Verificación previa")
+    Log (T "Verifying every prerequisite before any tool is installed." `
+          "Verificando cada requisito antes de instalar nada.")
+    & $preflightToRun
+    $preflightRc = $LASTEXITCODE
+    if ($preflightRc -eq 2) {
+        Write-Host ""
+        Write-Host (T "Bootstrap aborted: pre-flight found blockers. Fix them and re-run." `
+                       "Bootstrap detenido: la verificación previa encontró bloqueantes. Arreglalos y volvé a correr.") `
+                       -ForegroundColor Red
+        Write-Host (T "To bypass during development: `$env:PREFLIGHT_BYPASS = '1'; pwsh bootstrap.ps1" `
+                       "Para saltarla en desarrollo: `$env:PREFLIGHT_BYPASS = '1'; pwsh bootstrap.ps1")
+        exit 2
+    }
+}
+
 Hdr "Cleaning up deprecated tools"
 
 # claude-mem: unauthenticated local HTTP API, arbitrary file-read surface,
@@ -93,20 +133,27 @@ if (Test-Path $notebooklmDir) {
     }
 } else { Ok "notebooklm not present, nothing to clean" }
 
-Hdr "ai-brain-starter, one-command install"
+Hdr (T "ai-brain-starter, one-command install" "ai-brain-starter, instalación de un solo comando")
 Write-Host ""
 if ($DryRun) {
-    Write-Host "  DRY RUN MODE - showing what would be installed without making any changes." -ForegroundColor Magenta
+    Write-Host ("  " + (T "DRY RUN MODE - showing what would be installed without making any changes." `
+                            "MODO DE PRUEBA - mostrando lo que se instalaría sin hacer cambios reales.")) -ForegroundColor Magenta
     Write-Host ""
 }
-Write-Host "  This installs the full AI brain stack: graphify, humanizer,"
-Write-Host "  meeting-todos, patterns, insights, deconstruct, daily-journal,"
-Write-Host "  repurpose-talk, nano-banana (skill docs), Granola + ChatPRD MCPs,"
-Write-Host "  the obsidian-skills marketplace, plus the ai-brain-starter skill"
-Write-Host "  itself. Takes ~5 minutes the first time."
+Write-Host ("  " + (T "This installs the full AI brain stack: graphify, humanizer," `
+                       "Esto instala el stack completo de AI brain: graphify, humanizer,"))
+Write-Host ("  " + (T "meeting-todos, patterns, insights, deconstruct, daily-journal," `
+                       "meeting-todos, patterns, insights, deconstruct, daily-journal,"))
+Write-Host ("  " + (T "repurpose-talk, nano-banana (skill docs), Granola + ChatPRD MCPs," `
+                       "repurpose-talk, nano-banana (docs de skill), MCPs de Granola + ChatPRD,"))
+Write-Host ("  " + (T "the obsidian-skills marketplace, plus the ai-brain-starter skill" `
+                       "el marketplace obsidian-skills, y la skill ai-brain-starter"))
+Write-Host ("  " + (T "itself. Takes ~5 minutes the first time." `
+                       "misma. Tarda ~5 minutos la primera vez."))
 Write-Host ""
-Write-Host "  When it's done, Claude continues with the setup interview automatically."
-Write-Host "  You don't need to type anything."
+Write-Host ("  " + (T "When it's done, Claude continues with the setup interview automatically." `
+                       "Cuando termine, Claude continúa con la entrevista de setup automáticamente."))
+Write-Host ("  " + (T "You don't need to type anything." "No necesitás tipear nada."))
 Write-Host ""
 Start-Sleep -Seconds 1
 
@@ -116,22 +163,26 @@ Start-Sleep -Seconds 1
 # anything else. Never abort with "go install something from the Microsoft
 # Store yourself", that defeats the one-command promise.
 if (-not (Have winget)) {
-    Hdr "Installing winget (App Installer)"
-    Log "winget is the Windows package manager we use to install everything else."
-    Log "Your Windows version is missing it, we'll install it for you now."
+    Hdr (T "Installing winget (App Installer)" "Instalando winget (App Installer)")
+    Log (T "winget is the Windows package manager we use to install everything else." `
+          "winget es el gestor de paquetes de Windows que usamos para instalar todo lo demás.")
+    Log (T "Your Windows version is missing it, we'll install it for you now." `
+          "Tu versión de Windows no lo tiene, lo instalamos por vos ahora.")
 
     # Method 1: Microsoft's official MSIX bundle. URL aka.ms/getwinget always
     # resolves to the latest stable release on GitHub.
     $tempInstaller = "$env:TEMP\AppInstaller.msixbundle"
     try {
-        Log "Downloading App Installer from Microsoft..."
+        Log (T "Downloading App Installer from Microsoft..." "Descargando App Installer de Microsoft...")
         Invoke-WebRequest -Uri "https://aka.ms/getwinget" -OutFile $tempInstaller -UseBasicParsing
-        Log "Installing... (a Windows install dialog may appear briefly)"
+        Log (T "Installing... (a Windows install dialog may appear briefly)" `
+              "Instalando... (puede aparecer brevemente un diálogo de instalación de Windows)")
         Add-AppxPackage -Path $tempInstaller -ErrorAction Stop
         Remove-Item $tempInstaller -Force -ErrorAction SilentlyContinue
     } catch {
-        Warn "Auto-install of winget failed: $_"
-        Warn "Falling back to direct MSI installs for Python/Node/Obsidian."
+        Warn (T "Auto-install of winget failed: $_" "Falló la auto-instalación de winget: $_")
+        Warn (T "Falling back to direct MSI installs for Python/Node/Obsidian." `
+               "Volviendo a instalaciones MSI directas para Python/Node/Obsidian.")
     }
 
     # Refresh PATH so winget is callable in this session
@@ -199,17 +250,21 @@ if (Have node) { Ok "node $(node --version)" } else { Err "node install failed" 
 # bootstrap finishes. Distributed via npm so the install path is identical
 # across Mac, Linux, and Windows once Node is present.
 if (-not (Have claude)) {
-    Hdr "Installing Claude Code"
-    Log "Claude Code is Anthropic's developer tool that runs the AI brain skill."
-    Log "It's different from claude.ai (the chat website), this one lives in your"
-    Log "terminal and can read and write files in your vault. Installing via npm."
+    Hdr (T "Installing Claude Code" "Instalando Claude Code")
+    Log (T "Claude Code is Anthropic's developer tool that runs the AI brain skill." `
+          "Claude Code es la herramienta de Anthropic para developers que corre la skill del AI brain.")
+    Log (T "It's different from claude.ai (the chat website), this one lives in your" `
+          "Es diferente de claude.ai (el sitio de chat); este vive en tu")
+    Log (T "terminal and can read and write files in your vault. Installing via npm." `
+          "terminal y puede leer y escribir archivos en tu vault. Instalando vía npm.")
     npm install -g @anthropic-ai/claude-code 2>$null
     if ($LASTEXITCODE -ne 0) {
-        Err "Claude Code install failed, install manually with: npm install -g @anthropic-ai/claude-code"
+        Err (T "Claude Code install failed, install manually with: npm install -g @anthropic-ai/claude-code" `
+              "Falló la instalación de Claude Code. Instalalo manual con: npm install -g @anthropic-ai/claude-code")
     }
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 }
-if (Have claude) { Ok "Claude Code installed" }
+if (Have claude) { Ok (T "Claude Code installed" "Claude Code instalado") }
 
 # ─── pipx ─────────────────────────────────────────────────────────────────────
 if (-not (Have pipx)) {
@@ -279,16 +334,19 @@ foreach ($p in $ObsidianPaths) {
 }
 
 if (-not $ObsidianInstalled) {
-    Hdr "Installing Obsidian"
-    Log "Obsidian is the note-taking app this whole setup writes into. Free, runs locally, no account."
+    Hdr (T "Installing Obsidian" "Instalando Obsidian")
+    Log (T "Obsidian is the note-taking app this whole setup writes into. Free, runs locally, no account." `
+          "Obsidian es la app de notas en la que todo este setup escribe. Gratis, corre local, sin cuenta.")
     if ($DryRun) {
         Dry "would: install Obsidian via winget or direct download"
     } else {
         if ($UseWinget) {
-            Log "Installing via winget so you don't have to download anything yourself."
+            Log (T "Installing via winget so you don't have to download anything yourself." `
+                  "Instalando vía winget para que no tengas que descargar nada manual.")
             winget install -e --id Obsidian.Obsidian --accept-source-agreements --accept-package-agreements
         } else {
-            Log "winget unavailable, downloading Obsidian installer directly from obsidian.md."
+            Log (T "winget unavailable, downloading Obsidian installer directly from obsidian.md." `
+                  "winget no disponible, descargando instalador de Obsidian directamente desde obsidian.md.")
             $obsInstaller = "$env:TEMP\Obsidian-Installer.exe"
             try {
                 # Resolve latest Windows installer from Obsidian's GitHub releases.
@@ -543,12 +601,13 @@ if ((Get-Content "$env:USERPROFILE\.claude\settings.json" -ErrorAction SilentlyC
 
 Write-Host ""
 if ($Failed.Count -eq 0) {
-    Write-Host "━━━ All checks passed. ━━━" -ForegroundColor Green
+    Write-Host ("━━━ " + (T "All checks passed." "Todas las verificaciones pasaron.") + " ━━━") -ForegroundColor Green
 } else {
-    Write-Host "━━━ $($Failed.Count) check(s) failed: ━━━" -ForegroundColor Red
+    Write-Host ("━━━ $($Failed.Count) " + (T "check(s) failed:" "verificación(es) fallaron:") + " ━━━") -ForegroundColor Red
     foreach ($f in $Failed) { Write-Host "  - $f" }
     Write-Host ""
-    Write-Host "Don't proceed silently - fix these before continuing the setup interview."
+    Write-Host (T "Don't proceed silently - fix these before continuing the setup interview." `
+                  "No sigas en silencio: arreglá esto antes de continuar con la entrevista de setup.")
 }
 
 # ─── Change summary ──────────────────────────────────────────────────────────
@@ -589,31 +648,47 @@ if ($Installed.Count -eq 0 -and $Updated.Count -eq 0 -and $Skipped.Count -eq 0 -
 Write-Host ""
 
 Write-Host ""
-Write-Host "━━━ Install complete ━━━" -ForegroundColor Cyan
+Write-Host ("━━━ " + (T "Install complete" "Instalación completa") + " ━━━") -ForegroundColor Cyan
 Write-Host ""
 if ($env:CLAUDE_CODE_ENTRYPOINT) {
     # Running inside Claude Code (the paste-flow from the README). Claude will
     # continue with the setup interview automatically; no user action needed.
-    Write-Host "  Tools are ready. Claude continues with the setup interview automatically"
-    Write-Host "  from here, no commands to type and no folders to open."
+    Write-Host ("  " + (T "Tools are ready. Claude continues with the setup interview automatically" `
+                            "Las herramientas están listas. Claude continúa con la entrevista de setup automáticamente"))
+    Write-Host ("  " + (T "from here, no commands to type and no folders to open." `
+                            "desde acá, sin comandos que tipear y sin carpetas que abrir."))
     Write-Host ""
-    Write-Host "  Image generation (Nano Banana via Gemini) is the one thing that can't"
-    Write-Host "  auto-install here. Ask Claude to turn it on when you want image"
-    Write-Host "  generation. You don't need it for the core setup."
+    Write-Host ("  " + (T "Image generation (Nano Banana via Gemini) is the one thing that can't" `
+                            "Generación de imágenes (Nano Banana vía Gemini) es lo único que no se puede"))
+    Write-Host ("  " + (T "auto-install here. Ask Claude to turn it on when you want image" `
+                            "auto-instalar acá. Pedile a Claude que la prenda cuando quieras generar"))
+    Write-Host ("  " + (T "generation. You don't need it for the core setup." `
+                            "imágenes. No la necesitás para el setup base."))
     Write-Host ""
 } else {
     # Running standalone (irm-to-iex from PowerShell). Guide the user into the
     # paste-flow inside the Claude Code desktop app.
-    Write-Host "  Tools are ready. Now open the Claude Code desktop app and paste this"
-    Write-Host "  into the chat to run the setup interview:"
+    Write-Host ("  " + (T "Tools are ready. Now open the Claude Code desktop app and paste this" `
+                            "Las herramientas están listas. Ahora abrí la app de escritorio de Claude Code y pegá esto"))
+    Write-Host ("  " + (T "into the chat to run the setup interview:" `
+                            "en el chat para correr la entrevista de setup:"))
     Write-Host ""
-    Write-Host "      Please set up my AI Brain Starter end-to-end in this session. The"
-    Write-Host "      ai-brain-starter skill is already installed at"
-    Write-Host "      ~/.claude/skills/ai-brain-starter. Start the setup interview by"
-    Write-Host "      running the setup-brain skill and walk me through every phase"
-    Write-Host "      without stopping."
+    if ($script:LangCode -eq "es") {
+        Write-Host "      Por favor configurá mi AI Brain Starter completo en esta sesión."
+        Write-Host "      La skill ai-brain-starter ya está instalada en"
+        Write-Host "      ~/.claude/skills/ai-brain-starter. Empezá la entrevista de setup"
+        Write-Host "      corriendo la skill setup-brain y guiame por cada fase sin parar."
+    } else {
+        Write-Host "      Please set up my AI Brain Starter end-to-end in this session. The"
+        Write-Host "      ai-brain-starter skill is already installed at"
+        Write-Host "      ~/.claude/skills/ai-brain-starter. Start the setup interview by"
+        Write-Host "      running the setup-brain skill and walk me through every phase"
+        Write-Host "      without stopping."
+    }
     Write-Host ""
-    Write-Host "  Claude will ask where your vault should live and build everything"
-    Write-Host "  around your answers. You don't need to type any other commands."
+    Write-Host ("  " + (T "Claude will ask where your vault should live and build everything" `
+                            "Claude te va a preguntar dónde vivirá tu vault y va a construir todo"))
+    Write-Host ("  " + (T "around your answers. You don't need to type any other commands." `
+                            "alrededor de tus respuestas. No necesitás tipear ningún otro comando."))
     Write-Host ""
 }
