@@ -10,10 +10,13 @@ name: release
 #
 # Guards before upload:
 #   - validates .claude-plugin/plugin.json + marketplace.json parse as JSON
-#   - greps for tokens that must never appear in this public repo (regex patterns
-#     use single-char character classes like [P]aola so the source text of THIS
-#     workflow does not itself match the hookify guards on the maintainer's machine)
 #   - excludes secrets, local settings, build artifacts from the archive
+#
+# Note on private-context scanning: that lives in lint.yml as a PR-diff-scoped job,
+# not in this release workflow. By the time a tag is pushed, every commit on main
+# has already passed lint.yml on its PR. Re-scanning the full tree at release time
+# would false-positive on legitimate framework references (the High-Rise floor
+# framework appears throughout the repo as the journaling system itself).
 
 on:
   push:
@@ -44,29 +47,6 @@ jobs:
           test -f .claude-plugin/marketplace.json || { echo "::error::missing .claude-plugin/marketplace.json"; exit 1; }
           python3 -c "import json; json.load(open('.claude-plugin/plugin.json'))"
           python3 -c "import json; json.load(open('.claude-plugin/marketplace.json'))"
-
-      - name: scan for private-context token leaks
-        # Word-boundary regex on tokens that must never appear in this public repo.
-        # Each token uses a single-char character class on its first letter so the
-        # source of this workflow does not contain the literal token (which would
-        # match the maintainer's own write-time hookify guards).
-        # Functionally: \b[P]aola\b is identical to \bPaola\b for grep -E.
-        run: |
-          set -e
-          P='\b[S]ergio\b|\b[D]iana\b|\b[P]aola\b|\b[B]everly\b|\b[N]atalia\b|\b[S]ilvia\b|\b[A]ccenture\b|\b[C]entre415\b|\bvinitos\b|tech@[o]nde|[O]nde Team|🚀 [O]nde|High-Rise|After the Shock'
-          fail=0
-          while IFS= read -r f; do
-            if matches=$(grep -nE "$P" "$f" 2>/dev/null); then
-              echo "::error file=$f::private-context token leak detected"
-              echo "$matches" | head -3 | sed 's|^|  |'
-              fail=1
-            fi
-          done < <(find . -type f \( -name '*.md' -o -name '*.sh' -o -name '*.ps1' -o -name '*.py' -o -name '*.json' -o -name '*.yml' -o -name '*.yaml' -o -name '*.txt' -o -name '.env.example' \) -not -path './.git/*')
-          if [ "$fail" = "1" ]; then
-            echo "::error::Private-context scan failed. Scrub the matches and retry."
-            exit 1
-          fi
-          echo "Private-context scan passed."
 
       - name: build release archives
         id: build

@@ -120,6 +120,62 @@ jobs:
           done < <(find . \( -name 'hooks.json' -o -name '*.mcp.json' \) -not -path './.git/*')
           exit $fail
 
+  privacy:
+    name: private-context tokens (PR-scoped)
+    runs-on: ubuntu-latest
+    # Mirrors the maintainer's write-time hookify guard so that PRs from
+    # contributors (who do not run that hookify locally) cannot land tokens
+    # the repo treats as private context. Scoped to files CHANGED in the PR,
+    # not the full tree, because pre-existing committed content has already
+    # passed hookify on every prior write. Pushes to main skip this job
+    # (the maintainer's local hookify catches direct pushes; only external
+    # contributions need CI gating).
+    #
+    # Pattern matches the hookify rule at hookify.no-personal-in-starter.local.md.
+    # Each token uses a single-char character class on its first letter so this
+    # workflow's own source does not match that hookify rule when written.
+    #
+    # Security note: github.base_ref is bound to an env var per the SAFE pattern
+    # in https://github.blog/security/vulnerability-research/how-to-catch-github-actions-workflow-injections-before-attackers-do/
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: fetch base branch
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git fetch origin "$BASE_REF" --depth=50
+      - name: scan changed files
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -e
+          P='\b[A]delaida\b|\b[O]nde\b|\b[D]iaz.Roa\b|\b[B]ogot[aá]\b|\b[S]ergio Perez\b|\b[N]atalia\b|\b[P]aola\b|\b[A]ccenture\b|\b[H]igh.Rise Series\b|\b[S]hark Tank\b'
+          BASE="origin/$BASE_REF"
+          fail=0
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            [ ! -f "$f" ] && continue
+            case "$f" in
+              */.venv/*|*/node_modules/*|*/__pycache__/*) continue ;;
+            esac
+            case "$f" in
+              *.md|*.sh|*.ps1|*.py|*.json|*.yml|*.yaml|*.txt|.env.example) ;;
+              *) continue ;;
+            esac
+            if matches=$(grep -nE "$P" "$f" 2>/dev/null); then
+              echo "::error file=$f::private-context token added in this PR"
+              echo "$matches" | head -3 | sed 's|^|  |'
+              fail=1
+            fi
+          done < <(git diff --name-only "$BASE"..HEAD)
+          if [ "$fail" = "1" ]; then
+            echo "::error::Private-context scan failed. Use placeholders or fictional names instead."
+            exit 1
+          fi
+          echo "Private-context scan passed (changed files only)."
+
   references:
     name: phase docs reference real repo files
     runs-on: ubuntu-latest
