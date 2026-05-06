@@ -70,6 +70,73 @@ function T([string]$en, [string]$es) {
     if ($script:LangCode -eq "es") { return $es } else { return $en }
 }
 
+# ─── Email gate (universal, one-time) ──────────────────────────────────────
+# Every install passes through the form once. The form at
+# https://myceliumai.co/install captures email + context, mints a 32-char
+# token, emails the install command. This script validates the token and
+# writes a marker file. Future re-runs find the marker and skip the gate.
+$emailMarker = "$env:USERPROFILE\.claude\.ai-brain-starter-email-on-file"
+$installApiBase = if ($env:MYCELIUM_INSTALL_API) { $env:MYCELIUM_INSTALL_API } else { "https://myceliumai.co" }
+
+if ($env:EMAIL_GATE_BYPASS -ne "1" -and -not $DryRun -and -not (Test-Path $emailMarker)) {
+    Hdr (T "Email gate (one-time)" "Verificación de email (una sola vez)")
+    if (-not $env:TOKEN) {
+        Write-Host ""
+        Write-Host ("  " + (T "We need your email before installing the second brain." `
+                              "Necesitamos tu email antes de instalar el segundo cerebro."))
+        Write-Host ""
+        Write-Host ("  " + (T "This is a one-time gate. Once you submit the form, you get a token by" `
+                              "Esto es una sola vez. Una vez completes el formulario, recibís un token"))
+        Write-Host ("  " + (T "email; future re-runs skip this prompt." `
+                              "por email; las próximas corridas saltean este paso."))
+        Write-Host ""
+        Write-Host ("  1. " + (T "Open this URL in your browser:" "Abrí este URL en tu navegador:"))
+        Write-Host "     https://myceliumai.co/install"
+        Write-Host ("     (" + (T "Spanish:" "Español:") + " https://myceliumai.co/es/install)")
+        Write-Host ""
+        Write-Host ("  2. " + (T "Fill out the short form. Takes about 4 minutes." `
+                              "Completá el formulario corto. Tarda unos 4 minutos."))
+        Write-Host ""
+        Write-Host ("  3. " + (T "Check your email. You'll receive your personalized install command." `
+                              "Revisá tu email. Vas a recibir tu comando de instalación personalizado."))
+        Write-Host ""
+        Write-Host ("  4. " + (T "Either paste that full command into Claude Code (recommended)," `
+                              "Pegá ese comando completo en Claude Code (recomendado),"))
+        Write-Host ("     " + (T "OR re-run this script with the token:" `
+                              "O volvé a correr este script con el token:"))
+        Write-Host ""
+        Write-Host '         $env:TOKEN = "<your-token-from-email>"; pwsh bootstrap.ps1'
+        Write-Host ""
+        exit 3
+    }
+    $tk = $env:TOKEN.ToLower().Trim()
+    if ($tk -notmatch '^[a-f0-9]{32}$') {
+        Err (T "Token shape invalid. Expected 32 hex characters." `
+              "Formato de token inválido. Esperaba 32 caracteres hexadecimales.")
+        exit 4
+    }
+    Log (T "Validating token against $installApiBase..." `
+          "Validando token contra $installApiBase...")
+    try {
+        $verifyUri = "$installApiBase/api/install/verify?token=$tk"
+        $resp = Invoke-RestMethod -Uri $verifyUri -Method Get -TimeoutSec 10 -ErrorAction Stop
+        if ($resp.valid -ne $true) {
+            $reason = if ($resp.reason) { $resp.reason } else { "unknown" }
+            Err (T "Token validation failed (reason: $reason). Get a fresh token at https://myceliumai.co/install and re-run." `
+                  "Falló la validación del token (motivo: $reason). Conseguí un token nuevo en https://myceliumai.co/install y volvé a correr.")
+            exit 4
+        }
+    } catch {
+        Err (T "Token validation request failed: $_. Get a fresh token at https://myceliumai.co/install and re-run." `
+              "Falló la solicitud de validación de token: $_. Conseguí un token nuevo en https://myceliumai.co/install y volvé a correr.")
+        exit 4
+    }
+    Ok (T "Token valid. Recording email-on-file marker." `
+          "Token válido. Guardando marca de email-en-archivo.")
+    New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude" | Out-Null
+    Set-Content -Path $emailMarker -Value $tk -Encoding ASCII
+}
+
 # ─── Pre-flight gate (skip with $env:PREFLIGHT_BYPASS = "1") ──────────────────
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $preflightLocal = Join-Path $scriptRoot "scripts\preflight.ps1"
@@ -650,6 +717,22 @@ Write-Host ""
 Write-Host ""
 Write-Host ("━━━ " + (T "Install complete" "Instalación completa") + " ━━━") -ForegroundColor Cyan
 Write-Host ""
+
+# ─── Report install completion to Mycelium (best-effort, fail-open) ──────────
+if ((Test-Path $emailMarker) -and -not $DryRun) {
+    try {
+        $recordedToken = (Get-Content -Path $emailMarker -TotalCount 1).Trim()
+        if ($recordedToken) {
+            $os = "$([System.Environment]::OSVersion.VersionString) $env:PROCESSOR_ARCHITECTURE"
+            $body = @{ token = $recordedToken; os = $os; completed = $true } | ConvertTo-Json -Compress
+            Invoke-RestMethod -Uri "$installApiBase/api/install/complete" -Method Post `
+                -Body $body -ContentType "application/json" -TimeoutSec 8 -ErrorAction SilentlyContinue | Out-Null
+        }
+    } catch {
+        # Best-effort. Failing to report shouldn't block the user.
+    }
+}
+
 if ($env:CLAUDE_CODE_ENTRYPOINT) {
     # Running inside Claude Code (the paste-flow from the README). Claude will
     # continue with the setup interview automatically; no user action needed.

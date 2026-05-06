@@ -65,63 +65,57 @@ Read the four problems the team version solves: [`for-teams/why-teams-are-differ
 
 ## Install
 
-### What you need before starting
+### Step 1 — Get your install link
 
-1. The [Claude Code desktop app](https://claude.ai/download) with a paid Claude account (Pro, Max, or Team).
-2. A working internet connection.
+Go to **[myceliumai.co/install](https://myceliumai.co/install)** (Spanish: **[myceliumai.co/es/install](https://myceliumai.co/es/install)**) and fill out the short form. Takes about 4 minutes.
 
-That's it. The bootstrap installs everything else (Homebrew, Python, Node, Obsidian, all skills) for you.
+The form personalizes your install (so the system knows your role, your data, and which language to run in) and emails you a one-paste install command with your unique token. The same form is the path for paid cohorts, paid private installs, complimentary partner cohorts, and free open-source explorers.
 
-*Local install. Skills and hooks are open-source. Read [`SECURITY.md`](SECURITY.md) before adding any third-party skills, and the safety guarantees at the top of [`bootstrap.sh`](bootstrap.sh) if you have an existing Claude Code setup you want preserved (existing settings, MCPs, and skills are not overwritten).*
+### Step 2 — Open Claude Code
 
-### Step 1 — Open Claude Code
+Open the [Claude Code desktop app](https://claude.ai/download) and sign in with a paid Claude account (Pro, Max, or Team). The bootstrap installs everything else (Homebrew, Python, Node, Obsidian, all skills) for you.
 
-Open the Claude Code desktop app and sign in. You don't have to be in any particular folder; Claude will ask where your vault should live during setup.
+### Step 3 — Paste the install command from your email
 
-### Step 2 — Paste this into the chat
+Your welcome email contains a personalized command with your token embedded. Paste it into Claude Code and approve the tool calls. Claude runs:
 
-```
-Set up my AI Brain Starter end-to-end. Clone https://github.com/adelaidasofia/ai-brain-starter.git into ~/.claude/skills/ai-brain-starter (git pull if it already exists), run the pre-flight check first (bash ~/.claude/skills/ai-brain-starter/scripts/preflight.sh), then run the bootstrap (bash ~/.claude/skills/ai-brain-starter/bootstrap.sh), and finally walk me through the setup-brain skill until every phase is done. Don't stop between steps. I shouldn't have to type any commands.
-```
+1. A 30-second pre-flight check (OS, network, Claude Code install, admin permissions, disk).
+2. The token-gated bootstrap (clones the skill, installs all tools).
+3. The setup interview (asks your language first, runs everything in your chosen language).
 
-Claude runs the pre-flight diagnostic (verifies your machine, network, Claude Code install, and admin permissions in 30 seconds), then clones the skill, runs the installer (Obsidian, Python, graphify, all tools), and walks you through the setup interview. One paste is the whole thing. Mac, Windows, and Linux all use the same prompt.
+One paste, no terminal commands to type. Mac, Windows, and Linux all use the same flow.
 
 **If pre-flight fails**, Claude reads the structured report and explains in plain English what to fix. The most common blockers are: Claude Code not installed (download from https://claude.ai/download), a corporate VPN blocking GitHub, or a Mac that's not in the admin group.
 
-**Or install as a Claude Code plugin.** Inside Claude Code, run `/plugin marketplace add adelaidasofia/ai-brain-starter` then `/plugin install ai-brain-starter@ai-brain-starter`. That gives you the skills, hooks, and commands. The paste-prompt above is the only path that also runs the vault-setup interview.
+**Existing users** (anyone who installed before the email gate was live): your next bootstrap re-run will prompt you once to fill the same form. After that, you're never asked again.
 
-### Step 3 — Answer the questions
-
-Claude interviews you about your life, work, and goals, then builds your entire system around your answers. **First question is always: which language do you take notes in?** Pick whatever feels natural; the whole setup runs in that language and your CLAUDE.md, journal prompts, and concept notes all get built in it. The basics take 30 minutes; the full setup takes about 2 hours.
+*Local install. Your vault data never leaves your machine. The signup form is the only piece that touches our servers, and it captures only what's listed in [`SECURITY.md`](SECURITY.md) and the [privacy policy](https://myceliumai.co/privacy).*
 
 ---
 
 ## Instalar (Español)
 
-### Qué necesitás antes de empezar
+### Paso 1 — Conseguí tu link de instalación
 
-1. La [app de escritorio de Claude Code](https://claude.ai/download) con una cuenta paga de Claude (Pro, Max o Team).
-2. Conexión a internet funcionando.
+Andá a **[myceliumai.co/es/install](https://myceliumai.co/es/install)** (English: **[myceliumai.co/install](https://myceliumai.co/install)**) y completá el formulario corto. Tarda unos 4 minutos.
 
-Eso es todo. El bootstrap instala todo lo demás (Homebrew, Python, Node, Obsidian, todas las skills) por vos.
+El formulario personaliza tu instalación (para que el sistema sepa tu rol, tus datos, y en qué idioma correr) y te manda por email un comando de un solo pegado con tu token único. El mismo formulario es la ruta para cohortes pagas, instalaciones privadas pagas, cohortes complementarias de partners, y exploradores open-source.
 
-### Paso 1 — Abrí Claude Code
+### Paso 2 — Abrí Claude Code
 
-Abrí la app de escritorio de Claude Code y logueate. No hace falta estar en una carpeta específica; Claude te va a preguntar dónde vivirá tu vault durante el setup.
+Abrí la [app de escritorio de Claude Code](https://claude.ai/download) y logueate con una cuenta paga de Claude (Pro, Max o Team). El bootstrap instala todo lo demás (Homebrew, Python, Node, Obsidian, todas las skills) por vos.
 
-### Paso 2 — Pegá esto en el chat
+### Paso 3 — Pegá el comando de instalación de tu email
 
-```
-Configurá mi AI Brain Starter de punta a punta. Cloná https://github.com/adelaidasofia/ai-brain-starter.git en ~/.claude/skills/ai-brain-starter (git pull si ya existe), corré la verificación previa primero (bash ~/.claude/skills/ai-brain-starter/scripts/preflight.sh), después corré el bootstrap (bash ~/.claude/skills/ai-brain-starter/bootstrap.sh), y por último guiame por la skill setup-brain hasta que cada fase esté completa. No pares entre pasos. No tendría que tipear ningún comando.
-```
+Tu email de bienvenida contiene un comando personalizado con tu token. Pegalo en Claude Code y aprobá las acciones. Claude va a correr:
 
-Claude corre el diagnóstico previo (verifica tu máquina, red, instalación de Claude Code, y permisos de admin en 30 segundos), después cloná la skill, corre el instalador (Obsidian, Python, graphify, todas las herramientas), y te guía por la entrevista de setup. Un pegado es todo. Mac, Windows y Linux usan el mismo prompt.
+1. Una verificación previa de 30 segundos (OS, red, instalación de Claude Code, permisos de admin, disco).
+2. El bootstrap con token (clona la skill, instala todas las herramientas).
+3. La entrevista de setup (te pregunta el idioma primero, corre todo en el idioma que elijas).
 
-**Si la verificación previa falla**, Claude lee el reporte estructurado y te explica en español qué arreglar. Los bloqueantes más comunes son: Claude Code no instalado (descargá de https://claude.ai/download), una VPN corporativa bloqueando GitHub, o una Mac que no está en el grupo admin.
+Un pegado, cero comandos que tipear. Mac, Windows y Linux usan el mismo flujo.
 
-### Paso 3 — Respondé las preguntas
-
-Claude te entrevista sobre tu vida, trabajo y metas, después construye todo el sistema alrededor de tus respuestas. **La primera pregunta siempre es: ¿en qué idioma tomás notas?** Elegí el que te salga natural; todo el setup corre en ese idioma y tu CLAUDE.md, prompts de journal, y notas de conceptos se construyen en él. Los básicos tardan 30 minutos; el setup completo tarda unas 2 horas.
+**Usuarios existentes** (cualquiera que instaló antes de que el gate de email estuviera vivo): la próxima vez que corras el bootstrap te va a pedir una sola vez que completes el mismo formulario. Después, nunca más.
 
 ---
 

@@ -250,6 +250,78 @@ LANG_CODE="$(detect_lang)"
 t() { [[ "$LANG_CODE" == "es" ]] && echo "$2" || echo "$1"; }
 
 # ───────────────────────────────────────────────────────────────────────────────
+# Email gate (universal). Every install passes through the form once. The form
+# at https://myceliumai.co/install captures email + context, mints a 32-char
+# token, and emails the install command. Bootstrap validates the token and
+# writes a marker file. Future bootstrap re-runs find the marker and skip the
+# gate. Existing users (no marker yet) get the same prompt on their next run.
+#
+# Bypass for development: EMAIL_GATE_BYPASS=1 bash bootstrap.sh
+# ───────────────────────────────────────────────────────────────────────────────
+EMAIL_MARKER="$HOME/.claude/.ai-brain-starter-email-on-file"
+INSTALL_API_BASE="${MYCELIUM_INSTALL_API:-https://myceliumai.co}"
+
+if [[ "${EMAIL_GATE_BYPASS:-0}" != "1" && $DRY_RUN -eq 0 && ! -f "$EMAIL_MARKER" ]]; then
+  hdr "$(t "Email gate (one-time)" "Verificación de email (una sola vez)")"
+  if [[ -z "${TOKEN:-}" ]]; then
+    # No token. Print the form URL + how to re-run with the token.
+    cat <<EOF
+
+  $(t "We need your email before installing the second brain." \
+        "Necesitamos tu email antes de instalar el segundo cerebro.")
+
+  $(t "This is a one-time gate. Once you submit the form, you get a token by" \
+        "Esto es una sola vez. Una vez completes el formulario, recibís un token")
+  $(t "email; future re-runs skip this prompt." \
+        "por email; las próximas corridas saltean este paso.")
+
+  1. $(t "Open this URL in your browser:" "Abrí este URL en tu navegador:")
+     https://myceliumai.co/install
+     ($(t "Spanish:" "Español:") https://myceliumai.co/es/install)
+
+  2. $(t "Fill out the short form. Takes about 4 minutes." \
+          "Completá el formulario corto. Tarda unos 4 minutos.")
+
+  3. $(t "Check your email. You'll receive your personalized install command." \
+          "Revisá tu email. Vas a recibir tu comando de instalación personalizado.")
+
+  4. $(t "Either paste that full command into Claude Code (recommended)," \
+          "Pegá ese comando completo en Claude Code (recomendado),")
+     $(t "OR re-run this script with the token:" "O volvé a correr este script con el token:")
+
+         TOKEN=<your-token-from-email> bash $0
+
+EOF
+    exit 3
+  fi
+
+  # Token provided — validate against the API.
+  TOKEN="$(echo "$TOKEN" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+  if [[ ! "$TOKEN" =~ ^[a-f0-9]{32}$ ]]; then
+    err "$(t "Token shape invalid. Expected 32 hex characters." \
+            "Formato de token inválido. Esperaba 32 caracteres hexadecimales.")"
+    exit 4
+  fi
+  log "$(t "Validating token against $INSTALL_API_BASE..." \
+          "Validando token contra $INSTALL_API_BASE...")"
+  set +e
+  VERIFY_RESP="$(curl -sS -m 10 "$INSTALL_API_BASE/api/install/verify?token=$TOKEN" 2>/dev/null)"
+  set -e
+  if [[ -z "$VERIFY_RESP" ]] || ! echo "$VERIFY_RESP" | grep -q '"valid":true'; then
+    REASON="$(echo "${VERIFY_RESP:-}" | grep -oE '"reason":"[^"]+"' | sed 's/.*"reason":"\([^"]*\)".*/\1/' || true)"
+    err "$(t \
+      "Token validation failed (reason: ${REASON:-unknown}). Get a fresh token at https://myceliumai.co/install and re-run." \
+      "Falló la validación del token (motivo: ${REASON:-desconocido}). Conseguí un token nuevo en https://myceliumai.co/install y volvé a correr.")"
+    exit 4
+  fi
+  ok "$(t "Token valid. Recording email-on-file marker." \
+          "Token válido. Guardando marca de email-en-archivo.")"
+  mkdir -p "$HOME/.claude"
+  printf '%s\n' "$TOKEN" > "$EMAIL_MARKER"
+  chmod 600 "$EMAIL_MARKER"
+fi
+
+# ───────────────────────────────────────────────────────────────────────────────
 # Pre-flight gate (skip with PREFLIGHT_BYPASS=1)
 # Refuses to install on RED. Continues on YELLOW/GREEN.
 # ───────────────────────────────────────────────────────────────────────────────
@@ -999,6 +1071,23 @@ if [[ -f "$USER_HOOK_INSTALLER" ]] && [[ "$DRY_RUN" -eq 0 ]]; then
     ok "User-level hooks installed (~/.claude/settings.json)"
   else
     warn "User-level hook install had issues; check $BOOTSTRAP_LOG"
+  fi
+fi
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Report install completion to Mycelium (best-effort, fail-open)
+# ───────────────────────────────────────────────────────────────────────────────
+
+if [[ -f "$EMAIL_MARKER" && $DRY_RUN -eq 0 ]]; then
+  RECORDED_TOKEN="$(head -1 "$EMAIL_MARKER" 2>/dev/null | tr -d '[:space:]')"
+  if [[ -n "$RECORDED_TOKEN" ]]; then
+    OS_INFO="$(uname -srm 2>/dev/null || echo unknown)"
+    set +e
+    curl -sS -m 8 -X POST "$INSTALL_API_BASE/api/install/complete" \
+      -H "content-type: application/json" \
+      -d "{\"token\":\"$RECORDED_TOKEN\",\"os\":\"$OS_INFO\",\"completed\":true}" \
+      >/dev/null 2>&1 || true
+    set -e
   fi
 fi
 
