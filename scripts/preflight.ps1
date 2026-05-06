@@ -1,5 +1,5 @@
-#Requires -Version 5.1
-# preflight.ps1 — verify every prerequisite BEFORE bootstrap.ps1 touches the machine.
+﻿#Requires -Version 5.1
+# preflight.ps1 - verify every prerequisite BEFORE bootstrap.ps1 touches the machine.
 #
 # Bilingual (English / Español, locale-detected via $env:PREFLIGHT_LANG and Get-Culture).
 # Returns 0 GREEN / 1 YELLOW / 2 RED.
@@ -65,7 +65,7 @@ function Have($cmd) { return [bool](Get-Command $cmd -ErrorAction SilentlyContin
 # ─── Header ───────────────────────────────────────────────────────────────────
 if (-not $Json -and -not $Quiet) {
     Write-Host ""
-    Write-Host (T "AI Brain Starter — pre-flight check" "AI Brain Starter — verificación previa") -ForegroundColor White
+    Write-Host (T "AI Brain Starter - pre-flight check" "AI Brain Starter - verificación previa") -ForegroundColor White
     Write-Host (T "Verifying every prerequisite before any tool gets installed." `
                   "Verificando cada requisito antes de instalar nada.") -ForegroundColor DarkGray
 }
@@ -77,11 +77,11 @@ $winVer = [System.Environment]::OSVersion.Version
 $winBuild = $winVer.Build
 # Win10 v1909 = build 18363, Win11 = build 22000+
 if ($winBuild -ge 22000) {
-    Green (T "Windows 11 (build $winBuild) — supported" `
-              "Windows 11 (build $winBuild) — compatible")
+    Green (T "Windows 11 (build $winBuild) - supported" `
+              "Windows 11 (build $winBuild) - compatible")
 } elseif ($winBuild -ge 18363) {
-    Green (T "Windows 10 (build $winBuild) — supported" `
-              "Windows 10 (build $winBuild) — compatible")
+    Green (T "Windows 10 (build $winBuild) - supported" `
+              "Windows 10 (build $winBuild) - compatible")
 } elseif ($winBuild -ge 17763) {
     Yellow (T "Windows 10 build $winBuild is older than 1909. Most things install but winget may need manual install." `
                "Windows 10 build $winBuild es anterior a 1909. La mayoría se instala, pero winget puede requerir instalación manual.")
@@ -149,7 +149,7 @@ function Test-Reachable($url, $timeoutSec = 6) {
         return $true
     } catch [System.Net.WebException] {
         # WebException with a Response means we got an HTTP code (e.g. 403/404)
-        # — still counts as reachable.
+        # - still counts as reachable.
         if ($_.Exception.Response) { return $true }
         return $false
     } catch {
@@ -167,8 +167,8 @@ foreach ($h in $hosts) {
     if (Test-Reachable $h.url) {
         Green (T "$($h.name) reachable" "$($h.name) accesible")
     } else {
-        Red (T "$($h.name) NOT reachable at $($h.url) — check VPN / firewall / corporate proxy" `
-                "$($h.name) NO accesible en $($h.url) — revisá VPN / firewall / proxy corporativo")
+        Red (T "$($h.name) NOT reachable at $($h.url) - check VPN / firewall / corporate proxy" `
+                "$($h.name) NO accesible en $($h.url) - revisá VPN / firewall / proxy corporativo")
     }
 }
 
@@ -264,13 +264,13 @@ Section (T "Existing AI Brain Starter install" "Instalación previa de AI Brain 
 
 $absDir = "$env:USERPROFILE\.claude\skills\ai-brain-starter"
 if (Test-Path "$absDir\.git") {
-    Info (T "Existing clone found at $absDir — bootstrap will fast-forward if behind, skip if a fork." `
-            "Clon existente en $absDir — bootstrap hará fast-forward si está atrás, saltará si es un fork.")
+    Info (T "Existing clone found at $absDir - bootstrap will fast-forward if behind, skip if a fork." `
+            "Clon existente en $absDir - bootstrap hará fast-forward si está atrás, saltará si es un fork.")
 } elseif (Test-Path $absDir) {
     Yellow (T "Folder $absDir exists but is not a git clone. Bootstrap may overwrite. Move it aside if you have local changes." `
                "La carpeta $absDir existe pero no es un clon git. Bootstrap puede sobrescribir. Movela a un lado si tenés cambios locales.")
 } else {
-    Green (T "Clean slate — no previous install detected" "Comenzando de cero — sin instalación previa")
+    Green (T "Clean slate - no previous install detected" "Comenzando de cero - sin instalación previa")
 }
 
 # ─── 10. JSON output ──────────────────────────────────────────────────────────
@@ -322,8 +322,8 @@ if ($script:Red.Count -gt 0) {
     exit 1
 } else {
     if (-not $Json) {
-        Write-Host (T "Pre-flight PASSED. You're ready — paste the install prompt into Claude Code." `
-                       "Verificación OK. Listo — pegá el prompt de instalación en Claude Code.") -ForegroundColor Green
+        Write-Host (T "Pre-flight PASSED. You're ready - paste the install prompt into Claude Code." `
+                       "Verificación OK. Listo - pegá el prompt de instalación en Claude Code.") -ForegroundColor Green
         Write-Host ""
     }
     exit 0
