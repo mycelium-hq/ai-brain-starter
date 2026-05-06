@@ -90,6 +90,13 @@ This includes:
 - Every reaction, clarification, correction, or tangent
 - Every screenshot caption or side comment
 - The messages where they push back on you or ask for fixes
+- **Slash-command invocations** (e.g. `/daily-journal`, `/journal`) — yes, save them
+- **Single-line transitions** ("yeah", "ok", "next", "what does the panel say", "anything else") — yes, save them
+- **Meta-messages about the session itself** ("we're not done journaling", "save it now", "fix the inaccuracy") — yes, save them
+- **Tool/system requests interleaved with journal content** (MCP loads, file requests, integration fixes) — yes, save them
+- **Messages that look 'transitional' or 'mechanical'** — these are NOT exempt; they're part of the record
+
+**Hard rule: do NOT decide which messages are 'journal content' vs 'transitional/meta.'** All of them are content. EVERY message means EVERY message — no Claude-side filtering. If the user typed it during the session, it goes in the verbatim appendix. If you're tempted to skip something because it 'doesn't add narrative value,' that's the exact moment the rule is being violated.
 
 **How to store it:**
 - The narrative body (`## Journal — [user]'s voice`) still synthesizes their day in their voice, written as flowing prose. This is the readable reflection.
