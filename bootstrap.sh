@@ -319,6 +319,27 @@ EOF
   mkdir -p "$HOME/.claude"
   printf '%s\n' "$TOKEN" > "$EMAIL_MARKER"
   chmod 600 "$EMAIL_MARKER"
+
+  # Fetch the recap so the setup-brain skill can pre-populate Phase 1 with
+  # the user's name, role, intent, language, voice link, etc.
+  RECAP_FILE="$HOME/.claude/.ai-brain-starter-recap.json"
+  set +e
+  RECAP_RESP="$(curl -sS -m 8 "$INSTALL_API_BASE/api/install/recap?token=$TOKEN" 2>/dev/null)"
+  set -e
+  if [[ -n "$RECAP_RESP" ]] && echo "$RECAP_RESP" | grep -q '"ok":true'; then
+    printf '%s\n' "$RECAP_RESP" > "$RECAP_FILE"
+    chmod 600 "$RECAP_FILE"
+    ok "$(t "Recap cached for setup-brain Phase 1." \
+            "Recap guardado para Phase 1 de setup-brain.")"
+  fi
+
+  # Fire install_bootstrap_started event (best-effort, fail-open).
+  set +e
+  curl -sS -m 6 -X POST "$INSTALL_API_BASE/api/install/started" \
+    -H "content-type: application/json" \
+    -d "{\"token\":\"$TOKEN\",\"os\":\"$(uname -srm 2>/dev/null || echo unknown)\"}" \
+    >/dev/null 2>&1 || true
+  set -e
 fi
 
 # ───────────────────────────────────────────────────────────────────────────────
@@ -1082,10 +1103,27 @@ if [[ -f "$EMAIL_MARKER" && $DRY_RUN -eq 0 ]]; then
   RECORDED_TOKEN="$(head -1 "$EMAIL_MARKER" 2>/dev/null | tr -d '[:space:]')"
   if [[ -n "$RECORDED_TOKEN" ]]; then
     OS_INFO="$(uname -srm 2>/dev/null || echo unknown)"
+    # Sign the completion request with HMAC if we have a secret. The shared
+    # secret can ship with the bootstrap (it's only meaningful as a key for
+    # the bootstrap-to-server channel; leaking it lets attackers mark tokens
+    # consumed, which is a griefing surface, not a data-extraction one).
+    SIG_FILE="$HOME/.claude/.ai-brain-starter-hmac-secret"
+    SIG=""
+    if [[ -f "$SIG_FILE" ]] && have python3; then
+      HMAC_SECRET="$(head -1 "$SIG_FILE" 2>/dev/null | tr -d '[:space:]')"
+      if [[ -n "$HMAC_SECRET" ]]; then
+        SIG="$(python3 -c 'import hmac,hashlib,sys; t,s=sys.argv[1:3]; print(hmac.new(s.encode(),t.encode(),hashlib.sha256).hexdigest())' "$RECORDED_TOKEN" "$HMAC_SECRET" 2>/dev/null || true)"
+      fi
+    fi
+    if [[ -n "$SIG" ]]; then
+      PAYLOAD="{\"token\":\"$RECORDED_TOKEN\",\"os\":\"$OS_INFO\",\"completed\":true,\"signature\":\"$SIG\"}"
+    else
+      PAYLOAD="{\"token\":\"$RECORDED_TOKEN\",\"os\":\"$OS_INFO\",\"completed\":true}"
+    fi
     set +e
     curl -sS -m 8 -X POST "$INSTALL_API_BASE/api/install/complete" \
       -H "content-type: application/json" \
-      -d "{\"token\":\"$RECORDED_TOKEN\",\"os\":\"$OS_INFO\",\"completed\":true}" \
+      -d "$PAYLOAD" \
       >/dev/null 2>&1 || true
     set -e
   fi

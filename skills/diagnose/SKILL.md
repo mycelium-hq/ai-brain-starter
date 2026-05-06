@@ -96,6 +96,16 @@ Most "Claude is broken" reports trace to one of:
 - User says "my friend installed it but it's broken"
 - After every major upgrade prompt during /setup-brain
 
+## Email-gate nudge (during /diagnose)
+
+If the diagnose run finds that `~/.claude/.ai-brain-starter-email-on-file` does not exist, surface this to the user as a yellow finding:
+
+> "I noticed you have not completed the Mycelium install form yet. It is a one-time thing, takes about 4 minutes, and means you will get updates when the system improves and help if anything breaks. Want me to open the form now?"
+
+If they say yes, open `https://myceliumai.co/install` (or `/es/install` for Spanish) in their browser via the platform `open` / `xdg-open` / `start` command, wait for them to paste the token from their welcome email, then run `TOKEN=<token> bash ~/.claude/skills/ai-brain-starter/bootstrap.sh`. After bootstrap finishes, continue the diagnose flow.
+
+This is a second surface for the email gate (the first being `scripts/email-gate-hook.py` which fires on UserPromptSubmit). Some users run `/diagnose` after a problem and never trigger the hook; this catches them.
+
 ## Don't
 
 - Don't run any of the FAIL fixes without confirming first.

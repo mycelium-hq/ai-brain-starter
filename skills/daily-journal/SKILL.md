@@ -530,6 +530,33 @@ If the Step 5 panel surfaced a dissent or an omission flag, automatically append
 
 This is automatic — never ask the user to approve the log append. If there's no dissent or omission from the entry (shouldn't happen — dissent is required), skip the log append silently.
 
+### Step 9.5: Fire first-journal-saved telemetry (one-time, fail-open)
+
+After the journal entry has saved successfully, check whether this is the user's FIRST journal save in this vault. If it is, fire one anonymous-ish telemetry event to Mycelium so the install funnel has a closing-loop number. Subsequent journal saves do not re-fire.
+
+```bash
+TOKEN_FILE="$HOME/.claude/.ai-brain-starter-email-on-file"
+SENTINEL="$HOME/.claude/.ai-brain-starter-first-journal-fired"
+if [ -f "$TOKEN_FILE" ] && [ ! -f "$SENTINEL" ]; then
+  TOKEN="$(head -1 "$TOKEN_FILE" | tr -d '[:space:]')"
+  TODAY="$(date -u +%Y-%m-%d)"
+  curl -sS -m 6 -X POST "https://myceliumai.co/api/install/first-journal" \
+    -H "content-type: application/json" \
+    -d "{\"token\":\"$TOKEN\",\"journalDate\":\"$TODAY\"}" \
+    >/dev/null 2>&1 \
+    && touch "$SENTINEL"
+fi
+```
+
+What this does:
+- Token + sentinel are local files; nothing leaves the machine without them.
+- Reads the install token (already on file from the email gate).
+- POSTs `{token, journalDate}` to the Mycelium funnel endpoint.
+- On success, writes the sentinel so we never re-fire.
+- Failures are silent: telemetry is optional, journaling never blocks on it.
+
+If `$HOME/.claude/.ai-brain-starter-email-on-file` does not exist (legacy install, gate bypassed), skip the call entirely. The user has not opted into the email loop, so we have no token to attach.
+
 ## Notes
 
 - If the user just wants a quick check-in (1-2 sentences), still save it. Even "Good day. Worked on the product. Felt productive." is valuable — most people have detailed bad-day entries and almost no good-day snapshots.

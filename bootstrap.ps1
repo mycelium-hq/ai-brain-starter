@@ -135,6 +135,30 @@ if ($env:EMAIL_GATE_BYPASS -ne "1" -and -not $DryRun -and -not (Test-Path $email
           "Token válido. Guardando marca de email-en-archivo.")
     New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude" | Out-Null
     Set-Content -Path $emailMarker -Value $tk -Encoding ASCII
+
+    # Fetch recap for setup-brain Phase 1 pre-population
+    try {
+        $recapUri = "$installApiBase/api/install/recap?token=$tk"
+        $recap = Invoke-WebRequest -Uri $recapUri -Method Get -TimeoutSec 8 -UseBasicParsing -ErrorAction Stop
+        if ($recap.StatusCode -eq 200) {
+            $recapPath = "$env:USERPROFILE\.claude\.ai-brain-starter-recap.json"
+            Set-Content -Path $recapPath -Value $recap.Content -Encoding UTF8
+            Ok (T "Recap cached for setup-brain Phase 1." `
+                  "Recap guardado para Phase 1 de setup-brain.")
+        }
+    } catch {
+        # Best-effort. Setup-brain Phase 1 falls back to asking the questions.
+    }
+
+    # Fire install_bootstrap_started event (best-effort)
+    try {
+        $os = "$([System.Environment]::OSVersion.VersionString) $env:PROCESSOR_ARCHITECTURE"
+        $body = @{ token = $tk; os = $os } | ConvertTo-Json -Compress
+        Invoke-RestMethod -Uri "$installApiBase/api/install/started" -Method Post `
+            -Body $body -ContentType "application/json" -TimeoutSec 6 -ErrorAction SilentlyContinue | Out-Null
+    } catch {
+        # Best-effort. Funnel telemetry, not a hard dependency.
+    }
 }
 
 # ─── Pre-flight gate (skip with $env:PREFLIGHT_BYPASS = "1") ──────────────────
@@ -724,7 +748,25 @@ if ((Test-Path $emailMarker) -and -not $DryRun) {
         $recordedToken = (Get-Content -Path $emailMarker -TotalCount 1).Trim()
         if ($recordedToken) {
             $os = "$([System.Environment]::OSVersion.VersionString) $env:PROCESSOR_ARCHITECTURE"
-            $body = @{ token = $recordedToken; os = $os; completed = $true } | ConvertTo-Json -Compress
+            $sigPath = "$env:USERPROFILE\.claude\.ai-brain-starter-hmac-secret"
+            $signature = $null
+            if (Test-Path $sigPath) {
+                try {
+                    $secret = (Get-Content -Path $sigPath -TotalCount 1).Trim()
+                    if ($secret) {
+                        $hmac = [System.Security.Cryptography.HMACSHA256]::new(
+                            [System.Text.Encoding]::UTF8.GetBytes($secret))
+                        $hash = $hmac.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($recordedToken))
+                        $signature = ($hash | ForEach-Object { $_.ToString("x2") }) -join ""
+                        $hmac.Dispose()
+                    }
+                } catch {
+                    # Skip signing on any error; server still accepts unsigned during rollout.
+                }
+            }
+            $payload = @{ token = $recordedToken; os = $os; completed = $true }
+            if ($signature) { $payload.signature = $signature }
+            $body = $payload | ConvertTo-Json -Compress
             Invoke-RestMethod -Uri "$installApiBase/api/install/complete" -Method Post `
                 -Body $body -ContentType "application/json" -TimeoutSec 8 -ErrorAction SilentlyContinue | Out-Null
         }

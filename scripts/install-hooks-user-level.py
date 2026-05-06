@@ -63,6 +63,7 @@ ABS_FINGERPRINTS = [
     "ai-brain-starter/hooks/first-week-checkin.py",
     "ai-brain-starter/hooks/migrate-to-user-level.py",
     "ai-brain-starter/scripts/session-end-hook.sh",
+    "ai-brain-starter/scripts/email-gate-hook.py",
     "ai-brain-starter/⚙️ Meta/scripts/graph-context-hook.sh",
     # Legacy session-start context loaders shipped via ai-brain-starter:
     "SESSION START: CLAUDE.md is already auto-loaded",

@@ -1,5 +1,41 @@
 ## Phase 1: Language & Welcome
 
+### Step 1.−2 — Read the install recap if present (run FIRST, before any user-facing question)
+
+If the bootstrap completed via the email-gated install path, it cached the user's metadata at `~/.claude/.ai-brain-starter-recap.json`. The file looks like:
+
+```json
+{
+  "ok": true,
+  "name": "...",
+  "email": "...",
+  "lang": "en" | "es",
+  "branch": "cohort" | "tier" | "comp" | "open",
+  "cohortCode": "..." | null,
+  "tier": "..." | null,
+  "os": "mac-arm" | "mac-intel" | "windows" | "linux"
+}
+```
+
+If the file exists and parses cleanly, set these in your working memory and **DO NOT re-ask the corresponding questions**:
+
+- `RECAP_NAME` from `name`
+- `RECAP_EMAIL` from `email`
+- `PRIMARY_LANGUAGE` from `lang` (skip Step 1.0 entirely if present)
+- `RECAP_BRANCH` (informational, used to tune Phase 11 wiring)
+- `RECAP_OS` (informational, used to skip the OS-detection step in Phase 5)
+
+If the file is missing or malformed, fall back to the standard interview flow below (ask everything from scratch).
+
+When `RECAP_NAME` is set, your opening line in the user's primary language should be a **personalized welcome**, not a generic "Hey":
+
+- English: *"Welcome back, [name]. Let's get your second brain set up."*
+- Spanish: *"Hola [name], qué bueno verte. Vamos a poner en marcha tu segundo cerebro."*
+
+This eliminates the duplication between the install form and the setup interview. The user feels the system already knows them on sentence one.
+
+After reading the recap, continue with Step 1.−1 (mode detection) below. Skip Step 1.0 if `PRIMARY_LANGUAGE` is set from the recap.
+
 ### Step 1.−1 — Detect mode: NEW PERSONAL VAULT vs JOINING EXISTING TEAM VAULT (run BEFORE the language question)
 
 Before anything else, figure out what the user is trying to do. There are three modes:
