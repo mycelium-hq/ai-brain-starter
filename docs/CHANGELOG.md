@@ -9,6 +9,30 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-06 — Vertical packs (finance, legal) + maintainer release docs
+
+**Who this affects:** consulting clients and operators in regulated verticals (CFOs, finance ops, internal audit, in-house legal, legal ops, law firms) who want the substrate to come pre-shaped to their compliance and audit obligations rather than starting from a blank vault. Plus maintainers cutting future releases.
+
+**The shape:** two production-grade vertical skill packs were sitting untracked in `skills/`, ready to ship. Both have full coverage of the substrate's four extension surfaces (typed-memory schema, retention defaults, connector configs, decision-audit patterns). Healthcare is partial (schema + connectors only, retention + decision-audit pending) and stays untracked until complete.
+
+### What shipped
+
+- **`skills/vertical-finance/`** — Pre-configured finance vertical pack. Typed-memory categories for deals, counterparties, SOX 404 controls, audit evidence. Retention defaults aligned with SOX, SEC 17a-4, per-jurisdiction variations. Connectors for Workday, NetSuite, SAP Finance. Decision-audit patterns for SOX evidence stamping (`decision-audit/sox-404-evidence.md`) and board-pack version trails (`decision-audit/board-pack-trail.md`). 9 files, 37.8 KB.
+- **`skills/vertical-legal/`** — Pre-configured legal vertical pack. Typed-memory for matter management and privilege handling. Retention defaults aligned with ABA Model Rule 1.15 + state-bar variations. Connectors for Clio, NetDocuments, iManage. Decision-audit patterns for conflicts checks (`decision-audit/conflicts-check.md`) and privilege handling (`decision-audit/privilege-handling.md`). 9 files, 40.6 KB.
+
+Both packs use the `/vertical-finance` / `/vertical-legal` triggers with `init | status | rebuild` subcommands. They're additive — installing them doesn't change the substrate's behavior for users in other verticals. Use when onboarding a CFO organization or law firm that needs the substrate to come pre-shaped to their work.
+
+### Also shipped this release
+
+- **`docs/RELEASE_PROCESS.md`** — maintainer-facing reference for cutting a release. Covers the cut-a-release procedure, what `release.yml` does, the artifact list, the stable URL pattern, the PR-scoped privacy gate, re-running a release via `workflow_dispatch`, and the manual smoke-test path.
+- **`docs/RELEASES.md`** — 2026-05-06 user-facing entry describing the `--plugin-url` quick-try path that landed in v1.1.0, alongside the email-gated full bootstrap.
+
+### Not shipped (intentional)
+
+- **`skills/vertical-healthcare/`** is partial (5 files, 22.2 KB; missing the `retention/` and `decision-audit/` directories that the SKILL.md description promises). Stays untracked until `retention/` and `decision-audit/` directories are populated. Filed as `⚙️ Meta/Claude To-dos.md` follow-up.
+
+---
+
 ## 2026-05-06 — Release workflow + `--plugin-url` quick-try path
 
 **Who this affects:** anyone who wants to try ai-brain-starter skills against an existing vault without running the full bootstrap, plus maintainers who want a tagged-release distribution path alongside the email-gated install funnel.

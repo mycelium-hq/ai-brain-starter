@@ -11,6 +11,21 @@ For full development history including internal refactors and bug fixes, see [`C
 
 ---
 
+## 2026-05-06 — Vertical packs (finance, legal)
+
+Two vertical skill packs are now bundled with AI Brain Starter:
+
+- **`vertical-finance`** — Pre-configured for CFOs, finance ops, and internal audit teams. Typed-memory categories for SOX 404 controls and board-pack trails, retention defaults aligned with SOX + SEC 17a-4, connectors for Workday / NetSuite / SAP Finance, and decision-audit patterns for evidence stamping. Trigger: `/vertical-finance init`.
+- **`vertical-legal`** — Pre-configured for law firms, in-house legal, and legal-ops teams. Typed-memory for matter management and privilege handling, retention aligned with ABA Model Rule 1.15, connectors for Clio / NetDocuments / iManage, conflicts-check and privilege-handling decision audits. Trigger: `/vertical-legal init`.
+
+Both are additive — installing them doesn't change behavior for users outside those verticals. Use when onboarding a CFO organization or law firm that needs the substrate to come pre-shaped to their work rather than starting from a blank vault.
+
+A healthcare pack (vertical-healthcare) is in progress but not yet shipped — it needs the retention and decision-audit layers before it goes out.
+
+**No action required** for existing installs.
+
+---
+
 ## 2026-05-06 — `--plugin-url` quick-try path + tagged releases
 
 Existing Claude Code 2.1.129+ users can now try AI Brain Starter skills against an existing vault without running the full bootstrap:
