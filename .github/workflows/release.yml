@@ -50,11 +50,16 @@ jobs:
 
       - name: build release archives
         id: build
+        # Defense-in-depth: bind workflow_dispatch input to an env var per the
+        # workflow-injection guide (https://github.blog/security/vulnerability-research/...)
+        # rather than interpolating ${{ github.event.inputs.tag }} directly into the run: shell.
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
           set -e
           TAG="${GITHUB_REF#refs/tags/}"
           if [ -z "$TAG" ] || [ "$TAG" = "$GITHUB_REF" ]; then
-            TAG="${{ github.event.inputs.tag }}"
+            TAG="$INPUT_TAG"
           fi
           if [ -z "$TAG" ]; then
             echo "::error::No tag resolved"
