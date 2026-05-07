@@ -105,6 +105,55 @@ jobs:
 
           ls -la ai-brain-starter.zip ai-brain-starter.tar.gz *.sha256
 
+      - name: smoke-test built archives
+        # Catches a class of bugs the at-build manifest validation doesn't:
+        #   - rsync exclusion accidentally drops .claude-plugin/ from the zip
+        #   - directory structure inside the zip is wrong (root != ai-brain-starter/)
+        #   - manifest is parseable in source but corrupted in archive (encoding,
+        #     line-ending, BOM issues)
+        # Unpacks each archive to a temp dir and asserts the unpacked plugin
+        # manifest still parses + has required name + version fields.
+        run: |
+          set -e
+          TMP=/tmp/smoke
+          rm -rf "$TMP" && mkdir -p "$TMP"
+
+          # zip
+          unzip -q ai-brain-starter.zip -d "$TMP/from-zip"
+          test -f "$TMP/from-zip/ai-brain-starter/.claude-plugin/plugin.json" || { echo "::error::zip missing .claude-plugin/plugin.json at expected path"; exit 1; }
+          python3 -c "
+          import json
+          d = json.load(open('$TMP/from-zip/ai-brain-starter/.claude-plugin/plugin.json'))
+          assert d.get('name') == 'ai-brain-starter', f'bad name: {d.get(\"name\")}'
+          assert d.get('version'), 'missing version'
+          print(f'zip OK: name={d[\"name\"]} version={d[\"version\"]}')
+          "
+
+          # tar.gz
+          mkdir -p "$TMP/from-tar"
+          tar xzf ai-brain-starter.tar.gz -C "$TMP/from-tar"
+          test -f "$TMP/from-tar/ai-brain-starter/.claude-plugin/plugin.json" || { echo "::error::tar.gz missing .claude-plugin/plugin.json at expected path"; exit 1; }
+          python3 -c "
+          import json
+          d = json.load(open('$TMP/from-tar/ai-brain-starter/.claude-plugin/plugin.json'))
+          assert d.get('name') == 'ai-brain-starter', f'bad name: {d.get(\"name\")}'
+          assert d.get('version'), 'missing version'
+          print(f'tar.gz OK: name={d[\"name\"]} version={d[\"version\"]}')
+          "
+
+          # SHA256 verification: re-hash and compare to .sha256 sidecar
+          for f in ai-brain-starter.zip ai-brain-starter.tar.gz; do
+            actual=$(sha256sum "$f" | awk '{print $1}')
+            expected=$(awk '{print $1}' "$f.sha256")
+            if [ "$actual" != "$expected" ]; then
+              echo "::error::$f sha256 mismatch (sidecar=$expected actual=$actual)"
+              exit 1
+            fi
+            echo "$f sha256 OK ($actual)"
+          done
+
+          echo "All smoke-tests passed."
+
       - name: create release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
