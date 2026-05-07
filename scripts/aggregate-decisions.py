@@ -8,14 +8,19 @@ Fix: each decision lives in its own file in Decisions/, this script
 rebuilds Decision Log.md by concatenating all decision files in reverse
 chronological order.
 
-Difference from sessions: decisions are small and permanent — this
-script shows ALL of them in Decision Log.md, not just the top N. If the
-log gets unwieldy, rotation is a separate future concern.
+Rotation (added 2026-05-03 after Decision Log hit 351 KB / +4600 lines/month):
+  Inline = (decisions within last N months) ∪ (any decision with outcome:
+  pending), regardless of age. Pending decisions never rotate out — they
+  stay live as accountability surfaces (Brené veto). Closed-outcome
+  decisions older than the window move to Decision Log Archive.md.
+  Source files in Decisions/ are immutable; rotation is at output time.
+  Default window: 6 months. Override via --inline-window-months.
 
 Usage:
   VAULT_ROOT=/path/to/vault python3 aggregate-decisions.py
   python3 aggregate-decisions.py --dry-run
   python3 aggregate-decisions.py --no-legacy
+  python3 aggregate-decisions.py --inline-window-months 12
 
 Environment variables:
   VAULT_ROOT   — absolute path to the Obsidian vault root.
@@ -30,9 +35,10 @@ File format (Decisions/ entries):
     - floor: {emotional floor at decision time}
     - stakes: Low | Medium | High
     - speed: Instant | Hours | Days | Weeks
+    - next_step: REQUIRED. One concrete action (who + what + by when).
     - outcome: pending | {fill-in-later}
     - pattern: pending | {fill-in-later}
-  Body is the decision entry (What / Why / Floor / Stakes / Speed / ...).
+  Body is the decision entry (What / Why / Floor / Stakes / Speed / Next Step / ...).
 
 Determinism rules identical to aggregate-sessions.py: sorted filename
 descending → deterministic output → concurrent runs safe.
@@ -53,10 +59,13 @@ VAULT_ROOT = Path(os.environ.get("VAULT_ROOT", str(_SCRIPT_DIR.parent.parent)))
 META_DIR = VAULT_ROOT / "⚙️ Meta"
 DECISIONS_DIR = META_DIR / "Decisions"
 DECISION_LOG = META_DIR / "Decision Log.md"
+DECISION_LOG_ARCHIVE = META_DIR / "Decision Log Archive.md"
 
 AGGREGATOR_BEGIN = "<!-- aggregate-decisions:BEGIN -->"
 AGGREGATOR_END = "<!-- aggregate-decisions:END -->"
 LEGACY_HEADER = "## Legacy (pre-split) historical decisions"
+
+INLINE_WINDOW_MONTHS_DEFAULT = 6
 
 
 def preamble() -> str:
@@ -113,6 +122,139 @@ def strip_frontmatter(content: str) -> str:
     return content
 
 
+def parse_frontmatter(content: str) -> dict:
+    """Minimal flat-key YAML frontmatter parser. Ignores nested structures.
+
+    Sufficient for the decision frontmatter schema (decision_date, outcome,
+    stakes, etc. are all single-line key: value pairs).
+    """
+    if not content.startswith("---\n"):
+        return {}
+    end = content.find("\n---\n", 4)
+    if end == -1:
+        return {}
+    fm_text = content[4:end]
+    out: dict[str, str] = {}
+    for line in fm_text.split("\n"):
+        if ":" in line and not line.startswith((" ", "\t", "-")):
+            key, _, value = line.partition(":")
+            out[key.strip()] = value.strip().strip("\"'")
+    return out
+
+
+def extract_first_heading(body: str) -> str:
+    """Return the first '# ...' or '## ...' heading from the body, or ''."""
+    for line in body.split("\n"):
+        s = line.strip()
+        if s.startswith("# "):
+            return s[2:].strip()
+        if s.startswith("## "):
+            return s[3:].strip()
+    return ""
+
+
+def is_pending(outcome: str) -> bool:
+    """Treat empty / pending / fill-in-later as pending (always inline)."""
+    o = (outcome or "").lower().strip().strip("{}")
+    return o in ("", "pending", "fill-in-later", "tbd", "n/a")
+
+
+def split_inline_vs_archive(
+    files: list[Path], inline_window_months: int
+) -> tuple[list[Path], list[Path]]:
+    """Partition decision files into (inline, archive).
+
+    Inline = within window OR pending-outcome OR undated.
+    Archive = closed-outcome AND older than window.
+    """
+    cutoff = dt.date.today() - dt.timedelta(days=inline_window_months * 30)
+    inline: list[Path] = []
+    archive: list[Path] = []
+    for f in files:
+        try:
+            content = f.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            inline.append(f)  # fail safe: keep readable
+            continue
+        fm = parse_frontmatter(content)
+        outcome = fm.get("outcome", "pending")
+        date_str = fm.get("decision_date", "")
+        try:
+            d = dt.date.fromisoformat(date_str)
+        except (ValueError, TypeError):
+            d = None
+        if is_pending(outcome):
+            inline.append(f)  # pending → always inline regardless of age
+        elif d is None or d >= cutoff:
+            inline.append(f)
+        else:
+            archive.append(f)
+    return inline, archive
+
+
+def build_toc(files: list[Path], inline_window_months: int) -> str:
+    """Auto-TOC for the inline portion: date — title — [PENDING] marker.
+
+    No anchor links; Obsidian's outline panel handles in-file navigation.
+    The TOC's job is letting a reader scan all titles without scrolling
+    through a 350 KB file.
+    """
+    if not files:
+        return ""
+    lines = [
+        "## Index",
+        "",
+        f"*{len(files)} decision(s) inline. Window: last {inline_window_months} months. "
+        "Pending-outcome decisions stay inline regardless of age.*",
+        "",
+    ]
+    for f in files:
+        try:
+            content = f.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            lines.append(f"- `????-??-??` — {f.stem} (read failed)")
+            continue
+        fm = parse_frontmatter(content)
+        body = strip_frontmatter(content)
+        date = fm.get("decision_date") or "????-??-??"
+        outcome = fm.get("outcome", "pending")
+        stakes = fm.get("stakes", "")
+        title = extract_first_heading(body) or f.stem
+        markers = []
+        if is_pending(outcome):
+            markers.append("PENDING")
+        if stakes.lower() == "high":
+            markers.append("HIGH")
+        marker_str = f" `[{' / '.join(markers)}]`" if markers else ""
+        lines.append(f"- `{date}` — {title}{marker_str}")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def build_archive_file(files: list[Path], inline_window_months: int) -> str:
+    """Full content for Decision Log Archive.md."""
+    today = dt.date.today().isoformat()
+    preamble = (
+        "---\n"
+        f"creationDate: {today}\n"
+        "type: meta\n"
+        f"last_updated: {today}\n"
+        "---\n"
+        "\n# Decision Log Archive\n\n"
+        "*Closed-outcome decisions older than the inline window "
+        f"({inline_window_months} months). "
+        f"Auto-generated by `⚙️ Meta/scripts/aggregate-decisions.py` from "
+        "`⚙️ Meta/Decisions/`. Read [[Decision Log]] first; come here for "
+        "older pattern detection. Source files in Decisions/ are immutable — "
+        "rotation happens at output time only.*\n\n"
+        "---\n\n"
+    )
+    aggregate = build_aggregate(files)
+    return preamble + aggregate
+
+
 def build_aggregate(files: list[Path]) -> str:
     blocks = []
     for f in files:
@@ -160,6 +302,21 @@ def main() -> int:
         action="store_true",
         help="Don't preserve historical content below the aggregator region",
     )
+    parser.add_argument(
+        "--inline-window-months",
+        type=int,
+        default=INLINE_WINDOW_MONTHS_DEFAULT,
+        help=(
+            "How many months of decisions stay inline in Decision Log.md. "
+            "Older closed-outcome decisions move to Decision Log Archive.md. "
+            f"Pending-outcome decisions stay inline regardless of age. Default: {INLINE_WINDOW_MONTHS_DEFAULT}."
+        ),
+    )
+    parser.add_argument(
+        "--no-toc",
+        action="store_true",
+        help="Skip the auto-generated Index/TOC at the top of Decision Log.md",
+    )
     args = parser.parse_args()
 
     if not META_DIR.exists():
@@ -179,7 +336,21 @@ def main() -> int:
         )
         return 0
 
-    aggregate_block = build_aggregate(files)
+    inline_files, archive_files = split_inline_vs_archive(
+        files, args.inline_window_months
+    )
+
+    inline_block = build_aggregate(inline_files)
+    toc = "" if args.no_toc else build_toc(inline_files, args.inline_window_months)
+
+    archive_pointer = ""
+    if archive_files:
+        archive_pointer = (
+            "\n\n---\n\n## Archived decisions\n\n"
+            f"*{len(archive_files)} closed-outcome decision(s) older than "
+            f"{args.inline_window_months} months moved to "
+            "[[Decision Log Archive]]. Search there for older pattern detection.*\n"
+        )
 
     if DECISION_LOG.exists() and not args.no_legacy:
         existing = DECISION_LOG.read_text(encoding="utf-8")
@@ -187,24 +358,54 @@ def main() -> int:
     else:
         legacy = ""
 
-    new_content = preamble() + aggregate_block
+    new_content = preamble() + toc + inline_block + archive_pointer
     if legacy:
         new_content += f"\n\n---\n\n{LEGACY_HEADER}\n\n"
         new_content += legacy.rstrip() + "\n"
 
+    archive_content = (
+        build_archive_file(archive_files, args.inline_window_months)
+        if archive_files
+        else None
+    )
+
     if args.dry_run:
-        print(f"--- DRY RUN ---")
-        print(f"Would write {len(new_content):,} bytes to {DECISION_LOG.name}")
-        print(f"{len(files)} decision(s):")
-        for f in files:
+        print("--- DRY RUN ---")
+        print(
+            f"Would write {len(new_content):,} bytes to {DECISION_LOG.name} "
+            f"({len(inline_files)} inline decision(s))"
+        )
+        if archive_content is not None:
+            print(
+                f"Would write {len(archive_content):,} bytes to "
+                f"{DECISION_LOG_ARCHIVE.name} "
+                f"({len(archive_files)} archived decision(s))"
+            )
+        else:
+            print("No archive file needed (no decisions older than window).")
+        print(f"\nInline ({len(inline_files)}):")
+        for f in inline_files[:20]:
             print(f"  - {f.name}")
+        if len(inline_files) > 20:
+            print(f"  ... +{len(inline_files) - 20} more")
+        print(f"\nArchive ({len(archive_files)}):")
+        for f in archive_files[:20]:
+            print(f"  - {f.name}")
+        if len(archive_files) > 20:
+            print(f"  ... +{len(archive_files) - 20} more")
         return 0
 
     DECISION_LOG.write_text(new_content, encoding="utf-8")
     print(
-        f"Aggregated {len(files)} decision(s) into {DECISION_LOG.name} "
-        f"({len(new_content):,} bytes)"
+        f"Aggregated {len(inline_files)} inline decision(s) into "
+        f"{DECISION_LOG.name} ({len(new_content):,} bytes)"
     )
+    if archive_content is not None:
+        DECISION_LOG_ARCHIVE.write_text(archive_content, encoding="utf-8")
+        print(
+            f"Archived {len(archive_files)} closed decision(s) to "
+            f"{DECISION_LOG_ARCHIVE.name} ({len(archive_content):,} bytes)"
+        )
     return 0
 
 

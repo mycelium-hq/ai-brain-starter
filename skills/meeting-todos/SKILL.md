@@ -110,7 +110,7 @@ Ask the user if they want this added before writing.
 
 - Always confirm before writing to to-do
 - Transcripts in any language are fine — extract in the language of the meeting, or match the user's preference
-- Be specific: "Research optimal response time for Colombia market" not "Do research"
+- Be specific: "Research optimal response time for our target market" not "Do research"
 - Include context in the task where helpful: "Discuss referral API payload with John (what data to send when hotel can't take event)"
 - If a meeting had no clear action items, say so — don't invent tasks
 - **NEVER fail silently.** If the meeting file doesn't exist or can't be read, tell the user immediately

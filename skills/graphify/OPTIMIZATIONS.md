@@ -20,7 +20,7 @@ These 7 lessons from running /graphify on a real 2,380-file journal corpus are n
 
 7. **`source_file` must be a specific .md path, never a directory.** An agent setting `source_file` to `"📓 Journals/"` broke `save_semantic_cache` with `Errno 21: Is a directory`, causing the entire cache save to fail and forcing the next run to re-pay for all 370 files. `graphify_canonicalize.py` now has `normalize_source_file()` that defensively strips directory paths to `""` so the cache save can skip cleanly. The extraction prompt template also has an explicit "MUST be a specific .md path" requirement with good/bad examples.
 
-These are wrapper scripts (`scripts/graphify_prep.py`, `graphify_canonicalize.py`, `graphify_chunk.py`) that bracket the upstream graphify pipeline. They are tuned for the High-Rise framework that ai-brain-starter installs (the 16 floors from Shame to Peace). The prep step automatically picks up `dominant_floors:` / `floor:` frontmatter tags and turns each into a free EXTRACTED edge to the canonical floor node.
+These are wrapper scripts (`scripts/graphify_prep.py`, `graphify_canonicalize.py`, `graphify_chunk.py`) that bracket the upstream graphify pipeline. They are tuned for the framework that ai-brain-starter installs (the 16 floors from Shame to Peace). The prep step automatically picks up `dominant_floors:` / `floor:` frontmatter tags and turns each into a free EXTRACTED edge to the canonical floor node.
 
 ## TL;DR — the cost problem and the fix
 
@@ -72,7 +72,7 @@ What this does:
 - Removes empty subdirs after dedupe
 - Walks all remaining `.md` files with regex and writes `graphify-out/.graphify_preflight.json` containing every `[[wikilink]]` and YAML frontmatter framework tag as a node + EXTRACTED edge — these are FREE structural edges the LLM should not re-extract
 
-The script auto-recognizes the 16 High-Rise floors (Shame, Guilt, Apathy, Grief, Fear, Desire, Anger, Pride, Courage, Neutrality, Willingness, Acceptance, Reason, Love, Joy, Peace) from `dominant_floors:` or `floor:` frontmatter keys and creates a free `expresses_floor` edge from each tagged file to the canonical floor node. No LLM needed for any of this.
+The script auto-recognizes the domain-specific category labels (configurable per vault) from `dominant_floors:` or `floor:` frontmatter keys and creates a free `expresses_floor` edge from each tagged file to the canonical floor node. No LLM needed for any of this.
 
 ### Step 2 — Word-balanced chunking
 
@@ -89,7 +89,7 @@ What this does:
 - Greedy bin-packs the rest across N chunks balanced by **word count, not file count**
 - Writes one `graphify-out/.chunk_NN_files.txt` per chunk
 
-Why bin-packing matters: alphabetical chunking on Adelaida's 566-file corpus produced one chunk with 102K words and another with 2K words — 50× variance, slow stragglers, risk of context overflow on the big chunk. Bin-packed chunks all hit ~46K words ± 50.
+Why bin-packing matters: alphabetical chunking on a 566-file corpus produced one chunk with 102K words and another with 2K words — 50× variance, slow stragglers, risk of context overflow on the big chunk. Bin-packed chunks all hit ~46K words ± 50.
 
 Why 12 chunks (not 25): each subagent pays a fixed ~1.5K of prompt overhead. 12 large chunks instead of 25 small chunks cuts overhead by ~50% with no quality penalty.
 
@@ -167,7 +167,7 @@ to_html(G, communities, "graphify-out/graph.html")
 
 ## Cumulative savings
 
-Measured on Adelaida's 1,660-file vault (April 2026):
+Measured on a 1,660-file vault (April 2026):
 
 | Optimization | Savings | Cumulative cost vs naive |
 |---|---|---|
@@ -188,14 +188,14 @@ A naive run that would cost ~12M LLM tokens drops to ~1M for the first run, and 
 2. **Parallel subagent cap is ~10-12.** Dispatching more than that in a single message causes 429 rate limits on follow-up agent operations. The result writes usually succeed (you just lose the closing handshake message), but be aware that "agent failed" notifications may be misleading — always check the result file directly.
 3. **`signal.alarm()` is process-global.** Don't span a single timeout across multiple stages of a script (build + cluster + cache). Set fresh alarms per stage or skip alarms inside the cache write step.
 4. **The graphify cache uses `SHA256(file_contents + null + resolved_path)`.** This means moving a file to a new path invalidates its cache entry even if the content is identical. Plan accordingly when reorganizing.
-5. **The 16 floor names (Shame...Peace) are baked in.** They come from the High-Rise framework that ai-brain-starter installs in every vault. If you've added your own framework variants, add their lowercase names to `CANONICAL_FLOORS` in `graphify_prep.py` and to `LABEL_SUFFIX_VARIANTS` in `graphify_canonicalize.py`.
+5. **The 16 floor names (Shame...Peace) are baked in.** They come from the framework that ai-brain-starter installs in every vault. If you've added your own framework variants, add their lowercase names to `CANONICAL_FLOORS` in `graphify_prep.py` and to `LABEL_SUFFIX_VARIANTS` in `graphify_canonicalize.py`.
 6. **Cache root path gotcha when running from a temp CWD.** If you run graphify on a source outside the current working directory (e.g. a team Google Drive vault while your CWD is `/tmp/graphify_onde_team/`), `save_semantic_cache` will silently write 0 entries. Reason: it does `Path(root) / fpath` to resolve each file, and if `fpath` is relative and `root` doesn't match the actual vault root, the files don't exist relative to CWD and get skipped. **Fix: normalize every `source_file` in the extraction JSON to an absolute path before calling the cache API:**
    ```python
    VAULT_ROOT = Path("/absolute/path/to/vault")
    for n in extraction["nodes"]:
        sf = n.get("source_file", "")
        if sf and not Path(sf).is_absolute():
-           for prefix in ["", "Onde Team/"]:  # try each possible prefix
+           for prefix in [""]:  # extend with team-vault prefixes if running on a team substrate
                candidate = VAULT_ROOT / (prefix + sf)
                if candidate.exists():
                    n["source_file"] = str(candidate)

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-graphify_stage_select.py -- Stage selection for the graphify staged rollout.
+graphify_stage_select.py — Stage selection for the graphify staged rollout.
 
-Walks a corpus folder, applies the standard filters (>=500 words, no [AI Extract]),
-checks the cache for REAL LLM extractions (not preflight stubs, see Lesson #39),
+Walks a corpus folder, applies the standard filters (≥500 words, no [AI Extract]),
+checks the cache for REAL LLM extractions (not preflight stubs — see Lesson #39),
 and bin-packs the misses into ~50K-word chunks ready for parallel dispatch.
 
 LESSON #39 (2026-04-11):
@@ -18,20 +18,20 @@ LLM cache entry signature (any ONE is sufficient):
   - any edge has confidence_score != 1.0
 
 Preflight-only signature: structural relations ("references", "expresses_floor")
-with confidence="EXTRACTED" and score=1.0. These are NOT real hits, re-extract.
+with confidence="EXTRACTED" and score=1.0. These are NOT real hits — re-extract.
 
 Usage:
     python3 graphify_stage_select.py <corpus_folder> [--target-words 50000] [--stage-pct 1.0] [--stage-skip-pct 0.30]
 
 Examples:
     # Stage 3: full Daily Logs
-    python3 graphify_stage_select.py "Daily Logs"
+    python3 graphify_stage_select.py "📅 Daily Logs"
 
     # Stage 2: skip the recent 30% (already done in Stage 1), take the rest
-    python3 graphify_stage_select.py "Journals" --stage-skip-pct 0.30
+    python3 graphify_stage_select.py "📓 Journals" --stage-skip-pct 0.30
 
     # Stage 5 sub-stage: full Writing folder
-    python3 graphify_stage_select.py "Writing"
+    python3 graphify_stage_select.py "✍️ Writing"
 """
 import argparse
 import json
@@ -41,9 +41,8 @@ import sys
 from pathlib import Path
 from datetime import datetime
 
-# Auto-detect vault root from script location
-_SCRIPT_DIR = Path(__file__).resolve().parent
-VAULT = _SCRIPT_DIR.parent.parent  # scripts/ -> parent folder -> vault root
+DEFAULT_VAULT = Path.cwd()  # default to current working directory; override via --vault-root
+CACHE_DIR = DEFAULT_VAULT / "⚙️ Meta" / "graphify-out" / "cache"
 
 
 def is_llm_extraction(cache_data: dict) -> bool:
@@ -67,7 +66,7 @@ def is_llm_extraction(cache_data: dict) -> bool:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("corpus_folder", nargs="*",
-                    help="One or more folders relative to vault root, e.g. 'Notes' 'Writing'. "
+                    help="One or more folders relative to vault root, e.g. '📝 Notes' '✍️ Writing'. "
                          "Can also be passed via --include.")
     ap.add_argument("--include", action="append", default=[], metavar="FOLDER",
                     help="Alias for the positional corpus_folder arg. Repeatable: "
@@ -78,27 +77,27 @@ def main():
     ap.add_argument("--max-files-per-chunk", type=int, default=45,
                     help="Max files per chunk (Lesson #81: 60+ causes schema collapse, default 45)")
     ap.add_argument("--stage-skip-pct", type=float, default=0.0,
-                    help="Skip the most-recent N%%%% of files (e.g. 0.30 for 30%%%%, used by Stage 2 to skip Stage 1's slice)")
+                    help="Skip the most-recent N%% of files (e.g. 0.30 for 30%%, used by Stage 2 to skip Stage 1's slice)")
     ap.add_argument("--min-words", type=int, default=500)
     ap.add_argument("--skip-ai-extract", action="store_true", default=True)
     ap.add_argument("--out-prefix", default=None,
                     help="Name prefix for chunk files (written inside out_dir, e.g. 'notes' -> .notes_chunk_01)")
     ap.add_argument("--vault-root", default=None,
-                    help="Root directory of the vault. Defaults to auto-detected from script location.")
+                    help="Root directory of the vault. Defaults to personal vault.")
     args = ap.parse_args()
 
-    vault = Path(args.vault_root) if args.vault_root else VAULT
+    vault = Path(args.vault_root) if args.vault_root else DEFAULT_VAULT
     if not vault.exists():
         print(f"vault not found: {vault}", file=sys.stderr)
         sys.exit(1)
 
+    # Combine positional folders + --include folders (de-duped, order-preserving)
     folder_args = list(args.corpus_folder) + list(args.include)
     if not folder_args:
         print("error: at least one folder required (positional arg or --include)", file=sys.stderr)
         sys.exit(2)
-
-    folders = []
     seen: set[str] = set()
+    folders = []
     for cf in folder_args:
         if cf in seen:
             continue
@@ -109,36 +108,23 @@ def main():
             sys.exit(1)
         folders.append(f)
 
-    # Auto-detect graphify-out layout (Lesson #87):
-    # - Personal vault: <vault>/graphify-out/ for cache + chunks + graph
-    # - Multi-vault (team style): <vault>/graphify-out/cache/ at vault root,
-    #   chunks + graph inside a subfolder of <vault>/<corpus>/
-    team_cache = vault / "graphify-out" / "cache"
-    team_out = None
-    # Check if any corpus folder has a graphify-out nested inside it
-    for folder in folders:
-        if folder.is_dir():
-            for sub in folder.iterdir():
-                if sub.is_dir() and (sub / "graphify-out").exists():
-                    team_out = sub / "graphify-out"
-                    break
-            if team_out:
-                break
-            # Also check direct graphify-out under folder
-            if (folder / "graphify-out").exists():
-                team_out = folder / "graphify-out"
-                break
-    personal_out = vault / "graphify-out"
-    if team_cache.exists() and team_out is not None and team_out != personal_out:
-        cache_dir = team_cache
-        out_dir = team_out
-        layout = "team-vault"
+    # Auto-detect graphify-out layout (Lesson #53):
+    # - Personal vault: <vault>/⚙️ Meta/graphify-out/ for cache + chunks + graph
+    # - Team vault layout: <vault>/graphify-out/cache/ at vault root (sibling of content folder),
+    #   <vault>/<corpus_folder>/⚙️ Meta/graphify-out/ for chunks + graph
+    onde_team_cache = vault / "graphify-out" / "cache"
+    onde_team_out = folders[0] / "⚙️ Meta" / "graphify-out"
+    personal_out = vault / "⚙️ Meta" / "graphify-out"
+    if onde_team_cache.exists() and onde_team_out.exists():
+        cache_dir = onde_team_cache
+        out_dir = onde_team_out
+        layout = "onde-team"
     else:
         cache_dir = personal_out / "cache"
         out_dir = personal_out
         layout = "personal"
     out_dir.mkdir(parents=True, exist_ok=True)
-    # --out-prefix is a NAME, not a path. Resolve inside out_dir.
+    # Fix: --out-prefix is a NAME, not a path. Resolve inside out_dir.
     if args.out_prefix:
         out_prefix = str(out_dir / f".{args.out_prefix}_chunk_")
     else:
@@ -147,13 +133,10 @@ def main():
     print(f"  cache_dir: {cache_dir}")
     print(f"  out_dir:   {out_dir}")
 
-    os.chdir(vault)
-
-    # Lesson #89: exclude meta/archive folders from both vaults.
+    # Lesson #68: exclude ⚙️ Meta/ and Archive/ from both vaults.
     # Also skip _review_alternate_drafts/ (quarantine folder) and conflict copies.
-    # Lesson #89: also skip ⚙️ Meta (templates, GRAPH_REPORT, runbooks) and archived folders
     SKIP_PARTS = {
-        "_review_alternate_drafts", "Archive", "🗄 Archive", "⚙️ Meta",
+        "_review_alternate_drafts", "⚙️ Meta", "Archive", "🗄 Archive",
         ".claude", ".git", ".obsidian", ".trash", "node_modules", "worktrees",
     }
     def skip(f):
@@ -164,7 +147,6 @@ def main():
         if stem.endswith(" 2") or stem.endswith(" 3"):
             return True
         return False
-
     all_files = []
     for folder in folders:
         folder_files = [f for f in folder.rglob("*.md") if not skip(f)]
@@ -246,6 +228,7 @@ def main():
             # to absolute when relative_to raises ValueError.
             content = f.read_bytes()
             cache_file = None
+            # Relative path variants to try for cache lookup
             candidate_paths = []
             try:
                 candidate_paths.append(str(f.resolve().relative_to(vault.resolve())).encode())
@@ -289,13 +272,13 @@ def main():
     bin_w = [0] * target_chunks
     for f, w in items:
         # Find lightest bin that hasn't hit file-count cap (Lesson #81)
-        bin_candidates = [(bin_w[i], i) for i in range(len(bins)) if len(bins[i]) < max_fpc]
-        if not bin_candidates:
+        candidates = [(bin_w[i], i) for i in range(len(bins)) if len(bins[i]) < max_fpc]
+        if not candidates:
             # All bins full, create a new one
             bins.append([])
             bin_w.append(0)
-            bin_candidates = [(0, len(bins) - 1)]
-        _, idx = min(bin_candidates)
+            candidates = [(0, len(bins) - 1)]
+        _, idx = min(candidates)
         bins[idx].append(f)
         bin_w[idx] += w
 
@@ -316,7 +299,7 @@ def main():
     naive = sum(bin_w) * 2.55 / 1000
     grep_first = sum(bin_w) * 2.55 * 0.54 / 1000  # 46% reduction per Lesson #42
     print(f"Expected cost naive: ~{naive:.0f}K tokens")
-    print(f"With Grep-first (Lesson #42, 46% reduction): ~{grep_first:.0f}K tokens")
+    print(f"With Grep-first (Lesson #42 — 46% reduction): ~{grep_first:.0f}K tokens")
 
 
 if __name__ == "__main__":
