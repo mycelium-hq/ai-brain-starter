@@ -9,6 +9,26 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-06 — vertical-healthcare completion + recommended-skill-overrides doc
+
+**Who this affects:** covered entities, business associates, and health systems onboarding to the substrate; plus all installs that want a sensible starter `skillOverrides` configuration.
+
+**The shape:** v1.2.0 shipped finance + legal packs but kept healthcare untracked because its retention/, decision-audit/, and a third connector were missing relative to what its SKILL.md description promised. Authoring those four files closes the gap; the pack is now production-grade. Plus a portable doc that explains which Claude Code 2.1.129+ skills to set to `off` for a sharper auto-routing loadout.
+
+### What shipped
+
+- **`skills/vertical-healthcare/retention/defaults.md`** — HIPAA 6-year baseline per 45 CFR 164.530(j), per-state add-ons (California / Texas / New York / Florida / Massachusetts), special-case modifiers (decedent records 50 years per 164.502(f), minor patients per state baseline, 42 CFR Part 2 separate handling, research-consent records, psychotherapy notes 7-year floor).
+- **`skills/vertical-healthcare/decision-audit/phi-handling.md`** — firewall against the 18 HIPAA identifiers per 164.514(b)(2). Detection sweep at write time, coverage check, tenant-boundary check, sensitive-subset stamp, minimum-necessary review per 164.502(b). Access-time logging captures role, purpose, encounter, disposition, auth basis. Cross-boundary moves restricted to BAA-stamped channels, written authorizations, required-by-law disclosures, or de-identified output.
+- **`skills/vertical-healthcare/decision-audit/clinical-decision-trail.md`** — chain of input data → decision → decision-maker → supporting evidence → alternatives considered → shared-decision-making flag. Credentialing check, encounter validity, time consistency, content-addressable stamp. Reviewer chain (peer review, attending, medical director, quality) for institution-flagged decisions. Provenance: 45 CFR 164.526, 164.530(j), CMS 42 CFR 482.24(c), Joint Commission RC.02.01.01.
+- **`skills/vertical-healthcare/connectors/salesforce-health-cloud.md`** — Health Cloud connector (Person Accounts, EhrEncounter, EhrCondition, EhrMedicationStatement, CarePlan, CareRequest, ContentDocument). OAuth JWT bearer + web server flows. SObject sharing-rule + field-level-security honored, never bypassed. Sync cadences (nightly to real-time via Streaming API), rate-limit handling, cert rotation.
+- **`docs/RECOMMENDED_SKILL_OVERRIDES.md`** — a portable starter recipe for `skillOverrides` in `~/.claude/settings.json`. Walks through what to set `off` (skill collections that won't fire for most users), `user-invocable-only` (rare manual use), `name-only` (tokens-saving), with the reasoning per category.
+
+### Manifest version
+
+Bumped 1.2.0 → 1.3.0.
+
+---
+
 ## 2026-05-06 — Vertical packs (finance, legal) + maintainer release docs
 
 **Who this affects:** consulting clients and operators in regulated verticals (CFOs, finance ops, internal audit, in-house legal, legal ops, law firms) who want the substrate to come pre-shaped to their compliance and audit obligations rather than starting from a blank vault. Plus maintainers cutting future releases.

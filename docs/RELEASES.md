@@ -11,6 +11,22 @@ For full development history including internal refactors and bug fixes, see [`C
 
 ---
 
+## 2026-05-06 — vertical-healthcare completion + skill-overrides recipe
+
+The healthcare vertical pack is now complete. Three layers shipped that match what the pack's description has promised since launch:
+
+- **HIPAA-aligned retention defaults** with per-state add-ons (California, Texas, New York, Florida, Massachusetts) and special-case modifiers for decedent records, minor patients, 42 CFR Part 2 records, research-consent records, and psychotherapy notes.
+- **PHI handling firewall** that verifies every PHI write against the 18 HIPAA identifiers (45 CFR 164.514(b)(2)), logs every access with role and purpose, and restricts cross-boundary moves to BAA-stamped channels, written authorizations, required-by-law disclosures, or de-identified output.
+- **Clinical-decision evidence chain** that links every clinical decision to the input data, the decision-maker, supporting evidence, alternatives considered, and (when applicable) the peer-review chain.
+
+Plus the third connector promised in the pack description: **Salesforce Health Cloud**, with OAuth JWT bearer flow and Health Cloud SObject mappings. Trigger: `/vertical-healthcare init`.
+
+Also new: **`docs/RECOMMENDED_SKILL_OVERRIDES.md`** — a portable starter recipe for the `skillOverrides` setting that landed in Claude Code 2.1.129. Sharper auto-routing without disabling skills you might still need.
+
+**No action required** for existing installs. The vertical packs are additive — installing them doesn't change behavior for users in other verticals.
+
+---
+
 ## 2026-05-06 — Vertical packs (finance, legal)
 
 Two vertical skill packs are now bundled with AI Brain Starter:
