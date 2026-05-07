@@ -40,6 +40,26 @@ LABEL_SUFFIX_VARIANTS = (
 )
 
 
+def strip_unmatched_close(label: str) -> str:
+    """Strip trailing unmatched closing punctuation: ) ] }.
+
+    LLM extractions sometimes split mid-token (e.g. "co-founder (partner)" ->
+    "partner)" as a node label) — pollutes WIKILINK_GAPS.md and never resolves.
+    Only strip closers whose opener is absent, so balanced labels like
+    "Plot (2024)" survive.
+    """
+    if not label:
+        return label
+    pairs = {")": "(", "]": "[", "}": "{"}
+    while label and label[-1] in pairs:
+        close = label[-1]
+        opener = pairs[close]
+        if label.count(opener) >= label.count(close):
+            break
+        label = label[:-1].rstrip()
+    return label
+
+
 def strip_folder_prefix(label: str) -> str:
     """Strip folder path prefixes from wikilink-style labels.
 
@@ -77,6 +97,9 @@ def normalize_label(label: str, file_type: str = "document") -> str:
     label = (label or "").strip()
     if file_type == "document":
         label = strip_folder_prefix(label)
+    # Strip unmatched closing punctuation BEFORE suffix matching so
+    # "Foo Floor)" and "Foo Floor" canonicalize identically.
+    label = strip_unmatched_close(label)
     for suf in LABEL_SUFFIX_VARIANTS:
         if label.endswith(suf):
             label = label[: -len(suf)]
@@ -151,7 +174,8 @@ def canonicalize(extraction: dict) -> dict:
         if norm not in label_to_cid:
             label_to_cid[norm] = cid
             # Strip suffix variants from display label too
-            display = label
+            # Order matches normalize_label: unmatched close first, then suffix.
+            display = strip_unmatched_close(label)
             for suf in LABEL_SUFFIX_VARIANTS:
                 if display.endswith(suf):
                     display = display[: -len(suf)]
