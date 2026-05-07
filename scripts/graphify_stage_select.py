@@ -66,8 +66,14 @@ def is_llm_extraction(cache_data: dict) -> bool:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("corpus_folder", nargs="+",
-                    help="One or more folders relative to vault root, e.g. 'Notes' 'Writing'")
+    ap.add_argument("corpus_folder", nargs="*",
+                    help="One or more folders relative to vault root, e.g. 'Notes' 'Writing'. "
+                         "Can also be passed via --include.")
+    ap.add_argument("--include", action="append", default=[], metavar="FOLDER",
+                    help="Alias for the positional corpus_folder arg. Repeatable: "
+                         "--include 'External Inputs/Slack' --include 'External Inputs/Notion'. "
+                         "Useful for connector-driven runs where the explicit-flag form reads "
+                         "more clearly. Combines with any positional args; at least one source required.")
     ap.add_argument("--target-words", type=int, default=50000)
     ap.add_argument("--max-files-per-chunk", type=int, default=45,
                     help="Max files per chunk (Lesson #81: 60+ causes schema collapse, default 45)")
@@ -86,8 +92,17 @@ def main():
         print(f"vault not found: {vault}", file=sys.stderr)
         sys.exit(1)
 
+    folder_args = list(args.corpus_folder) + list(args.include)
+    if not folder_args:
+        print("error: at least one folder required (positional arg or --include)", file=sys.stderr)
+        sys.exit(2)
+
     folders = []
-    for cf in args.corpus_folder:
+    seen: set[str] = set()
+    for cf in folder_args:
+        if cf in seen:
+            continue
+        seen.add(cf)
         f = vault / cf
         if not f.exists():
             print(f"folder not found: {f}", file=sys.stderr)
