@@ -9,6 +9,27 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-08 — minimum Claude Code version bumped to 2.1.133
+
+**Who this affects:** anyone using the quick-try `--plugin-url` install path or running the full bootstrap on a fresh machine.
+
+**The shape:** Claude Code 2.1.133 (released 2026-05-08) fixes a silent bug where subagents were not discovering project, user, or plugin skills via the Skill tool. AI Brain Starter is skill-heavy: graphify, second-brain-mapping, weekly insights, and several quarterly maintenance flows compose skill calls from agent context. On 2.1.129–2.1.132, those agents may have been failing to find the skills they needed without surfacing an error. Bumping the floor to 2.1.133 closes that gap.
+
+### What changed
+
+- **README quick-try section** — minimum bumped from "2.1.129+" to "**2.1.133+**". The bootstrap path is unaffected (the bootstrap installs/upgrades Claude Code itself), but operators trying the plugin directly against an existing install need the floor.
+- **Two genuine 2.1.133 wins for this substrate:**
+  - **Subagent skill discovery fix.** Skill-heavy flows now correctly resolve project/user/plugin skills inside subagents. No code change in this repo, just the Claude Code upgrade.
+  - **Parallel session 401 race fix.** Pre-2.1.133, a refresh-token race could log out all concurrent sessions when running multiple worktrees in parallel. Heavy-vault users with multiple worktrees benefit immediately.
+- **`worktree.baseRef` setting** — Claude Code 2.1.133 reverted the `EnterWorktree` default back to `fresh` (branches from `origin/<default>`); 2.1.128–2.1.132 default was `head` (preserves unpushed commits). If your workflow relies on entering worktrees with WIP intact, set `"worktree": {"baseRef": "head"}` in `~/.claude/settings.json`. For local-only repos with no remote, `"head"` is the only path that works at all. The bootstrap will not auto-set this — it's a per-user judgment call.
+- **`$CLAUDE_EFFORT` env var now reaches hooks and Bash subprocesses.** Skills that want effort-aware behavior can finally read it. Examples already in the substrate (advisory-panel rule 15, life-history-prose effort-aware depth) come online automatically when a calling skill exposes the env var.
+
+### Manifest version
+
+No bump — README + docs only.
+
+---
+
 ## 2026-05-06 — vertical-healthcare completion + recommended-skill-overrides doc
 
 **Who this affects:** covered entities, business associates, and health systems onboarding to the substrate; plus all installs that want a sensible starter `skillOverrides` configuration.

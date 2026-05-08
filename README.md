@@ -93,7 +93,7 @@ One paste, no terminal commands to type. Mac, Windows, and Linux all use the sam
 
 ### Quick-try (existing Claude Code users)
 
-If you already have Claude Code 2.1.129+ and just want to try the skills against an existing vault (no full bootstrap, no Obsidian setup), load the plugin from the latest release archive:
+If you already have Claude Code **2.1.133+** and just want to try the skills against an existing vault (no full bootstrap, no Obsidian setup), load the plugin from the latest release archive:
 
 ```
 claude --plugin-url https://github.com/adelaidasofia/ai-brain-starter/releases/latest/download/ai-brain-starter.zip
