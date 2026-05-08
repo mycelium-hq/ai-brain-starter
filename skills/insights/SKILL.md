@@ -95,6 +95,19 @@ Gentler. Curious. Not prescriptive:
 - "The gap between what you say you want and what you're doing about it showed up again. Not failure, information."
 - "Your highest-floor entry was [entry]. What was different about that day?"
 
+### 4b. Coaching Sessions check-in (re-eval surface)
+
+If the user has the `/coaching` skill installed and a `🏠 Home/Coaching Sessions/` folder exists, scan it for any sessions whose `re_eval_date` has passed (date <= today) and whose `status` is still `open`. For each one:
+
+- Name the session (linkable wikilink to the file)
+- Pull the `Re-eval signals` questions from that file
+- Cross-reference against this period's journal entries: did the named pattern surface again? did the user act on the commitments?
+- Suggest a status update: `closed-grown` if commitments landed and pattern stayed dormant, `closed-failed` if pattern repeated and commitments didn't land, `re-eval` if mixed (extend `re_eval_date` by another month), or stay `open` if not enough data yet.
+
+Be honest about the data. If the user committed to "send the written follow-up" and there's no journal entry mentioning it, name that. If the pattern surfaced once in a different context, that's the 2nd-mention promotion threshold — name that too.
+
+If no coaching sessions exist or none are due, skip this section silently.
+
 ### 5. Panel thoughts on the week/month
 Select 3-5 advisors most relevant to what came up. 1-2 sentences each, in character. Challenge assumptions, don't just validate.
 
