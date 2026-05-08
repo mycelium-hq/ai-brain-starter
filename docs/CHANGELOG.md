@@ -9,6 +9,47 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-08 — `/journal` reads a config file for what to pull in (opt-in cross-platform)
+
+**Who this affects:** anyone who runs `/journal`. Default behavior changes for first-run users: the skill now creates a `Meta/journal-config.md` file in the vault on first invocation, and asks once whether to opt in to cross-platform data sources.
+
+**The shape:** `/journal` Step 0 used to pull RescueTime + Session Captures only. That left two gaps. (1) Captures.md only fires at session-close, so warm/unclosed Claude sessions left their content invisible to the journal. (2) Most relational events happen in iMessage / WhatsApp / on the calendar, not inside a Claude session. The journal was missing half the day. The fix: extend Step 0 to pull from six sources, three on by default (own data) and three opt-in (private conversations).
+
+### What runs by default (own data, on)
+
+- **RescueTime** (productivity numbers from your account).
+- **Session Captures** (quotes from your own Claude sessions).
+- **Today's activity** (git commits, modified files, session files in your own vault).
+
+These three are safe by default because they only read your own vault and your own RescueTime account.
+
+### What's opt-in (private conversations, off)
+
+- **iMessage 24h** (threads from your phone with traffic in last 24h).
+- **WhatsApp 24h** (threads from WhatsApp with traffic in last 24h).
+- **Calendar** (today's events from Google Workspace).
+
+These three are off by default because they see private conversations and meetings. The skill creates `Meta/journal-config.md` (template at `templates/journal-config.md`) on first run with all three off, and asks once whether to flip any on. The user stays in control by editing the file directly. The skill never re-prompts after the first run.
+
+### Why the change
+
+Codified after a journal session where the user's most emotionally important content of the day (a fight with a sibling, a dinner with a parent, a proposal drafted for a friend) was nowhere in the day's Claude sessions because those events happened on the phone. The journal asked "what's on your mind?" with no context, and the user had to manually re-narrate the day. The new pulls let the journal see the day, but only with the user's explicit consent per data source.
+
+### How to turn things on
+
+Edit `Meta/journal-config.md` (or `⚙️ Meta/journal-config.md` if your vault uses emoji-prefixed Meta). Change `off` to `on` for any data source. Save. Next `/journal` picks it up.
+
+### Filters
+
+`imessage_filters.exclude_chats` and `whatsapp_filters.exclude_chats` accept a list of phone numbers, emails, or contact names to skip on every pull. Useful for work-only threads or anything you want kept out of the journal context.
+
+### Files added or changed
+
+- `skills/daily-journal/SKILL.md` — Step 0 now config-gated (0-pre + 0a-0f), entry format adds `## Today` summary section.
+- `templates/journal-config.md` — new template with safe defaults + per-source filter docs.
+
+---
+
 ## 2026-05-08 — new `/coaching` skill: multi-pass panel sessions with accountability tracking
 
 **Who this affects:** anyone who has hit a moment too big for a daily journal entry. A hard conversation with a co-worker, a decision they're second-guessing, accumulated friction with a person, anything that needs panel feedback over multiple iterations and tracking over weeks or months.

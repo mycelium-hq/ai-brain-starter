@@ -112,11 +112,35 @@ This includes:
 
 **Initial context dump goes IN the journal too.** Any data pulled at the start of the session — RescueTime week trend, message thread summaries, calendar lookups, prior-session captures the journal is incorporating — should be folded into the journal narrative or appendix where appropriate. Don't keep it as scratch context that disappears after the session ends. The user's day-context becomes part of the day's journal record.
 
-### Step 0: Pull Session Captures AND RescueTime (ALWAYS — do both before saying anything)
+### Step 0: Pull data sources per opt-in config (ALWAYS — config-gated)
 
-**0a. RescueTime.** If the RescueTime MCP is connected, pull today's summary immediately so the Productivity Pulse, productive/distracting hours, and top 3 apps are in the room from sentence one. Do NOT defer this to Step 3. If the MCP is not connected, note it and move on.
+**0-pre. Read the journal config (mandatory).** Look for `⚙️ Meta/journal-config.md` (or `Meta/journal-config.md` if the vault doesn't use emoji-prefixed Meta). Parse the `data_sources:` frontmatter block.
 
-**0b. Session Captures.** Read `⚙️ Meta/Session Captures.md` (or your vault's equivalent staging file) in full. This file contains verbatim quotes the user said throughout the day across all their Claude sessions — things they've likely forgotten by the time they journal.
+If the file does not exist, copy `templates/journal-config.md` from this skill's repo into the vault and ask the user once:
+
+> "I created `journal-config.md`. Cross-platform pulls (iMessage, WhatsApp, Calendar) are off by default for privacy. Want to turn any on for richer context? You can change later by editing that file."
+
+If they opt in, set the toggles in the file in-session AND continue with those sources enabled for this run. If they pass, proceed with safe defaults. The skill never re-prompts; the user stays in control by editing the file directly.
+
+**0a. RescueTime** (gated on `data_sources.rescuetime: on`). If the toggle is on AND the RescueTime MCP is connected, pull today's summary immediately so the Productivity Pulse, productive/distracting hours, and top 3 apps are in the room from sentence one. Otherwise skip silently.
+
+**0b. Session Captures** (gated on `data_sources.session_captures: on`). Read `⚙️ Meta/Session Captures.md` (or your vault's equivalent staging file) in full. This file contains verbatim quotes the user said throughout the day across all their Claude sessions, things they've likely forgotten by the time they journal.
+
+**0c. Today's activity** (gated on `data_sources.todays_activity: on`). Captures.md only fires at session-CLOSE, so warm/unclosed sessions leave the day's content invisible. Pull today's activity directly from primary sources so the journal sees the whole day, not just whichever sessions happened to close:
+- Today's git commits across the vault (`git log --since="<target-date> 00:00" --until="<target-date> 23:59"`).
+- Files modified in the vault today (filter relevant extensions, exclude `.git/`, `.next/`, `node_modules`, caches, `.bak-` backups).
+- Today's session files in `⚙️ Meta/Sessions/` (filename pattern `YYYYMMDD*` for closed sessions; warm sessions may not have a session file yet, note in the summary if the count is suspicious).
+- RescueTime hours summary (already pulled in 0a if enabled).
+
+Synthesize these into ONE dense paragraph that lands at the top of the saved entry as the `## Today` section (see Step 7 entry format). Concrete: PR numbers, test count deltas, file counts, hour totals, named events, named people. Inventory shape, not narrative.
+
+**0d. iMessage 24h** (gated on `data_sources.imessage_24h: on`). If the toggle is on AND the iMessage MCP is connected, call `mcp__imessage__list_chats` (`days_back: 2`, `limit: 15`) to surface chats with activity in the last 24 hours. Apply `imessage_filters.exclude_chats` (skip phone numbers, emails, or contact names listed there) and `imessage_filters.only_unread`. For chats with notable volume (sister, partner, parent, co-founder, close friend, or anything the user flags), call `mcp__imessage__list_messages` for the chat_id and read the thread. Surface conflict, repair, or emotionally-loaded exchanges, don't bury the lede. Quote verbatim only what the user already lived through; do not paraphrase the painful stuff away. Otherwise skip silently.
+
+**0e. WhatsApp 24h** (gated on `data_sources.whatsapp_24h: on`). Same logic as 0d for WhatsApp. Call `mcp__whatsapp__list_chats` (`limit: 15`) and read any chat with traffic in the last 24 hours that looks load-bearing (family chats, group threads with co-founder/team, romantic-partner threads, vendor/contractor threads where commitments live). Voice notes appear inline as `[Voice note] <transcript>` if the bridge backfilled them. Apply `whatsapp_filters.exclude_chats` and `whatsapp_filters.only_unread`. Otherwise skip silently.
+
+**0f. Calendar** (gated on `data_sources.calendar: on`). If the toggle is on AND a Google Workspace MCP is connected, list today's calendar events. Apply `calendar_filters.include_calendars` (empty list = all calendars). Note who was met, when, and any block titles that name commitments. Otherwise skip silently.
+
+**Why some sources are opt-in:** iMessage, WhatsApp, and Calendar see private conversations and meetings. The user should consent explicitly per vault, not by default. The other three (RescueTime, Session Captures, Today's activity) read your own data and are on by default. Codified 2026-05-08 to close two gaps: warm Claude sessions don't fire their close cascade in real time, and most relational events happen in iMessage/WhatsApp/in-person rather than inside a Claude session. The journal must see the whole day, but the user opts in per vault to the cross-platform pulls.
 
 **Day boundary is 3:45 AM, not midnight.** Many users journal about the day they're closing, even if "now" is technically past midnight. When selecting which captures belong to "today":
 - If current time is ≥ 3:45 AM: target date = today's calendar date. Include captures from 3:45 AM today through now.
@@ -372,6 +396,9 @@ deep_work: X                # blocks completed today
 # rt_productive_h: X.X
 # rt_distracting_h: X.X
 ---
+
+## Today (auto-pulled per config — see ⚙️ Meta/journal-config.md)
+[ONE dense paragraph synthesized from the data sources enabled in journal-config.md. Concrete: PR numbers, test count deltas, file counts, hour totals, named events, named people, on-screen + off-screen events. Inventory shape, not narrative. Wikilink relevant people/projects/concepts so the graph picks them up. This is the "what happened today" anchor future-rereads use to date-stamp the entry. If `todays_activity` is off in config, omit this section entirely. If a section of activity was empty (no commits, no calendar events, etc.), say so explicitly rather than skipping; the absence is signal too.]
 
 ## Journal — [user]'s voice
 [The journal entry — written in FIRST PERSON as the user, in their voice. Stream of consciousness, casual, honest. Mix English and Spanglish naturally if they did in the interview. Include the details they shared. Don't clean it up too much — their journals are raw and real. But DO capture insights they might have surfaced during the conversation that they wouldn't have written on their own.]
