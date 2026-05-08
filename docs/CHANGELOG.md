@@ -9,6 +9,52 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-08 — new `/coaching` skill: multi-pass panel sessions with accountability tracking
+
+**Who this affects:** anyone who has hit a moment too big for a daily journal entry. A hard conversation with a co-worker, a decision they're second-guessing, accumulated friction with a person, anything that needs panel feedback over multiple iterations and tracking over weeks or months.
+
+**The shape:** The advisory panel inside `/journal` is one-shot per day. Real coaching, real therapy, real advisor relationships are not one-shot. They're multi-turn, they update when new evidence comes in, and they track whether the same blind spot keeps surfacing across months. The vault had all the pieces (panel rules, daily journals, decision logs) but no skill that orchestrated the multi-pass arc and filed it for tracking. `/coaching` fills that gap.
+
+### What `/coaching` does
+
+A three-tier output architecture for any hard moment worth tracking:
+
+1. **Verbatim raw** at `📋 Strategy/Coaching Sessions/Processing Notes - YYYY-MM-DD - <topic>.md`. The user's exact words, no annotation. Per the save-exact-words rule. Available for re-read forever, especially useful for users planning to write memoir or book material later.
+2. **Synthesized accountability record** at `🏠 Home/Coaching Sessions/YYYY-MM-DD - <topic>.md`. What surfaced, commitments named, re-eval date one month out. The file `/weekly` and `/monthly` look at to ask whether the pattern repeated and whether commitments landed.
+3. **Rolling pattern aggregator** at `🏠 Home/Panel Feedback Log.md`. Patterns table at the top tracks mention counts. Single mention is watch. 2+ mentions across different contexts promote to acute action item.
+
+### The corrections-update-takes loop
+
+The move that distinguishes coaching from journal. When the user pushes back on a panel take with new info, the next pass UPDATES prior reads transparently. Patterns get demoted explicitly when corrections invalidate them. A class-register read can become wrong once autobiographical context surfaces. A piece of advice can be retracted when the user names why it does not apply. The system shows its work.
+
+### Failure modes the skill explicitly avoids
+
+- **Yes-machine panels.** At least one voice MUST dissent. The dissent is the value.
+- **Synthesis without verbatim.** Always file verbatim raw FIRST. Strip the user's voice from the archive and the system breaks.
+- **Inflating mention counts.** One coaching session is one mention per pattern, even if multiple panelists agreed in that session. Mentions cumulate across DIFFERENT sessions.
+- **Skipping the corrections loop.** Roleplaying a panel without updating takes when the user pushes back is theater, not coaching.
+- **Forgetting re-eval.** A Coaching Session without a `re_eval_date` is just a fancy journal entry. The accountability comes from the calendar return.
+
+### Files added
+
+- `skills/coaching/SKILL.md` — the skill itself
+- `templates/coaching-sessions/EXAMPLE - 2025-01-15 - Hard Conversation With Co-worker.md` — generic example using a hypothetical co-worker scenario
+- `templates/Panel Feedback Log.md` — starter template for the rolling aggregator
+- README skill table updated to include `/coaching`
+
+### Integration with existing skills
+
+- `/journal` keeps its one-shot daily check-in with inline panel reactions
+- `/weekly` and `/monthly` are the natural surface for re-eval. They should read open Coaching Sessions and surface ones whose `re_eval_date` has passed
+- `/patterns` reads Panel Feedback Log Patterns table to confirm 2+ mentions across contexts
+- `/deconstruct` is auto-offered when a coaching session surfaces a `stakes: high` decision
+
+### Manifest version
+
+No bump. Additive new skill plus templates, no changes to existing skill behavior.
+
+---
+
 ## 2026-05-08 — minimum Claude Code version bumped to 2.1.133
 
 **Who this affects:** anyone using the quick-try `--plugin-url` install path or running the full bootstrap on a fresh machine.

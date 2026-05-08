@@ -172,7 +172,8 @@ Every tool is installed and wired during setup. They work together, not in isola
 | Command | What it does |
 |---------|-------------|
 | `/journal` | Daily journal interview with advisory panel, accountability checks, and emotional floor tracking |
-| `/weekly` | Weekly pattern recognition across your journal entries |
+| `/coaching` | Multi-pass coaching session for processing a hard conversation, decision, or accumulated tension. Verbatim raw + synthesized accountability record + rolling pattern tracker, with re-eval one month out |
+| `/weekly` | Weekly pattern recognition across your journal entries (also surfaces Coaching Sessions whose re-eval date has passed) |
 | `/monthly` | Deeper monthly trends with therapist and life coach observations |
 | `/graphify` | Build a knowledge graph from any set of files |
 | `/humanizer` | Strip AI patterns and rewrite in your voice — anchored to your actual writing corpus. `--diff` mode scores any draft 0–100 |
