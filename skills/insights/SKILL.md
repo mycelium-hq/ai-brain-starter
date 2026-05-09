@@ -52,6 +52,44 @@ Add to the report if data is available:
 - Session time breakdown by category
 - Notable gaps or mismatches (e.g., "12h in Obsidian but only 3h tagged as Writing in sessions")
 
+### Step 2e: Token usage report (weekly + monthly, optional)
+
+If the vault has `scripts/token-usage-report.py`, run it to surface real per-session token consumption + estimated USD cost from Claude Code session JSONLs:
+
+```bash
+# /weekly: 7-day window
+VAULT_ROOT="<VAULT_PATH>" python3 "<VAULT_PATH>/scripts/token-usage-report.py" --days 7 --top 10
+
+# /monthly: 30-day window
+VAULT_ROOT="<VAULT_PATH>" python3 "<VAULT_PATH>/scripts/token-usage-report.py" --days 30 --top 20
+```
+
+The script writes `⚙️ Meta/Token Usage Report.md`. Read it and surface a compact block in the report. If `Opus cost share` >60% or `Sessions ≥60 turns` >3, surface as a coach line in Section 3 (model-routing or session-length drift). Single-session cost outliers (>$200) get one bullet in Section 2.
+
+This replaces guess-work with real numbers from `~/.claude/projects/<vault-hash>/*.jsonl` (the only ground-truth source for token consumption — Claude Code does not surface this in any UI). Inspired by JuliusBrussee/caveman's /caveman-stats.
+
+### Step 2f: Drift compression candidates (weekly + monthly, optional)
+
+If the vault has `scripts/compress-vault-doc.py`, run the compression-candidate sweep on docs flagged by Drift Audit:
+
+```bash
+VAULT_ROOT="<VAULT_PATH>" python3 "<VAULT_PATH>/scripts/compress-vault-doc.py" --auto-from-drift --dry-run
+```
+
+If candidates show >2KB savings, surface as a compact block. If <2KB, skip silently.
+
+### Step 2g: Baseline + anomaly computation (LEAD-WITH SIGNAL)
+
+**The reason this skill exists is to surface insight, not to summarize.** A report that says "you had 6 Courage entries" is data. A report that says "Courage was 25% in the prior three months, dropped to 3% this month" is signal. That's the lead.
+
+If the vault has `scripts/monthly-baseline.py`, run it for the target period:
+
+```bash
+VAULT_ROOT="<VAULT_PATH>" python3 "<VAULT_PATH>/scripts/monthly-baseline.py" --month YYYY-MM --pretty
+```
+
+The script outputs floor distribution shifts ≥3pp from baseline, word-frequency anomalies ≥2× or ≤0.5× baseline, numeric metric deltas ≥10%, activity deltas, top people mentions, and missing-data flags. **Use this output as the FIRST DATA SECTION** (sections 0a/0b/0c below). Don't bury it under "Month at a glance." Anomaly-led framing means the reader sees what's different before they see what's present.
+
 ### Step 2c: Data availability check
 Before writing the report, check which data sources exist for the target period:
 - Time Tracking file: does it have entries for this month?
@@ -64,12 +102,49 @@ If a data source has no entries for the period, skip that section silently. If 3
 
 ## Report Structure
 
-### 1. The week/month at a glance
+**REPORT OPTIMIZATION FUNCTION:** Optimize for INSIGHT (anomaly + delta + counterfactual + said-vs-did), NOT for COMPLETENESS (cover every section). A great report surfaces 3-5 things you didn't already know. Sections 0a, 0b, 0c are the load-bearing ones. Sections 1, 1b, 6 are appendix material. Don't lead with summary content. If a section has nothing genuinely surprising, write one short line and move on rather than padding.
+
+The audit shaping every section: would this observation surprise the reader? If no, it's summary not insight. Cut it or compress it.
+
+### 0a. Anomalies + deltas (LEAD WITH THIS)
+
+From the Step 2g baseline output. Surface the floor shifts, word-frequency spikes, numeric metric changes, and activity deltas — but synthesize them, don't just paste the table. Format as 3-5 bullet points:
+
+- "Courage was 25-49% in the prior three months. Dropped to 3% this month. Hope/Excitement/Gratitude filled the space. The center of gravity shifted from white-knuckle pushing to open-arm receiving."
+- "[Person X] mentioned 32× more than baseline. Their arc dominated everything else."
+- "Health steps dropped 42%. Body got quiet while the emotional/professional center got loud."
+
+Each bullet names the data, the magnitude, AND the hypothesis the data invites. Don't stop at "X happened" — say "X happened, here's what it might mean."
+
+### 0b. Said vs. did (counterfactual check)
+
+Pull commitments from the period:
+- Decision Log entries (`⚙️ Meta/Decisions/*.md`) where outcome is blank or stale
+- Journal verbatim "I will" / "I'm going to" / "by [date]" statements
+- Current Priorities deadlines that were active during the period
+
+For each commitment: what was the outcome? Format as a 2-column comparison. Surface gaps explicitly. A missed deadline or stalled decision is signal, not an error to skip.
+
+This is the section that converts "summary of what happened" into "report card on what was said." Without this, the skill produces narrative without accountability.
+
+### 0c. Hidden connections (graph + co-occurrence)
+
+For the period, surface:
+- People → floor correlations (top 3 people from baseline output, mean floor of entries mentioning each)
+- Topic clusters → floor (e.g., "raise" entries averaged Fear; "consulting" entries averaged Excitement)
+- Day-of-week patterns if visible
+- One non-obvious co-occurrence the GRAPH_REPORT.md flags (run /graphify query if needed)
+
+Goal: surface 1-2 connections invisible from sequential reading. The graph sees aggregate patterns the diary doesn't.
+
+### 1. The week/month at a glance (DEMOTED — appendix-level)
 - How many entries (and any gaps, gaps often mean good stretches)
 - Floor distribution: how many entries on each floor, primary floor for the period
 - Floor trend: up, down, or stable vs. previous period
 - Habit tracking summary: gym count, average bedtime, scroll incidents
 - Time allocation (if RescueTime or Time Tracking data available): where hours actually went vs. where priorities say they should go
+
+Keep this short. The deltas are in 0a. This section is the snapshot context for a reader who skipped 0a, not the lead.
 
 ### 1b. Floor-Topic Correlations
 Compute a matrix: for each floor that appeared 3+ times this period, count how many entries co-occur with each topic cluster. Use keyword matching against entry content. Define 5-7 topic clusters relevant to the user's life (e.g., work, writing, money, relationships, health, spiritual, social). Present as a table (floor rows x topic columns). Then write 3-4 bullet points naming the strongest correlations: "Money correlates with Fear (7) and barely with Peace (2). When you think about money, you're on the worried floors."
@@ -192,6 +267,31 @@ Use the full advisory panel. Each advisor has a distinct voice, match it when th
 - Rick Rubin -- the creative act, removing yourself from the work, nature as source. Zen-like, minimal, listens more than speaks.
 - Elizabeth Gilbert -- big magic, creative courage, curiosity over passion. Warm, funny, demystifies the creative life.
 - Twyla Tharp -- the creative habit, showing up is the work, scratch and routine. Disciplined, no-nonsense choreographer energy.
+
+### 5a. Becoming-better-human pass (PRESCRIPTIVE, /monthly only)
+
+Where Section 5 has the panel REACT to anomalies (what to notice), Section 5a has a different panel PRESCRIBE actions (what to do). Use the "Personal Growth & Becoming Better Humans" roster from `templates/rules/advisory-panel.md`. Seat 5-7 voices most relevant to this month's anomalies.
+
+The instruction to each voice is the same: "Given this month's data, what should the journaler actually DO over the next 30 days to grow as a human, not just to ship more work?" The output is a concrete practice, ritual, identity-shift, or belief-examination. Not generic encouragement.
+
+Format each voice as 2-3 sentences:
+1. The pattern they noticed (in their lens)
+2. The specific practice or shift they prescribe
+3. The metric or signal that would tell the journaler it's working
+
+Required diversity:
+- At least one voice from the prescriptive coaches (Tony Robbins, Mel Robbins, Marshall Goldsmith, Carol Dweck, Susan David, Vishen Lakhiani, Robin Sharma, Angela Duckworth)
+- At least one voice from the body/state/practice cluster (Joe Dispenza, Wim Hof, David Goggins, Pema Chödrön)
+- At least one voice from the identity/inner-work cluster (Marisa Peer, Peter Crone, Eckhart Tolle)
+- One MUST DISSENT from "do more practices." Common dissent shapes: Pema Chödrön ("the practice is to stop trying to fix yourself"), Marshall Goldsmith ("you're already overdoing the becoming-better thing"), Eckhart Tolle ("presence isn't a practice you add").
+
+Banned shapes:
+- Generic affirmations
+- Same prescription from multiple voices in different costumes
+- "Read X book" as the entire prescription (the book IS the voice; their prescription must be a practice or shift)
+- Coverage-mode (don't seat a voice just to fill the diversity slot — drop them if they have nothing specific to say)
+
+Skip for /weekly (too short a window for prescriptive month-long practices).
 
 ### 5b. First-principles audit
 

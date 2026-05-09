@@ -109,6 +109,26 @@
 - **Oprah Winfrey** — Built a $2.5B media empire from nothing. Pick when: building audience, using voice, platform
 - **Balaji Srinivasan** — Former Coinbase CTO, a16z partner, network-state theorist. Pick when: future-of-work, decentralization, big-picture tech
 
+## Personal Growth & Becoming Better Humans
+
+Prescriptive voices for monthly insight reviews. Where Psychology & Inner Work observes patterns, this section recommends action. Used in `/monthly` Section 5a "Becoming-better-human pass" of the insights skill.
+
+- **Tony Robbins** — 50+ years of peak-performance coaching, 100M+ followers. 6 Human Needs framework (certainty, variety, significance, connection, growth, contribution), state management via Triad (focus + language + physiology). Pick when: state stuck, body data dropping, motion-creates-emotion intervention needed, identifying which human need is starving.
+- **Mel Robbins** — Bestselling author of *The 5 Second Rule* and *The Let Them Theory*; behavior change without motivation. Pick when: action gap, "I know what to do but don't do it," daily-decision micro-habits, breaking deliberation loops.
+- **Marisa Peer** — Created Rapid Transformational Therapy (RTT). "I am enough" identity work, self-worth ceilings, the language that programs the unconscious. Pick when: imposter signal, success-block, voice patterns that betray self-image, repetitive negative self-talk.
+- **Marshall Goldsmith** — Top-rated executive coach (Fortune 50 CEOs); author of *What Got You Here Won't Get You There* and *Triggers*. Daily Questions practice, "feedforward" not feedback, behaviors that helped you get here will not get you to the next level. Pick when: success-pattern dependency, blind-spot recognition, leader-stage transitions, when integration looks like coasting.
+- **Joe Dispenza** — Neuroscientist + meditation teacher; *Breaking the Habit of Being Yourself*, *Becoming Supernatural*. Mind-body practice, neural rewiring, stepping out of the personality that produced past results. Pick when: identity-level shift needed, body-mind integration practice, repeating patterns that survive cognitive reframes.
+- **David Goggins** — Former Navy SEAL, *Can't Hurt Me*, *Never Finished*. Mental toughness, accountability mirror, doing hard things on purpose. Pick when: comfort drift, body capacity declining, need for the dissenting voice that says "you're getting soft and you know it."
+- **Pema Chödrön** — Buddhist nun, *When Things Fall Apart*, *The Places That Scare You*. Sitting with difficult emotions without escape, basic goodness, groundlessness as practice. Pick when: bypassing through optimism, body asking for stillness, the comfortable floor that needs investigation.
+- **Wim Hof** — *The Iceman*, breath + cold + commitment method. Body-tone reset, sympathetic-system retraining, autonomic agency. Pick when: body data declining, recovery flag, need to physically reset state in 3 minutes.
+- **Peter Crone** — "The Mind Architect," identity-level coach. "Freedom is the absence of self-conflict." Examines the unconscious agreements behind repeated patterns. Pick when: same situation arrives in different clothing, root-cause work below behavior level, "what story am I living from?"
+- **Carol Dweck** — Stanford psychologist, *Mindset*. Fixed vs. growth mindset, the language of effort vs. talent, how praise shapes future behavior. Pick when: language of "I'm just X" or "I'm not Y" appearing, comparison to others, the subtle shift from learner to performer.
+- **Angela Duckworth** — *Grit*, MacArthur Fellow. Long-term passion + perseverance, deliberate practice over sprint heroics. Pick when: enthusiasm cycles + lulls visible, sustainability question, "is this a sprint or a marathon."
+- **Eckhart Tolle** — *The Power of Now*, *A New Earth*. Pain-body work, ego-identification, presence as primary practice. Pick when: future-anxiety/past-rumination spiral, identification with thought, the moment between stimulus and response.
+- **Vishen Lakhiani** — Founder of Mindvalley, *The Code of the Extraordinary Mind*. Consciousness engineering, three most important questions, lifestyle design as personal-development infrastructure. Pick when: integrating multiple practices into a coherent operating system.
+- **Susan David** — Harvard psychologist, *Emotional Agility*. Showing up to your emotions without fusing with them or fighting them. Pick when: emotion-suppression pattern, "should-feel" overriding "do-feel," the gap between values and present action.
+- **Robin Sharma** — *The 5 AM Club*, *The Monk Who Sold His Ferrari*. Daily ritual architecture, the 20/20/20 formula, willpower as muscle. Pick when: structural cadence breaking, morning ritual erosion visible in body data, need a practice not a principle.
+
 ## Creativity
 
 - **Rick Rubin** — Produced for Jay-Z, Johnny Cash, Adele; founded Def Jam. Pick when: overthinking creative work, "less is more"
