@@ -9,6 +9,23 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-08: Scheduled-task naming convention + `/diagnose` lint check
+
+**Who this affects:** anyone who has scheduled tasks under `~/.claude/scheduled-tasks/`.
+
+**The shape:** Claude Code's slash autocomplete registers `~/.claude/scheduled-tasks/<name>/SKILL.md` entries the same way it registers regular skills. A user typing `/journal` sees both the conversational journal skill AND any `daily-journal` cron task in the autocomplete menu, which is confusing because cron tasks have no manual-invocation use case. Until upstream supports a `cron_only: true` frontmatter flag (tracked in [anthropics/claude-code#57508](https://github.com/anthropics/claude-code/issues/57508)), the convention is to prefix scheduled-task names with `_`. They sort to the bottom of autocomplete and read as cron-only at a glance.
+
+### Two changes
+
+1. **`docs/MAINTENANCE.md` documents the convention.** New "Naming convention" subsection in Scheduled Tasks shows the bad/good rename pattern (`daily-journal` -> `_daily-journal-cron`).
+2. **`/diagnose` now warns on violations.** New section 10b in `scripts/diagnose.sh` and `scripts/diagnose.ps1` scans `~/.claude/scheduled-tasks/` for two problems: (a) names that collide with installed skills, (b) names that lack the `_` prefix. Either one emits a yellow WARN with a remediation hint.
+
+### What you might want to do
+
+If you have existing scheduled tasks, run `/diagnose` and rename any flagged ones. Two-step rename: change the directory name, then update the `name:` field in the task's `SKILL.md` frontmatter to match.
+
+---
+
 ## 2026-05-08 — `/journal` reads a config file for what to pull in (opt-in cross-platform)
 
 **Who this affects:** anyone who runs `/journal`. Default behavior changes for first-run users: the skill now creates a `Meta/journal-config.md` file in the vault on first invocation, and asks once whether to opt in to cross-platform data sources.

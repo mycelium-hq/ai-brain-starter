@@ -222,6 +222,46 @@ for f in "$MCP_LOCAL" "$MCP_GLOBAL"; do
 done
 [ "$mcp_found" -eq 0 ] && warn "No MCP config found" "MCPs are optional. Skip if you don't use them."
 
+# ----- 10b. Scheduled-task naming hygiene -----
+section "10b. Scheduled-task naming hygiene"
+SCHED_DIR="$HOME/.claude/scheduled-tasks"
+if [ -d "$SCHED_DIR" ]; then
+  collide_count=0
+  noprefix_count=0
+  collide_names=""
+  noprefix_names=""
+  for entry in "$SCHED_DIR"/*; do
+    [ -d "$entry" ] || continue
+    [ -f "$entry/SKILL.md" ] || continue
+    name=$(basename "$entry")
+    # Collision: scheduled-task name matches an installed skill name.
+    if [ -d "$HOME/.claude/skills/$name" ] || [ -f "$HOME/.claude/skills/$name/SKILL.md" ]; then
+      collide_count=$((collide_count+1))
+      collide_names="$collide_names $name"
+    fi
+    # Convention: cron-only tasks should prefix with _ so autocomplete
+    # surfaces them at the bottom and reads them as cron-only.
+    case "$name" in
+      _*) ;;
+      *) noprefix_count=$((noprefix_count+1)); noprefix_names="$noprefix_names $name";;
+    esac
+  done
+  if [ "$collide_count" -eq 0 ] && [ "$noprefix_count" -eq 0 ]; then
+    ok "Scheduled-task names are clean (no skill collisions, all underscore-prefixed)"
+  else
+    if [ "$collide_count" -gt 0 ]; then
+      warn "$collide_count scheduled-task name(s) collide with installed skills:$collide_names" \
+        "Rename: e.g. 'daily-journal' -> '_daily-journal-cron'. See docs/MAINTENANCE.md."
+    fi
+    if [ "$noprefix_count" -gt 0 ]; then
+      warn "$noprefix_count scheduled-task name(s) lack '_' prefix:$noprefix_names" \
+        "Cron-only tasks should start with _ to read as cron-only in autocomplete. See docs/MAINTENANCE.md."
+    fi
+  fi
+else
+  ok "No ~/.claude/scheduled-tasks/ directory (skipped)"
+fi
+
 # ----- 10. SessionStart freshness check -----
 section "10. ai-brain-starter freshness"
 ABS_DIR="$HOME/.claude/skills/ai-brain-starter"

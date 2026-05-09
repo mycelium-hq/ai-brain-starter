@@ -226,6 +226,43 @@ foreach ($f in @($mcpLocal, $mcpGlobal)) {
 }
 if (-not $mcpFound) { Warn "No MCP config found" "MCPs are optional." }
 
+# ----- 10b. Scheduled-task naming hygiene -----
+Section "10b. Scheduled-task naming hygiene"
+$schedDir = Join-Path $env:USERPROFILE ".claude\scheduled-tasks"
+$skillsDir = Join-Path $env:USERPROFILE ".claude\skills"
+if (Test-Path -LiteralPath $schedDir -PathType Container) {
+  $collideNames = @()
+  $noprefixNames = @()
+  Get-ChildItem -LiteralPath $schedDir -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+    $taskName = $_.Name
+    $skillMd = Join-Path $_.FullName "SKILL.md"
+    if (-not (Test-Path -LiteralPath $skillMd)) { return }
+    # Collision: scheduled-task name matches an installed skill name.
+    $skillCandidate = Join-Path $skillsDir $taskName
+    if (Test-Path -LiteralPath $skillCandidate -PathType Container) {
+      $collideNames += $taskName
+    }
+    # Convention: cron-only tasks should prefix with _ to read as cron-only.
+    if (-not $taskName.StartsWith("_")) {
+      $noprefixNames += $taskName
+    }
+  }
+  if ($collideNames.Count -eq 0 -and $noprefixNames.Count -eq 0) {
+    Ok "Scheduled-task names are clean (no skill collisions, all underscore-prefixed)"
+  } else {
+    if ($collideNames.Count -gt 0) {
+      Warn "$($collideNames.Count) scheduled-task name(s) collide with installed skills: $($collideNames -join ', ')" `
+        "Rename: e.g. 'daily-journal' -> '_daily-journal-cron'. See docs/MAINTENANCE.md."
+    }
+    if ($noprefixNames.Count -gt 0) {
+      Warn "$($noprefixNames.Count) scheduled-task name(s) lack '_' prefix: $($noprefixNames -join ', ')" `
+        "Cron-only tasks should start with _ to read as cron-only in autocomplete. See docs/MAINTENANCE.md."
+    }
+  }
+} else {
+  Ok "No ~/.claude/scheduled-tasks/ directory (skipped)"
+}
+
 # ----- 10. ai-brain-starter freshness -----
 Section "10. ai-brain-starter freshness"
 $absDir = Join-Path $env:USERPROFILE ".claude\skills\ai-brain-starter"

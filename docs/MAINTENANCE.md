@@ -58,6 +58,20 @@ python3 scripts/decision-outcome-check.py --vault-root /path/to/vault --dry-run
 
 Set these up as Claude Code scheduled tasks for hands-off maintenance:
 
+### Naming convention: prefix cron-only tasks with `_`
+
+Scheduled tasks live in `~/.claude/scheduled-tasks/<name>/SKILL.md`. Claude Code's slash autocomplete registers these alongside `~/.claude/skills/` entries, so a user typing `/` sees both real skills and cron-triggered tasks in the same list. That is confusing when a task shares a stem with a real skill (e.g., `daily-journal` the cron-style task vs `journal` the conversational skill).
+
+Workaround until upstream supports a `cron_only: true` frontmatter flag (tracked in [anthropics/claude-code#57508](https://github.com/anthropics/claude-code/issues/57508)): name your scheduled tasks with a leading underscore so they sort to the bottom of autocomplete and read as cron-only at a glance.
+
+| Bad | Good |
+|---|---|
+| `daily-journal` | `_daily-journal-cron` |
+| `graphify-weekly-check` | `_graphify-weekly-cron` |
+| `monthly-token-optimization` | `_monthly-token-cron` |
+
+Edit the existing task by renaming the directory and updating the `name:` field in its `SKILL.md` frontmatter to match. `/diagnose` will warn on any scheduled task that does not follow this convention or that collides with an installed skill name.
+
 ### Monthly Vault Maintenance (recommended)
 - **Schedule:** 1st of every month, 9am
 - **Cron:** `0 9 1 * *`
