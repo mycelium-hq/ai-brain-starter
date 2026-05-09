@@ -106,11 +106,23 @@ def find_vault_root(cwd: Path) -> Path | None:
     return None
 
 
-def detect_failure(tool_response: dict) -> tuple[bool, str]:
-    """Return (failed, excerpt) for a tool response payload."""
+def detect_failure(tool_response: dict, source_tool: str = "") -> tuple[bool, str]:
+    """Return (failed, excerpt) for a tool response payload.
+
+    For Write/Edit: a tool_response with `filePath`/`file_path` set is a
+    success shape ({type: create|update, filePath, content}). Skip the
+    generic content scan because the response carries the WRITTEN FILE
+    CONTENT, which routinely contains words like "error", "exception",
+    "permission denied" innocuously (in documentation, plist files, code
+    comments, hookify cheatsheets). Treating those as failures was the
+    false-positive bug that flooded Meta/Learnings/ with non-failures
+    until 2026-05-08; one user accumulated 169 captures in 5 days, all
+    successful Writes scanning their own content for error keywords.
+    """
     if not isinstance(tool_response, dict):
         return False, ""
-    # Bash-shaped responses
+
+    # Bash-shaped responses: explicit exitCode is authoritative
     if "exitCode" in tool_response:
         try:
             if int(tool_response.get("exitCode") or 0) != 0:
@@ -119,10 +131,19 @@ def detect_failure(tool_response: dict) -> tuple[bool, str]:
                 return True, (stderr or stdout)
         except (TypeError, ValueError):
             pass
+
+    # Explicit isError flag is authoritative
     if tool_response.get("isError") or tool_response.get("is_error"):
         msg = tool_response.get("error") or tool_response.get("message") or ""
         return True, str(msg)[:500]
-    # Generic content scan
+
+    # Write/Edit success short-circuit. Success shape carries filePath +
+    # content; the content is the file written, not error output.
+    if source_tool in ("Write", "Edit"):
+        if tool_response.get("filePath") or tool_response.get("file_path"):
+            return False, ""
+
+    # Generic content scan (Bash, Agent, Task without exitCode/isError)
     content = tool_response.get("content") or tool_response.get("output") or ""
     if isinstance(content, list):
         joined = " ".join(str(c.get("text", c)) if isinstance(c, dict) else str(c) for c in content)
@@ -293,7 +314,7 @@ def main() -> int:
     tool_call_id = data.get("tool_call_id") or data.get("toolCallId") or session_id
     cwd = Path(data.get("cwd") or os.getcwd())
 
-    failed, excerpt = detect_failure(tool_response)
+    failed, excerpt = detect_failure(tool_response, source_tool=tool_name)
     learning_text = detect_learning_annotation(tool_response)
     if not failed and not learning_text:
         emit_passthrough()
@@ -323,7 +344,58 @@ def main() -> int:
     return 0
 
 
+def _self_test() -> int:
+    """Regression tests for detect_failure. Run with --self-test."""
+    cases = [
+        # (description, tool_response, source_tool, expected_failed)
+        ("Bash exit 0 → not failure",
+         {"exitCode": 0, "stdout": "ok"}, "Bash", False),
+        ("Bash exit 1 → failure",
+         {"exitCode": 1, "stderr": "boom"}, "Bash", True),
+        ("Write of doc containing 'error' → not failure (regression-fp1)",
+         {"type": "update", "filePath": "/tmp/x.md",
+          "content": "## How to handle errors\nIf you see an error, retry."},
+         "Write", False),
+        ("Edit of plist with StandardErrorPath → not failure (regression-fp2)",
+         {"type": "update", "filePath": "/tmp/x.plist",
+          "content": "<key>StandardErrorPath</key>\n<string>/tmp/err.log</string>"},
+         "Edit", False),
+        ("Write of hookify rule mentioning 'permission denied' → not failure (regression-fp3)",
+         {"type": "update", "filePath": "/tmp/rule.md",
+          "content": "block 'permission denied' rm -rf commands"},
+         "Write", False),
+        ("Write of disambiguate_first_name docstring with 'unsafe' → not failure (regression-fp4)",
+         {"type": "update", "filePath": "/tmp/d.py",
+          "content": "auto-yes wikilink application is unsafe"},
+         "Write", False),
+        ("Agent isError true → failure",
+         {"isError": True, "error": "agent crashed"}, "Agent", True),
+        ("Bash with traceback in stdout → failure",
+         {"content": "Traceback (most recent call last):\n  File 'x.py'"},
+         "Bash", True),
+        ("Bash with success signal alongside error keyword → not failure",
+         {"content": "Error log cleared. Operation completed successfully."},
+         "Bash", False),
+        ("Write with no filePath (malformed response) → falls through to generic scan",
+         {"content": "permission denied: /etc/passwd"},
+         "Write", True),
+    ]
+    fails = 0
+    for desc, response, tool, expected in cases:
+        actual, excerpt = detect_failure(response, source_tool=tool)
+        ok = actual == expected
+        status = "PASS" if ok else "FAIL"
+        print(f"  [{status}] {desc}: expected={expected}, got={actual}")
+        if not ok:
+            fails += 1
+            print(f"          excerpt={excerpt[:80]!r}")
+    print(f"\n{len(cases) - fails}/{len(cases)} pass")
+    return 0 if fails == 0 else 1
+
+
 if __name__ == "__main__":
+    if "--self-test" in sys.argv:
+        sys.exit(_self_test())
     try:
         main()
     except Exception:
