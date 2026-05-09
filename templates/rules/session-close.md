@@ -94,7 +94,7 @@ The Stop hook runs without your involvement:
 
 1. **Haiku fallback.** If the session file body is still empty (you bailed), `scripts/session-close-fallback.py` calls Haiku 4.5 with the conversation transcript and fills the file. Flagged for next-session review. Requires `ANTHROPIC_API_KEY`; without it, leaves a "fallback unavailable" notice + partial-flag for `recover-last-close.py` to retry later.
 2. **Aggregators.** `aggregate-sessions.py` rebuilds Last Session.md, `aggregate-decisions.py` rebuilds Decision Log.md.
-3. **Targeted git snapshot.** Only if the vault is git-tracked. Stages explicit paths only (session file, decision files, captures file, aggregated views). Never `git add -A`. Waits up to 60s for any concurrent index lock. No push (vaults are typically local-only snapshot repos).
+3. **Targeted git snapshot.** Only if the vault is git-tracked. Stages explicit paths only (session file, decision files, captures file, aggregated views). Never `git add -A`. Waits up to 60s for any concurrent index lock. No push (vaults are typically local-only snapshot repos). **Drift scan first:** also `git status -s` the rules/, sessions/, decisions/, and captures-file paths to catch pre-existing dirty state from prior closes that never committed. Append matched paths to the explicit list. Catches edits made in a previous session whose own cascade missed them. Failure mode is silent until a worktree archive prompt threatens to discard the residue.
 4. **Retention cleanup.** Stubs older than 7 days deleted; substantive sessions older than 7 days archived to `Sessions/Archive/`.
 5. **Marker cleanup.** Removes `~/.claude/.closing-signal-{session_id}.json`.
 
