@@ -267,11 +267,59 @@ def derive_worktree(cwd: Path) -> str:
 
 
 def find_meta_dir(vault_root: Path) -> Path:
-    """Auto-detect Meta folder (with or without emoji prefix)."""
-    for child in sorted(vault_root.iterdir()):
-        if child.is_dir() and child.name.endswith("Meta"):
-            return child
+    """Auto-detect Meta folder. Returns the canonical dir for THIS vault.
+
+    Resolution order:
+      1. Common explicit prefixes first (emoji + plain). Cheap stat checks
+         beat directory iteration on large vaults and avoid relying on
+         iterdir order.
+      2. Iteration fallback for any other suffix-"Meta" dir name.
+      3. Final fallback: plain `Meta` under vault_root. Caller MUST verify
+         the returned path exists before emitting it (see verify_meta_dir).
+
+    The emoji-first probe fixes a class of bugs where iterdir() either
+    returned partial results, hit a NFD/NFC normalization mismatch on
+    macOS APFS, or failed silently. When `⚙️ Meta` exists on disk, this
+    function now returns it deterministically without iterating.
+    """
+    # 1. Explicit prefix probes (deterministic, cheap, robust).
+    for candidate_name in ("⚙️ Meta", "Meta"):
+        candidate = vault_root / candidate_name
+        if candidate.is_dir():
+            return candidate
+
+    # 2. Iterate as fallback for unconventional suffixes.
+    try:
+        for child in sorted(vault_root.iterdir()):
+            if child.is_dir() and child.name.endswith("Meta"):
+                return child
+    except OSError:
+        pass
+
+    # 3. Last resort. Caller verifies existence.
     return vault_root / "Meta"
+
+
+def verify_meta_dir(meta_dir: Path) -> tuple[bool, str]:
+    """Confirm the resolved Meta dir exists and contains the expected layout.
+
+    Returns (ok, reason). The cascade caller should refuse to emit pre-resolved
+    paths when ok is False — better to skip the cascade than to send the model
+    to a phantom directory where its writes will be silently lost.
+    """
+    if not meta_dir.exists():
+        return False, f"resolved meta_dir does not exist: {meta_dir}"
+    if not meta_dir.is_dir():
+        return False, f"resolved meta_dir is not a directory: {meta_dir}"
+    sessions = meta_dir / "Sessions"
+    if not sessions.exists():
+        # Auto-create the standard subdirs the cascade will write into.
+        try:
+            sessions.mkdir(parents=True, exist_ok=True)
+            (meta_dir / "Decisions").mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            return False, f"could not create Sessions/ subdir: {e}"
+    return True, ""
 
 
 def count_user_messages(transcript_path: str | None) -> int:
@@ -556,8 +604,15 @@ def main() -> int:
             emit_passthrough()
             return 0
 
-        # Resolve all paths up front
+        # Resolve all paths up front. Verify the resolution lands on a real
+        # directory before emitting the cascade — a phantom meta_dir sends
+        # the model writes that the aggregator will never pick up.
         meta_dir = find_meta_dir(vault_root)
+        ok, reason = verify_meta_dir(meta_dir)
+        if not ok:
+            log_debug(f"meta_dir verification failed, skipping cascade: {reason}")
+            emit_passthrough()
+            return 0
         sessions_dir = meta_dir / "Sessions"
         decisions_dir = meta_dir / "Decisions"
         captures_file = meta_dir / "Session Captures.md"
