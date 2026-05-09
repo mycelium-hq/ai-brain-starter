@@ -236,3 +236,114 @@ reference:
     - reference_topic
     - reference_last_updated_iso
     - reference_related         # wikilinks to related docs
+
+# ── Tier 5: message-channel exports ────────────────────────────────
+# Structured metadata from per-contact / per-channel chat files written
+# by the WhatsApp + iMessage MCP bridges and the /ingest-* skills.
+# slack_export and external_input honor MY_NAMES env (comma-separated)
+# for the my/their split. Defaults to {"You"} if unset (matches WhatsApp +
+# iMessage bridge convention). For Slack, configure MY_NAMES with your
+# actual display name(s) since Slack uses real names, not "You".
+
+whatsapp_chat:
+  folder_hint: "🤖 AI Chats/WhatsApp"
+  fields:
+    - whatsapp_chat_kind                        # direct|group from chat_type or jid (@g.us → group)
+    - whatsapp_contact_name                     # passthrough fm.contact
+    - whatsapp_message_count
+    - whatsapp_my_msg_count                     # outgoing (sender == "You")
+    - whatsapp_their_msg_count
+    - whatsapp_first_iso
+    - whatsapp_last_iso
+    - whatsapp_days_active                      # unique day-headers
+    - whatsapp_dormancy_days                    # today − last_iso, runtime
+    - whatsapp_density_per_day                  # message_count / days_active
+    - whatsapp_voice_note_count
+    - whatsapp_voice_note_transcribed_count
+    - whatsapp_reaction_count
+    - whatsapp_concepts_extracted               # wikilinks
+    - whatsapp_people_mentioned                 # CRM-matched names
+    - whatsapp_decision_signal                  # bool — exception|incident|pricing|escalation|outage|edge case|refund
+    - word_count
+  example_query: |
+    TABLE whatsapp_contact_name, whatsapp_message_count, whatsapp_dormancy_days
+    FROM "🤖 AI Chats/WhatsApp"
+    WHERE whatsapp_chat_kind = "direct" AND whatsapp_dormancy_days > 30
+    SORT whatsapp_message_count DESC
+
+imessage_chat:
+  folder_hint: "🤖 AI Chats/iMessage"
+  fields:
+    - imessage_chat_kind
+    - imessage_contact_name
+    - imessage_service                          # iMessage|SMS|Mixed|RCS
+    - imessage_message_count
+    - imessage_my_msg_count
+    - imessage_their_msg_count
+    - imessage_first_iso
+    - imessage_last_iso
+    - imessage_days_active
+    - imessage_dormancy_days
+    - imessage_density_per_day
+    - imessage_voice_note_count
+    - imessage_voice_note_transcribed_count
+    - imessage_attachment_count                 # `[file: [[Attachments/...]]]` resolved
+    - imessage_attachment_expired_count         # `[attachment expired: ...]`
+    - imessage_reply_quote_count                # > Sender: lines
+    - imessage_concepts_extracted
+    - imessage_people_mentioned
+    - imessage_decision_signal
+    - word_count
+
+slack_export:
+  folder_hint: "🤖 AI Chats/Slack/<workspace>/<channel>.md"
+  description: |
+    Per-channel cumulative file written by the Slack MCP `read_channel` tool.
+    Distinct from `external-input` + `source: slack` (per-day files).
+  fields:
+    - slack_export_workspace
+    - slack_export_channel
+    - slack_export_channel_id
+    - slack_export_last_sync_iso
+    - slack_export_dormancy_days
+    - slack_export_message_count
+    - slack_export_unique_senders
+    - slack_export_top_senders                  # top 5 with counts
+    - slack_export_my_msg_count                 # configure MY_NAMES env
+    - slack_export_their_msg_count
+    - slack_export_my_share_pct
+    - slack_export_attachment_count
+    - slack_export_link_count
+    - slack_export_concepts_extracted
+    - slack_export_people_mentioned
+    - slack_export_decision_signal
+    - word_count
+
+external_input:
+  folder_hint: "External Inputs/"
+  description: |
+    Files written by /ingest-* skills (slack, notion, github, gmail, linear, whatsapp).
+    Routes by `source:` field; each source emits its own prefix (slack_*, etc.).
+    Currently implemented: slack. Stubs for: notion, github, gmail, linear, whatsapp.
+  fields:
+    # Common
+    - external_source                           # slack|notion|github|gmail|linear|whatsapp
+    - external_dormancy_days
+    - word_count
+    # Slack-specific
+    - slack_channel
+    - slack_channel_id
+    - slack_workspace
+    - slack_date_start_iso
+    - slack_date_end_iso
+    - slack_message_count
+    - slack_unique_senders
+    - slack_top_senders
+    - slack_my_msg_count                        # configure MY_NAMES env
+    - slack_their_msg_count
+    - slack_my_share_pct
+    - slack_channel_mention_count               # <!channel> markers
+    - slack_link_count
+    - slack_concepts_extracted
+    - slack_people_mentioned
+    - slack_decision_signal
