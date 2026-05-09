@@ -74,8 +74,26 @@ def emit_passthrough() -> None:
 
 
 def find_vault_root(cwd: Path) -> Path | None:
-    """Walk up from cwd looking for a directory that contains a Meta folder."""
+    """Walk up from cwd looking for a directory that contains a Meta folder.
+
+    If we are inside a Claude Code git worktree (path contains
+    `.claude/worktrees/<slug>/`), reset to the main vault root before walking
+    up. Otherwise the hook writes episodic captures to the worktree's local
+    `Meta/Learnings/`, which gets discarded as "unconfirmed changes" when the
+    worktree is archived. The captures need to land in the main vault so the
+    closed-loop promote-runs see them.
+    """
     p = cwd.resolve()
+
+    # Worktree detection: path matches `.../<vault>/.claude/worktrees/<slug>/...`
+    parts = p.parts
+    if ".claude" in parts:
+        i = parts.index(".claude")
+        if i + 1 < len(parts) and parts[i + 1] == "worktrees":
+            # Main vault root is the parent of the `.claude` segment.
+            if i > 0:
+                p = Path(*parts[:i])
+
     for _ in range(8):
         if not p.is_dir():
             break
