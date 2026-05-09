@@ -9,6 +9,23 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-09: v1.3.1 vertical-healthcare actually-complete + CI privacy scanner fix
+
+**Who this affects:** anyone who installed v1.3.0 expecting `/vertical-healthcare init` to register and stage drafts.
+
+**The shape:** v1.3.0 advertised "vertical-healthcare completion" and committed the four files that release described as missing (retention, both decision-audit patterns, the third connector). But the original five files from the v1.2.0 partial scaffold were never staged either. Without README and SKILL, skill discovery did not register the pack at all, so the v1.3.0 promise was vacuous on disk. v1.3.1 lands the five missing files so the pack is functionally installable.
+
+### Two changes
+
+1. **`skills/vertical-healthcare/` is now installable.** Five files added: README, SKILL, the Epic and Cerner FHIR connectors, and `schema/typed-memory-categories.md`. Combined with the four files already on main since v1.3.0 (retention defaults, PHI-handling firewall, clinical-decision evidence chain, Salesforce Health Cloud connector), the pack covers all four substrate extension surfaces (typed-memory schema, retention defaults, connector configs, decision-audit patterns).
+2. **CI privacy scanner now scans only added lines, not whole files.** The `private-context tokens (PR-scoped)` check was selecting changed FILES correctly but then greping each file's full content. Pre-existing committed text (maintainer-attribution in plugin.json's author block, older CHANGELOG entries about features intentionally shipped public) failed every PR that touched those files. Fix: grep only the lines this PR adds (diff lines starting with `+`, excluding the `+++ b/path` file header). Net-new private-context additions still fail; legacy text is now correctly ignored.
+
+### What you might want to do
+
+If you tried `/vertical-healthcare init` on v1.3.0 and got nothing, run `git pull` to v1.3.1 and try again. If you are on a clean install or are not in the healthcare vertical, no action needed.
+
+---
+
 ## 2026-05-08: Scheduled-task naming convention + `/diagnose` lint check
 
 **Who this affects:** anyone who has scheduled tasks under `~/.claude/scheduled-tasks/`.
