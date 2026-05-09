@@ -250,13 +250,14 @@ share `entity_ids.github_pr` are very likely about the same workstream.
 
 The vault-as-ground-truth principle says the agent never trusts what it
 remembers between sessions. Every claim the agent makes must trace to a file
-the company controls. The closed loop turns that principle into a
-self-improving substrate: the agent's failures become episodic records, the
-records cluster into recognizable patterns, the patterns get human-reviewed
-into procedural memory, and the next agent reads the procedural memory
-before re-running the same task. Over time the procedural surface grows,
-the failure rate falls, and the agent's reliability becomes a function of
-the vault rather than the model's training-time priors.
+the company controls. The closed loop turns that principle into a substrate
+that compounds: the agent's failures become episodic records, the records
+cluster into recognizable patterns, the patterns get human-reviewed into
+procedural memory, and the next agent reads the procedural memory before
+re-running the same task. Over time the procedural surface grows, the
+failure rate falls, and the agent's reliability becomes a function of the
+vault rather than the model's training-time priors. The corpus gets richer
+every week. The model itself does not get smarter; the substrate does.
 
 The human review gate is the load-bearing piece. Without it, the loop
 amplifies noise (transient errors, environmental flakes, one-off network
