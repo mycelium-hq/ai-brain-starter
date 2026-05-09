@@ -146,7 +146,7 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
         run: git fetch origin "$BASE_REF" --depth=50
-      - name: scan changed files
+      - name: scan added lines only
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
@@ -164,7 +164,15 @@ jobs:
               *.md|*.sh|*.ps1|*.py|*.json|*.yml|*.yaml|*.txt|.env.example) ;;
               *) continue ;;
             esac
-            if matches=$(grep -nE "$P" "$f" 2>/dev/null); then
+            # Scan ONLY lines this PR adds (diff lines starting with `+`,
+            # excluding the `+++ b/path` file header). Pre-existing committed
+            # content is intentionally ignored: CI gates net-new private-context
+            # additions, not legacy text in files this PR happens to touch.
+            added_lines=$(git diff "$BASE"..HEAD -- "$f" | grep -E '^\+' | grep -vE '^\+\+\+' || true)
+            if [ -z "$added_lines" ]; then
+              continue
+            fi
+            if matches=$(echo "$added_lines" | grep -nE "$P" 2>/dev/null); then
               echo "::error file=$f::private-context token added in this PR"
               echo "$matches" | head -3 | sed 's|^|  |'
               fail=1
@@ -174,7 +182,7 @@ jobs:
             echo "::error::Private-context scan failed. Use placeholders or fictional names instead."
             exit 1
           fi
-          echo "Private-context scan passed (changed files only)."
+          echo "Private-context scan passed (added lines only)."
 
   references:
     name: phase docs reference real repo files
