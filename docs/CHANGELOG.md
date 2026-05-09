@@ -9,6 +9,26 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-09: v1.3.1 vertical-healthcare actually-complete (5 missing files landed)
+
+**Who this affects:** anyone who installed v1.3.0 expecting `/vertical-healthcare init` to work end-to-end.
+
+**The shape:** v1.3.0 advertised "vertical-healthcare completion" and shipped the 4 files the description promised (retention, both decision-audit patterns, Salesforce Health Cloud connector). But the original 5 files from the v1.2.0 partial scaffold (README, SKILL, cerner-fhir, epic-fhir, schema/typed-memory-categories) were never staged. Without README and SKILL, skill discovery did not register the pack at all, so the v1.3.0 promise was vacuous on disk. v1.3.1 lands the 5 files so the pack is functionally installable.
+
+### Files added
+
+- `skills/vertical-healthcare/README.md` — entry point, who-this-is-for, what-is-in-the-box, install + read-first guidance.
+- `skills/vertical-healthcare/SKILL.md` — `name: vertical-healthcare`, `trigger: /vertical-healthcare`, full pack overview with HIPAA + state-add-on framing.
+- `skills/vertical-healthcare/connectors/epic-fhir.md` — Epic via FHIR R4, SMART-on-FHIR auth, resource type coverage.
+- `skills/vertical-healthcare/connectors/cerner-fhir.md` — Oracle Cerner via FHIR R4, SMART-on-FHIR auth, resource type coverage.
+- `skills/vertical-healthcare/schema/typed-memory-categories.md` — 7 typed-memory categories (patient-scoped-fact, clinical-decision, phi-tagged-doc, baa-counterparty, retention-policy, hipaa-incident, breach-notification).
+
+### What you might want to do
+
+If you are on v1.3.0 and tried `/vertical-healthcare init` and got nothing, run `git pull` to v1.3.1 and try again. If you are on a clean install, no action needed.
+
+---
+
 ## 2026-05-08: Scheduled-task naming convention + `/diagnose` lint check
 
 **Who this affects:** anyone who has scheduled tasks under `~/.claude/scheduled-tasks/`.

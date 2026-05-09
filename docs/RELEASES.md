@@ -11,6 +11,14 @@ For full development history including internal refactors and bug fixes, see [`C
 
 ---
 
+## 2026-05-09 — v1.3.1: vertical-healthcare actually-complete
+
+v1.3.0 advertised "vertical-healthcare completion" but only landed 4 of the 9 files the pack needs. Without `README.md` and `SKILL.md`, skill discovery did not register the pack, so `/vertical-healthcare init` was inert. v1.3.1 lands the 5 missing files: README, SKILL, the Epic and Cerner FHIR connectors, and the typed-memory schema. The pack is now functionally installable.
+
+If you tried `/vertical-healthcare init` on v1.3.0 and got nothing, `git pull` to v1.3.1 and try again. Clean install, no action needed.
+
+---
+
 ## 2026-05-06 — vertical-healthcare completion + skill-overrides recipe
 
 The healthcare vertical pack is now complete. Three layers shipped that match what the pack's description has promised since launch:
