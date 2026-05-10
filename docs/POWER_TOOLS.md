@@ -172,13 +172,15 @@ The substrate ships memory, voice, vault, and session lifecycle. These vendor-pu
 
 **Install:** automatic via `bootstrap.sh`. Manual: `git clone https://github.com/AgriciDaniel/claude-seo.git ~/.claude/skills/claude-seo`.
 
-### yusufkaraaslan/Skill_Seekers — auto-convert docs sites into skills
+### yusufkaraaslan/Skill_Seekers — CLI tool that auto-converts docs sites into skills
 
-**Repo:** [yusufkaraaslan/Skill_Seekers](https://github.com/yusufkaraaslan/Skill_Seekers). **License:** MIT. **Stars:** 13,388.
+**Repo:** [yusufkaraaslan/Skill_Seekers](https://github.com/yusufkaraaslan/Skill_Seekers). **License:** MIT. **PyPI:** [`skill-seekers`](https://pypi.org/project/skill-seekers/). **Stars:** 13,388.
 
-**Why install:** point it at any documentation website and it generates a Claude skill in minutes. Each time you adopt a new vendor SDK or API (Stripe, Resend, MongoDB, internal tool), this skill saves the manual SKILL.md authoring step. Velocity multiplier for skill creation.
+**Why install:** converts documentation from 17 source types into production-ready SKILL.md format for 24+ AI platforms. Each time you adopt a new vendor SDK or API with public docs (Stripe, Resend, MongoDB, internal tool), this CLI saves the manual SKILL.md authoring step. Velocity multiplier for skill creation.
 
-**Install:** automatic via `bootstrap.sh`. Manual: `git clone https://github.com/yusufkaraaslan/Skill_Seekers.git ~/.claude/skills/skill-seekers`.
+**Important:** this is a CLI TOOL, not a SKILL.md-format skill. It does not auto-load when present in `~/.claude/skills/`. Use it as a command-line generator, then commit the resulting SKILL.md into the appropriate skill directory.
+
+**Install:** automatic via `bootstrap.sh` using `pipx install skill-seekers`. Invocation: `skill-seekers <docs-url>` (see [`skillseekersweb.com`](https://skillseekersweb.com/) for full usage).
 
 ### yvgude/lean-ctx — session caching + AST compression + token reduction
 

@@ -1033,15 +1033,29 @@ if [[ "${SKIP_VENDOR_SKILLS:-0}" != "1" ]]; then
   fi
   [[ -d "$HOME/.claude/skills/claude-seo" ]] && ok "claude-seo installed"
 
-  # Skill_Seekers (MIT, yusufkaraaslan). Converts any documentation website
-  # into a Claude skill in minutes. High-leverage for onboarding new
-  # vendor SDKs and APIs (any time the user adopts a new tool with public docs).
-  if [[ ! -d "$HOME/.claude/skills/skill-seekers" ]]; then
-    hdr "Installing yusufkaraaslan/Skill_Seekers (MIT)"
-    git clone --quiet https://github.com/yusufkaraaslan/Skill_Seekers.git "$HOME/.claude/skills/skill-seekers" \
-      || err "Skill_Seekers clone failed (skipping; install manually: git clone https://github.com/yusufkaraaslan/Skill_Seekers.git ~/.claude/skills/skill-seekers)"
+  # Skill_Seekers (MIT, yusufkaraaslan). Converts documentation from 17 source
+  # types into production-ready formats for 24+ AI platforms. NOT a SKILL.md-
+  # format skill — it is a Python CLI tool published on PyPI. Install via pipx,
+  # invoke as `skill-seekers <docs-url>`, output the generated SKILL.md into
+  # the appropriate skill directory. High-leverage when onboarding any new
+  # vendor SDK or API with public docs.
+  # 2026-05-10: corrected from earlier (wrong) git-clone-to-skills-dir pattern
+  # after the runbook audit caught that there is no SKILL.md at the repo root
+  # so cloning into ~/.claude/skills/ would not auto-load anything.
+  if ! command -v skill-seekers > /dev/null 2>&1; then
+    if command -v pipx > /dev/null 2>&1; then
+      hdr "Installing skill-seekers via pipx (MIT)"
+      pipx install skill-seekers 2>&1 | tail -3 || err "skill-seekers pipx install failed (manual: pipx install skill-seekers)"
+    else
+      err "pipx not found, cannot install skill-seekers (manual: pipx install skill-seekers OR pip install --user skill-seekers)"
+    fi
   fi
-  [[ -d "$HOME/.claude/skills/skill-seekers" ]] && ok "skill-seekers installed"
+  command -v skill-seekers > /dev/null 2>&1 && ok "skill-seekers CLI installed"
+  # Remove the earlier wrong-install if present (idempotent cleanup)
+  if [[ -d "$HOME/.claude/skills/skill-seekers" ]] && [[ -f "$HOME/.claude/skills/skill-seekers/CLAUDE.md" ]] && [[ ! -f "$HOME/.claude/skills/skill-seekers/SKILL.md" ]]; then
+    log "Removing wrong-install of skill-seekers (was git-cloned to skills dir, but it's a CLI tool not a SKILL.md skill)"
+    rm -rf "$HOME/.claude/skills/skill-seekers"
+  fi
 
   # lean-ctx (Apache 2.0, yvgude). MCP server + context runtime: session
   # caching, AST-aware compression, 90+ shell patterns to reduce token usage.
