@@ -124,58 +124,59 @@ Each skill in `skills/<name>/` is auto-discovered by Claude Code. After cloning,
 
 ---
 
-## Recommended adjacents (engineering + operations)
+## Vendor-published agent-skill bundles (engineering + operations)
 
-The substrate ships memory, voice, vault, and session lifecycle. These adjacents cover the engineering-side skills a serious build benefits from. They are NOT installed by `bootstrap.sh` because they only matter if you are operating a particular runtime (Python FastAPI, Next.js on Vercel, Stripe integration, etc.). Install per stack.
+The substrate ships memory, voice, vault, and session lifecycle. These vendor-published bundles cover the engineering-side skills a serious build benefits from. `bootstrap.sh` clones all five into `~/.claude/skills/` alongside the substrate (skip with `SKIP_VENDOR_SKILLS=1` for air-gapped installs). Each vendor maintains their own SKILL.md per platform; we do not fork, repackage, or redistribute.
+
+**Licenses verified 2026-05-10.** Two non-MIT cases below: Trail of Bits is CC-BY-SA-4.0 (attribution + share-alike on docs), and Vercel-labs has no LICENSE file (all-rights-reserved by default per `⚙️ Meta/rules/license-hygiene.md`). Bootstrap-clone is a user-side fetch from each vendor's GitHub, which is fair use; redistribution by `ai-brain-starter` is explicitly NOT done.
 
 ### Sentry SDK skills — production error tracking and AI monitoring
 
-**Why install:** if you are running a real backend or shipping a Next.js product, you need stack traces with breadcrumbs, not "the user said it broke." Sentry's official agent-skill family covers SDK setup per language and a dedicated AI-monitoring path that instruments Anthropic, OpenAI, Vercel AI, LangChain, Google GenAI, and Pydantic AI calls.
+**Repo:** [getsentry/sentry-skills](https://github.com/getsentry/sentry-skills). **License:** Apache 2.0. **Stars:** 681.
 
-**Install:**
-```bash
-git clone https://github.com/getsentry/sentry-skills ~/.claude/skills/sentry-skills
-```
+**Why install:** if you are running a real backend or shipping a Next.js product, you need stack traces with breadcrumbs, not "the user said it broke." The bundle covers 28+ language-specific SDK skills (`sentry-python-sdk`, `sentry-nextjs-sdk`, `sentry-cloudflare-sdk`, `sentry-react-sdk`, plus 24 more) and a dedicated `sentry-setup-ai-monitoring` skill that instruments Anthropic, OpenAI, Vercel AI, LangChain, Google GenAI, and Pydantic AI calls.
 
-The bundle includes one skill per platform (`sentry-python-sdk`, `sentry-nextjs-sdk`, `sentry-cloudflare-sdk`, `sentry-react-sdk`, plus 14 more) plus `sentry-setup-ai-monitoring` for instrumenting LLM calls.
+**Install:** automatic via `bootstrap.sh`. Manual: `git clone https://github.com/getsentry/sentry-skills.git ~/.claude/skills/sentry-skills`.
 
-**Source:** [getsentry/sentry-skills](https://github.com/getsentry/sentry-skills). MIT licensed.
+### Trail of Bits skills — Python toolchain + security primitives
 
-### Trail of Bits modern-python — Python toolchain hygiene
+**Repo:** [trailofbits/skills](https://github.com/trailofbits/skills). **License:** CC-BY-SA-4.0 (Creative Commons Attribution Share-Alike). **Stars:** 5,095.
 
-**Why install:** if you are running a Python codebase, this skill teaches the modern toolchain (uv for installs, ruff for lint+format, ty for typecheck, pytest for tests) and the working setup that avoids "works on my machine" drift between venvs.
+**Why install:** Trail of Bits is a high-trust security firm with deep Python tooling expertise. The bundle covers 22 skills including `modern-python` (uv + ruff + ty + pytest, the modern toolchain that avoids venv drift), `insecure-defaults` (detect hardcoded secrets, default credentials, weak crypto), `sharp-edges` (error-prone APIs and dangerous configurations), `static-analysis` (CodeQL + Semgrep + SARIF), `property-based-testing`, and `differential-review` (security-focused diff review with git-history analysis).
 
-**Install:** part of the [trailofbits/skills](https://github.com/trailofbits/skills) bundle. Clone the bundle for full Python + security skill coverage.
+**License caveat:** CC-BY-SA-4.0 is copyleft on documentation. Cloning into your own `~/.claude/skills/` is fine. **Forking the documentation into a derived work requires keeping the same license.** Do not bundle Trail of Bits content into MIT-licensed downstream repos without preserving CC-BY-SA-4.0.
 
-**Source:** [trailofbits/skills](https://github.com/trailofbits/skills) by Trail of Bits. MIT licensed.
+**Install:** automatic via `bootstrap.sh`. Manual: `git clone https://github.com/trailofbits/skills.git ~/.claude/skills/trailofbits-skills`.
 
-### Stripe official skills — billing integration discipline
+### Stripe agent-toolkit — billing integration discipline
 
-**Why install:** if you are integrating Stripe (subscriptions, one-off charges, Connect transfers), the official skills ship idempotency-key handling, webhook signing verification, and SDK upgrade paths that prevent the most common production bugs (double charges, missed webhooks, silent SDK breakage on minor version bumps).
+**Repo:** [stripe/agent-toolkit](https://github.com/stripe/agent-toolkit). **License:** MIT. **Stars:** 1,541.
 
-**Install:** clone the [stripe/skills](https://github.com/stripe/skills) repo into `~/.claude/skills/stripe-skills/`. Two skills bundled: `stripe-best-practices` and `upgrade-stripe`.
+**Why install:** if you are integrating Stripe (subscriptions, one-off charges, Connect transfers), the official toolkit ships `stripe-best-practices` (idempotency-key handling, webhook signing verification, error-handling patterns) and `upgrade-stripe` (SDK + API version bumps without silent breakage). Prevents the most common production bugs: double charges, missed webhooks, broken upgrades.
 
-**Source:** [stripe/skills](https://github.com/stripe/skills). MIT licensed.
+**Install:** automatic via `bootstrap.sh`. Manual: `git clone https://github.com/stripe/agent-toolkit.git ~/.claude/skills/stripe-agent-toolkit`.
 
-### Vercel labs Next.js + caching skills — Next.js + React patterns
+### Cloudflare skills — Core Web Vitals + Workers/D1/R2/Wrangler
 
-**Why install:** if you are running a Next.js app on Vercel (App Router or Pages Router), `next-best-practices` and `next-cache-components` cover the cache-aware composition patterns that determine whether your hot routes are fast or slow.
+**Repo:** [cloudflare/skills](https://github.com/cloudflare/skills). **License:** Apache 2.0. **Stars:** 1,486.
 
-**Install:** clone the [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills) bundle.
+**Why install:** the bundle includes `web-perf` (Core Web Vitals + render-blocking audits, stack-agnostic — works for static, Next.js, Astro), plus `workers-best-practices`, `durable-objects` (stateful coordination with RPC + SQLite + WebSockets), `wrangler` (deploy KV, R2, D1, Vectorize, Queues, Workflows), `agents-sdk` (build stateful AI agents with scheduling, RPC, MCP), `sandbox-sdk` (isolated code execution on Workers), and the comprehensive `cloudflare` platform skill.
 
-**Source:** [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills). MIT licensed.
+**Install:** automatic via `bootstrap.sh`. Manual: `git clone https://github.com/cloudflare/skills.git ~/.claude/skills/cloudflare-skills`.
 
-### Cloudflare web-perf — Core Web Vitals + render-blocking audits
+### Vercel labs agent-skills — Next.js + React patterns
 
-**Why install:** if you are shipping a public website (landing page, marketing site, app), the Cloudflare team's `web-perf` skill audits Core Web Vitals, render-blocking resources, and the most common perf anti-patterns. Stack-agnostic (works for static, Next.js, Astro, etc.).
+**Repo:** [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills). **License:** **NO LICENSE FILE** (all-rights-reserved by default). **Stars:** 26,343.
 
-**Install:** part of [cloudflare/skills](https://github.com/cloudflare/skills) which also includes Workers, Pages, Durable Objects, and Wrangler skills.
+**Why install:** the bundle covers `next-best-practices`, `next-cache-components` (cache-aware composition patterns that determine whether hot routes are fast or slow), `next-upgrade` (Next.js version bumps), `react-best-practices`, `composition-patterns`, `web-design-guidelines`, and `react-native-skills`. Vercel's own engineering team maintains it.
 
-**Source:** [cloudflare/skills](https://github.com/cloudflare/skills). MIT licensed.
+**License caveat:** Vercel-labs has not added a LICENSE file. Per `⚙️ Meta/rules/license-hygiene.md`: "No LICENSE file: treat as all-rights-reserved. Reading is fine; copying is infringement." Bootstrap-clone is a user-side fetch from Vercel's own GitHub (fair use). **Do NOT fork into a derived work or redistribute.** If Vercel-labs adds a license later, this caveat updates.
+
+**Install:** automatic via `bootstrap.sh`. Manual: `git clone https://github.com/vercel-labs/agent-skills.git ~/.claude/skills/vercel-agent-skills`.
 
 ### Catalog source
 
-These adjacents were surfaced via [VoltAgent/awesome-agent-skills](https://github.com/VoltAgent/awesome-agent-skills) (21k stars, MIT, hand-curated). The full catalog covers 1,100+ skills from official teams (Anthropic, Google, Stripe, Cloudflare, Netlify, HashiCorp, Sentry, Microsoft, Trail of Bits, Vercel Labs, etc.) plus community contributions. Worth scanning quarterly when shopping for adjacents in a new domain.
+These adjacents were surfaced via [VoltAgent/awesome-agent-skills](https://github.com/VoltAgent/awesome-agent-skills) (21k stars, MIT, hand-curated). The full catalog covers 1,100+ skills from official teams plus community contributions. The monthly `~/.claude/scheduled/scan-awesome-repos.sh` job watches this and four other awesome-* repos for new entries; reports land in `⚙️ Meta/Awesome Repo Scan/<YYYY-MM>.md`.
 
 ---
 

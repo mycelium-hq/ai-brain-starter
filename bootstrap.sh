@@ -968,6 +968,78 @@ fi
 [[ -d "$HOME/.claude/skills/superpowers" ]] && ok "superpowers skills installed"
 
 # ───────────────────────────────────────────────────────────────────────────────
+# Vendor-published agent-skill bundles (engineering + operations adjacents)
+# Surfaced via VoltAgent/awesome-agent-skills catalog. Each vendor maintains
+# their own SKILL.md per platform, so we clone the upstream bundles directly.
+# Bootstrap-clone is a user-side fetch from each vendor's GitHub; we do not
+# bundle, redistribute, or fork. Per-bundle licenses verified 2026-05-10.
+# Optional: skip with SKIP_VENDOR_SKILLS=1 (e.g. for air-gapped installs).
+# ───────────────────────────────────────────────────────────────────────────────
+
+if [[ "${SKIP_VENDOR_SKILLS:-0}" != "1" ]]; then
+
+  # Sentry SDK + AI monitoring skills (Apache 2.0, vendor-published).
+  # 28+ language-specific SDK skills (Python, Next.js, React, Node, Cloudflare,
+  # Flutter, Go, Ruby, etc.) plus sentry-setup-ai-monitoring which instruments
+  # Anthropic, OpenAI, Vercel AI, LangChain, Google GenAI, and Pydantic AI calls.
+  if [[ ! -d "$HOME/.claude/skills/sentry-skills" ]]; then
+    hdr "Installing getsentry/sentry-skills (Apache 2.0)"
+    git clone --quiet https://github.com/getsentry/sentry-skills.git "$HOME/.claude/skills/sentry-skills" \
+      || err "sentry-skills clone failed (skipping; install manually: git clone https://github.com/getsentry/sentry-skills.git ~/.claude/skills/sentry-skills)"
+  fi
+  [[ -d "$HOME/.claude/skills/sentry-skills" ]] && ok "sentry-skills installed"
+
+  # Trail of Bits skills (CC-BY-SA-4.0, security firm).
+  # 22 skills incl. modern-python (uv + ruff + ty + pytest), insecure-defaults,
+  # sharp-edges, static-analysis (CodeQL + Semgrep), property-based-testing,
+  # differential-review (security-focused diff review with git history).
+  # CC-BY-SA-4.0: bootstrap-clone is user-side fetch (OK); attribution required
+  # if redistributed. Do NOT bundle into ai-brain-starter (MIT).
+  if [[ ! -d "$HOME/.claude/skills/trailofbits-skills" ]]; then
+    hdr "Installing trailofbits/skills (CC-BY-SA-4.0)"
+    git clone --quiet https://github.com/trailofbits/skills.git "$HOME/.claude/skills/trailofbits-skills" \
+      || err "trailofbits/skills clone failed (skipping; install manually: git clone https://github.com/trailofbits/skills.git ~/.claude/skills/trailofbits-skills)"
+  fi
+  [[ -d "$HOME/.claude/skills/trailofbits-skills" ]] && ok "trailofbits-skills installed"
+
+  # Stripe agent-toolkit (MIT, vendor-published).
+  # Includes stripe-best-practices (idempotency keys, webhook signatures,
+  # error handling patterns) and upgrade-stripe (SDK + API version bumps).
+  if [[ ! -d "$HOME/.claude/skills/stripe-agent-toolkit" ]]; then
+    hdr "Installing stripe/agent-toolkit (MIT)"
+    git clone --quiet https://github.com/stripe/agent-toolkit.git "$HOME/.claude/skills/stripe-agent-toolkit" \
+      || err "stripe/agent-toolkit clone failed (skipping; install manually: git clone https://github.com/stripe/agent-toolkit.git ~/.claude/skills/stripe-agent-toolkit)"
+  fi
+  [[ -d "$HOME/.claude/skills/stripe-agent-toolkit" ]] && ok "stripe-agent-toolkit installed"
+
+  # Cloudflare skills (Apache 2.0, vendor-published).
+  # Includes web-perf (Core Web Vitals + render-blocking audits, stack-agnostic),
+  # workers-best-practices, durable-objects, wrangler, agents-sdk, sandbox-sdk.
+  if [[ ! -d "$HOME/.claude/skills/cloudflare-skills" ]]; then
+    hdr "Installing cloudflare/skills (Apache 2.0)"
+    git clone --quiet https://github.com/cloudflare/skills.git "$HOME/.claude/skills/cloudflare-skills" \
+      || err "cloudflare/skills clone failed (skipping; install manually: git clone https://github.com/cloudflare/skills.git ~/.claude/skills/cloudflare-skills)"
+  fi
+  [[ -d "$HOME/.claude/skills/cloudflare-skills" ]] && ok "cloudflare-skills installed"
+
+  # Vercel-labs agent-skills (NO LICENSE — all-rights-reserved by default).
+  # Includes next-best-practices, next-cache-components, next-upgrade,
+  # react-best-practices, composition-patterns, web-design-guidelines,
+  # react-native-skills. Bootstrap-clone is user-side fetch from Vercel's
+  # GitHub. Per CLAUDE.md license-hygiene: "No LICENSE file: treat as
+  # all-rights-reserved. Reading is fine; copying is infringement." We do NOT
+  # fork or redistribute; users fetch directly from Vercel's repo. If Vercel
+  # adds a license later, we revisit.
+  if [[ ! -d "$HOME/.claude/skills/vercel-agent-skills" ]]; then
+    hdr "Installing vercel-labs/agent-skills (NO LICENSE — read-only)"
+    git clone --quiet https://github.com/vercel-labs/agent-skills.git "$HOME/.claude/skills/vercel-agent-skills" \
+      || err "vercel-labs/agent-skills clone failed (skipping; install manually: git clone https://github.com/vercel-labs/agent-skills.git ~/.claude/skills/vercel-agent-skills)"
+  fi
+  [[ -d "$HOME/.claude/skills/vercel-agent-skills" ]] && ok "vercel-agent-skills installed"
+
+fi
+
+# ───────────────────────────────────────────────────────────────────────────────
 # Granola MCP (meeting workflow rule depends on this)
 # ───────────────────────────────────────────────────────────────────────────────
 
