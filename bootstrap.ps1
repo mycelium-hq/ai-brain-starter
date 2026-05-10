@@ -80,30 +80,77 @@ $installApiBase = if ($env:MYCELIUM_INSTALL_API) { $env:MYCELIUM_INSTALL_API } e
 
 if ($env:EMAIL_GATE_BYPASS -ne "1" -and -not $DryRun -and -not (Test-Path $emailMarker)) {
     Hdr (T "Email gate (one-time)" "Verificación de email (una sola vez)")
+
+    # Inline path: EMAIL+NAME passed as env vars (typically by Claude Code
+    # after asking the user inline). POST to quick-mint to get a token
+    # without making the user leave the chat.
+    if (-not $env:TOKEN -and $env:EMAIL -and $env:NAME) {
+        $qmLang = if ($env:LANG_HINT) { $env:LANG_HINT } else { "en" }
+        if ($qmLang -ne "en" -and $qmLang -ne "es") { $qmLang = "en" }
+        $qmOs = "windows"
+        Log (T "Minting install token for $($env:EMAIL) via $installApiBase..." `
+              "Generando token para $($env:EMAIL) en $installApiBase...")
+        try {
+            $qmBody = @{
+                email = $env:EMAIL
+                name = $env:NAME
+                lang = $qmLang
+                os = $qmOs
+                consentRequired = $true
+            } | ConvertTo-Json -Compress
+            $qmResp = Invoke-RestMethod -Uri "$installApiBase/api/install/quick-mint" `
+                -Method Post -ContentType "application/json" -Body $qmBody -TimeoutSec 12 -ErrorAction Stop
+            if ($qmResp.ok -and $qmResp.token -match '^[a-f0-9]{32}$') {
+                Ok (T "Token minted inline. No browser needed." `
+                      "Token generado en línea. Sin navegador.")
+                $env:TOKEN = $qmResp.token
+            } else {
+                Err (T "Inline mint returned no token. Falling back." `
+                      "Mint inline no devolvió token. Caemos al formulario.")
+            }
+        } catch {
+            Err (T "Inline mint failed: $_. Falling back." `
+                  "Falló mint inline: $_. Caemos al formulario.")
+        }
+    }
+
     if (-not $env:TOKEN) {
+        if ($env:CLAUDE_CODE_ENTRYPOINT) {
+            Write-Host ""
+            Write-Host "[ai-brain-starter:NEEDS_EMAIL]"
+            Write-Host ""
+            Write-Host (T "Bootstrap needs an email before installing. To keep this in-chat:" `
+                         "El bootstrap necesita un email antes de instalar. Para mantenerlo en chat:")
+            Write-Host ""
+            Write-Host (T "1. Ask the user: 'What's your email?' and 'What name should I use?' Optional: language (en/es)." `
+                         "1. Preguntale: '¿Cuál es tu email?' y '¿Qué nombre uso?' Opcional: idioma (en/es).")
+            Write-Host (T "2. Re-invoke this script with those values pre-set:" `
+                         "2. Volvé a correr este script con esos valores ya cargados:")
+            Write-Host ""
+            Write-Host '   $env:EMAIL="user@example.com"; $env:NAME="Their Name"; $env:LANG_HINT="en"; & "$env:USERPROFILE\.claude\skills\ai-brain-starter\bootstrap.ps1"'
+            Write-Host ""
+            Write-Host (T "Bootstrap will POST to /api/install/quick-mint, get a token, and continue. The user never leaves Claude Code." `
+                         "El bootstrap llama a /api/install/quick-mint, obtiene el token y continúa. El usuario nunca sale de Claude Code.")
+            Write-Host ""
+            exit 3
+        }
+
         Write-Host ""
         Write-Host ("  " + (T "We need your email before installing the second brain." `
                               "Necesitamos tu email antes de instalar el segundo cerebro."))
         Write-Host ""
-        Write-Host ("  " + (T "This is a one-time gate. Once you submit the form, you get a token by" `
-                              "Esto es una sola vez. Una vez completes el formulario, recibís un token"))
-        Write-Host ("  " + (T "email; future re-runs skip this prompt." `
-                              "por email; las próximas corridas saltean este paso."))
+        Write-Host ("  " + (T "Easiest path: open Claude Code and say 'install ai-brain-starter'." `
+                              "Camino más fácil: abrí Claude Code y decí 'instalá ai-brain-starter'."))
+        Write-Host ("  " + (T "It asks for your email in chat and handles the rest. No browser." `
+                              "Te pide el email en el chat y se encarga del resto. Sin navegador."))
         Write-Host ""
+        Write-Host ("  " + (T "Or, if you'd rather use the form:" "O, si preferís el formulario:"))
         Write-Host ("  1. " + (T "Open this URL in your browser:" "Abrí este URL en tu navegador:"))
         Write-Host "     https://myceliumai.co/install"
         Write-Host ("     (" + (T "Spanish:" "Español:") + " https://myceliumai.co/es/install)")
         Write-Host ""
-        Write-Host ("  2. " + (T "Fill out the short form. Takes about 4 minutes." `
-                              "Completá el formulario corto. Tarda unos 4 minutos."))
-        Write-Host ""
-        Write-Host ("  3. " + (T "Check your email. You'll receive your personalized install command." `
-                              "Revisá tu email. Vas a recibir tu comando de instalación personalizado."))
-        Write-Host ""
-        Write-Host ("  4. " + (T "Either paste that full command into Claude Code (recommended)," `
-                              "Pegá ese comando completo en Claude Code (recomendado),"))
-        Write-Host ("     " + (T "OR re-run this script with the token:" `
-                              "O volvé a correr este script con el token:"))
+        Write-Host ("  2. " + (T "Check your email for the install command and paste it back into PowerShell." `
+                              "Revisá tu email para el comando y pegalo en PowerShell."))
         Write-Host ""
         Write-Host '         $env:TOKEN = "<your-token-from-email>"; pwsh bootstrap.ps1'
         Write-Host ""

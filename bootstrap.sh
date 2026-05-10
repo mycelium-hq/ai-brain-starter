@@ -263,31 +263,102 @@ INSTALL_API_BASE="${MYCELIUM_INSTALL_API:-https://myceliumai.co}"
 
 if [[ "${EMAIL_GATE_BYPASS:-0}" != "1" && $DRY_RUN -eq 0 && ! -f "$EMAIL_MARKER" ]]; then
   hdr "$(t "Email gate (one-time)" "Verificación de email (una sola vez)")"
+
+  # Inline path: EMAIL+NAME provided as env vars (typically by Claude Code
+  # after asking the user inline). POST to quick-mint to get a token without
+  # the user ever leaving the chat.
+  if [[ -z "${TOKEN:-}" && -n "${EMAIL:-}" && -n "${NAME:-}" ]]; then
+    QM_LANG="${LANG_HINT:-en}"
+    [[ "$QM_LANG" != "en" && "$QM_LANG" != "es" ]] && QM_LANG="en"
+    QM_OS="mac-arm"
+    case "$(uname -sm 2>/dev/null)" in
+      Darwin*arm64*) QM_OS="mac-arm" ;;
+      Darwin*x86_64*) QM_OS="mac-intel" ;;
+      Linux*) QM_OS="linux" ;;
+    esac
+    log "$(t "Minting install token for $EMAIL via $INSTALL_API_BASE..." \
+            "Generando token de instalación para $EMAIL en $INSTALL_API_BASE...")"
+    QM_PAYLOAD="$(EMAIL="$EMAIL" NAME="$NAME" QM_LANG="$QM_LANG" QM_OS="$QM_OS" python3 <<'PY'
+import json, os
+print(json.dumps({
+  "email": os.environ.get("EMAIL",""),
+  "name": os.environ.get("NAME",""),
+  "lang": os.environ.get("QM_LANG","en"),
+  "os": os.environ.get("QM_OS","mac-arm"),
+  "consentRequired": True,
+}))
+PY
+)"
+    set +e
+    QM_RESP="$(curl -sS -m 12 -X POST "$INSTALL_API_BASE/api/install/quick-mint" \
+      -H "content-type: application/json" \
+      -d "$QM_PAYLOAD" 2>/dev/null)"
+    set -e
+    QM_TOKEN="$(printf '%s' "${QM_RESP:-}" | python3 <<'PY' 2>/dev/null
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    print(d.get("token","") if d.get("ok") else "")
+except Exception:
+    print("")
+PY
+)"
+    if [[ -z "$QM_TOKEN" || ! "$QM_TOKEN" =~ ^[a-f0-9]{32}$ ]]; then
+      err "$(t "Inline mint failed. Falling back to form." \
+              "Falló la generación inline. Caemos al formulario.")"
+    else
+      ok "$(t "Token minted inline. No browser needed." \
+              "Token generado en línea. Sin navegador.")"
+      TOKEN="$QM_TOKEN"
+    fi
+  fi
+
   if [[ -z "${TOKEN:-}" ]]; then
-    # No token. Print the form URL + how to re-run with the token.
+    # No token, no inline EMAIL+NAME. Two paths:
+    #   (a) Inside Claude Code → emit a sentinel telling Claude to collect
+    #       email + name inline and re-run with EMAIL= NAME= LANG= preset.
+    #   (b) Standalone shell → print the form URL fallback.
+    if [[ -n "${CLAUDE_CODE_ENTRYPOINT:-}" ]]; then
+      cat <<EOF
+
+[ai-brain-starter:NEEDS_EMAIL]
+
+$(t "Bootstrap needs an email before installing. To keep this in-chat (no browser, no terminal copy-paste):" \
+    "El bootstrap necesita un email antes de instalar. Para mantenerlo en chat (sin navegador, sin copiar y pegar):")
+
+$(t "1. Ask the user: 'What's your email?' and 'What name should I use?' Optional: language preference (en/es)." \
+    "1. Preguntale al usuario: '¿Cuál es tu email?' y '¿Qué nombre uso?' Opcional: idioma (en/es).")
+$(t "2. Re-invoke this script with those values pre-set:" \
+    "2. Volvé a correr este script con esos valores ya cargados:")
+
+   EMAIL="user@example.com" NAME="Their Name" LANG_HINT="en" bash $0
+
+$(t "Bootstrap will POST to /api/install/quick-mint, get a token, write the marker, and continue installing. The user never leaves Claude Code." \
+    "El bootstrap llama a /api/install/quick-mint, obtiene el token, escribe el marker y continúa. El usuario nunca sale de Claude Code.")
+
+EOF
+      exit 3
+    fi
+
+    # Standalone terminal fallback (curl-to-bash from a plain shell).
     cat <<EOF
 
   $(t "We need your email before installing the second brain." \
         "Necesitamos tu email antes de instalar el segundo cerebro.")
 
-  $(t "This is a one-time gate. Once you submit the form, you get a token by" \
-        "Esto es una sola vez. Una vez completes el formulario, recibís un token")
-  $(t "email; future re-runs skip this prompt." \
-        "por email; las próximas corridas saltean este paso.")
+  $(t "Easiest path: open Claude Code and say 'install ai-brain-starter'. It" \
+        "Camino más fácil: abrí Claude Code y decí 'instalá ai-brain-starter'.")
+  $(t "will ask for your email in chat and handle the rest. No browser." \
+        "Te pide el email en el chat y se encarga del resto. Sin navegador.")
+
+  $(t "Or, if you'd rather use the form:" "O, si preferís el formulario:")
 
   1. $(t "Open this URL in your browser:" "Abrí este URL en tu navegador:")
      https://myceliumai.co/install
      ($(t "Spanish:" "Español:") https://myceliumai.co/es/install)
 
-  2. $(t "Fill out the short form. Takes about 4 minutes." \
-          "Completá el formulario corto. Tarda unos 4 minutos.")
-
-  3. $(t "Check your email. You'll receive your personalized install command." \
-          "Revisá tu email. Vas a recibir tu comando de instalación personalizado.")
-
-  4. $(t "Either paste that full command into Claude Code (recommended)," \
-          "Pegá ese comando completo en Claude Code (recomendado),")
-     $(t "OR re-run this script with the token:" "O volvé a correr este script con el token:")
+  2. $(t "Check your email for the install command and paste it back into a shell." \
+          "Revisá tu email para el comando y pegalo en una terminal.")
 
          TOKEN=<your-token-from-email> bash $0
 

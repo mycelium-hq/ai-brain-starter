@@ -65,31 +65,29 @@ Read the four problems the team version solves: [`for-teams/why-teams-are-differ
 
 ## Install
 
-### Step 1 — Get your install link
+### Step 1 — Open Claude Code
 
-Go to **[myceliumai.co/install](https://myceliumai.co/install)** (Spanish: **[myceliumai.co/es/install](https://myceliumai.co/es/install)**) and fill out the short form. Takes about 4 minutes.
+Open the [Claude Code desktop app](https://claude.ai/download) and sign in with a paid Claude account (Pro, Max, or Team).
 
-The form personalizes your install (so the system knows your role, your data, and which language to run in) and emails you a one-paste install command with your unique token. The same form is the path for paid cohorts, paid private installs, complimentary partner cohorts, and free open-source explorers.
+### Step 2 — Say "install ai-brain-starter"
 
-### Step 2 — Open Claude Code
+Paste this one-liner into the chat:
 
-Open the [Claude Code desktop app](https://claude.ai/download) and sign in with a paid Claude account (Pro, Max, or Team). The bootstrap installs everything else (Homebrew, Python, Node, Obsidian, all skills) for you.
+```
+Install ai-brain-starter for me. Use the in-chat install path: ask me my email and name once, then run bootstrap. Don't send me to a browser or have me copy a token from email.
+```
 
-### Step 3 — Paste the install command from your email
+Claude asks two questions: *"What's your email?"* and *"What name should I use?"* That's it. Bootstrap mints your token over the API, installs everything (Homebrew, Python, Node, Obsidian, all skills, all MCPs), and runs the setup interview in your chosen language. No browser tab, no terminal copy-paste, no token to fish out of your inbox.
 
-Your welcome email contains a personalized command with your token embedded. Paste it into Claude Code and approve the tool calls. Claude runs:
+**If pre-flight fails**, Claude reads the structured report and explains in plain English what to fix. Most common blockers: Claude Code not installed, a corporate VPN blocking GitHub, or a Mac that's not in the admin group.
 
-1. A 30-second pre-flight check (OS, network, Claude Code install, admin permissions, disk).
-2. The token-gated bootstrap (clones the skill, installs all tools).
-3. The setup interview (asks your language first, runs everything in your chosen language).
+**Existing users** (re-running bootstrap, e.g. after a `git pull`): the email-gate marker on disk means you skip the question entirely. Bootstrap just runs.
 
-One paste, no terminal commands to type. Mac, Windows, and Linux all use the same flow.
+*Local install. Your vault data never leaves your machine. The signup is the only piece that touches our servers, and it captures only what's listed in [`SECURITY.md`](SECURITY.md) and the [privacy policy](https://myceliumai.co/privacy).*
 
-**If pre-flight fails**, Claude reads the structured report and explains in plain English what to fix. The most common blockers are: Claude Code not installed (download from https://claude.ai/download), a corporate VPN blocking GitHub, or a Mac that's not in the admin group.
+### Alternative — Browser form (only if you can't open Claude Code yet)
 
-**Existing users** (anyone who installed before the email gate was live): your next bootstrap re-run will prompt you once to fill the same form. After that, you're never asked again.
-
-*Local install. Your vault data never leaves your machine. The signup form is the only piece that touches our servers, and it captures only what's listed in [`SECURITY.md`](SECURITY.md) and the [privacy policy](https://myceliumai.co/privacy).*
+If you'd rather sign up before installing Claude Code, use the form at **[myceliumai.co/install](https://myceliumai.co/install)** (Spanish: **[myceliumai.co/es/install](https://myceliumai.co/es/install)**). It emails you a one-paste install command with a token embedded. This path exists for paid cohorts, partner cohorts, and anyone who wants to read the privacy details before installing.
 
 ### Quick-try (existing Claude Code users)
 
@@ -105,27 +103,27 @@ This loads the plugin **for the current session only**, giving you the skills (j
 
 ## Instalar (Español)
 
-### Paso 1 — Conseguí tu link de instalación
+### Paso 1 — Abrí Claude Code
 
-Andá a **[myceliumai.co/es/install](https://myceliumai.co/es/install)** (English: **[myceliumai.co/install](https://myceliumai.co/install)**) y completá el formulario corto. Tarda unos 4 minutos.
+Abrí la [app de escritorio de Claude Code](https://claude.ai/download) y logueate con una cuenta paga de Claude (Pro, Max o Team).
 
-El formulario personaliza tu instalación (para que el sistema sepa tu rol, tus datos, y en qué idioma correr) y te manda por email un comando de un solo pegado con tu token único. El mismo formulario es la ruta para cohortes pagas, instalaciones privadas pagas, cohortes complementarias de partners, y exploradores open-source.
+### Paso 2 — Decí "instalá ai-brain-starter"
 
-### Paso 2 — Abrí Claude Code
+Pegá este one-liner en el chat:
 
-Abrí la [app de escritorio de Claude Code](https://claude.ai/download) y logueate con una cuenta paga de Claude (Pro, Max o Team). El bootstrap instala todo lo demás (Homebrew, Python, Node, Obsidian, todas las skills) por vos.
+```
+Instalá ai-brain-starter para mí. Usá la ruta in-chat: preguntame mi email y nombre una vez, después corré el bootstrap. No me mandes al navegador ni me hagas copiar un token del email.
+```
 
-### Paso 3 — Pegá el comando de instalación de tu email
+Claude te hace dos preguntas: *"¿Cuál es tu email?"* y *"¿Qué nombre uso?"*. Eso es todo. El bootstrap genera tu token vía la API, instala todo (Homebrew, Python, Node, Obsidian, todas las skills, todos los MCPs), y corre la entrevista de setup en el idioma que elijas. Sin pestaña del navegador, sin copiar y pegar en la terminal, sin pescar un token del inbox.
 
-Tu email de bienvenida contiene un comando personalizado con tu token. Pegalo en Claude Code y aprobá las acciones. Claude va a correr:
+**Si la verificación previa falla**, Claude lee el reporte estructurado y te explica en idioma claro qué arreglar. Lo más común: Claude Code no instalado, una VPN corporativa bloqueando GitHub, o una Mac fuera del grupo admin.
 
-1. Una verificación previa de 30 segundos (OS, red, instalación de Claude Code, permisos de admin, disco).
-2. El bootstrap con token (clona la skill, instala todas las herramientas).
-3. La entrevista de setup (te pregunta el idioma primero, corre todo en el idioma que elijas).
+**Usuarios existentes** (re-corriendo el bootstrap, por ejemplo después de un `git pull`): el marker del email-gate en disco hace que saltees la pregunta. El bootstrap corre directo.
 
-Un pegado, cero comandos que tipear. Mac, Windows y Linux usan el mismo flujo.
+### Alternativa — Formulario web (sólo si todavía no podés abrir Claude Code)
 
-**Usuarios existentes** (cualquiera que instaló antes de que el gate de email estuviera vivo): la próxima vez que corras el bootstrap te va a pedir una sola vez que completes el mismo formulario. Después, nunca más.
+Si preferís registrarte antes de instalar Claude Code, usá el formulario en **[myceliumai.co/es/install](https://myceliumai.co/es/install)** (English: **[myceliumai.co/install](https://myceliumai.co/install)**). Te manda por email un comando de un pegado con el token incrustado. Esta ruta existe para cohortes pagas, cohortes de partners, y cualquiera que quiera leer la privacidad antes de instalar.
 
 ---
 
