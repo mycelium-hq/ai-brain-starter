@@ -1,0 +1,13 @@
+# scrub-public-repos.txt.example
+#
+# Copy to ~/.scrub-public-repos.txt and edit with the substrings of YOUR public
+# repo URLs. The pre-commit hook only enforces scrubbing on repos whose
+# `git remote get-url origin` contains one of these substrings.
+#
+# One substring per line. # comments allowed. Empty lines ignored.
+# Match is plain substring (no regex), case-sensitive.
+
+# Examples (replace with your real public repos):
+#youraccount/your-public-repo
+#youraccount/another-public-repo
+#youraccount/your-website

@@ -1,0 +1,23 @@
+# scrub-personal-tokens.txt.example
+#
+# Copy to ~/.scrub-personal-tokens.txt and edit with YOUR personal tokens.
+# One regex pattern per line. # comments allowed.
+# Empty lines ignored.
+#
+# The pre-commit-template.sh hook will refuse any public-repo commit
+# where the staged diff contains lines matching ANY of these patterns.
+
+# Word-boundary tokens (use \b...\b). For names, companies, cities, products
+# whose substrings might legitimately appear inside other words. Example:
+# \b(Acme|YourFullName|YourCofounder|YourCity)\b
+
+# Path-style tokens (no word-boundary needed). For private repo names,
+# personal vault paths, internal product names. Example:
+# (your-private-repo|/path/to/your/personal/vault)
+
+# Specific phrases (no word-boundary). For book titles, newsletter names,
+# program names, anything with internal spaces. Example:
+# (Your Book Series|Your Newsletter Name|Your Cohort Program)
+
+# Email-shaped tokens. Example:
+# (you@example\.com|admin@yourdomain\.com)
