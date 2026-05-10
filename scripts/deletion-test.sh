@@ -4,7 +4,7 @@
 #   bash deletion-test.sh <file-path> [search-root]
 #
 # Example:
-#   bash deletion-test.sh ~/dev/diazroa-concierge/src/lib/output-guard.ts ~/dev/diazroa-concierge
+#   bash deletion-test.sh ./src/lib/some-helper.ts .
 #
 # Outputs a verdict on whether the module is DEEP (worth keeping) or SHALLOW (candidate for deletion):
 #   - Counts callers (rg for imports/requires of the file)
