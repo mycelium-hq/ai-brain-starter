@@ -55,6 +55,11 @@
             "type": "command",
             "command": "bash '[VAULT_PATH]/⚙️ Meta/scripts/session-end-hook.sh'",
             "statusMessage": "Saving session context..."
+          },
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/coach-auto-prescribe-on-journal.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "statusMessage": "Coach auto-prescribe (post-journal, idempotent)..."
           }
         ]
       }
@@ -133,6 +138,11 @@
             "type": "command",
             "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/migrate-to-user-level.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Checking for project-level hook migration..."
+          },
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/health-auto-sync.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "statusMessage": "Auto-sync wearable data if stale (Oura, Fitbit)..."
           }
         ]
       }
