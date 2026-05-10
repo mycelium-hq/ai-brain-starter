@@ -126,9 +126,11 @@ Each skill in `skills/<name>/` is auto-discovered by Claude Code. After cloning,
 
 ## Vendor-published agent-skill bundles (engineering + operations)
 
-The substrate ships memory, voice, vault, and session lifecycle. These vendor-published bundles cover the engineering-side skills a serious build benefits from. `bootstrap.sh` clones all five into `~/.claude/skills/` alongside the substrate (skip with `SKIP_VENDOR_SKILLS=1` for air-gapped installs). Each vendor maintains their own SKILL.md per platform; we do not fork, repackage, or redistribute.
+The substrate ships memory, voice, vault, and session lifecycle. These vendor-published bundles cover the engineering-side skills a serious build benefits from. `bootstrap.sh` installs them via Claude Code's native plugin marketplace mechanism (skip with `SKIP_VENDOR_SKILLS=1` for air-gapped installs). Each vendor maintains their own SKILL.md per platform; we do not fork, repackage, or redistribute.
 
-**Licenses verified 2026-05-10.** Two non-MIT cases below: Trail of Bits is CC-BY-SA-4.0 (attribution + share-alike on docs), and Vercel-labs has no LICENSE file (all-rights-reserved by default per `⚙️ Meta/rules/license-hygiene.md`). Bootstrap-clone is a user-side fetch from each vendor's GitHub, which is fair use; redistribution by `ai-brain-starter` is explicitly NOT done.
+**Install path: `claude plugin marketplace add <repo>` + `claude plugin install <name>@<marketplace>`.** Plugin install is the ONLY path that registers nested SKILL.md files for Claude's auto-discovery. Raw `git clone` into `~/.claude/skills/` does NOT work for bundles with nested SKILL.md (the most common shape) because Claude auto-discovery only finds top-level SKILL.md. Codified 2026-05-10 after audit caught 7 cloned bundles invisible to Claude despite being on disk.
+
+**Licenses verified 2026-05-10.** Two non-MIT cases: Trail of Bits is CC-BY-SA-4.0 (attribution + share-alike on docs), and Vercel-labs has no LICENSE file (all-rights-reserved by default per `⚙️ Meta/rules/license-hygiene.md`). Plugin install is a user-side fetch from each vendor's GitHub, which is fair use; redistribution by `ai-brain-starter` is explicitly NOT done.
 
 ### Sentry SDK skills — production error tracking and AI monitoring
 
@@ -136,7 +138,7 @@ The substrate ships memory, voice, vault, and session lifecycle. These vendor-pu
 
 **Why install:** if you are running a real backend or shipping a Next.js product, you need stack traces with breadcrumbs, not "the user said it broke." The bundle covers 28+ language-specific SDK skills (`sentry-python-sdk`, `sentry-nextjs-sdk`, `sentry-cloudflare-sdk`, `sentry-react-sdk`, plus 24 more) and a dedicated `sentry-setup-ai-monitoring` skill that instruments Anthropic, OpenAI, Vercel AI, LangChain, Google GenAI, and Pydantic AI calls.
 
-**Install:** automatic via `bootstrap.sh`. Manual: `git clone https://github.com/getsentry/sentry-skills.git ~/.claude/skills/sentry-skills`.
+**Install:** automatic via `bootstrap.sh`. Manual: `claude plugin marketplace add getsentry/sentry-skills && claude plugin install sentry-skills@sentry-skills`.
 
 ### Trail of Bits skills — Python toolchain + security primitives
 
@@ -146,7 +148,7 @@ The substrate ships memory, voice, vault, and session lifecycle. These vendor-pu
 
 **License caveat:** CC-BY-SA-4.0 is copyleft on documentation. Cloning into your own `~/.claude/skills/` is fine. **Forking the documentation into a derived work requires keeping the same license.** Do not bundle Trail of Bits content into MIT-licensed downstream repos without preserving CC-BY-SA-4.0.
 
-**Install:** automatic via `bootstrap.sh`. Manual: `git clone https://github.com/trailofbits/skills.git ~/.claude/skills/trailofbits-skills`.
+**Install:** automatic via `bootstrap.sh` (installs 8 relevant plugins from the marketplace bundle: modern-python, insecure-defaults, sharp-edges, property-based-testing, static-analysis, testing-handbook-skills, differential-review, ask-questions-if-underspecified). Manual: `claude plugin marketplace add trailofbits/skills && claude plugin install <name>@trailofbits` per plugin.
 
 ### Stripe agent-toolkit — billing integration discipline
 
@@ -154,7 +156,7 @@ The substrate ships memory, voice, vault, and session lifecycle. These vendor-pu
 
 **Why install:** if you are integrating Stripe (subscriptions, one-off charges, Connect transfers), the official toolkit ships `stripe-best-practices` (idempotency-key handling, webhook signing verification, error-handling patterns) and `upgrade-stripe` (SDK + API version bumps without silent breakage). Prevents the most common production bugs: double charges, missed webhooks, broken upgrades.
 
-**Install:** automatic via `bootstrap.sh`. Manual: `git clone https://github.com/stripe/agent-toolkit.git ~/.claude/skills/stripe-agent-toolkit`.
+**Install:** automatic via `bootstrap.sh`. Manual: `claude plugin marketplace add stripe/agent-toolkit && claude plugin install stripe@stripe`.
 
 ### Cloudflare skills — Core Web Vitals + Workers/D1/R2/Wrangler
 
@@ -162,7 +164,7 @@ The substrate ships memory, voice, vault, and session lifecycle. These vendor-pu
 
 **Why install:** the bundle includes `web-perf` (Core Web Vitals + render-blocking audits, stack-agnostic — works for static, Next.js, Astro), plus `workers-best-practices`, `durable-objects` (stateful coordination with RPC + SQLite + WebSockets), `wrangler` (deploy KV, R2, D1, Vectorize, Queues, Workflows), `agents-sdk` (build stateful AI agents with scheduling, RPC, MCP), `sandbox-sdk` (isolated code execution on Workers), and the comprehensive `cloudflare` platform skill.
 
-**Install:** automatic via `bootstrap.sh`. Manual: `git clone https://github.com/cloudflare/skills.git ~/.claude/skills/cloudflare-skills`.
+**Install:** automatic via `bootstrap.sh`. Manual: `claude plugin marketplace add cloudflare/skills && claude plugin install cloudflare@cloudflare`.
 
 ### AgriciDaniel/claude-seo — comprehensive SEO + GEO toolkit
 
@@ -170,7 +172,7 @@ The substrate ships memory, voice, vault, and session lifecycle. These vendor-pu
 
 **Why install:** 25 sub-skills + 18 sub-agents covering technical SEO, on-page analysis, content quality (E-E-A-T), content briefs, schema markup, image optimization, sitemap architecture, AI search optimization (GEO, the post-LLM successor to SEO), local SEO, semantic topic clustering, search experience optimization (SXO), SEO drift monitoring, e-commerce SEO, international SEO with cultural profiles, Google SEO APIs (Search Console, PageSpeed, CrUX, GA4), and PDF report generation. Required for any consulting practice or public site that needs to be findable.
 
-**Install:** automatic via `bootstrap.sh`. Manual: `git clone https://github.com/AgriciDaniel/claude-seo.git ~/.claude/skills/claude-seo`.
+**Install:** automatic via `bootstrap.sh`. Manual: `claude plugin marketplace add AgriciDaniel/claude-seo && claude plugin install claude-seo@agricidaniel-seo`.
 
 ### yusufkaraaslan/Skill_Seekers — CLI tool that auto-converts docs sites into skills
 
