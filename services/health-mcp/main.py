@@ -1,11 +1,21 @@
-"""health-mcp main FastMCP server.
+"""health-mcp main FastMCP server (v0.2).
 
-15 tools across 5 categories: ingestion (3), query (3), analytics (3),
-vault-aware (5), live (1).
+32 tools across 7 categories:
+  Ingestion (5): XML, CSV, lab CSV, status, schema
+  Query (3): schema, query (read-only SQL), metric_series
+  Analytics (5): workout_list, sleep_summary, recovery_score, sleep_score,
+                 strain_score
+  Surface (4): longevity_panel, sleep_regularity, somatic_state, nutrition_summary
+  Cycle (3): cycle_context, phase_tagged_metric, phase_means
+  Symptoms + ECG + State of mind (4): symptoms_timeline, ecg_list,
+                                      state_of_mind_timeline, audio_exposure
+  Vault-aware (7): journal_context, journal_body_question, floor_correlation,
+                   coaching_context, panel_context, weekly_rollup, long_window
+  Live (1): live_query (Health Auto Export TCP)
+  Recommendations (1): recommended_labs
 
 Stdio transport. Designed to be registered in .mcp.json as `health` and
-launched per-session by Claude Code. Long-running ingest jobs hold the
-DuckDB write lock; tool calls during an active import will queue.
+launched per-session by Claude Code.
 """
 from __future__ import annotations
 
@@ -18,12 +28,15 @@ from typing import Any
 
 from fastmcp import FastMCP
 
+import cycle as cycle_mod
 import db
+import labs as labs_mod
 import live_tcp
 import parse_csv
 import parse_xml
 import scores
 import vault_aware
+from hk_types import HK_QUANTITY_TYPES, NUTRITION_TYPES, LONGEVITY_TYPES, CYCLE_TYPES, SYMPTOM_TYPES
 
 logging.basicConfig(
     stream=sys.stderr,
@@ -35,16 +48,13 @@ log = logging.getLogger("health-mcp")
 
 @asynccontextmanager
 async def lifespan(_app: FastMCP):
-    """Print DB stats at startup so connection failures fail loudly."""
     with db.connect() as con:
         s = db.stats(con)
     log.info(
-        "health-mcp ready: records=%d workouts=%d sleep=%d imports=%d db=%s",
-        s["records_count"],
-        s["workouts_count"],
-        s["sleep_count"],
-        s["imports_count"],
-        s["db_path"],
+        "health-mcp v0.2 ready: records=%d workouts=%d sleep=%d cycle=%d symptoms=%d ecg=%d state_of_mind=%d labs=%d",
+        s["records_count"], s["workouts_count"], s["sleep_count"],
+        s["cycle_count"], s["symptoms_count"], s["ecg_count"],
+        s["state_of_mind_count"], s["labs_count"],
     )
     yield
 
@@ -52,126 +62,94 @@ async def lifespan(_app: FastMCP):
 mcp = FastMCP("health-mcp", lifespan=lifespan)
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 def _parse_date(s: str) -> date:
-    """Accept either YYYY-MM-DD or full ISO datetime; return date."""
     return datetime.fromisoformat(s.replace("Z", "")).date() if "T" in s else datetime.strptime(s[:10], "%Y-%m-%d").date()
 
 
-def _bulk_insert_records(con, batch: list[dict[str, Any]]) -> tuple[int, int, int]:
-    """Insert (records, workouts, sleep) batches into DuckDB. Returns counts."""
+def _bulk_insert(con, batch: list[dict[str, Any]]) -> dict[str, int]:
+    """Insert all _kind dicts into their target tables. Returns counts per kind."""
     rec_rows = []
     wk_rows = []
     sl_rows = []
+    cy_rows = []
+    sy_rows = []
+    ecg_rows = []
+    som_rows = []
     for item in batch:
-        kind = item["_kind"]
-        if kind == "record":
-            rec_rows.append(
-                (
-                    item["type"],
-                    item["source_name"],
-                    item["unit"],
-                    item["start_date"],
-                    item["end_date"],
-                    item["value"],
-                    item["value_str"],
-                )
-            )
-        elif kind == "workout":
-            wk_rows.append(
-                (
-                    item["activity_type"],
-                    item["duration_min"],
-                    item["distance_km"],
-                    item["energy_kcal"],
-                    item["start_date"],
-                    item["end_date"],
-                    item["source_name"],
-                )
-            )
-        elif kind == "sleep":
-            sl_rows.append(
-                (
-                    item["start_date"],
-                    item["end_date"],
-                    item["stage"],
-                    item["source_name"],
-                )
-            )
+        k = item["_kind"]
+        if k == "record":
+            rec_rows.append((item["type"], item["source_name"], item["unit"], item["start_date"], item["end_date"], item["value"], item["value_str"]))
+        elif k == "workout":
+            wk_rows.append((item["activity_type"], item["duration_min"], item["distance_km"], item["energy_kcal"], item["start_date"], item["end_date"], item["source_name"]))
+        elif k == "sleep":
+            sl_rows.append((item["start_date"], item["end_date"], item["stage"], item["source_name"]))
+        elif k == "cycle":
+            cy_rows.append((item["type"], item["start_date"], item["end_date"], item["value"], item["source_name"]))
+        elif k == "symptom":
+            sy_rows.append((item["type"], item["start_date"], item["end_date"], item["severity"], item["source_name"]))
+        elif k == "ecg":
+            ecg_rows.append((item["start_date"], item["classification"], item["average_heart_rate"], item["sampling_frequency"], item["source_name"]))
+        elif k == "state_of_mind":
+            som_rows.append((item["start_date"], item["end_date"], item["kind"], item["valence"], item["labels"], item["associations"], item["source_name"]))
     if rec_rows:
-        con.executemany(
-            "INSERT INTO records (type, source_name, unit, start_date, end_date, value, value_str) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            rec_rows,
-        )
+        con.executemany("INSERT INTO records (type, source_name, unit, start_date, end_date, value, value_str) VALUES (?, ?, ?, ?, ?, ?, ?)", rec_rows)
     if wk_rows:
-        con.executemany(
-            "INSERT INTO workouts (activity_type, duration_min, distance_km, energy_kcal, start_date, end_date, source_name) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            wk_rows,
-        )
+        con.executemany("INSERT INTO workouts (activity_type, duration_min, distance_km, energy_kcal, start_date, end_date, source_name) VALUES (?, ?, ?, ?, ?, ?, ?)", wk_rows)
     if sl_rows:
-        con.executemany(
-            "INSERT INTO sleep (start_date, end_date, stage, source_name) "
-            "VALUES (?, ?, ?, ?)",
-            sl_rows,
-        )
-    return len(rec_rows), len(wk_rows), len(sl_rows)
+        con.executemany("INSERT INTO sleep (start_date, end_date, stage, source_name) VALUES (?, ?, ?, ?)", sl_rows)
+    if cy_rows:
+        con.executemany("INSERT INTO cycle (type, start_date, end_date, value, source_name) VALUES (?, ?, ?, ?, ?)", cy_rows)
+    if sy_rows:
+        con.executemany("INSERT INTO symptoms (type, start_date, end_date, severity, source_name) VALUES (?, ?, ?, ?, ?)", sy_rows)
+    if ecg_rows:
+        con.executemany("INSERT INTO ecg (start_date, classification, average_heart_rate, sampling_frequency, source_name) VALUES (?, ?, ?, ?, ?)", ecg_rows)
+    if som_rows:
+        con.executemany("INSERT INTO state_of_mind (start_date, end_date, kind, valence, labels, associations, source_name) VALUES (?, ?, ?, ?, ?, ?, ?)", som_rows)
+    return {
+        "records": len(rec_rows),
+        "workouts": len(wk_rows),
+        "sleep": len(sl_rows),
+        "cycle": len(cy_rows),
+        "symptoms": len(sy_rows),
+        "ecg": len(ecg_rows),
+        "state_of_mind": len(som_rows),
+    }
 
 
 # ---------------------------------------------------------------------------
-# Ingestion tools
+# Ingestion
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
 def health_import_xml(zip_or_xml_path: str, force: bool = False) -> dict[str, Any]:
     """Import an Apple Health XML export.zip (or unzipped export.xml) into DuckDB.
 
-    Args:
-        zip_or_xml_path: Absolute path to the file. Apple Health writes
-            export.zip; the user typically AirDrops or copies it to disk.
-        force: If true, re-import even if the file SHA matches a prior import.
-
-    Returns: {file_sha, kind, rows_inserted, records_count, workouts_count,
-              sleep_count, skipped (bool), elapsed_s}
+    Routes records into 7 tables based on type registry: records, workouts,
+    sleep, cycle (menstrual + reproductive), symptoms, ecg, state_of_mind.
+    Idempotent: re-importing the same file SHA returns skipped=True.
     """
     t0 = datetime.now()
     xml_path, file_sha, _scratch = parse_xml.resolve_xml_path(zip_or_xml_path)
     with db.connect() as con:
         if not force and db.file_already_imported(con, file_sha):
-            return {
-                "file_sha": file_sha,
-                "skipped": True,
-                "note": f"Already imported. Pass force=True to re-import.",
-            }
+            return {"file_sha": file_sha, "skipped": True, "note": "Already imported. Pass force=True to re-import."}
         batch: list[dict[str, Any]] = []
-        rec_total = wk_total = sl_total = 0
+        totals: dict[str, int] = {k: 0 for k in ("records", "workouts", "sleep", "cycle", "symptoms", "ecg", "state_of_mind")}
         BATCH = 5000
         for item in parse_xml.iter_records(xml_path):
             batch.append(item)
             if len(batch) >= BATCH:
-                r, w, s = _bulk_insert_records(con, batch)
-                rec_total += r
-                wk_total += w
-                sl_total += s
+                for k, v in _bulk_insert(con, batch).items():
+                    totals[k] += v
                 batch.clear()
         if batch:
-            r, w, s = _bulk_insert_records(con, batch)
-            rec_total += r
-            wk_total += w
-            sl_total += s
-        total = rec_total + wk_total + sl_total
+            for k, v in _bulk_insert(con, batch).items():
+                totals[k] += v
+        total = sum(totals.values())
         db.log_import(con, file_sha, "xml", str(xml_path), total)
     return {
-        "file_sha": file_sha,
-        "kind": "xml",
-        "rows_inserted": total,
-        "records_count": rec_total,
-        "workouts_count": wk_total,
-        "sleep_count": sl_total,
+        "file_sha": file_sha, "kind": "xml", "rows_inserted": total,
+        **{f"{k}_count": v for k, v in totals.items()},
         "skipped": False,
         "elapsed_s": round((datetime.now() - t0).total_seconds(), 2),
     }
@@ -179,97 +157,117 @@ def health_import_xml(zip_or_xml_path: str, force: bool = False) -> dict[str, An
 
 @mcp.tool()
 def health_import_csv(folder_path: str, force: bool = False) -> dict[str, Any]:
-    """Import a folder of Simple Health Export CSVs.
-
-    Args:
-        folder_path: Folder containing HKQuantityTypeIdentifier*.csv and/or
-            HKCategoryTypeIdentifier*.csv files.
-        force: If true, re-import even if the folder SHA matches.
-    """
+    """Import a folder of Simple Health Export CSVs."""
     t0 = datetime.now()
     folder, file_sha = parse_csv.folder_sha(folder_path)
     with db.connect() as con:
         if not force and db.file_already_imported(con, file_sha):
-            return {
-                "file_sha": file_sha,
-                "skipped": True,
-                "note": "Already imported. Pass force=True to re-import.",
-            }
+            return {"file_sha": file_sha, "skipped": True, "note": "Already imported."}
         batch: list[dict[str, Any]] = []
-        rec_total = wk_total = sl_total = 0
+        totals: dict[str, int] = {k: 0 for k in ("records", "workouts", "sleep", "cycle", "symptoms", "ecg", "state_of_mind")}
         BATCH = 5000
         for item in parse_csv.iter_records(folder):
             batch.append(item)
             if len(batch) >= BATCH:
-                r, w, s = _bulk_insert_records(con, batch)
-                rec_total += r
-                wk_total += w
-                sl_total += s
+                for k, v in _bulk_insert(con, batch).items():
+                    totals[k] += v
                 batch.clear()
         if batch:
-            r, w, s = _bulk_insert_records(con, batch)
-            rec_total += r
-            wk_total += w
-            sl_total += s
-        total = rec_total + wk_total + sl_total
+            for k, v in _bulk_insert(con, batch).items():
+                totals[k] += v
+        total = sum(totals.values())
         db.log_import(con, file_sha, "csv", str(folder), total)
     return {
-        "file_sha": file_sha,
-        "kind": "csv",
-        "rows_inserted": total,
-        "records_count": rec_total,
-        "workouts_count": wk_total,
-        "sleep_count": sl_total,
+        "file_sha": file_sha, "kind": "csv", "rows_inserted": total,
+        **{f"{k}_count": v for k, v in totals.items()},
         "skipped": False,
         "elapsed_s": round((datetime.now() - t0).total_seconds(), 2),
     }
 
 
 @mcp.tool()
+def health_import_labs(csv_path: str, lab_format: str = "auto", force: bool = False) -> dict[str, Any]:
+    """Import lab results from LabCorp / Quest / Function Health / generic CSV.
+
+    Args:
+        csv_path: path to the CSV exported from your patient portal.
+        lab_format: "auto" (detect by header shape), "labcorp", "quest",
+                    "function", or "generic".
+        force: re-import even if file SHA matches.
+
+    Why: Apple Health doesn't capture clinical lab panels. Manually importing
+    labs (ApoB, fasting insulin, hs-CRP, full thyroid, sex hormones) lets the
+    journal / coaching / panel / insights skills pull lab context alongside
+    biometrics. Without labs, the recovery-score formula misses chronic
+    inflammation and metabolic dysfunction.
+    """
+    t0 = datetime.now()
+    p, sha, rows = labs_mod.parse_labs_csv(csv_path, lab_format=lab_format)
+    if not rows:
+        return {"file_sha": sha, "rows": 0, "note": "No parseable rows in CSV. Check format with lab_format='generic' to inspect headers."}
+    with db.connect() as con:
+        if not force and db.file_already_imported(con, sha):
+            return {"file_sha": sha, "skipped": True, "note": "Already imported."}
+        con.executemany(
+            "INSERT INTO labs (test_date, panel, marker, value, unit, range_low, range_high, status, source) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [(r["test_date"], r["panel"], r["marker"], r["value"], r["unit"], r["range_low"], r["range_high"], r["status"], r["source"]) for r in rows],
+        )
+        db.log_import(con, sha, "labs", str(p), len(rows))
+    return {
+        "file_sha": sha, "kind": "labs", "rows_inserted": len(rows),
+        "skipped": False, "elapsed_s": round((datetime.now() - t0).total_seconds(), 2),
+        "format_detected": rows[0]["source"],
+    }
+
+
+@mcp.tool()
 def health_status() -> dict[str, Any]:
-    """Database stats: row counts, last import, available metric types."""
+    """Database stats: row counts per table, last import timestamp, top metric types."""
     with db.connect(read_only=True) as con:
         s = db.stats(con)
         s["top_types"] = db.types_with_counts(con)[:20]
     return s
 
 
+@mcp.tool()
+def health_recommended_labs() -> list[dict[str, Any]]:
+    """Return the recommended-labs reference list with the WHY for each marker.
+
+    Use this to tell users which lab markers would benefit them and the rationale.
+    Sourced from longevity-medicine consensus (Attia, Boham, Hyman) per the
+    advisory-panel pass on 2026-05-10. Each entry has marker, category, why,
+    suggested frequency, and rough cost band.
+    """
+    return labs_mod.RECOMMENDED_PANEL
+
+
 # ---------------------------------------------------------------------------
-# Query tools
+# Query
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
 def health_schema() -> list[dict[str, Any]]:
-    """List every record type in the DB with its row count + earliest/latest dates."""
+    """List every record type in the DB with row counts + date range."""
     with db.connect(read_only=True) as con:
         return db.types_with_counts(con)
 
 
-# Read-only SQL keywords (whitelist). DuckDB has many statement types; any
-# DML/DDL is rejected before reaching the connection.
-_SQL_FORBIDDEN = {
-    "INSERT", "UPDATE", "DELETE", "DROP", "CREATE", "ALTER", "TRUNCATE",
-    "ATTACH", "DETACH", "COPY", "PRAGMA", "SET", "INSTALL", "LOAD",
-}
+_SQL_FORBIDDEN = {"INSERT", "UPDATE", "DELETE", "DROP", "CREATE", "ALTER", "TRUNCATE", "ATTACH", "DETACH", "COPY", "PRAGMA", "SET", "INSTALL", "LOAD"}
 
 
 @mcp.tool()
 def health_query(sql: str, max_rows: int = 1000) -> list[dict[str, Any]]:
     """Run a read-only SQL query against DuckDB.
 
-    Tables: records (type, source_name, unit, start_date, end_date, value, value_str),
-            workouts (activity_type, duration_min, distance_km, energy_kcal, start_date, end_date, source_name),
-            sleep (start_date, end_date, stage, source_name),
-            imports (file_sha, kind, file_path, imported_at, row_count).
-
-    Rejects any statement containing a write keyword. Caps result at max_rows.
+    Tables: records, workouts, sleep, cycle, symptoms, ecg, state_of_mind,
+            labs, imports.
     """
     upper = sql.strip().upper()
-    first_word = upper.split()[0] if upper else ""
-    if first_word in _SQL_FORBIDDEN:
-        raise ValueError(f"Read-only query layer. Rejected first word: {first_word}")
+    first = upper.split()[0] if upper else ""
+    if first in _SQL_FORBIDDEN:
+        raise ValueError(f"Read-only query layer. Rejected first word: {first}")
     for tok in _SQL_FORBIDDEN:
-        # Catch UPDATE/DELETE inside a subquery or after a comment.
         if f" {tok} " in f" {upper} ":
             raise ValueError(f"Read-only query layer. Rejected keyword: {tok}")
     with db.connect(read_only=True) as con:
@@ -279,64 +277,34 @@ def health_query(sql: str, max_rows: int = 1000) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
-def health_metric_series(
-    metric: str,
-    start: str,
-    end: str,
-    aggregation: str = "daily",
-) -> list[dict[str, Any]]:
-    """Time series for a quantity-type metric.
-
-    Args:
-        metric: e.g. HKQuantityTypeIdentifierStepCount, HKQuantityTypeIdentifierHeartRate
-        start, end: YYYY-MM-DD or ISO datetime
-        aggregation: "daily" (sum or mean per metric type), "hourly", or "raw"
-    """
+def health_metric_series(metric: str, start: str, end: str, aggregation: str = "daily") -> list[dict[str, Any]]:
+    """Time series for a quantity-type metric. aggregation: 'daily' | 'hourly' | 'raw'."""
     sd = datetime.fromisoformat(start.replace("Z", ""))
     ed = datetime.fromisoformat(end.replace("Z", ""))
-    sum_metrics = {
-        "HKQuantityTypeIdentifierStepCount",
-        "HKQuantityTypeIdentifierActiveEnergyBurned",
-        "HKQuantityTypeIdentifierBasalEnergyBurned",
-        "HKQuantityTypeIdentifierDistanceWalkingRunning",
-        "HKQuantityTypeIdentifierFlightsClimbed",
-    }
+    sum_metrics = {t for t, m in HK_QUANTITY_TYPES.items() if m["aggregation"] == "sum"}
     agg = "SUM" if metric in sum_metrics else "AVG"
     with db.connect(read_only=True) as con:
         if aggregation == "raw":
             rows = con.execute(
-                "SELECT start_date, value, source_name FROM records "
-                "WHERE type = ? AND start_date >= ? AND start_date < ? "
-                "ORDER BY start_date",
+                "SELECT start_date, value, source_name FROM records WHERE type = ? AND start_date >= ? AND start_date < ? ORDER BY start_date",
                 [metric, sd, ed],
             ).fetchall()
-            return [
-                {"timestamp": str(r[0]), "value": float(r[1]) if r[1] is not None else None, "source": r[2]}
-                for r in rows
-            ]
+            return [{"timestamp": str(r[0]), "value": float(r[1]) if r[1] is not None else None, "source": r[2]} for r in rows]
         bucket = "hour" if aggregation == "hourly" else "day"
         rows = con.execute(
-            f"""
-            SELECT DATE_TRUNC('{bucket}', start_date) AS bucket, {agg}(value) AS v, COUNT(*) AS n
-            FROM records WHERE type = ? AND start_date >= ? AND start_date < ?
-            GROUP BY bucket ORDER BY bucket
-            """,
+            f"SELECT DATE_TRUNC('{bucket}', start_date) AS bucket, {agg}(value), COUNT(*) "
+            "FROM records WHERE type = ? AND start_date >= ? AND start_date < ? GROUP BY bucket ORDER BY bucket",
             [metric, sd, ed],
         ).fetchall()
-        return [
-            {"bucket": str(r[0]), "value": round(float(r[1]), 3) if r[1] is not None else None, "n": int(r[2])}
-            for r in rows
-        ]
+        return [{"bucket": str(r[0]), "value": round(float(r[1]), 3) if r[1] is not None else None, "n": int(r[2])} for r in rows]
 
 
 # ---------------------------------------------------------------------------
-# Analytics tools
+# Analytics
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-def health_workout_list(
-    start: str, end: str, activity_type: str | None = None
-) -> list[dict[str, Any]]:
+def health_workout_list(start: str, end: str, activity_type: str | None = None) -> list[dict[str, Any]]:
     """List workouts in a date range, optionally filtered by activity_type."""
     sd = datetime.fromisoformat(start.replace("Z", ""))
     ed = datetime.fromisoformat(end.replace("Z", ""))
@@ -351,23 +319,12 @@ def health_workout_list(
             f"FROM workouts WHERE {where} ORDER BY start_date",
             params,
         ).fetchall()
-    return [
-        {
-            "activity_type": r[0],
-            "start": str(r[1]),
-            "end": str(r[2]),
-            "duration_min": round(float(r[3]), 1) if r[3] is not None else None,
-            "distance_km": round(float(r[4]), 2) if r[4] is not None else None,
-            "energy_kcal": round(float(r[5])) if r[5] is not None else None,
-            "source": r[6],
-        }
-        for r in rows
-    ]
+    return [{"activity_type": r[0], "start": str(r[1]), "end": str(r[2]), "duration_min": round(float(r[3]), 1) if r[3] is not None else None, "distance_km": round(float(r[4]), 2) if r[4] is not None else None, "energy_kcal": round(float(r[5])) if r[5] is not None else None, "source": r[6]} for r in rows]
 
 
 @mcp.tool()
 def health_sleep_summary(start: str, end: str) -> list[dict[str, Any]]:
-    """Per-night sleep summary in a date range. One row per night."""
+    """Per-night sleep summary in a date range."""
     sd = _parse_date(start)
     ed = _parse_date(end)
     out: list[dict[str, Any]] = []
@@ -376,108 +333,363 @@ def health_sleep_summary(start: str, end: str) -> list[dict[str, Any]]:
         while cur <= ed:
             sleep = scores._sleep_for_date(con, cur)
             if sleep["asleep_min"] > 0 or sleep["in_bed_min"] > 0:
-                out.append(
-                    {
-                        "night_of": cur.isoformat(),
-                        "asleep_min": round(sleep["asleep_min"]),
-                        "in_bed_min": round(sleep["in_bed_min"]),
-                        "rem_min": round(sleep["rem_min"]),
-                        "deep_min": round(sleep["deep_min"]),
-                        "core_min": round(sleep["core_min"]),
-                        "awake_min": round(sleep["awake_min"]),
-                        "efficiency": round(sleep["efficiency"], 3),
-                    }
-                )
+                out.append({
+                    "night_of": cur.isoformat(), "asleep_min": round(sleep["asleep_min"]),
+                    "in_bed_min": round(sleep["in_bed_min"]), "rem_min": round(sleep["rem_min"]),
+                    "deep_min": round(sleep["deep_min"]), "core_min": round(sleep["core_min"]),
+                    "awake_min": round(sleep["awake_min"]), "efficiency": round(sleep["efficiency"], 3),
+                })
             cur += timedelta(days=1)
     return out
 
 
 @mcp.tool()
 def health_recovery_score(date_str: str) -> dict[str, Any]:
-    """Recovery score 0-100 for a date.
-
-    Open algorithm: 40% HRV vs baseline, 20% RHR, 25% sleep duration,
-    15% sleep efficiency. Returns components + confidence.
-    """
-    target = _parse_date(date_str)
+    """Recovery score 0-100. Open formula: 40% HRV + 20% RHR + 25% sleep duration + 15% efficiency."""
     with db.connect(read_only=True) as con:
-        return scores.recovery_score(con, target)
+        return scores.recovery_score(con, _parse_date(date_str))
 
 
 @mcp.tool()
 def health_sleep_score(date_str: str) -> dict[str, Any]:
-    """Sleep score 0-100 for a date.
-
-    40% duration, 25% efficiency, 20% REM%, 15% deep%.
-    """
-    target = _parse_date(date_str)
+    """Sleep score 0-100. 40% duration + 25% efficiency + 20% REM% + 15% deep%."""
     with db.connect(read_only=True) as con:
-        return scores.sleep_score(con, target)
+        return scores.sleep_score(con, _parse_date(date_str))
 
 
 @mcp.tool()
 def health_strain_score(date_str: str) -> dict[str, Any]:
-    """Strain score 0-21 (Whoop-shape scale, open formula).
-
-    Inputs: active vs basal kcal ratio, HR-elevated minutes, workout minutes.
-    Logarithmic mapping for asymptotic shape.
-    """
-    target = _parse_date(date_str)
+    """Strain score 0-21 (Whoop-shape, log compression)."""
     with db.connect(read_only=True) as con:
-        return scores.strain_score(con, target)
-
-
-# ---------------------------------------------------------------------------
-# Vault-aware tools (substrate differentiator)
-# ---------------------------------------------------------------------------
-
-@mcp.tool()
-def health_journal_context(date_str: str) -> dict[str, Any]:
-    """24h health roll-up for the daily-journal skill. Read-only DB query;
-    no vault read required for this tool (other vault-aware tools do read).
-    """
-    target = _parse_date(date_str)
-    with db.connect(read_only=True) as con:
-        return vault_aware.journal_context(con, target)
+        return scores.strain_score(con, _parse_date(date_str))
 
 
 @mcp.tool()
-def health_floor_correlation(
-    metric: str, days: int = 30, vault_root: str = ""
-) -> dict[str, Any]:
-    """Correlate a daily biometric (e.g. HRV) with Floor tags from the user's
-    journal frontmatter.
+def health_sleep_regularity(start: str, end: str) -> dict[str, Any]:
+    """Sleep regularity index over a window: bed/wake variance, latency, naps.
 
-    Args:
-        metric: e.g. HKQuantityTypeIdentifierHeartRateVariabilitySDNN
-        days: lookback window
-        vault_root: absolute path to the personal vault. Required for floor lookup.
+    Chronic sleep debt (Winter, panel 2026-05-10) is the actual predictor —
+    a single night isn't the signal. Returns regularity_score 0-100, plus
+    bed-time + wake-time + duration stdev, mean latency, and nap count.
+    """
+    with db.connect(read_only=True) as con:
+        return scores.sleep_regularity(con, _parse_date(start), _parse_date(end))
+
+
+@mcp.tool()
+def health_longevity_panel(date_str: str) -> dict[str, Any]:
+    """Surface VO2Max, walking speed, walking steadiness, lean mass, body fat,
+    Zone-2 minutes (last 30d), and 6-minute walk distance.
+
+    The single most predictive longevity markers (Attia + Patrick, panel
+    2026-05-10) bundled into one call. Apple Watch records most of these
+    automatically.
+    """
+    with db.connect(read_only=True) as con:
+        return scores.longevity_panel(con, _parse_date(date_str))
+
+
+@mcp.tool()
+def health_somatic_state(date_str: str, lookback_min: int = 30) -> dict[str, Any]:
+    """Recent HR/HRV volatility + body_says_slow_down boolean.
+
+    Coaching skill should call this BEFORE emotional inquiry. If body_says_slow_down
+    is True (recent HR volatility, HR peak, or HRV crash), regulate first
+    (breath / body scan / slow check-in) before reframe work. Sympathetic
+    activation makes coaching counterproductive (Levine, panel 2026-05-10).
+    """
+    with db.connect(read_only=True) as con:
+        return scores.somatic_state(con, _parse_date(date_str), lookback_min=lookback_min)
+
+
+@mcp.tool()
+def health_nutrition_summary(start: str, end: str) -> dict[str, Any]:
+    """Daily kcal / macros / fiber / water / caffeine / alcohol averages over
+    the window, plus an under-fuel detector.
+
+    Under-fuel rule (Braddock, panel 2026-05-10): kcal_consumed < 0.7 *
+    (basal + active). If 30%+ of days are under-fueled, the recovery-score
+    'rest more' advice is mis-framed — the actual signal is 'eat enough'.
+    Requires a paired nutrition app (MyFitnessPal, Cronometer, etc.) writing
+    HKQuantityTypeIdentifierDietary* records.
+    """
+    with db.connect(read_only=True) as con:
+        return scores.nutrition_summary(con, _parse_date(start), _parse_date(end))
+
+
+@mcp.tool()
+def health_long_window(metric: str, years: int = 2, aggregation: str = "avg") -> dict[str, Any]:
+    """Year-over-year same-month comparison + persistent-asymmetry detector.
+
+    Trauma signatures and seasonal Floor-body coupling (van der Kolk, panel
+    2026-05-10) don't show up in 30-day windows. They show up as the same
+    metric trending the wrong direction every spring, every anniversary date.
+    """
+    with db.connect(read_only=True) as con:
+        return scores.long_window(con, metric, years=years, aggregation=aggregation)
+
+
+# ---------------------------------------------------------------------------
+# Cycle (Sims + Briden, panel 2026-05-10)
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+def health_cycle_context(date_str: str) -> dict[str, Any]:
+    """Current cycle phase + cycle-day + length variance + irregularity flag.
+
+    Phases: menstrual / follicular / ovulation / luteal. Refines band-based
+    guess with ovulation test results when available.
+
+    A low-HRV day in mid-luteal is normal physiology, not a recovery deficit.
+    The substrate gaslights half its users until the journal / coaching /
+    panel skills include phase context. Pair with phase_tagged_metric for
+    series and phase_means for per-phase aggregates.
+    """
+    with db.connect(read_only=True) as con:
+        return cycle_mod.cycle_context(con, _parse_date(date_str))
+
+
+@mcp.tool()
+def health_phase_tagged_metric(metric: str, start: str, end: str, aggregation: str = "avg") -> list[dict[str, Any]]:
+    """Daily metric series with cycle-phase tag on each day.
+
+    Returns list of {date, value, cycle_day, phase}. Use to plot HRV /
+    sleep / RHR / etc. by cycle phase or to feed correlation analysis.
+    """
+    with db.connect(read_only=True) as con:
+        return cycle_mod.phase_tagged_metric(con, metric, _parse_date(start), _parse_date(end), aggregation=aggregation)
+
+
+@mcp.tool()
+def health_phase_means(metric: str, days: int = 90, aggregation: str = "avg") -> dict[str, Any]:
+    """Mean of a metric segmented by cycle phase over the last N days.
+
+    Confirms with the user's own data the 'low HRV in luteal is normal'
+    pattern. Or surfaces the opposite if it's NOT normal for them.
+    """
+    with db.connect(read_only=True) as con:
+        return cycle_mod.phase_means_for_metric(con, metric, days=days, aggregation=aggregation)
+
+
+# ---------------------------------------------------------------------------
+# Symptoms / ECG / State of mind / Audio
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+def health_symptom_timeline(start: str, end: str, symptom_type: str | None = None) -> list[dict[str, Any]]:
+    """List symptom log entries in a date range. Optionally filter to a
+    specific HKCategoryTypeIdentifier* type."""
+    sd = datetime.fromisoformat(start.replace("Z", ""))
+    ed = datetime.fromisoformat(end.replace("Z", ""))
+    where = "start_date >= ? AND start_date < ?"
+    params: list[Any] = [sd, ed]
+    if symptom_type:
+        where += " AND type = ?"
+        params.append(symptom_type)
+    with db.connect(read_only=True) as con:
+        rows = con.execute(
+            f"SELECT type, start_date, end_date, severity, source_name FROM symptoms WHERE {where} ORDER BY start_date",
+            params,
+        ).fetchall()
+    return [{"type": r[0], "start": str(r[1]), "end": str(r[2]), "severity": r[3], "source": r[4]} for r in rows]
+
+
+@mcp.tool()
+def health_ecg_list(start: str, end: str) -> list[dict[str, Any]]:
+    """List ECG entries in a date range with classification (sinus / afib /
+    inconclusive)."""
+    sd = datetime.fromisoformat(start.replace("Z", ""))
+    ed = datetime.fromisoformat(end.replace("Z", ""))
+    with db.connect(read_only=True) as con:
+        rows = con.execute(
+            "SELECT start_date, classification, average_heart_rate, sampling_frequency, source_name "
+            "FROM ecg WHERE start_date >= ? AND start_date < ? ORDER BY start_date",
+            [sd, ed],
+        ).fetchall()
+    return [{"timestamp": str(r[0]), "classification": r[1], "avg_hr_bpm": round(float(r[2]), 1) if r[2] is not None else None, "sampling_frequency_hz": float(r[3]) if r[3] is not None else None, "source": r[4]} for r in rows]
+
+
+@mcp.tool()
+def health_state_of_mind_timeline(start: str, end: str) -> list[dict[str, Any]]:
+    """iOS 17+ State of Mind mood logs. Returns entries with valence (-1 to +1),
+    kind (momentary or daily), labels, and associations."""
+    sd = datetime.fromisoformat(start.replace("Z", ""))
+    ed = datetime.fromisoformat(end.replace("Z", ""))
+    with db.connect(read_only=True) as con:
+        rows = con.execute(
+            "SELECT start_date, end_date, kind, valence, labels, associations, source_name "
+            "FROM state_of_mind WHERE start_date >= ? AND start_date < ? ORDER BY start_date",
+            [sd, ed],
+        ).fetchall()
+    return [{"start": str(r[0]), "end": str(r[1]), "kind": r[2], "valence": float(r[3]) if r[3] is not None else None, "labels": r[4], "associations": r[5], "source": r[6]} for r in rows]
+
+
+@mcp.tool()
+def health_audio_exposure(start: str, end: str, threshold_db: float = 80.0) -> dict[str, Any]:
+    """Environmental + headphone audio exposure summary, with hours over the
+    safe-listening threshold. Default threshold 80 dB matches WHO guidance.
+    """
+    sd = datetime.fromisoformat(start.replace("Z", ""))
+    ed = datetime.fromisoformat(end.replace("Z", ""))
+    with db.connect(read_only=True) as con:
+        env = con.execute(
+            "SELECT AVG(value), MAX(value), COUNT(*) FROM records "
+            "WHERE type = 'HKQuantityTypeIdentifierEnvironmentalAudioExposure' "
+            "AND start_date >= ? AND start_date < ?",
+            [sd, ed],
+        ).fetchone()
+        head = con.execute(
+            "SELECT AVG(value), MAX(value), COUNT(*) FROM records "
+            "WHERE type = 'HKQuantityTypeIdentifierHeadphoneAudioExposure' "
+            "AND start_date >= ? AND start_date < ?",
+            [sd, ed],
+        ).fetchone()
+        env_over = con.execute(
+            "SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (end_date - start_date))) / 3600.0, 0) FROM records "
+            "WHERE type = 'HKQuantityTypeIdentifierEnvironmentalAudioExposure' "
+            "AND value > ? AND start_date >= ? AND start_date < ?",
+            [threshold_db, sd, ed],
+        ).fetchone()
+        head_over = con.execute(
+            "SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (end_date - start_date))) / 3600.0, 0) FROM records "
+            "WHERE type = 'HKQuantityTypeIdentifierHeadphoneAudioExposure' "
+            "AND value > ? AND start_date >= ? AND start_date < ?",
+            [threshold_db, sd, ed],
+        ).fetchone()
+    return {
+        "start": start, "end": end, "threshold_db": threshold_db,
+        "environmental": {
+            "avg_db": round(float(env[0]), 1) if env and env[0] is not None else None,
+            "max_db": round(float(env[1]), 1) if env and env[1] is not None else None,
+            "n_samples": int(env[2]) if env else 0,
+            "hours_over_threshold": round(float(env_over[0]), 1) if env_over else 0,
+        },
+        "headphone": {
+            "avg_db": round(float(head[0]), 1) if head and head[0] is not None else None,
+            "max_db": round(float(head[1]), 1) if head and head[1] is not None else None,
+            "n_samples": int(head[2]) if head else 0,
+            "hours_over_threshold": round(float(head_over[0]), 1) if head_over else 0,
+        },
+        "interpretation_hint": "WHO recommends < 1hr/day at >85 dB. Cumulative hearing damage is dose-dependent and irreversible.",
+    }
+
+
+@mcp.tool()
+def health_lab_panel(date_str: str | None = None, lookback_days: int = 365) -> list[dict[str, Any]]:
+    """Most recent lab values per marker within lookback window.
+
+    Returns one row per marker with the most recent test_date, value, range,
+    and status (low / in_range / high). If date_str is provided, returns the
+    panel at that date — useful for time-traveling lab reads.
+    """
+    cutoff_dt = (
+        _parse_date(date_str) - timedelta(days=lookback_days)
+        if date_str else date.today() - timedelta(days=lookback_days)
+    )
+    end_dt = _parse_date(date_str) if date_str else date.today()
+    with db.connect(read_only=True) as con:
+        rows = con.execute(
+            """
+            SELECT marker, test_date, value, unit, range_low, range_high, status, panel, source
+            FROM labs WHERE test_date >= ? AND test_date <= ?
+            ORDER BY marker, test_date DESC
+            """,
+            [cutoff_dt, end_dt],
+        ).fetchall()
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        marker = r[0]
+        if marker in seen:
+            continue
+        seen.add(marker)
+        out.append({
+            "marker": marker, "test_date": str(r[1]),
+            "value": float(r[2]) if r[2] is not None else None,
+            "unit": r[3], "range_low": float(r[4]) if r[4] is not None else None,
+            "range_high": float(r[5]) if r[5] is not None else None,
+            "status": r[6], "panel": r[7], "source": r[8],
+        })
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Vault-aware (substrate differentiator)
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+def health_journal_context(date_str: str, voice_profile: str = "curious") -> dict[str, Any]:
+    """24h health roll-up for daily-journal, in the voice profile of choice.
+
+    voice_profile: 'clinical' | 'warm' | 'curious'.
+      clinical: exact numbers + percent deltas. For data export.
+      warm: narrative sentences. Default for daily-journal default.
+      curious: open-ended observation + a question. Default for coaching.
+
+    Returns both the structured data AND a `prompt_text` rendered in the
+    chosen register so the host skill can paste it directly into its prompt
+    without breaking voice.
+    """
+    target = _parse_date(date_str)
+    with db.connect(read_only=True) as con:
+        ctx = vault_aware.journal_context(con, target)
+        # Compute 30-day HRV baseline for delta phrasing.
+        baseline_row = con.execute(
+            "SELECT AVG(daily) FROM (SELECT DATE_TRUNC('day', start_date) AS d, AVG(value) AS daily "
+            "FROM records WHERE type = 'HKQuantityTypeIdentifierHeartRateVariabilitySDNN' "
+            "AND start_date >= ? AND start_date < ? GROUP BY d)",
+            [datetime.combine(target - timedelta(days=30), datetime.min.time()), datetime.combine(target, datetime.min.time())],
+        ).fetchone()
+        baseline = float(baseline_row[0]) if baseline_row and baseline_row[0] is not None else None
+    from voice_bridge import render_journal_context_with_baseline
+    ctx["hrv_baseline_30d_ms"] = round(baseline, 1) if baseline is not None else None
+    ctx["voice_profile"] = voice_profile
+    ctx["prompt_text"] = render_journal_context_with_baseline(ctx, baseline, profile=voice_profile)
+    return ctx
+
+
+@mcp.tool()
+def health_journal_body_question(date_str: str) -> dict[str, Any]:
+    """Body literacy prompt: returns a context-aware question (not a number)
+    for the daily-journal skill. The question lands differently depending on
+    what the body did — hard night, deep rest, low HRV, etc.
+    """
+    with db.connect(read_only=True) as con:
+        return vault_aware.journal_body_question(con, _parse_date(date_str))
+
+
+@mcp.tool()
+def health_floor_correlation(metric: str, days: int = 30, vault_root: str = "") -> dict[str, Any]:
+    """Pearson r between numeric floor_level and a daily biometric.
+
+    vault_root: absolute path to your personal vault. Required.
     """
     if not vault_root:
-        return {
-            "metric": metric,
-            "n": 0,
-            "note": "vault_root is required. Pass the absolute path to your personal vault.",
-        }
+        return {"metric": metric, "n": 0, "note": "vault_root is required."}
     vr = Path(vault_root).expanduser().resolve()
     if not vr.is_dir():
-        return {
-            "metric": metric,
-            "n": 0,
-            "note": f"vault_root {vr} does not exist or is not a directory",
-        }
+        return {"metric": metric, "n": 0, "note": f"vault_root {vr} not found."}
     with db.connect(read_only=True) as con:
         return vault_aware.floor_correlation(con, metric, days, vr)
 
 
 @mcp.tool()
-def health_coaching_context(
-    start: str, end: str, theme: str | None = None, vault_root: str = ""
-) -> dict[str, Any]:
-    """Recovery-vs-stress markers + Floor distribution over a coaching window.
-
-    The `theme` arg is reserved for v0.2 (filtering Floor tags by theme).
+def health_symptom_correlation(symptom_type: str, days: int = 90, vault_root: str = "") -> dict[str, Any]:
+    """Correlate occurrences of a specific symptom with Floor tags. Returns
+    per-floor symptom-incidence percentages.
     """
+    if not vault_root:
+        return {"symptom": symptom_type, "n": 0, "note": "vault_root is required."}
+    vr = Path(vault_root).expanduser().resolve()
+    if not vr.is_dir():
+        return {"symptom": symptom_type, "n": 0, "note": f"vault_root {vr} not found."}
+    with db.connect(read_only=True) as con:
+        return vault_aware.symptom_correlation(con, symptom_type, days, vr)
+
+
+@mcp.tool()
+def health_coaching_context(start: str, end: str, theme: str | None = None, vault_root: str = "") -> dict[str, Any]:
+    """Recovery-vs-stress markers + Floor distribution over a coaching window."""
     sd = _parse_date(start)
     ed = _parse_date(end)
     vr = Path(vault_root).expanduser().resolve() if vault_root else Path("/")
@@ -496,31 +708,32 @@ def health_panel_context(date_str: str, vault_root: str = "") -> dict[str, Any]:
 
 @mcp.tool()
 def health_weekly_rollup(week_start: str) -> dict[str, Any]:
-    """Feeds /insights weekly-review skill. Returns avg/min/max for HRV, RHR,
-    sleep, steps, plus workout count + recovery trend."""
-    sd = _parse_date(week_start)
+    """Feeds /insights weekly review."""
     with db.connect(read_only=True) as con:
-        return vault_aware.weekly_rollup(con, sd)
+        return vault_aware.weekly_rollup(con, _parse_date(week_start))
+
+
+@mcp.tool()
+def health_long_window_with_journal(metric: str, years: int = 2, vault_root: str = "") -> dict[str, Any]:
+    """Pair scores.long_window YoY + persistent-asymmetry analysis with Floor
+    tags from the same months. Surfaces seasonal Floor-body coupling
+    (van der Kolk's anniversary-pattern hypothesis)."""
+    if not vault_root:
+        return {"metric": metric, "note": "vault_root is required."}
+    vr = Path(vault_root).expanduser().resolve()
+    if not vr.is_dir():
+        return {"metric": metric, "note": f"vault_root {vr} not found."}
+    with db.connect(read_only=True) as con:
+        return vault_aware.long_window_with_journal(con, metric, years, vr)
 
 
 # ---------------------------------------------------------------------------
-# Live tools (Health Auto Export TCP)
+# Live (Health Auto Export TCP)
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-def health_live_query(
-    metric: str,
-    host: str = "localhost",
-    port: int = 9000,
-    start: str | None = None,
-    end: str | None = None,
-) -> dict[str, Any]:
-    """Query the Health Auto Export iOS app over TCP for live data.
-
-    Requires the Health Auto Export iOS app installed, the TCP server
-    enabled in its settings, and the iPhone on the same Wi-Fi as this host.
-    Returns the raw response or an error dict if the server is unreachable.
-    """
+def health_live_query(metric: str, host: str = "localhost", port: int = 9000, start: str | None = None, end: str | None = None) -> dict[str, Any]:
+    """Query the Health Auto Export iOS app over TCP for live data."""
     params: dict[str, Any] = {"metric": metric}
     if start:
         params["start"] = start

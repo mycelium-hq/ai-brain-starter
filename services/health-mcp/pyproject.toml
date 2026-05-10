@@ -1,7 +1,7 @@
 [project]
 name = "health-mcp"
-version = "0.1.0"
-description = "Apple Health MCP server for the ai-brain-starter substrate. Multi-mode ingestion (XML / CSV / TCP-live), DuckDB query layer, open scoring algorithms, vault-aware tools that pair with daily-journal / coaching / panel / insights skills."
+version = "0.2.0"
+description = "Apple Health MCP server for the ai-brain-starter substrate. Full HealthKit surface coverage (108 quantity types + 47 symptom types + 14 cycle types + ECG + iOS 17 State of Mind). Multi-mode ingestion (XML / CSV / TCP-live + lab CSV). Open scoring algorithms (recovery / sleep / strain / sleep regularity / longevity panel / somatic state). Vault-aware tools that pair biometrics + cycle phase + symptoms with Floor tags from daily journals."
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
@@ -40,9 +40,13 @@ packages = ["."]
 include = [
   "main.py",
   "db.py",
+  "hk_types.py",
   "parse_xml.py",
   "parse_csv.py",
   "live_tcp.py",
   "scores.py",
   "vault_aware.py",
+  "cycle.py",
+  "labs.py",
+  "voice_bridge.py",
 ]

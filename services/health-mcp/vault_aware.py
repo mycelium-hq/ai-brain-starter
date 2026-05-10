@@ -411,3 +411,114 @@ def weekly_rollup(con: "duckdb.DuckDBPyConnection", week_start: date) -> dict[st
         "recovery_trend": trend,
         "daily_recovery": daily_recovery,
     }
+
+
+# ---------------------------------------------------------------------------
+# Body literacy prompt (Bainbridge, panel 2026-05-10)
+# ---------------------------------------------------------------------------
+
+def journal_body_question(con: "duckdb.DuckDBPyConnection", target: date) -> dict[str, Any]:
+    """Return a context-aware embodiment question — not a number — for the
+    daily-journal prompt. The question lands differently depending on what
+    the body did.
+    """
+    from voice_bridge import render_body_question  # late import; voice_bridge imports nothing heavy
+
+    ctx = journal_context(con, target)
+    return {
+        "date": target.isoformat(),
+        "question": render_body_question(ctx),
+        "body_summary": ctx,
+        "interpretation_hint": (
+            "Use the question as a journal prompt. Use body_summary as private "
+            "context for the LLM, NOT to repeat back to the user verbatim."
+        ),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Symptoms correlation (Pagliano, panel 2026-05-10)
+# ---------------------------------------------------------------------------
+
+def symptom_correlation(
+    con: "duckdb.DuckDBPyConnection",
+    symptom_type: str,
+    days: int,
+    vault_root: Path,
+) -> dict[str, Any]:
+    """Correlate occurrences of a specific symptom (HKCategoryTypeIdentifier*)
+    with Floor tags from the journal.
+
+    Returns: per-floor symptom-day frequency. n_paired = days where both a
+    floor tag and a symptom log exist.
+    """
+    cutoff = datetime.combine(date.today() - timedelta(days=days), datetime.min.time())
+    rows = con.execute(
+        """
+        SELECT DATE_TRUNC('day', start_date)::DATE AS d, severity
+        FROM symptoms
+        WHERE type = ? AND start_date >= ?
+        GROUP BY d, severity
+        """,
+        [symptom_type, cutoff],
+    ).fetchall()
+    by_date: dict[date, str] = {}
+    for d, sev in rows:
+        by_date[d] = sev or "event"
+
+    tagged = _floor_tagged_dates(vault_root, days=days)
+    by_floor: dict[str, dict[str, int]] = {}
+    n_paired = 0
+    for t in tagged:
+        if t["date"] not in by_date:
+            continue
+        n_paired += 1
+        floor = t.get("floor") or f"level_{t.get('floor_level')}" or "unspecified"
+        by_floor.setdefault(floor, {"days_with_symptom": 0, "total_floor_days": 0})
+        by_floor[floor]["days_with_symptom"] += 1
+
+    for t in tagged:
+        floor = t.get("floor") or f"level_{t.get('floor_level')}" or "unspecified"
+        if floor in by_floor:
+            by_floor[floor]["total_floor_days"] += 1
+
+    for floor, counts in by_floor.items():
+        total = counts["total_floor_days"]
+        counts["incidence_pct"] = round(counts["days_with_symptom"] / total * 100, 1) if total else 0
+
+    return {
+        "symptom": symptom_type,
+        "days_window": days,
+        "n_days_with_symptom": len(by_date),
+        "n_paired_with_floor_tag": n_paired,
+        "by_floor": by_floor,
+        "interpretation_hint": (
+            "Higher incidence_pct on a given floor = symptom co-occurs with "
+            "that emotional state. Useful for pelvic / migraine / GI patterns "
+            "that may be Floor-linked."
+        ),
+    }
+
+
+def long_window_with_journal(
+    con: "duckdb.DuckDBPyConnection",
+    metric: str,
+    years: int,
+    vault_root: Path,
+) -> dict[str, Any]:
+    """Pair scores.long_window with journal Floor tags from the same months.
+    Surfaces seasonal Floor-body coupling (van der Kolk's 'anniversary'
+    pattern)."""
+    from scores import long_window
+
+    base = long_window(con, metric, years=years)
+    tagged = _floor_tagged_dates(vault_root, days=years * 365)
+    by_month: dict[str, dict[str, int]] = {}
+    for t in tagged:
+        m = t["date"].strftime("%Y-%m")
+        by_month.setdefault(m, {})
+        floor = t.get("floor") or f"level_{t.get('floor_level')}"
+        by_month[m][floor] = by_month[m].get(floor, 0) + 1
+    base["floor_distribution_by_month"] = by_month
+    return base
+

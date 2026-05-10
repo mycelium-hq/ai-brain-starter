@@ -1,0 +1,15 @@
+test_date,panel,marker,value,unit,range_low,range_high,status,source
+2026-05-01,metabolic,Fasting Glucose,88,mg/dL,70,99,in_range,labcorp
+2026-05-01,metabolic,HbA1c,5.2,%,4.0,5.6,in_range,labcorp
+2026-05-01,metabolic,Fasting Insulin,4.2,uIU/mL,2.6,24.9,in_range,labcorp
+2026-05-01,inflammation,hs-CRP,0.4,mg/L,0,3.0,in_range,labcorp
+2026-05-01,cardiovascular,ApoB,82,mg/dL,40,90,in_range,labcorp
+2026-05-01,cardiovascular,Lp(a),18,nmol/L,0,75,in_range,labcorp
+2026-05-01,thyroid,TSH,2.1,uIU/mL,0.4,4.5,in_range,labcorp
+2026-05-01,thyroid,Free T4,1.3,ng/dL,0.8,1.8,in_range,labcorp
+2026-05-01,thyroid,Free T3,3.2,pg/mL,2.3,4.2,in_range,labcorp
+2026-05-01,micronutrient,Vitamin D 25-OH,28,ng/mL,30,100,low,labcorp
+2026-05-01,micronutrient,Ferritin,42,ng/mL,15,150,in_range,labcorp
+2026-05-01,micronutrient,Vitamin B12,580,pg/mL,200,900,in_range,labcorp
+2026-05-01,hormonal,Estradiol,45,pg/mL,12.5,498,in_range,labcorp
+2026-05-01,hormonal,Progesterone,2.1,ng/mL,0.1,25.6,in_range,labcorp

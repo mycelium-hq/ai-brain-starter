@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<HealthData locale="en_US">
+ <ExportDate value="2026-05-10 09:00:00 -0500"/>
+ <Me HKCharacteristicTypeIdentifierBiologicalSex="HKBiologicalSexFemale"/>
+
+ <!-- Synthetic v0.2 fixture covering cycle, symptoms, ECG, state of mind,
+      longevity, nutrition. NO REAL HEALTH DATA. -->
+
+ <!-- Cycle: menstrual flow on 2026-04-12, 2026-04-13, 2026-04-14 + cycle on 2026-05-10 -->
+ <Record type="HKCategoryTypeIdentifierMenstrualFlow" sourceName="Health" startDate="2026-04-12 06:00:00 -0500" endDate="2026-04-12 06:01:00 -0500" value="HKCategoryValueMenstrualFlowMedium"/>
+ <Record type="HKCategoryTypeIdentifierMenstrualFlow" sourceName="Health" startDate="2026-04-13 06:00:00 -0500" endDate="2026-04-13 06:01:00 -0500" value="HKCategoryValueMenstrualFlowHeavy"/>
+ <Record type="HKCategoryTypeIdentifierMenstrualFlow" sourceName="Health" startDate="2026-04-14 06:00:00 -0500" endDate="2026-04-14 06:01:00 -0500" value="HKCategoryValueMenstrualFlowLight"/>
+ <Record type="HKCategoryTypeIdentifierMenstrualFlow" sourceName="Health" startDate="2026-05-10 06:00:00 -0500" endDate="2026-05-10 06:01:00 -0500" value="HKCategoryValueMenstrualFlowMedium"/>
+
+ <!-- Ovulation test result on 2026-04-26 -->
+ <Record type="HKCategoryTypeIdentifierOvulationTestResult" sourceName="Health" startDate="2026-04-26 07:00:00 -0500" endDate="2026-04-26 07:01:00 -0500" value="HKCategoryValueOvulationTestResultLuteinizingHormoneSurge"/>
+
+ <!-- Cervical mucus on 2026-04-25 -->
+ <Record type="HKCategoryTypeIdentifierCervicalMucusQuality" sourceName="Health" startDate="2026-04-25 07:00:00 -0500" endDate="2026-04-25 07:01:00 -0500" value="HKCategoryValueCervicalMucusQualityEggWhite"/>
+
+ <!-- Symptoms -->
+ <Record type="HKCategoryTypeIdentifierHeadache" sourceName="Health" startDate="2026-05-08 14:00:00 -0500" endDate="2026-05-08 16:00:00 -0500" value="HKCategoryValueSeverityModerate"/>
+ <Record type="HKCategoryTypeIdentifierBloating" sourceName="Health" startDate="2026-05-09 09:00:00 -0500" endDate="2026-05-09 11:00:00 -0500" value="HKCategoryValueSeverityMild"/>
+ <Record type="HKCategoryTypeIdentifierFatigue" sourceName="Health" startDate="2026-05-09 18:00:00 -0500" endDate="2026-05-09 20:00:00 -0500" value="HKCategoryValueSeveritySevere"/>
+ <Record type="HKCategoryTypeIdentifierLowerBackPain" sourceName="Health" startDate="2026-05-10 08:00:00 -0500" endDate="2026-05-10 10:00:00 -0500" value="HKCategoryValueSeverityMild"/>
+
+ <!-- Longevity quantity types -->
+ <Record type="HKQuantityTypeIdentifierVO2Max" sourceName="Watch" unit="ml/(kg*min)" startDate="2026-05-09 12:00:00 -0500" endDate="2026-05-09 12:00:00 -0500" value="42.5"/>
+ <Record type="HKQuantityTypeIdentifierWalkingSpeed" sourceName="Watch" unit="m/s" startDate="2026-05-09 14:00:00 -0500" endDate="2026-05-09 14:30:00 -0500" value="1.45"/>
+ <Record type="HKQuantityTypeIdentifierAppleWalkingSteadiness" sourceName="iPhone" unit="%" startDate="2026-05-09 14:00:00 -0500" endDate="2026-05-09 14:00:00 -0500" value="92"/>
+ <Record type="HKQuantityTypeIdentifierLeanBodyMass" sourceName="Health" unit="kg" startDate="2026-05-01 06:00:00 -0500" endDate="2026-05-01 06:00:00 -0500" value="48.2"/>
+ <Record type="HKQuantityTypeIdentifierBodyMass" sourceName="Health" unit="kg" startDate="2026-05-01 06:00:00 -0500" endDate="2026-05-01 06:00:00 -0500" value="62.5"/>
+ <Record type="HKQuantityTypeIdentifierBodyFatPercentage" sourceName="Health" unit="%" startDate="2026-05-01 06:00:00 -0500" endDate="2026-05-01 06:00:00 -0500" value="22.8"/>
+
+ <!-- Sleeping wrist temperature -->
+ <Record type="HKQuantityTypeIdentifierAppleSleepingWristTemperature" sourceName="Watch" unit="degF" startDate="2026-05-09 03:00:00 -0500" endDate="2026-05-09 03:00:00 -0500" value="97.4"/>
+
+ <!-- Nutrition -->
+ <Record type="HKQuantityTypeIdentifierDietaryEnergyConsumed" sourceName="MyFitnessPal" unit="kcal" startDate="2026-05-09 12:00:00 -0500" endDate="2026-05-09 12:30:00 -0500" value="650"/>
+ <Record type="HKQuantityTypeIdentifierDietaryEnergyConsumed" sourceName="MyFitnessPal" unit="kcal" startDate="2026-05-09 19:00:00 -0500" endDate="2026-05-09 19:30:00 -0500" value="850"/>
+ <Record type="HKQuantityTypeIdentifierDietaryProtein" sourceName="MyFitnessPal" unit="g" startDate="2026-05-09 12:00:00 -0500" endDate="2026-05-09 12:30:00 -0500" value="38"/>
+ <Record type="HKQuantityTypeIdentifierDietaryProtein" sourceName="MyFitnessPal" unit="g" startDate="2026-05-09 19:00:00 -0500" endDate="2026-05-09 19:30:00 -0500" value="42"/>
+ <Record type="HKQuantityTypeIdentifierDietaryCarbohydrates" sourceName="MyFitnessPal" unit="g" startDate="2026-05-09 12:00:00 -0500" endDate="2026-05-09 12:30:00 -0500" value="60"/>
+ <Record type="HKQuantityTypeIdentifierDietaryFatTotal" sourceName="MyFitnessPal" unit="g" startDate="2026-05-09 12:00:00 -0500" endDate="2026-05-09 12:30:00 -0500" value="22"/>
+ <Record type="HKQuantityTypeIdentifierDietaryWater" sourceName="Water" unit="ml" startDate="2026-05-09 09:00:00 -0500" endDate="2026-05-09 09:00:00 -0500" value="500"/>
+ <Record type="HKQuantityTypeIdentifierDietaryCaffeine" sourceName="MyFitnessPal" unit="mg" startDate="2026-05-09 08:00:00 -0500" endDate="2026-05-09 08:00:00 -0500" value="120"/>
+
+ <!-- Audio exposure -->
+ <Record type="HKQuantityTypeIdentifierEnvironmentalAudioExposure" sourceName="Watch" unit="dBASPL" startDate="2026-05-09 16:00:00 -0500" endDate="2026-05-09 17:00:00 -0500" value="68"/>
+ <Record type="HKQuantityTypeIdentifierHeadphoneAudioExposure" sourceName="iPhone" unit="dBASPL" startDate="2026-05-09 11:00:00 -0500" endDate="2026-05-09 12:00:00 -0500" value="78"/>
+
+ <!-- ECG -->
+ <ElectrocardiogramRecord type="HKDataTypeIdentifierElectrocardiogram" sourceName="Watch" startDate="2026-05-09 15:00:00 -0500" endDate="2026-05-09 15:00:30 -0500" classification="HKElectrocardiogramClassificationSinusRhythm" averageHeartRate="68" samplingFrequency="512"/>
+
+ <!-- State of mind (iOS 17+) -->
+ <StateOfMind kind="momentary" sourceName="Mindfulness" startDate="2026-05-09 11:00:00 -0500" endDate="2026-05-09 11:01:00 -0500" valence="0.45" labels="content,grateful" associations="family,work"/>
+ <StateOfMind kind="momentary" sourceName="Mindfulness" startDate="2026-05-09 21:00:00 -0500" endDate="2026-05-09 21:01:00 -0500" valence="-0.15" labels="anxious,tired" associations="work"/>
+
+ <!-- Standard activity for context -->
+ <Record type="HKQuantityTypeIdentifierStepCount" sourceName="iPhone" unit="count" startDate="2026-05-09 09:00:00 -0500" endDate="2026-05-09 09:30:00 -0500" value="4200"/>
+ <Record type="HKQuantityTypeIdentifierActiveEnergyBurned" sourceName="Watch" unit="kcal" startDate="2026-05-09 12:00:00 -0500" endDate="2026-05-09 13:00:00 -0500" value="320"/>
+ <Record type="HKQuantityTypeIdentifierBasalEnergyBurned" sourceName="Watch" unit="kcal" startDate="2026-05-09 00:00:00 -0500" endDate="2026-05-09 23:59:00 -0500" value="1650"/>
+
+</HealthData>
