@@ -124,6 +124,36 @@ Each skill in `skills/<name>/` is auto-discovered by Claude Code. After cloning,
 
 ---
 
+### Eng-discipline cycle (the obra superpowers as a unit)
+
+**What it is:** four obra/superpowers skills compose into a single engineering discipline that the substrate's TDD and modern-Python substrates both anchor against. Use them together, not piecemeal.
+
+| Step | Iron law | Skill |
+|---|---|---|
+| 1. Design before code | NO IMPLEMENTATION ACTION UNTIL DESIGN APPROVED | `obra:brainstorming` |
+| 2. Test before code | NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST | `obra:test-driven-development` (paired with `tdd-substrate` for dual-runtime Vitest+pytest projects) |
+| 3. Root cause before fix | NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST | `obra:systematic-debugging` (paired with `obra:root-cause-tracing` on deep cascades) |
+| 4. Evidence before completion | NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE | `obra:verification-before-completion` |
+
+**Why it matters as a unit:** any one skill in isolation slips. Brainstorming without TDD produces designed-but-untested code. TDD without verification produces "tests pass, ship" claims that miss what the tests don't cover. Verification without root-cause produces fixes that suppress symptoms. The cycle locks in a sequence where each step gates the next.
+
+**How the substrate uses it:**
+- `tdd-substrate` (this repo) IS the test-before-code step for dual-runtime (Vitest + pytest) projects, with explicit cross-references to brainstorming, systematic-debugging, and verification-before-completion as the surrounding discipline.
+- `modern-python-substrate` (this repo) IS the toolchain (uv + ruff + ty + pytest) that hosts the pytest side of the TDD step. It also lists the four-step cycle in its `## Eng-discipline cycle (Python-specific cross-references)` section so a Python-only user gets the same map.
+- Substrate-level enforcement: PreToolUse hooks ensure no destructive git operation runs with an in-flight uncommitted module (the verification-before-completion step's safety net).
+
+**When to invoke each:**
+- `/brainstorming` — at the start of ANY non-trivial feature or refactor, before touching code
+- `/test-driven-development` — when implementing a feature or fixing a bug, before writing implementation code
+- `/systematic-debugging` — when a bug, test failure, or unexpected behavior appears, before proposing a fix
+- `/verification-before-completion` — when about to claim work is complete, fixed, or passing, before committing or PR
+
+**Trigger pattern:** for a feature build with no surprises, the cycle runs forward (1 → 2 → 4). For a debug session, it usually runs (3 → 2 → 4) — root-cause first, then test the proposed fix, then verify. For a "does this work?" pass before merge, it runs (4) standalone.
+
+**Anti-pattern this prevents:** "I implemented X, ran the tests, looks good, shipping" — three steps but missing the design (1), the failure-first discipline (2 demands a failing test), the post-fix verification (4 demands fresh evidence post-change). The substrate's session-end cascade is the periodic enforcement of step 4.
+
+---
+
 ## Vendor-published agent-skill bundles (engineering + operations)
 
 The substrate ships memory, voice, vault, and session lifecycle. These vendor-published bundles cover the engineering-side skills a serious build benefits from. `bootstrap.sh` installs them via Claude Code's native plugin marketplace mechanism (skip with `SKIP_VENDOR_SKILLS=1` for air-gapped installs). Each vendor maintains their own SKILL.md per platform; we do not fork, repackage, or redistribute.
