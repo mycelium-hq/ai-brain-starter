@@ -29,18 +29,19 @@ fi
 BASENAME=$(basename "$FILE")
 STEM="${BASENAME%.*}"
 
-# Find caller files: anything that imports or requires this file's stem
-# Languages: JS/TS (import / require / from), Python (import / from)
-# Use broad glob to cover all common code extensions; filter out the file itself.
-CALLERS=$(rg -l \
-  -g '*.ts' -g '*.tsx' -g '*.js' -g '*.jsx' -g '*.mjs' -g '*.cjs' -g '*.py' -g '*.go' -g '*.rb' \
-  -g '!node_modules' -g '!dist' -g '!.next' -g '!build' \
+# Find caller files: anything that imports or requires this file's stem.
+# Use POSIX grep -r (always in PATH; rg may be a shell-function alias not visible to scripts).
+# Search common code extensions, excluding obvious non-source dirs.
+CALLERS=$(grep -rl \
+  --include='*.ts' --include='*.tsx' --include='*.js' --include='*.jsx' \
+  --include='*.mjs' --include='*.cjs' --include='*.py' --include='*.go' --include='*.rb' \
+  --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=.next --exclude-dir=build --exclude-dir=.git \
   -e "${STEM}" \
-  "$ROOT" 2>/dev/null | grep -v "^$FILE$" || true)
-# Narrow to files that actually IMPORT (not just mention) the stem
+  "$ROOT" 2>/dev/null | grep -v "^${FILE}$" || true)
+# Narrow to files that actually IMPORT (not just mention) the stem.
 CALLERS=$(echo "$CALLERS" | while IFS= read -r f; do
   [[ -z "$f" ]] && continue
-  if rg -q -e "(import|require|from).*['\"\`].*${STEM}" "$f" 2>/dev/null; then
+  if grep -qE "(import|require|from)[[:space:]].*['\"\`].*${STEM}" "$f" 2>/dev/null; then
     echo "$f"
   fi
 done)
