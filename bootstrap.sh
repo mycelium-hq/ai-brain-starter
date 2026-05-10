@@ -1022,6 +1022,37 @@ if [[ "${SKIP_VENDOR_SKILLS:-0}" != "1" ]]; then
   fi
   [[ -d "$HOME/.claude/skills/cloudflare-skills" ]] && ok "cloudflare-skills installed"
 
+  # claude-seo (MIT, AgriciDaniel). 25 sub-skills + 18 sub-agents covering
+  # technical SEO, on-page (E-E-A-T), schema, AI search optimization (GEO),
+  # local SEO, GA4, PDF reports. Required for any consulting practice or
+  # public site (myceliumai.co, diazroa.com, etc.).
+  if [[ ! -d "$HOME/.claude/skills/claude-seo" ]]; then
+    hdr "Installing AgriciDaniel/claude-seo (MIT)"
+    git clone --quiet https://github.com/AgriciDaniel/claude-seo.git "$HOME/.claude/skills/claude-seo" \
+      || err "claude-seo clone failed (skipping; install manually: git clone https://github.com/AgriciDaniel/claude-seo.git ~/.claude/skills/claude-seo)"
+  fi
+  [[ -d "$HOME/.claude/skills/claude-seo" ]] && ok "claude-seo installed"
+
+  # Skill_Seekers (MIT, yusufkaraaslan). Converts any documentation website
+  # into a Claude skill in minutes. High-leverage for onboarding new
+  # vendor SDKs and APIs (any time the user adopts a new tool with public docs).
+  if [[ ! -d "$HOME/.claude/skills/skill-seekers" ]]; then
+    hdr "Installing yusufkaraaslan/Skill_Seekers (MIT)"
+    git clone --quiet https://github.com/yusufkaraaslan/Skill_Seekers.git "$HOME/.claude/skills/skill-seekers" \
+      || err "Skill_Seekers clone failed (skipping; install manually: git clone https://github.com/yusufkaraaslan/Skill_Seekers.git ~/.claude/skills/skill-seekers)"
+  fi
+  [[ -d "$HOME/.claude/skills/skill-seekers" ]] && ok "skill-seekers installed"
+
+  # lean-ctx (Apache 2.0, yvgude). MCP server + context runtime: session
+  # caching, AST-aware compression, 90+ shell patterns to reduce token usage.
+  # Direct fit for substrate's token-optimization line.
+  if [[ ! -d "$HOME/.claude/skills/lean-ctx" ]]; then
+    hdr "Installing yvgude/lean-ctx (Apache 2.0)"
+    git clone --quiet https://github.com/yvgude/lean-ctx.git "$HOME/.claude/skills/lean-ctx" \
+      || err "lean-ctx clone failed (skipping; install manually: git clone https://github.com/yvgude/lean-ctx.git ~/.claude/skills/lean-ctx)"
+  fi
+  [[ -d "$HOME/.claude/skills/lean-ctx" ]] && ok "lean-ctx installed"
+
   # Vercel-labs agent-skills (NO LICENSE — all-rights-reserved by default).
   # Includes next-best-practices, next-cache-components, next-upgrade,
   # react-best-practices, composition-patterns, web-design-guidelines,

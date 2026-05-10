@@ -164,6 +164,30 @@ The substrate ships memory, voice, vault, and session lifecycle. These vendor-pu
 
 **Install:** automatic via `bootstrap.sh`. Manual: `git clone https://github.com/cloudflare/skills.git ~/.claude/skills/cloudflare-skills`.
 
+### AgriciDaniel/claude-seo — comprehensive SEO + GEO toolkit
+
+**Repo:** [AgriciDaniel/claude-seo](https://github.com/AgriciDaniel/claude-seo). **License:** MIT. **Stars:** 6,276.
+
+**Why install:** 25 sub-skills + 18 sub-agents covering technical SEO, on-page analysis, content quality (E-E-A-T), content briefs, schema markup, image optimization, sitemap architecture, AI search optimization (GEO, the post-LLM successor to SEO), local SEO, semantic topic clustering, search experience optimization (SXO), SEO drift monitoring, e-commerce SEO, international SEO with cultural profiles, Google SEO APIs (Search Console, PageSpeed, CrUX, GA4), and PDF report generation. Required for any consulting practice or public site that needs to be findable.
+
+**Install:** automatic via `bootstrap.sh`. Manual: `git clone https://github.com/AgriciDaniel/claude-seo.git ~/.claude/skills/claude-seo`.
+
+### yusufkaraaslan/Skill_Seekers — auto-convert docs sites into skills
+
+**Repo:** [yusufkaraaslan/Skill_Seekers](https://github.com/yusufkaraaslan/Skill_Seekers). **License:** MIT. **Stars:** 13,388.
+
+**Why install:** point it at any documentation website and it generates a Claude skill in minutes. Each time you adopt a new vendor SDK or API (Stripe, Resend, MongoDB, internal tool), this skill saves the manual SKILL.md authoring step. Velocity multiplier for skill creation.
+
+**Install:** automatic via `bootstrap.sh`. Manual: `git clone https://github.com/yusufkaraaslan/Skill_Seekers.git ~/.claude/skills/skill-seekers`.
+
+### yvgude/lean-ctx — session caching + AST compression + token reduction
+
+**Repo:** [yvgude/lean-ctx](https://github.com/yvgude/lean-ctx). **License:** Apache 2.0. **Stars:** 1,425.
+
+**Why install:** MCP server and context runtime for AI coding agents. Session caching, AST-aware compression, and 90+ shell patterns to reduce token usage. Direct fit for the substrate's token-optimization line. Pairs with `docs/TOKEN_OPTIMIZATION.md`.
+
+**Install:** automatic via `bootstrap.sh`. Manual: `git clone https://github.com/yvgude/lean-ctx.git ~/.claude/skills/lean-ctx`. Then `lean-ctx init --agent claude-code` per upstream docs.
+
 ### Vercel labs agent-skills — Next.js + React patterns
 
 **Repo:** [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills). **License:** **NO LICENSE FILE** (all-rights-reserved by default). **Stars:** 26,343.
