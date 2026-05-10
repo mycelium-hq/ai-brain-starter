@@ -1239,7 +1239,7 @@ if [[ "${SKIP_VENDOR_SKILLS:-0}" != "1" ]]; then
     fi
     claude_marketplace_safe "$repo"
     claude_install_safe "$target"
-    [[ $DRY_RUN -eq 0 ]] && ok "plugin ready: $target"
+    if [[ $DRY_RUN -eq 0 ]]; then ok "plugin ready: $target"; fi
   }
 
   # Sentry SDK + AI monitoring skills (Apache 2.0, vendor-published).
@@ -1256,7 +1256,7 @@ if [[ "${SKIP_VENDOR_SKILLS:-0}" != "1" ]]; then
   for plugin in modern-python insecure-defaults sharp-edges property-based-testing static-analysis testing-handbook-skills differential-review ask-questions-if-underspecified; do
     claude_install_safe "$plugin@trailofbits"
   done
-  [[ $DRY_RUN -eq 0 ]] && ok "trailofbits plugins ready"
+  if [[ $DRY_RUN -eq 0 ]]; then ok "trailofbits plugins ready"; fi
 
   # Stripe agent-toolkit (MIT, vendor-published).
   # Single plugin in a marketplace bundle. Includes stripe-best-practices
