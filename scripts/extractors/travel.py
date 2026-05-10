@@ -3,6 +3,8 @@
 extractors/travel.py — structured metadata for travel entries.
 Type: `travel`, also `trip`, `place`.
 """
+from __future__ import annotations
+
 import re
 
 from _base import (

@@ -7,6 +7,8 @@ Note: Python module names can't have hyphens, so the module is named with
 an underscore but the `type:` field in frontmatter uses `negotiation-prep`.
 The dispatcher matches by lowercasing + normalizing.
 """
+from __future__ import annotations
+
 import re
 
 from _base import (

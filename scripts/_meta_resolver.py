@@ -23,6 +23,8 @@ Don't use this in scripts that intentionally want plain Meta/ (e.g.
 promote-episodic-to-procedural reads Learnings/ which lives in plain Meta).
 """
 
+from __future__ import annotations
+
 from pathlib import Path
 
 

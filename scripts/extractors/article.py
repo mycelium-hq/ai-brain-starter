@@ -3,6 +3,8 @@
 extractors/article.py — structured metadata for saved articles / essays.
 Type: `article`.
 """
+from __future__ import annotations
+
 import re
 
 from _base import (

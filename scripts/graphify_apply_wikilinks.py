@@ -55,6 +55,8 @@ Maintenance runbook:
        once you've identified era/company/role markers per person.
 """
 
+from __future__ import annotations
+
 import argparse
 import re
 import sys

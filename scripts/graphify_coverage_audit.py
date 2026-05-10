@@ -33,6 +33,8 @@ Usage:
     python3 graphify_coverage_audit.py --vault-root "$(pwd)" --json-only
     python3 graphify_coverage_audit.py --vault-root "$(pwd)" --skip "Archive,Drafts"
 """
+from __future__ import annotations
+
 import argparse
 import hashlib
 import json

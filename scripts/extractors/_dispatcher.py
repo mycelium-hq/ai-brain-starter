@@ -12,6 +12,8 @@ Each extractor module must expose:
 Registry convention: module filename == type name. `book.py` handles `type: book`.
 Modules starting with _ are infrastructure, not extractors.
 """
+from __future__ import annotations
+
 import argparse
 import glob
 import importlib

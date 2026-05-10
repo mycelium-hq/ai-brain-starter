@@ -33,6 +33,8 @@ CONFIG (per user, once):
 BYPASS: WORKTREE_RECONCILE_BYPASS=1
 """
 
+from __future__ import annotations
+
 import json
 import os
 import subprocess
