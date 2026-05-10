@@ -29,6 +29,29 @@ Same thing — open an issue. Describe the problem you're trying to solve, not j
 
 ---
 
+## Testing bootstrap.sh changes safely
+
+Editing `bootstrap.sh` is risky to test against your real machine — it touches `~/.claude/`, registers plugin marketplaces, edits `settings.json`, and installs system tools. The fix: a sandbox HOME.
+
+`HOME` is what every Claude Code path resolves against (`~/.claude/`, skill clones, plugin installs, `settings.json`). Set `HOME` to a fresh empty directory, run bootstrap from there, and everything writes into the sandbox while your real config stays untouched.
+
+```bash
+SANDBOX=$(mktemp -d)
+cd /path/to/your/local/ai-brain-starter
+HOME="$SANDBOX" EMAIL_GATE_BYPASS=1 PREFLIGHT_BYPASS=1 bash bootstrap.sh
+```
+
+After the run, inspect `$SANDBOX/.claude/` to see what got created. To reset and re-test: `rm -rf "$SANDBOX"` and start over.
+
+**Two flags worth knowing for tests:**
+
+- `--dry-run` — shows what would be installed without making changes. Every install path respects this; if you add a new install step, wrap it in `do_cmd`, `git_clone_safe`, `claude_install_safe`, `claude_marketplace_safe`, or `pipx_install_safe` to keep dry-run actually dry.
+- `--uninstall` — removes everything bootstrap installed (with a confirmation prompt). Useful for leaving a clean machine after testing.
+
+**System tools (Brew, Node, Python, pipx, gh, Obsidian) are global**, so they short-circuit if already present on the host even with `HOME` redirected. That's fine — bootstrap's job is to install user-level Claude Code content, not duplicate system installs.
+
+---
+
 ## What's welcome
 
 - Bug fixes

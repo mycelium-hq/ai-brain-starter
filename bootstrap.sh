@@ -193,6 +193,10 @@ for arg in "$@"; do
         echo "ERROR: install-hooks-user-level.py not found." >&2
         exit 2
       fi ;;
+    --uninstall)
+      UNINSTALL=1 ;;
+    --force)
+      FORCE=1 ;;
     --help|-h)
       cat <<'HELP'
 Usage: bash bootstrap.sh [OPTIONS]
@@ -201,6 +205,8 @@ Install or update the ai-brain-starter setup. Safe to re-run.
 
 Options:
   --dry-run, -n                 Show what would be installed without making changes
+  --uninstall                   Remove everything bootstrap installed (with confirmation)
+  --force                       Skip the uninstall confirmation prompt
   --restore                     Interactive restore from .bak files (closes #2)
   --smoke-test                  Run end-to-end verification of the installed setup
   --detect-partial              Scan for half-installed components (closes #4)
@@ -208,11 +214,20 @@ Options:
                                 universally including inside git worktrees)
   --help, -h                    This help
 
+Environment:
+  GIT_CLONE_TIMEOUT_SECS        Timeout (default 60s) for any git clone
+  EMAIL_GATE_BYPASS=1           Skip the email-gate (development)
+  PREFLIGHT_BYPASS=1            Skip the preflight check (development)
+  SKIP_VENDOR_SKILLS=1          Skip third-party plugin marketplaces (air-gapped)
+  REQUIRED_CLAUDE_VERSION       Override the minimum Claude Code version (default 2.1.133)
+
 Logs: every run is appended to ~/.claude/.bootstrap.log (closes #3).
 HELP
       exit 0 ;;
   esac
 done
+UNINSTALL="${UNINSTALL:-0}"
+FORCE="${FORCE:-0}"
 
 # Tee subsequent output to the log (header + everything that follows)
 exec > >(tee -a "$BOOTSTRAP_LOG") 2>&1
@@ -234,6 +249,43 @@ is_linux() { [[ "$(uname -s)" == "Linux" ]]; }
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# run_with_timeout SECS CMD [ARGS...] — portable timeout wrapper.
+# Prefers GNU `timeout` (Linux + Mac with coreutils) or `gtimeout` (brew),
+# falls back to a pure-shell background+wait+kill so it works on a clean Mac.
+# Returns 124 on timeout, otherwise the command's exit code.
+run_with_timeout() {
+  local secs="$1"; shift
+  if have timeout; then
+    timeout "$secs" "$@"; return $?
+  fi
+  if have gtimeout; then
+    gtimeout "$secs" "$@"; return $?
+  fi
+  "$@" &
+  local pid=$!
+  local elapsed=0
+  while [[ $elapsed -lt $secs ]] && kill -0 "$pid" 2>/dev/null; do
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    kill -TERM "$pid" 2>/dev/null
+    sleep 1
+    kill -KILL "$pid" 2>/dev/null
+    wait "$pid" 2>/dev/null || true
+    return 124
+  fi
+  wait "$pid"
+  return $?
+}
+
+# version_at_least REQUIRED ACTUAL — semver via sort -V.
+version_at_least() {
+  local required="$1" actual="$2"
+  [[ -z "$actual" ]] && return 1
+  [[ "$(printf '%s\n%s\n' "$required" "$actual" | sort -V | head -1)" == "$required" ]]
+}
+
 # ───────────────────────────────────────────────────────────────────────────────
 # Locale detection + bilingual translation helper
 # Override via BOOTSTRAP_LANG=es|en. Otherwise: $LC_ALL > $LANG > AppleLocale > en.
@@ -248,6 +300,120 @@ detect_lang() {
 }
 LANG_CODE="$(detect_lang)"
 t() { [[ "$LANG_CODE" == "es" ]] && echo "$2" || echo "$1"; }
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Claude Code minimum-version check
+# Older Claude Code versions error cryptically on the /quick-try plugin path.
+# Surface a clear upgrade command instead. Override REQUIRED_CLAUDE_VERSION
+# to test against an older version. Bypass via PREFLIGHT_BYPASS=1.
+# ───────────────────────────────────────────────────────────────────────────────
+REQUIRED_CLAUDE_VERSION="${REQUIRED_CLAUDE_VERSION:-2.1.133}"
+if [[ "${PREFLIGHT_BYPASS:-0}" != "1" ]] && have claude; then
+  CLAUDE_VERSION_RAW="$(claude --version 2>/dev/null | head -1)"
+  CLAUDE_VERSION="$(printf '%s' "$CLAUDE_VERSION_RAW" | awk '{print $1}')"
+  if [[ -n "$CLAUDE_VERSION" ]] && ! version_at_least "$REQUIRED_CLAUDE_VERSION" "$CLAUDE_VERSION"; then
+    hdr "$(t "Claude Code is too old" "Claude Code está desactualizado")"
+    err "$(t "Detected Claude Code $CLAUDE_VERSION — bootstrap requires $REQUIRED_CLAUDE_VERSION or newer." \
+            "Detectado Claude Code $CLAUDE_VERSION — el bootstrap necesita $REQUIRED_CLAUDE_VERSION o más nuevo.")"
+    log "$(t "Upgrade with: npm i -g @anthropic-ai/claude-code@latest" \
+            "Actualizá con: npm i -g @anthropic-ai/claude-code@latest")"
+    log "$(t "Then re-run: bash bootstrap.sh" \
+            "Después volvé a correr: bash bootstrap.sh")"
+    log "$(t "Override (development only): REQUIRED_CLAUDE_VERSION=$CLAUDE_VERSION bash bootstrap.sh" \
+            "Bypass (sólo desarrollo): REQUIRED_CLAUDE_VERSION=$CLAUDE_VERSION bash bootstrap.sh")"
+    exit 2
+  fi
+fi
+
+# ───────────────────────────────────────────────────────────────────────────────
+# State file — last successful run timestamp surfaced at next run start.
+# ───────────────────────────────────────────────────────────────────────────────
+BOOTSTRAP_STATE="$HOME/.claude/.bootstrap-state"
+PREVIOUS_RUN_TIMESTAMP=""
+if [[ -f "$BOOTSTRAP_STATE" ]]; then
+  PREVIOUS_RUN_TIMESTAMP="$(head -1 "$BOOTSTRAP_STATE" 2>/dev/null || true)"
+fi
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Uninstall — remove what bootstrap installed.
+# PRESERVES: vault data, custom skills, custom MCPs, custom marketplaces.
+# ───────────────────────────────────────────────────────────────────────────────
+if [[ "$UNINSTALL" == "1" ]]; then
+  hdr "$(t "Uninstall preview" "Vista previa de la desinstalación")"
+  printf "\n  %s\n\n" "$(t "Bootstrap will remove the following if confirmed:" \
+                          "El bootstrap va a remover lo siguiente si confirmás:")"
+  UNINSTALL_TARGETS=(
+    "$HOME/.claude/skills/ai-brain-starter"
+    "$HOME/.claude/skills/humanizer"
+    "$HOME/.claude/skills/superpowers"
+    "$HOME/.claude/skills/lean-ctx"
+    "$HOME/.claude/skills/rich-elicitation"
+    "$HOME/.claude/skills/vercel-agent-skills"
+    "$BOOTSTRAP_STATE"
+    "$HOME/.claude/.ai-brain-starter-email-on-file"
+    "$HOME/.claude/.ai-brain-starter-hmac-secret"
+  )
+  PRESENT=()
+  for t_path in "${UNINSTALL_TARGETS[@]}"; do
+    [[ -e "$t_path" ]] && PRESENT+=("$t_path")
+  done
+  for p in "${PRESENT[@]}"; do printf "    - %s\n" "$p"; done
+  printf "\n  %s\n" "$(t "Plus settings.json entries: obsidian-skills marketplace + 3 enabled plugins" \
+                          "Más entradas de settings.json: marketplace obsidian-skills + 3 plugins habilitados")"
+  printf "  %s\n\n" "$(t "Plus .mcp.json entries: granola, chatprd" \
+                          "Más entradas de .mcp.json: granola, chatprd")"
+  printf "  %s\n" "$(t "PRESERVED: vault, custom skills, custom MCPs, custom marketplaces, custom hooks." \
+                       "PRESERVADO: vault, skills propias, MCPs propios, marketplaces propios, hooks propios.")"
+  printf "  %s\n\n" "$(t "settings.json + .mcp.json get backed up before edit (recoverable via .bak files)." \
+                          "settings.json + .mcp.json se respaldan antes de editar (recuperable vía .bak).")"
+
+  if [[ "$FORCE" != "1" ]]; then
+    printf "  %s " "$(t "Type 'yes' to proceed (anything else cancels):" \
+                       "Escribí 'yes' para continuar (cualquier otra cosa cancela):")"
+    read -r CONFIRM
+    if [[ "$CONFIRM" != "yes" ]]; then
+      log "$(t "Cancelled. Nothing changed." "Cancelado. Nada cambió.")"
+      exit 0
+    fi
+  fi
+
+  hdr "$(t "Uninstalling" "Desinstalando")"
+  for p in "${PRESENT[@]}"; do
+    rm -rf "$p" && ok "removed: $p"
+  done
+
+  if [[ -f "$HOME/.claude/.mcp.json" ]]; then
+    backup_file "$HOME/.claude/.mcp.json"
+    python3 - <<'PY' || warn "MCP cleanup failed"
+import json, os
+p = os.path.expanduser("~/.claude/.mcp.json")
+m = json.load(open(p))
+for srv in ("granola", "chatprd"):
+    m.get("mcpServers", {}).pop(srv, None)
+with open(p, "w") as f: json.dump(m, f, indent=2)
+PY
+    ok "MCP entries cleaned"
+  fi
+
+  if [[ -f "$HOME/.claude/settings.json" ]]; then
+    backup_file "$HOME/.claude/settings.json"
+    python3 - <<'PY' || warn "settings cleanup failed"
+import json, os
+p = os.path.expanduser("~/.claude/settings.json")
+s = json.load(open(p))
+s.get("extraKnownMarketplaces", {}).pop("obsidian-skills", None)
+ep = s.get("enabledPlugins", {})
+for plug in ("obsidian@obsidian-skills", "context7", "playwright"):
+    ep.pop(plug, None)
+with open(p, "w") as f: json.dump(s, f, indent=2)
+PY
+    ok "settings.json entries cleaned"
+  fi
+
+  printf "\n  %s\n" "$(t "Uninstall complete. Plugin marketplaces remain — remove via 'claude plugin marketplace remove <name>' if desired." \
+                       "Desinstalación completa. Los marketplaces de plugins quedan — removelos con 'claude plugin marketplace remove <name>' si querés.")"
+  exit 0
+fi
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Email gate (universal). Every install passes through the form once. The form
@@ -466,6 +632,70 @@ backup_file() {
   fi
 }
 
+# git_clone_safe URL DEST [DESCRIPTION] — respects DRY_RUN, enforces a 60s
+# timeout via run_with_timeout so a hanging clone doesn't stall indefinitely.
+GIT_CLONE_TIMEOUT_SECS="${GIT_CLONE_TIMEOUT_SECS:-60}"
+git_clone_safe() {
+  local url="$1"
+  local dest="$2"
+  local desc="${3:-clone $url}"
+  if [[ $DRY_RUN -eq 1 ]]; then
+    dry "would: $desc → $dest"
+    return 0
+  fi
+  if [[ -d "$dest/.git" ]]; then
+    return 0
+  fi
+  run_with_timeout "$GIT_CLONE_TIMEOUT_SECS" git clone --quiet "$url" "$dest" 2>/dev/null
+  local ec=$?
+  if [[ "$ec" == "124" ]]; then
+    err "$desc — clone exceeded ${GIT_CLONE_TIMEOUT_SECS}s timeout. Skipping; re-run later."
+    return 1
+  elif [[ "$ec" -ne 0 ]]; then
+    err "$desc — clone failed (exit $ec)"
+    return 1
+  fi
+  return 0
+}
+
+# claude_marketplace_safe REPO — respects DRY_RUN, idempotent.
+claude_marketplace_safe() {
+  local repo="$1"
+  if claude plugin marketplace list 2>/dev/null | grep -q "GitHub ($repo)"; then
+    return 0
+  fi
+  if [[ $DRY_RUN -eq 1 ]]; then
+    dry "would: claude plugin marketplace add $repo"
+    return 0
+  fi
+  hdr "Adding marketplace: $repo"
+  claude plugin marketplace add "$repo" 2>&1 | tail -2 || err "marketplace add failed: $repo"
+}
+
+# claude_install_safe TARGET — respects DRY_RUN, idempotent.
+claude_install_safe() {
+  local target="$1"
+  if claude plugin list 2>/dev/null | grep -q "❯ $target$"; then
+    return 0
+  fi
+  if [[ $DRY_RUN -eq 1 ]]; then
+    dry "would: claude plugin install $target"
+    return 0
+  fi
+  hdr "Installing plugin: $target"
+  claude plugin install "$target" 2>&1 | tail -2 || err "plugin install failed: $target"
+}
+
+# pipx_install_safe PKG — respects DRY_RUN.
+pipx_install_safe() {
+  local pkg="$1"
+  if [[ $DRY_RUN -eq 1 ]]; then
+    dry "would: pipx install $pkg"
+    return 0
+  fi
+  pipx install "$pkg" 2>&1 | tail -3 || return 1
+}
+
 # ───────────────────────────────────────────────────────────────────────────────
 # Header
 # ───────────────────────────────────────────────────────────────────────────────
@@ -492,6 +722,14 @@ echo "  $(t \
   "When it's done, Claude continues with the setup interview automatically." \
   "Cuando termine, Claude continúa con la entrevista de setup automáticamente.")"
 echo "  $(t "You don't need to type anything." "No necesitás tipear nada.")"
+
+if [[ -n "$PREVIOUS_RUN_TIMESTAMP" ]]; then
+  printf "\n  \033[36m·\033[0m %s %s. %s\n" \
+    "$(t "Last successful run:" "Última corrida exitosa:")" \
+    "$PREVIOUS_RUN_TIMESTAMP" \
+    "$(t "Re-runs are idempotent — already-installed components are skipped." \
+        "Las recorridas son idempotentes — los componentes ya instalados se saltean.")"
+fi
 echo
 [[ $DRY_RUN -eq 0 ]] && sleep 1
 
@@ -927,12 +1165,16 @@ if [[ ${#SKILLS_TO_SYNC[@]} -gt 0 ]]; then
       done
     fi
   else
-    warn "sync-skills.sh not found — using direct copy (no backups)"
-    for sub in "${SKILLS_TO_SYNC[@]}"; do
-      src="$SKILL_DIR/skills/$sub"
-      dst="$HOME/.claude/skills/$sub"
-      [[ -d "$src" ]] && do_cmd "cp -R $src → $dst" mkdir -p "$dst" && do_cmd "" cp -R "$src/." "$dst/"
-    done
+    if [[ $DRY_RUN -eq 1 ]]; then
+      dry "would copy bundled skills directly (sync-skills.sh path not yet on disk in dry-run): ${SKILLS_TO_SYNC[*]}"
+    else
+      warn "sync-skills.sh not found — using direct copy (no backups)"
+      for sub in "${SKILLS_TO_SYNC[@]}"; do
+        src="$SKILL_DIR/skills/$sub"
+        dst="$HOME/.claude/skills/$sub"
+        [[ -d "$src" ]] && do_cmd "cp -R $src → $dst" mkdir -p "$dst" && do_cmd "" cp -R "$src/." "$dst/"
+      done
+    fi
   fi
 fi
 
@@ -946,10 +1188,13 @@ fi
 
 if [[ ! -d "$HOME/.claude/skills/humanizer" ]]; then
   hdr "Installing humanizer (de-AI writing pass)"
-  git clone --quiet https://github.com/adelaidasofia/humanizer.git "$HOME/.claude/skills/humanizer" \
-    || err "humanizer clone failed"
+  git_clone_safe "https://github.com/adelaidasofia/humanizer.git" \
+                 "$HOME/.claude/skills/humanizer" \
+                 "humanizer clone"
 fi
-[[ -d "$HOME/.claude/skills/humanizer" ]] && ok "humanizer skill installed"
+if [[ $DRY_RUN -eq 0 && -d "$HOME/.claude/skills/humanizer" ]]; then
+  ok "humanizer skill installed"
+fi
 
 # ───────────────────────────────────────────────────────────────────────────────
 # obra/superpowers (engineering-discipline skills, MIT, Jesse Vincent)
@@ -962,10 +1207,13 @@ fi
 
 if [[ ! -d "$HOME/.claude/skills/superpowers" ]]; then
   hdr "Installing obra/superpowers (engineering-discipline skills)"
-  git clone --quiet https://github.com/obra/superpowers.git "$HOME/.claude/skills/superpowers" \
-    || err "superpowers clone failed (skipping; install manually with: git clone https://github.com/obra/superpowers.git ~/.claude/skills/superpowers)"
+  git_clone_safe "https://github.com/obra/superpowers.git" \
+                 "$HOME/.claude/skills/superpowers" \
+                 "superpowers clone"
 fi
-[[ -d "$HOME/.claude/skills/superpowers" ]] && ok "superpowers skills installed"
+if [[ $DRY_RUN -eq 0 && -d "$HOME/.claude/skills/superpowers" ]]; then
+  ok "superpowers skills installed"
+fi
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Vendor-published agent-skill bundles (engineering + operations adjacents)
@@ -980,23 +1228,18 @@ fi
 
 if [[ "${SKIP_VENDOR_SKILLS:-0}" != "1" ]]; then
 
-  # Helper: register a marketplace + install a plugin (idempotent)
+  # Register a marketplace + install a plugin (idempotent + DRY_RUN-safe).
   # Args: $1=owner/repo (marketplace source) $2=plugin@marketplace-id (install target)
   install_plugin() {
     local repo="$1"
     local target="$2"
-    local marketplace_id="${target##*@}"
-
-    if ! claude plugin marketplace list 2>/dev/null | grep -q "GitHub ($repo)"; then
-      hdr "Adding marketplace: $repo"
-      claude plugin marketplace add "$repo" 2>&1 | tail -2 || err "marketplace add failed: $repo"
+    if claude plugin list 2>/dev/null | grep -q "❯ $target$"; then
+      ok "plugin ready: $target (already installed)"
+      return 0
     fi
-
-    if ! claude plugin list 2>/dev/null | grep -q "❯ $target$"; then
-      hdr "Installing plugin: $target"
-      claude plugin install "$target" 2>&1 | tail -2 || err "plugin install failed: $target"
-    fi
-    ok "plugin ready: $target"
+    claude_marketplace_safe "$repo"
+    claude_install_safe "$target"
+    if [[ $DRY_RUN -eq 0 ]]; then ok "plugin ready: $target"; fi
   }
 
   # Sentry SDK + AI monitoring skills (Apache 2.0, vendor-published).
@@ -1009,17 +1252,11 @@ if [[ "${SKIP_VENDOR_SKILLS:-0}" != "1" ]]; then
   # Marketplace bundle. We install the relevant 8 plugins (Python toolchain +
   # security-defaults + property-based testing + diff review + clarification).
   # Skipped: blockchain/smart-contract specifics, Burp Suite, DWARF, etc.
-  if ! claude plugin marketplace list 2>/dev/null | grep -q "GitHub (trailofbits/skills)"; then
-    hdr "Adding marketplace: trailofbits/skills"
-    claude plugin marketplace add trailofbits/skills 2>&1 | tail -2 || err "trailofbits marketplace add failed"
-  fi
+  claude_marketplace_safe "trailofbits/skills"
   for plugin in modern-python insecure-defaults sharp-edges property-based-testing static-analysis testing-handbook-skills differential-review ask-questions-if-underspecified; do
-    if ! claude plugin list 2>/dev/null | grep -q "❯ $plugin@trailofbits$"; then
-      hdr "Installing trailofbits plugin: $plugin"
-      claude plugin install "$plugin@trailofbits" 2>&1 | tail -1 || err "trailofbits/$plugin install failed"
-    fi
+    claude_install_safe "$plugin@trailofbits"
   done
-  ok "trailofbits plugins ready"
+  if [[ $DRY_RUN -eq 0 ]]; then ok "trailofbits plugins ready"; fi
 
   # Stripe agent-toolkit (MIT, vendor-published).
   # Single plugin in a marketplace bundle. Includes stripe-best-practices
@@ -1050,13 +1287,16 @@ if [[ "${SKIP_VENDOR_SKILLS:-0}" != "1" ]]; then
   # to the top-level path so Claude auto-loads it.
   if [[ ! -d "$HOME/.claude/skills/lean-ctx" ]]; then
     hdr "Installing yvgude/lean-ctx (Apache 2.0, manual cherry-pick)"
-    git clone --quiet https://github.com/yvgude/lean-ctx.git "$HOME/.claude/skills/lean-ctx" \
-      || err "lean-ctx clone failed"
+    git_clone_safe "https://github.com/yvgude/lean-ctx.git" \
+                   "$HOME/.claude/skills/lean-ctx" \
+                   "lean-ctx clone"
   fi
-  if [[ -d "$HOME/.claude/skills/lean-ctx" ]] && [[ ! -L "$HOME/.claude/skills/lean-ctx/SKILL.md" ]] && [[ -f "$HOME/.claude/skills/lean-ctx/skills/lean-ctx/SKILL.md" ]]; then
+  if [[ $DRY_RUN -eq 0 && -d "$HOME/.claude/skills/lean-ctx" ]] && [[ ! -L "$HOME/.claude/skills/lean-ctx/SKILL.md" ]] && [[ -f "$HOME/.claude/skills/lean-ctx/skills/lean-ctx/SKILL.md" ]]; then
     ln -sf "$HOME/.claude/skills/lean-ctx/skills/lean-ctx/SKILL.md" "$HOME/.claude/skills/lean-ctx/SKILL.md"
   fi
-  [[ -L "$HOME/.claude/skills/lean-ctx/SKILL.md" ]] && ok "lean-ctx installed (top-level SKILL.md symlinked for auto-discovery)"
+  if [[ $DRY_RUN -eq 0 && -L "$HOME/.claude/skills/lean-ctx/SKILL.md" ]]; then
+    ok "lean-ctx installed (top-level SKILL.md symlinked for auto-discovery)"
+  fi
 
   # coreyhaines31/marketingskills (MIT, 27.5k stars). Marketplace bundle with
   # 41 marketing skills covering CRO, copywriting, SEO, paid ads, growth.
@@ -1073,10 +1313,13 @@ if [[ "${SKIP_VENDOR_SKILLS:-0}" != "1" ]]; then
   # is auto-discoverable).
   if [[ ! -d "$HOME/.claude/skills/rich-elicitation" ]]; then
     hdr "Installing CyberZenithX/Rich-Elicitation-Skill (MIT)"
-    git clone --quiet https://github.com/CyberZenithX/Rich-Elicitation-Skill.git "$HOME/.claude/skills/rich-elicitation" \
-      || err "rich-elicitation clone failed"
+    git_clone_safe "https://github.com/CyberZenithX/Rich-Elicitation-Skill.git" \
+                   "$HOME/.claude/skills/rich-elicitation" \
+                   "rich-elicitation clone"
   fi
-  [[ -f "$HOME/.claude/skills/rich-elicitation/SKILL.md" ]] && ok "rich-elicitation installed (top-level SKILL.md auto-discoverable)"
+  if [[ $DRY_RUN -eq 0 && -f "$HOME/.claude/skills/rich-elicitation/SKILL.md" ]]; then
+    ok "rich-elicitation installed (top-level SKILL.md auto-discoverable)"
+  fi
 
   # vercel-labs/agent-skills (NO LICENSE — all-rights-reserved by default).
   # Per CLAUDE.md license-hygiene: "No LICENSE file: treat as all-rights-reserved.
@@ -1088,10 +1331,13 @@ if [[ "${SKIP_VENDOR_SKILLS:-0}" != "1" ]]; then
   # If Vercel adds a license later, switch to plugin install or symlink.
   if [[ ! -d "$HOME/.claude/skills/vercel-agent-skills" ]]; then
     hdr "Cloning vercel-labs/agent-skills (NO LICENSE — read-only reference)"
-    git clone --quiet https://github.com/vercel-labs/agent-skills.git "$HOME/.claude/skills/vercel-agent-skills" \
-      || err "vercel-labs/agent-skills clone failed"
+    git_clone_safe "https://github.com/vercel-labs/agent-skills.git" \
+                   "$HOME/.claude/skills/vercel-agent-skills" \
+                   "vercel-labs/agent-skills clone"
   fi
-  [[ -d "$HOME/.claude/skills/vercel-agent-skills" ]] && ok "vercel-agent-skills cloned (read-only reference; no auto-load)"
+  if [[ $DRY_RUN -eq 0 && -d "$HOME/.claude/skills/vercel-agent-skills" ]]; then
+    ok "vercel-agent-skills cloned (read-only reference; no auto-load)"
+  fi
 
   # Skill_Seekers (MIT, yusufkaraaslan). Converts documentation from 17 source
   # types into production-ready formats for 24+ AI platforms. NOT a SKILL.md-
@@ -1105,42 +1351,19 @@ if [[ "${SKIP_VENDOR_SKILLS:-0}" != "1" ]]; then
   if ! command -v skill-seekers > /dev/null 2>&1; then
     if command -v pipx > /dev/null 2>&1; then
       hdr "Installing skill-seekers via pipx (MIT)"
-      pipx install skill-seekers 2>&1 | tail -3 || err "skill-seekers pipx install failed (manual: pipx install skill-seekers)"
+      pipx_install_safe skill-seekers || err "skill-seekers pipx install failed (manual: pipx install skill-seekers)"
     else
       err "pipx not found, cannot install skill-seekers (manual: pipx install skill-seekers OR pip install --user skill-seekers)"
     fi
   fi
-  command -v skill-seekers > /dev/null 2>&1 && ok "skill-seekers CLI installed"
+  if [[ $DRY_RUN -eq 0 ]] && command -v skill-seekers > /dev/null 2>&1; then
+    ok "skill-seekers CLI installed"
+  fi
   # Remove the earlier wrong-install if present (idempotent cleanup)
   if [[ -d "$HOME/.claude/skills/skill-seekers" ]] && [[ -f "$HOME/.claude/skills/skill-seekers/CLAUDE.md" ]] && [[ ! -f "$HOME/.claude/skills/skill-seekers/SKILL.md" ]]; then
     log "Removing wrong-install of skill-seekers (was git-cloned to skills dir, but it's a CLI tool not a SKILL.md skill)"
     rm -rf "$HOME/.claude/skills/skill-seekers"
   fi
-
-  # lean-ctx (Apache 2.0, yvgude). MCP server + context runtime: session
-  # caching, AST-aware compression, 90+ shell patterns to reduce token usage.
-  # Direct fit for substrate's token-optimization line.
-  if [[ ! -d "$HOME/.claude/skills/lean-ctx" ]]; then
-    hdr "Installing yvgude/lean-ctx (Apache 2.0)"
-    git clone --quiet https://github.com/yvgude/lean-ctx.git "$HOME/.claude/skills/lean-ctx" \
-      || err "lean-ctx clone failed (skipping; install manually: git clone https://github.com/yvgude/lean-ctx.git ~/.claude/skills/lean-ctx)"
-  fi
-  [[ -d "$HOME/.claude/skills/lean-ctx" ]] && ok "lean-ctx installed"
-
-  # Vercel-labs agent-skills (NO LICENSE — all-rights-reserved by default).
-  # Includes next-best-practices, next-cache-components, next-upgrade,
-  # react-best-practices, composition-patterns, web-design-guidelines,
-  # react-native-skills. Bootstrap-clone is user-side fetch from Vercel's
-  # GitHub. Per CLAUDE.md license-hygiene: "No LICENSE file: treat as
-  # all-rights-reserved. Reading is fine; copying is infringement." We do NOT
-  # fork or redistribute; users fetch directly from Vercel's repo. If Vercel
-  # adds a license later, we revisit.
-  if [[ ! -d "$HOME/.claude/skills/vercel-agent-skills" ]]; then
-    hdr "Installing vercel-labs/agent-skills (NO LICENSE — read-only)"
-    git clone --quiet https://github.com/vercel-labs/agent-skills.git "$HOME/.claude/skills/vercel-agent-skills" \
-      || err "vercel-labs/agent-skills clone failed (skipping; install manually: git clone https://github.com/vercel-labs/agent-skills.git ~/.claude/skills/vercel-agent-skills)"
-  fi
-  [[ -d "$HOME/.claude/skills/vercel-agent-skills" ]] && ok "vercel-agent-skills installed"
 
 fi
 
@@ -1391,6 +1614,34 @@ if [[ -f "$EMAIL_MARKER" && $DRY_RUN -eq 0 ]]; then
       >/dev/null 2>&1 || true
     set -e
   fi
+fi
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Post-install diagnose — final go/no-go beyond the basic CHECKS above.
+# Skipped in dry-run. Non-blocking.
+# ───────────────────────────────────────────────────────────────────────────────
+
+DIAGNOSE_SCRIPT="$SKILL_DIR/scripts/diagnose.sh"
+if [[ ! -f "$DIAGNOSE_SCRIPT" ]] && [[ -f "$HOME/Desktop/ai-brain-starter/scripts/diagnose.sh" ]]; then
+  DIAGNOSE_SCRIPT="$HOME/Desktop/ai-brain-starter/scripts/diagnose.sh"
+fi
+if [[ -f "$DIAGNOSE_SCRIPT" ]] && [[ "$DRY_RUN" -eq 0 ]]; then
+  hdr "$(t "Post-install diagnose" "Diagnóstico post-instalación")"
+  log "$(t "Running scripts/diagnose.sh for the final go/no-go." \
+          "Corriendo scripts/diagnose.sh para el go/no-go final.")"
+  set +e
+  bash "$DIAGNOSE_SCRIPT" 2>&1 | tail -40
+  DIAG_RC=$?
+  set -e
+  if [[ $DIAG_RC -ne 0 ]]; then
+    warn "$(t "Diagnose reported issues — see output above. Re-running bootstrap is safe." \
+            "Diagnose reportó problemas — mirá arriba. Volver a correr el bootstrap es seguro.")"
+  fi
+fi
+
+# State breadcrumb so the next run can surface "last successful run"
+if [[ "$DRY_RUN" -eq 0 ]]; then
+  echo "$(date +%Y-%m-%dT%H:%M:%S%z)" > "$BOOTSTRAP_STATE" 2>/dev/null || true
 fi
 
 # ───────────────────────────────────────────────────────────────────────────────

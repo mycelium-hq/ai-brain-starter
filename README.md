@@ -65,6 +65,44 @@ Read the four problems the team version solves: [`for-teams/why-teams-are-differ
 
 ## Install
 
+> **Requires Claude Code 2.1.133 or newer.** Bootstrap will refuse to run on older versions and tell you the upgrade command. To check, run `claude --version`. To upgrade: `npm i -g @anthropic-ai/claude-code@latest`.
+
+### Before you paste — what gets installed
+
+Bootstrap touches your `~/.claude/` directory and registers third-party content. Here's the full surface so you can opt in with eyes open.
+
+**Skill repos cloned to `~/.claude/skills/`:**
+
+| Repo | License | What it does |
+|---|---|---|
+| `ai-brain-starter` (this repo) | MIT | The substrate itself — vault setup, hooks, session lifecycle |
+| `humanizer` | MIT | De-AI-ifies writing, scores against your voice corpus |
+| `obra/superpowers` | MIT | Engineering discipline (TDD, brainstorming, debugging) |
+| `yvgude/lean-ctx` | Apache 2.0 | Context compression — shell patterns + AST-aware reads |
+| `CyberZenithX/Rich-Elicitation-Skill` | MIT | Multi-round clarifying questions before ambiguous tasks |
+| `vercel-labs/agent-skills` | No license — read-only reference | Next.js / React patterns; cloned but not auto-loaded |
+
+**Plugin marketplaces added (and the plugins enabled from each):**
+
+| Marketplace | Plugins enabled | License |
+|---|---|---|
+| `getsentry/sentry-skills` | sentry-skills (28+ SDK + AI monitoring sub-skills) | Apache 2.0 |
+| `trailofbits/skills` | modern-python, insecure-defaults, sharp-edges, property-based-testing, static-analysis, testing-handbook-skills, differential-review, ask-questions-if-underspecified | CC-BY-SA-4.0 |
+| `stripe/agent-toolkit` | stripe (best-practices, upgrade-stripe) | MIT |
+| `cloudflare/skills` | cloudflare (workers, durable-objects, agents-sdk, web-perf, wrangler, sandbox-sdk) | Apache 2.0 |
+| `AgriciDaniel/claude-seo` | claude-seo (25 sub-skills + 18 sub-agents) | MIT |
+| `obra/superpowers` | superpowers (engineering discipline as plugin) | MIT |
+| `coreyhaines31/marketingskills` | marketing-skills (41 marketing sub-skills) | MIT |
+| `kepano/obsidian-skills` | obsidian, context7, playwright | MIT |
+
+**MCP servers wired in `~/.claude/.mcp.json`:** `granola` (meeting transcription), `chatprd` (PRD drafting). Existing MCPs you wired yourself are preserved.
+
+**System tools (skipped if already present):** Homebrew, Python 3.10+, Node, npm, pipx, gh, fastmcp, graphify (via pipx), skill-seekers (via pipx), Obsidian.
+
+**Settings + backups:** every edit to `~/.claude/settings.json` and `~/.claude/.mcp.json` writes a `.bak-YYYY-MM-DD-HHMM` backup first. Existing custom marketplaces, plugins, hooks, env vars, and permissions are preserved (`setdefault` semantics, never overwrites).
+
+**Don't want all of it?** Set `SKIP_VENDOR_SKILLS=1` to skip third-party plugin marketplaces. The core ai-brain-starter substrate still installs. Removing later: `bash bootstrap.sh --uninstall` (asks for confirmation, then removes everything bootstrap installed; preserves your vault and your customizations).
+
 ### Step 1 — Open Claude Code
 
 Open the [Claude Code desktop app](https://claude.ai/download) and sign in with a paid Claude account (Pro, Max, or Team).
@@ -196,6 +234,8 @@ Full catalog with attribution and source links: [`docs/POWER_TOOLS.md`](docs/POW
 
 ## What Gets Created
 
+**In your vault** (the markdown side — what you see in Obsidian):
+
 ```
 Your Vault/
   CLAUDE.md                    # Your memory file — loaded every session
@@ -217,6 +257,20 @@ Your Vault/
   Books/                       # Book notes
   Psychology/                  # Inner work, therapy, growth
 ```
+
+**In Claude Code** (the tooling side — new commands you can invoke):
+
+```
+~/.claude/
+  skills/                      # 6 cloned skill repos (see "Before you paste" inventory)
+  plugins/                     # 8 plugin marketplaces, ~40+ installed plugins
+  settings.json                # +8 marketplace registrations, +3 enabled plugins
+  .mcp.json                    # +2 MCP servers (granola, chatprd)
+  .bootstrap.log               # Forensic log of every bootstrap run
+  .bootstrap-state             # Last successful run timestamp
+```
+
+The full inventory is in [Before you paste](#before-you-paste--what-gets-installed) above and [`docs/POWER_TOOLS.md`](docs/POWER_TOOLS.md). To remove cleanly: `bash bootstrap.sh --uninstall`.
 
 Plus custom folders based on your interview.
 
