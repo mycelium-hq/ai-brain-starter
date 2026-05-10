@@ -167,7 +167,7 @@ Checklist for GEO readiness:
 - [ ] **Q&A blocks where relevant** (format: `## Question` followed by direct answer). LLMs match on question structure.
 - [ ] **No login walls or paywalls on cited content.** Blocked content gets dropped from training and citation pools.
 - [ ] **Stable URLs over months.** LLMs cache; URL changes break citation continuity.
-- [ ] **Brand consistency** in entity names. "Mycelium AI" everywhere, not "the consultancy" or "my AI work" or other paraphrases.
+- [ ] **Brand consistency** in entity names. Pick the canonical brand name and use it everywhere; do not paraphrase ("the consultancy", "my AI work", "our shop") in headings or schema. LLMs entity-link on exact strings.
 - [ ] **`llms.txt` at root** if you want to direct LLM crawlers (analogous to robots.txt for AI). Format: list of canonical content URLs the site owner wants LLMs to prioritize.
 
 GEO does NOT replace SEO; it layers on top. Pages that pass classic SEO and add the GEO checklist tend to win both surfaces.
