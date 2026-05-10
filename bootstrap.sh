@@ -969,69 +969,109 @@ fi
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Vendor-published agent-skill bundles (engineering + operations adjacents)
-# Surfaced via VoltAgent/awesome-agent-skills catalog. Each vendor maintains
-# their own SKILL.md per platform, so we clone the upstream bundles directly.
-# Bootstrap-clone is a user-side fetch from each vendor's GitHub; we do not
-# bundle, redistribute, or fork. Per-bundle licenses verified 2026-05-10.
+# Surfaced via VoltAgent/awesome-agent-skills catalog. Install via Claude Code's
+# native plugin marketplace mechanism, NOT via raw git clone — plugin install
+# is the only path that registers the SKILL.md files for auto-discovery and
+# enables the <plugin-name>:<skill-name> namespace pattern.
 # Optional: skip with SKIP_VENDOR_SKILLS=1 (e.g. for air-gapped installs).
+# Per-bundle licenses verified 2026-05-10. Plumbing-fix codified 2026-05-10
+# after audit caught nested-SKILL.md bundles invisible to Claude when raw-cloned.
 # ───────────────────────────────────────────────────────────────────────────────
 
 if [[ "${SKIP_VENDOR_SKILLS:-0}" != "1" ]]; then
+
+  # Helper: register a marketplace + install a plugin (idempotent)
+  # Args: $1=owner/repo (marketplace source) $2=plugin@marketplace-id (install target)
+  install_plugin() {
+    local repo="$1"
+    local target="$2"
+    local marketplace_id="${target##*@}"
+
+    if ! claude plugin marketplace list 2>/dev/null | grep -q "GitHub ($repo)"; then
+      hdr "Adding marketplace: $repo"
+      claude plugin marketplace add "$repo" 2>&1 | tail -2 || err "marketplace add failed: $repo"
+    fi
+
+    if ! claude plugin list 2>/dev/null | grep -q "❯ $target$"; then
+      hdr "Installing plugin: $target"
+      claude plugin install "$target" 2>&1 | tail -2 || err "plugin install failed: $target"
+    fi
+    ok "plugin ready: $target"
+  }
 
   # Sentry SDK + AI monitoring skills (Apache 2.0, vendor-published).
   # 28+ language-specific SDK skills (Python, Next.js, React, Node, Cloudflare,
   # Flutter, Go, Ruby, etc.) plus sentry-setup-ai-monitoring which instruments
   # Anthropic, OpenAI, Vercel AI, LangChain, Google GenAI, and Pydantic AI calls.
-  if [[ ! -d "$HOME/.claude/skills/sentry-skills" ]]; then
-    hdr "Installing getsentry/sentry-skills (Apache 2.0)"
-    git clone --quiet https://github.com/getsentry/sentry-skills.git "$HOME/.claude/skills/sentry-skills" \
-      || err "sentry-skills clone failed (skipping; install manually: git clone https://github.com/getsentry/sentry-skills.git ~/.claude/skills/sentry-skills)"
-  fi
-  [[ -d "$HOME/.claude/skills/sentry-skills" ]] && ok "sentry-skills installed"
+  install_plugin "getsentry/sentry-skills" "sentry-skills@sentry-skills"
 
   # Trail of Bits skills (CC-BY-SA-4.0, security firm).
-  # 22 skills incl. modern-python (uv + ruff + ty + pytest), insecure-defaults,
-  # sharp-edges, static-analysis (CodeQL + Semgrep), property-based-testing,
-  # differential-review (security-focused diff review with git history).
-  # CC-BY-SA-4.0: bootstrap-clone is user-side fetch (OK); attribution required
-  # if redistributed. Do NOT bundle into ai-brain-starter (MIT).
-  if [[ ! -d "$HOME/.claude/skills/trailofbits-skills" ]]; then
-    hdr "Installing trailofbits/skills (CC-BY-SA-4.0)"
-    git clone --quiet https://github.com/trailofbits/skills.git "$HOME/.claude/skills/trailofbits-skills" \
-      || err "trailofbits/skills clone failed (skipping; install manually: git clone https://github.com/trailofbits/skills.git ~/.claude/skills/trailofbits-skills)"
+  # Marketplace bundle. We install the relevant 8 plugins (Python toolchain +
+  # security-defaults + property-based testing + diff review + clarification).
+  # Skipped: blockchain/smart-contract specifics, Burp Suite, DWARF, etc.
+  if ! claude plugin marketplace list 2>/dev/null | grep -q "GitHub (trailofbits/skills)"; then
+    hdr "Adding marketplace: trailofbits/skills"
+    claude plugin marketplace add trailofbits/skills 2>&1 | tail -2 || err "trailofbits marketplace add failed"
   fi
-  [[ -d "$HOME/.claude/skills/trailofbits-skills" ]] && ok "trailofbits-skills installed"
+  for plugin in modern-python insecure-defaults sharp-edges property-based-testing static-analysis testing-handbook-skills differential-review ask-questions-if-underspecified; do
+    if ! claude plugin list 2>/dev/null | grep -q "❯ $plugin@trailofbits$"; then
+      hdr "Installing trailofbits plugin: $plugin"
+      claude plugin install "$plugin@trailofbits" 2>&1 | tail -1 || err "trailofbits/$plugin install failed"
+    fi
+  done
+  ok "trailofbits plugins ready"
 
   # Stripe agent-toolkit (MIT, vendor-published).
-  # Includes stripe-best-practices (idempotency keys, webhook signatures,
-  # error handling patterns) and upgrade-stripe (SDK + API version bumps).
-  if [[ ! -d "$HOME/.claude/skills/stripe-agent-toolkit" ]]; then
-    hdr "Installing stripe/agent-toolkit (MIT)"
-    git clone --quiet https://github.com/stripe/agent-toolkit.git "$HOME/.claude/skills/stripe-agent-toolkit" \
-      || err "stripe/agent-toolkit clone failed (skipping; install manually: git clone https://github.com/stripe/agent-toolkit.git ~/.claude/skills/stripe-agent-toolkit)"
-  fi
-  [[ -d "$HOME/.claude/skills/stripe-agent-toolkit" ]] && ok "stripe-agent-toolkit installed"
+  # Single plugin in a marketplace bundle. Includes stripe-best-practices
+  # (idempotency keys, webhook signatures, error handling) and upgrade-stripe.
+  install_plugin "stripe/agent-toolkit" "stripe@stripe"
 
   # Cloudflare skills (Apache 2.0, vendor-published).
   # Includes web-perf (Core Web Vitals + render-blocking audits, stack-agnostic),
   # workers-best-practices, durable-objects, wrangler, agents-sdk, sandbox-sdk.
-  if [[ ! -d "$HOME/.claude/skills/cloudflare-skills" ]]; then
-    hdr "Installing cloudflare/skills (Apache 2.0)"
-    git clone --quiet https://github.com/cloudflare/skills.git "$HOME/.claude/skills/cloudflare-skills" \
-      || err "cloudflare/skills clone failed (skipping; install manually: git clone https://github.com/cloudflare/skills.git ~/.claude/skills/cloudflare-skills)"
-  fi
-  [[ -d "$HOME/.claude/skills/cloudflare-skills" ]] && ok "cloudflare-skills installed"
+  install_plugin "cloudflare/skills" "cloudflare@cloudflare"
 
   # claude-seo (MIT, AgriciDaniel). 25 sub-skills + 18 sub-agents covering
   # technical SEO, on-page (E-E-A-T), schema, AI search optimization (GEO),
-  # local SEO, GA4, PDF reports. Required for any consulting practice or
-  # public site (myceliumai.co, diazroa.com, etc.).
-  if [[ ! -d "$HOME/.claude/skills/claude-seo" ]]; then
-    hdr "Installing AgriciDaniel/claude-seo (MIT)"
-    git clone --quiet https://github.com/AgriciDaniel/claude-seo.git "$HOME/.claude/skills/claude-seo" \
-      || err "claude-seo clone failed (skipping; install manually: git clone https://github.com/AgriciDaniel/claude-seo.git ~/.claude/skills/claude-seo)"
+  # local SEO, GA4, PDF reports. Heavier than seo-substrate (which is the lean
+  # version cherry-picked from this bundle). Both can coexist; users pick which
+  # invocation pattern fits their site.
+  install_plugin "AgriciDaniel/claude-seo" "claude-seo@agricidaniel-seo"
+
+  # obra/superpowers (MIT, Jesse Vincent). Engineering-discipline skills:
+  # TDD, worktrees, brainstorming, root-cause-tracing, systematic-debugging,
+  # verification-before-completion, dispatching-parallel-agents, executing-plans,
+  # writing-plans, finishing-a-development-branch, receiving/requesting code review.
+  install_plugin "obra/superpowers" "superpowers@superpowers-dev"
+
+  # lean-ctx (Apache 2.0, yvgude). Context compression: AST-aware reads,
+  # cached re-reads (~13 tokens), 95+ shell patterns, MCP integration.
+  # NO plugin manifest in repo, so we git-clone + symlink the nested SKILL.md
+  # to the top-level path so Claude auto-loads it.
+  if [[ ! -d "$HOME/.claude/skills/lean-ctx" ]]; then
+    hdr "Installing yvgude/lean-ctx (Apache 2.0, manual cherry-pick)"
+    git clone --quiet https://github.com/yvgude/lean-ctx.git "$HOME/.claude/skills/lean-ctx" \
+      || err "lean-ctx clone failed"
   fi
-  [[ -d "$HOME/.claude/skills/claude-seo" ]] && ok "claude-seo installed"
+  if [[ -d "$HOME/.claude/skills/lean-ctx" ]] && [[ ! -L "$HOME/.claude/skills/lean-ctx/SKILL.md" ]] && [[ -f "$HOME/.claude/skills/lean-ctx/skills/lean-ctx/SKILL.md" ]]; then
+    ln -sf "$HOME/.claude/skills/lean-ctx/skills/lean-ctx/SKILL.md" "$HOME/.claude/skills/lean-ctx/SKILL.md"
+  fi
+  [[ -L "$HOME/.claude/skills/lean-ctx/SKILL.md" ]] && ok "lean-ctx installed (top-level SKILL.md symlinked for auto-discovery)"
+
+  # vercel-labs/agent-skills (NO LICENSE — all-rights-reserved by default).
+  # Per CLAUDE.md license-hygiene: "No LICENSE file: treat as all-rights-reserved.
+  # Reading is fine; copying is infringement." Bootstrap-clone is user-side fetch
+  # from Vercel's GitHub (fair use). We do NOT symlink SKILL.md to top-level
+  # because that would auto-load Vercel's content via redistribution semantics.
+  # The clone is a read-only reference: users browse SKILL.md files manually
+  # at ~/.claude/skills/vercel-agent-skills/ when they need Next.js patterns.
+  # If Vercel adds a license later, switch to plugin install or symlink.
+  if [[ ! -d "$HOME/.claude/skills/vercel-agent-skills" ]]; then
+    hdr "Cloning vercel-labs/agent-skills (NO LICENSE — read-only reference)"
+    git clone --quiet https://github.com/vercel-labs/agent-skills.git "$HOME/.claude/skills/vercel-agent-skills" \
+      || err "vercel-labs/agent-skills clone failed"
+  fi
+  [[ -d "$HOME/.claude/skills/vercel-agent-skills" ]] && ok "vercel-agent-skills cloned (read-only reference; no auto-load)"
 
   # Skill_Seekers (MIT, yusufkaraaslan). Converts documentation from 17 source
   # types into production-ready formats for 24+ AI platforms. NOT a SKILL.md-
