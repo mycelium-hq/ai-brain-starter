@@ -19,6 +19,7 @@ launched per-session by Claude Code.
 """
 from __future__ import annotations
 
+import json
 import logging
 import sys
 from contextlib import asynccontextmanager
@@ -28,6 +29,7 @@ from typing import Any
 
 from fastmcp import FastMCP
 
+import coach as coach_mod
 import cycle as cycle_mod
 import db
 import fitbit_client
@@ -874,6 +876,210 @@ def health_live_query(metric: str, host: str = "localhost", port: int = 9000, st
     if end:
         params["end"] = end
     return live_tcp.query("health_metrics", params, host=host, port=port)
+
+
+# ---------------------------------------------------------------------------
+# Coach (v0.4) — longevity + fitness coach state layer
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+def health_coach_prescribe(date_str: str, profile_json: str = "{}") -> dict[str, Any]:
+    """Issue a daily workout prescription.
+
+    Reads recovery + sleep + cycle + somatic state from health-mcp, applies
+    the profile (days_per_week, equipment, level, started_iso, etc.), and
+    returns a structured prescription with workout_type + intensity +
+    difficulty + why_today + deload flag.
+
+    profile_json: JSON string of the user's coach profile. The /coach skill
+    loads it from <vault>/Meta/coach-profile.yaml and passes it in.
+
+    The actual exercise list + sets/reps/weights is rendered by the /coach
+    skill's prompt using this prescription + the per-lift progression state
+    from health_coach_lift_state.
+    """
+    try:
+        profile = json.loads(profile_json) if profile_json else {}
+    except json.JSONDecodeError:
+        profile = {}
+    target = _parse_date(date_str)
+    with db.connect() as con:
+        recovery = scores.recovery_score(con, target)
+        sleep_s = scores.sleep_score(con, target)
+        cycle_ctx = cycle_mod.cycle_context(con, target)
+        if cycle_ctx.get("phase") == "unknown":
+            cycle_ctx = None
+        somatic = scores.somatic_state(con, target, lookback_min=30)
+        decision = coach_mod.decide_workout_type(
+            con, target, profile, recovery, sleep_s, cycle_ctx, somatic,
+        )
+        rx_id = coach_mod.prescription_id(target.isoformat(), decision["workout_type"])
+        # Idempotent: skip writing if same id exists today.
+        existing = con.execute(
+            "SELECT prescription_id FROM coach_prescriptions WHERE prescription_id = ?",
+            [rx_id],
+        ).fetchone()
+        if not existing:
+            con.execute(
+                "INSERT INTO coach_prescriptions "
+                "(prescribed_for, prescribed_at, workout_type, difficulty, duration_min, body_focus, exercises_json, why_today, prescription_id) "
+                "VALUES (?, NOW(), ?, ?, ?, ?, ?, ?, ?)",
+                [
+                    target, decision["workout_type"], decision["difficulty"],
+                    int(profile.get("session_minutes", 45)),
+                    profile.get("body_focus", ""),
+                    "",  # exercises_json filled by skill output if persisted
+                    decision["why_today"], rx_id,
+                ],
+            )
+    return {
+        "prescription_id": rx_id,
+        "date": target.isoformat(),
+        "workout_type": decision["workout_type"],
+        "intensity_factor": decision["intensity_factor"],
+        "difficulty": decision["difficulty"],
+        "deload_week": decision["deload_week"],
+        "why_today": decision["why_today"],
+        "recovery_score": recovery.get("score") if recovery else None,
+        "sleep_score": sleep_s.get("score") if sleep_s else None,
+        "cycle_phase": cycle_ctx.get("phase") if cycle_ctx else None,
+        "body_says_slow_down": somatic.get("body_says_slow_down") if somatic else None,
+        "interpretation_hint": (
+            "Use workout_type to pick the template. Use intensity_factor to "
+            "scale loads off the user's progression state (health_coach_lift_state). "
+            "Cite why_today verbatim in the user-facing block. If deload_week is True, "
+            "cut volume 40% and intensity 20%."
+        ),
+    }
+
+
+@mcp.tool()
+def health_coach_lift_state(lift_name: str) -> dict[str, Any]:
+    """Get progression state for a major lift (squat, deadlift, bench, etc.).
+
+    Returns {last_weight_kg, consecutive_full_sets, consecutive_failures,
+    current_top_set_kg, recommended_next_load (with action + weight + note)}.
+
+    Use this to program the next session's loads. Apply fail-twice-drop-10%,
+    complete-twice-add-2.5kg-upper / 5kg-lower, hold-on-single-fail.
+    """
+    with db.connect(read_only=True) as con:
+        state = coach_mod.get_last_lift(con, lift_name)
+    next_load = coach_mod.next_lift_load(state, prescribed_reps=5, prescribed_sets=3)
+    return {
+        "lift_name": lift_name,
+        "state": state,
+        "recommended_next_load": next_load,
+    }
+
+
+@mcp.tool()
+def health_coach_log_completion(
+    prescription_id: str,
+    rpe: int | None = None,
+    notes: str | None = None,
+    lift_actuals_json: str = "[]",
+) -> dict[str, Any]:
+    """Log a completed session + update per-lift progression.
+
+    lift_actuals_json: JSON array. Each entry: {lift_name, weight_kg,
+    sets_completed, reps_completed_per_set (list), prescribed_sets,
+    prescribed_reps}.
+
+    Updates coach_lift_progress so the next prescription reads the new state.
+    """
+    try:
+        actuals = json.loads(lift_actuals_json) if lift_actuals_json else []
+    except json.JSONDecodeError:
+        actuals = []
+    with db.connect() as con:
+        result = coach_mod.log_completion(con, prescription_id, rpe, notes, actuals)
+    return result
+
+
+@mcp.tool()
+def health_coach_recent_prescriptions(days: int = 7) -> list[dict[str, Any]]:
+    """List recent prescriptions with their completion status."""
+    cutoff = date.today() - timedelta(days=days)
+    with db.connect(read_only=True) as con:
+        rows = con.execute(
+            """
+            SELECT p.prescribed_for, p.workout_type, p.difficulty, p.why_today,
+                   p.prescription_id,
+                   (SELECT COUNT(*) FROM coach_completions c WHERE c.prescription_id = p.prescription_id) AS completed
+            FROM coach_prescriptions p
+            WHERE p.prescribed_for >= ?
+            ORDER BY p.prescribed_for DESC
+            """,
+            [cutoff],
+        ).fetchall()
+    return [
+        {
+            "date": str(r[0]), "workout_type": r[1], "difficulty": int(r[2] or 0),
+            "why_today": r[3], "prescription_id": r[4],
+            "completed": int(r[5] or 0) > 0,
+        }
+        for r in rows
+    ]
+
+
+@mcp.tool()
+def health_coach_summary(days: int = 28) -> dict[str, Any]:
+    """Coach summary for the last N days: completion rate, deload weeks,
+    workout-type distribution, average RPE, top-set progress on tracked lifts.
+
+    Use for weekly + monthly coach reviews.
+    """
+    cutoff = date.today() - timedelta(days=days)
+    with db.connect(read_only=True) as con:
+        prescribed = con.execute(
+            "SELECT COUNT(*) FROM coach_prescriptions WHERE prescribed_for >= ?",
+            [cutoff],
+        ).fetchone()[0]
+        completed = con.execute(
+            """
+            SELECT COUNT(DISTINCT c.prescription_id)
+            FROM coach_completions c JOIN coach_prescriptions p
+              ON c.prescription_id = p.prescription_id
+            WHERE p.prescribed_for >= ?
+            """,
+            [cutoff],
+        ).fetchone()[0]
+        by_type = con.execute(
+            """
+            SELECT workout_type, COUNT(*) FROM coach_prescriptions
+            WHERE prescribed_for >= ? GROUP BY workout_type ORDER BY 2 DESC
+            """,
+            [cutoff],
+        ).fetchall()
+        avg_rpe_row = con.execute(
+            """
+            SELECT AVG(c.rpe) FROM coach_completions c JOIN coach_prescriptions p
+              ON c.prescription_id = p.prescription_id
+            WHERE p.prescribed_for >= ?
+            """,
+            [cutoff],
+        ).fetchone()
+        avg_rpe = float(avg_rpe_row[0]) if avg_rpe_row and avg_rpe_row[0] is not None else None
+        lifts = con.execute(
+            "SELECT lift_name, current_top_set_kg, last_session_date FROM coach_lift_progress "
+            "WHERE last_session_date >= ? ORDER BY current_top_set_kg DESC",
+            [cutoff],
+        ).fetchall()
+    return {
+        "days_window": days,
+        "prescribed": int(prescribed or 0),
+        "completed": int(completed or 0),
+        "completion_rate_pct": round(100 * (completed or 0) / (prescribed or 1), 1),
+        "workout_type_distribution": {r[0]: int(r[1]) for r in by_type},
+        "average_rpe": round(avg_rpe, 1) if avg_rpe is not None else None,
+        "tracked_lifts": [
+            {"lift_name": r[0], "current_top_set_kg": float(r[1]) if r[1] is not None else None, "last_session_date": str(r[2])}
+            for r in lifts
+        ],
+    }
+
+
 
 
 if __name__ == "__main__":
