@@ -3,11 +3,16 @@
 # Keeps last N rotated copies, gzipped. Safe to call every SessionStart.
 # Runs silently and fast (~10ms for small logs); exits 0 always.
 #
-# Policy: rotate at >500KB, keep 3 generations (.1.gz .2.gz .3.gz).
-# Total cap per log ~2MB on disk after compression.
+# Policy: rotate at >500KB, keep 30 generations (.1.gz ... .30.gz).
+# Total cap per log ~16MB on disk after compression.
+#
+# KEEP default raised from 3 → 30 so substrate-audit-style analyses
+# over a 90-day window have enough rotated history to count rule fires.
+# Override per-host via env var (KEEP=N bash rotate-logs.sh).
 #
 # Usage:
 #   LOG_DIR=~/.claude/hooks bash rotate-logs.sh
+#   KEEP=30 LOG_DIR=~/.claude/hooks bash rotate-logs.sh
 #
 # Or add specific log paths to LOGS array below.
 
@@ -15,7 +20,7 @@ set +e
 
 LOG_DIR="${LOG_DIR:-$HOME/.claude/hooks}"
 MAX_BYTES="${MAX_BYTES:-512000}"
-KEEP="${KEEP:-3}"
+KEEP="${KEEP:-30}"
 
 # Auto-collect all .log files in LOG_DIR, or override by setting LOGS explicitly.
 if [ ${#LOGS[@]:-0} -eq 0 ]; then
