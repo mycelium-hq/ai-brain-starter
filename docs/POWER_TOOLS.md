@@ -100,6 +100,30 @@ You also need a `GEMINI_API_KEY` environment variable from [Google AI Studio](ht
 
 ---
 
+### obra/superpowers — work-discipline skills (TDD, worktrees, debugging)
+
+**What it does:** A bundle of generic engineering-discipline skills by Jesse Vincent. The ones that pair best with this substrate:
+
+- `test-driven-development` — red-green-refactor with an iron-law "no production code without a failing test first" stance. Pairs with project-specific TDD skills (e.g., a Vitest+pytest variant for a multi-runtime codebase).
+- `using-git-worktrees` — isolated worktree creation with safety verification. Pairs with the worktree-vs-main-vault path discipline this substrate already enforces via PreToolUse hooks.
+- `root-cause-tracing` — systematic upstream-trace from a deep error to its original trigger.
+- `systematic-debugging` — disciplined hypothesis-instrument-fix-regress loop for hard bugs.
+- `verification-before-completion` — pre-handoff audit pattern that mirrors this substrate's session-end cascade philosophy.
+- `brainstorming` — structured questioning that turns a rough idea into a design. Complements `/deconstruct` (first-principles) by sitting one step earlier in the funnel.
+
+**Why it matters:** the substrate handles memory, voice, vault, and session lifecycle. obra/superpowers handles the *engineering work itself* — the discipline of how code gets shipped. Together they cover both halves of a founder-engineer's day.
+
+**Install:**
+```bash
+git clone https://github.com/obra/superpowers.git ~/.claude/skills/superpowers
+```
+
+Each skill in `skills/<name>/` is auto-discovered by Claude Code. After cloning, restart Claude Code so the SKILL.md files load.
+
+**Source:** [obra/superpowers](https://github.com/obra/superpowers) by Jesse Vincent. MIT licensed. 184k stars at time of writing.
+
+---
+
 ## Cheap model APIs
 
 When the task is mechanical — extract entities, summarize a doc, classify notes — burning Opus tokens is wasteful. A cheap reasoning model costs 100–150x less and is sufficient.
