@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE HealthData [
+<!ELEMENT HealthData (ExportDate, Me, Record*, Workout*)>
+<!ELEMENT ExportDate EMPTY>
+<!ELEMENT Me EMPTY>
+<!ELEMENT Record EMPTY>
+<!ELEMENT Workout EMPTY>
+]>
+<HealthData locale="en_US">
+ <ExportDate value="2026-05-10 09:00:00 -0500"/>
+ <Me HKCharacteristicTypeIdentifierBiologicalSex="HKBiologicalSexNotSet"/>
+
+ <!-- Synthetic fixture for tests. NO REAL HEALTH DATA. -->
+
+ <!-- Steps: 3 days -->
+ <Record type="HKQuantityTypeIdentifierStepCount" sourceName="iPhone" unit="count" startDate="2026-05-08 08:00:00 -0500" endDate="2026-05-08 08:30:00 -0500" value="2500"/>
+ <Record type="HKQuantityTypeIdentifierStepCount" sourceName="iPhone" unit="count" startDate="2026-05-08 14:00:00 -0500" endDate="2026-05-08 14:30:00 -0500" value="3500"/>
+ <Record type="HKQuantityTypeIdentifierStepCount" sourceName="iPhone" unit="count" startDate="2026-05-09 09:00:00 -0500" endDate="2026-05-09 09:30:00 -0500" value="4200"/>
+ <Record type="HKQuantityTypeIdentifierStepCount" sourceName="iPhone" unit="count" startDate="2026-05-10 07:00:00 -0500" endDate="2026-05-10 07:30:00 -0500" value="1800"/>
+
+ <!-- Heart rate -->
+ <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Watch" unit="count/min" startDate="2026-05-09 12:00:00 -0500" endDate="2026-05-09 12:01:00 -0500" value="72"/>
+ <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Watch" unit="count/min" startDate="2026-05-09 12:30:00 -0500" endDate="2026-05-09 12:31:00 -0500" value="118"/>
+ <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Watch" unit="count/min" startDate="2026-05-09 13:00:00 -0500" endDate="2026-05-09 13:01:00 -0500" value="135"/>
+
+ <!-- Resting heart rate -->
+ <Record type="HKQuantityTypeIdentifierRestingHeartRate" sourceName="Watch" unit="count/min" startDate="2026-05-08 06:00:00 -0500" endDate="2026-05-08 06:00:00 -0500" value="58"/>
+ <Record type="HKQuantityTypeIdentifierRestingHeartRate" sourceName="Watch" unit="count/min" startDate="2026-05-09 06:00:00 -0500" endDate="2026-05-09 06:00:00 -0500" value="62"/>
+ <Record type="HKQuantityTypeIdentifierRestingHeartRate" sourceName="Watch" unit="count/min" startDate="2026-05-10 06:00:00 -0500" endDate="2026-05-10 06:00:00 -0500" value="55"/>
+
+ <!-- HRV -->
+ <Record type="HKQuantityTypeIdentifierHeartRateVariabilitySDNN" sourceName="Watch" unit="ms" startDate="2026-05-08 03:00:00 -0500" endDate="2026-05-08 03:00:00 -0500" value="38"/>
+ <Record type="HKQuantityTypeIdentifierHeartRateVariabilitySDNN" sourceName="Watch" unit="ms" startDate="2026-05-09 03:00:00 -0500" endDate="2026-05-09 03:00:00 -0500" value="31"/>
+ <Record type="HKQuantityTypeIdentifierHeartRateVariabilitySDNN" sourceName="Watch" unit="ms" startDate="2026-05-10 03:00:00 -0500" endDate="2026-05-10 03:00:00 -0500" value="45"/>
+
+ <!-- Active energy -->
+ <Record type="HKQuantityTypeIdentifierActiveEnergyBurned" sourceName="Watch" unit="kcal" startDate="2026-05-09 12:00:00 -0500" endDate="2026-05-09 13:00:00 -0500" value="320"/>
+ <Record type="HKQuantityTypeIdentifierBasalEnergyBurned" sourceName="Watch" unit="kcal" startDate="2026-05-09 00:00:00 -0500" endDate="2026-05-09 23:59:00 -0500" value="1650"/>
+
+ <!-- Mindful sessions -->
+ <Record type="HKCategoryTypeIdentifierMindfulSession" sourceName="Calm" startDate="2026-05-09 07:00:00 -0500" endDate="2026-05-09 07:15:00 -0500" value="HKCategoryValueNotApplicable"/>
+
+ <!-- Sleep stages: night of 2026-05-08 -> 2026-05-09 -->
+ <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Watch" startDate="2026-05-08 22:30:00 -0500" endDate="2026-05-08 23:00:00 -0500" value="HKCategoryValueSleepAnalysisInBed"/>
+ <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Watch" startDate="2026-05-08 23:00:00 -0500" endDate="2026-05-09 00:30:00 -0500" value="HKCategoryValueSleepAnalysisAsleepCore"/>
+ <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Watch" startDate="2026-05-09 00:30:00 -0500" endDate="2026-05-09 01:30:00 -0500" value="HKCategoryValueSleepAnalysisAsleepDeep"/>
+ <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Watch" startDate="2026-05-09 01:30:00 -0500" endDate="2026-05-09 03:00:00 -0500" value="HKCategoryValueSleepAnalysisAsleepCore"/>
+ <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Watch" startDate="2026-05-09 03:00:00 -0500" endDate="2026-05-09 04:30:00 -0500" value="HKCategoryValueSleepAnalysisAsleepREM"/>
+ <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Watch" startDate="2026-05-09 04:30:00 -0500" endDate="2026-05-09 05:00:00 -0500" value="HKCategoryValueSleepAnalysisAwake"/>
+ <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Watch" startDate="2026-05-09 05:00:00 -0500" endDate="2026-05-09 06:30:00 -0500" value="HKCategoryValueSleepAnalysisAsleepCore"/>
+
+ <!-- Workout: 32-minute run -->
+ <Workout workoutActivityType="HKWorkoutActivityTypeRunning" duration="32" durationUnit="min" totalDistance="5.1" totalDistanceUnit="km" totalEnergyBurned="320" totalEnergyBurnedUnit="kcal" sourceName="Watch" startDate="2026-05-09 12:00:00 -0500" endDate="2026-05-09 12:32:00 -0500"/>
+
+</HealthData>

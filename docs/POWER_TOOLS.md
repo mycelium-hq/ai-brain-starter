@@ -361,6 +361,49 @@ Then open Claude Code and use any ChatPRD tool — it will prompt you to authent
 
 ---
 
+### health-mcp — Apple Health into the substrate
+
+**What it does:** Imports Apple Health data (XML export, Simple Health Export CSV, or Health Auto Export TCP-live) into a local DuckDB and exposes 15 tools across 5 categories: ingestion, query, analytics (recovery / sleep / strain scores with open formulas), vault-aware (journal context, Floor correlation, coaching context, panel context, weekly rollup), and live (TCP query against Health Auto Export iOS app).
+
+**Why it matters:** the substrate ships skills for daily journaling, coaching, advisory-panel synthesis, and weekly insights. Each one is more accurate when it knows how the body felt during the moments it analyzes. health-mcp closes that gap. The vault-aware tools READ journal frontmatter (`floor_level`, `floor`) and correlate biometrics with emotional Floor tags — the differentiating capability no other Apple Health MCP has. The companion skills `ingest-health` and `health-context` wire it into `/journal`, `/coaching`, `/panel`, `/patterns`, `/weekly`, `/monthly` so the body track and the emotional track meet automatically.
+
+**Three ingestion modes** (pick by data flow):
+- **XML export.zip** (free, manual, universal): iOS Health → Profile → Export All Health Data → run `health_import_xml(zip_path)`
+- **Simple Health Export CSV** (free, manual): Simple Health Export iOS app → folder of `HKQuantityTypeIdentifier*.csv` → run `health_import_csv(folder_path)`
+- **Health Auto Export TCP** (paid iOS app, real-time): Health Auto Export Premium → enable TCP server → run `health_live_query(metric, host, port, ...)`
+
+**Open scoring algorithms:** Recovery (0-100, 40% HRV vs 30-day baseline + 20% RHR + 25% sleep duration + 15% sleep efficiency), Sleep (0-100, 40% duration + 25% efficiency + 20% REM% + 15% deep%), Strain (0-21 Whoop-shape, log compression). All deterministic Python with weights + formulas in `scores.py`. Directional, not diagnostic.
+
+**Install:**
+```bash
+cd services/health-mcp
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e .
+```
+
+Register in your project `.mcp.json`:
+```json
+{
+  "mcpServers": {
+    "health": {
+      "command": "python3",
+      "args": ["-m", "main"],
+      "env": {"HEALTH_MCP_DB": "~/.claude/health-mcp/health.duckdb"}
+    }
+  }
+}
+```
+
+Restart Claude Code, then run `/ingest-health <path-to-export.zip>` and `health_status()` for a smoke check.
+
+**Composition:** `health-context` skill auto-fires when daily-journal, coaching, advisory-panel, patterns, or insights skills run. Host skills get biometric context folded into their prompts without each one re-implementing the connection layer.
+
+**Privacy:** local-only. DuckDB stays on disk. No cloud sync, no telemetry. Vault-aware tools READ frontmatter; never write. TCP live mode is local Wi-Fi only.
+
+**Source:** `services/health-mcp/` in this repo. Built with [FastMCP](https://github.com/jlowin/fastmcp) + [DuckDB](https://duckdb.org/) + [lxml](https://lxml.de/) for streaming XML parse. Existing-impl audit: surveyed [the-momentum/open-wearables](https://github.com/the-momentum/open-wearables), [the-momentum/apple-health-mcp-server](https://github.com/the-momentum/apple-health-mcp-server), [neiltron/apple-health-mcp](https://github.com/neiltron/apple-health-mcp), [HealthyApps/health-auto-export-mcp-server](https://github.com/HealthyApps/health-auto-export-mcp-server) before building. None covered the substrate-fit surface (Python + lightweight + multi-mode + vault-aware) so we unioned best-of-each per the WhatsApp-MCP build pattern.
+
+---
+
 ### Recommended additional MCP servers (optional)
 
 The Claude Code MCP ecosystem is growing fast. Other servers worth adding for a founder workflow:

@@ -28,3 +28,9 @@ secrets.json
 
 # Per-clone drift-check personal-pattern list (use .driftignore.example as starting point).
 .driftignore
+
+# health-mcp local DuckDB (user health data, never commit).
+*.duckdb
+*.duckdb.wal
+*.duckdb.tmp
+**/health-mcp-extract/
