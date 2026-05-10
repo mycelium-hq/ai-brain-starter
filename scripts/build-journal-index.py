@@ -57,40 +57,43 @@ def main():
     output_path = os.path.join(meta_dir, "journal-index.json")
     entries = []
 
-    for fname in os.listdir(journal_dir):
-        if not fname.endswith(".md"):
-            continue
-        fpath = os.path.join(journal_dir, fname)
-        if os.path.isdir(fpath):
-            continue
-        try:
-            with open(fpath, "r", encoding="utf-8", errors="replace") as f:
-                in_fm = False
-                meta = {}
-                for i, line in enumerate(f):
-                    if i == 0 and line.strip() == "---":
-                        in_fm = True
-                        continue
-                    if in_fm:
-                        if line.strip() == "---":
+    # Recursive walk: indexes journals nested under year-month subfolders
+    # (e.g. Journals/2026-04/2026-04-15.md), not just top-level files.
+    for root, _dirs, files in os.walk(journal_dir):
+        for fname in files:
+            if not fname.endswith(".md"):
+                continue
+            fpath = os.path.join(root, fname)
+            try:
+                with open(fpath, "r", encoding="utf-8", errors="replace") as f:
+                    in_fm = False
+                    meta = {}
+                    for i, line in enumerate(f):
+                        if i == 0 and line.strip() == "---":
+                            in_fm = True
+                            continue
+                        if in_fm:
+                            if line.strip() == "---":
+                                break
+                            if ": " in line:
+                                k, v = line.split(": ", 1)
+                                meta[k.strip()] = v.strip().strip("'\"")
+                        if i > 15:
                             break
-                        if ": " in line:
-                            k, v = line.split(": ", 1)
-                            meta[k.strip()] = v.strip().strip("'\"")
-                    if i > 15:
-                        break
-                if "creationDate" in meta:
-                    entry = {
-                        "file": fname,
-                        "date": meta["creationDate"][:10],
-                    }
-                    if "floor" in meta:
-                        entry["floor"] = meta["floor"]
-                    if "floor_level" in meta:
-                        entry["floor_level"] = meta["floor_level"]
-                    entries.append(entry)
-        except Exception:
-            pass
+                    if "creationDate" in meta:
+                        # Store path relative to journal_dir so subfoldered
+                        # entries with colliding basenames stay distinct.
+                        entry = {
+                            "file": os.path.relpath(fpath, journal_dir),
+                            "date": meta["creationDate"][:10],
+                        }
+                        if "floor" in meta:
+                            entry["floor"] = meta["floor"]
+                        if "floor_level" in meta:
+                            entry["floor_level"] = meta["floor_level"]
+                        entries.append(entry)
+            except Exception:
+                pass
 
     entries.sort(key=lambda x: x["date"])
     output = {
