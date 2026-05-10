@@ -9,6 +9,58 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-10: health-mcp v0.2 — full HealthKit surface + cycle awareness + lab import + voice bridge
+
+**Who this affects:** anyone who installed health-mcp at v0.1 (the Apple Health connector that paired biometrics with daily-journal / coaching / advisory-panel / patterns / insights). Or anyone who hasn't installed it yet but uses the body-aware skills.
+
+**The shape:** v0.1 covered the obvious 15-tool surface — XML / CSV / TCP ingestion, recovery / sleep / strain scores, journal / coaching / panel / insights context. The advisory-panel pass on 2026-05-10 (every Health & Body voice plus Jackie Kennedy) flagged the gaps: cycle phase entirely missing, only ~20 quantity types covered, no lab import, no symptoms, no ECG, no iOS 17 State of Mind, voice register breaking when biometric data lands inside a journaling skill. v0.2 closes all of it.
+
+### What landed
+
+1. **Full HealthKit surface coverage.** The type registry now indexes 108 quantity types (every Apple Health metric — VO2Max, walking steadiness, sleeping wrist temperature, all 40 dietary types, blood oxygen, AFib burden, ECG, etc.), 47 symptom + cardio-event + sensory-event types (headache, bloating, fatigue, hot flashes, lower back pain, pelvic pain, irregular heart rhythm event, etc.), 14 cycle / reproductive types (menstrual flow, cervical mucus, ovulation tests, pregnancy, contraceptive, lactation, sexual activity), ECG records with classification, and iOS 17+ State of Mind mood logs. New tables: `cycle`, `symptoms`, `ecg`, `state_of_mind`, `labs`.
+
+2. **Cycle phase awareness (Sims + Briden, panel 2026-05-10).** Three new tools — `health_cycle_context`, `health_phase_tagged_metric`, `health_phase_means` — read menstrual flow records and surface current phase + cycle day + length variance + irregularity flag. A low-HRV day in mid-luteal is normal physiology, not a recovery deficit; the substrate now contextualizes biometrics by cycle phase instead of gaslighting half its users.
+
+3. **Lab CSV import (Boham, panel 2026-05-10).** New tool `health_import_labs` accepts LabCorp / Quest / Function Health / generic CSV exports. Auto-detects format. Plus `health_recommended_labs()` returns the 16-marker substrate reference panel (ApoB, fasting insulin, hs-CRP, full thyroid, sex hormones, vitamin D, etc.) with the WHY for each marker. Apple Health captures the visible 20% of health; the chemistry that drives chronic disease is invisible to it. The labs change the prescription.
+
+4. **Voice bridge (chairman synthesis, panel 2026-05-10).** `health_journal_context` now takes a `voice_profile` arg (`clinical` / `warm` / `curious`). The same biometric data renders as "HRV 28ms (-33% vs 30-day baseline)" or "you slept 5h 12m short night; HRV ran noticeably below your usual" or "Body, last 24h: ... Anything you want to notice about how that maps to what happened yesterday?". The host skill picks the register so the journaling voice is preserved.
+
+5. **Body literacy prompts (Bainbridge, panel 2026-05-10, dissent voice integrated).** `health_journal_body_question` returns NOT a number but a context-aware embodiment question. "Your body had a hard night. What did it want from you today that you didn't give it?" The substrate is for inhabiting a body, not surveilling one.
+
+6. **Sleep regularity (Winter, panel 2026-05-10).** New `health_sleep_regularity` returns regularity score 0-100 derived from bed-time + wake-time + duration variance, plus mean sleep latency and nap detection. Chronic sleep debt is the predictor; one-night sleep score isn't the whole signal.
+
+7. **Longevity panel (Attia + Patrick, panel 2026-05-10).** `health_longevity_panel` bundles VO2Max, walking speed, walking steadiness, lean body mass, body fat %, Zone 2 minutes, and 6-minute walk distance into one call. The most-predictive longevity markers Apple Watch already records.
+
+8. **Somatic pre-check for coaching (Levine, panel 2026-05-10).** `health_somatic_state` returns recent HR/HRV volatility plus a `body_says_slow_down` boolean. The coaching skill should call this BEFORE emotional inquiry. Sympathetic activation makes reframe work counterproductive; the body asks for regulation first.
+
+9. **Nutrition under-fuel detector (Braddock, panel 2026-05-10).** `health_nutrition_summary` aggregates dietary records and flags days where consumed kcal < 70% of (basal + active). Under-fueled days show up as low HRV, and the recovery score will tell you to "rest" when the actual prescription is "eat enough." Catches the asymmetry.
+
+10. **Long-window mode (van der Kolk, panel 2026-05-10).** `health_long_window` and `health_long_window_with_journal` compare same-month-this-year vs same-month-last-year and surface persistent asymmetries (4+ months on the same side of YoY delta). Trauma signatures and seasonal Floor-body coupling don't show up in 30-day windows.
+
+11. **Symptom-vs-Floor correlation (Pagliano, panel 2026-05-10).** `health_symptom_correlation` correlates symptom occurrences with Floor tags. Surfaces "headache co-occurs with Floor 4 (Fear) at 58%, vs 12% baseline" — useful for pelvic / migraine / GI patterns that may be Floor-linked.
+
+12. **Audio exposure tool.** `health_audio_exposure` returns hours over the safe-listening threshold (default 80 dB) for environmental + headphone audio. WHO recommends < 1hr/day at >85 dB; cumulative hearing damage is dose-dependent and irreversible.
+
+13. **Privacy-first README (Jackie Kennedy, panel 2026-05-10, public-facing review).** Privacy commitment now opens both README and SETUP. "Local-only. Your health data never leaves your machine. Every score is directional, not diagnostic." appears above the fold. Cost-status of each ingestion path is labeled explicitly.
+
+### Tools count
+
+v0.1 was 15 tools across 5 categories. v0.2 ships 32 tools across 8 categories: ingestion (5), query (3), analytics (5), surface (7 — longevity / sleep regularity / somatic state / nutrition / long window / audio exposure / lab panel), cycle (3), symptoms + ECG + state-of-mind (3), vault-aware (8 — including voice-bridge and body literacy), live (1). Plus `health_recommended_labs` for the panel reference list.
+
+### Tests
+
+41 passing (up from 18 in v0.1). New v0.2 fixture covers cycle records, symptoms, ECG, State of Mind, longevity quantity types, and dietary records. Lab CSV fixture exercises the LabCorp / Quest / Function / generic auto-detection.
+
+### What you might want to do
+
+If you installed v0.1, `git pull` and re-import your Apple Health export.zip with `health_import_xml(path, force=True)` to populate the new cycle, symptoms, ECG, and State of Mind tables. Existing scores stay valid.
+
+If you're on a clean install, follow [services/health-mcp/SETUP.md](../services/health-mcp/SETUP.md) for the three-mode ingestion flow.
+
+If you take periodic labs, export from your patient portal and try `health_import_labs(path, lab_format='auto')`.
+
+---
+
 ## 2026-05-09: v1.3.1 vertical-healthcare actually-complete + CI privacy scanner fix
 
 **Who this affects:** anyone who installed v1.3.0 expecting `/vertical-healthcare init` to register and stage drafts.

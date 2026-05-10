@@ -361,9 +361,9 @@ Then open Claude Code and use any ChatPRD tool — it will prompt you to authent
 
 ---
 
-### health-mcp — Apple Health into the substrate
+### health-mcp — Apple Health into the substrate (v0.2)
 
-**What it does:** Imports Apple Health data (XML export, Simple Health Export CSV, or Health Auto Export TCP-live) into a local DuckDB and exposes 15 tools across 5 categories: ingestion, query, analytics (recovery / sleep / strain scores with open formulas), vault-aware (journal context, Floor correlation, coaching context, panel context, weekly rollup), and live (TCP query against Health Auto Export iOS app).
+**What it does:** Imports the full Apple Health surface (108 quantity types + 47 symptom types + 14 cycle / reproductive types + ECG + iOS 17 State of Mind) into local DuckDB and exposes 32 tools across 8 categories: ingestion (XML / Simple Health Export CSV / Health Auto Export TCP-live + lab CSV import), query, analytics (recovery / sleep / strain / sleep regularity / longevity panel / somatic state / nutrition under-fuel detector / long-window YoY / audio exposure), cycle (phase + cycle-day + irregularity flag + phase-tagged metrics), symptoms / ECG / state-of-mind timelines, vault-aware (journal context with voice profile, body-literacy prompts, Floor correlation, symptom correlation, coaching context, panel context, weekly rollup, long-window with journal), and live TCP. Plus `health_recommended_labs()` returns a 16-marker reference panel with the WHY for each marker.
 
 **Why it matters:** the substrate ships skills for daily journaling, coaching, advisory-panel synthesis, and weekly insights. Each one is more accurate when it knows how the body felt during the moments it analyzes. health-mcp closes that gap. The vault-aware tools READ journal frontmatter (`floor_level`, `floor`) and correlate biometrics with emotional Floor tags — the differentiating capability no other Apple Health MCP has. The companion skills `ingest-health` and `health-context` wire it into `/journal`, `/coaching`, `/panel`, `/patterns`, `/weekly`, `/monthly` so the body track and the emotional track meet automatically.
 

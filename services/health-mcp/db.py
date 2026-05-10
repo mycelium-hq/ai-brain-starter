@@ -5,17 +5,26 @@ open a fresh connection per call and close it on return so concurrent stdio
 tool invocations do not collide.
 
 Schema:
-  records        — quantity + category records from Apple Health
-  workouts       — workout sessions
-  sleep          — sleep stage segments (parsed out of HKCategoryTypeIdentifierSleepAnalysis)
-  imports        — file ingest log; SHA-256 of source file used for idempotent re-imports
+  records        — HKQuantityType + duration-bearing HKCategoryType records
+  workouts       — HKWorkout sessions
+  sleep          — sleep stage segments (HKCategoryTypeIdentifierSleepAnalysis)
+  cycle          — menstrual + reproductive HKCategoryType records (flow,
+                   cervical mucus, ovulation tests, pregnancy, contraceptive,
+                   lactation, sexual activity)
+  symptoms       — HKCategoryType symptom + cardio-event + sensory-event records
+                   with severity ('mild'/'moderate'/'severe' or 'event')
+  ecg            — HKElectrocardiogram entries with classification
+  state_of_mind  — HKStateOfMind mood logs (iOS 17+)
+  labs           — manual lab imports (LabCorp / Quest / Function Health /
+                   generic CSV) — clinical chemistry that Apple Health doesn't
+                   capture (ApoB, fasting insulin, hs-CRP, full thyroid, etc.)
+  imports        — file ingest log; SHA-256 of source file used for idempotent
+                   re-imports
 
 Idempotency:
-  imports.file_sha is the natural dedup key. health_import_xml / _csv hash the
-  source file, look it up in `imports`, skip if found unless force=True.
-  Within a single import, record-level dedup uses the natural key
-  (type, source_name, start_date, end_date, value) so partial re-imports do
-  not duplicate rows.
+  imports.file_sha is the natural dedup key. health_import_xml / _csv / _labs
+  hash the source file, look it up in `imports`, skip if found unless
+  force=True.
 """
 from __future__ import annotations
 
@@ -84,10 +93,74 @@ def init_schema(con: "duckdb.DuckDBPyConnection") -> None:
         );
         """
     )
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cycle (
+            type        VARCHAR NOT NULL,
+            start_date  TIMESTAMP NOT NULL,
+            end_date    TIMESTAMP NOT NULL,
+            value       VARCHAR,
+            source_name VARCHAR
+        );
+        """
+    )
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS symptoms (
+            type        VARCHAR NOT NULL,
+            start_date  TIMESTAMP NOT NULL,
+            end_date    TIMESTAMP NOT NULL,
+            severity    VARCHAR,
+            source_name VARCHAR
+        );
+        """
+    )
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ecg (
+            start_date         TIMESTAMP NOT NULL,
+            classification     VARCHAR,
+            average_heart_rate DOUBLE,
+            sampling_frequency DOUBLE,
+            source_name        VARCHAR
+        );
+        """
+    )
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS state_of_mind (
+            start_date  TIMESTAMP NOT NULL,
+            end_date    TIMESTAMP NOT NULL,
+            kind        VARCHAR,
+            valence     DOUBLE,
+            labels      VARCHAR,
+            associations VARCHAR,
+            source_name VARCHAR
+        );
+        """
+    )
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS labs (
+            test_date   DATE NOT NULL,
+            panel       VARCHAR,
+            marker      VARCHAR NOT NULL,
+            value       DOUBLE,
+            unit        VARCHAR,
+            range_low   DOUBLE,
+            range_high  DOUBLE,
+            status      VARCHAR,
+            source      VARCHAR
+        );
+        """
+    )
     # Speed up the common time-window queries.
     con.execute("CREATE INDEX IF NOT EXISTS idx_records_type_start ON records(type, start_date);")
     con.execute("CREATE INDEX IF NOT EXISTS idx_workouts_start ON workouts(start_date);")
     con.execute("CREATE INDEX IF NOT EXISTS idx_sleep_start ON sleep(start_date);")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_cycle_type_start ON cycle(type, start_date);")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_symptoms_type_start ON symptoms(type, start_date);")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_labs_marker_date ON labs(marker, test_date);")
 
 
 @contextmanager
@@ -128,9 +201,12 @@ def log_import(
 def stats(con: "duckdb.DuckDBPyConnection") -> dict[str, Any]:
     """Per-table counts + last import timestamp."""
     out: dict[str, Any] = {}
-    for table in ("records", "workouts", "sleep", "imports"):
-        row = con.execute(f"SELECT COUNT(*) FROM {table};").fetchone()
-        out[f"{table}_count"] = row[0] if row else 0
+    for table in ("records", "workouts", "sleep", "cycle", "symptoms", "ecg", "state_of_mind", "labs", "imports"):
+        try:
+            row = con.execute(f"SELECT COUNT(*) FROM {table};").fetchone()
+            out[f"{table}_count"] = row[0] if row else 0
+        except Exception:
+            out[f"{table}_count"] = 0
     last = con.execute(
         "SELECT MAX(imported_at), MIN(imported_at) FROM imports;"
     ).fetchone()
