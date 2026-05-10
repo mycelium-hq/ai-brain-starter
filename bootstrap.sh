@@ -646,8 +646,8 @@ git_clone_safe() {
   if [[ -d "$dest/.git" ]]; then
     return 0
   fi
-  run_with_timeout "$GIT_CLONE_TIMEOUT_SECS" git clone --quiet "$url" "$dest" 2>/dev/null
-  local ec=$?
+  local ec=0
+  run_with_timeout "$GIT_CLONE_TIMEOUT_SECS" git clone --quiet "$url" "$dest" 2>/dev/null || ec=$?
   if [[ "$ec" == "124" ]]; then
     err "$desc — clone exceeded ${GIT_CLONE_TIMEOUT_SECS}s timeout. Skipping; re-run later."
   elif [[ "$ec" -ne 0 ]]; then
