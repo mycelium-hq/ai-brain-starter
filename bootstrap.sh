@@ -1058,6 +1058,26 @@ if [[ "${SKIP_VENDOR_SKILLS:-0}" != "1" ]]; then
   fi
   [[ -L "$HOME/.claude/skills/lean-ctx/SKILL.md" ]] && ok "lean-ctx installed (top-level SKILL.md symlinked for auto-discovery)"
 
+  # coreyhaines31/marketingskills (MIT, 27.5k stars). Marketplace bundle with
+  # 41 marketing skills covering CRO, copywriting, SEO, paid ads, growth.
+  # Direct fit for the Mycelium consulting funnel (myceliumai.co + diazroa.com),
+  # Substack post launches, Apollo outreach sequences, pricing strategy.
+  # Surfaced 2026-05-10 during proper WhatsApp-bar audit (missed in prior pass).
+  install_plugin "coreyhaines31/marketingskills" "marketing-skills@marketingskills"
+
+  # CyberZenithX/Rich-Elicitation-Skill (MIT). Multi-round clarifying questions
+  # before ambiguous tasks. Pairs better than ToB's ask-questions because it
+  # ships specific operational guidance: 3-4 options per question, mark
+  # Recommended on the preferred path, lead with framing sentence, ask-before-
+  # AND-during. No plugin manifest in repo, so we git-clone (top-level SKILL.md
+  # is auto-discoverable).
+  if [[ ! -d "$HOME/.claude/skills/rich-elicitation" ]]; then
+    hdr "Installing CyberZenithX/Rich-Elicitation-Skill (MIT)"
+    git clone --quiet https://github.com/CyberZenithX/Rich-Elicitation-Skill.git "$HOME/.claude/skills/rich-elicitation" \
+      || err "rich-elicitation clone failed"
+  fi
+  [[ -f "$HOME/.claude/skills/rich-elicitation/SKILL.md" ]] && ok "rich-elicitation installed (top-level SKILL.md auto-discoverable)"
+
   # vercel-labs/agent-skills (NO LICENSE — all-rights-reserved by default).
   # Per CLAUDE.md license-hygiene: "No LICENSE file: treat as all-rights-reserved.
   # Reading is fine; copying is infringement." Bootstrap-clone is user-side fetch
