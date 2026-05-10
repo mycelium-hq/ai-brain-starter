@@ -11,40 +11,61 @@ This doc explains the auto-trigger chain, what fires when, and how to verify it'
 
 ## The chain
 
+Single entry point: the user's existing daily `/journal` habit. The chain runs once per day, gated to the moment the user actually engages with the substrate.
+
 ```
-06:30 (any time) — User opens Claude Code
+User opens Claude Code at some point in the day (any number of sessions)
+    │   (SessionStart fires no health hooks — pure overhead reduction
+    │    for users with ~20 sessions/day. Codified 2026-05-10.)
     │
     ▼
-SessionStart hook fires
-    │
-    ▼
-hooks/health-auto-sync.py
-    │   Checks last Oura import age. If > 24h: pulls yesterday's data.
-    │   Checks last Fitbit import age. If > 24h: pulls yesterday's data.
-    │   Apple Health skipped (requires iOS interaction).
-    │
-    ▼
-User types /journal (or similar) at any point in the session
+User types /journal (existing daily habit)
     │
     ▼
 Stop hook fires when /journal completes
     │
     ▼
-hooks/coach-auto-prescribe-on-journal.py
-    │   Reads <vault>/Meta/coach-profile.yaml.
-    │   Checks if today's prescription exists. If not, fires
-    │   health_coach_prescribe with the saved profile.
-    │   Runs scripts/backfill-journal-body-context.py for yesterday only
-    │   (appends Body track section below yesterday's verbatim journal).
+hooks/coach-auto-prescribe-on-journal.py runs three steps in order:
+    │
+    │   1. Wearable sync — checks last Oura import age, last Fitbit
+    │      import age. For each vendor with credentials set AND data > 24h
+    │      stale: pulls yesterday → today catch-up window. Apple Health
+    │      skipped (requires iOS interaction; hookify nudges on stale).
+    │
+    │   2. Journal backfill — runs scripts/backfill-journal-body-context.py
+    │      for yesterday only. Appends Body track section below yesterday's
+    │      verbatim content (substrate journal-verbatim rule preserved).
+    │
+    │   3. Coach prescription — reads <vault>/Meta/coach-profile.yaml.
+    │      Checks if today's prescription exists. If not, fires the
+    │      coach.decide_workout_type decision tree (recovery + sleep +
+    │      cycle phase + somatic state + body_says_slow_down + Floor
+    │      qualifier from today's journal).
     │
     ▼
 If profile.calendar_drop=true AND google-workspace MCP connected:
-    │   Drops today's workout to Google Calendar at preferred_workout_clock.
+    │   Today's workout drops to Google Calendar at preferred_workout_clock.
     │
     ▼
-Done. Workout sits in calendar. Yesterday's journal has body context.
-Nothing else for the user to remember.
+Done. Body context in yesterday's journal. Workout in calendar.
+Single trigger. Zero remembering.
 ```
+
+## Why /journal is the gate (not SessionStart)
+
+The v0.5.0 build initially wired the wearable sync on SessionStart. The panel correction (Karpathy + Patrick Collison + Naval, 2026-05-10): a user with ~20 sessions/day was paying 20× the python-process overhead for a logic that only needs to run once daily.
+
+The fix (v0.5.1): tie the chain to `/journal` — the user's existing once-daily habit. Three benefits:
+
+- **Once-daily firing.** No 20× overhead.
+- **Substrate philosophy preserved.** "If you don't journal, you miss out" — the substrate doesn't work harder than the user. If the user skips /journal Sunday, Monday's `/coach today` reads from Saturday's data and `/health doctor` shows the staleness.
+- **Single failure surface.** One hook to verify, one trigger to debug, one cadence to remember.
+
+Howard Marks's dissent on the panel was load-bearing: name the cost. The cost is "if you skip /journal for 2 days, your wearable data is 2 days stale and your prescription is off." That's tolerable, and `/health doctor` surfaces it loudly.
+
+## The opt-in SessionStart sync (power-user only)
+
+`hooks/health-auto-sync.py` ships in the repo and is fully tested but is NOT wired in the default `hooks.json` template. Users who want per-session sync (e.g., never journals but wants the data fresh) can manually add it to their `~/.claude/settings.json` SessionStart block. Documented at the bottom of this file.
 
 ## What auto-fires vs what stays manual
 

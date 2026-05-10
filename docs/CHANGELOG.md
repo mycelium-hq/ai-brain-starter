@@ -9,6 +9,34 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-10: health-mcp v0.5.1 — collapse auto-chain to /journal-only (single daily trigger, not per-session)
+
+**Who this affects:** users on v0.5 who have many Claude Code sessions per day.
+
+**The shape:** v0.5 wired the wearable sync to SessionStart. The panel correction (Karpathy + Patrick Collison + Naval, panel pass 2026-05-10 minutes after v0.5 merged): for users with ~20 sessions/day, that's 20× the python-process overhead per day for a logic that only needs to run once daily. The fix: tie the entire chain to /journal, the user's existing once-daily habit. Howard Marks's dissent on the panel was load-bearing — the explicit cost is "if you skip /journal for 2 days, your wearable data is 2 days stale and your prescription is off." That cost is tolerable, and /health doctor surfaces it loudly.
+
+### What changed
+
+1. **`hooks.json`**: removed the SessionStart `health-auto-sync.py` entry. The Stop-on-journal entry stays.
+2. **`hooks/coach-auto-prescribe-on-journal.py`**: now runs three steps in order — wearable sync (Oura + Fitbit if > 24h stale and credentials present), yesterday's journal backfill, today's coach prescription. The single entry point for the daily auto-chain.
+3. **`hooks/health-auto-sync.py`**: still ships in the repo + still fully tested, but is NOT wired in the default `hooks.json`. Available as an opt-in for power users who want per-session sync.
+4. **Granular bypass**: `HEALTH_AUTO_SYNC_BYPASS=1` now skips ONLY the sync step inside the chain hook (lets a user disable just the wearable pull without disabling the coach prescription).
+5. **`docs/AUTOMATION.md`**: rewritten to reflect the single-trigger architecture, with a "Why /journal is the gate (not SessionStart)" section documenting the panel reasoning + Howard Marks's dissent.
+
+### Tests
+
+81 passing (unchanged from v0.5). The hooks.json test was renamed and tightened — it now ASSERTS that `health-auto-sync.py` is NOT in SessionStart (regression guard), AND that `coach-auto-prescribe-on-journal.py` is in Stop.
+
+### What to do
+
+If you installed v0.5 already: re-run `/health-setup` or manually remove the SessionStart entry for `health-auto-sync.py` from your `~/.claude/settings.json`. Restart Claude Code. From that point on, the chain fires once per day at `/journal` Stop only.
+
+If you actively want per-session sync (rare): add the SessionStart entry back manually. The script still works; it just isn't the default.
+
+The substrate philosophy stays: if you don't journal, the chain quietly waits. `/health doctor` shows the staleness so you know.
+
+---
+
 ## 2026-05-10: health-mcp v0.5 — auto-trigger chain + /health-doctor (no more remembering commands)
 
 **Who this affects:** anyone using the health stack who is not going to remember to run `/coach today`, `/ingest-health`, or `/backfill-journal-body-context` every morning. Anyone who shipped capability across v0.1-v0.4 and noticed nothing was happening.

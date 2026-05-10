@@ -90,18 +90,28 @@ def test_auto_coach_no_profile_emits_silent():
     assert data.get("continue") is True
 
 
-def test_hooks_json_includes_new_hooks():
-    """hooks.json template wires the two new hooks."""
+def test_hooks_json_includes_journal_chain_hook():
+    """hooks.json template wires the Stop-on-journal hook as the single
+    daily-once entry point (codified 2026-05-10 after per-SessionStart
+    firing was flagged as wasteful for users with ~20 sessions/day).
+
+    The SessionStart sync hook stays in the repo as an OPT-IN power-user
+    file but is NOT wired by default.
+    """
     text = HOOKS_JSON.read_text(encoding="utf-8")
     data = json.loads(text)
-    # SessionStart should include health-auto-sync.py
-    session_starts = data.get("hooks", {}).get("SessionStart", [])
-    session_blob = json.dumps(session_starts)
-    assert "health-auto-sync.py" in session_blob
-    # Stop should include coach-auto-prescribe-on-journal.py
     stops = data.get("hooks", {}).get("Stop", [])
     stop_blob = json.dumps(stops)
     assert "coach-auto-prescribe-on-journal.py" in stop_blob
+    # SessionStart should NOT include health-auto-sync.py by default
+    # (would fire on every session — over-firing for ~20 sessions/day users).
+    session_starts = data.get("hooks", {}).get("SessionStart", [])
+    session_blob = json.dumps(session_starts)
+    assert "health-auto-sync.py" not in session_blob, (
+        "health-auto-sync.py should NOT be wired in SessionStart by default. "
+        "It's available as an opt-in for users who want per-session sync, "
+        "but the default chain fires on /journal Stop only."
+    )
 
 
 def test_health_doctor_skill_exists():
