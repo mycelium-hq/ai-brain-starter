@@ -9,6 +9,44 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-10: health-mcp v0.3 — multi-vendor (Oura + Fitbit) + /health-setup wizard + journal backfill skill + backfill prompt
+
+**Who this affects:** anyone with a wearable that is NOT just Apple Watch (Oura Ring, Fitbit), anyone who wants their existing journals enriched with body context retroactively, anyone setting up health-mcp for the first time on Windows or Linux.
+
+**The shape:** v0.2 covered the full Apple Health surface but assumed the user had an iPhone. v0.3 closes three gaps: (1) Oura Ring + Fitbit ingestion via vendor APIs sharing the same DuckDB schema and the same scoring formulas, (2) an interactive /health-setup wizard that branches by vendor + OS so the user only sees install steps that apply to them, and (3) a /backfill-journal-body-context skill plus a self-contained backfill prompt for running a one-shot pass over every journal entry this year.
+
+### What landed
+
+1. **Oura Ring support** (`services/health-mcp/oura_client.py` + `health_import_oura` tool). Personal Access Token only — no OAuth flow. Generate one at https://cloud.ouraring.com/personal-access-tokens (free), export `OURA_PERSONAL_ACCESS_TOKEN`, run `health_import_oura(start, end)`. Oura's daily sleep score + sleep sessions (stages) + readiness + activity + workouts get normalized to the same DuckDB rows Apple Health uses. HRV / RHR / steps / active kcal map to the same HKQuantityType ids so recovery score and every vault-aware tool work without modification.
+
+2. **Fitbit support** (`services/health-mcp/fitbit_client.py` + `health_import_fitbit` tool). OAuth2 via a Personal app registered at https://dev.fitbit.com/apps. The client auto-refreshes access tokens if FITBIT_REFRESH_TOKEN + FITBIT_CLIENT_ID + FITBIT_CLIENT_SECRET are also set. Fitbit HRV requires Premium; without Premium you get steps + sleep + RHR + weight, no HRV. Sleep stages are 30-second epoch granularity from Fitbit's v1.2 sleep endpoint.
+
+3. **Multi-vendor schema sharing.** Every vendor writes to the same `records` / `workouts` / `sleep` / `cycle` / `symptoms` tables. The recovery_score formula uses whichever metric has data for a given day. If you have both an Apple Watch and an Oura Ring, both populate; v0.3 takes the last-writer-wins approach for simultaneous same-day same-metric writes. v0.4 will add per-source priority preferences.
+
+4. **`/health-setup` wizard** (`skills/health-setup/SKILL.md`). Branches by which wearable(s) the user has AND which OS they're on. Calls `health_vendor_setup_guide(vendor, os_kind)` which returns OS-specific shell commands the user pastes into Terminal / PowerShell / bash. Then `health_vendor_healthcheck(vendor)` verifies the token works before running the first import. Branches cleanly for `apple_health`, `oura`, `fitbit`, `garmin` (routes via Apple Health on iPhone), and `whoop` (deferred to v0.4 — open-wearables is the substitute today).
+
+5. **`/backfill-journal-body-context` skill + script.** Walks every daily journal entry in a date range (default this year) and appends a "Body track" section BELOW the original verbatim content. The original journal text is NEVER modified — the journal-verbatim rule is non-negotiable. Pulls HRV / RHR / sleep / steps / workouts / cycle phase / recovery score / sleep score / out-of-range lab markers + a Floor-paired interpretation. Default model: **Python template (zero cost, deterministic).** Optional `--llm-model minimax` for richer prose at ~$0.06/M tokens. Idempotent — re-runs skip entries that already have the marker.
+
+6. **`docs/BACKFILL_PROMPT.md`.** A self-contained prompt for running the backfill in a fresh Claude Code session. Copy-paste into a new chat and the model walks through dry-run → real-run → ongoing-cadence scheduled task → /weekly verification end-to-end. The prompt explicitly de-prioritizes Sonnet / Opus for the per-entry interpretation — Python template is the default, MiniMax opt-in.
+
+### Tools count
+
+v0.2 was 32 tools. v0.3 adds 4 more: `health_import_oura`, `health_import_fitbit`, `health_vendor_setup_guide`, `health_vendor_healthcheck`. Total: 36 tools.
+
+### Tests
+
+54 passing (up from 41 in v0.2). New v0.3 tests cover vendor-client token validation (raises when env var missing), SHA determinism for idempotent re-imports, and vendor setup guide returning the right shape per vendor + OS (with alias normalization for `apple` / `apple_watch` / `iphone` / `ios` → `apple_health`).
+
+### What you might want to do
+
+If you have an Oura Ring or Fitbit, run `/health-setup` for the first-time install flow. The wizard asks you which wearable(s) you have and which OS, then walks you through the per-vendor token setup and first import.
+
+If you have a year (or more) of daily journals and want them paired with your body data retroactively, follow the prompt at `docs/BACKFILL_PROMPT.md` in a fresh Claude Code session. It runs the script with Python templates (zero LLM cost) and optionally with MiniMax for richer per-entry prose.
+
+After backfill, run `/weekly` to see the body track populated alongside your Floor tags. Then run `/patterns` to see how Floor patterns correlate with HRV / sleep / cycle phase over the period.
+
+---
+
 ## 2026-05-10: health-mcp v0.2 — full HealthKit surface + cycle awareness + lab import + voice bridge
 
 **Who this affects:** anyone who installed health-mcp at v0.1 (the Apple Health connector that paired biometrics with daily-journal / coaching / advisory-panel / patterns / insights). Or anyone who hasn't installed it yet but uses the body-aware skills.

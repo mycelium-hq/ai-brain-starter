@@ -30,12 +30,15 @@ from fastmcp import FastMCP
 
 import cycle as cycle_mod
 import db
+import fitbit_client
 import labs as labs_mod
 import live_tcp
+import oura_client
 import parse_csv
 import parse_xml
 import scores
 import vault_aware
+import vendor_setup
 from hk_types import HK_QUANTITY_TYPES, NUTRITION_TYPES, LONGEVITY_TYPES, CYCLE_TYPES, SYMPTOM_TYPES
 
 logging.basicConfig(
@@ -228,6 +231,137 @@ def health_status() -> dict[str, Any]:
         s = db.stats(con)
         s["top_types"] = db.types_with_counts(con)[:20]
     return s
+
+
+@mcp.tool()
+def health_import_oura(start: str, end: str, force: bool = False) -> dict[str, Any]:
+    """Import Oura Ring data via the Oura v2 Cloud API.
+
+    Requires OURA_PERSONAL_ACCESS_TOKEN in env. Generate one at
+    https://cloud.ouraring.com/personal-access-tokens (free).
+
+    Pulls daily sleep + sleep sessions (stages) + readiness + activity +
+    workouts in [start, end] and normalizes into the same DuckDB schema as
+    Apple Health imports. HRV / RHR / steps / active kcal map to the same
+    HKQuantityType ids so health_recovery_score and all vault-aware tools
+    work without modification.
+    """
+    t0 = datetime.now()
+    sd = _parse_date(start)
+    ed = _parse_date(end)
+    try:
+        sha = oura_client.folder_sha(sd, ed)
+    except ValueError as e:
+        return {"error": str(e), "skipped": True}
+    with db.connect() as con:
+        if not force and db.file_already_imported(con, sha):
+            return {"file_sha": sha, "skipped": True, "note": "This date range already imported. Pass force=True to re-import."}
+        batch: list[dict[str, Any]] = []
+        totals: dict[str, int] = {k: 0 for k in ("records", "workouts", "sleep", "cycle", "symptoms", "ecg", "state_of_mind")}
+        BATCH = 1000
+        try:
+            for item in oura_client.fetch_range(sd, ed):
+                batch.append(item)
+                if len(batch) >= BATCH:
+                    for k, v in _bulk_insert(con, batch).items():
+                        totals[k] += v
+                    batch.clear()
+            if batch:
+                for k, v in _bulk_insert(con, batch).items():
+                    totals[k] += v
+            total = sum(totals.values())
+            db.log_import(con, sha, "oura", f"oura:{sd.isoformat()}..{ed.isoformat()}", total)
+        except ValueError as e:
+            return {"error": str(e), "skipped": True}
+    return {
+        "file_sha": sha, "kind": "oura", "rows_inserted": total,
+        **{f"{k}_count": v for k, v in totals.items()},
+        "skipped": False,
+        "elapsed_s": round((datetime.now() - t0).total_seconds(), 2),
+    }
+
+
+@mcp.tool()
+def health_import_fitbit(start: str, end: str, force: bool = False) -> dict[str, Any]:
+    """Import Fitbit data via the Fitbit Web API.
+
+    Requires a Personal app registered at https://dev.fitbit.com/apps and
+    FITBIT_ACCESS_TOKEN in env (plus FITBIT_REFRESH_TOKEN +
+    FITBIT_CLIENT_ID + FITBIT_CLIENT_SECRET for auto-refresh).
+
+    Pulls daily activity + heart rate + sleep stages + weight in [start, end]
+    and normalizes into the shared DuckDB schema. HRV is included when
+    available (Fitbit Premium only).
+    """
+    t0 = datetime.now()
+    sd = _parse_date(start)
+    ed = _parse_date(end)
+    try:
+        sha = fitbit_client.folder_sha(sd, ed)
+    except ValueError as e:
+        return {"error": str(e), "skipped": True}
+    with db.connect() as con:
+        if not force and db.file_already_imported(con, sha):
+            return {"file_sha": sha, "skipped": True, "note": "This date range already imported. Pass force=True to re-import."}
+        batch: list[dict[str, Any]] = []
+        totals: dict[str, int] = {k: 0 for k in ("records", "workouts", "sleep", "cycle", "symptoms", "ecg", "state_of_mind")}
+        BATCH = 1000
+        try:
+            for item in fitbit_client.fetch_range(sd, ed):
+                batch.append(item)
+                if len(batch) >= BATCH:
+                    for k, v in _bulk_insert(con, batch).items():
+                        totals[k] += v
+                    batch.clear()
+            if batch:
+                for k, v in _bulk_insert(con, batch).items():
+                    totals[k] += v
+            total = sum(totals.values())
+            db.log_import(con, sha, "fitbit", f"fitbit:{sd.isoformat()}..{ed.isoformat()}", total)
+        except ValueError as e:
+            return {"error": str(e), "skipped": True}
+    return {
+        "file_sha": sha, "kind": "fitbit", "rows_inserted": total,
+        **{f"{k}_count": v for k, v in totals.items()},
+        "skipped": False,
+        "elapsed_s": round((datetime.now() - t0).total_seconds(), 2),
+    }
+
+
+@mcp.tool()
+def health_vendor_setup_guide(vendor: str, os_kind: str = "macos") -> dict[str, Any]:
+    """Return setup instructions for a wearable vendor on a given OS.
+
+    Args:
+        vendor: 'apple_health' | 'oura' | 'fitbit' | 'garmin' | 'whoop'
+        os_kind: 'macos' | 'windows' | 'linux'
+
+    Returns a structured dict with: display_name, summary, free/paid paths,
+    common_steps, transfer_steps (OS-specific), env_vars (with what each
+    one is for), the tool to call after setup, ongoing-cadence guidance,
+    and any vendor-specific notes (rate limits, premium gates, etc.).
+    """
+    return vendor_setup.vendor_setup_guide(vendor, os_kind)
+
+
+@mcp.tool()
+def health_vendor_healthcheck(vendor: str) -> dict[str, Any]:
+    """Verify that a vendor's API credentials work end-to-end.
+
+    Args:
+        vendor: 'oura' | 'fitbit' (Apple Health is offline; n/a)
+
+    Returns {ok: bool, user_id?: str, error?: str}. Use after setting up
+    env vars to confirm before running a full import.
+    """
+    v = vendor.lower().strip()
+    if v == "oura":
+        return oura_client.healthcheck()
+    if v == "fitbit":
+        return fitbit_client.healthcheck()
+    if v in {"apple", "apple_health"}:
+        return {"ok": True, "note": "Apple Health is offline-only. No healthcheck needed. Run health_status() to see what's imported."}
+    return {"ok": False, "error": f"Unknown vendor '{vendor}'. Supported: oura, fitbit, apple_health."}
 
 
 @mcp.tool()

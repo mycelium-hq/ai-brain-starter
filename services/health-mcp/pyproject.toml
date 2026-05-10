@@ -1,7 +1,7 @@
 [project]
 name = "health-mcp"
-version = "0.2.0"
-description = "Apple Health MCP server for the ai-brain-starter substrate. Full HealthKit surface coverage (108 quantity types + 47 symptom types + 14 cycle types + ECG + iOS 17 State of Mind). Multi-mode ingestion (XML / CSV / TCP-live + lab CSV). Open scoring algorithms (recovery / sleep / strain / sleep regularity / longevity panel / somatic state). Vault-aware tools that pair biometrics + cycle phase + symptoms with Floor tags from daily journals."
+version = "0.3.0"
+description = "Health MCP for the ai-brain-starter substrate. Multi-vendor (Apple Health + Oura Ring + Fitbit) ingestion with shared DuckDB schema. Full HealthKit surface (108 quantity types + 47 symptom types + 14 cycle types + ECG + iOS 17 State of Mind). Open scoring algorithms (recovery / sleep / strain / sleep regularity / longevity panel / somatic state). Vault-aware tools that pair biometrics + cycle phase + symptoms with Floor tags from daily journals. OS-aware setup wizard."
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
@@ -49,4 +49,7 @@ include = [
   "cycle.py",
   "labs.py",
   "voice_bridge.py",
+  "oura_client.py",
+  "fitbit_client.py",
+  "vendor_setup.py",
 ]
