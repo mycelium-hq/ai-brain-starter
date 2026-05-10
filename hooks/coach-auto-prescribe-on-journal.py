@@ -1,7 +1,21 @@
 #!/usr/bin/env python3
-"""Stop hook: after a journal session, silently prescribe today's workout
-(if not yet prescribed) AND backfill yesterday's journal with body-track
-context.
+"""Stop hook: after a journal session, run the full daily-once chain:
+  1. Sync wearable data (Oura, Fitbit) if > 24h stale
+  2. Backfill yesterday's journal with body-track context
+  3. Prescribe today's workout (if not yet prescribed)
+
+This is the SINGLE entry point for the daily auto-chain (codified
+2026-05-10 after the panel flagged per-SessionStart firing was wasteful).
+Tying everything to /journal — the user's existing daily habit — has
+three benefits:
+
+  - Fires once per day, not once per session (user has ~20 sessions/day)
+  - Honors the substrate philosophy: if you don't journal, the chain
+    quietly waits. The user opts into engagement, the substrate doesn't
+    nag.
+  - Single failure surface: if /journal doesn't fire, /health doctor will
+    surface "your wearable data is N days stale". One observability
+    surface, not multiple.
 
 The chain Bainbridge approved (panel 2026-05-10): auto-trigger the
 ANALYSIS, never auto-trigger the ACTION. This hook prepares the workout +
@@ -13,22 +27,24 @@ When this fires:
     or the assistant just wrote a file under [VAULT]/Journals/ for today
 
 What it does:
-  1. Find today's coach prescription via health_coach_recent_prescriptions.
-     If today already has one, skip.
-  2. If no prescription, call health_coach_prescribe with the saved profile.
-  3. If profile.calendar_drop is true and google-workspace MCP is connected,
-     drop the workout to calendar at preferred_workout_clock. (Hook can't
-     directly call other MCPs; surfaces the request as additionalContext
-     for Claude to action on next turn.)
-  4. Trigger backfill-journal-body-context script for yesterday's entry
-     ONLY (not the whole year — that's the one-time backfill skill).
+  1. Wearable sync — Oura + Fitbit, only the vendors with env-var
+     credentials set, only if the last import is > 24h old. Multi-day
+     catch-up if user has been absent.
+  2. Backfill yesterday's journal entry via
+     scripts/backfill-journal-body-context.py.
+  3. Look up today's coach prescription; if none, create one via the
+     coach.decide_workout_type decision tree.
+  4. Surface a one-line summary as additionalContext.
 
 Failure modes:
-  - No coach profile saved -> skip silently (user hasn't run /coach yet)
-  - health-mcp missing -> skip silently
-  - DuckDB locked -> skip silently (next stop tries again)
+  - No coach profile saved → skip prescription, still try sync + backfill
+  - health-mcp missing → skip silently
+  - Wearable API down → log skip reason, exit silently (next /journal retries)
+  - DuckDB locked → skip silently
+  - User absent for 7 days → sync pulls 7 days catch-up at next /journal
 
-Bypass: COACH_AUTO_PRESCRIBE_BYPASS=1 in env.
+Bypass: COACH_AUTO_PRESCRIBE_BYPASS=1 in env (skips ALL three steps).
+Granular bypass: HEALTH_AUTO_SYNC_BYPASS=1 (skips only the sync step).
 """
 from __future__ import annotations
 
@@ -98,13 +114,94 @@ def _emit_context(line: str) -> None:
     }))
 
 
+def _maybe_sync_wearables(db, today: date) -> list[str]:
+    """Run Oura + Fitbit sync if either is > 24h stale and credentials present.
+    Returns a list of summary lines (one per vendor synced)."""
+    if os.environ.get("HEALTH_AUTO_SYNC_BYPASS") == "1":
+        return []
+    parts: list[str] = []
+    yesterday = today - timedelta(days=1)
+    have_oura = bool(os.environ.get("OURA_PERSONAL_ACCESS_TOKEN") or os.environ.get("OURA_PAT"))
+    have_fitbit = bool(os.environ.get("FITBIT_ACCESS_TOKEN"))
+    if not (have_oura or have_fitbit):
+        return parts
+
+    if have_oura:
+        try:
+            with db.connect(read_only=True) as con:
+                row = con.execute("SELECT MAX(imported_at) FROM imports WHERE kind = 'oura'").fetchone()
+            last_iso = row[0] if row and row[0] else None
+            stale = True
+            if last_iso:
+                last_dt = last_iso if isinstance(last_iso, datetime) else datetime.fromisoformat(str(last_iso))
+                stale = (datetime.now() - last_dt) > timedelta(hours=24)
+            if stale:
+                import oura_client
+                with db.connect() as con:
+                    sha = oura_client.folder_sha(yesterday, today)
+                    if not db.file_already_imported(con, sha):
+                        rows_total = 0
+                        for item in oura_client.fetch_range(yesterday, today):
+                            kind = item["_kind"]
+                            if kind == "record":
+                                con.execute(
+                                    "INSERT INTO records (type, source_name, unit, start_date, end_date, value, value_str) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                                    (item["type"], item["source_name"], item.get("unit", ""), item["start_date"], item["end_date"], item.get("value"), item.get("value_str")),
+                                )
+                            elif kind == "workout":
+                                con.execute(
+                                    "INSERT INTO workouts (activity_type, duration_min, distance_km, energy_kcal, start_date, end_date, source_name) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                                    (item["activity_type"], item["duration_min"], item.get("distance_km"), item.get("energy_kcal"), item["start_date"], item["end_date"], item.get("source_name", "Oura")),
+                                )
+                            elif kind == "sleep":
+                                con.execute(
+                                    "INSERT INTO sleep (start_date, end_date, stage, source_name) VALUES (?, ?, ?, ?)",
+                                    (item["start_date"], item["end_date"], item["stage"], item.get("source_name", "Oura")),
+                                )
+                            rows_total += 1
+                        db.log_import(con, sha, "oura", f"oura:{yesterday.isoformat()}..{today.isoformat()}", rows_total)
+                        parts.append(f"Oura +{rows_total}")
+        except Exception as e:
+            parts.append(f"Oura skip: {type(e).__name__}")
+
+    if have_fitbit:
+        try:
+            with db.connect(read_only=True) as con:
+                row = con.execute("SELECT MAX(imported_at) FROM imports WHERE kind = 'fitbit'").fetchone()
+            last_iso = row[0] if row and row[0] else None
+            stale = True
+            if last_iso:
+                last_dt = last_iso if isinstance(last_iso, datetime) else datetime.fromisoformat(str(last_iso))
+                stale = (datetime.now() - last_dt) > timedelta(hours=24)
+            if stale:
+                import fitbit_client
+                with db.connect() as con:
+                    sha = fitbit_client.folder_sha(yesterday, today)
+                    if not db.file_already_imported(con, sha):
+                        rows_total = 0
+                        for item in fitbit_client.fetch_range(yesterday, today):
+                            kind = item["_kind"]
+                            if kind == "record":
+                                con.execute(
+                                    "INSERT INTO records (type, source_name, unit, start_date, end_date, value, value_str) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                                    (item["type"], item["source_name"], item.get("unit", ""), item["start_date"], item["end_date"], item.get("value"), item.get("value_str")),
+                                )
+                            elif kind == "sleep":
+                                con.execute(
+                                    "INSERT INTO sleep (start_date, end_date, stage, source_name) VALUES (?, ?, ?, ?)",
+                                    (item["start_date"], item["end_date"], item["stage"], item.get("source_name", "Fitbit")),
+                                )
+                            rows_total += 1
+                        db.log_import(con, sha, "fitbit", f"fitbit:{yesterday.isoformat()}..{today.isoformat()}", rows_total)
+                        parts.append(f"Fitbit +{rows_total}")
+        except Exception as e:
+            parts.append(f"Fitbit skip: {type(e).__name__}")
+
+    return parts
+
+
 def main() -> int:
     if os.environ.get("COACH_AUTO_PRESCRIBE_BYPASS") == "1":
-        _emit_silent()
-        return 0
-
-    profile = _read_profile()
-    if not profile:
         _emit_silent()
         return 0
 
@@ -121,9 +218,6 @@ def main() -> int:
 
     try:
         import db
-        import coach as coach_mod
-        import scores
-        import cycle as cycle_mod
     except Exception:
         _emit_silent()
         return 0
@@ -131,7 +225,31 @@ def main() -> int:
     today = date.today()
     summary_parts: list[str] = []
 
-    # 1. Has today already been prescribed?
+    # 1. Wearable sync (Oura + Fitbit if > 24h stale, only vendors with credentials set).
+    summary_parts.extend(_maybe_sync_wearables(db, today))
+
+    # 2. Coach prescription + journal backfill require the coach profile.
+    profile = _read_profile()
+    if not profile:
+        # No profile yet -> emit sync summary if any, otherwise silent.
+        if summary_parts:
+            _emit_context("; ".join(summary_parts))
+        else:
+            _emit_silent()
+        return 0
+
+    try:
+        import coach as coach_mod
+        import scores
+        import cycle as cycle_mod
+    except Exception:
+        if summary_parts:
+            _emit_context("; ".join(summary_parts))
+        else:
+            _emit_silent()
+        return 0
+
+    # 3. Has today already been prescribed?
     try:
         with db.connect(read_only=True) as con:
             row = con.execute(
