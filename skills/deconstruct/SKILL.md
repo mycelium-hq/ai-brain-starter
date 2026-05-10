@@ -11,8 +11,8 @@ A structured thinking skill modeled on Aristotle's method: find the foundational
 ## When This Fires
 
 - **Manual:** User types `/deconstruct` and describes a problem, decision, or situation
-- **Auto-triggered (fast mode):** When logging a decision with `stakes: high` in the decision template, Claude auto-offers: "This is high-stakes. Want me to deconstruct it before you commit?" If yes, run fast mode (Phase 1 + Phase 4 only)
-- **Auto-triggered (panel integration):** If your vault has an advisory panel (like the daily journal skill), add a trigger row for convention-following language. When the user says "that's how it's done," "best practice," "everyone does it this way," or copies a competitor's approach without questioning why, one panel voice surfaces 1-2 hidden assumptions in one sentence, then asks: "Is that actually true for YOU, or is it convention?"
+- **Auto-triggered (fast mode, optional):** When logging a decision with `stakes: high` in any decision template, Claude can auto-offer: "This is high-stakes. Want me to deconstruct it before you commit?" If yes, run fast mode (Phase 1 + Phase 4 only). To enable, add `deconstruct_auto: true` to your decision template frontmatter.
+- **Auto-triggered (panel integration, optional):** If your vault has an advisory panel skill (like the daily-journal plugin), add a trigger row for convention-following language. When the user says "that's how it's done," "best practice," "everyone does it this way," or copies a competitor's approach without questioning why, one panel voice surfaces 1-2 hidden assumptions in one sentence, then asks: "Is that actually true for YOU, or is it convention?"
 
 ## Two Modes
 
@@ -139,11 +139,13 @@ mode: full | fast
 {Phase 4 output}
 ```
 
+If your vault doesn't have a notes folder convention, the skill will ask once and remember.
+
 ---
 
 ## Weekly Retrospective Integration
 
-If your vault uses a weekly insights or review skill, add a "first-principles audit" step:
+If your vault uses a weekly insights or review skill (like the insights plugin), add a "first-principles audit" step:
 
 > Scan your decisions folder for any decisions logged this period with `stakes: high`. Check whether they have `deconstruct: true` in their YAML frontmatter.
 >
@@ -178,3 +180,4 @@ This skill works best when you suspect you're stuck inside assumptions you can't
 - The 3-question test in Phase 2 is the core of the skill. If you rush it, the rest falls apart.
 - The constraint vs. perceived-constraint split in Phase 1 is where most value lives. Real constraints are physics. Perceived constraints are stories.
 - If the user's framing is actually sound and first-principles-aligned already, say so. Don't manufacture problems to justify the framework.
+
