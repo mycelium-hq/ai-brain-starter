@@ -102,6 +102,32 @@ jobs:
           done < <(find . -name '*.ps1' -not -path './.git/*')
           exit $fail
 
+  python-syntax:
+    name: Python syntax (3.9 - macOS system default)
+    runs-on: ubuntu-latest
+    # macOS ships /usr/bin/python3 as Python 3.9. Many users invoke hooks via
+    # that exact path. PEP 604 union syntax (X | None) in annotations crashes
+    # 3.9 at module load time. `from __future__ import annotations` is the
+    # canonical fix and works on 3.7+. This job catches the regression class
+    # before merge. No untrusted input used in any run: command.
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.9"
+      - name: py_compile every .py
+        run: |
+          set -e
+          fail=0
+          while IFS= read -r f; do
+            if ! python3 -m py_compile "$f" 2>err; then
+              echo "::error file=$f::python3 -m py_compile failed on Python 3.9"
+              cat err | sed "s|^|  |"
+              fail=1
+            fi
+          done < <(find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' -not -path '*/__pycache__/*')
+          exit $fail
+
   json:
     name: JSON validity (hooks.json, *.mcp.json)
     runs-on: ubuntu-latest
