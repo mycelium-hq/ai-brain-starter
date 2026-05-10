@@ -4,6 +4,10 @@ A verification harness around your AI agent. So memory compounds instead of corr
 
 ---
 
+You have a smart assistant that forgets you every morning. This is the harness that gives it a memory: notes on your disk that the assistant reads before answering you, deterministic guards that block bad edits before they land, and a session-end ritual that files what mattered. Whether you write, run a company, or just want context to stop disappearing between conversations, the same surface works.
+
+---
+
 Microsoft DELEGATE-52 ([arxiv.org/abs/2604.15597](https://arxiv.org/abs/2604.15597), April 2026) measured what most operators already feel: frontier LLMs corrupt 25% of professional content over 20 edit interactions. Document size amplifies the failure 5×. The paper concludes the only reliable mitigation is a domain-specific verification harness around the model.
 
 This is one.
