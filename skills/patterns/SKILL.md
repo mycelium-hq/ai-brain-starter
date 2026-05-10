@@ -1,6 +1,6 @@
 ---
 name: patterns
-description: Instinct Engine — scans recent sessions, journals, and decisions for recurring patterns and turns them into concrete captures (CLAUDE.md rules, concept notes, writing seeds, skill improvements). Run after /weekly or whenever you sense a pattern hardening. Also runs semi-autonomously via session-end auto-detection triggers. Do NOT use for weekly/monthly journal reviews (use insights), daily journaling (use daily-journal), or one-off decisions (use deconstruct).
+description: Instinct Engine — scans recent sessions, journals, and decisions for recurring patterns and turns them into concrete captures (CLAUDE.md rules, concept notes, writing seeds, skill improvements). Run after a weekly review or whenever you sense a pattern hardening. Also runs semi-autonomously via session-end auto-detection triggers. Do NOT use for weekly/monthly journal reviews, daily journaling, or one-off decisions.
 trigger: /patterns
 ---
 
@@ -8,9 +8,25 @@ trigger: /patterns
 
 You are extracting signal before it evaporates. This skill scans recent sessions and surfaces what's hardening into real insight, then proposes concrete captures.
 
-Run this after `/weekly`, after a heavy journaling session, or whenever the user says "I keep noticing..." or "this keeps coming up."
+Run this after a weekly review, after a heavy journaling session, or whenever the user says "I keep noticing..." or "this keeps coming up."
 
-**Headless/auto mode:** If you are running in a cron job, background script, or `--print` session with no interactive user, skip Step 3's confirmation. Auto-capture all findings. Add `(auto-captured — review and edit)` as a note in any new files created. Proceed directly to Step 4 → Step 5.
+**Headless / auto mode:** If you are running in a cron job, background script, or `--print` session with no interactive user, skip Step 3's confirmation. Auto-capture all findings. Add `(auto-captured — review and edit)` as a note in any new files created. Proceed directly to Step 4 → Step 5.
+
+---
+
+## First-run config
+
+On first invocation, look for `[VAULT]/.patterns-prefs.md`. If it doesn't exist, ask:
+
+1. **Last-session file path** (where the most recent session summary lives, e.g. `Meta/Last Session.md`, or `none`)
+2. **Decision log path** (e.g. `Meta/Decision Log.md`, or `none`)
+3. **Journal folder** (e.g. `Journal/`, or `none`)
+4. **Drafts folder** (where writing seeds get created, e.g. `Writing/Drafts/`)
+5. **Concept folder** (where new concept notes go, e.g. `Notes/Concepts/`)
+6. **Changelog file** (where pattern runs get logged, e.g. `Vault Changelog.md`, or `none`)
+7. **CLAUDE.md path** (where rules get written, default `CLAUDE.md` at vault root)
+
+Save preferences. Don't ask again.
 
 ---
 
@@ -42,13 +58,13 @@ Claude discovered something non-obvious about the vault, a tool, an API, or a wo
 
 ## Step 1: Gather recent signal (do this silently)
 
-Read these sources in parallel:
-- `[VAULT]/⚙️ Meta/Last Session.md` — what was just worked on
-- `[VAULT]/⚙️ Meta/Decision Log.md` — last 10–15 entries (look for repeating decision types)
+Read these sources in parallel (skip any set to `none` in prefs):
+- The last-session file — what was just worked on
+- The decision log — last 10–15 entries (look for repeating decision types)
 - Any content drafts or writing drafts — recent drafts (look for recurring metaphors)
-- Last 7 journal entries (use journal-index.json if available, otherwise read directly)
+- Last 7 journal entries (if a `journal-index.json` exists in the journal folder, use it; otherwise read directly)
 
-If `/weekly` was just run, its output is already in context — use that, don't re-scan journals.
+If a weekly review was just run, its output is already in context — use that, don't re-scan journals.
 
 ---
 
@@ -73,7 +89,7 @@ Look across everything for:
 Present findings grouped by type. Be specific — quote the actual phrase or pattern. Maximum 5 proposals at a time:
 
 > **Writing pattern:** "[exact quote]" has appeared in 3 entries and 2 drafts in the last 2 weeks.
-> → Proposed: start a writing seed in `Writing/Drafts/[Title].md`
+> → Proposed: start a writing seed in your drafts folder
 
 > **Decision framework:** Every time [situation], you [action]. This has happened [N] times.
 > → Proposed: new CLAUDE.md rule — "[rule text]"
@@ -86,18 +102,19 @@ Ask: "Which of these do you want to capture?"
 
 After the user confirms, execute all approved captures in one pass:
 
-- **Writing seed** → create a draft in Writing/Drafts/ (or wherever drafts live) with the exact phrasing + context of where it appeared
+- **Writing seed** → create a draft in the drafts folder with the exact phrasing + context of where it appeared
 - **CLAUDE.md rule** → add to the relevant section, sync to any other CLAUDE.md files
-- **Concept note** → create in the right folder, add wikilinks
+- **Concept note** → create in the concept folder, add wikilinks
 - **Skill improvement** → note it clearly: "This should be baked into [skill name] — flag for next update"
 
 ---
 
 ## Step 5: Log and close
 
-Append to Vault Changelog.md (if it exists):
+Append to the configured changelog file (if set):
 ```
 - [DATE] /patterns run: [N] captures made — [brief list]
 ```
 
-If any universal patterns emerged (not personal, applicable to any second-brain user), flag them: "This pattern could go in ai-brain-starter — want me to note it for the next update?"
+If any universal patterns emerged (not personal, applicable to any second-brain user), flag them: "This pattern could go in the universal patterns repo — want me to note it for next time?"
+
