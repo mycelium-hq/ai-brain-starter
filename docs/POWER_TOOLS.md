@@ -124,6 +124,61 @@ Each skill in `skills/<name>/` is auto-discovered by Claude Code. After cloning,
 
 ---
 
+## Recommended adjacents (engineering + operations)
+
+The substrate ships memory, voice, vault, and session lifecycle. These adjacents cover the engineering-side skills a serious build benefits from. They are NOT installed by `bootstrap.sh` because they only matter if you are operating a particular runtime (Python FastAPI, Next.js on Vercel, Stripe integration, etc.). Install per stack.
+
+### Sentry SDK skills — production error tracking and AI monitoring
+
+**Why install:** if you are running a real backend or shipping a Next.js product, you need stack traces with breadcrumbs, not "the user said it broke." Sentry's official agent-skill family covers SDK setup per language and a dedicated AI-monitoring path that instruments Anthropic, OpenAI, Vercel AI, LangChain, Google GenAI, and Pydantic AI calls.
+
+**Install:**
+```bash
+git clone https://github.com/getsentry/sentry-skills ~/.claude/skills/sentry-skills
+```
+
+The bundle includes one skill per platform (`sentry-python-sdk`, `sentry-nextjs-sdk`, `sentry-cloudflare-sdk`, `sentry-react-sdk`, plus 14 more) plus `sentry-setup-ai-monitoring` for instrumenting LLM calls.
+
+**Source:** [getsentry/sentry-skills](https://github.com/getsentry/sentry-skills). MIT licensed.
+
+### Trail of Bits modern-python — Python toolchain hygiene
+
+**Why install:** if you are running a Python codebase, this skill teaches the modern toolchain (uv for installs, ruff for lint+format, ty for typecheck, pytest for tests) and the working setup that avoids "works on my machine" drift between venvs.
+
+**Install:** part of the [trailofbits/skills](https://github.com/trailofbits/skills) bundle. Clone the bundle for full Python + security skill coverage.
+
+**Source:** [trailofbits/skills](https://github.com/trailofbits/skills) by Trail of Bits. MIT licensed.
+
+### Stripe official skills — billing integration discipline
+
+**Why install:** if you are integrating Stripe (subscriptions, one-off charges, Connect transfers), the official skills ship idempotency-key handling, webhook signing verification, and SDK upgrade paths that prevent the most common production bugs (double charges, missed webhooks, silent SDK breakage on minor version bumps).
+
+**Install:** clone the [stripe/skills](https://github.com/stripe/skills) repo into `~/.claude/skills/stripe-skills/`. Two skills bundled: `stripe-best-practices` and `upgrade-stripe`.
+
+**Source:** [stripe/skills](https://github.com/stripe/skills). MIT licensed.
+
+### Vercel labs Next.js + caching skills — Next.js + React patterns
+
+**Why install:** if you are running a Next.js app on Vercel (App Router or Pages Router), `next-best-practices` and `next-cache-components` cover the cache-aware composition patterns that determine whether your hot routes are fast or slow.
+
+**Install:** clone the [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills) bundle.
+
+**Source:** [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills). MIT licensed.
+
+### Cloudflare web-perf — Core Web Vitals + render-blocking audits
+
+**Why install:** if you are shipping a public website (landing page, marketing site, app), the Cloudflare team's `web-perf` skill audits Core Web Vitals, render-blocking resources, and the most common perf anti-patterns. Stack-agnostic (works for static, Next.js, Astro, etc.).
+
+**Install:** part of [cloudflare/skills](https://github.com/cloudflare/skills) which also includes Workers, Pages, Durable Objects, and Wrangler skills.
+
+**Source:** [cloudflare/skills](https://github.com/cloudflare/skills). MIT licensed.
+
+### Catalog source
+
+These adjacents were surfaced via [VoltAgent/awesome-agent-skills](https://github.com/VoltAgent/awesome-agent-skills) (21k stars, MIT, hand-curated). The full catalog covers 1,100+ skills from official teams (Anthropic, Google, Stripe, Cloudflare, Netlify, HashiCorp, Sentry, Microsoft, Trail of Bits, Vercel Labs, etc.) plus community contributions. Worth scanning quarterly when shopping for adjacents in a new domain.
+
+---
+
 ## Cheap model APIs
 
 When the task is mechanical — extract entities, summarize a doc, classify notes — burning Opus tokens is wasteful. A cheap reasoning model costs 100–150x less and is sufficient.
