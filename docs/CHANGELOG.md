@@ -9,6 +9,77 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-10: health-mcp v0.5 — auto-trigger chain + /health-doctor (no more remembering commands)
+
+**Who this affects:** anyone using the health stack who is not going to remember to run `/coach today`, `/ingest-health`, or `/backfill-journal-body-context` every morning. Anyone who shipped capability across v0.1-v0.4 and noticed nothing was happening.
+
+**The shape:** Across v0.1-v0.4 the substrate shipped 41 tools + 5 skills, but only ONE auto-fire chain (`health-context` inside `/journal`, `/coaching`, `/panel`, `/patterns`, `/insights`). Everything else was manual: `/health-setup`, `/ingest-health`, `/coach today`, `/backfill-journal-body-context`. The user-facing point of the substrate was getting buried under commands the user had to remember.
+
+The permanent-fix-pattern rule from CLAUDE.md applies: capability without trigger isn't deployed. v0.5 is the automation layer.
+
+### Two auto-trigger hooks
+
+1. **`hooks/health-auto-sync.py`** — SessionStart hook. Whenever the user opens Claude Code, the hook checks the freshness of the last Oura import and the last Fitbit import. If either is > 24 hours stale AND the env-var credentials are present, it pulls yesterday's data silently in the background. Surfaces a one-line summary in the session-start context if a sync ran; silent otherwise. Handles range queries, so a 7-day absence pulls 7 days of catch-up at the next session.
+
+2. **`hooks/coach-auto-prescribe-on-journal.py`** — Stop hook. After a journal session completes, the hook:
+   - Reads `<VAULT_ROOT>/Meta/coach-profile.yaml`. Skips silently if no profile.
+   - Checks if today's coach prescription already exists. If not, creates one via the `coach.decide_workout_type` decision tree (same logic as `health_coach_prescribe`).
+   - Runs `scripts/backfill-journal-body-context.py` for yesterday only, appending the body-track section below the verbatim journal content.
+   - If `profile.calendar_drop: true` and google-workspace MCP is connected, the prescription is available for the next /coach today to drop into Google Calendar at `preferred_workout_clock`.
+
+Both hooks are registered in the `hooks.json` template and get installed into `~/.claude/settings.json` by `/setup-brain` (or `/health-setup` v0.5+, which auto-wires them).
+
+### New `/health doctor` observability skill
+
+Six sections, color-coded green / yellow / red:
+1. **Data freshness** — hours/days since last import per vendor + labs
+2. **Last prescription + completion** — most recent prescription, completion status, streak, missed days
+3. **Auto-trigger hooks installed** — are the two hooks wired in settings.json? Have they fired in the last 48h?
+4. **Coach profile** — exists? `calendar_drop: true`? `preferred_workout_clock` set? `days_per_week` reasonable?
+5. **Lab status flags** — any marker with status low or high + days since last test + the WHY + suggested re-test cadence
+6. **Cycle phase + sleep regularity** — phase, irregularity flag, regularity score, bed/wake stdev
+
+Each yellow / red has a one-line "what to do" — never vague "consider reviewing."
+
+### Bainbridge guardrail
+
+The dissent voice from the v0.2 panel (auto-trigger the analysis, never auto-trigger the action) is the load-bearing constraint for v0.5. The chain prepares the workout, appends the body-track to journals, and writes the calendar event — but `/coach log` stays manual. Logging completion (RPE + lift actuals) is the body-in-the-loop moment that the substrate never automates.
+
+### Failure modes handled
+
+- Wearable API down at session start → hook catches exception, exits silently. Next session retries.
+- User skips /journal one day → tomorrow's /journal triggers the chain for two days at once. No missed days.
+- User doesn't open Claude Code for a week → next session pulls 7 days of wearable backfill in one shot.
+- health-mcp not yet installed → hooks exit silently. Once `/health-setup` runs, hooks start firing.
+- Coach profile not yet set → Stop hook exits silently. Once `/coach profile` runs, hooks start firing.
+- google-workspace MCP not connected → prescription still creates in DB, calendar drop skipped. Hook never blocks.
+
+### Bypass env vars
+
+- `HEALTH_AUTO_SYNC_BYPASS=1` — skip the SessionStart sync (for offline / debugging)
+- `COACH_AUTO_PRESCRIBE_BYPASS=1` — skip the Stop hook prescription
+- Both default off; bypass is opt-in
+
+### Tests
+
+81 passing (up from 69 in v0.4). New v0.5 tests cover:
+- Both hooks compile cleanly (no syntax errors)
+- Bypass env vars short-circuit to silent JSON
+- Hooks emit valid JSON even under unexpected failure (Claude Code blocks the prompt on invalid hook output)
+- hooks.json template registers both hooks
+- /health-doctor SKILL.md enumerates the six sections
+- AUTOMATION.md preserves the Bainbridge dissent anchor
+
+### What to do
+
+If you ran `/health-setup` before v0.5: re-run it, or manually paste the two hook entries from `hooks.json` into your `~/.claude/settings.json`. Then restart Claude Code. From that point on, opening any Claude Code session triggers the sync; running `/journal` triggers the prescription.
+
+If you're on a fresh install: `/health-setup` now ends with the auto-wire step. Default yes.
+
+To verify: `/health doctor` — green flags = working, yellow / red = specific fix needed.
+
+---
+
 ## 2026-05-10: health-mcp v0.4 — /coach longevity + fitness coach skill (progressive overload + cycle-aware + Floor-paired)
 
 **Who this affects:** anyone who wants a daily workout prescription that reads from their actual biometrics + cycle phase + emotional state (Floor) instead of a generic template. Companion to the /weekly + /monthly insights — coach drives the daily prescription, insights surface the weekly/monthly pattern.
