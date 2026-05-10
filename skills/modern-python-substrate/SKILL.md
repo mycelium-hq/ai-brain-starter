@@ -61,18 +61,17 @@ dependencies = [
     "pydantic>=2.6",
 ]
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=8.0",
-    "pytest-cov>=4.1",
-    "hypothesis>=6.100",
-    "ty>=0.1",
-    "ruff>=0.6",
-]
+[dependency-groups]  # PEP 735 (preferred over [project.optional-dependencies] for dev tools)
+dev = [{include-group = "lint"}, {include-group = "test"}]
+lint = ["ruff>=0.6", "ty>=0.1"]
+test = ["pytest>=8.0", "pytest-cov>=4.1", "hypothesis>=6.100"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+# For simple non-distributed packages, `uv_build` is a simpler alternative:
+#   requires = ["uv_build>=0.7"]
+#   build-backend = "uv_build"
 
 [tool.ruff]
 target-version = "py311"
@@ -166,7 +165,9 @@ uv python pin 3.11
 # Add a dep
 uv add fastapi pydantic anthropic
 
-# Add a dev-only dep
+# Add a dev-only dep (group syntax is the PEP-735 way; `--dev` is shorthand for `--group dev`)
+uv add --group dev pytest hypothesis
+# Or the older shorthand
 uv add --dev pytest hypothesis
 
 # Run something inside the venv
@@ -180,6 +181,23 @@ uv run ty check src/
 - `uv.lock` is committed to the repo; locks every dep version + transitive
 - `uv sync` installs from the lockfile reproducibly
 - `uv lock --upgrade` to refresh; `uv lock --upgrade-package <name>` for one dep
+
+### Ad-hoc deps with `uv run --with`
+
+For one-off commands needing a package not in the project deps (testing, scratch, REPL):
+
+```bash
+# One-shot Python with a temporary package
+uv run --with httpx python -c "import httpx; print(httpx.get('https://httpbin.org/ip').json())"
+
+# Multiple temp packages
+uv run --with rich --with click python script.py
+
+# Combine with project deps (adds to existing venv)
+uv run --with respx pytest  # project deps + respx for this run only
+```
+
+`uv add` for permanent project deps; `--with` for ephemeral tools that should not pollute pyproject.toml.
 
 ## ruff workflow
 
@@ -387,10 +405,12 @@ def call_with_retry(client, messages, model, max_retries=3):
 
 (Full LLM-stack patterns: see `claude-api` skill.)
 
-## Pre-commit hooks
+## Pre-commit hooks (prek preferred, pre-commit compatible)
+
+[prek](https://github.com/j178/prek) is a Rust-native drop-in replacement for `pre-commit`. Same `.pre-commit-config.yaml` format, ~7x faster install, single binary, no Python runtime required, parallel hook execution. Already in production at CPython, FastAPI, Ruff, Apache Airflow.
 
 ```yaml
-# .pre-commit-config.yaml
+# .pre-commit-config.yaml (same file works for prek and pre-commit)
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.6.0
@@ -415,7 +435,72 @@ repos:
         stages: [commit]
 ```
 
-Install: `pre-commit install`. Now every `git commit` runs ruff + ty + fast pytest before the commit lands.
+Install with prek (recommended):
+```bash
+# One-time install
+brew install prek    # or: cargo install prek
+
+# Per-repo activation
+prek install                  # writes .git/hooks/pre-commit
+prek run --all-files          # initial pass on existing files
+prek auto-update              # bump hook revs
+```
+
+Or with classic pre-commit if the team standardizes on it:
+```bash
+uv add --group dev pre-commit
+uv run pre-commit install
+```
+
+Either tool reads the same config. Migrating an existing pre-commit setup to prek is `prek install` — no config changes needed.
+
+## PEP 723: inline-script metadata
+
+For single-file scripts that need external dependencies, embed the deps directly in the script header. No `pyproject.toml`, no requirements.txt, no manual venv. uv reads the metadata, resolves deps into a transient venv, runs the script.
+
+```python
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "httpx",
+#     "rich",
+# ]
+# ///
+
+import httpx
+from rich import print
+
+response = httpx.get("https://api.github.com/repos/anthropics/claude-code")
+print(response.json()["stargazers_count"])
+```
+
+Run with `uv run script.py` (or `./script.py` if the shebang is set + `chmod +x`). uv handles the venv lifecycle automatically — no manual cleanup.
+
+When to use PEP 723:
+- One-off automation scripts with deps
+- Utility scripts shared between projects (no need to install a package)
+- Demos and reproducers (single-file, fully self-contained)
+
+When NOT to use it:
+- Multi-file projects (use `pyproject.toml`)
+- Reusable libraries
+- Anything with complex config (test setup, build scripts, CI)
+
+## Security tooling (overview)
+
+When the project ships externally, layer in security tools as pre-commit hooks + CI checks:
+
+| Tool | Purpose | When |
+|---|---|---|
+| **shellcheck** | Lint shell scripts in the repo | pre-commit |
+| **detect-secrets** | Catch committed credentials, API keys, tokens | pre-commit |
+| **actionlint** | GitHub Actions workflow YAML syntax | pre-commit + CI |
+| **zizmor** | GitHub Actions security audit (script-injection, supply-chain) | pre-commit + CI |
+| **pip-audit** | Scan `uv.lock` for known CVEs in dependencies | CI + scheduled |
+| **Dependabot** | Automated dependency-update PRs (security + version bumps) | scheduled |
+
+For full security setup (configs, install commands, exclusion patterns), see the trailofbits modern-python skill bundled via the marketplace install: it covers shellcheck/detect-secrets/zizmor/pip-audit configuration in detail at `~/.claude/plugins/marketplaces/trailofbits/plugins/modern-python/skills/modern-python/references/security-setup.md`. This substrate stays slim; the security-firm framing belongs in their bundle.
 
 ## CI matrix (GitHub Actions example)
 
@@ -460,7 +545,7 @@ jobs:
 | `pathlib.Path` not `os.path` | Object-API > string-mangling-API |
 | `dataclass` or `pydantic.BaseModel` for value objects, not bare dicts | Type-checker catches typos in field names |
 
-## Anti-patterns
+## Anti-patterns (workflow-level)
 
 | Anti-pattern | Fix |
 |---|---|
@@ -472,6 +557,19 @@ jobs:
 | Untyped public function signatures | ty's `--strict` catches; CI gate fails |
 | Tests in the same package as source (`yourproject/test_main.py`) | Move to `tests/test_main.py` (src/ layout) |
 | pytest fixtures defined in test files instead of `conftest.py` | Move shared fixtures to conftest; one source of truth |
+| Manually editing `pyproject.toml` to add deps | `uv add <pkg>` keeps lockfile + table in sync |
+| Activating the venv (`source .venv/bin/activate`) before commands | Just `uv run <cmd>`; uv finds the venv |
+| `[project.optional-dependencies]` for dev tools | `[dependency-groups]` (PEP 735) — supports group includes, cleaner |
+| Poetry, pipenv, pip-tools wrappers | uv replaces all three; one binary, faster |
+
+## Anti-patterns (config typos that silently break tooling)
+
+| Wrong | Right | Why |
+|---|---|---|
+| `[tool.ty]\npython-version = "3.11"` | `[tool.ty.environment]\npython-version = "3.11"` | ty looks for `python-version` under `[tool.ty.environment]`; placing it under `[tool.ty]` is silently ignored |
+| `[tool.ty]\nstrict = true` (legacy) | Per-rule severity under `[tool.ty.rules]` | Newer ty versions deprecated the global strict flag in favor of explicit rule severity |
+| `requires = ["hatchling"]` for non-distributed projects | `requires = ["uv_build>=0.7"]` + `build-backend = "uv_build"` | uv_build is simpler when you don't need plugin hooks or sdist customization |
+| `# noqa` without rule code | `# noqa: E501` (specific code) | Bare noqa hides every violation on the line, including ones that show up later |
 
 ## Output format
 
@@ -605,6 +703,21 @@ The toolchain (this skill) is necessary but not sufficient. The cycle is the dis
 | Established practice (cross-team norms) | src/ layout default, no implicit relative imports, no wildcard imports, one logger per module, typed-everything, narrow exception types | n/a |
 
 **Audit gap closed 2026-05-10.** v1 cited 5 sources. v2 adds async testing, structured logging, mocking, and the obra eng-discipline cycle cross-references — these were genuine missing capabilities.
+
+**v3 audit gap closed 2026-05-10 (deep ToB read).** Verified v2 against the full trailofbits/skills/modern-python SKILL.md (333 lines) + 9 reference files (testing, security-setup, ruff-config, pyproject, pep723-scripts, prek, uv-commands, migration-checklist, dependabot). v3 adds:
+
+| Added in v3 | Source | Why it was missing in v2 |
+|---|---|---|
+| PEP 735 `[dependency-groups]` syntax in pyproject.toml | ToB modern-python SKILL.md | v2 used `[project.optional-dependencies]` which is the legacy pattern |
+| `uv_build` build backend as alternative to hatchling for non-distributed packages | ToB anti-patterns table | v2 only mentioned hatchling |
+| `uv add --group dev` syntax (PEP-735-aligned) alongside `--dev` shorthand | ToB SKILL.md + uv-commands.md | v2 only documented `--dev` |
+| `uv run --with` ad-hoc dep pattern | ToB uv-commands.md | v2 had no answer for "I need httpx in this one shell command without installing it" |
+| **prek** as preferred pre-commit replacement | ToB references/prek.md | v2 only documented classic pre-commit |
+| **PEP 723 inline-script metadata** (full section) | ToB references/pep723-scripts.md | v2 had no single-file-script story |
+| **Security tooling overview** (shellcheck, detect-secrets, actionlint, zizmor, pip-audit, Dependabot) | ToB references/security-setup.md | v2 omitted security tooling (deferred to ToB skill, but should at least map the surface) |
+| Anti-patterns config typos (`[tool.ty]` vs `[tool.ty.environment]`, bare `# noqa`, hatchling-by-default) | ToB SKILL.md anti-patterns | v2 only had workflow-level anti-patterns |
+
+**Verification harness:** every capability listed above either has a working example block in this SKILL.md OR a precise pointer to the upstream reference, NOT just a name-drop. The cross-reference to ToB security-setup.md is an explicit deferral — the substrate doesn't reimplement security setup; it points to the canonical source.
 
 ## Source attribution
 

@@ -1,0 +1,102 @@
+# Product marketing context (template — fill in for your project)
+
+This file is auto-loaded by the `coreyhaines31/marketing-skills` plugin (41 marketing sub-skills bundled via `bootstrap.sh`). When any of these skills fires (cold-email, copywriting, email-sequence, pricing-strategy, customer-research, ad-creative, social-content, etc.), it reads this file FIRST so it can skip foundational ICP/positioning questions.
+
+To activate: copy this file to `.agents/product-marketing-context.md` (drop the `.example` suffix) at the root of any repo where you want the marketing skills to know your product context. Fill in each section.
+
+If you don't fill this in, the marketing skills still work — they just ask the foundational questions every time.
+
+## 1. Product overview
+
+- **One-line description:** [What it is in a sentence.]
+- **What it does (2-3 sentences):** [Core function + the customer transformation it produces.]
+- **Product category:** [The shelf you sit on. How customers search for you.]
+- **Product type:** [SaaS / marketplace / e-commerce / service / consulting / open-source / hybrid.]
+- **Business model:** [Self-serve / sales-led / hybrid / community-led.]
+- **Pricing shape:** [Free + paid tiers / consulting day rate / fixed-price project / per-seat / per-event.]
+
+## 2. Target audience
+
+- **Target company type:** [Industry / size / stage. Be specific.]
+- **Target decision-makers:** [Roles + departments. Who signs the contract, who uses it daily.]
+- **Primary use case:** [The main problem you solve.]
+- **Jobs to be done (2-3):** [What customers "hire" you for, in their words.]
+- **Specific scenarios:** [Concrete moments where they reach for you.]
+
+## 3. Personas (B2B only)
+
+For each stakeholder in the buying decision:
+
+- **User:** [Daily user. What they care about. Friction they feel.]
+- **Champion:** [Internal advocate. Why they push for you.]
+- **Decision maker:** [Final approver. The objection they raise.]
+- **Financial buyer:** [The one staring at price.]
+- **Technical influencer:** [Security/IT/architecture review.]
+
+## 4. Problems and pain points
+
+- **Core challenge before you:** [In their words, not yours.]
+- **Why current solutions fall short:** [Generic competitors / spreadsheets / agencies / DIY.]
+- **What it costs them:** [Time + money + opportunity.]
+- **Emotional tension:** [Stress, fear, doubt, FOMO. Real ones, not invented.]
+
+## 5. Differentiation
+
+- **3-5 reasons you're different:** [Not "we're the best" — specific structural differences.]
+- **Proof points:** [Numbers, case studies, named customers, testimonial verbatim.]
+- **What you do NOT do:** [Boundaries. The kind of customer you don't serve well.]
+
+## 6. Customer language (verbatim)
+
+The most valuable section. Drop in real phrases from:
+
+- Customer support tickets
+- Sales call transcripts
+- Reviews (G2, Capterra, ProductHunt, Reddit)
+- Internal Slack/Discord/forum threads
+- Cold-email replies (positive AND negative)
+
+Push for **exact phrases** over polished descriptions. "It's a pain to set up Zapier flows manually" beats "users want easier automation." Copy that resonates uses the words they already think in.
+
+## 7. Competitors and alternatives
+
+- **Direct competitors:** [Same shelf.]
+- **Indirect alternatives:** [Different shelf, same job.]
+- **Status quo / DIY:** [Doing nothing. Spreadsheets. The intern.]
+- **For each:** [What they do well. Where they fail. How you compare.]
+
+## 8. Channels and traffic
+
+- **Primary acquisition:** [SEO / paid / partnerships / community / outbound / referrals.]
+- **Where customers research:** [G2 / Reddit / Twitter / LinkedIn / industry blogs.]
+- **What pre-arrival context typical visitors have:** [Cold / warm / familiar / brand-aware.]
+
+## 9. Tone and voice
+
+- **Voice:** [Direct / warm / technical / playful / authoritative.]
+- **Words to avoid:** [Jargon you don't use. Industry clichés you reject.]
+- **Words you reach for:** [Distinctive vocabulary that's "yours."]
+- **Em dash policy / exclamation policy / first-person policy:** [Codify the small rules so every skill respects them.]
+
+## 10. Foundational documents
+
+Link to canonical sources:
+
+- [Origin story / founding narrative]
+- [Product roadmap]
+- [Pricing page]
+- [Brand guide / style guide]
+- [Customer case studies]
+- [Internal positioning memo]
+
+---
+
+## How to use this file with the marketing skills
+
+After filling in: trigger any marketing skill (e.g. ask Claude "write me a cold email to <persona>" or "draft a launch announcement"). The skill auto-reads this file before asking you for setup info, so you go straight to the tactical work.
+
+If you update positioning, re-run `/product-marketing-context` and the skill will diff + update the relevant sections.
+
+## Voice firewall reminder
+
+If your project uses the `humanizer` skill (also bundled in this substrate), every external-prose surface (cold-email, copywriting, social-content, ad-creative, sales-enablement, copy-editing, popup-cro output, email-sequence body, churn-prevention save offers) MUST be passed through `/humanizer` before publish. The marketing skills produce structure; humanizer locks voice. This is enforced at the substrate level and downstream of any context here.
