@@ -646,14 +646,12 @@ git_clone_safe() {
   if [[ -d "$dest/.git" ]]; then
     return 0
   fi
-  run_with_timeout "$GIT_CLONE_TIMEOUT_SECS" git clone --quiet "$url" "$dest" 2>/dev/null
-  local ec=$?
+  local ec=0
+  run_with_timeout "$GIT_CLONE_TIMEOUT_SECS" git clone --quiet "$url" "$dest" 2>/dev/null || ec=$?
   if [[ "$ec" == "124" ]]; then
     err "$desc — clone exceeded ${GIT_CLONE_TIMEOUT_SECS}s timeout. Skipping; re-run later."
-    return 1
   elif [[ "$ec" -ne 0 ]]; then
     err "$desc — clone failed (exit $ec)"
-    return 1
   fi
   return 0
 }
@@ -687,13 +685,16 @@ claude_install_safe() {
 }
 
 # pipx_install_safe PKG — respects DRY_RUN.
+# Always returns 0 (failures land in FAILED via err); set -e in bootstrap
+# would otherwise kill the whole install on a single tool's network blip.
 pipx_install_safe() {
   local pkg="$1"
   if [[ $DRY_RUN -eq 1 ]]; then
     dry "would: pipx install $pkg"
     return 0
   fi
-  pipx install "$pkg" 2>&1 | tail -3 || return 1
+  pipx install "$pkg" 2>&1 | tail -3 || err "pipx install $pkg failed"
+  return 0
 }
 
 # ───────────────────────────────────────────────────────────────────────────────
