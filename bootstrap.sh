@@ -952,6 +952,22 @@ fi
 [[ -d "$HOME/.claude/skills/humanizer" ]] && ok "humanizer skill installed"
 
 # ───────────────────────────────────────────────────────────────────────────────
+# obra/superpowers (engineering-discipline skills, MIT, Jesse Vincent)
+# Adopted as documented dependency in docs/POWER_TOOLS.md. Clone alongside
+# ai-brain-starter so the substrate (memory/voice/vault/session) and the work
+# discipline (TDD, worktrees, root-cause-tracing, systematic-debugging,
+# verification-before-completion, brainstorming) are both available out of
+# the box. 184k stars upstream, last verified 2026-05-09.
+# ───────────────────────────────────────────────────────────────────────────────
+
+if [[ ! -d "$HOME/.claude/skills/superpowers" ]]; then
+  hdr "Installing obra/superpowers (engineering-discipline skills)"
+  git clone --quiet https://github.com/obra/superpowers.git "$HOME/.claude/skills/superpowers" \
+    || err "superpowers clone failed (skipping; install manually with: git clone https://github.com/obra/superpowers.git ~/.claude/skills/superpowers)"
+fi
+[[ -d "$HOME/.claude/skills/superpowers" ]] && ok "superpowers skills installed"
+
+# ───────────────────────────────────────────────────────────────────────────────
 # Granola MCP (meeting workflow rule depends on this)
 # ───────────────────────────────────────────────────────────────────────────────
 
