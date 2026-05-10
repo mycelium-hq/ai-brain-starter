@@ -113,13 +113,19 @@ Open the [Claude Code desktop app](https://claude.ai/download) and sign in with 
 
 ### Step 2 — Say "install ai-brain-starter"
 
-Paste this one-liner into the chat:
+Paste this into the chat:
 
 ```
-Install ai-brain-starter for me. Use the in-chat install path: ask me my email and name once, then run bootstrap. Don't send me to a browser or have me copy a token from email.
+Install ai-brain-starter for me: https://github.com/adelaidasofia/ai-brain-starter
 ```
 
-Claude asks two questions: *"What's your email?"* and *"What name should I use?"* That's it. Bootstrap mints your token over the API, installs everything (Homebrew, Python, Node, Obsidian, all skills, all MCPs), and runs the setup interview in your chosen language. No browser tab, no terminal copy-paste, no token to fish out of your inbox.
+That's the whole prompt. After you paste, what happens:
+
+- Claude asks "What's your email?" and "What name should I use?" — two short questions, one each.
+- Bootstrap (the installer) mints your token over the API, downloads and configures everything (Homebrew, Python, Node, Obsidian, all skills, all MCPs).
+- The setup interview begins automatically in your chosen language.
+
+No browser tab, no terminal copy-paste, no token to fish out of your inbox.
 
 **If pre-flight fails**, Claude reads the structured report and explains in plain English what to fix. Most common blockers: Claude Code not installed, a corporate VPN blocking GitHub, or a Mac that's not in the admin group.
 
@@ -151,13 +157,19 @@ Abrí la [app de escritorio de Claude Code](https://claude.ai/download) y loguea
 
 ### Paso 2 — Decí "instalá ai-brain-starter"
 
-Pegá este one-liner en el chat:
+Pegá esto en el chat:
 
 ```
-Instalá ai-brain-starter para mí. Usá la ruta in-chat: preguntame mi email y nombre una vez, después corré el bootstrap. No me mandes al navegador ni me hagas copiar un token del email.
+Instalá ai-brain-starter para mí: https://github.com/adelaidasofia/ai-brain-starter
 ```
 
-Claude te hace dos preguntas: *"¿Cuál es tu email?"* y *"¿Qué nombre uso?"*. Eso es todo. El bootstrap genera tu token vía la API, instala todo (Homebrew, Python, Node, Obsidian, todas las skills, todos los MCPs), y corre la entrevista de setup en el idioma que elijas. Sin pestaña del navegador, sin copiar y pegar en la terminal, sin pescar un token del inbox.
+Ese es el prompt entero. Después de pegarlo, lo que pasa:
+
+- Claude te pregunta "¿Cuál es tu email?" y "¿Qué nombre uso?" — dos preguntas cortas, una a la vez.
+- El bootstrap (el instalador) genera tu token vía la API, descarga y configura todo (Homebrew, Python, Node, Obsidian, todas las skills, todos los MCPs).
+- La entrevista de setup arranca automáticamente en el idioma que elijas.
+
+Sin pestaña del navegador, sin copiar y pegar en la terminal, sin pescar un token del inbox.
 
 **Si la verificación previa falla**, Claude lee el reporte estructurado y te explica en idioma claro qué arreglar. Lo más común: Claude Code no instalado, una VPN corporativa bloqueando GitHub, o una Mac fuera del grupo admin.
 
