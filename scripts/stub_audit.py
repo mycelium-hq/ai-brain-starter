@@ -21,6 +21,8 @@ Usage:
     python3 stub_audit.py --vault-root "$(pwd)" --skip "Drafts,Personal"
     python3 stub_audit.py --vault-root "$(pwd)" --out-dir "/tmp/audit"
 """
+from __future__ import annotations
+
 import argparse
 import json
 import os

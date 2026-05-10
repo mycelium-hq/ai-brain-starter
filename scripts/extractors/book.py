@@ -3,6 +3,8 @@
 extractors/book.py — structured metadata for book notes.
 Type: `book`. Verbatim only, no LLM.
 """
+from __future__ import annotations
+
 import re
 
 from _base import (

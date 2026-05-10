@@ -17,6 +17,8 @@ Usage:
   python3 rename-contacts.py --vault /path/to/vault --output "Notes/WhatsApp"
 """
 
+from __future__ import annotations
+
 import os
 import re
 import sys

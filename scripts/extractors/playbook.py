@@ -3,6 +3,8 @@
 extractors/playbook.py — structured metadata for playbook docs.
 Type: `playbook`. Usually Pao contractor playbooks (Source/Location/Shape/Channel).
 """
+from __future__ import annotations
+
 import re
 
 from _base import (

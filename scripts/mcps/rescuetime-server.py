@@ -13,6 +13,8 @@ Tools exposed:
   - get_productivity_trend — pulse trend over N days
 """
 
+from __future__ import annotations
+
 import os
 import httpx
 from datetime import date, timedelta

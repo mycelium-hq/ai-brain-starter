@@ -3,6 +3,8 @@
 extractors/company.py — structured metadata for company notes.
 Type: `company`.
 """
+from __future__ import annotations
+
 import re
 
 from _base import (
