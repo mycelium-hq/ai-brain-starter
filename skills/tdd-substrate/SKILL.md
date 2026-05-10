@@ -341,6 +341,46 @@ When invoked, the skill responds:
 - `/grill-build` — for fuzzy build scope; resolve scope before writing tests
 - `/architecture-pass` — for refactors that change architecture (must have tests covering the surface first)
 
+## The full eng-discipline cycle (cross-references)
+
+TDD is one step in a four-step cycle. Each step has its own Iron Law and its own substrate or upstream skill. Use them together:
+
+| Step | Iron Law | Substrate / source |
+|---|---|---|
+| 1. Design before code | NO IMPLEMENTATION ACTION UNTIL DESIGN APPROVED | `obra:brainstorming` (HARD-GATE: no code, no scaffold, no skill invocation until design is presented and user approves) |
+| 2. Test before code | NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST | This skill (`tdd-substrate`) |
+| 3. Root cause before fix | NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST | `obra:systematic-debugging` (random fixes waste time + create new bugs; symptom fixes are failure) |
+| 4. Evidence before completion | NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE | `obra:verification-before-completion` (run the test in THIS message; do not claim "it passes" from prior memory) |
+
+The four Iron Laws share a rhetorical pattern from obra/superpowers: **"Violating the letter of these rules is violating the spirit of these rules."** Each rule has loopholes a tired engineer will reach for; the rule's intent is the protection, not just the rule's words.
+
+The cycle runs: brainstorming (no code yet) → TDD (one failing test) → if-bug-found → systematic-debugging → fix → verification-before-completion → claim done. Skip any step and the discipline collapses.
+
+(Cycle source: obra/superpowers/skills/{brainstorming, test-driven-development, systematic-debugging, verification-before-completion}. v1 of this substrate cited only the TDD step — substantial gap. v2 maps the cycle.)
+
+## Anti-pattern (shared with verification-before-completion)
+
+| Anti-pattern (recap) | Fix |
+|---|---|
+| Claim "tests pass" without running them in this message | Run the verification command NOW; show output before claiming done |
+| "It worked yesterday" / "I ran it earlier" | Stale evidence is no evidence; re-run |
+| "CI is green" without checking the right CI run for the commit currently on disk | Pull the SHA in CI; match against `git rev-parse HEAD`; if mismatch, re-run |
+
+## Source comparison (everything-comparison build, revised)
+
+| Source | What got incorporated | What was left out |
+|---|---|---|
+| [obra/superpowers/skills/test-driven-development](https://github.com/obra/superpowers/tree/main/skills/test-driven-development) | Iron Law, Red-Green-Refactor cycle with verify-fail diamond, Good/Bad code framing | Generic single-runtime focus (this substrate ships dual-runtime) |
+| **[obra/superpowers/skills/brainstorming](https://github.com/obra/superpowers/tree/main/skills/brainstorming) (newly cross-referenced)** | HARD-GATE design-first pattern; "too simple to need a design" anti-pattern; checklist-as-tasks pattern | Visual-companion sub-flow stays in upstream skill |
+| **[obra/superpowers/skills/systematic-debugging](https://github.com/obra/superpowers/tree/main/skills/systematic-debugging) (newly cross-referenced)** | Iron Law for root-cause investigation; "symptom fixes are failure" framing | Phase-by-phase debug loop stays in upstream skill |
+| **[obra/superpowers/skills/verification-before-completion](https://github.com/obra/superpowers/tree/main/skills/verification-before-completion) (newly cross-referenced)** | Iron Law for fresh verification; "evidence before claims" framing; gate-function pattern | Specific verify-command catalog stays in upstream skill |
+| [trailofbits/skills/property-based-testing](https://github.com/trailofbits/skills/tree/main/skills/property-based-testing) | Property-based testing for invariants; hypothesis pattern | Smart-contract-specific properties |
+| [trailofbits/skills/testing-handbook-skills](https://github.com/trailofbits/skills/tree/main/skills/testing-handbook-skills) | Sanitizer hygiene mention; fuzzer routing | Most security-research framing |
+| Anthropic [claude-cookbooks](https://github.com/anthropics/claude-cookbooks) testing patterns | TDD-with-LLM patterns | Vendor-specific eval patterns |
+| Established practice (cross-team norms) | Regression-test-for-every-bug rule, test-isolation discipline, arrange-act-assert structure, one-assertion-per-test | n/a |
+
+**Audit gap closed 2026-05-10.** v1 cited only 1 of 4 obra eng-discipline skills (TDD). v2 cross-references the full cycle (brainstorming, systematic-debugging, verification-before-completion). The discipline is the cycle, not just TDD in isolation.
+
 ## Source attribution
 
-Source-comparison build per the repo-evaluation runbook "build with everything-comparison" rule. Sources cited above. No source's content was forked verbatim; the patterns were extracted, merged, and re-expressed in caveman-form.
+Source-comparison build per the repo-evaluation runbook "build with everything-comparison" rule. No source's content was forked verbatim; the patterns were extracted, merged, and re-expressed in caveman-form. Where obra owns specific framings ("Iron Law", "Violating the letter is violating the spirit", "verify-fail diamond"), those frames are credited inline.

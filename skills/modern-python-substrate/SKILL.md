@@ -510,6 +510,102 @@ When invoked, the skill responds:
 - `claude-api` — full LLM-stack patterns (anthropic SDK, prompt caching, streaming, citations, model migration)
 - trailofbits-skills bundle — complementary security-focused Python skills (insecure-defaults, sharp-edges, static-analysis)
 
+## Async testing (asyncio + pytest-asyncio)
+
+For Python services that ship `async def` code (FastAPI, httpx clients, async DB drivers):
+
+```python
+import pytest
+
+
+@pytest.mark.asyncio
+async def test_async_function_returns_value():
+    result = await my_async_function()
+    assert result == "expected"
+
+
+@pytest.fixture
+async def async_client():
+    """Async fixture using async generator pattern."""
+    client = AsyncClient()
+    yield client
+    await client.close()
+```
+
+Configure in `pyproject.toml`:
+
+```toml
+[tool.pytest.ini_options]
+asyncio_mode = "auto"  # auto-mark async tests; opt-out with @pytest.mark.asyncio(mode="strict")
+```
+
+For testing async code that hits real services, use `pytest-httpx` to mock httpx calls or `respx` for `httpx`-specific routing.
+
+## Structured logging (loguru OR structlog OR stdlib logging)
+
+For LLM-stack apps especially: structured logging is required for production debugging because LLM call latency / tokens / errors / retries need correlation.
+
+```python
+# Recommended for new projects: loguru (one import, sane defaults)
+from loguru import logger
+
+logger.add("app.log", rotation="100 MB", retention="30 days", serialize=True)  # JSON output
+logger.info("call_start", model="claude-sonnet-4-5", input_tokens=1234)
+logger.error("rate_limit", retry_after=10.0, attempt=2)
+```
+
+Or stdlib + structlog if the team prefers explicit configuration. Either way, output should be:
+- One log entry per event (not concatenated multi-line)
+- JSON when serialized (greppable, parseable)
+- Has correlation IDs for multi-step requests
+- Captures context (user_id, request_id, model, retry count) at the call site, not later
+
+## Mocking (pytest-mock + unittest.mock)
+
+```python
+def test_external_api_call(mocker):
+    """pytest-mock wraps unittest.mock with cleaner pytest integration."""
+    mock_response = mocker.Mock(status_code=200, json=lambda: {"key": "value"})
+    mocker.patch("httpx.get", return_value=mock_response)
+
+    result = call_external_api()
+
+    assert result == {"key": "value"}
+```
+
+Mock at the BOUNDARY (HTTP, database, file I/O), not at internal calls. If you find yourself mocking your own internal methods, the test is testing the wrong layer.
+
+## Eng-discipline cycle (Python-specific cross-references)
+
+Python toolchain hygiene + TDD + debugging + verification form one cycle. Each step has its own substrate or upstream skill:
+
+| Step | Iron Law | Substrate / source |
+|---|---|---|
+| 1. Design before code | NO IMPLEMENTATION ACTION UNTIL DESIGN APPROVED | `obra:brainstorming` |
+| 2. Toolchain set up correctly | THIS SKILL — uv + ruff + ty + pytest configured per pyproject.toml | This skill (`modern-python-substrate`) |
+| 3. Test before code | NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST | `tdd-substrate` (Vitest + pytest dual-runtime; this skill is the Python toolchain that hosts the pytest side) |
+| 4. Root cause before fix | NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST | `obra:systematic-debugging` |
+| 5. Evidence before completion | NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE | `obra:verification-before-completion` |
+
+The toolchain (this skill) is necessary but not sufficient. The cycle is the discipline.
+
+## Source comparison (everything-comparison build, revised)
+
+| Source | What got incorporated | What was left out |
+|---|---|---|
+| [trailofbits/skills/modern-python](https://github.com/trailofbits/skills/tree/main/skills/modern-python) (CC-BY-SA-4.0) | The uv + ruff + ty + pytest core stack; src/ layout default; pre-commit pattern | Security-firm framing (security defaults belong in a separate skill); patterns reimplemented clean per CC-BY-SA-4.0 license-hygiene |
+| [Astral docs](https://docs.astral.sh/) (uv, ruff, ty official) | Authoritative invocation patterns; correct config field names; latest 2026 behavior | Docs are reference; this skill teaches the workflow not the API |
+| [pytest official docs](https://docs.pytest.org/) | Fixtures, parametrize, markers, conftest hierarchy | Plugin ecosystem catalogue (would bloat) |
+| Anthropic SDK + tiktoken patterns (linked via `claude-api`) | LLM-stack integration: prompt caching, streaming, retries, token counting | Full SDK docs (handled by claude-api skill) |
+| [trailofbits/skills/property-based-testing](https://github.com/trailofbits/skills/tree/main/skills/property-based-testing) (CC-BY-SA-4.0) | Hypothesis pattern for invariants on top of example-based tests | Smart-contract specifics |
+| **pytest-asyncio + httpx async patterns (newly added)** | Async test patterns, fixture usage, asyncio_mode config | Niche async libraries (trio, anyio) |
+| **Structured logging (loguru / structlog) (newly added)** | When and why structured logging matters for LLM-stack apps | Distributed tracing (OpenTelemetry, separate concern) |
+| **pytest-mock + unittest.mock (newly added)** | Mock at the boundary, not internal calls | Specific mock-libraries-as-DB-replacements |
+| **obra eng-discipline cycle cross-references (newly added)** | Brainstorming + TDD + systematic-debugging + verification as the surrounding discipline | Each individual obra skill stays at upstream |
+| Established practice (cross-team norms) | src/ layout default, no implicit relative imports, no wildcard imports, one logger per module, typed-everything, narrow exception types | n/a |
+
+**Audit gap closed 2026-05-10.** v1 cited 5 sources. v2 adds async testing, structured logging, mocking, and the obra eng-discipline cycle cross-references — these were genuine missing capabilities.
+
 ## Source attribution
 
-Source-comparison build per the repo-evaluation runbook "build with everything-comparison" rule. Sources cited above. Patterns from CC-BY-SA-4.0 sources (trailofbits/skills/modern-python, trailofbits/skills/property-based-testing) were reimplemented clean per the license-hygiene rule.
+Source-comparison build per the repo-evaluation runbook "build with everything-comparison" rule. Patterns from CC-BY-SA-4.0 sources (trailofbits/skills/modern-python, trailofbits/skills/property-based-testing) were reimplemented clean per the license-hygiene rule.

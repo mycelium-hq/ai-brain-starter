@@ -238,15 +238,133 @@ Audit reports always print:
 <single concrete action the user takes after reading this report>
 ```
 
-## Source
+## Initial Assessment (before any checklist)
 
-Cherry-pick from [AgriciDaniel/claude-seo](https://github.com/AgriciDaniel/claude-seo) (MIT, 6,276 stars). Their bundle is comprehensive but heavy for solo-operator surfaces; this substrate keeps the surface coverage at 80% and trims the depth at the long tail. Specific extensions skipped from upstream:
+Before running the audit checklist, gather context:
 
-- `seo-dataforseo` (paid API — out)
-- `seo-firecrawl` (paid API — out, we have own scraping path)
-- `seo-image-gen` (image generation — covered by `nano-banana` in our stack)
-- `seo-flow` (FLOW framework integration — out, not used)
-- `seo-ecommerce` (multi-SKU shop — out for solo operators)
-- `seo-cluster` (semantic topic clustering at scale — out, manual is sufficient under 200 pages)
+1. **Site type** — SaaS, e-commerce, blog, consulting, multi-tenant SaaS, creator newsletter, portfolio. Different types have different SEO priorities.
+2. **Primary business goal** — conversions, organic traffic volume, AI citation, education, support deflection, brand awareness. Different goals weight different capabilities.
+3. **Priority keywords/topics** — top 5-10 queries that matter for the business.
+4. **Current state** — known issues, recent traffic changes, last audit date.
+5. **AI visibility** — has the user checked ChatGPT, Perplexity, Google AI Overviews, or Claude with web for their priority queries? If not, run the AI Visibility Check first (below).
+6. **Context file** — if `.agents/product-marketing-context.md` or `.claude/product-marketing-context.md` exists in the project, read it before asking questions. Use that context and only ask for what's not already covered.
 
-Per `⚙️ Meta/rules/repo-evaluation.md` cherry-pick rule: extract the substrate primitives at our quality bar, credit upstream, do not install the whole bundle.
+(Pattern source: coreyhaines31/marketingskills/seo-audit. Their "Initial Assessment" framing prevents going straight to checklist when scope is unclear.)
+
+## AI visibility diagnostic
+
+Before optimizing for AI search, MEASURE current state:
+
+1. **Search the user's priority queries in each surface:**
+   - Google AI Overviews (default top result on most queries in 2026)
+   - ChatGPT browsing mode
+   - Perplexity
+   - Claude with web tool
+   - Gemini
+   - Grok (if relevant audience)
+2. **For each surface, capture:**
+   - Is the brand cited at all?
+   - Is a competitor cited where the brand should be?
+   - Is the citation in the answer, in the sources, both, or neither?
+   - Does the AI's summary represent the brand accurately?
+3. **Compare against baseline** — same queries 30-60 days later. Did interventions move the needle?
+
+(Diagnostic source: coreyhaines31/marketingskills/ai-seo. Critical missing piece in v1 of this substrate — measurement-before-intervention is the right SEO sequence.)
+
+## Ranking-loss triage flow
+
+When the user reports "my traffic dropped" / "my rankings fell" / "Google update hit me":
+
+1. **Establish the timeline.** When did the drop start? Which queries lost the most?
+2. **Pull Search Console data.** Compare last-28-days vs the prior period. Filter by query, page, country, device. Surface the top losers.
+3. **Check Google's algorithm update history** for that date range (`https://status.search.google.com/` plus community trackers). If a known update hit, the cause is usually content quality + topical relevance, not technical.
+4. **Check manual actions** in Search Console > Security & Manual Actions. Manual actions are rare but explain the entire drop when present.
+5. **Crawl the top losers** for new technical issues: 404s, redirect chains, canonical breakage, indexability changes. The technical-SEO checklist (above) becomes the punch list.
+6. **Compare on-page content** of losers to the SERP winners. If competitors now rank with deeper content, fresher dates, more specific facts — content-quality intervention is the move, not technical.
+7. **AI Overviews check** — many post-2024 traffic drops are because AI Overviews answers the question without a click, even though rankings are unchanged. The fix is "show up in the AI answer" (see GEO section), not "rank higher."
+
+(Triage flow source: coreyhaines31/marketingskills/seo-audit. Substantial gap in v1 — solo operators need the triage when rankings fall, not just the proactive checklist.)
+
+## Programmatic SEO (revised: not excluded; included with constraints)
+
+V1 of this substrate excluded programmatic SEO ("solo operators don't need it"). That was wrong. Programmatic SEO at solo-operator scale (5-50 pages, not 5,000) is a real capability:
+
+- **Vertical-pack landing pages**: one page per vertical (legal/finance/healthcare/influencer/operator/founder) with shared template + per-vertical data.
+- **Case-study pages**: one per public case study with consistent schema, internal linking, and structured data.
+- **Comparison pages**: `<our-product> vs <competitor>` for each meaningful competitor.
+- **Integration pages**: `<our-tool> + <integration>` when an integration is launched.
+
+Constraints for solo operators:
+- **No thin content**: each page must have genuinely different value, not the same template with one variable swapped. Google penalizes duplicate-shaped pages.
+- **Real data behind every page**: actual case studies, actual competitor comparisons, not placeholder.
+- **Source content lives in markdown** (one file per page) so updates are git-tracked and the schema markup regenerates from frontmatter.
+- **Schema rich-result coverage**: each programmatic page type gets the right schema type (FAQ, Product, HowTo, Article, Event).
+- **Internal linking**: programmatic pages link to each other AND to cornerstone content so the site's link graph stays strong.
+
+Out of scope (genuine over-reach for solo ops): 1,000+ programmatic page generation, SEO-API-based content sourcing, AI-generated content at scale.
+
+(Source: coreyhaines31/marketingskills/programmatic-seo. v1 was wrong to exclude this entirely; corrected here.)
+
+## Schema markup (expanded)
+
+V1 covered 4 schema types (BlogPosting, Person, Organization, BreadcrumbList). The full set worth covering for solo + creator surfaces:
+
+- `BlogPosting` (kept from v1) — for blog posts, Substack articles
+- `Person` (kept) — for about pages, author pages
+- `Organization` (kept) — for company / consultancy pages
+- `BreadcrumbList` (kept) — for any page below root
+- `FAQPage` — for pages with Q&A content; eligible for Google rich-result FAQ accordion
+- `HowTo` — for step-by-step guides; eligible for HowTo rich result with image carousel
+- `Product` — for any paid product, course, coaching offer, digital download
+- `Event` — for ticketed events, webinars, cohort launches
+- `Course` — for courses/cohorts (different schema than Product; specifically for educational offerings)
+- `Review` + `AggregateRating` — for testimonials and review aggregations on landing pages
+- `WebSite` with `SearchAction` — for sites with on-site search; lets Google show a search box in the sitelinks
+
+Use Google's [Rich Results Test](https://search.google.com/test/rich-results) before publish.
+
+(Schema expansion source: coreyhaines31/marketingskills/schema-markup. v1 missed FAQ, HowTo, Product, Event, Course, Review/AggregateRating, WebSite-SearchAction.)
+
+## Site architecture / information architecture
+
+For new sites OR site restructures (NOT covered in v1):
+
+1. **Page-hierarchy planning.** What pages must exist? What's at root level vs nested?
+2. **URL pattern.** Hyphen-separated, lowercase, descriptive but short. Avoid stop words. Stable over years.
+3. **Internal linking strategy.** Cornerstone content (3-5 pillar pages per topic cluster) gets the most internal links from all related pages. Topic clusters: pillar → sub-topic pages → leaf content.
+4. **Navigation design.** Primary nav stays under 7 items. Secondary nav (footer, sidebar) handles depth. No multi-level dropdowns.
+5. **Breadcrumb strategy.** Every page below root gets a breadcrumb (also schema-marked).
+6. **Orphan-page check.** Every content page must be reachable from at least one other content page (not just from the sitemap). Orphan pages do not rank.
+
+For existing site restructures, the migration plan needs:
+- 301-map every old URL to its new home
+- Submit updated sitemap to Google + Bing
+- Monitor 30-day post-migration coverage report for indexability regressions
+
+(IA source: coreyhaines31/marketingskills/site-architecture. Substantial gap in v1.)
+
+## Cross-skill references (delegate when scope expands)
+
+This substrate covers the substrate primitives. Delegate to specialist skills for deeper work:
+
+- **AI SEO deep-dive (citation chasing, LLM-specific tactics)** → `marketing-skills:ai-seo` (coreyhaines)
+- **Programmatic SEO at >50 pages or with paid APIs** → `marketing-skills:programmatic-seo` (coreyhaines)
+- **Site architecture mapping for new sites** → `marketing-skills:site-architecture` (coreyhaines)
+- **Schema markup beyond the 11 types covered above** → `marketing-skills:schema-markup` (coreyhaines)
+- **Full claude-seo (25 sub-skills + 18 sub-agents) for deep niches** → `claude-seo:*` (AgriciDaniel)
+- **Conversion rate optimization on the resulting traffic** → `marketing-skills:form-cro`, `marketing-skills:onboarding-cro`, `marketing-skills:page-cro` (coreyhaines)
+- **Pricing page work** → `marketing-skills:pricing-strategy` (coreyhaines)
+
+The substrate primitives stay opinionated and lean. The full SEO/marketing surface is plugin-installed and discoverable when the user's prompt drifts beyond substrate scope.
+
+## Source comparison (everything-comparison build, revised)
+
+| Source | What got incorporated | What was left out |
+|---|---|---|
+| [AgriciDaniel/claude-seo](https://github.com/AgriciDaniel/claude-seo) (MIT, 6,276 stars) | 25 sub-skills surfaced as cross-skill references; substrate primitives kept; specific extensions excluded as listed below | `seo-dataforseo` (paid), `seo-firecrawl` (paid), `seo-image-gen` (covered by nano-banana), `seo-flow` (out), `seo-ecommerce` (out for solo), `seo-cluster` (manual under 200 pages) |
+| [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills) (MIT, 27,584 stars) | Initial Assessment pattern, AI visibility diagnostic, ranking-loss triage flow, programmatic SEO inclusion, expanded schema types (FAQ + HowTo + Product + Event + Course + Review + WebSite), site architecture / IA section, cross-skill references at the top, context-file-check pattern | Form CRO + onboarding CRO + page CRO + pricing strategy delegated to specialist skills (in same plugin) |
+| Cross-team practice + 2026 search ecosystem norms | hreflang reciprocity rule, Substack-specific per-post checklist, GEO + AI Overviews layer | n/a |
+
+**Audit gap closed 2026-05-10.** v1 of this substrate (initial build) cited only AgriciDaniel/claude-seo as the source. The everything-comparison rule required cross-checking the broader marketing-skill landscape, which surfaced the coreyhaines marketingskills bundle. v2 (this revision) incorporates the missing capabilities with proper attribution.
+
+Per `⚙️ Meta/rules/repo-evaluation.md` cherry-pick rule + everything-comparison rule: substrate primitives stay opinionated, full domain surface stays in plugin-installed bundles, cross-skill references make the delegation explicit.
