@@ -137,6 +137,74 @@ For the period, surface:
 
 Goal: surface 1-2 connections invisible from sequential reading. The graph sees aggregate patterns the diary doesn't.
 
+### 0d. Body track (health-mcp)
+
+The body has its own data and its own arc. When biometric / cycle / sleep / nutrition / lab data is available, it answers questions journals alone can't: which Floor-low days were physiology and which were content; whether the recovery score's "rest more" was the right prescription or whether the actual signal was "eat enough"; whether a Floor pattern this month is anniversary-coupled to the same month two years ago; whether a nutrient deficiency is masquerading as a low-mood pattern.
+
+**If the `health` MCP is not registered or returns errors, skip this entire section silently.** Graceful degradation, never block the main report.
+
+#### Tools to call (weekly)
+
+- `health_weekly_rollup(week_start)` — HRV / RHR / sleep / steps / workout aggregates + recovery_trend
+- `health_sleep_regularity(week_start, week_end)` — bed/wake variance, mean latency, nap count, regularity_score
+- `health_nutrition_summary(week_start, week_end)` — daily macros + under_fuel_signal
+- `health_cycle_context(today)` — current phase + cycle-day + irregularity
+- `health_floor_correlation("HKQuantityTypeIdentifierHeartRateVariabilitySDNN", days=30, vault_root)` — HRV vs Floor over 30d
+- `health_lab_panel(today, lookback_days=180)` — most recent lab values per marker with status (low / in_range / high)
+
+#### Tools to call (monthly only — additional)
+
+- `health_long_window("HKQuantityTypeIdentifierHeartRateVariabilitySDNN", years=2)` — YoY same-month + persistent_asymmetry signal
+- `health_long_window_with_journal("HKQuantityTypeIdentifierStepCount", years=2, vault_root)` — Floor distribution by month + YoY metric
+- `health_longevity_panel(today)` — VO2Max, walking speed, walking steadiness, lean mass, Zone 2 minutes, 6-min walk
+- `health_phase_means("HKQuantityTypeIdentifierHeartRateVariabilitySDNN", days=90)` — cycle-phase segmented HRV
+- `health_symptom_correlation(symptom_type, days=90, vault_root)` — for each symptom that appeared 3+ times this month, run the correlation
+
+#### Synthesis instruction (HELPFUL, NOT JUST COOL)
+
+The reason this section exists is to change what the user does tomorrow, not to display body numbers. Lead with patterns that pair body data with the Floor/journal track in ways neither could surface alone.
+
+Surface 3-7 bullets, each shaped:
+- **Pattern named** — concrete, with magnitudes from the tool calls
+- **What it might mean** — the hypothesis the data invites (cycle phase, under-fueling, anniversary coupling, lab deficiency, sleep debt, etc.)
+- **What to do about it** — one specific next-action. Not "be aware." Not "consider." A behavior or a check.
+
+Worked examples (not for the report — the SHAPE):
+
+> **HRV ran 18% below baseline mid-period — and you were in mid-luteal phase.** Cycle-phase context (Sims) says luteal HRV dips are physiology. The recovery score over-fired here. **Don't trust the "rest more" prompts during luteal week 3 unless RHR also climbed.**
+
+> **Floor 4 (Fear) days correlated r=-0.42 with HRV across 12 paired observations.** On Fear days, sleep latency was 23min vs 11min average. The body is registering threat before the journal names it. **For the next two weeks, when sleep latency runs >20min, write before bed instead of in the morning.**
+
+> **5 of 14 days you ate under 70% of energy burned. Recovery score recommended rest 4 of those days.** This is the under-fuel signal — recovery wants you to eat enough, not rest more. **Set a daily kcal floor of [basal+active*0.8] until HRV returns to baseline.**
+
+> **HRV is 14% below same-month-last-year AND same-month-two-years-ago. Third-year asymmetry.** Persistent-asymmetry detector flagged it. Anniversary-pattern hypothesis (van der Kolk). **What was happening this time of year in [year-3]? `/deconstruct` on the period.**
+
+> **Vitamin D 25-OH = 28 ng/mL (ref 30-100). Below range.** Vitamin D deficiency drives mood, immunity, and recovery. The persistent low-Floor pattern this month may have a metabolic floor under it. **Get tested again in 3 months after supplementing 5000 IU/day; flag with your physician.**
+
+> **Sleep-regularity score 52/100. Bed-time stdev 87min, wake-time stdev 72min.** Body is in chronic low-grade jet lag. The recovery formula doesn't capture this — single-night scores look fine. **Pick a wake time within a 30-min window for 14 days; the score should climb 20+ points.**
+
+> **VO2Max trended down 4% over 90 days. Zone 2 minutes 124/week (target 180+).** Cardio capacity is the priority longevity lever and it's drifting. **One Zone 2 walk (60-70% HRmax) per workday for the next month — measurable in the next monthly review.**
+
+#### Banned shapes for this section
+
+- Listing biometric numbers without an interpretation hypothesis ("HRV was 38ms; sleep was 6h 10m") — that's data, not insight
+- Generic "stay hydrated" / "get more sleep" advice unconnected to the period's actual data
+- Pretending labs cause symptoms when ranges are in-range
+- Citing the recovery score as ground truth when cycle phase or under-fueling explains the dip
+- "Talk to your doctor" as the entire prescription. Always pair with one specific behavioral next-action OR one specific data check
+
+#### Cycle-phase qualifier (always apply if cycle data exists)
+
+When `health_cycle_context(today)` returns a phase, ALL biometric interpretations in this section must be qualified by phase. Saying "your HRV dropped" without naming the phase is medically incomplete and the substrate gaslights its menstruating users without it. The phase tag is the first line of any biometric finding.
+
+#### Lab status flags (always surface ANY out-of-range lab)
+
+If `health_lab_panel(today)` returns ANY marker with `status: low` or `status: high`, surface it as its own bullet with the WHY for that marker (pull from `health_recommended_labs` if useful) and a specific re-check or supplementation suggestion. Out-of-range labs change the prescription; never bury them under "your body had a tough month."
+
+#### Voice profile
+
+Use the `curious` register: observation + question. Do NOT use `clinical` for this section even though the data is clinical. The reader is reading their own life, not a chart review. The data is the input; the question is the load-bearing artifact.
+
 ### 1. The week/month at a glance (DEMOTED — appendix-level)
 - How many entries (and any gaps, gaps often mean good stretches)
 - Floor distribution: how many entries on each floor, primary floor for the period
