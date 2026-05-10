@@ -9,6 +9,48 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-10: health-mcp v0.4 — /coach longevity + fitness coach skill (progressive overload + cycle-aware + Floor-paired)
+
+**Who this affects:** anyone who wants a daily workout prescription that reads from their actual biometrics + cycle phase + emotional state (Floor) instead of a generic template. Companion to the /weekly + /monthly insights — coach drives the daily prescription, insights surface the weekly/monthly pattern.
+
+**The shape:** The substrate had the data + the analytics + the journal pairing + the insights review. What it didn't have was a COACH PERSONA that issued a workout. A user on the panel sent the "Claude Fitness Coach" PDF from someone else and asked what we could learn. The panel said: lift the calendar drop + progressive overload + the daily decision shape, but extend it because their version is JUST fitness and our substrate already has the longevity + cycle-aware + Floor-pairing data they're missing. v0.4 is that extension.
+
+### What landed
+
+1. **Coach state layer** (`services/health-mcp/coach.py`): three new DuckDB tables (`coach_prescriptions`, `coach_completions`, `coach_lift_progress`). Tracks every prescription's id + workout type + difficulty + why_today, every completion's RPE + notes + lift actuals, and per-lift progression state (last weight + reps + sets, consecutive full sets, consecutive failures, current top set).
+
+2. **Progressive overload state machine.** Fail-twice-drop-10%, complete-twice-add-2.5kg (upper body) or 5kg (lower body), single-fail holds the weight. Deload every 4th week from profile start (40% volume drop, 20% intensity drop).
+
+3. **Decision tree wired to existing analytics.** The `health_coach_prescribe` tool reads recovery score + sleep score + cycle context + somatic state + body_says_slow_down + days-per-week + equipment + level + started_iso and returns workout_type + intensity_factor + difficulty + deload_week + why_today + prescription_id. Cycle-phase qualifier: luteal HRV dips don't collapse intensity (Sims, panel rule). Sleep score < 35 → rest day. `body_says_slow_down: true` → active recovery (Levine rule).
+
+4. **`/coach` skill** (`skills/coach/SKILL.md`): the user-facing surface. Profile setup (12 questions saved to `<vault>/Meta/coach-profile.yaml`), daily prescription that reads health-mcp + today's journal Floor and renders the workout block, weekly planning that pulls last week's completion + body data, monthly review that bundles the Attia longevity panel (VO2Max + Zone 2 minutes + walking steadiness + lean mass), and `/coach log` for entering actuals after a session.
+
+5. **Floor qualifier** (substrate differentiator). Floor in Shame / Fear / Apathy / Grief / Anger AND `floor_sensitivity: high` in profile → intensity drops ~15%, swap heavy compounds for moderate accessories or mobility. Floor in Joy / Peace / Love / Gratitude → green light. Floor in Courage + good sleep + follicular phase → PR day. The qualifier is multiplicative on top of `intensity_factor`. Never overrides somatic-state slow-down — that's still regulate-first.
+
+6. **Calendar drop integration.** If `profile.calendar_drop: true` AND `google-workspace` MCP is connected, daily prescriptions write to the user's Google Calendar at their preferred workout time. Title pattern: `🏋️ [Type] · [duration]min`. Full workout block in description. Weekly planning writes 7 events at once.
+
+7. **Five new tools**: `health_coach_prescribe`, `health_coach_lift_state`, `health_coach_log_completion`, `health_coach_recent_prescriptions`, `health_coach_summary`. Brings tool total to 41 (32 in v0.2 + 4 in v0.3 + 5 in v0.4).
+
+### What we deliberately did NOT copy from the PDF
+
+- Their iOS-beta Apple Health integration. Our local-only multi-vendor (Apple + Oura + Fitbit) path is strictly better for privacy + cross-platform.
+- Their hardcoded sleep tiers (`<4h = no workout, 4-5h = recovery only, 5-6h = drop 40%`). We use `sleep_score` and `sleep_regularity` as continuous signals.
+- Their generic cycle prescriptions (`follicular = strength PRs, luteal = lighter weights`). Ours compares THIS cycle's HRV/sleep to baseline per phase via `health_phase_means`, not a generic 28-day template.
+- "Nutrition only when asked" — flipped. If the under-fuel detector fires (Braddock pattern from v0.2), the coach surfaces it without being asked.
+- Their assumption that the data-driven coach is the whole answer. The Bainbridge dissent voice on the panel was integrated as the body-literacy prompt (`health_journal_body_question`) and the Floor qualifier — the coach acknowledges emotional state, not just biometrics.
+
+### Tests
+
+69 passing (up from 54 in v0.3). New v0.4 tests cover the progressive-overload state machine (first session, complete-twice-add for upper + lower, fail-twice-drop-10%, single-fail-holds), the deload-week computation, the decision tree (body_says_slow_down → active recovery, luteal qualifier bumps intensity, low sleep score → rest, deload week cuts intensity), and the log-completion roundtrip with consecutive-full vs consecutive-failure counters.
+
+### What you might want to do
+
+If you want the coach: run `/coach` to start the profile setup, then `/coach today` for your first prescription. Once your profile is saved, set up the daily scheduled run via `/schedule` so the workout drops into your calendar before you wake up. After the first week, run `/coach week` for the Sunday planning + weekly review.
+
+If you don't want the coach: nothing changes. The skill only fires when you invoke it.
+
+---
+
 ## 2026-05-10: health-mcp v0.3 — multi-vendor (Oura + Fitbit) + /health-setup wizard + journal backfill skill + backfill prompt
 
 **Who this affects:** anyone with a wearable that is NOT just Apple Watch (Oura Ring, Fitbit), anyone who wants their existing journals enriched with body context retroactively, anyone setting up health-mcp for the first time on Windows or Linux.

@@ -154,6 +154,47 @@ def init_schema(con: "duckdb.DuckDBPyConnection") -> None:
         );
         """
     )
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS coach_prescriptions (
+            prescribed_for DATE NOT NULL,
+            prescribed_at  TIMESTAMP NOT NULL,
+            workout_type   VARCHAR NOT NULL,
+            difficulty     INTEGER,
+            duration_min   INTEGER,
+            body_focus     VARCHAR,
+            exercises_json VARCHAR,
+            why_today      VARCHAR,
+            prescription_id VARCHAR NOT NULL
+        );
+        """
+    )
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS coach_completions (
+            prescription_id VARCHAR NOT NULL,
+            completed_at    TIMESTAMP NOT NULL,
+            rpe             INTEGER,
+            notes           VARCHAR,
+            actuals_json    VARCHAR
+        );
+        """
+    )
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS coach_lift_progress (
+            lift_name VARCHAR NOT NULL,
+            last_session_date DATE,
+            last_weight_kg DOUBLE,
+            last_reps_completed INTEGER,
+            last_sets_completed INTEGER,
+            consecutive_full_sets INTEGER DEFAULT 0,
+            consecutive_failures INTEGER DEFAULT 0,
+            current_top_set_kg DOUBLE,
+            updated_at TIMESTAMP NOT NULL
+        );
+        """
+    )
     # Speed up the common time-window queries.
     con.execute("CREATE INDEX IF NOT EXISTS idx_records_type_start ON records(type, start_date);")
     con.execute("CREATE INDEX IF NOT EXISTS idx_workouts_start ON workouts(start_date);")
@@ -161,6 +202,9 @@ def init_schema(con: "duckdb.DuckDBPyConnection") -> None:
     con.execute("CREATE INDEX IF NOT EXISTS idx_cycle_type_start ON cycle(type, start_date);")
     con.execute("CREATE INDEX IF NOT EXISTS idx_symptoms_type_start ON symptoms(type, start_date);")
     con.execute("CREATE INDEX IF NOT EXISTS idx_labs_marker_date ON labs(marker, test_date);")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_coach_prescriptions_date ON coach_prescriptions(prescribed_for);")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_coach_completions_id ON coach_completions(prescription_id);")
+    con.execute("CREATE INDEX IF NOT EXISTS idx_coach_lift_name ON coach_lift_progress(lift_name);")
 
 
 @contextmanager
@@ -201,7 +245,7 @@ def log_import(
 def stats(con: "duckdb.DuckDBPyConnection") -> dict[str, Any]:
     """Per-table counts + last import timestamp."""
     out: dict[str, Any] = {}
-    for table in ("records", "workouts", "sleep", "cycle", "symptoms", "ecg", "state_of_mind", "labs", "imports"):
+    for table in ("records", "workouts", "sleep", "cycle", "symptoms", "ecg", "state_of_mind", "labs", "imports", "coach_prescriptions", "coach_completions", "coach_lift_progress"):
         try:
             row = con.execute(f"SELECT COUNT(*) FROM {table};").fetchone()
             out[f"{table}_count"] = row[0] if row else 0
