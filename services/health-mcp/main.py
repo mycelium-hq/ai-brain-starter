@@ -36,6 +36,7 @@ import fitbit_client
 import labs as labs_mod
 import live_tcp
 import oura_client
+import analytics
 import parse_csv
 import parse_xml
 import scores
@@ -1163,6 +1164,147 @@ def health_coach_summary(days: int = 28) -> dict[str, Any]:
     }
 
 
+
+
+# ---------------------------------------------------------------------------
+# v0.7 Analytics surface (multi-year correlation + Floor/Loop fingerprints)
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+def health_correlate(
+    metric_a: str,
+    metric_b: str,
+    group_by: str | None = None,
+    vault_root: str = "",
+    lookback_days: int = 365,
+) -> dict[str, Any]:
+    """Pearson correlation between two metrics over the lookback window.
+
+    metric_a / metric_b accept friendly names ('hrv', 'rhr', 'steps',
+    'vo2max', 'mindful_minutes', ...) or HK identifiers.
+    group_by: None | 'floor' | 'cycle_phase' | 'day_of_week'.
+    When group_by='floor', vault_root is required.
+
+    Returns r, n, and signal_strength ('strong'|'moderate'|'weak'|'noise')
+    so callers can filter noise. Stdlib Pearson, no scipy dep.
+    """
+    vr = Path(vault_root) if vault_root else None
+    with db.connect(read_only=True) as con:
+        return analytics.correlate(con, metric_a, metric_b, group_by=group_by, vault_root=vr, lookback_days=lookback_days)
+
+
+@mcp.tool()
+def health_floor_body_fingerprint(
+    floor: str,
+    vault_root: str,
+    lookback_days: int = 365,
+) -> dict[str, Any]:
+    """Body fingerprint of a Floor: mean HRV / RHR / steps / VO2max /
+    mindful / sleep efficiency on days tagged with this Floor vs all other
+    days. Reports delta_pct so the surface answers 'what does Anger feel
+    like in the body.' Cycle phase distribution included if cycle data
+    exists.
+
+    floor: Floor name (e.g. 'Acceptance') or numeric floor_level as string
+    (e.g. '23' resolves to floor_level=23).
+    """
+    try:
+        floor_val: str | int = int(floor)
+    except ValueError:
+        floor_val = floor
+    with db.connect(read_only=True) as con:
+        return analytics.floor_body_fingerprint(con, Path(vault_root), floor_val, lookback_days=lookback_days)
+
+
+@mcp.tool()
+def health_loop_signature(
+    loop_dates_iso: list[str],
+    vault_root: str = "",
+    lookback_days: int = 365,
+) -> dict[str, Any]:
+    """Body fingerprint of a named loop. Caller passes the list of dates
+    detected as a loop (e.g. Founder Exhaustion Loop cluster) by the
+    /patterns skill. Baseline = all other days in the window.
+
+    loop_dates_iso: list of ISO date strings (YYYY-MM-DD).
+    """
+    loop_dates: list[date] = []
+    for s in loop_dates_iso:
+        try:
+            loop_dates.append(_parse_date(s))
+        except ValueError:
+            continue
+    vr = Path(vault_root) if vault_root else Path("")
+    with db.connect(read_only=True) as con:
+        return analytics.loop_signature(con, vr, loop_dates, lookback_days=lookback_days)
+
+
+@mcp.tool()
+def health_sleep_architecture(start: str, end: str) -> dict[str, Any]:
+    """Per-night sleep architecture summary over [start, end).
+
+    Returns REM%, Deep%, Core%, Awake% (aggregated across nights),
+    mean sleep efficiency, mean fragmentation (Awake segment count per
+    night). Chris Winter / Stacy Sims surface.
+    """
+    sd = _parse_date(start)
+    ed = _parse_date(end)
+    with db.connect(read_only=True) as con:
+        return analytics.sleep_architecture(con, sd, ed)
+
+
+@mcp.tool()
+def health_longitudinal_summary(
+    start: str,
+    end: str,
+    granularity: str = "month",
+) -> dict[str, Any]:
+    """Month / quarter / year aggregation of longevity markers: HRV baseline,
+    RHR baseline, VO2max, lean body mass, body mass, walking steadiness,
+    active energy mean, steps mean, sleep efficiency. Peter Attia surface
+    for tracking the markers that compound over years.
+
+    granularity: 'month' | 'quarter' | 'year'.
+    """
+    sd = _parse_date(start)
+    ed = _parse_date(end)
+    with db.connect(read_only=True) as con:
+        return analytics.longitudinal_summary(con, sd, ed, granularity=granularity)
+
+
+@mcp.tool()
+def health_symptom_correlate(
+    symptom_type: str | None = None,
+    vault_root: str = "",
+    lookback_days: int = 365,
+) -> dict[str, Any]:
+    """Body fingerprint of symptom-present days vs symptom-absent days.
+
+    symptom_type: a HK symptom type id (e.g. 'HKCategoryTypeIdentifierHeadache').
+    If None, aggregates across all symptom types found in the window.
+    Pagliano / Briden surface for finding what predicts a symptom flare.
+    """
+    vr = Path(vault_root) if vault_root else None
+    with db.connect(read_only=True) as con:
+        return analytics.symptom_correlate(con, symptom_type=symptom_type, vault_root=vr, lookback_days=lookback_days)
+
+
+@mcp.tool()
+def health_top_signals(
+    vault_root: str = "",
+    lookback_days: int = 365,
+    min_strength: str = "moderate",
+) -> dict[str, Any]:
+    """Briden-honoring noise filter: scan curated metric pairs + Floor x HRV
+    pairings, return ONLY signals at or above min_strength.
+
+    min_strength: 'weak' | 'moderate' | 'strong'.
+    This is the entrypoint the /longitudinal skill uses to surface only
+    actionable patterns and avoid drowning the user in correlations.
+    """
+    vr = Path(vault_root) if vault_root else None
+    with db.connect(read_only=True) as con:
+        return analytics.top_signals(con, vault_root=vr, lookback_days=lookback_days, min_strength=min_strength)
 
 
 if __name__ == "__main__":

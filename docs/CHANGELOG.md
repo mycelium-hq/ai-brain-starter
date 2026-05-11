@@ -9,6 +9,42 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-10: health-mcp v0.7 — multi-year analytical surface + /longitudinal skill
+
+**Who this affects:** anyone with 12+ months of health-mcp data who wants to surface patterns that span years — Floor-to-body fingerprints, cycle-phase × HRV, sleep architecture drift, longevity-marker trends, symptom correlates. Single-day tools (recovery score, journal context) were already in v0.2. v0.7 fills the multi-year analytical gap.
+
+**The shape:** the Health & Body panel (Peter Attia + Stacy Sims + Chris Winter + Bessel van der Kolk + Carrie Pagliano + Lara Briden's load-bearing dissent) converged on six analytical surfaces. v0.7 ships all six plus a `/longitudinal` skill that wraps them with Briden's noise filter codified: report only signals above a strength threshold, never drown the user in correlations.
+
+### What changed
+
+1. **`services/health-mcp/analytics.py`** (new, ~600 lines): the analytical core. Stdlib only (statistics, math) — no scipy dep so install footprint stays tiny. Pearson correlation in pure Python. Signal-strength gate (strong / moderate / weak / noise) based on |r| × n.
+2. **`services/health-mcp/main.py`**: seven new MCP tools.
+   - `health_correlate(metric_a, metric_b, group_by, vault_root, lookback_days)` — pairwise correlation, optionally grouped by Floor / cycle phase / day-of-week.
+   - `health_floor_body_fingerprint(floor, vault_root, lookback_days)` — body signature for a named Floor (Acceptance, Anger, etc.) vs all other days.
+   - `health_loop_signature(loop_dates_iso, vault_root, lookback_days)` — body fingerprint of a named loop (Founder Exhaustion Loop, etc.).
+   - `health_sleep_architecture(start, end)` — REM/Deep/Core/Awake percentages, efficiency, fragmentation. Night-of bucketing (sleep starting 18:00+ goes to the next day).
+   - `health_longitudinal_summary(start, end, granularity)` — month/quarter/year aggregation of longevity markers (HRV baseline, VO2max, lean body mass, walking steadiness, etc.).
+   - `health_symptom_correlate(symptom_type, vault_root, lookback_days)` — body fingerprint of symptom-present vs symptom-absent days.
+   - `health_top_signals(vault_root, lookback_days, min_strength)` — the Briden filter. Scans curated metric pairs + Floor × HRV pairings, returns ONLY signals at or above min_strength.
+3. **`skills/longitudinal/SKILL.md`** (new): wraps the seven tools into a single `/longitudinal` pass. Six-step orchestration: top_signals first (noise filter), then top-3 Floor fingerprints, sleep architecture drift, longitudinal markers, symptom correlates, named loops if /patterns ran recently. Required Health & Body panel commentary on the surfaced signals.
+4. **`services/health-mcp/tests/test_v07_analytics.py`** (new): 19 tests covering Pearson correctness (positive/negative/zero-variance/below-min-n), signal-strength gate (strong/moderate/weak/noise), metric alias resolution, correlate with seeded fixtures, sleep architecture stage percentages, longitudinal monthly buckets, loop_signature vs baseline, friendly-name resolution, no-data graceful handling, top_signals filter behavior.
+
+### Why a noise filter is the centerpiece
+
+Briden's dissent in the panel pass was load-bearing: "Don't drown in correlations. More data without hypotheses is rumination in spreadsheet form. Focus on the 3 metrics that actually predict your worst days." The substrate honors this by returning a `signal_strength` field on every correlation and a `top_signals` entry point that scans + filters before returning anything. The `/longitudinal` skill then reports only signals above the threshold and explicitly tells the user when nothing cleared.
+
+### Tests
+
+116 passing (19 new + 97 prior). 3 deselected (e2e tests gated behind DB lock).
+
+### What to do
+
+If you have 12+ months of data: run `/longitudinal` for a year, `/longitudinal 5y` for the longer view, `/longitudinal all` for whatever your DB holds.
+
+If you just started: keep journaling + the auto-sync chain running. The surface becomes useful around 3-6 months of paired Floor + body data.
+
+---
+
 ## 2026-05-10: health-mcp v0.6 — Apple Shortcuts bridge for free Apple-native auto-sync
 
 **Who this affects:** Apple Watch / iPhone users who want HealthKit data flowing into the DuckDB without re-exporting an XML zip every few weeks AND without depending on a paid third-party iOS app (the prior v0.2 TCP shim required Health Auto Export Premium).
