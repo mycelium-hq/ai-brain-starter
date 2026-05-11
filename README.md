@@ -107,31 +107,50 @@ Bootstrap touches your `~/.claude/` directory and registers third-party content.
 
 **Don't want all of it?** Set `SKIP_VENDOR_SKILLS=1` to skip third-party plugin marketplaces. The core ai-brain-starter substrate still installs. Removing later: `bash bootstrap.sh --uninstall` (asks for confirmation, then removes everything bootstrap installed; preserves your vault and your customizations).
 
-Open the [Claude Code desktop app](https://claude.ai/download), sign in with a paid Claude account (Pro, Max, or Team), and paste this into the chat:
+Three steps. About 10 minutes total. No technical experience required.
+
+### 1. Open Terminal
+
+Press `Cmd` + `Space`, type `terminal`, press Enter. A black window opens with a blinking cursor. That's it.
+
+### 2. Paste this and press Enter
 
 ```
-Install ai-brain-starter for me. Read https://github.com/adelaidasofia/ai-brain-starter and follow the install steps in the README.
+bash <(curl -fsSL https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main/bootstrap.sh)
 ```
 
-That's the whole prompt. After you paste, what happens:
+Things will scroll. The installer is downloading and configuring everything: Homebrew, Python, Node, Obsidian, all the skills, all the MCPs. Takes about 5 minutes. If it asks for your Mac password (the one you use to log in), type it and press Enter — that's needed once, for installing Obsidian.
 
-- Claude asks "What's your email?" and "What name should I use?" — two short questions, one each.
-- Bootstrap (the installer) mints your token over the API, downloads and configures everything (Homebrew, Python, Node, Obsidian, all skills, all MCPs).
-- The setup interview begins automatically in your chosen language.
+When it's done, you'll see a line that says **`━━━ Install complete ━━━`**.
 
-No browser tab, no terminal copy-paste, no token to fish out of your inbox.
+### 3. Open Claude Code, paste this in the chat
 
-**If pre-flight fails**, Claude reads the structured report and explains in plain English what to fix. Most common blockers: Claude Code not installed, a corporate VPN blocking GitHub, or a Mac that's not in the admin group.
+```
+Set up my AI Brain Starter.
+```
 
-**Existing users** (re-running bootstrap after a `git pull`): the email-gate marker on disk means you skip the question entirely. Bootstrap just runs.
+Claude takes over from here. It asks you a few questions (your name, where to put your vault, what you write, etc.) and configures everything around your answers. Takes about 15 minutes. When it's done, you have a fully working second brain.
+
+---
 
 *Local install. Your vault data never leaves your machine. The signup is the only piece that touches our servers, and it captures only what's listed in [`SECURITY.md`](SECURITY.md) and the [privacy policy](https://myceliumai.co/privacy).*
 
 <details>
-<summary>Edge cases (rare — most people skip this)</summary>
+<summary>Why Terminal? Isn't there a one-click install?</summary>
 
-- **Want to sign up via web before installing Claude Code?** Use the form at [myceliumai.co/install](https://myceliumai.co/install) (Spanish: [myceliumai.co/es/install](https://myceliumai.co/es/install)). It emails you a one-paste install command with a token embedded. Exists for paid cohorts, partner cohorts, and anyone who wants to read the privacy details first.
-- **Already a Claude Code user and just want to try the skills against an existing vault** (no full bootstrap, no Obsidian setup)? Load the plugin for the current session only: `claude --plugin-url https://github.com/adelaidasofia/ai-brain-starter/releases/latest/download/ai-brain-starter.zip`. The full install above remains the recommended path.
+The full install touches things only Terminal can reach: it installs Homebrew (the Mac package manager), Python, Node, Obsidian, plus configures Claude Code's plugin marketplaces. A chat-only install can't do any of that. Terminal looks scary the first time but the three steps above are everything — you don't need to learn it.
+
+If you genuinely can't or won't open Terminal:
+
+- **Browser signup**: [myceliumai.co/install](https://myceliumai.co/install) (Spanish: [myceliumai.co/es/install](https://myceliumai.co/es/install)) captures your email and emails you the same install command. It still runs in Terminal but you get a polished onboarding page first.
+- **Existing Claude Code users who just want the skills, no vault setup**: load the plugin for the current session only with `claude --plugin-url https://github.com/adelaidasofia/ai-brain-starter/releases/latest/download/ai-brain-starter.zip`. You won't get the Obsidian vault, MCPs, or the setup interview — just the skill files. The Terminal install above is still the recommended path for the full experience.
+
+</details>
+
+<details>
+<summary>What about pasting the GitHub link directly into Claude Code?</summary>
+
+You can try this — paste `Install ai-brain-starter for me. Read https://github.com/adelaidasofia/ai-brain-starter and follow the install steps in the README.` into Claude Code and Claude will attempt to fetch the README and run the install. This works most of the time, but it depends on Claude's interpretation of the URL and what's in your current folder. The Terminal install above is deterministic; the chat-based install is heuristic. If chat-based gets confused, fall back to Terminal.
 
 </details>
 
@@ -139,29 +158,50 @@ No browser tab, no terminal copy-paste, no token to fish out of your inbox.
 
 ## Instalar (Español)
 
-Abrí la [app de escritorio de Claude Code](https://claude.ai/download), logueate con una cuenta paga de Claude (Pro, Max o Team), y pegá esto en el chat:
+Tres pasos. Unos 10 minutos en total. No necesitás experiencia técnica.
+
+### 1. Abrí Terminal
+
+Presioná `Cmd` + `Espacio`, escribí `terminal`, presioná Enter. Se abre una ventana negra con un cursor parpadeando. Listo.
+
+### 2. Pegá esto y presioná Enter
 
 ```
-Instalá ai-brain-starter para mí. Leé https://github.com/adelaidasofia/ai-brain-starter y seguí los pasos de instalación del README.
+bash <(curl -fsSL https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main/bootstrap.sh)
 ```
 
-Ese es el prompt entero. Después de pegarlo, lo que pasa:
+Vas a ver cosas pasando en pantalla. El instalador está descargando y configurando todo: Homebrew, Python, Node, Obsidian, todas las skills, todos los MCPs. Tarda unos 5 minutos. Si te pide la contraseña de tu Mac (la que usás para entrar), escribila y presioná Enter — sólo la necesita una vez, para instalar Obsidian.
 
-- Claude te pregunta "¿Cuál es tu email?" y "¿Qué nombre uso?" — dos preguntas cortas, una a la vez.
-- El bootstrap (el instalador) genera tu token vía la API, descarga y configura todo (Homebrew, Python, Node, Obsidian, todas las skills, todos los MCPs).
-- La entrevista de setup arranca automáticamente en el idioma que elijas.
+Cuando termine, vas a ver una línea que dice **`━━━ Instalación completa ━━━`**.
 
-Sin pestaña del navegador, sin copiar y pegar en la terminal, sin pescar un token del inbox.
+### 3. Abrí Claude Code, pegá esto en el chat
 
-**Si la verificación previa falla**, Claude lee el reporte estructurado y te explica en idioma claro qué arreglar. Lo más común: Claude Code no instalado, una VPN corporativa bloqueando GitHub, o una Mac fuera del grupo admin.
+```
+Configurá mi AI Brain Starter.
+```
 
-**Usuarios existentes** (re-corriendo el bootstrap después de un `git pull`): el marker del email-gate en disco hace que saltees la pregunta. El bootstrap corre directo.
+Claude toma el control desde acá. Te hace algunas preguntas (tu nombre, dónde poner tu vault, qué escribís, etc.) y configura todo en base a tus respuestas. Tarda unos 15 minutos. Cuando termina, tenés un segundo cerebro completo y funcionando.
+
+---
+
+*Instalación local. Los datos de tu vault no salen de tu máquina. El signup es lo único que toca nuestros servidores, y captura sólo lo que está listado en [`SECURITY.md`](SECURITY.md) y la [política de privacidad](https://myceliumai.co/privacy).*
 
 <details>
-<summary>Casos especiales (poco comunes, la mayoría los saltea)</summary>
+<summary>¿Por qué Terminal? ¿No hay un instalador de un click?</summary>
 
-- **¿Querés registrarte vía web antes de instalar Claude Code?** Usá el formulario en [myceliumai.co/es/install](https://myceliumai.co/es/install) (English: [myceliumai.co/install](https://myceliumai.co/install)). Te manda por email un comando de un pegado con el token incrustado. Existe para cohortes pagas, cohortes de partners, y cualquiera que quiera leer la privacidad antes.
-- **¿Ya usás Claude Code y sólo querés probar las skills contra un vault existente** (sin bootstrap completo, sin setup de Obsidian)? Cargá el plugin sólo para la sesión actual: `claude --plugin-url https://github.com/adelaidasofia/ai-brain-starter/releases/latest/download/ai-brain-starter.zip`. La instalación completa de arriba sigue siendo la ruta recomendada.
+La instalación completa toca cosas que sólo Terminal puede tocar: instala Homebrew (el gestor de paquetes de Mac), Python, Node, Obsidian, y configura los marketplaces de plugins de Claude Code. Una instalación sólo-chat no puede hacer nada de eso. Terminal se ve intimidante la primera vez pero los tres pasos de arriba son todo — no necesitás aprenderlo.
+
+Si genuinamente no podés o no querés abrir Terminal:
+
+- **Signup web**: [myceliumai.co/es/install](https://myceliumai.co/es/install) (English: [myceliumai.co/install](https://myceliumai.co/install)) captura tu email y te manda el mismo comando de instalación. Igual corre en Terminal pero tenés una página de onboarding antes.
+- **Usuarios existentes de Claude Code que sólo quieren las skills, sin setup de vault**: cargá el plugin sólo para la sesión actual con `claude --plugin-url https://github.com/adelaidasofia/ai-brain-starter/releases/latest/download/ai-brain-starter.zip`. No obtenés el vault de Obsidian, ni los MCPs, ni la entrevista de setup — sólo los archivos de la skill. La instalación por Terminal de arriba sigue siendo la ruta recomendada.
+
+</details>
+
+<details>
+<summary>¿Y pegar el link de GitHub directamente en Claude Code?</summary>
+
+Podés intentarlo — pegá `Instalá ai-brain-starter para mí. Leé https://github.com/adelaidasofia/ai-brain-starter y seguí los pasos del README.` en Claude Code y Claude va a intentar buscar el README y correr la instalación. Funciona la mayoría de las veces, pero depende de cómo Claude interprete el URL y de lo que tengas en tu carpeta actual. La instalación por Terminal es determinista; la basada en chat es heurística. Si la basada en chat se confunde, volvé a Terminal.
 
 </details>
 
