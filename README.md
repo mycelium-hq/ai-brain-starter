@@ -107,13 +107,7 @@ Bootstrap touches your `~/.claude/` directory and registers third-party content.
 
 **Don't want all of it?** Set `SKIP_VENDOR_SKILLS=1` to skip third-party plugin marketplaces. The core ai-brain-starter substrate still installs. Removing later: `bash bootstrap.sh --uninstall` (asks for confirmation, then removes everything bootstrap installed; preserves your vault and your customizations).
 
-### Step 1 — Open Claude Code
-
-Open the [Claude Code desktop app](https://claude.ai/download) and sign in with a paid Claude account (Pro, Max, or Team).
-
-### Step 2 — Say "install ai-brain-starter"
-
-Paste this into the chat:
+Open the [Claude Code desktop app](https://claude.ai/download), sign in with a paid Claude account (Pro, Max, or Team), and paste this into the chat:
 
 ```
 Install ai-brain-starter for me: https://github.com/adelaidasofia/ai-brain-starter
@@ -129,35 +123,23 @@ No browser tab, no terminal copy-paste, no token to fish out of your inbox.
 
 **If pre-flight fails**, Claude reads the structured report and explains in plain English what to fix. Most common blockers: Claude Code not installed, a corporate VPN blocking GitHub, or a Mac that's not in the admin group.
 
-**Existing users** (re-running bootstrap, e.g. after a `git pull`): the email-gate marker on disk means you skip the question entirely. Bootstrap just runs.
+**Existing users** (re-running bootstrap after a `git pull`): the email-gate marker on disk means you skip the question entirely. Bootstrap just runs.
 
 *Local install. Your vault data never leaves your machine. The signup is the only piece that touches our servers, and it captures only what's listed in [`SECURITY.md`](SECURITY.md) and the [privacy policy](https://myceliumai.co/privacy).*
 
-### Alternative — Browser form (only if you can't open Claude Code yet)
+<details>
+<summary>Edge cases (rare — most people skip this)</summary>
 
-If you'd rather sign up before installing Claude Code, use the form at **[myceliumai.co/install](https://myceliumai.co/install)** (Spanish: **[myceliumai.co/es/install](https://myceliumai.co/es/install)**). It emails you a one-paste install command with a token embedded. This path exists for paid cohorts, partner cohorts, and anyone who wants to read the privacy details before installing.
+- **Want to sign up via web before installing Claude Code?** Use the form at [myceliumai.co/install](https://myceliumai.co/install) (Spanish: [myceliumai.co/es/install](https://myceliumai.co/es/install)). It emails you a one-paste install command with a token embedded. Exists for paid cohorts, partner cohorts, and anyone who wants to read the privacy details first.
+- **Already a Claude Code user and just want to try the skills against an existing vault** (no full bootstrap, no Obsidian setup)? Load the plugin for the current session only: `claude --plugin-url https://github.com/adelaidasofia/ai-brain-starter/releases/latest/download/ai-brain-starter.zip`. The full install above remains the recommended path.
 
-### Quick-try (existing Claude Code users)
-
-If you already have Claude Code **2.1.133+** and just want to try the skills against an existing vault (no full bootstrap, no Obsidian setup), load the plugin from the latest release archive:
-
-```
-claude --plugin-url https://github.com/adelaidasofia/ai-brain-starter/releases/latest/download/ai-brain-starter.zip
-```
-
-This loads the plugin **for the current session only**, giving you the skills (journaling, graphify, weekly insights, etc.) without touching your home directory or vault structure. Use it to evaluate whether the skill set fits your workflow before committing to the full bootstrap. The full install above remains the recommended path: it sets up the Obsidian vault, the hooks, the resolver, the meeting workflow, and everything else that makes the system compound across sessions.
+</details>
 
 ---
 
 ## Instalar (Español)
 
-### Paso 1 — Abrí Claude Code
-
-Abrí la [app de escritorio de Claude Code](https://claude.ai/download) y logueate con una cuenta paga de Claude (Pro, Max o Team).
-
-### Paso 2 — Decí "instalá ai-brain-starter"
-
-Pegá esto en el chat:
+Abrí la [app de escritorio de Claude Code](https://claude.ai/download), logueate con una cuenta paga de Claude (Pro, Max o Team), y pegá esto en el chat:
 
 ```
 Instalá ai-brain-starter para mí: https://github.com/adelaidasofia/ai-brain-starter
@@ -173,11 +155,15 @@ Sin pestaña del navegador, sin copiar y pegar en la terminal, sin pescar un tok
 
 **Si la verificación previa falla**, Claude lee el reporte estructurado y te explica en idioma claro qué arreglar. Lo más común: Claude Code no instalado, una VPN corporativa bloqueando GitHub, o una Mac fuera del grupo admin.
 
-**Usuarios existentes** (re-corriendo el bootstrap, por ejemplo después de un `git pull`): el marker del email-gate en disco hace que saltees la pregunta. El bootstrap corre directo.
+**Usuarios existentes** (re-corriendo el bootstrap después de un `git pull`): el marker del email-gate en disco hace que saltees la pregunta. El bootstrap corre directo.
 
-### Alternativa — Formulario web (sólo si todavía no podés abrir Claude Code)
+<details>
+<summary>Casos especiales (poco comunes, la mayoría los saltea)</summary>
 
-Si preferís registrarte antes de instalar Claude Code, usá el formulario en **[myceliumai.co/es/install](https://myceliumai.co/es/install)** (English: **[myceliumai.co/install](https://myceliumai.co/install)**). Te manda por email un comando de un pegado con el token incrustado. Esta ruta existe para cohortes pagas, cohortes de partners, y cualquiera que quiera leer la privacidad antes de instalar.
+- **¿Querés registrarte vía web antes de instalar Claude Code?** Usá el formulario en [myceliumai.co/es/install](https://myceliumai.co/es/install) (English: [myceliumai.co/install](https://myceliumai.co/install)). Te manda por email un comando de un pegado con el token incrustado. Existe para cohortes pagas, cohortes de partners, y cualquiera que quiera leer la privacidad antes.
+- **¿Ya usás Claude Code y sólo querés probar las skills contra un vault existente** (sin bootstrap completo, sin setup de Obsidian)? Cargá el plugin sólo para la sesión actual: `claude --plugin-url https://github.com/adelaidasofia/ai-brain-starter/releases/latest/download/ai-brain-starter.zip`. La instalación completa de arriba sigue siendo la ruta recomendada.
+
+</details>
 
 ---
 
