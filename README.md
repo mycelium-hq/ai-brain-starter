@@ -339,6 +339,7 @@ If what you need is agent federation, swarm topologies, or a 300-tool MCP server
 ## Deeper Documentation
 
 - **[`RELIABILITY_MANIFESTO.md`](RELIABILITY_MANIFESTO.md)** — the five architectural pillars (vault as ground truth, hooks as deterministic guards, rule extraction, decision-outcome trail, session-close cascade) and the five failure modes they prevent (hallucination, silent failure, cold start, drift, knowledge loss). Read this if you want to understand why the system is shaped the way it is.
+- **[`docs/MCP_STACK.md`](docs/MCP_STACK.md)** — the 13 companion MCP servers (Slack, iMessage, WhatsApp, Google Workspace, Apollo, Substack, lu.ma, parse, graph-query, and more). All public, MIT, draft+confirm on writes, JSONL audit, prompt-injection scrubber. Install whichever subset you need.
 - **[`docs/POWER_TOOLS.md`](docs/POWER_TOOLS.md)** — every third-party skill, MCP server, and Obsidian plugin, with attribution and source links
 - **[`docs/MEMORY_SYSTEM.md`](docs/MEMORY_SYSTEM.md)** — how Claude accumulates knowledge across sessions using typed memories
 - **[`docs/TOKEN_OPTIMIZATION.md`](docs/TOKEN_OPTIMIZATION.md)** — how to stop burning tokens on overhead: compress Claude-facing files, cap memory, route cheap work to cheap models
