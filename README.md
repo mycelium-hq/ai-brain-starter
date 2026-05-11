@@ -110,7 +110,7 @@ Bootstrap touches your `~/.claude/` directory and registers third-party content.
 Open the [Claude Code desktop app](https://claude.ai/download), sign in with a paid Claude account (Pro, Max, or Team), and paste this into the chat:
 
 ```
-Install ai-brain-starter for me: https://github.com/adelaidasofia/ai-brain-starter
+Install ai-brain-starter for me. Read https://github.com/adelaidasofia/ai-brain-starter and follow the install steps in the README.
 ```
 
 That's the whole prompt. After you paste, what happens:
@@ -142,7 +142,7 @@ No browser tab, no terminal copy-paste, no token to fish out of your inbox.
 Abrí la [app de escritorio de Claude Code](https://claude.ai/download), logueate con una cuenta paga de Claude (Pro, Max o Team), y pegá esto en el chat:
 
 ```
-Instalá ai-brain-starter para mí: https://github.com/adelaidasofia/ai-brain-starter
+Instalá ai-brain-starter para mí. Leé https://github.com/adelaidasofia/ai-brain-starter y seguí los pasos de instalación del README.
 ```
 
 Ese es el prompt entero. Después de pegarlo, lo que pasa:
