@@ -64,6 +64,17 @@ A new MCP server goes public IFF:
 
 The rule plus a personal-data scrub script means new MCPs ship same-day. The thirteenth would take a fraction of the time of the first.
 
+## What the public stack does not include
+
+These 13 repos give you the wiring. The team install at [diazroa.com](https://diazroa.com) adds what the wiring depends on:
+
+- **The runtime.** Memory across sessions with per-tenant isolation, hash-chain audit, and the orchestration layer the public skills hook into. Private. Hosted.
+- **Per-vertical workflow content.** Legal review packs, fundraise pipelines, board-pack generators, event-ops playbooks. Built for each client.
+- **Personal + team vault wired together** without leaking either way, with RBAC, contractor routing, and the vault-hygiene work most installs stall on in week three.
+- **Office hours.** The systems compound when someone who has run them under load is the one tuning them with you.
+
+Free 20-minute diagnostic on [diazroa.com](https://diazroa.com) if you want to see if the team install fits your shape.
+
 ## License
 
 Each repo is MIT. See the `LICENSE` file in the individual repo.
