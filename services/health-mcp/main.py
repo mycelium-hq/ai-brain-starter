@@ -39,6 +39,7 @@ import oura_client
 import parse_csv
 import parse_xml
 import scores
+import shortcut_normalize
 import vault_aware
 import vendor_setup
 from hk_types import HK_QUANTITY_TYPES, NUTRITION_TYPES, LONGEVITY_TYPES, CYCLE_TYPES, SYMPTOM_TYPES
@@ -187,6 +188,88 @@ def health_import_csv(folder_path: str, force: bool = False) -> dict[str, Any]:
         **{f"{k}_count": v for k, v in totals.items()},
         "skipped": False,
         "elapsed_s": round((datetime.now() - t0).total_seconds(), 2),
+    }
+
+
+@mcp.tool()
+def health_import_shortcut(payload_path: str, force: bool = False) -> dict[str, Any]:
+    """Import an Apple Shortcuts JSON payload (one day's HealthKit data).
+
+    The companion iOS Shortcut writes a single JSON file per day to iCloud
+    Drive at `~/Library/Mobile Documents/com~apple~CloudDocs/health-mcp/<YYYY-MM-DD>.json`.
+    This tool reads that file, normalizes via shortcut_normalize.iter_payload,
+    and writes to the same DuckDB tables as the XML / CSV / Oura / Fitbit
+    importers. Idempotent via file SHA (re-importing the same payload
+    returns skipped=True).
+
+    Apple Shortcuts cannot read every HealthKit type. ECG records and a few
+    niche types are not exposed; users who want full coverage should run
+    `health_import_xml` periodically alongside this auto-sync.
+    """
+    t0 = datetime.now()
+    file_sha = shortcut_normalize.payload_sha(payload_path)
+    with db.connect() as con:
+        if not force and db.file_already_imported(con, file_sha):
+            return {"file_sha": file_sha, "skipped": True, "note": "Already imported. Pass force=True to re-import."}
+        try:
+            payload = shortcut_normalize.load_payload_file(payload_path)
+        except (FileNotFoundError, json.JSONDecodeError, ValueError) as e:
+            return {"error": f"{type(e).__name__}: {e}", "skipped": True}
+        batch: list[dict[str, Any]] = []
+        totals: dict[str, int] = {k: 0 for k in ("records", "workouts", "sleep", "cycle", "symptoms", "ecg", "state_of_mind")}
+        BATCH = 5000
+        for item in shortcut_normalize.iter_payload(payload):
+            batch.append(item)
+            if len(batch) >= BATCH:
+                for k, v in _bulk_insert(con, batch).items():
+                    totals[k] += v
+                batch.clear()
+        if batch:
+            for k, v in _bulk_insert(con, batch).items():
+                totals[k] += v
+        total = sum(totals.values())
+        db.log_import(con, file_sha, "shortcut", str(payload_path), total)
+    return {
+        "file_sha": file_sha, "kind": "shortcut", "rows_inserted": total,
+        **{f"{k}_count": v for k, v in totals.items()},
+        "skipped": False,
+        "schema_version": payload.get("schema_version"),
+        "payload_date": payload.get("date"),
+        "elapsed_s": round((datetime.now() - t0).total_seconds(), 2),
+    }
+
+
+@mcp.tool()
+def health_sweep_shortcut_inbox(inbox_path: str | None = None, archive: bool = True) -> dict[str, Any]:
+    """Process every JSON payload in the iCloud Drive inbox folder.
+
+    Default inbox: `~/Library/Mobile Documents/com~apple~CloudDocs/health-mcp/`.
+    Each `<YYYY-MM-DD>.json` file is imported via `health_import_shortcut`
+    and (if `archive=True`) moved to `<inbox>/processed/<YYYY-MM-DD>.json`.
+    Idempotent: previously-imported files are skipped without error.
+
+    Returns a per-file summary list. Designed for the daily journal-Stop
+    chain hook: one call drains everything new since yesterday.
+    """
+    import shutil
+    inbox = Path(inbox_path) if inbox_path else shortcut_normalize.default_inbox()
+    if not inbox.is_dir():
+        return {"inbox": str(inbox), "files_processed": 0, "note": "Inbox folder does not exist yet."}
+    processed_dir = inbox / "processed"
+    if archive:
+        processed_dir.mkdir(parents=True, exist_ok=True)
+    results: list[dict[str, Any]] = []
+    for f in sorted(inbox.glob("*.json")):
+        if f.parent != inbox:
+            continue
+        res = health_import_shortcut(str(f))
+        results.append({"file": f.name, **{k: v for k, v in res.items() if k in ("rows_inserted", "skipped", "error", "payload_date")}})
+        if archive and not res.get("error"):
+            shutil.move(str(f), str(processed_dir / f.name))
+    return {
+        "inbox": str(inbox),
+        "files_processed": len(results),
+        "results": results,
     }
 
 

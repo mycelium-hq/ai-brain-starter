@@ -164,6 +164,64 @@ def _maybe_sync_wearables(db, today: date) -> list[str]:
         except Exception as e:
             parts.append(f"Oura skip: {type(e).__name__}")
 
+    # Apple Shortcuts bridge: sweep iCloud Drive inbox for any new <YYYY-MM-DD>.json
+    # payloads written by the iOS Shortcut. No credentials needed; the iOS
+    # Shortcut runs as a personal automation and writes to iCloud Drive,
+    # which Mac mounts at ~/Library/Mobile Documents/com~apple~CloudDocs/.
+    try:
+        import shortcut_normalize
+        inbox = shortcut_normalize.default_inbox()
+        if inbox.is_dir():
+            payloads = sorted(p for p in inbox.glob("*.json") if p.parent == inbox)
+            if payloads:
+                import shutil
+                processed_dir = inbox / "processed"
+                processed_dir.mkdir(parents=True, exist_ok=True)
+                imported = 0
+                rows_total = 0
+                for f in payloads:
+                    file_sha = shortcut_normalize.payload_sha(f)
+                    with db.connect() as con:
+                        if db.file_already_imported(con, file_sha):
+                            shutil.move(str(f), str(processed_dir / f.name))
+                            continue
+                        try:
+                            payload = shortcut_normalize.load_payload_file(f)
+                        except Exception:
+                            continue
+                        n = 0
+                        for item in shortcut_normalize.iter_payload(payload):
+                            kind = item["_kind"]
+                            if kind == "record":
+                                con.execute(
+                                    "INSERT INTO records (type, source_name, unit, start_date, end_date, value, value_str) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                                    (item["type"], item["source_name"], item.get("unit", ""), item["start_date"], item["end_date"], item.get("value"), item.get("value_str")),
+                                )
+                            elif kind == "workout":
+                                con.execute(
+                                    "INSERT INTO workouts (activity_type, duration_min, distance_km, energy_kcal, start_date, end_date, source_name) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                                    (item["activity_type"], item["duration_min"], item.get("distance_km"), item.get("energy_kcal"), item["start_date"], item["end_date"], item.get("source_name", "Apple Watch")),
+                                )
+                            elif kind == "sleep":
+                                con.execute(
+                                    "INSERT INTO sleep (start_date, end_date, stage, source_name) VALUES (?, ?, ?, ?)",
+                                    (item["start_date"], item["end_date"], item["stage"], item.get("source_name", "Apple Watch")),
+                                )
+                            elif kind == "cycle":
+                                con.execute(
+                                    "INSERT INTO cycle (type, start_date, end_date, value, source_name) VALUES (?, ?, ?, ?, ?)",
+                                    (item["type"], item["start_date"], item["end_date"], item.get("value"), item.get("source_name", "Cycle Tracking")),
+                                )
+                            n += 1
+                        db.log_import(con, file_sha, "shortcut", str(f), n)
+                    shutil.move(str(f), str(processed_dir / f.name))
+                    imported += 1
+                    rows_total += n
+                if imported:
+                    parts.append(f"Apple Shortcut +{rows_total} ({imported}d)")
+    except Exception as e:
+        parts.append(f"Apple Shortcut skip: {type(e).__name__}")
+
     if have_fitbit:
         try:
             with db.connect(read_only=True) as con:
