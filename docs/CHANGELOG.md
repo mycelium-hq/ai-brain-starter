@@ -9,6 +9,40 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-10: health-mcp v0.6 — Apple Shortcuts bridge for free Apple-native auto-sync
+
+**Who this affects:** Apple Watch / iPhone users who want HealthKit data flowing into the DuckDB without re-exporting an XML zip every few weeks AND without depending on a paid third-party iOS app (the prior v0.2 TCP shim required Health Auto Export Premium).
+
+**The shape:** Apple does not expose a network API for HealthKit; data lives on-device. The substrate's three prior Apple Health paths were XML re-export (manual, periodic), Simple Health Export CSV (manual, periodic), and the v0.2 Health Auto Export TCP shim (real-time but paid third-party dep). v0.6 adds a fourth path that is Apple-native + free: Apple Shortcuts personal automation writes a daily JSON payload to iCloud Drive; the Mac receiver picks it up and ingests on the next `/journal` Stop hook. Karpathy + DHH + Naval converged on the panel: a substrate that depends on a paid app has a ceiling on adoption the substrate author does not control. Steve Jobs's load-bearing dissent (verify automation reliability) was resolved by iOS 17+ time-of-day automations supporting silent "Run Without Asking" execution.
+
+### What changed
+
+1. **`services/health-mcp/shortcut_normalize.py`** (new): translates the iOS Shortcut's JSON payload shape into the same `_kind`-tagged dicts that `parse_xml.iter_records` produces, so `_bulk_insert` works without modification. Sleep stage aliases, numeric coercion, malformed-entry skip — all covered.
+2. **`services/health-mcp/main.py`**: two new MCP tools.
+   - `health_import_shortcut(payload_path, force=False)` — import a single `<YYYY-MM-DD>.json` payload, idempotent via file SHA.
+   - `health_sweep_shortcut_inbox(inbox_path=None, archive=True)` — drain every payload in the iCloud Drive inbox, archive to `processed/` after success.
+3. **`hooks/coach-auto-prescribe-on-journal.py`**: the v0.5.1 chain hook gains a third sync step alongside Oura + Fitbit. On `/journal` Stop, the hook scans `~/Library/Mobile Documents/com~apple~CloudDocs/health-mcp/`, ingests every new payload, archives to `processed/`. Reports `Apple Shortcut +N (Md)` in the chain summary.
+4. **`services/health-mcp/shortcut/README.md`** (new): 3-step iPhone setup + payload schema + coverage notes + troubleshooting.
+5. **`services/health-mcp/tests/test_shortcut_bridge.py`** (new): 16 tests covering normalizer round-trip, sleep stage aliases, malformed input handling, file SHA stability, end-to-end import + sweep behavior.
+
+### Tests
+
+13 normalizer + I/O tests pass deterministically without DB. 3 e2e tests gated behind fastmcp availability + DB fixture (run via `pytest -k "e2e or sweep"`). Total v0.6 test count: 16 new + 81 prior = 97.
+
+### Coverage and limits
+
+Apple Shortcuts can read HRV, RHR, sleep stages, steps, workouts, mindful minutes, cycle data, VO2 Max — roughly 95% of what the substrate's body-track section, recovery score, and journal context use. Three types are not exposed via `Find Health Samples`: ECG records, full symptom logs, and State of Mind (iOS 17.2+ partial). For full coverage, run `health_import_xml` periodically (monthly is plenty) alongside the daily Shortcut sync. The substrate de-dupes via file SHA so the two paths coexist cleanly.
+
+### What to do
+
+If you want zero-touch Apple Health auto-sync: follow the 3-step iPhone setup in `services/health-mcp/shortcut/README.md`. The Mac side is already wired.
+
+If you already use Oura, Fitbit, or are happy with periodic XML exports: nothing to do. The v0.5.1 chain still runs Oura + Fitbit; the Apple Shortcut step skips silently if the iCloud inbox doesn't exist.
+
+If you want to opt out of just the Apple Shortcut sweep without disabling Oura + Fitbit: the existing `HEALTH_AUTO_SYNC_BYPASS=1` env var skips ALL wearable syncs in the chain. A more granular bypass for just Apple Shortcuts is on the v0.7 roadmap.
+
+---
+
 ## 2026-05-10: health-mcp v0.5.1 — collapse auto-chain to /journal-only (single daily trigger, not per-session)
 
 **Who this affects:** users on v0.5 who have many Claude Code sessions per day.
