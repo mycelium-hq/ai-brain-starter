@@ -70,14 +70,28 @@ def _cycle_lengths(starts: list[date]) -> list[int]:
 
 def _band_phase(cycle_day: int, cycle_length: int) -> str:
     """Map a cycle day to a phase. Bands scale to cycle_length; the 28-day
-    bands are stretched/compressed proportionally."""
+    bands are stretched/compressed proportionally.
+
+    Returns "unknown" when the data is stale: if cycle_day exceeds the
+    scaled luteal upper-bound by more than ~50%, the last logged menstrual
+    flow is too far in the past to trust as the current-cycle anchor. This
+    matters for users with sparse cycle data - without this guard, any day
+    months after the last logged flow silently bucketed as 'luteal' and
+    corrupted every downstream Floor body fingerprint.
+    """
     if cycle_length <= 0:
         return "unknown"
     scale = cycle_length / 28.0
     for phase, (lo, hi) in PHASE_BAND_28D.items():
         if lo * scale <= cycle_day <= hi * scale:
             return phase
-    return "luteal"
+    # Out-of-band cycle day. Tolerance up to +50% past luteal upper-bound
+    # (~42 days for a 28-day cycle) accommodates mild irregularity. Beyond
+    # that, the anchor is stale and we should NOT silently default to luteal.
+    luteal_hi = PHASE_BAND_28D.get("luteal", (15, 28))[1]
+    if cycle_day <= int(luteal_hi * scale * 1.5):
+        return "luteal"
+    return "unknown"
 
 
 def _ovulation_refinement(con: "duckdb.DuckDBPyConnection", target: date, window_days: int = 5) -> str | None:
