@@ -140,6 +140,41 @@ Synthesize these into ONE dense paragraph that lands at the top of the saved ent
 
 **0f. Calendar** (gated on `data_sources.calendar: on`). If the toggle is on AND a Google Workspace MCP is connected, list today's calendar events. Apply `calendar_filters.include_calendars` (empty list = all calendars). Note who was met, when, and any block titles that name commitments. Otherwise skip silently.
 
+**0g. Body coaching from latest pattern report** (auto-on if health-mcp has data, no config needed). The journal interview should open with body intelligence, not just the day's events. Two-part fetch:
+
+1. **Yesterday's body track.** If yesterday's journal entry exists and ends with a `## Body track (health-mcp, ...)` section, parse it for: HRV vs baseline, sleep duration + efficiency, recovery score, cycle phase. Also note yesterday's Floor.
+2. **Latest Health Pattern Report.** Find the most recent `🏠 Home/Health Pattern Report YYYY-MM-DD.md` (or `Home/Health Pattern Report ...` for non-emoji vaults). Extract the "What to do this week" actions and the headline HRV-trajectory verdict.
+
+**Surface as ONE opening coaching prompt before the interview starts.** Format:
+
+> "Before today's check-in — your body is telling me something I want to ask you about.
+> 
+> Yesterday's body track: HRV X ms (Δ% vs baseline), sleep Yh Zm, recovery score W. Floor: {floor}.
+> 
+> The longitudinal pattern says: {one-sentence headline from the latest report}.
+> 
+> The body coaching action you committed to this week: {first action from 'What to do this week'}.
+> 
+> Three questions before we go into the day:
+> 1. How's the body actually feeling right now, in your own words?
+> 2. The {floor} you tagged yesterday — did it carry into this morning?
+> 3. Did you hold the {action} commitment yesterday? Honest answer."
+
+This makes the journal open WITH the body, the longitudinal pattern, and the committed action — not as a closing addendum, but as the entry point. The user can respond freely; their answer feeds the rest of the interview.
+
+**Health & Body panel triggers** (mid-interview). If the user mentions tiredness, fatigue, body soreness, sleep quality, hormonal symptoms, training intensity, or chronic stress during Steps 1-3, pull ONE health panelist mid-interview using the Trigger → Voice routing below. Same one-sentence rule: their voice, then return.
+
+| Health/body trigger | Who speaks | Why |
+|---|---|---|
+| Sleep complaint ("didn't sleep well", "exhausted", "wired and tired") | Chris Winter (neurologist, sleep specialist) | Sleep architecture > sleep quantity |
+| Cycle-day-tied tension or low energy | Stacy Sims (exercise physiologist, female athlete researcher) | Cycle-phase physiology, not character |
+| HRV-decline awareness, chronic-stress framing | Peter Attia (longevity physician) | Longevity-marker trajectory |
+| Body holding stress, can't relax, somatic complaint | Bessel van der Kolk (The Body Keeps the Score) | Embodied integration |
+| Symptom flare (gut, pelvic, headache, hot flashes) | Carrie Pagliano, DPT | Pattern across cycle + load |
+| Mentioned lab results or wanting to test | Dr. Elizabeth Boham (functional medicine) | Root-cause framing |
+
+Skip 0g silently if health-mcp has no data or no Health Pattern Report exists yet. Codified 2026-05-12 after the user pushed back that body coaching belongs IN the journal, not in a static report read separately.
+
 **Why some sources are opt-in:** iMessage, WhatsApp, and Calendar see private conversations and meetings. The user should consent explicitly per vault, not by default. The other three (RescueTime, Session Captures, Today's activity) read your own data and are on by default. Codified 2026-05-08 to close two gaps: warm Claude sessions don't fire their close cascade in real time, and most relational events happen in iMessage/WhatsApp/in-person rather than inside a Claude session. The journal must see the whole day, but the user opts in per vault to the cross-platform pulls.
 
 **Day boundary is 3:45 AM, not midnight.** Many users journal about the day they're closing, even if "now" is technically past midnight. When selecting which captures belong to "today":
