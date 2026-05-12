@@ -330,18 +330,41 @@ def _resolve_minimax_helper() -> Path | None:
 
 def _try_minimax_interpret(prompt: str) -> str | None:
     """Try to call the MiniMax helper if the user has one set up. Returns the
-    interpretation string on success, None on failure."""
+    interpretation string on success, None on failure.
+
+    Token budget = 1500: MiniMax M2.7 emits reasoning_content first; with
+    only 200 tokens the model burns the entire budget on reasoning and the
+    `content` field comes back empty. 1500 gives enough headroom for both
+    reasoning + a 1-3 sentence interpretation. Verified 2026-05-11 on
+    M2.7 (reasoning_tokens averaged ~80 per 1-3 sentence prompt).
+    """
     script = _resolve_minimax_helper()
     if not script:
         return None
     try:
-        proc = subprocess.run(["bash", str(script), prompt, "200"], capture_output=True, text=True, timeout=20, check=False)
+        proc = subprocess.run(["bash", str(script), prompt, "1500"], capture_output=True, text=True, timeout=30, check=False)
         out = proc.stdout.strip()
         if proc.returncode == 0 and out:
             return out[:600]
     except subprocess.SubprocessError:
         return None
     return None
+
+
+_BODY_TRACK_SECTION_RE = re.compile(
+    r"\n*---\n+## Body track \(health-mcp, backfilled \d{4}-\d{2}-\d{2}\).*?\Z",
+    re.DOTALL,
+)
+
+
+def _strip_existing_body_track(text: str) -> str:
+    """Remove a previously-appended body-track section from a journal file.
+
+    The section format is: leading blank line(s), '---', '## Body track ...'
+    through end-of-file. Used by --force to avoid duplicating the section
+    when re-running. Idempotent; returns text unchanged if no section.
+    """
+    return _BODY_TRACK_SECTION_RE.sub("", text).rstrip() + "\n"
 
 
 def main() -> int:
@@ -442,7 +465,10 @@ def main() -> int:
             print(f"  WOULD APPEND to {p.name}:")
             print("    " + section[:200].replace("\n", "\n    "))
         else:
-            new_text = text.rstrip() + section
+            # When --force, strip any prior body-track section so we replace
+            # in-place instead of appending duplicates.
+            base_text = _strip_existing_body_track(text) if args.force else text
+            new_text = base_text.rstrip() + section
             p.write_text(new_text, encoding="utf-8")
         backfilled += 1
         if backfilled % 25 == 0:
