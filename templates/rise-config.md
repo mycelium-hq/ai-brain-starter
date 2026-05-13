@@ -67,8 +67,12 @@ Practices the skill asks about at step 1. Default: meditation only. Common ancho
 - `prayer`
 - `sunlight` — morning sun exposure
 - `walk` — pre-routine walk
+- `lymphatic_drainage` — dry brushing or self-massage
+- `breakfast_within_30` — eating within 30 min of waking; the skill asks the timing question explicitly and logs `breakfast_within_30_done: true | false` plus optional `breakfast_eaten_at: HH:MM`
 
 The skill asks "have you done your [anchor 1] and [anchor 2] yet?" If you say no, it pauses and waits for you to do them. If you say skip-today, it logs the skip and continues. Empty list = skip the anchor check entirely.
+
+**Breakfast-within-30 anchor (women-specific note):** Stacy Sims and Lara Briden advocate ~30g protein within 30 min of waking for active women, especially in luteal and menstrual phase, to blunt the morning cortisol spike and stabilize blood sugar. Peter Attia frames it as contextual rather than universal; consistency at the same time daily beats chaotic variance. Use this anchor if it fits your physiology. Skip it if it doesn't.
 
 ## To-do file paths
 
