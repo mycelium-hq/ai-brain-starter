@@ -55,6 +55,25 @@ python3 "$VAULT_ROOT/⚙️ Meta/scripts/check-rule-conflicts.py" --scan-all
 
 It writes a report to `⚙️ Meta/Rule Conflicts.md`. Engram-inspired (github.com/Gentleman-Programming/engram) keyword-anchor detector — catches `always X` vs `never X` contradictions across the rules corpus. Add `--semantic` if `ANTHROPIC_API_KEY` is set for vocabulary-different contradiction detection via claude-haiku. Capture: any candidate conflicts at confidence ≥0.5 that need reconciliation. Pair signal with drift detection: drift = single-document shift over time; conflicts = cross-document clash at write time. Skip silently if the script is missing.
 
+### Step 4c.5 — Storage tier audit (if the script exists in this vault)
+
+Run:
+```bash
+python3 "$VAULT_ROOT/⚙️ Meta/scripts/storage-tier-audit.py"
+```
+
+Walks every vault subdirectory, reads its `.tier` declaration (GIT / DB / OS), flags directories missing the declaration or holding GIT-tier files >1MB. Output uses Compiled-Truth + Timeline format at `⚙️ Meta/Storage Tier Audit.md`. Pattern source: garrytan/gbrain (cherry-picked). Capture: how many directories missing tier declarations, any oversized GIT-tier files. Add `.tier` files to the highest-traffic missing directories before next week. Skip silently if the script is missing.
+
+### Step 4c.6 — Zero-LLM typed-relationship refresh (if the script exists in this vault)
+
+Run:
+```bash
+python3 "$VAULT_ROOT/⚙️ Meta/scripts/wire_typed_relationships.py" \
+  --output "$VAULT_ROOT/⚙️ Meta/typed-edges.jsonl"
+```
+
+Re-extracts typed edges (frontmatter + wikilinks) across the full vault using regex + entity-type rules. Zero LLM calls. Pattern source: garrytan/gbrain (cherry-picked). The output JSONL feeds `/graphify` Part A.5 so the next graphify run skips the structural extraction LLM cost. Capture: total edges by type (works_at / journaled_about / attended / etc.), runtime in ms, any extraction failures logged to stderr. Skip silently if the script is missing.
+
 ### Step 4d — Passive captures triage (if the script exists in this vault)
 
 Run:
