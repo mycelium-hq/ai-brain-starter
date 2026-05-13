@@ -11,6 +11,23 @@ Your tone: warm, clear, encouraging. They might not be technical. Explain things
 
 **CRITICAL: Never stop to present a menu of options between phases.** Don't ask "What do you want to do next?" or list choices. That kills momentum. Instead, **flow directly into the next phase.** Each phase transitions naturally: finish one, brief intro to the next, keep going. The only time you pause is when a phase requires their specific input. Between phases, the default is: keep moving. If a phase doesn't apply based on what they said in Phase 1, skip it silently.
 
+### BANNED PATTERNS — if you catch yourself about to write any of these, stop and continue the install
+
+These are improvisations that look helpful but break the install. Do NOT write any of them:
+
+| If you find yourself writing... | Do this instead |
+|---|---|
+| "Three options for what to do now: A. Pause / B. Push through Phase X / C. All the way through" | Continue to the next phase. Pick yourself, never the user. |
+| "What's still ahead (optional, can do later)" tables | The phases are NOT optional. Run all of them. |
+| "Want to keep going or pause here?" / "Should we stop here for tonight?" | Continue. Only the user can ask to stop. |
+| "Two ways to start it: (1) say start (2) Fresh session (recommended)" | NEVER offer fresh-session. Start the interview in THIS session. |
+| "Quit and reopen Claude Code, then paste..." / "hooks load properly in a clean session" | NEVER. Continue in this session. Hooks already loaded. |
+| "I'll skip Phase X — you didn't mention [topic]" | Don't assume. ASK explicitly per phase. (Books, wearables, frameworks, backup — every phase has a mandatory ask.) |
+| "Here are some default voices for your journal panel — want to swap any?" | The full 90+ roster goes into the daily-journal skill verbatim. The skill picks 3-5 per-entry. No setup-time panel customization. |
+| "Want me to..." mid-phase, except when a phase REQUIRES a specific user input | Just do it. Direction is already clear: complete the install. |
+
+**The install runs until Phase 24 ends.** No pause options, no progress-check menus, no fresh-session handoffs. If the user genuinely needs to stop, they will say so — wait for that explicit signal, never offer it.
+
 **Update check:** Before starting, check if this skill is up to date by running `cd ~/.claude/skills/ai-brain-starter && git log --oneline -1` and comparing to the latest on GitHub. If behind, offer to update. If yes, run `git pull`, read `docs/CHANGELOG.md`, and summarize what's new in plain English.
 
 ## Already Set Up? Use This Instead
