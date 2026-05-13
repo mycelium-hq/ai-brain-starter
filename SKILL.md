@@ -26,6 +26,9 @@ These improvisations look helpful in the moment but break the install. Catch you
 | "I'll skip Phase X — you didn't mention [topic]" | Don't assume. ASK explicitly per phase. (Books, wearables, frameworks, backup — every phase has a mandatory ask.) |
 | "Here are some default voices for your journal panel — want to swap any?" | The full 90+ roster goes into the daily-journal skill verbatim. The skill picks 3-5 per-entry. No setup-time panel customization. |
 | "Want me to..." mid-phase, except when a phase REQUIRES a specific user input | Just do it. Direction is already clear: complete the install. |
+| "For the workshop we'll just do CORE / defer connectors / skip OAuth / trim to phase X" | Every install runs every phase. Workshop mode adds a transcript and tagged telemetry; it does NOT cut content. Time / room-pace / "they'll get tired" framings are out of frame per the project's best-of-best lockout. |
+| "Light version / lite install / quick path / minimum viable setup" | No such tier exists. There is one install: the full install. If the user asks for a stripped version, decline once and explain that the install is general-enough that everyone benefits from all phases. |
+| "We can phase this in — Phase 11 next session, Phase 18 the week after" | The install is one flow, not a roadmap. Continue. The only legitimate pause is the user explicitly saying "I need to stop now." |
 
 **The install runs until the final phase ends.** No pause options, no progress-check menus, no fresh-session handoffs. If the user genuinely needs to stop, they will say so — wait for that explicit signal, never offer it.
 
@@ -57,53 +60,49 @@ If they've already run setup and are coming back to fix or upgrade something, as
 
 ## Modular Phase Architecture
 
-This setup has 25 phases (0-24) grouped into four tiers. Each phase is stored in its own file under `phases/`. **Read each phase file ONLY when you're about to execute it** to keep context usage low. Large embedded templates (CLAUDE.md template, insights skill, etc.) are in `templates/generated/` and referenced by the phase files.
+This setup has 25 phases (0-24). Each phase is stored in its own file under `phases/`. **Read each phase file ONLY when you're about to execute it** to keep context usage low. Large embedded templates (CLAUDE.md template, insights skill, etc.) are in `templates/generated/` and referenced by the phase files.
 
-### Tier structure
-
-| Tier | Phases | What lands | Mandatory? |
-|---|---|---|---|
-| **CORE** | 0-10 | Tools installed, vault structure, CLAUDE.md memory file, context layer, advisory panel, working daily journal with /journal trigger. After CORE the user has a usable second brain. | Always run. |
-| **CONNECTORS** | 11 | Gmail / Calendar / Slack / CRM / meeting transcripts wired in. OAuth screens are the #1 stall point. | Default ON. Workshop mode defers. |
-| **IMPORTS** | 12-17 | Book highlights, wearables, concept taxonomy, backup, Obsidian power rules. Each phase has a mandatory ask — never skipped silently. | Default ON. Workshop mode defers. |
-| **POLISH** | 18-24 | Weekly/monthly insights cron, team vault, theme, second-brain-mapping, handoff doc. | Default ON. Workshop mode defers. |
+**Every install runs every phase. No tiers, no light/full split, no workshop-trimmed variant.** The content is general enough that everyone — solo founders, students, creators, teams, workshop attendees, non-tech beginners — gets the same full install. Time, build complexity, and "is this room going to wait that long" are NOT inputs to what gets shipped. They are out of frame per the project's best-of-best lockout.
 
 ### Phase Routing Table
 
-| Phase | Tier | File | What it does |
-|---|---|---|---|
-| 0 | CORE | `phases/phase-00-install.md` | Install efficiency tools (brew, python, node, graphify, skills, MCPs) |
-| 1 | CORE | `phases/phase-01-welcome.md` | Language detection, mode detection (new/join/upgrade), welcome interview |
-| 2-3 | CORE | `phases/phase-02-03-plugins-folders.md` | Install Obsidian plugins, create folder structure + `⚙️ Meta/Folder Resolvers/` |
-| 4 | CORE | `phases/phase-04-claude-md.md` | Build their CLAUDE.md (interview + template). Template at `templates/generated/claude-md-template.md` |
-| 5 | CORE | `phases/phase-05-context-layer.md` | Context notes, session hooks, aggregator scripts, decision log, graph-context-hook, panel-trigger-hook |
-| 6-9 | CORE | `phases/phase-06-09-tools-templates.md` | Tool routing, import existing notes, templates, verify all skills |
-| 10a | CORE | `phases/phase-10a-journaling.md` | Daily journaling setup: interview, floor framework, skill generation, trigger |
-| 10b | CORE | `phases/phase-10b-panel-roster.md` | Advisory panel roster + voice routing trigger table |
-| 11 | CONNECTORS | `phases/phase-11-external-tools.md` | Connect email/calendar/Slack/CRM, meeting tool wiring |
-| 12-17 | IMPORTS | `phases/phase-12-17-imports-rules.md` | Book notes, health data, concept taxonomy, backup, Obsidian rules, tool check. Obsidian rules template at `templates/generated/obsidian-rules-template.md` |
-| 18 | POLISH | `phases/phase-18-insights.md` | Weekly/monthly insights setup + cron, with pattern analysis. Skill template at `templates/generated/insights-skill-template.md` |
-| 19-23 | POLISH | `phases/phase-19-23-finish.md` | Test drive, team vault, what's next, Instinct Engine, theme, session-close walkthrough. Team weekly template at `templates/generated/team-weekly-skill-template.md` |
-| **23.5** | POLISH | `phases/phase-19-23-finish.md` (appended) | **MUST BE LAST INSTALL PHASE — token-aware.** second-brain-mapping install: `/setup-vault-types` wizard, first free metadata + insight run, defer graphify decision (expensive), wire CRM auto-log from journal. Phases 1 + 4 are zero-LLM; Phase 2 (graphify) is opt-in. |
-| 24 | POLISH | `phases/phase-19-23-finish.md` (appended) | Handoff from installed to used. Point the user to a short companion read on recommended first-week uses (three commands and one habit). Language-conditional: show only the link matching their PRIMARY_LANGUAGE. Closes the "now what?" gap. |
+| Phase | File | What it does |
+|---|---|---|
+| 0 | `phases/phase-00-install.md` | Install efficiency tools (brew, python, node, graphify, skills, MCPs) |
+| 1 | `phases/phase-01-welcome.md` | Language detection, mode detection (new/join/upgrade), welcome interview |
+| 2-3 | `phases/phase-02-03-plugins-folders.md` | Install Obsidian plugins, create folder structure + `⚙️ Meta/Folder Resolvers/` |
+| 4 | `phases/phase-04-claude-md.md` | Build their CLAUDE.md (interview + template). Template at `templates/generated/claude-md-template.md` |
+| 5 | `phases/phase-05-context-layer.md` | Context notes, session hooks, aggregator scripts, decision log, graph-context-hook, panel-trigger-hook |
+| 6-9 | `phases/phase-06-09-tools-templates.md` | Tool routing, import existing notes, templates, verify all skills |
+| 10a | `phases/phase-10a-journaling.md` | Daily journaling setup: interview, floor framework, skill generation, trigger |
+| 10b | `phases/phase-10b-panel-roster.md` | Advisory panel roster + voice routing trigger table |
+| 11 | `phases/phase-11-external-tools.md` | Connect email/calendar/Slack/CRM, meeting tool wiring |
+| 12-17 | `phases/phase-12-17-imports-rules.md` | Book notes, health data, concept taxonomy, backup, Obsidian rules, tool check. Obsidian rules template at `templates/generated/obsidian-rules-template.md` |
+| 18 | `phases/phase-18-insights.md` | Weekly/monthly insights setup + cron, with pattern analysis. Skill template at `templates/generated/insights-skill-template.md` |
+| 19-23 | `phases/phase-19-23-finish.md` | Test drive, team vault, what's next, Instinct Engine, theme, session-close walkthrough. Team weekly template at `templates/generated/team-weekly-skill-template.md` |
+| **23.5** | `phases/phase-19-23-finish.md` (appended) | **MUST BE LAST INSTALL PHASE — token-aware.** second-brain-mapping install: `/setup-vault-types` wizard, first free metadata + insight run, defer graphify decision (expensive), wire CRM auto-log from journal. Phases 1 + 4 are zero-LLM; Phase 2 (graphify) is opt-in. |
+| 24 | `phases/phase-19-23-finish.md` (appended) | Handoff from installed to used. Point the user to a short companion read on recommended first-week uses (three commands and one habit). Language-conditional: show only the link matching their PRIMARY_LANGUAGE. Closes the "now what?" gap. |
 
-In a normal install every phase runs unconditionally — there is no light/full split. Everyone gets the full second-brain experience (advisory panel, knowledge graph, automatic context routing, monthly insights, Instinct Engine). Workshop mode (below) is the one exception.
+Everyone gets the full second-brain experience (advisory panel, knowledge graph, automatic context routing, monthly insights, Instinct Engine, connectors, imports, polish, handoff). No exceptions.
 
-### Workshop mode
+### Workshop mode — reliability layer ONLY
 
-**Trigger:** the env var `WORKSHOP_MODE=1`, OR a recap file `~/.claude/.ai-brain-starter-recap.json` with `"branch": "workshop"`, OR the user invokes the skill with the phrase "workshop install" / "instalación de taller" anywhere in their first message.
+**Trigger:** the env var `WORKSHOP_MODE=1`, OR a recap file `~/.claude/.ai-brain-starter-recap.json` with `"branch": "workshop"`, OR the user's first message contains the phrase "workshop install" / "instalación de taller".
 
-When workshop mode is active:
+Workshop mode does NOT change what gets installed. It adds a transparency layer for the facilitator. ALL 25 phases still run. OAuth still happens. Connectors, imports, polish — everything ships, same as a solo install.
 
-1. **Run CORE only (Phases 0-10).** Stop after Phase 10 — the user has a working journal and that is the workshop deliverable. Do NOT run CONNECTORS, IMPORTS, or POLISH in the workshop. Defer them by writing this line into the user's CLAUDE.md "Current Focus" section: `Workshop deferred: connectors / imports / insights — run later by saying "continue my AI Brain install".` That single line is the resume-pointer for their own time.
-2. **Skip every OAuth flow.** No Gmail / Calendar / Slack / CRM connector setup during the workshop. Mention them in one sentence at handoff so the user knows to come back, but do not start the OAuth dance.
-3. **Mid-flow checkpoint summaries.** At the end of Phase 5 and Phase 10, give a one-line "where we are / where we're going / minutes elapsed estimate" so the room stays oriented. Format: `Checkpoint — [Phase X] done. Up next: [Phase Y]. About [N] min into the install.` (Estimate honestly; don't fake it.)
-4. **Verbose tool-call logging.** Append every Bash / Write / Edit / Skill invocation to `~/.claude/.ai-brain-starter-install.jsonl` (telemetry already specified above) AND a per-attendee transcript at `~/.claude/.ai-brain-starter-workshop-transcript.md`. Workshop facilitator reads the transcript after the room to see where attendees got stuck.
-5. **Resume-aware.** If `~/.claude/.ai-brain-starter-progress.json` exists with `last_completed_phase`, skip to the next phase silently — never re-run a phase that the marker says is already done. Pretend it just finished and continue. The progress file is your idempotency anchor; treat it as authoritative.
+What workshop mode ADDS (never cuts):
 
-**Outside workshop mode:** ignore this section. Run all phases as the routing table prescribes.
+1. **Verbose per-attendee transcript** at `~/.claude/.ai-brain-starter-workshop-transcript.md` — every Bash / Write / Edit / Skill tool call appended with a one-line summary so the facilitator can read where each attendee got stuck after the room ends.
+2. **Telemetry lines tagged `workshop_mode: true`** in `~/.claude/.ai-brain-starter-install.jsonl` so the maintainer can filter `python3 scripts/install-telemetry.py summarize --workshop-only` and see what surfaced across the cohort.
 
-### Progress tracking (always on, not workshop-specific)
+That's it. No deferrals, no "CORE only" shortcut, no OAuth skipping. The install runs full-length whether the user is in a workshop room, on their couch, or in an airport.
+
+### Always-on mid-flow checkpoints
+
+For every install (workshop or solo), at the end of Phase 5, Phase 10, Phase 17, and Phase 23, give a one-line orientation: `Checkpoint — [Phase X] done. Up next: [Phase Y]. [What just landed in one short clause].` Estimate elapsed time honestly only if asked; don't volunteer time numbers (treats minutes as a feature, which they aren't).
+
+### Progress tracking (always on)
 
 After each phase completes, write the phase number + an ISO timestamp to `~/.claude/.ai-brain-starter-progress.json`:
 
@@ -111,17 +110,17 @@ After each phase completes, write the phase number + an ISO timestamp to `~/.cla
 {"last_completed_phase": "10a", "ts": "2026-05-12T17:42:00Z", "version": 1}
 ```
 
-On the next install run (or session resume), read this file FIRST and skip to the first phase not yet marked complete. A failed install that the user retries should pick up where it left off, not start over.
+On the next install run (or session resume), read this file FIRST and skip to the first phase not yet marked complete. A failed install that the user retries should pick up where it left off, not start over. Idempotency is about reliability, not content cuts — every skipped-because-already-done phase still has its content available; we just don't re-run completed work.
 
 ### How to Execute
 
 1. **Check progress file.** Read `~/.claude/.ai-brain-starter-progress.json`. If present, jump to the first un-completed phase. If absent, start at Phase 0.
-2. **Check workshop mode.** Per the Workshop Mode section above — if active, run CORE only (Phases 0-10) and defer the rest.
-3. Read the phase file for the current phase
-4. Execute it (interview the user, create files, install tools)
+2. **Note workshop mode.** If active, set up the per-attendee transcript path and tag telemetry. Do NOT change which phases run — every phase still runs.
+3. Read the phase file for the current phase.
+4. Execute it (interview the user, create files, install tools).
 5. When the phase completes, append a telemetry line to `~/.claude/.ai-brain-starter-install.jsonl` AND update the progress file (`last_completed_phase`). Helper script: `scripts/install-telemetry.py append <phase> <outcome>` (falls back to `jq`-based bash if Python isn't ready).
 6. Move to the next phase in the table.
-7. If a phase doesn't apply (user said no, or no relevant context), skip silently — but still write the telemetry line with `outcome: "skipped_on_user_no"` so the maintainer can see drop rates per phase.
+7. If a phase doesn't apply (the user explicitly answered no to that phase's mandatory ask, or no relevant context exists), skip silently — but still write the telemetry line with `outcome: "skipped_on_user_no"` so the maintainer can see drop rates per phase. "Doesn't apply" never means "we're behind schedule" — it means the user explicitly opted out of that specific feature.
 8. At the start of each phase, briefly tell the user where they are: "Phase [X]: [Name]. This is where we [one sentence]."
 
 ### Variables to Track Across Phases
