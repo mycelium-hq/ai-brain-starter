@@ -151,7 +151,15 @@ The email-gate marker on disk means you skip the email question entirely. Bootst
 <summary>Edge cases (rare — most people skip this)</summary>
 
 - **Want to sign up via web before installing Claude Code?** Use the form at [myceliumai.co/install](https://myceliumai.co/install) (Spanish: [myceliumai.co/es/install](https://myceliumai.co/es/install)). It emails you a one-paste install command. Exists for paid cohorts, partner cohorts, and anyone who wants to read the privacy details first.
-- **Already a Claude Code user and just want to try the skills against an existing vault** (no full install, no Obsidian setup)? Load the plugin for the current session only: `claude --plugin-url https://github.com/adelaidasofia/ai-brain-starter/releases/latest/download/ai-brain-starter.zip`. The full install above remains the recommended path.
+- **Already a Claude Code user and just want to try the skills against an existing vault** (no full install, no Obsidian setup)? Two lightweight paths:
+  - **Marketplace install (persistent across sessions):** open Claude Code, paste:
+    ```
+    /plugin marketplace add adelaidasofia/ai-brain-starter
+    /plugin install ai-brain-starter@ai-brain-starter
+    ```
+  - **Session-only (no install at all):** `claude --plugin-url https://github.com/adelaidasofia/ai-brain-starter/releases/latest/download/ai-brain-starter.zip`
+
+  The full install above remains the recommended path for the complete substrate (vault setup, MCP wiring, hooks, lifecycle).
 - **Chat-native install not working?** Open Terminal (`Cmd+Space` → "terminal" → Enter), paste `bash <(curl -fsSL https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main/bootstrap.sh)`, press Enter. Then open Claude Code and paste "set up my AI Brain Starter." This is the deterministic fallback if Claude gets confused by the URL.
 
 </details>
