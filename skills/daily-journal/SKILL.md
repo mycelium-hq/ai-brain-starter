@@ -193,9 +193,25 @@ This surfaces themes they might not otherwise bring up and gives them a chance t
 
 **After the journal entry is saved and all seeds have been incorporated into the entry:** delete all used seeds from the staging file, keeping only the frontmatter, section headers, format comments, and any seeds that were NOT used. Leave the `## Ideas & Strategy Captures` section intact — those are handled separately and get filed to their respective vault destinations, not into the journal body.
 
+**0h. Morning /rise entry pairing (auto-on if today's morning entry exists).** Look for today's morning entry written by `/rise` at `<save_path>/<Month YYYY>/<YYYY-MM-DD> Rise.md` (the `save_path` is configured in `Meta/rise-config.md`; default `Journals`). If it exists, parse:
+- `priorities:` list (what the user committed to this morning)
+- `intention:` string (how they said they'd show up)
+- `floor:` + `floor_level:` (their sunrise Floor)
+- Any `<anchor>_done` flags from the morning anchor practices
+
+Save the parsed values to working memory for Step 1 (opener incorporates them) and Step 3.5 (accountability beats). If no morning entry exists, skip silently and run the normal flow — do NOT fail.
+
+This is non-negotiable when a morning entry exists: the evening journal MUST close the loop on what was opened. Without it, the morning declaration becomes a dead-end file and the Floor-at-sunrise vs Floor-at-sundown delta (a new `/patterns` input) gets lost.
+
 ### Step 1: Open with a warm, casual check-in
 
-Start with ONE simple question. Don't overwhelm. Pick one of these based on time of day:
+**If today's morning `/rise` entry was found in Step 0h:** open by acknowledging what was set this morning. Pattern:
+
+> "How was today? This morning you opened wanting to focus on [priority 1], [priority 2], [priority 3], and to show up [intention]. How did that land?"
+
+Let them answer freely — don't make them go priority-by-priority robotically. They'll naturally weave through what landed and what didn't. Capture verbatim. Step 3.5 will close the formal accountability beats.
+
+**If no morning `/rise` entry was found:** use the standard time-of-day opener:
 - Morning: "Hey! How are you waking up today? What's on your mind?"
 - Afternoon: "How's the day going so far? Anything standing out?"
 - Evening: "How was today? What's sitting with you right now?"
@@ -273,6 +289,29 @@ After the emotional check-in, run through these accountability items. Be direct 
 - The idea quarantine: if a new idea came up, park it (see Step 8)
 - 30-day idea timer: if they're excited about an off-focus idea during a hard stretch, name it: "Is this real inspiration or escape from the hard stretch?"
 - Pre-flight check before team confrontations: if they're frustrated with someone, ask "Are you on a Low Floor right now? Is this real feedback or projection?"
+
+### Step 3.5: Morning /rise accountability (only if Step 0h found a morning entry)
+
+If today's morning `/rise` entry was parsed in Step 0h, close the loop explicitly before identifying the floor. This is the night-side of the morning declaration — without it, the priorities and intention die in the file.
+
+**Priorities accountability:** if it wasn't already covered in Step 1's flowing answer, ask:
+
+> "Walking through this morning's list specifically: [priority 1], [priority 2], [priority 3]. Which landed, which didn't, and what got in the way of the ones that didn't?"
+
+For each priority, capture a single status: `landed | partial | dropped`. Save to working memory for Step 7's frontmatter.
+
+**Intention accountability:** ask separately:
+
+> "This morning you wanted to show up [intention]. Did you?"
+
+Listen for texture in the answer — "kind of," "until I got tired," "yes early, no late" — and save a single status: `held | partial | missed`. Don't force a binary if the user answers with nuance; capture the nuance verbatim in the body.
+
+**Floor-at-sunrise vs sunset gap:** silently note the morning Floor from Step 0h and compare to the Floor you'll identify in Step 4. The gap (e.g., morning Willingness → evening Frustration) is signal for `/patterns`. Don't surface the gap in conversation — just save both Floors in frontmatter.
+
+**Edge cases:**
+- "Didn't even look at the list": capture as `landed: 0 / 3`, no judgment in tone. Save verbatim.
+- Morning intention was high-aspiration and the user fell short: do NOT moralize. The point is data, not discipline. Save the gap and move on.
+- Crisis-tier override at any point (language flips to total-self / dysregulation / acute grief): skip remaining accountability beats, jump to Step 4 with hold-voice protocol.
 
 ### Step 4: Identify the floor
 
@@ -419,8 +458,15 @@ Wait for explicit confirmation. Only save after the user says yes or suggests ed
 ```markdown
 ---
 creationDate: YYYY-MM-DDTHH:MM
-floor: Primary              # single floor name (or [Primary, Secondary] for elevator emotions)
+floor: Primary              # single floor name (or [Primary, Secondary] for elevator emotions) — this is the EVENING floor
 floor_level: Low | Middle | High
+# Morning pairing fields — ONLY include if a /rise entry was found in Step 0h:
+# floor_morning: <Floor at sunrise from /rise frontmatter>
+# floor_morning_level: Low | Middle | High
+# priorities_planned: ["priority 1", "priority 2", "priority 3"]   # from morning /rise
+# priorities_landed: ["landed" | "partial" | "dropped", ...]        # parallel array, same length, status per priority
+# intention_planned: "<intention sentence from morning /rise>"
+# intention_held: held | partial | missed
 gym: true | false
 gym_week: X                 # count for this week
 sleep_time: "HH:MM"
