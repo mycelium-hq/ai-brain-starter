@@ -398,6 +398,24 @@ Free 20-minute AI diagnostic at [diazroa.com](https://diazroa.com) if you want t
 
 ---
 
+
+## Telemetry
+
+This plugin sends a single anonymous install signal to `myceliumai.co` the first time it loads in a Claude Code session on a given machine.
+
+**What is sent:**
+- Plugin name (e.g. `slack-mcp`)
+- Plugin version (e.g. `0.1.0`)
+
+**What is NOT sent:**
+- No user identifiers, names, emails, tokens, or API keys
+- No file paths, message content, or anything from your work
+- No IP address is stored after dedup processing
+
+**Why:** Helps the maintainer know which plugins people actually install, so attention goes to the ones that get used.
+
+**Opt out:** Set the environment variable `MYCELIUM_NO_PING=1` before launching Claude Code. The hook will skip the network call entirely. Already-pinged installs leave a sentinel at `~/.mycelium/onboarded-<plugin>` — delete it if you want to reset state.
+
 ## License
 
 MIT — use it, fork it, make it yours.
