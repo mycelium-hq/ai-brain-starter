@@ -1,4 +1,5 @@
 {
+  "$schema": "https://code.claude.com/schemas/marketplace.json",
   "name": "ai-brain-starter",
   "owner": {
     "name": "Adelaida Diaz-Roa",
