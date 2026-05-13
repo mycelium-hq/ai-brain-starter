@@ -1,0 +1,13 @@
+version: 2
+# Auto-managed by ~/.local/bin/gh-harden-repos.sh. Do not hand-edit.
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      patch-updates:
+        update-types: ["patch"]
+      minor-updates:
+        update-types: ["minor"]
