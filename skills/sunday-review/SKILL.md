@@ -74,6 +74,15 @@ python3 "$VAULT_ROOT/⚙️ Meta/scripts/wire_typed_relationships.py" \
 
 Re-extracts typed edges (frontmatter + wikilinks) across the full vault using regex + entity-type rules. Zero LLM calls. Pattern source: garrytan/gbrain (cherry-picked). The output JSONL feeds `/graphify` Part A.5 so the next graphify run skips the structural extraction LLM cost. Capture: total edges by type (works_at / journaled_about / attended / etc.), runtime in ms, any extraction failures logged to stderr. Skip silently if the script is missing.
 
+### Step 4c.7 — Public repo standards audit (if the script exists in this vault)
+
+Run:
+```bash
+python3 "$VAULT_ROOT/⚙️ Meta/scripts/audit-public-repo-standards.py"
+```
+
+Audits every public non-archived non-fork repo under your GitHub org for baseline standards: LICENSE, README, real CI workflow (Dependabot auto-merge alone does not count), last-push freshness (>60d = stale). Classifies repo type (`code-python`, `code-node`, `code-go`, `code-rust`, `skill`, `docs`, `meta`) so CI requirements only apply to actual code repos. Output uses Compiled-Truth + Timeline format at `⚙️ Meta/Public Repo Standards Audit.md`. Capture: any repos with gaps, especially `missing LICENSE` (MIT add via `gh api -X PUT contents/LICENSE`) or `no CI workflow` (extend the harden script's Layer 6 to handle the missing case). Skip silently if the script is missing.
+
 ### Step 4d — Passive captures triage (if the script exists in this vault)
 
 Run:
