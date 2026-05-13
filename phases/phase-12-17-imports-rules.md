@@ -1,10 +1,14 @@
 # Phases 12-17: Imports, Taxonomy, Backup, and Obsidian Rules
 
+**Run every phase in this file. Ask each phase's question explicitly.** Do NOT skip a phase because the user didn't mention the topic earlier — most users have no idea these features exist until you ask. Banned framings: "Skip — you didn't mention books / wearables / a framework / a backup tool." Always ask. Then skip only if their explicit answer is no.
+
 ---
 
 ## Phase 12: Import Book Notes & Highlights
 
-Ask: "Do you read books and highlight? (Kindle, Apple Books, Readwise, physical books with notes?)"
+**MANDATORY ASK — do NOT skip because they didn't bring up books earlier.** Ask now:
+
+"Do you read books and highlight? (Kindle, Apple Books, Readwise, physical books with margin notes?)"
 
 If yes, explain: "Your book highlights are some of the most valuable notes you have — they're the ideas that resonated enough to mark. Let's get them in."
 
@@ -21,23 +25,32 @@ After import:
 - Add wikilinks to concepts that match existing vault notes
 - "Your reading and your thinking are now connected. When you write about a topic, your book highlights surface as context."
 
-## Phase 13: Health Data Import (Optional)
+## Phase 13: Health Data Import
 
-**Note:** Basic habit tracking (gym, sleep, mood, scrolling) is already built into the journal skill from Phase 10. This phase is ONLY for importing external health data sources.
+**MANDATORY ASK — never assume.** Do NOT skip this phase because the user didn't mention a wearable earlier. Most people who own an Apple Watch, Oura, Fitbit, Garmin, or Whoop don't think to bring it up during setup. Ask explicitly now:
 
-Ask: "Do you use any health tracking devices or apps? (Apple Health, Fitbit, Garmin, Oura, Whoop?)"
+"Do you wear or use any of these? Apple Watch / Apple Health, Oura Ring, Fitbit, Garmin, Whoop, or any other health-tracking device or app?"
 
-If yes: "We can import your health data and cross-reference it with your journal entries. Imagine asking 'what do my best weeks have in common?' and getting back: gym 4x, sleep before midnight, no social media after 9pm. The habit tracking from your journal gives you the subjective data — this gives you the objective data."
+Wait for their answer. If they say yes (even to one), continue. If they explicitly say "no, none of these," then skip to Phase 14.
 
-Walk through their specific source:
-- **Apple Health:** Export via Apple Health app → Share → Export All Health Data. Creates a zip with XML. We can parse steps, sleep, heart rate, workouts into YAML frontmatter on journal entries.
-- **Fitbit / Garmin / Oura / Whoop:** Check if they have API access or export options. Some have Obsidian community plugins.
+If yes: "We can import your health data and cross-reference it with your journal entries. Imagine asking 'what do my best weeks have in common?' and getting back: gym 4x, sleep before midnight, HRV above 40, no social media after 9pm. The habit tracking from your journal gives you the subjective data — this gives you the objective data."
 
-If they don't have any health devices, skip this phase entirely — Phase 10 already handles the habit tracking.
+Then walk through their specific source. If they have the `health-setup` skill installed (from the ai-brain-starter bundle), invoke it via the Skill tool to handle wearable wiring end-to-end. Otherwise:
+
+- **Apple Watch / Apple Health:** Export via Apple Health app → Share → Export All Health Data. Creates a zip with XML. The `ingest-health` skill (also bundled) imports it into a local DuckDB. Three modes: XML export.zip, Simple Health Export CSV folder, Health Auto Export TCP-live.
+- **Oura Ring:** Personal Access Token from cloud.ouraring.com → set `OURA_TOKEN` env var. The `health-setup` skill wires this end-to-end.
+- **Fitbit / Garmin / Whoop:** each has its own auth dance. `health-setup` skill handles each one.
+- **Apple Watch without export hassle:** Health Auto Export iOS app pushes live data via TCP. Walk them through it.
+
+After import, the `health-context` skill (auto-fires on journal entries) pairs body data with Floor tags — so a "Floor: Joy" entry with "HRV 22, RHR 78, sleep 5h 12m" gets the parasympathetic-state caveat automatically.
+
+If they explicitly said no to all wearables, skip this phase silently — Phase 10's habit tracking already covers the subjective side.
 
 ## Phase 14: Build Your Concept Taxonomy
 
-Ask: "Do you have a framework you think about life through? (Values, principles, categories, a personal philosophy?) Or do you want to build one?"
+**MANDATORY ASK** — concept notes are how the vault stops being a filing cabinet. Always run this phase.
+
+Ask: "Do you have a framework you think about life through? (Values, principles, categories, a personal philosophy?) Or do you want to build one from the themes already in your writing?"
 
 Not everyone has a framework like the High-Rise. But everyone has recurring themes. Help them identify theirs:
 
@@ -67,7 +80,9 @@ This is what turns a vault from a filing system into a thinking system. The conc
 
 ## Phase 15: Backup & Sync Setup
 
-Ask: "How do you want to back up your vault? (Google Drive, iCloud, Dropbox, Git, or just local?)"
+**MANDATORY ASK — never skip.** If their vault folder dies and there's no backup, the entire install is lost work. Always ask:
+
+"How do you want to back up your vault? Pick one: Google Drive, iCloud, Dropbox, Git (private GitHub repo), or just local (manual external-drive copies)?"
 
 **Important:** "Your vault is just a folder of files. If that folder disappears, everything is gone. Let's make sure it's backed up."
 

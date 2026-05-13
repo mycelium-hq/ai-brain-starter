@@ -466,7 +466,11 @@ Based on what came up in Steps 1–3 AND which triggers fired mid-interview (see
 
 **The Advisory Panel roster:**
 
-During setup, offer the user the full roster below and let them **customize the panel** — add voices, remove voices, replace voices with people relevant to their life (their grandmother, their favorite professor, a specific author). Save the final roster into the generated skill so the daily journal uses the user's actual panel, not a generic one. If the user doesn't want to customize, use the default roster below as-is.
+**DO NOT ask the user to customize the panel at setup time.** No "default 5" proposed for approval. No "want to swap any in?" prompt. The full roster below gets installed into the daily-journal skill verbatim, and the skill's Step 5 selects 3-5 panelists PER ENTRY based on which mid-interview triggers fired and what surfaced in Steps 1-3. This guarantees variation across entries — a finance-stress journal pulls Hormozi + Buffett + Gabor Maté; a creative-block journal pulls Rubin + Gilbert + Brené Brown; a relationship journal pulls Perel + Tatkin + Solomon. Same default 5 every day would defeat the point.
+
+The user CAN edit the roster later by asking ("add my grandmother as a panelist," "remove Hormozi"). That edit lands in the daily-journal SKILL.md directly. But never volunteer the customization prompt at setup — it adds a decision they don't need to make and locks them into a static panel.
+
+Install the full roster below into the daily-journal skill exactly as written:
 
 *Wealth & Strategy:*
 Naval Ravikant (leverage, asymmetric bets, freedom-through-clarity) · Warren Buffett (capital allocation, simplicity, patience, circle of competence) · Ray Dalio (macro cycles, principles-based decisions, risk parity) · Alex Hormozi (execution, offers, scaling) · Tom Wheelwright (tax strategy, entity design, intergenerational planning) · Marc Andreessen (tech thesis, software-eats-world, founder empathy) · Stephen Schwarzman (PE discipline, scale-up playbooks) · Howard Marks (credit cycles, risk management, second-level thinking) · Sam Zell (contrarian, distressed value, downside-first thinking) · Robert Kiyosaki (cash-flow mindset, financial education) · Ken Griffin (risk-adjusted returns, market microstructure) · Laurene Powell Jobs (impact investing, values-led legacy) · Richard Branson (joyful entrepreneurship, brand magic)
@@ -510,6 +514,6 @@ Jane Goodall (planetary compassion, stewardship, humility with action) · Charle
 *Creativity:*
 Rick Rubin (creativity via presence, subtractive genius, trust the muse) · Elizabeth Gilbert (creative courage, fear alchemy, permission to play) · Twyla Tharp (creative discipline, daily craft)
 
-**Customize by user.** During setup, ask: *"This is the default advisory panel. Want to add, swap, or remove anyone? You can replace any of these with a specific person in your life — a mentor, a grandparent, a coach — and I'll build them into the skill."* Whatever they say, bake into Step 5 of the generated skill.
+**No setup-time customization prompt.** Install the full roster above verbatim into the daily-journal SKILL.md. The skill picks 3-5 per entry from this full roster based on what surfaces — variation is the feature, not a bug. If the user later asks to add a specific person (grandmother, mentor, professor) or remove one of the listed voices, edit the daily-journal SKILL.md directly at that point. Never volunteer the customization question.
 
-**Advisory Panel Roster:** The full panel roster, voice routing trigger table, and panel customization instructions are in `phases/phase-10b-panel-roster.md`. Read that file when you reach Step 5 of the journal skill generation.
+**Advisory Panel Roster:** The full panel roster and voice routing trigger table are in `phases/phase-10b-panel-roster.md`. Read that file when you reach Step 5 of the journal skill generation.
