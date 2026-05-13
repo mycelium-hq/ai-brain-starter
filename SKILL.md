@@ -26,16 +26,17 @@ These improvisations look helpful in the moment but break the install. Catch you
 | "I'll skip Phase X — you didn't mention [topic]" | Don't assume. ASK explicitly per phase. (Books, wearables, frameworks, backup — every phase has a mandatory ask.) |
 | "Here are some default voices for your journal panel — want to swap any?" | The full 90+ roster goes into the daily-journal skill verbatim. The skill picks 3-5 per-entry. No setup-time panel customization. |
 | "Want me to..." mid-phase, except when a phase REQUIRES a specific user input | Just do it. Direction is already clear: complete the install. |
-| "For the workshop we'll just do CORE / defer connectors / skip OAuth / trim to phase X" | Every install runs every phase. Workshop mode adds a transcript and tagged telemetry; it does NOT cut content. Time / room-pace / "they'll get tired" framings are out of frame per the project's best-of-best lockout. |
+| "For the workshop we'll just do CORE / defer connectors / skip OAuth / trim to phase X" | No workshop mode exists. There is one install. Every phase runs. Time / room-pace / "they'll get tired" framings are out of frame per the project's best-of-best lockout. |
 | "Light version / lite install / quick path / minimum viable setup" | No such tier exists. There is one install: the full install. If the user asks for a stripped version, decline once and explain that the install is general-enough that everyone benefits from all phases. |
 | "We can phase this in — Phase 11 next session, Phase 18 the week after" | The install is one flow, not a roadmap. Continue. The only legitimate pause is the user explicitly saying "I need to stop now." |
+| "I see your recap file says `lang: en` so I'll continue in English" / silently inheriting any language default | The recap is a HINT, never authoritative. Phase 1 Step 1.0 ALWAYS runs and asks the language question. The user picks. No silent defaults from server-side form choices, browser locale, OS locale, or anything else. |
 
 **The install runs until the final phase ends.** No pause options, no progress-check menus, no fresh-session handoffs. If the user genuinely needs to stop, they will say so — wait for that explicit signal, never offer it.
 
-**Telemetry capture (Goldsmith pattern).** After each phase completes, append one JSON line to `~/.claude/.ai-brain-starter-install.jsonl` describing what happened. Schema:
+**Telemetry capture.** After each phase completes, append one JSON line to `~/.claude/.ai-brain-starter-install.jsonl` describing what happened. Schema:
 
 ```json
-{"ts": "2026-05-12T17:42:00Z", "phase": "10a", "outcome": "completed", "user_redirected": false, "new_improvisation_seen": null, "workshop_mode": false}
+{"ts": "2026-05-12T17:42:00Z", "phase": "10a", "outcome": "completed", "user_redirected": false, "new_improvisation_seen": null}
 ```
 
 `outcome` ∈ {`completed`, `skipped_on_user_no`, `errored`}. Set `new_improvisation_seen` to a short string ONLY when the user catches you doing something this skill didn't tell you to do (the file is the diff between what the skill prescribed and what you actually did). That string is the maintainer's signal for the next BANNED PATTERNS row. Use the `append-install-event` helper at `scripts/install-telemetry.py` when present; fall back to `jq -c .` from bash if not.
@@ -83,24 +84,11 @@ This setup has 25 phases (0-24). Each phase is stored in its own file under `pha
 | **23.5** | `phases/phase-19-23-finish.md` (appended) | **MUST BE LAST INSTALL PHASE — token-aware.** second-brain-mapping install: `/setup-vault-types` wizard, first free metadata + insight run, defer graphify decision (expensive), wire CRM auto-log from journal. Phases 1 + 4 are zero-LLM; Phase 2 (graphify) is opt-in. |
 | 24 | `phases/phase-19-23-finish.md` (appended) | Handoff from installed to used. Point the user to a short companion read on recommended first-week uses (three commands and one habit). Language-conditional: show only the link matching their PRIMARY_LANGUAGE. Closes the "now what?" gap. |
 
-Everyone gets the full second-brain experience (advisory panel, knowledge graph, automatic context routing, monthly insights, Instinct Engine, connectors, imports, polish, handoff). No exceptions.
+Everyone gets the full second-brain experience (advisory panel, knowledge graph, automatic context routing, monthly insights, Instinct Engine, connectors, imports, polish, handoff). No exceptions. No modes, no flags, no "workshop install" branch — there is one install and one user experience.
 
-### Workshop mode — reliability layer ONLY
+### Mid-flow checkpoints
 
-**Trigger:** the env var `WORKSHOP_MODE=1`, OR a recap file `~/.claude/.ai-brain-starter-recap.json` with `"branch": "workshop"`, OR the user's first message contains the phrase "workshop install" / "instalación de taller".
-
-Workshop mode does NOT change what gets installed. It adds a transparency layer for the facilitator. ALL 25 phases still run. OAuth still happens. Connectors, imports, polish — everything ships, same as a solo install.
-
-What workshop mode ADDS (never cuts):
-
-1. **Verbose per-attendee transcript** at `~/.claude/.ai-brain-starter-workshop-transcript.md` — every Bash / Write / Edit / Skill tool call appended with a one-line summary so the facilitator can read where each attendee got stuck after the room ends.
-2. **Telemetry lines tagged `workshop_mode: true`** in `~/.claude/.ai-brain-starter-install.jsonl` so the maintainer can filter `python3 scripts/install-telemetry.py summarize --workshop-only` and see what surfaced across the cohort.
-
-That's it. No deferrals, no "CORE only" shortcut, no OAuth skipping. The install runs full-length whether the user is in a workshop room, on their couch, or in an airport.
-
-### Always-on mid-flow checkpoints
-
-For every install (workshop or solo), at the end of Phase 5, Phase 10, Phase 17, and Phase 23, give a one-line orientation: `Checkpoint — [Phase X] done. Up next: [Phase Y]. [What just landed in one short clause].` Estimate elapsed time honestly only if asked; don't volunteer time numbers (treats minutes as a feature, which they aren't).
+At the end of Phase 5, Phase 10, Phase 17, and Phase 23, give a one-line orientation: `Checkpoint — [Phase X] done. Up next: [Phase Y]. [What just landed in one short clause].` Estimate elapsed time only if explicitly asked; don't volunteer time numbers (treats minutes as a feature, which they aren't).
 
 ### Progress tracking (always on)
 
@@ -115,13 +103,12 @@ On the next install run (or session resume), read this file FIRST and skip to th
 ### How to Execute
 
 1. **Check progress file.** Read `~/.claude/.ai-brain-starter-progress.json`. If present, jump to the first un-completed phase. If absent, start at Phase 0.
-2. **Note workshop mode.** If active, set up the per-attendee transcript path and tag telemetry. Do NOT change which phases run — every phase still runs.
-3. Read the phase file for the current phase.
-4. Execute it (interview the user, create files, install tools).
-5. When the phase completes, append a telemetry line to `~/.claude/.ai-brain-starter-install.jsonl` AND update the progress file (`last_completed_phase`). Helper script: `scripts/install-telemetry.py append <phase> <outcome>` (falls back to `jq`-based bash if Python isn't ready).
-6. Move to the next phase in the table.
-7. If a phase doesn't apply (the user explicitly answered no to that phase's mandatory ask, or no relevant context exists), skip silently — but still write the telemetry line with `outcome: "skipped_on_user_no"` so the maintainer can see drop rates per phase. "Doesn't apply" never means "we're behind schedule" — it means the user explicitly opted out of that specific feature.
-8. At the start of each phase, briefly tell the user where they are: "Phase [X]: [Name]. This is where we [one sentence]."
+2. Read the phase file for the current phase.
+3. Execute it (interview the user, create files, install tools).
+4. When the phase completes, append a telemetry line to `~/.claude/.ai-brain-starter-install.jsonl` AND update the progress file (`last_completed_phase`). Helper script: `scripts/install-telemetry.py append <phase> <outcome>` (falls back to `jq`-based bash if Python isn't ready).
+5. Move to the next phase in the table.
+6. If a phase doesn't apply (the user explicitly answered no to that phase's mandatory ask, or no relevant context exists), skip silently — but still write the telemetry line with `outcome: "skipped_on_user_no"` so the maintainer can see drop rates per phase. "Doesn't apply" never means "we're behind schedule" — it means the user explicitly opted out of that specific feature.
+7. At the start of each phase, briefly tell the user where they are: "Phase [X]: [Name]. This is where we [one sentence]."
 
 ### Variables to Track Across Phases
 
