@@ -65,7 +65,6 @@ def cmd_append(args: argparse.Namespace) -> int:
         "outcome": args.outcome,
         "user_redirected": bool(args.redirected),
         "new_improvisation_seen": args.new_improvisation,
-        "workshop_mode": bool(args.workshop),
     }
 
     _ensure_parent(LOG_PATH)
@@ -80,7 +79,6 @@ def cmd_append(args: argparse.Namespace) -> int:
                     "last_completed_phase": args.phase,
                     "ts": event["ts"],
                     "version": PROGRESS_VERSION,
-                    "workshop_mode": bool(args.workshop),
                 },
                 ensure_ascii=False,
                 indent=2,
@@ -139,9 +137,6 @@ def cmd_summarize(args: argparse.Namespace) -> int:
             return 2
         events = [e for e in events if (t := _ts(e)) and t >= since]
 
-    if args.workshop_only:
-        events = [e for e in events if e.get("workshop_mode")]
-
     if not events:
         print("no events match the filters")
         return 0
@@ -195,7 +190,6 @@ def main(argv: list[str] | None = None) -> int:
         "outcome",
         help=f'one of {sorted(VALID_OUTCOMES)}',
     )
-    p_append.add_argument("--workshop", action="store_true", help="workshop-mode install")
     p_append.add_argument(
         "--new-improvisation",
         default=None,
@@ -210,7 +204,6 @@ def main(argv: list[str] | None = None) -> int:
 
     p_sum = sub.add_parser("summarize", help="aggregate per-phase + per-install stats")
     p_sum.add_argument("--since", default=None, help="filter events after YYYY-MM-DD (UTC)")
-    p_sum.add_argument("--workshop-only", action="store_true", help="only workshop-mode events")
     p_sum.set_defaults(func=cmd_summarize)
 
     args = parser.parse_args(argv)

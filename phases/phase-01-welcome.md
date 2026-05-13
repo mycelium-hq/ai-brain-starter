@@ -17,24 +17,21 @@ If the bootstrap completed via the email-gated install path, it cached the user'
 }
 ```
 
-If the file exists and parses cleanly, set these in your working memory and **DO NOT re-ask the corresponding questions**:
+If the file exists and parses cleanly, capture these into your working memory:
 
 - `RECAP_NAME` from `name`
 - `RECAP_EMAIL` from `email`
-- `PRIMARY_LANGUAGE` from `lang` (skip Step 1.0 entirely if present)
+- `RECAP_LANG` from `lang` — **a HINT, never authoritative**. Do NOT pre-set `PRIMARY_LANGUAGE` from this. Step 1.0 still runs and the user still picks.
 - `RECAP_BRANCH` (informational, used to tune Phase 11 wiring)
 - `RECAP_OS` (informational, used to skip the OS-detection step in Phase 5)
 
+`name` + `email` are facts the user typed themselves on the install page. Reuse them. `lang` is a server-side default from a one-field form (the install page defaults to `"en"` if no language is selected — Sneider's signup hit this default and the recap.lang was `"en"` even though no one ever asked him). Treat it as background context only.
+
 If the file is missing or malformed, fall back to the standard interview flow below (ask everything from scratch).
 
-When `RECAP_NAME` is set, your opening line in the user's primary language should be a **personalized welcome**, not a generic "Hey":
+**No personalized welcome before Step 1.0 runs.** The recap'd name lands in the Step 1.1 welcome AFTER the user has picked a language. Pre-emptive welcomes in English or Spanish would lock the conversation into a language the user never confirmed. Wait.
 
-- English: *"Welcome back, [name]. Let's get your second brain set up."*
-- Spanish: *"Hola [name], qué bueno verte. Vamos a poner en marcha tu segundo cerebro."*
-
-This eliminates the duplication between the install form and the setup interview. The user feels the system already knows them on sentence one.
-
-After reading the recap, continue with Step 1.−1 (mode detection) below. Skip Step 1.0 if `PRIMARY_LANGUAGE` is set from the recap.
+After reading the recap, continue with Step 1.−1 (mode detection) below. **Step 1.0 always runs. No exceptions.**
 
 ### Step 1.−1 — Detect mode: NEW PERSONAL VAULT vs JOINING EXISTING TEAM VAULT (run BEFORE the language question)
 
@@ -133,13 +130,38 @@ If we routed to mode B (joining an existing team vault), do NOT run Phases 2, 3,
 
 Don't ask the language question (1.0) or any of the personal-setup questions (1.1) — those are for new personal vaults only. The team vault already has its own CLAUDE.md with its own conventions.
 
-### Step 1.0 — Languages (ASK FIRST, BEFORE ANYTHING ELSE)
+### Step 1.0 — Languages (ASK FIRST, BEFORE ANYTHING ELSE — NO EXCEPTIONS)
 
-Before any other question, ask **in English**:
+**This step always runs.** Not "unless the recap has a lang field." Not "unless the user's first message was in English." Not "unless Phase -2 already set something." Always. The user has to pick.
 
-> "Quick first question: **what languages do you usually take notes and journal in?** It can be one, two, three, whatever. Some people slip into a second language for emotional content, or use one language for work and another for personal stuff — that's normal, tell me all of them.
+**Open polyglot.** The very first message you send must show the user their language is one of the options — not buried, not after a paragraph of English. Open with this exact greeting (verbatim, including the line breaks and the emoji-free wave), translated into the most common languages the substrate expects, with the call-to-action at the end:
+
+> 👋
 >
-> Then: **which one is your primary?** (The one you think and write in most.) I'll run the rest of this setup in that primary language and build everything — your CLAUDE.md, your journal prompts, your concept notes, your folder names — in it. The other languages will get added as aliases on every concept note, so wikilinks resolve no matter which language you wrote the entry in."
+> **What language do you want to do this in?**
+> ¿En qué idioma quieres hacer esto?
+> Em qual idioma você quer fazer isso?
+> Dans quelle langue veux-tu faire ça?
+> In welcher Sprache möchtest du das machen?
+> 你想用哪种语言来做这个？
+> どの言語でやりたいですか？
+> בְּאֵיזוֹ שָׂפָה אַתָּה רוֹצֶה לַעֲשׂוֹת אֶת זֶה?
+> أَيُّ لُغَةٍ تُرِيدُ أَنْ تَفْعَلَ هَذَا بِهَا؟
+>
+> *Just answer in the language you want me to use. I'll match you.*
+> *Responde en el idioma que quieras usar. Te sigo.*
+
+The user typing back "español" / "français" / "Português" / "中文" / a sentence in any language is the signal. Match whatever they wrote in. If they answer in a language not in the list above, that's fine too — match their language and run the whole rest of setup in it.
+
+**After they answer, ask the follow-up in their chosen language:**
+
+> "Got it. Do you also take notes / journal in any other languages? Some people slip into a second language for emotional content, or use one language for work and another for personal stuff — that's normal, tell me all of them. Or 'just this one' if it's only one language."
+
+Then store:
+- `PRIMARY_LANGUAGE` — the language they chose to set up in (whatever they answered in / wrote)
+- `SECONDARY_LANGUAGES` — list (possibly empty) of every other language they mentioned. These drive the alias generation later.
+
+**Why the recap.lang cannot drive this:** the install signup form defaults to `lang: "en"` when no field is provided (which is most of the time, because the form prefills it from URL params or browser locale). A user who never picked English ends up with `recap.lang: "en"` and a setup interview that silently runs in English. The first install where this surfaced: Sneider, 2026-05-12, recap-defaulted to English without ever being asked. Don't trust recap.lang as authoritative. Open polyglot. Let the user pick by responding.
 
 Wait for their answer. Store it as:
 - `PRIMARY_LANGUAGE` — the one language the whole bot runs in
