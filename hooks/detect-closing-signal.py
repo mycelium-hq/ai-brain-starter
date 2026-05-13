@@ -186,12 +186,15 @@ def classify_signal(prompt: str, packs: dict, custom: list[str]) -> tuple[str | 
 
     text = prompt.strip()
 
-    # False-positive guards run FIRST
-    if is_false_positive(text, packs.get("false_positive_guards", [])):
-        log_debug("false-positive guard matched, skipping")
-        return (None, None)
+    # Strong-tier matches (custom, explicit, high_confidence) OVERRIDE
+    # false-positive guards. The guard is meant to catch "okay let's continue"
+    # mid-conversation transitions — NOT to suppress "okay let's close this
+    # session" which contains a clear close verb. Fix shipped 2026-05-12 after
+    # an "Okay, let's close this session" prompt was silently suppressed by the
+    # `^ok(ay)?[,.\s]+(let'?s|now)...` guard despite high_confidence pattern
+    # `\b(let'?s\s+)?close\s+(this|the)\s+session\b` also matching.
 
-    # User custom patterns are highest authority
+    # User custom patterns are highest authority — always win, FP guard skipped
     for pattern in custom:
         try:
             if re.search(pattern, text, re.IGNORECASE | re.MULTILINE):
@@ -199,7 +202,23 @@ def classify_signal(prompt: str, packs: dict, custom: list[str]) -> tuple[str | 
         except re.error:
             continue
 
-    for level in ("explicit", "high_confidence", "emoji_only", "ambiguous"):
+    # Strong tiers (explicit, high_confidence) override FP guards
+    for level in ("explicit", "high_confidence"):
+        for pattern in packs.get(level, []):
+            try:
+                if re.search(pattern, text, re.IGNORECASE | re.MULTILINE):
+                    log_debug(f"matched [{level}] (FP guard bypassed): {pattern}")
+                    return (level, pattern)
+            except re.error as e:
+                log_debug(f"bad pattern '{pattern}': {e}")
+                continue
+
+    # For weaker tiers (emoji_only, ambiguous), apply FP guards
+    if is_false_positive(text, packs.get("false_positive_guards", [])):
+        log_debug("false-positive guard matched (no strong-tier match), skipping")
+        return (None, None)
+
+    for level in ("emoji_only", "ambiguous"):
         for pattern in packs.get(level, []):
             try:
                 if re.search(pattern, text, re.IGNORECASE | re.MULTILINE):
