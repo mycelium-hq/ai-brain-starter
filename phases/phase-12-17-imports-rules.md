@@ -80,18 +80,37 @@ This is what turns a vault from a filing system into a thinking system. The conc
 
 ## Phase 15: Backup & Sync Setup
 
-**MANDATORY ASK — never skip.** If their vault folder dies and there's no backup, the entire install is lost work. Always ask:
+**Silent detection. Do NOT ask the user to pick from a list.** Open-ended "Google Drive / iCloud / Dropbox / Git / local — pick one?" mid-install is the classic attrition point. The user lacks context to choose, momentum dies. Detect their current state and surface it; only prompt for action when there is no sync detected.
 
-"How do you want to back up your vault? Pick one: Google Drive, iCloud, Dropbox, Git (private GitHub repo), or just local (manual external-drive copies)?"
+Run this detection silently and capture the result:
 
-**Important:** "Your vault is just a folder of files. If that folder disappears, everything is gone. Let's make sure it's backed up."
+```bash
+VAULT="[VAULT_PATH]"
+case "$VAULT" in
+  *"/Mobile Documents/iCloud~md~obsidian/"*|*"/iCloud Drive/"*)
+    echo "BACKUP_DETECTED=iCloud" ;;
+  *"/Google Drive/"*|*"/GoogleDrive/"*|*"/Google Drive - "*)
+    echo "BACKUP_DETECTED=Google Drive" ;;
+  *"/Dropbox/"*|*"/Dropbox - "*)
+    echo "BACKUP_DETECTED=Dropbox" ;;
+  *"/OneDrive/"*|*"/OneDrive - "*)
+    echo "BACKUP_DETECTED=OneDrive" ;;
+  *)
+    echo "BACKUP_DETECTED=none" ;;
+esac
+```
 
-Options:
-- **Google Drive / Dropbox / iCloud:** "Move your vault folder into your cloud sync folder. It'll back up automatically. This also lets you access it from multiple devices."
-- **Git:** "If you're comfortable with git, we can initialize a repo and push to GitHub (private). This gives you version history — you can undo any change."
-- **Just local:** "At minimum, set a reminder to copy the vault folder to an external drive once a week."
+**If a sync is detected** (`iCloud`, `Google Drive`, `Dropbox`, `OneDrive`): say ONE sentence confirming, then move on. No ask.
 
-If they want to share the vault with a team: "Google Drive is the best option for team vaults. Everyone installs Google Drive for Desktop, opens the vault in Obsidian, and the files sync. I can help you set up a separate team vault later."
+> "Your vault is in [DETECTED], so it's syncing automatically. Anything you write lands in your cloud backup within seconds. Moving on."
+
+**If no sync is detected** (vault lives on Desktop, Documents, raw home, etc.): surface the risk in one sentence + offer the one-line fix. Still no five-option menu.
+
+> "Heads up: your vault is at `[VAULT_PATH]`, which doesn't sync to a cloud backup. If your laptop dies, the vault is gone. The fastest fix is to move the folder into iCloud Drive (or Google Drive / Dropbox / OneDrive — whichever you already use). Want me to wait while you do that, or carry on and come back to it?"
+
+Wait for a yes/no. On yes, give them the drag-and-drop instructions for their detected OS. On no, log a `[backup-deferred]` line to the session file so the next session's `/diagnose` surfaces it. Do NOT block the install. Backup is important but the install closing flow is more important than getting a perfect answer here.
+
+Team-vault sharing is handled separately in Phase 20 — do NOT mention it here.
 
 ## Phase 16: Add Obsidian Power Rules to CLAUDE.md
 

@@ -351,10 +351,33 @@ Do NOT explain the layered architecture, the hooks, the language packs, the Haik
 
 ---
 
+## Phase 24.6 — Future-session pointer (one paragraph, then end)
+
+After the close walkthrough, plant ONE seed for the next session — what to do AFTER they've read the Substack post and slept on it. This is not another decision to make tonight; it's the path forward they'll come back to. Speak in their PRIMARY_LANGUAGE, one paragraph, conversational register.
+
+**EN:**
+> "One more thing for your future self. Right now the vault is mostly empty. The more of your actual thinking that lives in here, the more I can do for you. Next time we work together: bring in the notes you're already using — the active project docs, the journal you've been writing in a different app, the meeting notes from last quarter. Not everything you've ever written. Just the stuff you're actually working from right now. Then ask me to have the panel review the organization — we can decide together what belongs where. Once that's settled, run `/second-brain-mapping` in a fresh session and the whole vault becomes queryable. That's the path. Tonight, just read the Substack post."
+
+**ES:**
+> "Una última cosa para tu yo del futuro. Ahora mismo el vault está casi vacío. Mientras más de tu pensamiento real viva acá adentro, más puedo hacer por ti. La próxima vez que trabajemos juntos: trae las notas que ya estás usando — los documentos de proyectos activos, el diario que has estado escribiendo en otra app, las notas de reuniones del último trimestre. No todo lo que has escrito en tu vida. Solo lo que estás usando ahora mismo. Después me pides que el panel revise la organización — decidimos juntos qué va dónde. Cuando eso esté claro, corre `/second-brain-mapping` en una sesión nueva y todo el vault se vuelve consultable. Ese es el camino. Esta noche, solo lee el Substack."
+
+Why this phase matters: install completion is the moment of highest motivation AND highest decision fatigue. The user can't act on more right now. But they will remember what's NEXT if you plant it cleanly. The right shape is "future-tense, single concrete next action, framed as the thing that turns the vault from empty room into actual brain."
+
+**Banned framings:**
+- "Now let's organize all your files." — too much, wrong moment.
+- "Bring in everything you've ever written." — exactly the bulk-import that pollutes the vault and degrades `/second-brain-mapping` output.
+- "Run `/second-brain-mapping` next" with no precondition — the skill produces empty output on a near-empty vault.
+- "Optionally..." — anything optional in a close phrase gets skipped; the future-session pointer is the actual closer.
+
+After this paragraph, stop. Do not add another phase, another link, another check. The install is done. The user closes this session and reads the Substack post.
+
+---
+
 ## Important Notes for Claude
 
 - GO SLOW. Wait for answers. Don't dump instructions.
 - **NEVER STOP MID-SETUP.** After completing each phase, ALWAYS continue to the next phase automatically. Do not wait for the user to ask "what's next?" — tell them what's coming and proceed. The only reasons to pause are: (1) the user explicitly says "let's stop here" or "I need a break," (2) a critical install failed and needs manual intervention, or (3) the user asks a question that needs answering before continuing. After the journal phase especially — there are 10+ more phases. Don't stop there.
+- **PHASES 24, 24.5, AND 24.6 ARE MANDATORY CLOSING PHASES.** Fire ALL THREE even if a prior optional phase (20 team vault, 22 patterns, 23 theme) was skipped or 23.5 errored mid-script. Phase 24 = Substack first-week handoff (the user does not get pointed at the post if you skip it). Phase 24.5 = session-close walkthrough (the close cascade is invisible if you skip it). Phase 24.6 = future-session pointer (the user doesn't know what to do next session if you skip it). Skipping any of these silently is a known failure mode: install reaches the second-brain-mapping setup, the model thinks "we're done," closes the session without firing 24/24.5/24.6. Do not do that. The install is not complete until all three fire.
 - At the start of each phase, briefly tell the user where they are: "Phase [X] of 21: [Name]. This is where we [one sentence]."
 - If context gets compressed mid-setup (long session), re-read SKILL.md to pick up where you left off. Check which phases are done by looking at what exists in the vault (folders, CLAUDE.md, skills, templates).
 - If they seem overwhelmed, say: "We can stop here and pick up the rest tomorrow. What we've done so far is already working." But default is to KEEP GOING.
