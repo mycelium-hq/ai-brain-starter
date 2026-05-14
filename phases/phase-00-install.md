@@ -14,6 +14,8 @@ Non-technical users will think nothing is happening if Claude goes silent during
 
 As bootstrap prints its own check-mark lines per tool, you don't need to narrate each one. The output is already reassuring. Chime in once at the end: *"All tools ready. Now let's get you set up."* Or, on failure: *"A couple of tools didn't install (listed above). I'll work around them for now and we can retry at the end. None of them are blocking what we're about to do."*
 
+**DO NOT use the Monitor tool on bootstrap output.** Monitor renders every stdout line as a separate "Human:" turn in the conversation transcript — empty lines from brew/npm chatter included. Users see a wall of bare `Human:` labels interspersed with progress messages and leaked `<task-notification>` XML blocks. Bootstrap's own stdout is already user-visible — just `Bash(bash bootstrap.sh)` and let it print directly. If you want async progress, set `run_in_background: true` on the Bash call and read the result when it finishes. Monitor is for log-streaming long-running daemons, not installers.
+
 ---
 
 ### Step 0.1a. Email — ask once, in chat (skip if marker already on disk)
