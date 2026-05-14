@@ -78,39 +78,19 @@ type: concept
 
 This is what turns a vault from a filing system into a thinking system. The concepts are the nodes. The links are the edges. The graph becomes navigable.
 
-## Phase 15: Backup & Sync Setup
+## Phase 15: Backup confirmation (one sentence, then move on)
 
-**Silent detection. Do NOT ask the user to pick from a list.** Open-ended "Google Drive / iCloud / Dropbox / Git / local — pick one?" mid-install is the classic attrition point. The user lacks context to choose, momentum dies. Detect their current state and surface it; only prompt for action when there is no sync detected.
+**The vault lives on the Desktop. That's the canonical home — set in Phase 1 step 7 ("Put it somewhere easy to find, like your Desktop") and it stays that way.** Do NOT ask the user to pick a backup mechanism. Do NOT push them to move the vault into iCloud / Google Drive / Dropbox. Their normal backup habits (Time Machine, external drive, cloud sync at the OS level, whatever they already do) cover the vault — it's just a folder of markdown files.
 
-Run this detection silently and capture the result:
+One sentence acknowledgment, then move on. In their PRIMARY_LANGUAGE.
 
-```bash
-VAULT="[VAULT_PATH]"
-case "$VAULT" in
-  *"/Mobile Documents/iCloud~md~obsidian/"*|*"/iCloud Drive/"*)
-    echo "BACKUP_DETECTED=iCloud" ;;
-  *"/Google Drive/"*|*"/GoogleDrive/"*|*"/Google Drive - "*)
-    echo "BACKUP_DETECTED=Google Drive" ;;
-  *"/Dropbox/"*|*"/Dropbox - "*)
-    echo "BACKUP_DETECTED=Dropbox" ;;
-  *"/OneDrive/"*|*"/OneDrive - "*)
-    echo "BACKUP_DETECTED=OneDrive" ;;
-  *)
-    echo "BACKUP_DETECTED=none" ;;
-esac
-```
+**EN:** "One thing to mention: your vault is a folder of markdown files. Whatever you normally use to back up your computer (Time Machine, an external drive, a cloud sync, whatever) already covers it. No special backup setup needed. Moving on."
 
-**If a sync is detected** (`iCloud`, `Google Drive`, `Dropbox`, `OneDrive`): say ONE sentence confirming, then move on. No ask.
+**ES:** "Una cosa: tu vault es una carpeta con archivos markdown. Lo que sea que normalmente uses para hacer copias de seguridad de tu computador (Time Machine, un disco externo, una sync en la nube, lo que sea) ya lo cubre. No hace falta una configuración especial. Sigamos."
 
-> "Your vault is in [DETECTED], so it's syncing automatically. Anything you write lands in your cloud backup within seconds. Moving on."
+That's it. Do NOT recommend a specific backup tool, do NOT surface a five-option menu, do NOT trigger an alarm because the vault lives on Desktop. Desktop is correct.
 
-**If no sync is detected** (vault lives on Desktop, Documents, raw home, etc.): surface the risk in one sentence + offer the one-line fix. Still no five-option menu.
-
-> "Heads up: your vault is at `[VAULT_PATH]`, which doesn't sync to a cloud backup. If your laptop dies, the vault is gone. The fastest fix is to move the folder into iCloud Drive (or Google Drive / Dropbox / OneDrive — whichever you already use). Want me to wait while you do that, or carry on and come back to it?"
-
-Wait for a yes/no. On yes, give them the drag-and-drop instructions for their detected OS. On no, log a `[backup-deferred]` line to the session file so the next session's `/diagnose` surfaces it. Do NOT block the install. Backup is important but the install closing flow is more important than getting a perfect answer here.
-
-Team-vault sharing is handled separately in Phase 20 — do NOT mention it here.
+Team-vault sharing is handled separately in Phase 20.
 
 ## Phase 16: Add Obsidian Power Rules to CLAUDE.md
 
