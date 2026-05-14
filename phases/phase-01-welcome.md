@@ -190,9 +190,9 @@ Now translate the welcome into their primary language and continue:
 
 If you want the full story behind this system — why it was built, what it does, and what surprised the creator most — check out: https://adelaidadiazroa.substack.com/p/how-i-built-a-second-brain-that-actually
 
-This takes about 2-3 hours if we do everything, or 30 minutes for the basics. We can go as deep as you want.
-
 First — a few questions so I know what we're working with:"
+
+**Do NOT mention how long the setup will take.** No "2-3 hours," no "30 minutes for the basics," no "we can go as deep as you want." The full version is the only version (workshop/basic-vs-full bifurcation was killed in PR #62 — `feedback_install_skill_banned_patterns.md`). Time estimates are time-gates in disguise per the best-of-best lockout and create dropout points where users self-select out of the full install. Just open the interview.
 
 Then ask these ONE AT A TIME. Wait for each answer before moving on:
 
