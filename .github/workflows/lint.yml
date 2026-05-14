@@ -210,6 +210,26 @@ jobs:
           fi
           echo "Private-context scan passed (added lines only)."
 
+  worktree-session-close:
+    name: worktree session-close invariant (#65)
+    runs-on: ubuntu-latest
+    # Catches the bug class from issue #65: session-end-hook.sh resolving
+    # VAULT to a worktree path instead of the main vault, which routed
+    # session commits to `claude/<slug>` branches that worktree-prune.sh
+    # later deleted. Test spawns a fake vault + worktree and asserts:
+    #   1. resolve_main_vault strips the worktree segment
+    #   2. worktree-prune refuses to delete branches with unmerged commits
+    #   3. worktree-prune still deletes fully-merged orphan branches
+    # No untrusted user input is referenced in any run: command.
+    steps:
+      - uses: actions/checkout@v6
+      - name: configure git identity
+        run: |
+          git config --global user.email "ci@example.com"
+          git config --global user.name "ci"
+      - name: run integration test
+        run: bash tests/integration/test_worktree_session_close.sh
+
   references:
     name: phase docs reference real repo files
     runs-on: ubuntu-latest
