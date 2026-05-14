@@ -19,7 +19,8 @@
 #     - Claude Code (via npm) and Obsidian (desktop app)
 #     - graphify CLI + Claude skill (with optimization scripts)
 #     - All bundled sub-skills: graphify, meeting-todos, patterns, insights,
-#       deconstruct, daily-journal, repurpose-talk, nano-banana (skill docs only)
+#       deconstruct, daily-journal, repurpose-talk, nano-banana (skill docs only),
+#       second-brain-mapping, setup-vault-types, diagnose
 #     - humanizer (de-AI writing) — cloned from its own fork repo
 #     - Granola + ChatPRD MCPs
 #     - Marketplace: obsidian-skills (kepano); plugins: obsidian, context7, playwright
@@ -1089,7 +1090,7 @@ SKILL_FORKS=()
 SKILL_SYMLINKS=()
 SKILLS_TO_SYNC=()
 
-for sub in graphify meeting-todos patterns insights deconstruct daily-journal repurpose-talk nano-banana; do
+for sub in graphify meeting-todos patterns insights deconstruct daily-journal repurpose-talk nano-banana second-brain-mapping setup-vault-types diagnose; do
   dst="$HOME/.claude/skills/$sub"
 
   if [[ -L "$dst" ]]; then
@@ -1490,7 +1491,7 @@ for check in "${CHECKS[@]}"; do
   fi
 done
 # Skill folders (full bundled set + humanizer + ai-brain-starter itself)
-for sub in graphify meeting-todos patterns insights deconstruct daily-journal repurpose-talk nano-banana humanizer ai-brain-starter diagnose; do
+for sub in graphify meeting-todos patterns insights deconstruct daily-journal repurpose-talk nano-banana humanizer ai-brain-starter diagnose second-brain-mapping setup-vault-types; do
   if [[ -d "$HOME/.claude/skills/$sub" ]]; then
     ok "skill: $sub"
   else
