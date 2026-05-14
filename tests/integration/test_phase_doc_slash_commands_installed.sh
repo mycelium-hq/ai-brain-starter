@@ -26,6 +26,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BOOTSTRAP="$REPO_ROOT/bootstrap.sh"
 SKILLS_DIR="$REPO_ROOT/skills"
+COMMANDS_DIR="$REPO_ROOT/commands"
 
 # Slash commands documented as user-runnable in phase docs.
 # Maintained explicitly so we don't accidentally promote a closing-signal
@@ -72,6 +73,18 @@ for skill in "${REQUIRED_SKILLS[@]}"; do
     echo "FAIL: $skill is referenced as a slash command in phase docs but is NOT in any bootstrap.sh install loop" >&2
     echo "  Phase docs reference /$skill but new installs won't have it." >&2
     echo "  Add '$skill' to the 'for sub in ...' loops in bootstrap.sh." >&2
+    FAILED=$((FAILED + 1))
+    continue
+  fi
+  # (c) commands/<skill>.md exists in repo. Without this file, the skill
+  # folder is installed but the slash command doesn't appear in the
+  # Claude Code palette. This was the surface bug behind the 2026-05-14
+  # install report where /second-brain-mapping wasn't surfaced even
+  # though the skill folder existed.
+  if [ ! -f "$COMMANDS_DIR/$skill.md" ]; then
+    echo "FAIL: commands/$skill.md missing in repo" >&2
+    echo "  Without this file, /$skill won't appear in the Claude Code slash command palette." >&2
+    echo "  Skill folders alone don't register palette entries — commands/<name>.md does." >&2
     FAILED=$((FAILED + 1))
     continue
   fi
