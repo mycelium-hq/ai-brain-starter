@@ -1185,6 +1185,48 @@ fi
 [[ ${#SKILL_SYMLINKS[@]} -gt 0 ]] && log "Symlinks preserved untouched: ${#SKILL_SYMLINKS[@]} skill(s)"
 
 # ───────────────────────────────────────────────────────────────────────────────
+# Slash commands — install commands/*.md into ~/.claude/commands/
+# Skill folders alone do NOT register slash commands in Claude Code's palette.
+# Plugin-style `commands/<name>.md` files do. Without this step, users get the
+# skills installed but typing `/` doesn't surface them in the command list.
+# This was the surface bug behind the 2026-05-14 install report where
+# /second-brain-mapping didn't appear in the palette after install completed.
+# ───────────────────────────────────────────────────────────────────────────────
+hdr "Installing slash commands"
+COMMANDS_SRC="$SKILL_DIR/commands"
+COMMANDS_DST="$HOME/.claude/commands"
+if [[ -d "$COMMANDS_SRC" ]]; then
+  mkdir -p "$COMMANDS_DST"
+  COMMAND_COUNT=0
+  COMMAND_BACKED_UP=0
+  STAMP="$(date +%Y-%m-%d-%H%M)"
+  for cmd_src in "$COMMANDS_SRC"/*.md; do
+    [[ -f "$cmd_src" ]] || continue
+    cmd_name="$(basename "$cmd_src")"
+    cmd_dst="$COMMANDS_DST/$cmd_name"
+    if [[ -f "$cmd_dst" ]]; then
+      if ! cmp -s "$cmd_src" "$cmd_dst"; then
+        cp "$cmd_dst" "$cmd_dst.bak-$STAMP"
+        BACKUPS+=("$cmd_dst.bak-$STAMP")
+        cp "$cmd_src" "$cmd_dst"
+        COMMAND_BACKED_UP=$((COMMAND_BACKED_UP + 1))
+      fi
+    else
+      cp "$cmd_src" "$cmd_dst"
+      COMMAND_COUNT=$((COMMAND_COUNT + 1))
+    fi
+  done
+  if [[ $COMMAND_COUNT -gt 0 || $COMMAND_BACKED_UP -gt 0 ]]; then
+    ok "commands: $COMMAND_COUNT new, $COMMAND_BACKED_UP updated (backups preserved)"
+    UPDATED+=("slash commands ($COMMAND_COUNT new, $COMMAND_BACKED_UP updated)")
+  else
+    ok "commands: already current"
+  fi
+else
+  warn "commands/ directory not found at $COMMANDS_SRC — slash commands will not appear in palette"
+fi
+
+# ───────────────────────────────────────────────────────────────────────────────
 # Humanizer
 # ───────────────────────────────────────────────────────────────────────────────
 
