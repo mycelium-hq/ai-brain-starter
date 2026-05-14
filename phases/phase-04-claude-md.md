@@ -6,11 +6,33 @@
 Ask these ONE AT A TIME:
 
 1. "What are you working on right now? Top 3 priorities across work and life."
-2. "Who are the key people in your life right now? (Give me 5-10 names and who they are — coworker, partner, sister, boss, friend, whatever.)"
+2. "Who are the key people in your life right now? Give me 5-10. For each one I need: **full name, nickname or what you actually call them, and who they are** (coworker, partner, sibling, boss, friend, whatever). Example: *'Jane Doe, I call her Jane, my sister.'*"
 3. "What tools do you use daily? (Project management, email, calendar, note apps, design tools, etc.)"
 4. "Are there terms, abbreviations, or nicknames you use that I wouldn't know? (Project names, inside jokes, acronyms)"
 5. "How do you want me to behave? For example: be concise? explain things simply? push back on bad ideas? confirm before making changes?"
 6. "Anything else I should know about you that would help me be useful? (Your personality, what frustrates you, what motivates you, your values)"
+
+**For question 2, also write a per-person CRM file** at `[VAULT_PATH]/👤 CRM/<First Last>.md` for every person the user names. The CLAUDE.md `## People` section is the quick-reference index; the CRM file is the durable record that every future skill (meeting-todos, daily-journal, /patterns, panel attribution guard, advisory-panel exclusion) can read. Schema:
+
+```markdown
+---
+type: person
+nickname: <what they actually call them>
+relationship: <sibling | cofounder | client | friend | partner | etc.>
+created: <YYYY-MM-DD>
+---
+
+## <Full Name>
+
+**Also called:** <nickname>
+**Relationship:** <one line>
+
+### Notes
+
+[blank — accrues over time as the person comes up in journals, meetings, decisions]
+```
+
+If a name comes back ambiguous ("my sister" with no name, "my boss" with no name), ask one targeted follow-up. Never invent a full name or guess at spelling. If the user provides only one name, save that — incomplete is better than fabricated.
 
 Now create the CLAUDE.md at the vault root with this structure:
 

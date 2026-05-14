@@ -126,23 +126,71 @@ def main() -> None:
     if not reconciled:
         return
 
-    msg = (
-        f"auto: reconcile-worktree-shared synced {len(reconciled)} "
-        f"shared-canonical file(s) to match main vault\n\n"
-        + "\n".join(f"- {f}" for f in reconciled)
-    )
-    res = subprocess.run(
-        ["git", "-C", str(wt), "commit", "-m", msg, "--quiet"],
+    # PRIMARY PATH: fast-forward the worktree branch to the main branch tip.
+    # If the worktree branch is a strict ancestor of master/main (the normal
+    # case — worktrees are created from master HEAD and don't accumulate
+    # their own commits when hooks route writes to main), FF-merge advances
+    # the worktree branch pointer without creating any new commit. The
+    # "modified" files become "clean" naturally because HEAD now matches
+    # the working tree byte-for-byte. No orphan commit ever appears on
+    # `claude/<slug>`.
+    #
+    # FALLBACK: if FF fails (worktree branch diverged from main — a real
+    # session-end-hook commit landed there, or the user committed manually),
+    # fall back to the prior auto-commit behavior so the archive prompt
+    # still sees a clean state. This is the rare case and is exactly what
+    # generates orphans, but we prefer one orphan now to repeatedly warning
+    # about uncommitted bytes that already live on main.
+    main_branch = "master"
+    has_master = subprocess.run(
+        ["git", "-C", str(wt), "show-ref", "--verify", "--quiet", "refs/heads/master"],
+    ).returncode == 0
+    if not has_master:
+        # Repo uses "main" as default branch
+        main_branch = "main"
+
+    ff_result = subprocess.run(
+        ["git", "-C", str(wt), "merge", "--ff-only", "--no-edit", main_branch],
         capture_output=True,
+        text=True,
     )
-    if res.returncode == 0:
+
+    if ff_result.returncode == 0:
+        # FF succeeded: worktree branch now points at main's tip. Files that
+        # were "modified vs HEAD" are now "clean" because HEAD has the new
+        # content. No commit was created. Issue #65-family orphan-commit
+        # accumulation prevented.
         print(json.dumps({
             "systemMessage": (
-                f"[reconcile-worktree-shared] auto-staged + committed "
-                f"{len(reconciled)} shared-canonical file(s) on worktree "
-                f"that already matched main vault."
+                f"[reconcile-worktree-shared] fast-forwarded worktree branch "
+                f"to {main_branch} ({len(reconciled)} file(s) reconciled with "
+                f"no orphan commit)."
             )
         }))
+    else:
+        # FF failed: worktree branch has diverged from main (real session
+        # commits or manual work landed there). Fall back to auto-commit
+        # on the worktree branch so the archive prompt still sees clean
+        # state. This is the rare path.
+        msg = (
+            f"auto: reconcile-worktree-shared synced {len(reconciled)} "
+            f"shared-canonical file(s) to match main vault (FF to "
+            f"{main_branch} not possible — branch diverged)\n\n"
+            + "\n".join(f"- {f}" for f in reconciled)
+        )
+        commit_result = subprocess.run(
+            ["git", "-C", str(wt), "commit", "-m", msg, "--quiet"],
+            capture_output=True,
+        )
+        if commit_result.returncode == 0:
+            print(json.dumps({
+                "systemMessage": (
+                    f"[reconcile-worktree-shared] FF to {main_branch} not "
+                    f"possible; committed {len(reconciled)} file(s) on "
+                    f"worktree branch instead. Branch will need recovery "
+                    f"via scripts/recover-orphan-claude-branches.py."
+                )
+            }))
 
     if divergent:
         print(json.dumps({
