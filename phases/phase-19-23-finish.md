@@ -14,6 +14,39 @@ Run the journal interview. Save the entry. Show them the file in their vault.
 
 "That's your first entry. The vault is alive now. Every conversation from here makes it smarter."
 
+## Phase 19.5 — Bring me ONE active doc right now (activation moment)
+
+**This is critical. Do not skip.** The install can't assume the user will be back for another session. We have THIS one. Naming three commands and pointing at a Substack post is not enough — they need to actually use the system once, with their own content, before they close.
+
+Ask in PRIMARY_LANGUAGE:
+
+**EN:** "Before we wrap up — one thing that turns this from 'installed' to 'actually useful' is putting real content in. Not everything you've ever written. ONE active thing — the project doc you're working on, the goal you're tracking, a meeting note from this week, the notes on a book you're reading. What's something you're working with right now that you'd want me to know about in our next session?"
+
+**ES:** "Antes de cerrar — una cosa que convierte esto de 'instalado' a 'realmente útil' es meter contenido real. No todo lo que has escrito. UNA cosa activa: el documento del proyecto en el que estás, la meta que estás siguiendo, una nota de reunión de esta semana, los apuntes del libro que estás leyendo. ¿Qué es algo con lo que estés trabajando ahora que te gustaría que yo conociera en nuestra próxima sesión?"
+
+Wait for their answer. Then help them import that ONE thing into the vault — into the right folder based on what they described:
+
+| What they describe | Where it goes |
+|---|---|
+| Active project doc | `📝 Notes/Projects/` (or whatever they called Notes in Phase 3) |
+| Goal or commitment | `🏠 Home/Goals.md` or `🏠 Home/` (or their Home equivalent) |
+| Meeting note | `📝 Notes/Meetings/` |
+| Book notes | `📝 Notes/Books/` |
+| Client doc | `👤 CRM/[Client Name].md` or `📝 Notes/Clients/` |
+| Anything else | `📝 Notes/` root, ask them to name it |
+
+Ask them to paste the content (or copy-paste from their existing app — Apple Notes, Google Docs, Notion, paper photo, voice memo transcript, whatever they have). Write it to the vault yourself. Confirm by showing them the file path. Add basic frontmatter (`type: <type>`, `created: <today>`) if it fits.
+
+Tell them what just happened in plain language:
+
+**EN:** "Done. That's now in your vault at `[PATH]`. Next session I'll already know about it. The journal you just wrote and this document are the first two real things in your vault. Everything compounds from here."
+
+**ES:** "Listo. Eso ya está en tu vault en `[PATH]`. En la próxima sesión ya lo voy a conocer. El diario que escribiste y este documento son las primeras dos cosas reales en tu vault. Todo se compone desde acá."
+
+**Why this phase matters:** the install has been about scaffolding (folders, CLAUDE.md, templates, skills, hooks). Scaffolding is invisible to the user — they can't tell whether it works until real content lives in it. ONE imported document is the activation moment that proves the system to them. Without it, they close the session and the vault stays as empty scaffolding waiting for a "next session" that may never happen.
+
+**Bounded scope.** Resist the urge to push for more than one document. The user is tired. The point is proof, not bulk. If they say "I have a lot of stuff to bring in," answer: "Bring one now. The rest can come over the coming weeks — there's no rush. We just want one in tonight."
+
 ## Phase 20: Team Vault (Optional)
 
 Ask: "Do you have a team — cofounders, employees, contractors, collaborators? Want to set up a shared vault they can all access, synced from your personal one?"
@@ -367,25 +400,25 @@ Do NOT explain the layered architecture, the hooks, the language packs, the Haik
 
 ---
 
-## Phase 24.6 — Future-session pointer (one paragraph, then end)
+## Phase 24.6 — Progressive-use pointer (one paragraph, then end)
 
-After the close walkthrough, plant ONE seed for the next session — what to do AFTER they've read the Substack post and slept on it. This is not another decision to make tonight; it's the path forward they'll come back to. Speak in their PRIMARY_LANGUAGE, one paragraph, conversational register.
+After the close walkthrough, set the expectation for how the vault grows AS THEY USE IT — not as a deferred action they have to remember. The activation moment already happened in Phase 19.5 (their first imported doc). This phase is about pacing the rest of the import + when extra capabilities come online. Speak in their PRIMARY_LANGUAGE, one paragraph, conversational register.
 
 **EN:**
-> "One more thing for your future self. Right now the vault is mostly empty. The more of your actual thinking that lives in here, the more I can do for you. Next time we work together: bring in the notes you're already using — the active project docs, the journal you've been writing in a different app, the meeting notes from last quarter. Not everything you've ever written. Just the stuff you're actually working from right now. Then ask me to have the panel review the organization — we can decide together what belongs where. Once that's settled, run `/second-brain-mapping` in a fresh session and the whole vault becomes queryable. That's the path. Tonight, just read the Substack post."
+> "One last thing about pacing. The doc you just brought in plus tonight's journal are the first two real things in your vault. Over the next couple of weeks, when you reach for a note in your old system (Apple Notes, Google Docs, Notion, paper, whatever), just bring it in here instead. You don't have to migrate everything at once — let it happen organically. When you have ten or so real notes in, ask me 'can the panel review how my files are organized?' and we'll clean it up together. The `/second-brain-mapping` skill keeps the index fresh as content accumulates — run it weekly per the first-week post. The vault gets smarter the more of your actual life lives in here."
 
 **ES:**
-> "Una última cosa para tu yo del futuro. Ahora mismo el vault está casi vacío. Mientras más de tu pensamiento real viva acá adentro, más puedo hacer por ti. La próxima vez que trabajemos juntos: trae las notas que ya estás usando — los documentos de proyectos activos, el diario que has estado escribiendo en otra app, las notas de reuniones del último trimestre. No todo lo que has escrito en tu vida. Solo lo que estás usando ahora mismo. Después me pides que el panel revise la organización — decidimos juntos qué va dónde. Cuando eso esté claro, corre `/second-brain-mapping` en una sesión nueva y todo el vault se vuelve consultable. Ese es el camino. Esta noche, solo lee el Substack."
+> "Una última cosa sobre el ritmo. El documento que acabas de traer más el diario de esta noche son las primeras dos cosas reales en tu vault. En las próximas semanas, cuando estés buscando una nota en tu sistema anterior (Apple Notes, Google Docs, Notion, papel, lo que sea), simplemente tráela acá en vez. No tienes que migrar todo de una — déjalo pasar de forma orgánica. Cuando tengas unas diez notas reales adentro, pregúntame '¿puede el panel revisar cómo están organizados mis archivos?' y la limpiamos juntos. El skill `/second-brain-mapping` mantiene el índice fresco a medida que se acumula contenido — córrelo semanalmente como dice el post de la primera semana. El vault se vuelve más inteligente mientras más de tu vida real viva acá adentro."
 
-Why this phase matters: install completion is the moment of highest motivation AND highest decision fatigue. The user can't act on more right now. But they will remember what's NEXT if you plant it cleanly. The right shape is "future-tense, single concrete next action, framed as the thing that turns the vault from empty room into actual brain."
+Why this phase matters: install completion is the moment of highest motivation AND highest decision fatigue. The user already did the activation moment in Phase 19.5 (one doc imported). This phase tells them HOW the rest gets brought in — progressively, naturally, not as a homework assignment for a future session that may never happen.
 
 **Banned framings:**
-- "Now let's organize all your files." — too much, wrong moment.
-- "Bring in everything you've ever written." — exactly the bulk-import that pollutes the vault and degrades `/second-brain-mapping` output.
-- "Run `/second-brain-mapping` next" with no precondition — the skill produces empty output on a near-empty vault.
-- "Optionally..." — anything optional in a close phrase gets skipped; the future-session pointer is the actual closer.
+- "Next session, bring in your active notes." — punts activation to a session we can't guarantee. Use Phase 19.5 instead.
+- "Bring in everything you've ever written." — bulk import pollutes the vault.
+- "Run `/second-brain-mapping` next" with no precondition — the skill produces noisy output on a near-empty vault.
+- "Optionally..." — anything optional in a close phrase gets skipped; the progressive-use pointer is the actual closer.
 
-After this paragraph, stop. Do not add another phase, another link, another check. The install is done. The user closes this session and reads the Substack post.
+After this paragraph, stop. Do not add another phase, another link, another check. The install is done.
 
 ---
 
@@ -393,7 +426,7 @@ After this paragraph, stop. Do not add another phase, another link, another chec
 
 - GO SLOW. Wait for answers. Don't dump instructions.
 - **NEVER STOP MID-SETUP.** After completing each phase, ALWAYS continue to the next phase automatically. Do not wait for the user to ask "what's next?" — tell them what's coming and proceed. The only reasons to pause are: (1) the user explicitly says "let's stop here" or "I need a break," (2) a critical install failed and needs manual intervention, or (3) the user asks a question that needs answering before continuing. After the journal phase especially — there are 10+ more phases. Don't stop there.
-- **PHASES 24, 24.5, AND 24.6 ARE MANDATORY CLOSING PHASES.** Fire ALL THREE even if a prior optional phase (20 team vault, 22 patterns, 23 theme) was skipped or 23.5 errored mid-script. Phase 24 = Substack first-week handoff (the user does not get pointed at the post if you skip it). Phase 24.5 = session-close walkthrough (the close cascade is invisible if you skip it). Phase 24.6 = future-session pointer (the user doesn't know what to do next session if you skip it). Skipping any of these silently is a known failure mode: install reaches the second-brain-mapping setup, the model thinks "we're done," closes the session without firing 24/24.5/24.6. Do not do that. The install is not complete until all three fire.
+- **PHASES 19.5, 24, 24.5, AND 24.6 ARE MANDATORY.** Fire ALL FOUR even if a prior optional phase (20 team vault, 22 patterns, 23 theme) was skipped or 23.5 errored mid-script. Phase 19.5 = activation moment (the user imports their first active doc IN THIS SESSION because we can't assume another session will happen). Phase 24 = Substack first-week handoff with inline three-commands-and-one-habit orientation. Phase 24.5 = session-close walkthrough. Phase 24.6 = progressive-use pointer. Skipping any of these silently is a known failure mode: install reaches the second-brain-mapping setup, the model thinks "we're done," closes the session without firing the activation + closing phases. Do not do that. The install is not complete until all four fire.
 - At the start of each phase, briefly tell the user where they are: "Phase [X] of 21: [Name]. This is where we [one sentence]."
 - If context gets compressed mid-setup (long session), re-read SKILL.md to pick up where you left off. Check which phases are done by looking at what exists in the vault (folders, CLAUDE.md, skills, templates).
 - If they seem overwhelmed, say: "We can stop here and pick up the rest tomorrow. What we've done so far is already working." But default is to KEEP GOING.
