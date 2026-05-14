@@ -26,7 +26,37 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VAULT="${VAULT_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+
+# Resolve VAULT to the MAIN vault root, never a worktree.
+#
+# If $SCRIPT_DIR matches `.../<vault>/.claude/worktrees/<slug>/.../scripts`,
+# the script is executing from a worktree's own checkout. Walking up via
+# `$SCRIPT_DIR/../..` resolves to the worktree path, not the main vault,
+# and every subsequent write (META_DIR, SESSIONS_DIR, git add) lands on
+# the `claude/<slug>` branch instead of `master`. The worktree-prune cron
+# then deletes those branches assuming the work is on master — it isn't —
+# and the commits become orphaned, recoverable only via reflog until gc.
+# Symptom: session files silently disappear when the worktree is archived.
+# Mirrors the fix in hooks/post-tool-use-learnings.py (commit 78f4a37).
+resolve_main_vault() {
+  local p="$1"
+  case "$p" in
+    *"/.claude/worktrees/"*)
+      # Strip from `.claude/worktrees/<slug>/...` onward → main vault root.
+      echo "${p%%/.claude/worktrees/*}"
+      ;;
+    *)
+      echo "$p"
+      ;;
+  esac
+}
+
+if [ -n "${VAULT_ROOT:-}" ]; then
+  VAULT="$VAULT_ROOT"
+else
+  CANDIDATE="$(cd "$SCRIPT_DIR/../.." && pwd)"
+  VAULT="$(resolve_main_vault "$CANDIDATE")"
+fi
 
 # Read hook input (Stop hook contract: {session_id, transcript_path, cwd, ...})
 HOOK_INPUT="$(cat || true)"
