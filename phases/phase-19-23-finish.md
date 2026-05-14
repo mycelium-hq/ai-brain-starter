@@ -313,27 +313,43 @@ Install is done. This is the handoff from "installed" to "used." Close the loop 
 
 Tell the user in their PRIMARY_LANGUAGE only. Show one link, matching their language. Do NOT show both — that feels like marketing. One block, one link, done.
 
+**Why this phase matters:** the most common failure mode for a new install isn't a broken tool — it's a user who finishes setup and doesn't know where to start. Naming the three commands and one habit IN THE CONVERSATION (not just behind a Substack link) means the user walks away with the picture even if they never click. Inline orientation + link to depth is the canonical first-week onboarding shape.
+
+**Voice note for Claude:** resist the urge to add "Congrats!" or exclamation marks. The register is quiet confidence, not performance. "Well done" / "Bien hecho" lands harder than "You did it!" — and matches the voice of the whole setup.
+
+**Content alignment:** the three-commands-and-one-habit framing here matches the canonical live deployment at adelaidadiazroa.substack.com verbatim. If the post is updated, mirror the changes here so the install and the post stay in sync.
+
 **If PRIMARY_LANGUAGE is English (or any non-Spanish language):**
+
 > "Well done. Vault is ready.
 >
-> A short read on what to do in your first week, three commands and one habit:
+> Three commands and one habit for your first week:
 >
-> https://adelaidadiazroa.substack.com/p/your-first-week-with-your-second
+> 1. `/journal` — every night. This is the habit. It builds the data the weekly and monthly pattern insights run on. Missing a week means the weekly insight misses most of the week.
+> 2. `/second-brain-mapping` — once you've brought your active notes in (next session), run this to map the vault in small batches and make everything queryable.
+> 3. "What would the panel think?" — ask this before any strategic decision. Brings 3 to 5 named voices with built-in dissent.
 >
-> Read tonight. Run the first thing tomorrow."
+> Week 1 will feel quiet. If you do these three things, by day eight you'll feel what the brain is for. If you skip them, the vault sits in your Obsidian folder doing nothing.
+>
+> Longer walkthrough: https://adelaidadiazroa.substack.com/p/your-first-week-with-your-second
+>
+> Read it tonight. Stuck on anything? Just say so in any session."
 
 **If PRIMARY_LANGUAGE is Spanish:**
+
 > "Bien hecho. El vault está listo.
 >
-> Un artículo corto sobre qué hacer la primera semana: tres comandos y un hábito.
+> Tres comandos y un hábito para tu primera semana:
 >
-> https://perspectivasblog.substack.com/p/tu-primera-semana-con-tu-segundo
+> 1. `/journal` — todas las noches. Este es el hábito. Construye los datos sobre los que corren los insights semanales y mensuales. Si te saltas una semana, el insight semanal pierde la mayor parte de la semana.
+> 2. `/second-brain-mapping` — cuando hayas traído tus notas activas (en la próxima sesión), corre esto para mapear el vault en lotes pequeños y dejar todo consultable.
+> 3. "¿Qué pensaría el panel?" — pregúntalo antes de cualquier decisión estratégica. Trae de 3 a 5 voces nombradas con disenso incorporado.
 >
-> Léelo esta noche. Corre el primero mañana."
-
-Why this phase matters: the most common failure mode for a new install isn't a broken tool, it's a user who finishes setup and doesn't know where to start. A single short read with three concrete actions closes that gap.
-
-Voice note for Claude: resist the urge to add "Congrats!" or exclamation marks. The register is quiet confidence, not performance. "Well done" / "Bien hecho" lands harder than "You did it!" — and matches the voice of the whole setup.
+> La primera semana se va a sentir callada. Si haces estas tres cosas, para el día ocho vas a sentir para qué sirve el cerebro. Si te las saltas, el vault se queda en tu carpeta de Obsidian sin hacer nada.
+>
+> Recorrido más largo: https://perspectivasblog.substack.com/p/tu-primera-semana-con-tu-segundo
+>
+> Léelo esta noche. ¿Atascado en algo? Solo dilo en cualquier sesión."
 
 ---
 
