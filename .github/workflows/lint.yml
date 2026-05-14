@@ -230,6 +230,28 @@ jobs:
       - name: run integration test
         run: bash tests/integration/test_worktree_session_close.sh
 
+  reconcile-ff-invariant:
+    name: reconcile-worktree-shared FF invariant (PR #68)
+    runs-on: ubuntu-latest
+    # Catches the bug class from PR #68: reconcile-worktree-shared.py
+    # committing on the worktree branch instead of fast-forwarding it
+    # to master, which accumulated orphan commits on `claude/*` branches.
+    # Same family as #65, different mechanism. Test asserts:
+    #   1. Hook FF-merges worktree branch to master when files are
+    #      byte-identical and branch is a strict ancestor.
+    #   2. No new commits are created on `claude/<slug>` after FF.
+    #   3. Hook falls back to commit-on-branch when FF is impossible
+    #      (worktree branch diverged with its own commits).
+    # No untrusted user input is referenced in any run: command.
+    steps:
+      - uses: actions/checkout@v6
+      - name: configure git identity
+        run: |
+          git config --global user.email "ci@example.com"
+          git config --global user.name "ci"
+      - name: run integration test
+        run: bash tests/integration/test_reconcile_ff_invariant.sh
+
   references:
     name: phase docs reference real repo files
     runs-on: ubuntu-latest
