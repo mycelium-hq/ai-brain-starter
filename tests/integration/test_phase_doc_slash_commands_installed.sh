@@ -48,9 +48,19 @@ REQUIRED_SKILLS=(
 
 FAILED=0
 
+# Skills installed via a SEPARATE clone path (not from skills/ folder).
+# These skip the (a) folder check but still get the (b) install-loop check.
+# humanizer = cloned from its own public fork repo per bootstrap.sh header.
+SEPARATE_CLONE_SKILLS="humanizer"
+
 for skill in "${REQUIRED_SKILLS[@]}"; do
-  # (a) skill folder exists in repo
-  if [ ! -d "$SKILLS_DIR/$skill" ]; then
+  is_separate_clone=0
+  for sc in $SEPARATE_CLONE_SKILLS; do
+    [ "$skill" = "$sc" ] && is_separate_clone=1
+  done
+
+  # (a) skill folder exists in repo (skipped for separate-clone skills)
+  if [ "$is_separate_clone" = "0" ] && [ ! -d "$SKILLS_DIR/$skill" ]; then
     echo "FAIL: skills/$skill/ folder missing in repo" >&2
     FAILED=$((FAILED + 1))
     continue
@@ -59,8 +69,8 @@ for skill in "${REQUIRED_SKILLS[@]}"; do
   # copies files to ~/.claude/skills/). We scan for the literal skill
   # name as a token in the loop's "for sub in" line.
   if ! grep -E "^for sub in .*\b${skill}\b.*; do" "$BOOTSTRAP" >/dev/null 2>&1; then
-    echo "FAIL: skills/$skill/ exists in repo but is NOT in any bootstrap.sh install loop" >&2
-    echo "  Phase docs reference /$skill but new installs won't have the skill folder." >&2
+    echo "FAIL: $skill is referenced as a slash command in phase docs but is NOT in any bootstrap.sh install loop" >&2
+    echo "  Phase docs reference /$skill but new installs won't have it." >&2
     echo "  Add '$skill' to the 'for sub in ...' loops in bootstrap.sh." >&2
     FAILED=$((FAILED + 1))
     continue
