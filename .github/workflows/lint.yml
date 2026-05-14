@@ -230,6 +230,22 @@ jobs:
       - name: run integration test
         run: bash tests/integration/test_worktree_session_close.sh
 
+  phase-doc-skills-installed:
+    name: phase-doc slash commands have matching install entries
+    runs-on: ubuntu-latest
+    # Catches the bug class where a phase doc tells the user to "run /foo"
+    # but the bootstrap install loop never copies the skill folder to
+    # ~/.claude/skills/, so /foo doesn't appear in their slash command list.
+    # Source incident: fresh install completed but /second-brain-mapping
+    # was missing because bootstrap.sh's install loop didn't include it.
+    # Test asserts: every user-runnable slash command referenced in phase
+    # docs has (a) a matching skill folder in skills/ AND (b) is in the
+    # bootstrap install loop.
+    steps:
+      - uses: actions/checkout@v6
+      - name: run integration test
+        run: bash tests/integration/test_phase_doc_slash_commands_installed.sh
+
   reconcile-ff-invariant:
     name: reconcile-worktree-shared FF invariant (PR #68)
     runs-on: ubuntu-latest
