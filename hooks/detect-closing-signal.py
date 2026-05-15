@@ -530,6 +530,19 @@ def _full_cascade_block(
 ) -> str:
     """The reusable cascade-instruction block."""
     pending = ", ".join(pending_outcomes) if pending_outcomes else "(none)"
+    # Pre-resolve the Time Tracking surface (codified 2026-05-14). The Phase 1
+    # bullet used to say "if vault uses it" and require the model to infer
+    # presence; that produced a false-negative when the model checked the
+    # wrong directory. Resolving here mirrors the pattern for session_file +
+    # captures_file: the model trusts the injected path, no inference.
+    time_tracking_file = meta_dir / "Time Tracking.md"
+    if time_tracking_file.is_file():
+        tt_line = (
+            f"  Time tracking:    {time_tracking_file}  "
+            f"(append today's entry under a ## YYYY-MM-DD heading; create the heading if missing)"
+        )
+    else:
+        tt_line = "  Time tracking:    (not in this vault, skip the time-tracking step)"
     return f"""SESSION CLOSE — pre-resolved context (use these exact values):
 
   Timestamp:        {timestamp_human}
@@ -538,6 +551,7 @@ def _full_cascade_block(
   Session file:     {session_file}  (already pre-built with frontmatter + headers; fill in the body)
   Decisions dir:    {decisions_dir}  (write per-decision files here, slug-named)
   Captures file:    {captures_file}
+{tt_line}
   Decisions with empty Outcome (review for backfill): {pending}
 
 PHASE 0b — Incomplete-work gate (DO THIS FIRST, before any writes):
@@ -566,8 +580,12 @@ PHASE 1 — Single-pass conversation scan (compose all in memory before writing)
     Outcomes where this session resolved them.
   • Delegations: items for others get @Name + drafted Slack/WhatsApp/email
     message ready to send.
-  • Time tracking entry (if vault uses it): one line, format
-    "HH:MMam - HH:MMam | Category | Brief", inferred from conversation.
+  • Time tracking entry: append to the Time tracking file resolved above
+    (path is authoritative, do NOT search for it or claim it doesn't exist).
+    One line, format "HH:MMam - HH:MMam | Category | Brief", inferred from
+    conversation. If the resolved path says "(not in this vault, skip)",
+    skip this step. Otherwise: append under today's date heading; create
+    the heading if missing.
 
 PHASE 2 — Batch writes (one tool-call block, append never overwrite):
   • Fill in the pre-built session file (paths above).
