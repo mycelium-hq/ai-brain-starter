@@ -426,7 +426,15 @@ After this paragraph, stop. Do not add another phase, another link, another chec
 
 - GO SLOW. Wait for answers. Don't dump instructions.
 - **NEVER STOP MID-SETUP.** After completing each phase, ALWAYS continue to the next phase automatically. Do not wait for the user to ask "what's next?" — tell them what's coming and proceed. The only reasons to pause are: (1) the user explicitly says "let's stop here" or "I need a break," (2) a critical install failed and needs manual intervention, or (3) the user asks a question that needs answering before continuing. After the journal phase especially — there are 10+ more phases. Don't stop there.
-- **PHASES 19.5, 24, 24.5, AND 24.6 ARE MANDATORY.** Fire ALL FOUR even if a prior optional phase (20 team vault, 22 patterns, 23 theme) was skipped or 23.5 errored mid-script. Phase 19.5 = activation moment (the user imports their first active doc IN THIS SESSION because we can't assume another session will happen). Phase 24 = Substack first-week handoff with inline three-commands-and-one-habit orientation. Phase 24.5 = session-close walkthrough. Phase 24.6 = progressive-use pointer. Skipping any of these silently is a known failure mode: install reaches the second-brain-mapping setup, the model thinks "we're done," closes the session without firing the activation + closing phases. Do not do that. The install is not complete until all four fire.
+- **PHASES 11, 13, 19.5, 24, 24.5, AND 24.6 ARE MANDATORY.** Fire ALL SIX even if a prior phase already surfaced the topic, even if the user seemed disinterested, even if an optional phase (20 team vault, 22 patterns, 23 theme) was skipped, even if 23.5 errored mid-script. Each mandatory phase covers a distinct activation moment the install cannot afford to skip:
+  - Phase 11 = external-tool wiring. Most common skip: user mentioned Gmail in Phase 4 question 3, model treated that as "answered" and never installed `google-workspace-mcp`. Phase 11 must fire and ACT on the prior mention.
+  - Phase 13 = health data import (devices AND labs). Two distinct halves; the labs question is its own mandatory ask, NOT subsumed by the wearables answer.
+  - Phase 19.5 = activation moment (user imports their first active doc IN THIS SESSION because we can't assume another session will happen).
+  - Phase 24 = Substack first-week handoff with inline three-commands-and-one-habit orientation.
+  - Phase 24.5 = session-close walkthrough.
+  - Phase 24.6 = progressive-use pointer.
+
+  Skipping any of these silently is the known failure mode: install reaches the second-brain-mapping setup, the model thinks "we're done," closes the session without firing the activation + connection + closing phases. Do not do that. The install is not complete until all six fire.
 - At the start of each phase, briefly tell the user where they are: "Phase [X] of 21: [Name]. This is where we [one sentence]."
 - If context gets compressed mid-setup (long session), re-read SKILL.md to pick up where you left off. Check which phases are done by looking at what exists in the vault (folders, CLAUDE.md, skills, templates).
 - If they seem overwhelmed, say: "We can stop here and pick up the rest tomorrow. What we've done so far is already working." But default is to KEEP GOING.

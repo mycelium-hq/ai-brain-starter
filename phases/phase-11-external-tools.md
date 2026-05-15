@@ -1,9 +1,16 @@
 ## Phase 11: Connect External Tools
 
+**MANDATORY ASK — never skip, regardless of what the user mentioned earlier.** If the user listed Gmail / Google Calendar / Outlook / Slack / any other tool back in Phase 4 question 3, that's INFORMATION; this phase is where Claude actually wires the MCP. The known failure mode: model captures "Gmail" in CLAUDE.md `## Tools I Use` and then SKIPS this phase thinking the question is already answered. Phase 11 must fire even when prior phases already surfaced the tool name. The question changes from "do you use it?" to "you mentioned Gmail earlier — installing google-workspace-mcp now."
+
 "Let's connect Claude to the tools you actually use. This is where the vault becomes an operating system, not just a notebook."
 
 ### Email & Calendar
-Ask: "Do you use Gmail / Google Calendar / Google Drive / Google Docs? Or Outlook / Microsoft 365?"
+
+**First check what they said in Phase 4 question 3 (the tools answer).** If they named Gmail, Google Calendar, Google Drive, Google Docs, Google Sheets, or Google Meet anywhere in that answer, DO NOT re-ask. Skip directly to install:
+
+> "You mentioned [Gmail / Google Calendar / etc.] back in the tools section, so I'm installing `google-workspace-mcp` now. One MCP that covers Gmail, Calendar, Drive, Docs, Sheets, and Meet. Supports multiple accounts (work + personal) and is token-efficient. I'll walk you through the Google Cloud OAuth setup."
+
+**Otherwise ask:** "Do you use Gmail / Google Calendar / Google Drive / Google Docs? Or Outlook / Microsoft 365?"
 
 **If they use ANY Google Workspace surface (Gmail, Calendar, Drive, Docs, Sheets, Meet) — install `google-workspace-mcp` as the default.** Do NOT recommend Settings → Connectors first. The MCP covers all 5 surfaces in one install, supports multiple accounts, and is token-efficient.
 
