@@ -230,6 +230,21 @@ jobs:
       - name: run integration test
         run: bash tests/integration/test_worktree_session_close.sh
 
+  bootstrap-dry-run:
+    name: bootstrap.sh end-to-end dry-run (no parse errors, all skills + commands fire)
+    runs-on: ubuntu-latest
+    # End-to-end coverage of the install path. Asserts bootstrap.sh
+    # --dry-run exits 0 (no syntax errors, no unbound variables, no
+    # logic breaks in any of the install sections) AND mentions every
+    # required skill AND fires the commands install section.
+    # Catches the bug class where a new section in bootstrap.sh has an
+    # error that only surfaces when a real install runs.
+    # No untrusted user input referenced.
+    steps:
+      - uses: actions/checkout@v6
+      - name: run E2E test
+        run: bash tests/integration/test_bootstrap_dry_run.sh
+
   phase-doc-skills-installed:
     name: phase-doc slash commands have matching install entries
     runs-on: ubuntu-latest

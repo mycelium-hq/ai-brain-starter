@@ -434,7 +434,31 @@ Trigger the cascade now by treating "install completed Phase 24.6" as equivalent
 6. Phase 2b git snapshot — commits everything to the vault's local git so the install state is recoverable
 7. Phase 3 aggregators — rebuilds Last Session.md so the user's NEXT session opens with full context about yesterday's install
 
-After the cascade completes, ONE LINE goodbye in the user's PRIMARY_LANGUAGE: "Vault is saved. See you in your next session." or "Vault guardado. Nos vemos en tu próxima sesión." Then truly stop.
+After the cascade completes, run a self-verification check before saying goodbye. Invoke the `diagnose` skill (it landed during Phase 0 bootstrap) via the Skill tool with `skill: diagnose`. The skill scans the installed state and returns a green/yellow/red report covering:
+- CLAUDE.md exists at vault root with required sections
+- About Me file exists in 🏠 Home/ with template structure
+- ⚙️ Meta/ folder and subfolders created
+- Required skills landed in ~/.claude/skills/
+- Required slash commands landed in ~/.claude/commands/
+- MCPs registered (granola, chatprd, google-workspace if applicable)
+- Hooks installed (session-start-context, post-tool-use-learnings, etc.)
+- session-end-hook.sh present and executable
+- No .ps1 BOM issues (Windows only)
+
+Read the diagnose output. If everything is green, proceed to the goodbye. If anything is yellow (warning) or red (failure), surface a one-paragraph summary in the user's PRIMARY_LANGUAGE BEFORE the goodbye:
+
+**EN:** "Before we close — one quick verification. [Skill folder X / MCP Y / Hook Z] didn't land cleanly. Most things are fine. To fix this specific item, [exact one-line command from diagnose output]. Otherwise everything else is set up."
+
+**ES:** "Antes de cerrar — una verificación rápida. [Skill X / MCP Y / Hook Z] no quedó bien instalado. La mayoría está bien. Para arreglar específicamente eso: [comando exacto del diagnose]. Lo demás quedó listo."
+
+Then say the goodbye line:
+
+**EN:** "Vault is saved. See you in your next session."
+**ES:** "Vault guardado. Nos vemos en tu próxima sesión."
+
+Then truly stop.
+
+**Why self-verification at install close:** every previous install bug class (skill folder missing, command not registered, MCP not wired, About Me not created) was silent until the user hit it days or weeks later. Running `diagnose` automatically catches these AT INSTALL TIME so the user can re-run bootstrap or fix the specific item before they leave with a half-broken vault. The skill exists in the install bundle — use it.
 
 **Why this phase matters:** without it, install conversations were getting lost. Personal context revealed during install lands in About Me (per Phase 3c universal capture) but the SESSION RECORD — what got done, what got chosen, what's pending — only exists if close fires. Users who install and walk away without saying "bye" would lose the install context entirely. The user already gave you the equivalent of a "bye" by completing the install. Don't wait for the explicit word — fire the close now.
 
