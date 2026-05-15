@@ -280,8 +280,8 @@ if ($DryRun) {
 }
 Write-Host ("  " + (T "This installs the full AI brain stack: graphify, humanizer," `
                        "Esto instala el stack completo de AI brain: graphify, humanizer,"))
-Write-Host ("  " + (T "meeting-todos, patterns, insights, deconstruct, daily-journal," `
-                       "meeting-todos, patterns, insights, deconstruct, daily-journal,"))
+Write-Host ("  " + (T "meeting-todos, patterns, insights, deconstruct, daily-journal, rise," `
+                       "meeting-todos, patterns, insights, deconstruct, daily-journal, rise,"))
 Write-Host ("  " + (T "repurpose-talk, nano-banana (skill docs), Granola + ChatPRD MCPs," `
                        "repurpose-talk, nano-banana (docs de skill), MCPs de Granola + ChatPRD,"))
 Write-Host ("  " + (T "the obsidian-skills marketplace, plus the ai-brain-starter skill" `
@@ -585,7 +585,7 @@ if ((Test-Path "$SkillDir\SKILL.md") -or $DryRun) { Ok "ai-brain-starter at $Ski
 Hdr "Installing bundled sub-skills (with safety checks)"
 $stamp = Get-Date -Format "yyyy-MM-dd-HHmm"
 
-foreach ($sub in @("graphify", "meeting-todos", "patterns", "insights", "deconstruct", "daily-journal", "repurpose-talk", "nano-banana")) {
+foreach ($sub in @("graphify", "meeting-todos", "patterns", "insights", "deconstruct", "daily-journal", "rise", "repurpose-talk", "nano-banana")) {
     $src = "$SkillDir\skills\$sub"
     $dst = "$env:USERPROFILE\.claude\skills\$sub"
 
@@ -723,7 +723,7 @@ if ($DryRun) {
 foreach ($pair in @(@("graphify","graphify"), @("node","node"), @("npm","npm"), @("pipx","pipx"), @("gh","gh"))) {
     if (Have $pair[1]) { Ok $pair[0] } else { Err "$($pair[0]) not callable" }
 }
-foreach ($sub in @("graphify","meeting-todos","patterns","insights","deconstruct","daily-journal","repurpose-talk","nano-banana","humanizer","ai-brain-starter","diagnose")) {
+foreach ($sub in @("graphify","meeting-todos","patterns","insights","deconstruct","daily-journal","rise","repurpose-talk","nano-banana","humanizer","ai-brain-starter","diagnose")) {
     if (Test-Path "$env:USERPROFILE\.claude\skills\$sub") { Ok "skill: $sub" } else { Err "skill missing: $sub" }
 }
 if (Test-Path "$env:USERPROFILE\.claude\skills\graphify\scripts") { Ok "graphify scripts" } else { Err "graphify scripts missing" }
