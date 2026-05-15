@@ -9,6 +9,42 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-14: install hardening — slash commands actually appear in the palette + activation in this session + capture everything
+
+**Who this affects:** anyone who installed before today. Twelve PRs landed today that fix gaps in the install flow. The most user-visible:
+1. After install, typing `/` in a new session now actually surfaces `/journal`, `/second-brain-mapping`, `/diagnose`, `/setup-vault-types`, and the other shipped skills. Before today, the skill folders were installed but the palette entries were not — typing `/second-brain-mapping` got blank in the dropdown.
+2. The install used to ask "how do you want to back up your vault — Google Drive / iCloud / Dropbox / Git / local?" mid-flow. That five-option menu confused people and stalled momentum. Killed. Desktop is the canonical vault home; your normal backup habits cover it.
+3. The install used to end with a Substack link and no inline orientation. Now the three commands and one habit for week one are named **in the conversation** before the link. Users who don't click the link still walk away with the picture.
+4. New activation moment in the install session itself: "Bring me ONE active doc right now." A real doc from the user's life lands in the vault before close — not deferred to a "next session" that may never happen.
+5. New canonical `🏠 Home/About Me.md` file gets created at install and populated as the user answers questions. Personal context revealed anywhere now lands somewhere durable, instead of going nowhere.
+
+**What you should do:** re-run `bash ~/.claude/skills/ai-brain-starter/bootstrap.sh` once to backfill all the missing pieces. Idempotent — it skips anything you already have. After it finishes, open a new session and type `/` — you'll see the full slash command palette.
+
+### Breaking down the twelve PRs
+
+| PR | What | Impact |
+|---|---|---|
+| #66 | 5-layer fix for the worktree session-loss bug class. `session-end-hook.sh` `resolve_main_vault()` strips `.claude/worktrees/<slug>/` from path resolution. `worktree-prune.sh` refuses to delete branches with unmerged commits. New CI test enforces the invariant. New `recover-orphan-claude-branches.py` recovery script. | Closes [#65](https://github.com/adelaidasofia/ai-brain-starter/issues/65) (reported by a user who lost a full debrief session). Existing orphan commits surface via the new SessionStart hook. |
+| #67 | Phase 0 install guidance: don't wrap bootstrap output in the Monitor tool. It rendered every stdout line as a "Human:" turn and leaked `<task-notification>` XML to the chat. | Quieter install, no more wall of bare "Human:" labels. |
+| #68 | reconcile-worktree-shared.py now does `git merge --ff-only master` first instead of always committing on the worktree branch. Cuts orphan-commit accumulation from ~1 per session-end to zero in the normal case. Plus install fixes: killed the "2-3 hours / 30 min for basic" time-gate line; wired key-people interview to also create per-person CRM files. | Cleaner branch history. Install asks for full name + nickname per person. |
+| #69 | CI test for the reconcile FF invariant (companion to PR #66's test). New SessionStart hook surfaces orphan-branch count when nonzero. Em-dash warning added to the public-repo scrub gate. | Drift prevention. The 78f4a37 → #65 → #68 chain (same defect recurring one week later because no CI test caught it) is now closed at every layer. |
+| #70 | Phase 15 backup question stopped pushing users to iCloud/Drive/Dropbox when their vault was on Desktop. Silent acknowledgment, move on. New Phase 24.6 "progressive use" pointer. Phases 24, 24.5, 24.6 marked MANDATORY in install closing checklist. | Smoother close. No more confusing backup ask. |
+| #71 | Phase 24 now names the three commands and one habit **inline** in the conversation, matching the canonical Substack first-week post verbatim. Plus a stuck-help pointer. | Users who don't click the link still know what to do tomorrow. |
+| #72 | NEW Phase 19.5: "Bring me ONE active doc right now." Activation moment in the install session itself, before close. Plus Desktop confirmed as canonical vault home. Phase 24.6 reframed from deferred action to progressive use. | Install ends with TWO real things in the vault (first journal entry + first imported doc), not zero. |
+| #73 | Bootstrap install loop was hardcoded to 8 skills and missing `second-brain-mapping`, `setup-vault-types`, and `diagnose` — all referenced as slash commands in phase docs. New CI test asserts every phase-doc slash command has a matching skill folder AND is in the install list. | Fresh installs now actually have the skills the install flow references. |
+| #74 | `commands/` directory at repo root with one `.md` per slash command. Bootstrap copies them into `~/.claude/commands/` so they actually appear in the Claude Code palette when users type `/`. CI test extended to assert each required skill has a matching commands/<name>.md. | This is the fix for "I typed `/` and `/second-brain-mapping` didn't come up." Skill folders alone don't register palette entries — plugin-style commands/<name>.md files do. |
+| #76 | Phase 11 (Gmail / Google Workspace MCP install) now MANDATORY with explicit Phase 4 carryover: if the user mentioned Gmail in the tools answer, install fires automatically. Phase 13 (health) split into 13a (wearables, existing) + 13b (lab tests + health reports, NEW). | No more "user mentioned Gmail, model captured it in CLAUDE.md, never installed the MCP." Same for labs — people with annual bloodwork but no wearable now get asked. |
+| #77 | NEW canonical `🏠 Home/About Me.md` file. Sectioned schema (Identity, Work, Relationships, Health, Values, Habits, Hobbies, History, Notes). Universal capture rule: anything personal the user reveals during install (or any future session) must land somewhere durable — append to About Me, never overwrite, don't pause to confirm. Phase 4 produces CLAUDE.md AND About Me at once. Phases 11, 13 also write through to About Me. | Information given → information saved. No more "I have ADHD" mentioned in passing and forgotten. |
+| (this PR) | CHANGELOG entry. Phase 3b idempotency — preserve user About Me content on re-install. CLAUDE.md template gains a universal capture rule line so the rule loads every session forever. | Re-install no longer overwrites your About Me. The capture rule is now visible in every future session. |
+
+### Why so many in one day
+
+A friend's install surfaced a cascade of distinct failure modes, each one revealing the next: orphan commits → install missing skills → palette entries missing → activation deferred → information collected and discarded. Each layer had a real surface bug; each got a fix shipped with a CI test (where applicable) so the next install doesn't repeat the failure.
+
+The pattern that emerged and is now codified: **every fix to a bug class ships with (a) the actual fix, (b) a CI test that would fail on revert, (c) an observability surface that catches future regressions.** Same family across PRs #66, #68, #73, #74.
+
+---
+
 ## 2026-05-10: health-mcp v0.7 — multi-year analytical surface + /longitudinal skill
 
 **Who this affects:** anyone with 12+ months of health-mcp data who wants to surface patterns that span years — Floor-to-body fingerprints, cycle-phase × HRV, sleep architecture drift, longevity-marker trends, symptom correlates. Single-day tools (recovery score, journal context) were already in v0.2. v0.7 fills the multi-year analytical gap.

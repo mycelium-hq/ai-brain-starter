@@ -73,7 +73,11 @@ Now create the CLAUDE.md at the vault root with this structure:
 [from their answer]
 
 ## About Me
-The deep profile lives at `🏠 Home/About Me.md`. Read it on demand for context-heavy work (panel reviews, life-history prose, advisory sessions, weekly insights, anything that needs identity/health/relationships/history depth). Append to it whenever the user reveals new personal context per the universal capture rule.
+The deep profile lives at `🏠 Home/About Me.md`. Read it on demand for context-heavy work (panel reviews, life-history prose, advisory sessions, weekly insights, anything that needs identity/health/relationships/history depth). Append to it whenever the user reveals new personal context per the universal capture rule below.
+
+## Universal capture rule (always active, every session)
+
+Anything personal the user reveals must land somewhere durable in the vault before the conversation moves on. If they mention an age, a hometown, a health condition, a partner's name, an old job, a hobby, a value, a fear — and it doesn't fit a structured ask currently running — append it to `🏠 Home/About Me.md` in the right section (or under `## Notes` if nothing fits). Append never overwrite. Date free-form additions. Don't pause to confirm — write the bullet and continue. Surface conflicts only ("you said X earlier; now Y — which stays?"). The failure this prevents: user says "I have ADHD" in passing, model nods and moves on, the fact never lands anywhere, six months later the model has no context for "why am I forgetting things?" Capture is lossless.
 
 ## Vault Map
 [FILL THIS IN — list the actual folders created in Phase 3, e.g.:

@@ -189,15 +189,20 @@ Tell them: "Done — you should see the folders in your Obsidian sidebar now. Th
 
 **Add any custom folders they request. Always use emojis.**
 
-### Phase 3b — Create About Me profile file
+### Phase 3b — Create About Me profile file (idempotent)
 
-After creating folders, copy the About Me template into the vault's 🏠 Home/ folder:
+After creating folders, copy the About Me template into the vault's 🏠 Home/ folder ONLY IF the file does not already exist. Re-running bootstrap must never overwrite a user's existing About Me content — it accrues over time and is the user's deep profile.
 
 ```bash
 mkdir -p "[VAULT_PATH]/🏠 Home"
-cp "$HOME/.claude/skills/ai-brain-starter/templates/Home/About Me.md" "[VAULT_PATH]/🏠 Home/About Me.md"
-# Substitute the {{DATE}} placeholder with today's date
-sed -i '' "s/{{DATE}}/$(date +%Y-%m-%d)/g" "[VAULT_PATH]/🏠 Home/About Me.md"
+if [ ! -f "[VAULT_PATH]/🏠 Home/About Me.md" ]; then
+  cp "$HOME/.claude/skills/ai-brain-starter/templates/Home/About Me.md" "[VAULT_PATH]/🏠 Home/About Me.md"
+  # Substitute the {{DATE}} placeholder with today's date
+  sed -i '' "s/{{DATE}}/$(date +%Y-%m-%d)/g" "[VAULT_PATH]/🏠 Home/About Me.md"
+  echo "created [VAULT_PATH]/🏠 Home/About Me.md from template"
+else
+  echo "[VAULT_PATH]/🏠 Home/About Me.md already exists — preserving user content"
+fi
 ```
 
 This is the canonical "deep profile" file. The CLAUDE.md `## Me` line is the quick reference loaded every session; `About Me.md` is the rich profile loaded on demand for context-heavy work (panel reviews, life-history prose, advisory sessions, weekly insights).
