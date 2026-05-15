@@ -46,6 +46,19 @@ Building AI systems that compound over time. Translating between technical and n
 - Available for paid Brain Setup, Implementation Sprint, or Fractional engagements (see for-teams/working-with-me.md)
 - Free 20-minute AI diagnostic at https://diazroa.com
 
+## 5 Love Languages
+
+If you have asked someone in your life to take the [5 Love Languages quiz](https://5lovelanguages.com/quizzes), drop their result into this section using the format below. The `inject-love-language-context.py` hook reads this section automatically whenever the person's name appears in your prompt, and uses it to shape how the assistant drafts messages, plans gifts, or designs apologies for them.
+
+- Quality time — 35%
+- Words of affirmation — 25%
+- Physical touch — 20%
+- Acts of service — 15%
+- Receiving gifts — 5%
+*Source: replace with where this came from — quiz date, a transcribed screenshot, a conversation, etc.*
+
+The hook matches the person's filename, any frontmatter alias, and (if globally unique) their first name. Case- and accent-insensitive. Caches in `~/.claude/.love-language-index.json` and refreshes when any CRM file changes or the cache turns one day old. Delete this section if you do not want to use the hook — it silently no-ops for cards that omit it.
+
 ## How this card auto-populates
 
 You fill this out once. The system keeps it alive after that:
