@@ -25,13 +25,15 @@ After import:
 - Add wikilinks to concepts that match existing vault notes
 - "Your reading and your thinking are now connected. When you write about a topic, your book highlights surface as context."
 
-## Phase 13: Health Data Import
+## Phase 13: Health Data Import (devices + labs)
 
-**MANDATORY ASK — never assume.** Do NOT skip this phase because the user didn't mention a wearable earlier. Most people who own an Apple Watch, Oura, Fitbit, Garmin, or Whoop don't think to bring it up during setup. Ask explicitly now:
+**MANDATORY ASK — never assume.** Do NOT skip this phase because the user didn't mention health earlier. Most people who own a wearable or have had recent lab work don't think to bring it up during a vault setup. Ask BOTH halves explicitly:
+
+### 13a. Wearables
 
 "Do you wear or use any of these? Apple Watch / Apple Health, Oura Ring, Fitbit, Garmin, Whoop, or any other health-tracking device or app?"
 
-Wait for their answer. If they say yes (even to one), continue. If they explicitly say "no, none of these," then skip to Phase 14.
+Wait for their answer. If they say yes (even to one), continue. If they say "no, none of these," move to 13b.
 
 If yes: "We can import your health data and cross-reference it with your journal entries. Imagine asking 'what do my best weeks have in common?' and getting back: gym 4x, sleep before midnight, HRV above 40, no social media after 9pm. The habit tracking from your journal gives you the subjective data — this gives you the objective data."
 
@@ -44,7 +46,19 @@ Then walk through their specific source. If they have the `health-setup` skill i
 
 After import, the `health-context` skill (auto-fires on journal entries) pairs body data with Floor tags — so a "Floor: Joy" entry with "HRV 22, RHR 78, sleep 5h 12m" gets the parasympathetic-state caveat automatically.
 
-If they explicitly said no to all wearables, skip this phase silently — Phase 10's habit tracking already covers the subjective side.
+### 13b. Lab tests + health reports
+
+ASK regardless of the wearables answer — devices and labs are different surfaces, and someone with no wearable may still have rich annual bloodwork. Phrasing matters: don't say "medical records" (intimidating); say "lab tests or any health reports."
+
+"Have you had any recent lab tests, bloodwork, hormone panels, or other health reports in the last year or two? PDFs, images of paper results, anything? Even one set of bloodwork is enough to start."
+
+If they say yes: "Save the PDFs or photos in your vault under `🏠 Home/Health/Labs/` (create the folder if it doesn't exist). When you mention symptoms, energy, mood, or anything body-related in journals, I'll cross-reference. For PDF lab panels, the `parse-mcp interpret` tool extracts the structured values and writes a markdown summary next to the original. You can also just drop them in and ask me 'what's in here?' when we're back in a session."
+
+Walk through one if they have it handy right now: "Want to drop one in now? I'll show you the flow once so you know how it works."
+
+If they say no: "Cool. If you do bloodwork later — annual physical, perimenopause panel, fertility screen, whatever — drop the PDFs in `🏠 Home/Health/Labs/` and I'll know what to do."
+
+If they explicitly said no to BOTH wearables and labs, skip the rest of Phase 13 silently — Phase 10's habit tracking covers the subjective side. Otherwise, the body track in journals is now wired.
 
 ## Phase 14: Build Your Concept Taxonomy
 
