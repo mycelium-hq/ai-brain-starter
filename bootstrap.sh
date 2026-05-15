@@ -20,7 +20,15 @@
 #     - graphify CLI + Claude skill (with optimization scripts)
 #     - All bundled sub-skills: graphify, meeting-todos, patterns, insights,
 #       deconstruct, daily-journal, rise, repurpose-talk, nano-banana (skill docs only),
-#       second-brain-mapping, setup-vault-types, diagnose
+#       second-brain-mapping, setup-vault-types, diagnose, note-todos, sunday-review,
+#       coach, coaching, backfill-journal-body-context, longitudinal, security-snapshot,
+#       synth-pr-to-sop, synth-thread-to-sop, resolver-query, extract-rules-from-vault,
+#       for-my-team, health-context, health-doctor, health-setup, modern-python-substrate,
+#       tdd-substrate, seo-substrate, remotion-best-practices, ingest-github, ingest-gmail,
+#       ingest-health, ingest-linear, ingest-notion, ingest-slack, ingest-whatsapp,
+#       ingest-youtube
+#     - Verticals (vertical-finance / vertical-healthcare / vertical-legal /
+#       influencer-pack) live in the repo as opt-in installs; not auto-installed.
 #     - humanizer (de-AI writing) — cloned from its own fork repo
 #     - Granola + ChatPRD MCPs
 #     - Marketplace: obsidian-skills (kepano); plugins: obsidian, context7, playwright
@@ -1090,7 +1098,7 @@ SKILL_FORKS=()
 SKILL_SYMLINKS=()
 SKILLS_TO_SYNC=()
 
-for sub in graphify meeting-todos patterns insights deconstruct daily-journal rise repurpose-talk nano-banana second-brain-mapping setup-vault-types diagnose; do
+for sub in graphify meeting-todos patterns insights deconstruct daily-journal rise repurpose-talk nano-banana second-brain-mapping setup-vault-types diagnose note-todos sunday-review coach coaching backfill-journal-body-context longitudinal security-snapshot synth-pr-to-sop synth-thread-to-sop resolver-query extract-rules-from-vault for-my-team health-context health-doctor health-setup modern-python-substrate tdd-substrate seo-substrate remotion-best-practices ingest-github ingest-gmail ingest-health ingest-linear ingest-notion ingest-slack ingest-whatsapp ingest-youtube; do
   dst="$HOME/.claude/skills/$sub"
 
   if [[ -L "$dst" ]]; then
@@ -1533,7 +1541,7 @@ for check in "${CHECKS[@]}"; do
   fi
 done
 # Skill folders (full bundled set + humanizer + ai-brain-starter itself)
-for sub in graphify meeting-todos patterns insights deconstruct daily-journal rise repurpose-talk nano-banana humanizer ai-brain-starter diagnose second-brain-mapping setup-vault-types; do
+for sub in graphify meeting-todos patterns insights deconstruct daily-journal rise repurpose-talk nano-banana humanizer ai-brain-starter diagnose second-brain-mapping setup-vault-types note-todos sunday-review coach coaching backfill-journal-body-context longitudinal security-snapshot synth-pr-to-sop synth-thread-to-sop resolver-query extract-rules-from-vault for-my-team health-context health-doctor health-setup modern-python-substrate tdd-substrate seo-substrate remotion-best-practices ingest-github ingest-gmail ingest-health ingest-linear ingest-notion ingest-slack ingest-whatsapp ingest-youtube; do
   if [[ -d "$HOME/.claude/skills/$sub" ]]; then
     ok "skill: $sub"
   else
