@@ -2,7 +2,7 @@
 
 For teams larger than 50, regulated industries, or any organization where the CTO / CISO / VP Eng owns the install decision. The personal and small-team patterns shipped in `for-teams/` cover Google Drive / Dropbox / iCloud as the collaboration substrate. Enterprise installs do not.
 
-This doc names the architecture an enterprise install needs. It is not a one-size install — every engagement resolves the open questions against the client's existing infrastructure. The doc exists so the architecture is concrete before procurement asks.
+This doc names the architecture an enterprise install needs. It is not a one-size install. Every engagement resolves the open questions against the client's existing infrastructure. The doc exists so the architecture is concrete before procurement asks.
 
 ## Who this is for
 
@@ -129,7 +129,7 @@ MCP servers (calendar, CRM, document store, internal-data) run in the client's V
 - Mutual TLS with client CA-signed certs
 - Connector credentials in client KMS (AWS KMS, Azure Key Vault, GCP Secret Manager, HashiCorp Vault)
 
-Operator workstations connect via the client's VPN to reach MCP. Operator MCP servers (those running on the operator's local machine) are NOT in the architecture for tier-5 — every MCP must be operable by the client without operator presence.
+Operator workstations connect via the client's VPN to reach MCP. Operator MCP servers (those running on the operator's local machine) are NOT in the architecture for tier-5. Every MCP must be operable by the client without operator presence.
 
 ### Audit logging
 
@@ -158,7 +158,7 @@ Vault content stays in the contracted region. Operationally:
 - Git repo region pinned (GitHub Enterprise Server in client region; GitLab Self-Managed in client VPC)
 - MCP servers in client VPC, region pinned
 - Audit log in client SIEM, region pinned
-- Anthropic API region selection (EU residency available; US-only for some models — check current availability per contract)
+- Anthropic API region selection (EU residency available; US-only for some models, check current availability per contract)
 
 If the client requires the model to NOT cross regions, a self-hosted model (Llama, Mistral, DBRX) can substitute via the same MCP architecture. Quality differences require evaluation per task; see eval-gates-in-ci pattern.
 
