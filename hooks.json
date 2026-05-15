@@ -35,6 +35,11 @@
           },
           {
             "type": "command",
+            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/inject-love-language-context.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "statusMessage": "Checking CRM for love language context..."
+          },
+          {
+            "type": "command",
             "command": "python3 ~/.claude/skills/ai-brain-starter/scripts/email-gate-hook.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Checking email-on-file marker..."
           },
