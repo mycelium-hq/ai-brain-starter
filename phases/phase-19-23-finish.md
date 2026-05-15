@@ -418,7 +418,29 @@ Why this phase matters: install completion is the moment of highest motivation A
 - "Run `/second-brain-mapping` next" with no precondition — the skill produces noisy output on a near-empty vault.
 - "Optionally..." — anything optional in a close phrase gets skipped; the progressive-use pointer is the actual closer.
 
-After this paragraph, stop. Do not add another phase, another link, another check. The install is done.
+---
+
+## Phase 24.7 — Auto-fire the session-close cascade (MANDATORY, do NOT wait for user)
+
+**Critical.** After Phase 24.6's progressive-use paragraph, IMMEDIATELY fire the session-close cascade per `templates/rules/session-close.md`. Do NOT wait for the user to say "bye" / "thanks, that's all" / "goodnight." The install conversation contains the user's profile setup, their first imported doc, their first journal entry, and every volunteered personal context revealed across all the question phases. Without firing the close, none of it gets logged to the session file, the aggregators don't run, and the next session has no record of "yesterday we did the install." The whole installation conversation is effectively lost as context.
+
+Trigger the cascade now by treating "install completed Phase 24.6" as equivalent to the user saying "bye." Run the standard close protocol:
+
+1. Phase 0 timestamp
+2. Phase 0b incomplete-work gate (any failed installs, deferred backups, missing wearables/labs the user wanted to come back to — surface them in the session file)
+3. Phases 0c-0e cleanup + health checks
+4. Phase 1 conversation scan — capture every personal-context revelation that didn't already land in About Me / CLAUDE.md via the universal capture rule. Most should already be there; this is the safety net.
+5. Phase 2 session file write at `⚙️ Meta/Sessions/{timestamp}-install.md`. Include: what got installed (skills, MCPs, plugins, themes), what choices the user made (folder structure, journal time, panel roster picks, wearable / lab status, tools wired), what's pending (lab PDF upload, granola LaunchAgent install, any unfinished items)
+6. Phase 2b git snapshot — commits everything to the vault's local git so the install state is recoverable
+7. Phase 3 aggregators — rebuilds Last Session.md so the user's NEXT session opens with full context about yesterday's install
+
+After the cascade completes, ONE LINE goodbye in the user's PRIMARY_LANGUAGE: "Vault is saved. See you in your next session." or "Vault guardado. Nos vemos en tu próxima sesión." Then truly stop.
+
+**Why this phase matters:** without it, install conversations were getting lost. Personal context revealed during install lands in About Me (per Phase 3c universal capture) but the SESSION RECORD — what got done, what got chosen, what's pending — only exists if close fires. Users who install and walk away without saying "bye" would lose the install context entirely. The user already gave you the equivalent of a "bye" by completing the install. Don't wait for the explicit word — fire the close now.
+
+**Banned framings (in addition to Phase 24.6's bans):**
+- "When you're done, say 'bye' and I'll save everything." — Phase 24.5 already told them this for FUTURE sessions. The INSTALL session doesn't need to wait for the word; it's already over.
+- "I'll save everything next time you're back." — There may be no next time. Save now.
 
 ---
 
@@ -427,7 +449,7 @@ After this paragraph, stop. Do not add another phase, another link, another chec
 - **NEVER LET INFORMATION GO NOWHERE.** Anything personal the user reveals must land in `🏠 Home/About Me.md` (or the right structured destination: CLAUDE.md quick fields, a per-person CRM file, the Health folder, etc.) before the conversation moves on. Universal capture rule codified in Phase 3c. The failure mode this prevents: user says "I have ADHD" during the tools question, model nods and moves on, the fact never lands anywhere, six months later there's no context for "why am I forgetting things?" Capture must be lossless. Append, never overwrite. Do not pause to confirm — just write the bullet and continue.
 - GO SLOW. Wait for answers. Don't dump instructions.
 - **NEVER STOP MID-SETUP.** After completing each phase, ALWAYS continue to the next phase automatically. Do not wait for the user to ask "what's next?" — tell them what's coming and proceed. The only reasons to pause are: (1) the user explicitly says "let's stop here" or "I need a break," (2) a critical install failed and needs manual intervention, or (3) the user asks a question that needs answering before continuing. After the journal phase especially — there are 10+ more phases. Don't stop there.
-- **PHASES 3b, 11, 13, 19.5, 24, 24.5, AND 24.6 ARE MANDATORY.** Fire ALL SEVEN even if a prior phase already surfaced the topic, even if the user seemed disinterested, even if an optional phase (20 team vault, 22 patterns, 23 theme) was skipped, even if 23.5 errored mid-script. Each mandatory phase covers a distinct activation or capture moment the install cannot afford to skip:
+- **PHASES 3b, 11, 13, 19.5, 24, 24.5, 24.6, AND 24.7 ARE MANDATORY.** Fire ALL EIGHT even if a prior phase already surfaced the topic, even if the user seemed disinterested, even if an optional phase (20 team vault, 22 patterns, 23 theme) was skipped, even if 23.5 errored mid-script. Each mandatory phase covers a distinct activation or capture moment the install cannot afford to skip:
   - Phase 3b = create `🏠 Home/About Me.md` from the template. Without it, the universal capture rule has nowhere to write to. Phase 4 fills the first sections; subsequent sessions append.
   - Phase 11 = external-tool wiring. Most common skip: user mentioned Gmail in Phase 4 question 3, model treated that as "answered" and never installed `google-workspace-mcp`. Phase 11 must fire and ACT on the prior mention.
   - Phase 13 = health data import (devices AND labs). Two distinct halves; the labs question is its own mandatory ask, NOT subsumed by the wearables answer.
@@ -435,8 +457,9 @@ After this paragraph, stop. Do not add another phase, another link, another chec
   - Phase 24 = Substack first-week handoff with inline three-commands-and-one-habit orientation.
   - Phase 24.5 = session-close walkthrough.
   - Phase 24.6 = progressive-use pointer.
+  - Phase 24.7 = AUTO-FIRE session-close cascade (do NOT wait for the user to say "bye"). Without this, the install conversation never gets logged to a session file, the aggregators don't run, and the user's next session opens with no record of what got installed. Phase 24.7 is the difference between "install was saved" and "install evaporated when the user closed the window."
 
-  Skipping any of these silently is the known failure mode: install reaches the second-brain-mapping setup, the model thinks "we're done," closes the session without firing the activation + connection + capture + closing phases. Do not do that. The install is not complete until all seven fire.
+  Skipping any of these silently is the known failure mode: install reaches the second-brain-mapping setup, the model thinks "we're done," closes the session without firing the activation + connection + capture + closing phases. Do not do that. The install is not complete until all eight fire.
 - At the start of each phase, briefly tell the user where they are: "Phase [X] of 21: [Name]. This is where we [one sentence]."
 - If context gets compressed mid-setup (long session), re-read SKILL.md to pick up where you left off. Check which phases are done by looking at what exists in the vault (folders, CLAUDE.md, skills, templates).
 - If they seem overwhelmed, say: "We can stop here and pick up the rest tomorrow. What we've done so far is already working." But default is to KEEP GOING.
