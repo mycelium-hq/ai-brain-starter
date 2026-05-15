@@ -4,6 +4,8 @@
 
 "Let's connect Claude to the tools you actually use. This is where the vault becomes an operating system, not just a notebook."
 
+**Universal capture write-through.** Anything the user reveals while answering this phase's questions — preferred email account, calendar timezone, work tools that reveal industry/role, contacts at companies they care about, geographic context (work hours, regional accounts) — appends to `🏠 Home/About Me.md` in the right section (`## Work`, `## Identity`, `## Habits, Routines, Rhythm`) per Phase 3c. Don't pause to confirm — write the bullet and continue.
+
 ### Email & Calendar
 
 **First check what they said in Phase 4 question 3 (the tools answer).** If they named Gmail, Google Calendar, Google Drive, Google Docs, Google Sheets, or Google Meet anywhere in that answer, DO NOT re-ask. Skip directly to install:

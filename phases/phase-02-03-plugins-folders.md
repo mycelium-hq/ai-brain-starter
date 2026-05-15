@@ -189,6 +189,36 @@ Tell them: "Done — you should see the folders in your Obsidian sidebar now. Th
 
 **Add any custom folders they request. Always use emojis.**
 
+### Phase 3b — Create About Me profile file
+
+After creating folders, copy the About Me template into the vault's 🏠 Home/ folder:
+
+```bash
+mkdir -p "[VAULT_PATH]/🏠 Home"
+cp "$HOME/.claude/skills/ai-brain-starter/templates/Home/About Me.md" "[VAULT_PATH]/🏠 Home/About Me.md"
+# Substitute the {{DATE}} placeholder with today's date
+sed -i '' "s/{{DATE}}/$(date +%Y-%m-%d)/g" "[VAULT_PATH]/🏠 Home/About Me.md"
+```
+
+This is the canonical "deep profile" file. The CLAUDE.md `## Me` line is the quick reference loaded every session; `About Me.md` is the rich profile loaded on demand for context-heavy work (panel reviews, life-history prose, advisory sessions, weekly insights).
+
+**Sections start mostly empty.** Phase 4 fills the high-priority fields (Identity name, Work one-liner, Relationships key people). Phase 11 fills Tools-adjacent fields. Phase 13 fills Health (wearables + labs link). Every subsequent session appends new personal context revealed during conversation per the universal capture rule below.
+
+### Phase 3c — Universal capture rule (codified, applies for the rest of install AND every future session)
+
+**Anything personal the user reveals must land somewhere durable in the vault before the conversation moves on.** If the user volunteers a fact about themselves — age, where they grew up, a health condition, a partner's name, an old job, a hobby, a value, a fear — and that fact does not naturally fit a structured ask currently running, append it to `🏠 Home/About Me.md` in the right section (or under `## Notes` if no section fits) before moving on.
+
+The failure mode: a user says "I have ADHD" in passing during the tools question. The model nods and moves on. The fact never lands anywhere. Six months later when the user asks "why am I forgetting things?" the model has no context. The capture must be lossless.
+
+**Mechanics:**
+- Append, never overwrite. Date the addition if it's a free-form `## Notes` entry.
+- Place in the right section if obvious (health → Health, family → Relationships, etc.).
+- Do not pause the conversation to confirm — just write the bullet and continue. The user can edit/remove later.
+- If the fact contradicts something already in About Me (old version), surface the conflict to the user: "You said [old]; just now you said [new]. Which should stay?" Do not silently overwrite.
+- Sensitive content (trauma, medical, financial in private repos) is fine to append. About Me is the user's private vault file, not shared.
+
+This rule applies to EVERY phase from here forward and to every post-install session. It is the canonical answer to "information was given and went nowhere."
+
 After creating folders, create resolver files in `⚙️ Meta/Folder Resolvers/` — one per key directory. Each is a short decision tree answering "does X live here?" — it prevents the vault from decaying into ambiguity as it grows. Centralized in Meta so the resolver doesn't clutter the folder it describes (a resolver file sitting in `👤 CRM/` shows up in every CRM Dataview query and next to every contact card).
 
 First create the `⚙️ Meta/Folder Resolvers/` directory, then create these files inside it. Name each file after the folder it describes (use the folder's emoji prefix):

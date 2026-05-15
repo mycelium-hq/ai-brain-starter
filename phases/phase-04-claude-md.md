@@ -1,7 +1,20 @@
 
-## Phase 4: Build Their CLAUDE.md
+## Phase 4: Build Their CLAUDE.md (and populate About Me)
 
 "Now the most important part — your memory file. I'm going to ask you some questions, then create a file that I'll read automatically at the start of every conversation. The more specific you are, the better I get."
+
+**Write-through invariant.** Phase 4 produces TWO files at once: `CLAUDE.md` (compressed quick reference loaded every session) and `🏠 Home/About Me.md` (the deep profile created in Phase 3b). Every answer the user gives — and every piece of personal context they volunteer beyond the question — must land in the right section of About Me as you go. Do NOT collect all 6 answers verbally and then write only to CLAUDE.md. The two files fill together, in real time, as the user answers.
+
+| Phase 4 question | Lands in CLAUDE.md | Lands in About Me |
+|---|---|---|
+| 1. Priorities | `## Current Focus` (top 3) | (only if user reveals deeper context about WHY a priority matters — append to `## Work` or `## Personal History`) |
+| 2. Key people | `## People` (5-10 lines) | `## Relationships` (full names, nicknames, relationships) — plus per-person CRM file per Phase 3c CRM wiring |
+| 3. Tools | `## Tools I Use` table | `## Work` (only if a tool name reveals industry / role detail) |
+| 4. Terms / nicknames / acronyms | `## Key Terms` | (no, terms are project-vocab not personal) |
+| 5. How you want me to behave | `## Rules` | (no, this is behavior preferences not personal facts) |
+| 6. Anything else | `## Rules` if behavior, otherwise narrative bottom | YES — most volunteered personal context lands here. Split by section (Identity, Values, Habits, History, etc.) |
+
+**Universal capture during Phase 4 (per Phase 3c):** when the user volunteers something while answering ANY of the 6 questions that doesn't fit the structured slot above, append it to the right About Me section. Example: question 2 is "key people." User says "Diego is my brother-in-law, we worked together at my last company before it sold in 2019." → CLAUDE.md gets "Diego — brother-in-law"; About Me Relationships gets "Diego — brother-in-law"; About Me Work gets "Sold a previous company with Diego in 2019" under Past work. THREE distinct facts, three places.
 
 Ask these ONE AT A TIME:
 
@@ -58,6 +71,9 @@ Now create the CLAUDE.md at the vault root with this structure:
 | Tool | What I use it for |
 |------|------------------|
 [from their answer]
+
+## About Me
+The deep profile lives at `🏠 Home/About Me.md`. Read it on demand for context-heavy work (panel reviews, life-history prose, advisory sessions, weekly insights, anything that needs identity/health/relationships/history depth). Append to it whenever the user reveals new personal context per the universal capture rule.
 
 ## Vault Map
 [FILL THIS IN — list the actual folders created in Phase 3, e.g.:

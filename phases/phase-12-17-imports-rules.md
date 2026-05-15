@@ -27,7 +27,9 @@ After import:
 
 ## Phase 13: Health Data Import (devices + labs)
 
-**MANDATORY ASK — never assume.** Do NOT skip this phase because the user didn't mention health earlier. Most people who own a wearable or have had recent lab work don't think to bring it up during a vault setup. Ask BOTH halves explicitly:
+**MANDATORY ASK — never assume.** Do NOT skip this phase because the user didn't mention health earlier. Most people who own a wearable or have had recent lab work don't think to bring it up during a vault setup. Ask BOTH halves explicitly.
+
+**Universal capture write-through.** Anything the user reveals about their health while answering this phase — conditions, diagnoses, cycle context, recent medical events, medications, therapists, fitness habits — appends to `🏠 Home/About Me.md` under `## Health` per Phase 3c. Health context is high-value for every future session (panel reviews, journal entries, advisory work). Capture is lossless.
 
 ### 13a. Wearables
 
