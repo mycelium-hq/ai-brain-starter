@@ -559,6 +559,26 @@ Surface any background tasks still running, pipeline phases killed mid-run,
 errors not retried. Ask the user "finish now, or defer?" Wait for their call.
 If nothing incomplete: say "No incomplete work" and proceed.
 
+PHASE 0c — Consumable-artifact cleanup (model, BEFORE writes):
+Quick scan for handoff files + consumes_when artifacts. Run these (silent on
+empty), classify each match (consumed/in-flight/stale-untouched), and propose
+`git mv` to Handoffs/Archive/ for consumed items. Never delete without user
+confirm. If no matches found: silent skip, do NOT mention.
+  find "{meta_dir}/Handoffs" -maxdepth 1 -type f -name "*.md" 2>/dev/null
+  grep -lE "^consumes_when:" "{meta_dir}"/*.md 2>/dev/null
+
+PHASE 0d — Orphan task-list guard (model, BEFORE writes):
+Run the orphan-task-list scanner if it exists on this install (skip silently
+on missing — not all installs have it):
+  python3 "{meta_dir}/scripts/check-orphan-task-lists.py" 2>/dev/null || true
+If it fires and reports violators, surface the count + first sample to the
+user before proceeding to Phase 1.
+
+PHASE 0e — Launchd health check (model, BEFORE writes; macOS only):
+On macOS, re-bootstrap any unloaded launchd agents (skip silently if script
+missing or on non-Mac):
+  bash "{meta_dir}/scripts/check-launchd-health.sh" 2>/dev/null || true
+
 PHASE 1 — Single-pass conversation scan (compose all in memory before writing):
   • Belief shifts: did the user end the session believing something different?
   • Journal seeds: VERBATIM quotes where they revealed a belief, observation,
@@ -593,11 +613,39 @@ PHASE 2 — Batch writes (one tool-call block, append never overwrite):
   • Append journal seeds to Captures.
   • Personal vs team firewall: never let personal content leak to a team vault.
 
-The post-Stop hook handles aggregators, retention cleanup, git snapshot,
-worktree cleanup, audits. Don't run those yourself — they fire automatically
-after your turn ends.
+The post-Stop hook handles ONLY the mechanical pieces: aggregators
+(aggregate-sessions.py / aggregate-decisions.py), retention cleanup
+(stubs >7d), git snapshot (vault-safe-commit.sh), worktree-archive-prep.
+Don't run those yourself — they fire automatically after your turn ends.
 
-PHASE 3 — Final summary (one line):
+Phases 0c/0d/0e and the Phase 3 audit are MODEL-SIDE. The post-Stop hook
+does NOT run them.
+
+PHASE 3 — Functional audit (conditional, MODEL-SIDE):
+If this session shipped code or docs to a PUBLIC REPO that users download
+(ai-brain-starter, humanizer, mycelium-site, any *-mcp, etc.), run the
+6-step audit before close:
+  1. Syntax: `python3 -m py_compile` every new/modified .py;
+     `bash -n` every new/modified .sh;
+     `python3 -c "import json; json.load(open(...))"` every new/modified .json.
+  2. Path resolution: grep every `~/.claude/skills/...` path in docs/templates
+     against the actual filesystem. Every path must resolve.
+  3. Orphan scan: grep every new file under hooks/, scripts/, templates/
+     against the docs that should reference it. Unreferenced = invisible.
+  4. Smoke test: invoke each new script with `--help` or minimal args.
+  5. Misleading copy: search shipped docs for "this hook blocks X" /
+     "three gates enforce Y" that imply auto-installation. If the artifact
+     isn't auto-installed, rewrite to "opt-in, install via:".
+  6. Relative link check: resolve every `](...)` relative link in modified
+     README/docs against the filesystem.
+Report: "Audit: N python OK, M bash OK, K JSON OK, P paths resolved,
+Q orphans found + fixed, R smoke tests passed."
+If session shipped to a public repo and you SKIP this audit, you've left
+the close cascade incomplete. CI covers the bulk-mechanical checks
+(syntax, em-dash, cross-reference) but does NOT cover smoke tests,
+misleading copy, or unreferenced files. The audit catches what CI can't.
+
+PHASE 4 — Final summary (one line, after audit if Phase 3 fired):
 "Filed X seeds, Y to-dos (yours: A, delegations: B), Z decisions, checked
 off M items. Anything I missed?"
 
