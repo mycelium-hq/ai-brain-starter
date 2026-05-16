@@ -256,6 +256,8 @@ Every tool is installed and wired during setup. They work together, not in isola
 | `/optimize-brain` | Deep vault optimization: CRM, graphs, dashboards, compression, wikilinks |
 | `/mem-search` | Search Claude's cross-session memory database |
 
+The table above is the daily-driver subset. The full first-party catalog — forty-plus skills grouped by what they do — is in [`docs/SKILLS.md`](docs/SKILLS.md).
+
 ### Power tools under the hood
 
 - **Graphify** — knowledge graph extraction with community detection, audit trails, and 80-92% token savings via wrapper scripts
@@ -361,6 +363,7 @@ If what you need is agent federation, swarm topologies, or a 300-tool MCP server
 
 - **[`RELIABILITY_MANIFESTO.md`](RELIABILITY_MANIFESTO.md)** — the five architectural pillars (vault as ground truth, hooks as deterministic guards, rule extraction, decision-outcome trail, session-close cascade) and the five failure modes they prevent (hallucination, silent failure, cold start, drift, knowledge loss). Read this if you want to understand why the system is shaped the way it is.
 - **[`docs/MCP_STACK.md`](docs/MCP_STACK.md)** — the 13 companion MCP servers (Slack, iMessage, WhatsApp, Google Workspace, Apollo, Substack, lu.ma, parse, graph-query, and more). All public, MIT, draft+confirm on writes, JSONL audit, prompt-injection scrubber. Install whichever subset you need.
+- **[`docs/SKILLS.md`](docs/SKILLS.md)** — the full first-party skill catalog, forty-plus skills grouped by what they do
 - **[`docs/POWER_TOOLS.md`](docs/POWER_TOOLS.md)** — every third-party skill, MCP server, and Obsidian plugin, with attribution and source links
 - **[`docs/MEMORY_SYSTEM.md`](docs/MEMORY_SYSTEM.md)** — how Claude accumulates knowledge across sessions using typed memories
 - **[`docs/TOKEN_OPTIMIZATION.md`](docs/TOKEN_OPTIMIZATION.md)** — how to stop burning tokens on overhead: compress Claude-facing files, cap memory, route cheap work to cheap models
