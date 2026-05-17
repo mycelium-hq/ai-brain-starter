@@ -48,7 +48,7 @@ This is the difference between a tool the creator trusts and one that quietly ha
 
 When the creator rejects a proposed idea:
 
-1. The engine writes an `idea-discard` record with the rejection `reason_code`, an optional note, and a frozen snapshot of the idea's angle, bucket, and platform.
+1. The engine writes an `idea-discard` record with the rejection `reason_code`, an optional note, and a frozen snapshot of the idea's angle, bucket, platform, and format.
 2. The source `content-idea` record's `status` is set to `discarded`.
 3. The next generation run reads recent discards and the `taste-profile` (below). It does not re-propose a discarded idea or a near-variant of one.
 
