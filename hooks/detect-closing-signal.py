@@ -40,7 +40,9 @@ Or via absolute path during install:
   python3 ~/.claude/skills/ai-brain-starter/hooks/detect-closing-signal.py
 
 Environment variables (all optional):
-  VAULT_ROOT — vault path. Defaults to cwd.
+  VAULT_ROOT — vault path. Defaults to cwd. Worktree paths are collapsed to
+               the main vault root so session artifacts never strand on a
+               worktree (see resolve_main_vault).
   CLOSING_SIGNAL_LANGS — comma-separated language packs to load (default: en,es,pt)
   CLOSING_SIGNAL_DETECTION — "regex" (default) or "hybrid" (regex + Haiku fallback)
   CLOSING_SIGNAL_DEBUG — set to 1 for stderr trace
@@ -283,6 +285,30 @@ def derive_worktree(cwd: Path) -> str:
         except OSError:
             pass
     return "main"
+
+
+def resolve_main_vault(path: Path) -> Path:
+    """Collapse a worktree path to the MAIN vault root.
+
+    If `path` is inside `<vault>/.claude/worktrees/<slug>/...`, return
+    `<vault>` — the main vault root. Otherwise return `path` unchanged.
+
+    Session artifacts (the session file, Decisions/, Captures, Time
+    Tracking) MUST land in the main vault. A worktree's own checkout sits
+    on a throwaway `claude/<slug>` branch; anything written there is
+    discarded when the worktree is archived. The close cascade can fire
+    from inside a worktree, so the cwd-derived vault root must be
+    collapsed back to main before any artifact path is resolved.
+
+    Mirrors resolve_main_vault() in scripts/session-end-hook.sh — the same
+    fix applied to the Stop hook for issue #65 / PR #66. This hook (the
+    UserPromptSubmit Layer 1 of the cascade) was never brought to parity.
+    """
+    marker = "/.claude/worktrees/"
+    text = str(path)
+    if marker in text:
+        return Path(text.split(marker, 1)[0])
+    return path
 
 
 def find_meta_dir(vault_root: Path) -> Path:
@@ -666,7 +692,13 @@ def main() -> int:
             emit_passthrough()
             return 0
 
-        vault_root = Path(os.environ.get("VAULT_ROOT", str(cwd)))
+        # Resolve the vault root. When the close cascade fires from inside a
+        # worktree, cwd IS the worktree; resolve_main_vault collapses it back
+        # so every session artifact lands in the main vault, never a throwaway
+        # claude/<slug> branch that gets discarded when the worktree archives.
+        vault_root = resolve_main_vault(
+            Path(os.environ.get("VAULT_ROOT") or cwd)
+        )
 
         langs = [
             x.strip() for x in
