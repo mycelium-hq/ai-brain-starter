@@ -1,6 +1,6 @@
 # Influencer Pack
 
-A creator-economy vertical pack for the ai-brain-starter substrate. The pack ships typed-memory categories, platform connectors, retention defaults, and decision-audit patterns so a creator can install a working second-brain on day one instead of inventing the vocabulary from scratch.
+A creator-economy vertical pack for the ai-brain-starter substrate. The pack ships typed-memory categories, platform connectors, the idea engine, retention defaults, and decision-audit patterns so a creator can install a working second-brain on day one instead of inventing the vocabulary from scratch.
 
 ## What the pack covers
 
@@ -23,8 +23,9 @@ The pack init step verifies these are present and prompts the operator to instal
 
 | Layer | Where it lands |
 |---|---|
-| 9 typed-memory categories | `schema/typed-memory-categories.md` |
+| 12 typed-memory categories | `schema/typed-memory-categories.md` |
 | 16 platform connector specs | `connectors/<platform>.md` |
+| Idea engine (the content-generation spine) | `idea-engine/<file>.md` |
 | Retention defaults | `retention/defaults.md` |
 | Decision-audit patterns | `decision-audit/<pattern>.md` |
 
@@ -43,4 +44,4 @@ A future build will add `operator-pack/` (SMB brick-and-mortar) and `founder-pac
 
 ## License
 
-MIT, same as the rest of ai-brain-starter. Schema is open-core. Workflow content + paid-product mechanics live in the runtime layer, not in this repo.
+MIT, same as the rest of ai-brain-starter. The schema and the idea-engine mechanism are open-core. Calibrated workflow content (tuned generation prompts, per-language filter corpora) and paid-product mechanics live in the runtime layer, not in this repo.
