@@ -314,3 +314,38 @@ jobs:
             done
           done < <(grep -rn -E '`scripts/[A-Za-z0-9_./-]+\.(sh|ps1|py|plist)`' phases/ 2>/dev/null || true)
           [ -f /tmp/lint-ref-fail ] && exit 1 || exit 0
+
+  detect-closing-signal-worktree:
+    name: detect-closing-signal resolves to main vault from a worktree
+    runs-on: ubuntu-latest
+    # Catches the session-artifact stranding bug class: the UserPromptSubmit
+    # close-cascade hook (hooks/detect-closing-signal.py) set vault_root from
+    # its cwd, so when the cascade fired inside a worktree the session file,
+    # Decisions, Captures and Time Tracking all resolved worktree-side and
+    # were discarded when the worktree was archived. Same class as the
+    # worktree-session-close job (#65) but for Layer 1 of the cascade, not the
+    # Stop hook. Test asserts the resolved session file lands in the MAIN
+    # vault, never under .claude/worktrees/, and the worktree slug is kept.
+    # No untrusted user input is referenced in any run: command.
+    steps:
+      - uses: actions/checkout@v6
+      - name: run integration test
+        run: bash tests/integration/test_detect_closing_signal_worktree.sh
+
+  stranded-session-artifacts-watchdog:
+    name: stranded-session-artifacts watchdog detects uncommitted worktree writes
+    runs-on: ubuntu-latest
+    # Layer 3 of the stranding defense: hooks/surface-stranded-session-artifacts.py
+    # is a SessionStart watchdog that flags session artifacts left uncommitted
+    # inside a worktree (which the archive step would discard). Test asserts it
+    # detects an uncommitted session file, names the offending worktree, stays
+    # silent when worktrees are clean, and does not flag committed artifacts.
+    # No untrusted user input is referenced in any run: command.
+    steps:
+      - uses: actions/checkout@v6
+      - name: configure git identity
+        run: |
+          git config --global user.email "ci@example.com"
+          git config --global user.name "ci"
+      - name: run integration test
+        run: bash tests/integration/test_stranded_session_artifacts_watchdog.sh

@@ -9,6 +9,23 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-17: the session-close cascade no longer strands artifacts in a worktree
+
+**Who this affects:** anyone who uses git worktrees and runs the session-close cascade.
+
+When you said "bye" or "wrapping up" from inside a worktree, the close cascade pre-resolved the session file, Decisions, Captures and Time Tracking to the *worktree's* own `Meta/` folder, not the main vault. A worktree sits on a throwaway `claude/<slug>` branch, so when the worktree was archived those writes showed up as "uncommitted changes that will be permanently discarded." Session history was silently lost.
+
+PR #66 fixed this same bug class for the Stop hook (`session-end-hook.sh`). It was never fixed for the UserPromptSubmit hook (`detect-closing-signal.py`), the Layer 1 hook that pre-resolves the paths the model writes to. This release closes that gap.
+
+**What changed:**
+- `detect-closing-signal.py` gains `resolve_main_vault()`. When the cascade fires inside a worktree, the vault root is collapsed back to the main vault before any artifact path is resolved. Session files keep the worktree slug in their filename; only the directory changes to the main vault. Mirrors the `resolve_main_vault()` already in `session-end-hook.sh`.
+- New SessionStart watchdog `surface-stranded-session-artifacts.py`. It scans every worktree for session artifacts left uncommitted and surfaces them loudly at the next session start, before they can be archived away. This is the uncommitted-changes companion to `surface-orphan-claude-branches.py`, which already covers committed-but-unmerged commits on `claude/*` branches.
+- Two new CI tests (`test_detect_closing_signal_worktree.sh`, `test_stranded_session_artifacts_watchdog.sh`) enforce both invariants and fail on revert.
+
+**What you should do:** nothing required, the auto-update picks it up. To wire the new watchdog into your SessionStart hooks immediately, re-run `bash ~/.claude/skills/ai-brain-starter/bootstrap.sh` (idempotent).
+
+---
+
 ## 2026-05-14: install hardening — slash commands actually appear in the palette + activation in this session + capture everything
 
 **Who this affects:** anyone who installed before today. Twelve PRs landed today that fix gaps in the install flow. The most user-visible:
