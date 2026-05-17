@@ -44,4 +44,4 @@ A future build will add `operator-pack/` (SMB brick-and-mortar) and `founder-pac
 
 ## License
 
-MIT, same as the rest of ai-brain-starter. The schema and the idea-engine mechanism are open-core. Calibrated workflow content — tuned generation prompts, per-language filter corpora — and paid-product mechanics live in the runtime layer, not in this repo.
+MIT, same as the rest of ai-brain-starter. The schema and the idea-engine mechanism are open-core. Calibrated workflow content (tuned generation prompts, per-language filter corpora) and paid-product mechanics live in the runtime layer, not in this repo.

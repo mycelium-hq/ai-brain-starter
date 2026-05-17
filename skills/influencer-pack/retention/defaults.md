@@ -22,7 +22,7 @@ The defaults below balance creator workflow needs against platform terms-of-serv
 | `voice-fingerprint-audio` | creator-controlled | encrypted, retention is whatever the creator decides |
 | `audience-question` | indefinite | question patterns persist across years |
 | `content-idea` | indefinite | the creator's content-roadmap history; cheap to keep |
-| `idea-discard` | indefinite | the idea engine's training signal — must never auto-archive, or the taste profile loses its basis |
+| `idea-discard` | indefinite | the idea engine's training signal; must never auto-archive, or the taste profile loses its basis |
 | `taste-profile` | indefinite | one living record per creator, recomputed in place |
 
 ## Jurisdictional overrides

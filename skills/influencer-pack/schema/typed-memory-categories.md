@@ -4,7 +4,7 @@ Twelve categories ship with the influencer pack. Each category lists the require
 
 A document that does not match its declared category schema is rejected at write time and surfaced as a recoverable error to the operator.
 
-The final three categories — `content-idea`, `idea-discard`, `taste-profile` — back the idea engine, the pack's content-generation spine. See `idea-engine/mechanism.md`.
+The final three categories (`content-idea`, `idea-discard`, `taste-profile`) back the idea engine, the pack's content-generation spine. See `idea-engine/mechanism.md`.
 
 ## audience-segment
 
@@ -218,7 +218,7 @@ platform: required (frozen from the discarded idea)
 
 ## taste-profile
 
-The compounding model of one creator's idea preferences, recomputed from their accumulated `idea-discard` and accepted `content-idea` records. This is what makes the idea engine learn: a weighted, confidence-scored model, not a rolling list of recent rejections. Distinct from `voice-fingerprint` — that models how the creator *writes*; this models what the creator wants to *make*.
+The compounding model of one creator's idea preferences, recomputed from their accumulated `idea-discard` and accepted `content-idea` records. This is what makes the idea engine learn: a weighted, confidence-scored model, not a rolling list of recent rejections. Distinct from `voice-fingerprint`, which models how the creator *writes*; this models what the creator wants to *make*.
 
 ```yaml
 type: taste-profile

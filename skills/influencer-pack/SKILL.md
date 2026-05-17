@@ -36,9 +36,9 @@ The idea engine is the pack's spine. It is what turns the typed-memory layer fro
 It does two things a generic AI idea generator does not:
 
 - **Every idea is grounded in real audience evidence.** No idea is proposed without a verbatim quote from a real comment, DM, or piece of the creator's own content behind it. An idea that cannot cite real evidence is dropped, not softened. The enforcing pattern is `decision-audit/evidence-grounding.md`.
-- **It learns the creator's taste.** Every idea the creator discards is logged with a reason and compounded into a `taste-profile` — a weighted, confidence-scored model, not a rolling reject list. Later runs read the profile and stop proposing what the creator keeps rejecting. The engine improves with use, and the profile is the creator's switching cost.
+- **It learns the creator's taste.** Every idea the creator discards is logged with a reason and compounded into a `taste-profile`, a weighted, confidence-scored model, not a rolling reject list. Later runs read the profile and stop proposing what the creator keeps rejecting. The engine improves with use, and the profile is the creator's switching cost.
 
-The engine reads `content-piece`, `dm-conversation`, and `audience-question`; it writes `content-idea`, `idea-discard`, and `taste-profile`. The full mechanism — bucket structure, generation flow, the discard loop, the compounding-profile math, the prompt-cache layout — is in `idea-engine/mechanism.md`. The noise filter that keeps adoration and bot text out of the generation context is in `idea-engine/pre-filter.md`.
+The engine reads `content-piece`, `dm-conversation`, and `audience-question`; it writes `content-idea`, `idea-discard`, and `taste-profile`. The full mechanism (bucket structure, generation flow, the discard loop, the compounding-profile math, the prompt-cache layout) is in `idea-engine/mechanism.md`. The noise filter that keeps adoration and bot text out of the generation context is in `idea-engine/pre-filter.md`.
 
 `/content-engine` is the creator-facing skill that runs the engine.
 

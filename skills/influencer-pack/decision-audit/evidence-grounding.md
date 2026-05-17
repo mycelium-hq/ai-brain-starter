@@ -4,7 +4,7 @@ The idea engine proposes content based on what a creator's audience actually sai
 
 ## Why this exists
 
-A content-idea generator that hallucinates is worse than useless — it is actively harmful. If the engine proposes "your audience keeps asking about X" and the audience never asked about X, the creator makes content for demand that is not there, and they stop trusting every other idea the engine proposes.
+A content-idea generator that hallucinates is worse than useless; it is actively harmful. If the engine proposes "your audience keeps asking about X" and the audience never asked about X, the creator makes content for demand that is not there, and they stop trusting every other idea the engine proposes.
 
 The failure is quiet. A fabricated idea reads exactly like a grounded one. The only defense is to make grounding a hard, checked invariant rather than a hope.
 
@@ -42,7 +42,7 @@ def assert_idea_grounded(idea, typed_memory):
             raise EvidenceGapError(f"{idea.idea_id}: evidence quote not found in any basis record")
 ```
 
-A candidate that raises `EvidenceGapError` is dropped from the batch; the batch proceeds with the ideas that pass. A run that drops every candidate returns an empty batch — a correct result, not a failure.
+A candidate that raises `EvidenceGapError` is dropped from the batch; the batch proceeds with the ideas that pass. A run that drops every candidate returns an empty batch, which is a correct result, not a failure.
 
 ## ID-strip backstop
 
@@ -54,13 +54,13 @@ The backstop is belt-and-suspenders: the prompt instruction is the belt, the str
 
 Every grounding check writes a hash-chained entry to the audit log: timestamp, `idea_id`, batch ID, pass or fail, and on fail the specific gap. The audit log is append-only.
 
-If a drop is later found to be a false positive — the evidence was real but the FK resolution missed it — the operator marks the audit entry `revoked: true` with a reason. The entry stays; the log is never edited.
+If a drop is later found to be a false positive (the evidence was real but the FK resolution missed it), the operator marks the audit entry `revoked: true` with a reason. The entry stays; the log is never edited.
 
 ## What this pattern does not do
 
-This pattern checks that an idea is *grounded*. It does not check that an idea is *good* — that is the creator's judgment, expressed through the discard loop (`idea-engine/mechanism.md`). A well-grounded idea the creator does not like is a valid output of the engine and a valid `idea-discard`. Grounding is the floor, not the ceiling.
+This pattern checks that an idea is *grounded*. It does not check that an idea is *good*; that is the creator's judgment, expressed through the discard loop (`idea-engine/mechanism.md`). A well-grounded idea the creator does not like is a valid output of the engine and a valid `idea-discard`. Grounding is the floor, not the ceiling.
 
 ## Related patterns
 
-- `idea-engine/mechanism.md` — the engine this pattern gates.
-- `decision-audit/sponsored-disclosure.md` — the other pre-publish gate in the pack.
+- `idea-engine/mechanism.md` (the engine this pattern gates).
+- `decision-audit/sponsored-disclosure.md` (the other pre-publish gate in the pack).
