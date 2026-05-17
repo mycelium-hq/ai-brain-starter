@@ -212,9 +212,10 @@ reason_note: optional, free text the creator adds
 angle_snapshot: required (the discarded idea's angle, frozen so the signal survives if the content-idea record is later archived)
 source_bucket: required (frozen from the discarded idea)
 platform: required (frozen from the discarded idea)
+format: required (frozen from the discarded idea)
 ```
 
-`angle_snapshot`, `source_bucket`, and `platform` are copied (frozen) onto the discard record rather than read through the FK, so the learning signal survives independently of the `content-idea` it came from.
+`angle_snapshot`, `source_bucket`, `platform`, and `format` are copied (frozen) onto the discard record rather than read through the FK, so the learning signal survives independently of the `content-idea` it came from. `format` is frozen so the taste profile can compute `rejected_formats` from the discard alone.
 
 ## taste-profile
 
