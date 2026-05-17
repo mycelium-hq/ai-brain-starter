@@ -1,6 +1,6 @@
 ---
 name: influencer-pack
-description: Pre-configured creator-economy vertical pack for the ai-brain-starter substrate. Ships typed-memory categories for audience, DMs, content, collabs, and creator revenue; connector configs for Instagram, TikTok, YouTube, Substack, X, LinkedIn, Stan Store, Stripe, Patreon; retention defaults aligned with Meta + TikTok + YouTube data-handling expectations; decision-audit patterns for sponsored-disclosure and brand-deal terms. Use when onboarding a creator, personal-brand operator, or content-engine team that needs the substrate to come pre-shaped to the work rather than starting from a blank vault.
+description: Pre-configured creator-economy vertical pack for the ai-brain-starter substrate. Ships typed-memory categories for audience, DMs, content, collabs, and creator revenue; connector configs for Instagram, TikTok, YouTube, Substack, X, LinkedIn, Stan Store, Stripe, Patreon; retention defaults aligned with Meta + TikTok + YouTube data-handling expectations; the idea engine, an evidence-grounded content-idea generator that learns the creator's taste from every discard; decision-audit patterns for sponsored-disclosure and evidence-grounding. Use when onboarding a creator, personal-brand operator, or content-engine team that needs the substrate to come pre-shaped to the work rather than starting from a blank vault.
 trigger: /influencer-pack
 argument-hint: "init | status | rebuild [--platform <name>]"
 ---
@@ -21,12 +21,26 @@ Run `/influencer-pack init` and the pack writes:
 
 | Layer | What ships | Where it lands |
 |---|---|---|
-| Schema | 9 typed-memory categories with frontmatter contracts | `schema/typed-memory-categories.md` |
+| Schema | 12 typed-memory categories with frontmatter contracts | `schema/typed-memory-categories.md` |
 | Connectors | 16 platform connector specs (Instagram, TikTok, YouTube, Substack, X, LinkedIn, Stan Store, Stripe, Patreon, more) | `connectors/*.md` |
+| Idea engine | The content-generation spine: bucket structure, discard loop, compounding taste profile, pre-filter interface | `idea-engine/*.md` |
 | Retention | Per-category retention defaults aligned with platform terms of service and creator-economy norms | `retention/defaults.md` |
-| Decision audit | Sponsored-content disclosure pattern and brand-deal acceptance pattern | `decision-audit/*.md` |
+| Decision audit | Sponsored-content disclosure and evidence-grounding patterns | `decision-audit/*.md` |
 
 Nothing is auto-applied to a live install. The pack stages drafts under `drafts/` and prints the path; the operator reviews and accepts before merging into the production memory layer.
+
+## The idea engine
+
+The idea engine is the pack's spine. It is what turns the typed-memory layer from an archive into a working content engine, and it is the piece the rest of the pack orbits.
+
+It does two things a generic AI idea generator does not:
+
+- **Every idea is grounded in real audience evidence.** No idea is proposed without a verbatim quote from a real comment, DM, or piece of the creator's own content behind it. An idea that cannot cite real evidence is dropped, not softened. The enforcing pattern is `decision-audit/evidence-grounding.md`.
+- **It learns the creator's taste.** Every idea the creator discards is logged with a reason and compounded into a `taste-profile` — a weighted, confidence-scored model, not a rolling reject list. Later runs read the profile and stop proposing what the creator keeps rejecting. The engine improves with use, and the profile is the creator's switching cost.
+
+The engine reads `content-piece`, `dm-conversation`, and `audience-question`; it writes `content-idea`, `idea-discard`, and `taste-profile`. The full mechanism — bucket structure, generation flow, the discard loop, the compounding-profile math, the prompt-cache layout — is in `idea-engine/mechanism.md`. The noise filter that keeps adoration and bot text out of the generation context is in `idea-engine/pre-filter.md`.
+
+`/content-engine` is the creator-facing skill that runs the engine.
 
 ## Required companion skills
 
@@ -44,7 +58,7 @@ The influencer-pack assumes these substrate skills are also installed in `~/.cla
 | Skill | What it does | Trigger |
 |---|---|---|
 | `/dm-closer` | Drafts DM responses in the creator's tone, qualifies fan vs prospect vs brand-collab, escalates high-value contacts to manual review. | Always-on |
-| `/content-engine` | Generates short-form posts (Reels, Shorts, TikToks) from anchor recordings plus AI b-roll plus trend formats. | Weekly batch |
+| `/content-engine` | Runs the idea engine: proposes evidence-grounded content ideas across three audience buckets and learns from every discard via the taste profile. Also turns approved ideas and anchor recordings into platform-native drafts. See `idea-engine/mechanism.md`. | Weekly batch |
 | `/weekly-creator-report` | Monday-morning rollup: revenue by source, top content by reach plus revenue, audience growth, collab pipeline status. | Cron at 7am Monday |
 | `/collab-pipeline` | Tracks inbound brand asks plus outbound creator-to-creator collabs with stage, terms, next-step. | Always-on |
 | `/voice-fingerprint-update` | Re-trains the written-voice fingerprint on the last 30 days of approved content. Reads from `External Inputs/YouTube/` (via `ingest-youtube`), the Substack archive, and the IG caption history. | Monthly cron |

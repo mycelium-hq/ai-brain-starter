@@ -1,8 +1,10 @@
 # Influencer pack: typed-memory categories
 
-Nine categories ship with the influencer pack. Each category lists the required frontmatter that the substrate enforces at write time, plus optional frontmatter that downstream queries depend on.
+Twelve categories ship with the influencer pack. Each category lists the required frontmatter that the substrate enforces at write time, plus optional frontmatter that downstream queries depend on.
 
 A document that does not match its declared category schema is rejected at write time and surfaced as a recoverable error to the operator.
+
+The final three categories — `content-idea`, `idea-discard`, `taste-profile` — back the idea engine, the pack's content-generation spine. See `idea-engine/mechanism.md`.
 
 ## audience-segment
 
@@ -170,3 +172,67 @@ transcript_word_count: required, integer
 why_kept: required, one of [reference, inspiration, competitive-analysis, repurposing-input, fact-check]
 linked_content: optional, list of content_id FKs (when this source informed a published piece)
 ```
+
+## content-idea
+
+A single generated content idea: one proposed Reel, carousel, video, or newsletter, grounded in real audience evidence. The output unit of the idea engine. Every `content-idea` must trace to at least one real audience record; an idea with no evidence is rejected at write time (see `decision-audit/evidence-grounding.md`).
+
+```yaml
+type: content-idea
+idea_id: required, unique within tenant
+generated_date: required, ISO 8601
+batch_id: required (groups every idea emitted by one generation run)
+source_bucket: required, one of [audience-comments, audience-dms, top-content]
+platforms: required, list, subset of [instagram, tiktok, youtube, substack, x, linkedin]
+angle: required, one-line thesis of the idea (no raw IDs or hashes in this field)
+format: required, one of [reel, carousel, image-post, story, short, long-video, newsletter, thread, post]
+evidence_quotes: required, non-empty list of verbatim quotes from real audience records
+why_good: required, 1-2 sentences (the pain, curiosity, or segment the idea serves)
+suggested_angle: required, hook + body focus + close (the angle, not a full script)
+basis_content_ids: optional, list of content-piece FKs
+basis_conversation_ids: optional, list of dm-conversation FKs
+basis_question_ids: optional, list of audience-question FKs
+status: required, one of [proposed, accepted, discarded, published]
+linked_content: optional, FK to content-piece once the idea is published
+```
+
+At least one of `basis_content_ids`, `basis_conversation_ids`, `basis_question_ids` must be non-empty, and `evidence_quotes` must be non-empty. The substrate rejects a `content-idea` that fails either condition. This is the evidence-grounding invariant; the enforcing pattern is `decision-audit/evidence-grounding.md`.
+
+## idea-discard
+
+The record of a creator rejecting a generated idea, with the reason. The idea engine's learning signal: every discard feeds the `taste-profile` recompute so future generations stop proposing what the creator keeps rejecting.
+
+```yaml
+type: idea-discard
+discard_id: required, unique within tenant
+idea_id: required, FK to content-idea
+discarded_date: required, ISO 8601
+reason_code: required, one of [topic-covered, not-interested, too-basic, off-voice, wrong-format, other]
+reason_note: optional, free text the creator adds
+angle_snapshot: required (the discarded idea's angle, frozen so the signal survives if the content-idea record is later archived)
+source_bucket: required (frozen from the discarded idea)
+platform: required (frozen from the discarded idea)
+```
+
+`angle_snapshot`, `source_bucket`, and `platform` are copied (frozen) onto the discard record rather than read through the FK, so the learning signal survives independently of the `content-idea` it came from.
+
+## taste-profile
+
+The compounding model of one creator's idea preferences, recomputed from their accumulated `idea-discard` and accepted `content-idea` records. This is what makes the idea engine learn: a weighted, confidence-scored model, not a rolling list of recent rejections. Distinct from `voice-fingerprint` — that models how the creator *writes*; this models what the creator wants to *make*.
+
+```yaml
+type: taste-profile
+profile_id: required, unique within tenant (one active profile per creator)
+updated_date: required, ISO 8601
+discards_observed: required, integer (count of idea-discard records folded into this profile)
+accepts_observed: required, integer (count of accepted or published content-idea records folded in)
+rejected_angles: required, list of {pattern, weight, confidence} entries
+rejected_formats: required, list of {format, weight, confidence} entries
+rejected_topics: required, list of {topic, weight, confidence} entries
+preferred_angles: required, list of {pattern, weight, confidence} entries
+preferred_formats: required, list of {format, weight, confidence} entries
+preferred_topics: required, list of {topic, weight, confidence} entries
+recompute_basis: required, list of idea-discard and content-idea FKs folded in the most recent recompute
+```
+
+`weight` is how strongly a signal recurs (0 to 1); `confidence` scales with how many observations support it, so a profile built on 6 discards is correctly treated as weaker than one built on 200. The recompute cadence and the weighting math are in `idea-engine/mechanism.md`.
