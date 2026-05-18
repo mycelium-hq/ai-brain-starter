@@ -4,15 +4,17 @@
 # It runs in two modes:
 #   - Inside Claude Code (from the README paste-flow): Claude invokes this
 #     as part of end-to-end setup and continues into the interview after.
-#   - Standalone (irm-to-iex from PowerShell): tools get installed, then
-#     the Next-Steps block tells the user to open Claude Code and paste the
-#     setup prompt. Detection is via $env:CLAUDE_CODE_ENTRYPOINT.
+#   - Standalone (run directly from PowerShell after cloning the repo): tools
+#     get installed, then the Next-Steps block tells the user to open Claude
+#     Code and paste the setup prompt. Detection is via $env:CLAUDE_CODE_ENTRYPOINT.
 #
-# Usage (run from PowerShell, NOT cmd.exe):
-#     irm https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main/bootstrap.ps1 | iex
+# Usage (clone the repo first, then run the local script; do not curl-pipe).
+# Run from PowerShell, NOT cmd.exe:
+#     git clone https://github.com/adelaidasofia/ai-brain-starter "$env:USERPROFILE\.claude\skills\ai-brain-starter"
+#     & "$env:USERPROFILE\.claude\skills\ai-brain-starter\bootstrap.ps1"
 #
 # Dry run (preview changes without making them):
-#     iex "& { $(irm https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main/bootstrap.ps1) } -DryRun"
+#     & "$env:USERPROFILE\.claude\skills\ai-brain-starter\bootstrap.ps1" -DryRun
 #
 # SAFETY GUARANTEES, same as bootstrap.sh:
 #   - Existing settings.json/.mcp.json keys preserved (setdefault never overwrites)

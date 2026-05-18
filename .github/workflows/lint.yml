@@ -349,3 +349,32 @@ jobs:
           git config --global user.name "ci"
       - name: run integration test
         run: bash tests/integration/test_stranded_session_artifacts_watchdog.sh
+
+  no-remote-pipe-install:
+    name: install docs never pipe remote code into a shell
+    runs-on: ubuntu-latest
+    # Catches the bug class from the May 2026 install-UX incident: the README
+    # told the installing assistant to run `bash <(curl -fsSL .../bootstrap.sh)`.
+    # Piping un-reviewed remote code into a shell trips the Claude Code auto-mode
+    # classifier on every install; a cautious model then surfaces the block to
+    # the user as a wall of warnings, and one model fabricated a prompt-injection
+    # alert on top of it. The canonical install is now: clone the public repo,
+    # then run the local script. This job fails if any install-facing file
+    # reintroduces a remote-pipe-to-shell pattern. No untrusted user input is
+    # referenced in any run: command.
+    steps:
+      - uses: actions/checkout@v6
+      - name: scan install surfaces
+        run: |
+          set -e
+          fail=0
+          pattern='bash <\(curl|(curl|wget)[^|]*\| *(bash|sh)|\| *iex'
+          while IFS= read -r f; do
+            [ -f "$f" ] || continue
+            if matches=$(grep -nE "$pattern" "$f" 2>/dev/null); then
+              echo "::error file=$f::install docs must not pipe remote code into a shell; use 'git clone' then run the local script"
+              echo "$matches" | head -5 | sed 's|^|  |'
+              fail=1
+            fi
+          done < <(find README.md bootstrap.sh bootstrap.ps1 phases -type f \( -name '*.md' -o -name '*.sh' -o -name '*.ps1' \))
+          exit $fail

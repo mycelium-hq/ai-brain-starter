@@ -6,12 +6,13 @@
 # It runs in two modes:
 #   - Inside Claude Code (from the README paste-flow): Claude invokes this
 #     as part of end-to-end setup and continues into the interview after.
-#   - Standalone (curl-to-bash from a terminal): tools get installed, then
-#     the Next-Steps block tells the user to open Claude Code and paste the
-#     setup prompt. Detection is via $CLAUDE_CODE_ENTRYPOINT.
+#   - Standalone (run directly from a terminal after cloning the repo): tools
+#     get installed, then the Next-Steps block tells the user to open Claude
+#     Code and paste the setup prompt. Detection is via $CLAUDE_CODE_ENTRYPOINT.
 #
-# Usage:
-#     curl -fsSL https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main/bootstrap.sh | bash
+# Usage (clone the repo first, then run the local script; do not curl-pipe):
+#     git clone https://github.com/adelaidasofia/ai-brain-starter ~/.claude/skills/ai-brain-starter
+#     bash ~/.claude/skills/ai-brain-starter/bootstrap.sh
 #
 # What it installs:
 #     - Homebrew (Mac only, if missing)
