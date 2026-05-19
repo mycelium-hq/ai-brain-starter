@@ -241,11 +241,36 @@ Based on their answer, ask follow-up questions. Be curious, not clinical. Push g
 - Celebrate wins they'd normally skip over
 - Keep it conversational, not therapeutic — you're a smart friend who knows them well
 
-### Step 2.5: Gratitude check (optional — offer, don't force)
+### Step 2.5: Gratitude check (MANDATORY — ask, capture, and optionally stage to a gratitude group)
 
-Offer: "Want to capture one thing you're grateful for today — financial, relational, anything?"
+**Codified 2026-05-18.** Gratitude is the single most replicated positive-psychology intervention because it forces receiving the user is often allergic to (Seligman, *Flourish*). Ask for three every session, fold them into the entry, and optionally stage them as a message draft to the user's chosen gratitude group (iMessage, WhatsApp, or any other channel they have configured).
 
-If yes: include it naturally in the journal entry. If they skip it, move on without comment. This counters the journaling bias where only struggle gets documented. "I can afford my rent" counts as much as "great dinner with friends."
+**Ask:** "Three things you're grateful for today — anything. Financial, relational, body, small. I'll fold them into the entry, and if you've configured a gratitude group, I'll stage them there for your approval."
+
+**Capture:** Include the three verbatim in the `## Journal` body in the user's voice AND in a `gratitudes:` frontmatter array (queryable for weekly/monthly reviews and pattern analysis).
+
+**Stage to gratitude group (configurable per vault):**
+- Look for `gratitude_group:` in `Meta/journal-config.md` (or your vault's equivalent). Expected schema:
+  ```yaml
+  gratitude_group:
+    channel: imessage | whatsapp | none   # default: none
+    chat_id: <chat_guid or jid>           # required if channel != none
+    language: en | es | <BCP-47>          # default: en (the language the group operates in)
+    template: |
+      Gratitudes for today:
+      1. {{g1}}
+      2. {{g2}}
+      3. {{g3}}
+  ```
+- If configured, translate the user's gratitudes into the group's language (preserving voice — don't formalize), populate the template, and stage via the appropriate MCP (`mcp__imessage__send_message` or `mcp__whatsapp__send_message`).
+- Wait for explicit user approval, then call `confirm_send`. If the user edits the draft, restage and re-confirm.
+- If `gratitude_group.channel: none` or no config exists, capture the three in the entry without staging anything. Never assume a channel the user hasn't opted into.
+
+**Edge case — only one or two gratitudes given:** capture what was given, don't insist on three. The ritual aims at receiving, not at hitting a quota.
+
+**Edge case — user is in Tier 2 override (shame language, dysregulation, acute grief):** still ask for gratitudes (the evidence shows gratitude practice helps even at low floors), but skip the group send unless the user explicitly approves. Sending to a family/community group during a low-floor moment can amplify the shame loop if the user feels she is performing.
+
+**Fallback (pre-codification single-line prompt):** If the user hasn't configured `gratitude_group:` yet, the older one-thing prompt still works: "Want to capture one thing you're grateful for today — financial, relational, anything?" Capture it in the entry without staging. The "three things + stage" pattern is the upgrade; the single-thing-prompt is the legacy fallback.
 
 ### Step 3: Behavior Accountability Check
 
