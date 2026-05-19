@@ -83,6 +83,20 @@ python3 "$VAULT_ROOT/⚙️ Meta/scripts/audit-public-repo-standards.py"
 
 Audits every public non-archived non-fork repo under your GitHub org for baseline standards: LICENSE, README, real CI workflow (Dependabot auto-merge alone does not count), last-push freshness (>60d = stale). Classifies repo type (`code-python`, `code-node`, `code-go`, `code-rust`, `skill`, `docs`, `meta`) so CI requirements only apply to actual code repos. Output uses Compiled-Truth + Timeline format at `⚙️ Meta/Public Repo Standards Audit.md`. Capture: any repos with gaps, especially `missing LICENSE` (MIT add via `gh api -X PUT contents/LICENSE`) or `no CI workflow` (extend the harden script's Layer 6 to handle the missing case). Skip silently if the script is missing.
 
+### Step 4c.8 — Hallucination tracking (if the scripts exist in this vault)
+
+Run the aggregator first (fast, no LLM calls):
+```bash
+python3 "$VAULT_ROOT/⚙️ Meta/scripts/hallucination-watch.py" --quiet
+```
+
+Then run the sample audit (slower, requires Claude auth — `ANTHROPIC_API_KEY` in env OR a `claude` CLI subprocess can reach Max OAuth):
+```bash
+python3 "$VAULT_ROOT/⚙️ Meta/scripts/hallucination-sample-audit.py" --turns 6 --quiet
+```
+
+The aggregator tallies pre-ship catches from the hookify-blocks log, post-ship corrections from the Critical Failure Inventory, and fabrication-class feedback memories. Output: `⚙️ Meta/Hallucination Watch.md`. The sample audit random-samples recent assistant turns, extracts verifiable factual claims, deterministic vault-greps the keywords, and Claude-classifies each claim as supported / contradicted / unverifiable. Output: `⚙️ Meta/Hallucination Sample Audit.md` (overwrites) + appended history to `⚙️ Meta/Hallucination Sample Audit History.jsonl`. Together they form a per-vault verification harness in the family DELEGATE-52 (arxiv 2604.15597, Apr 2026) identifies as the only consistent mitigation for multi-turn LLM corruption. Capture: this week's fabrication hook fires, any new Critical Failure Inventory rows, this run's `verified_fraction`, and the 4-week trend on verified_fraction (if 4+ history rows exist). Skip silently if either script is missing.
+
 ### Step 4d — Passive captures triage (if the script exists in this vault)
 
 Run:
