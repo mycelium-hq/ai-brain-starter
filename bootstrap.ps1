@@ -72,11 +72,11 @@ function T([string]$en, [string]$es) {
     if ($script:LangCode -eq "es") { return $es } else { return $en }
 }
 
-# ─── Email gate (universal, one-time) ──────────────────────────────────────
-# Every install passes through the form once. The form at
-# https://myceliumai.co/install captures email + context, mints a 32-char
-# token, emails the install command. This script validates the token and
-# writes a marker file. Future re-runs find the marker and skip the gate.
+# ─── Optional signup ───────────────────────────────────────────────────────
+# The install does NOT gate on email. The block below runs only when an
+# email or token was already provided (web-form path, or EMAIL/NAME env
+# vars); with nothing provided it is skipped and the install proceeds.
+# The setup interview makes one optional email ask at the end.
 $emailMarker = "$env:USERPROFILE\.claude\.ai-brain-starter-email-on-file"
 $installApiBase = if ($env:MYCELIUM_INSTALL_API) { $env:MYCELIUM_INSTALL_API } else { "https://myceliumai.co" }
 
