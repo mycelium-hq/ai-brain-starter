@@ -78,7 +78,12 @@ See `retention/defaults.md` for the full table.
 /vertical-finance init
 ```
 
-Stages drafts, prints a review checklist, stops.
+The init command:
+
+1. Verifies the substrate is installed and at a compatible version.
+2. Stages all schema, connector, retention, and decision-audit files under `drafts/finance/`. Nothing is auto-applied; the CFO, controller, and internal-audit lead must review and merge.
+3. Prints a review checklist that names every file staged and the SOX / SEC 17a-4 / state-law citation each enforces.
+4. Stops. The finance organization reviews and merges manually.
 
 ## Status
 
