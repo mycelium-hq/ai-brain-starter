@@ -72,11 +72,7 @@ function T([string]$en, [string]$es) {
     if ($script:LangCode -eq "es") { return $es } else { return $en }
 }
 
-# ─── Optional signup ───────────────────────────────────────────────────────
-# The install does NOT gate on email. The block below runs only when an
-# email or token was already provided (web-form path, or EMAIL/NAME env
-# vars); with nothing provided it is skipped and the install proceeds.
-# The setup interview makes one optional email ask at the end.
+# ─── Optional signup (the install never blocks on it) ──────────────────────
 $emailMarker = "$env:USERPROFILE\.claude\.ai-brain-starter-email-on-file"
 $installApiBase = if ($env:MYCELIUM_INSTALL_API) { $env:MYCELIUM_INSTALL_API } else { "https://myceliumai.co" }
 
