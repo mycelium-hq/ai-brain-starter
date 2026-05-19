@@ -1,0 +1,83 @@
+name: security-audit
+
+# Blocks CI on dependency vulnerabilities across this repo's sub-projects
+# so a vulnerable dependency cannot land, or sit, unnoticed. The weekly
+# cron catches advisories disclosed against dependencies already in use,
+# where no commit is needed for the repo to become vulnerable.
+#
+# Hand-maintained. The repo-hardening tooling (gh-harden-repos.sh)
+# auto-templates a security-audit gate only for repos with an npm or pip
+# manifest at the root; ai-brain-starter keeps its dependency manifests
+# in subdirectories (services/, scripts/, skills/), so this gate is
+# written by hand. Generated gates carry an "Auto-managed by" marker on
+# line 2; this file omits it, so the tooling leaves it alone.
+#
+# No untrusted input is interpolated into any run: step.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 13 * * 1'   # Mondays 13:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  npm-audit:
+    # scripts/whatsapp is the only npm sub-project. Threshold is `high`:
+    # high + critical fail the build; moderate and low stay with
+    # Dependabot PRs so the gate is signal, not noise.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: npm audit (scripts/whatsapp)
+        working-directory: scripts/whatsapp
+        run: |
+          if [ ! -f package-lock.json ] && [ ! -f npm-shrinkwrap.json ]; then
+            npm install --package-lock-only --ignore-scripts
+          fi
+          npm audit --audit-level=high
+
+  pip-audit:
+    # One job per Python sub-project (services + skills). fail-fast is
+    # off so every sub-project is audited even when one has a finding.
+    # pip-audit reads the OSV / PyPI advisory database; a genuinely
+    # unfixable advisory can be waived with `--ignore-vuln <GHSA-id>`
+    # plus a justifying comment, never by deleting this gate.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dir:
+          - services/health-mcp
+          - services/memory-api
+          - skills/nano-banana
+          - skills/synth-pr-to-sop
+          - skills/synth-thread-to-sop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: pip-audit (${{ matrix.dir }})
+        working-directory: ${{ matrix.dir }}
+        run: |
+          python -m pip install --quiet pip-audit
+          if [ -f requirements.txt ]; then
+            pip-audit --requirement requirements.txt
+          elif [ -f pyproject.toml ]; then
+            python -c "import sys,tomllib; sys.stdout.write(chr(10).join(tomllib.load(open('pyproject.toml','rb')).get('project',{}).get('dependencies',[])))" > /tmp/security-audit-deps.txt
+            if [ -s /tmp/security-audit-deps.txt ]; then
+              pip-audit --requirement /tmp/security-audit-deps.txt
+            else
+              echo "security-audit: pyproject.toml declares no [project.dependencies]; nothing to audit."
+            fi
+          else
+            echo "security-audit: no requirements.txt or pyproject.toml; nothing to audit."
+          fi
