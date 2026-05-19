@@ -386,6 +386,72 @@ Tell the user in their PRIMARY_LANGUAGE only. Show one link, matching their lang
 
 ---
 
+## Phase 24.4 — Optional: stay in touch (MANDATORY to ask, the answer is optional)
+
+The install is complete and the vault is fully the user's. This is the ONE place the setup asks for an email, and it is genuinely optional — the install never depended on it. Do NOT pressure, do NOT imply anything is unfinished without it, do NOT re-ask after a decline.
+
+First, check whether they already signed up (web-form installs, or a re-run):
+
+```bash
+test -f "$HOME/.claude/.ai-brain-starter-email-on-file" && echo on-file || echo missing
+```
+
+If `on-file`, skip this phase entirely — they are already on the list. Go straight to Phase 24.5.
+
+If `missing`, make the ask ONCE, in PRIMARY_LANGUAGE:
+
+**EN:** "Your vault is set up and yours to keep — nothing here changes that. One optional thing: I can send a short note when there's a meaningful update to the system, and there's a free workflow audit for founders, a small number each month. If you'd like either, what's the best email? Or just say skip — everything works exactly the same either way."
+
+**ES:** "Tu vault está listo y es tuyo — nada de esto cambia eso. Una cosa opcional: te puedo mandar una nota corta cuando hay una actualización importante del sistema, y hay una auditoría gratuita de flujo de trabajo para founders, algunas cada mes. Si querés cualquiera de las dos, ¿cuál es tu mejor email? O simplemente decí saltar — todo funciona exactamente igual de cualquier forma."
+
+**If they decline** (skip / no / move on): say one warm line ("Done — you're all set." / "Listo — todo en orden.") and go to Phase 24.5. Never ask twice.
+
+**If they give an email**, record it. You already have their name (Phase 1) and PRIMARY_LANGUAGE. Substitute them and run:
+
+```bash
+EMAIL="their@email.com" NAME="Their Name" QM_LANG="en" python3 - <<'PY'
+import json, os, urllib.request
+payload = json.dumps({
+    "email": os.environ["EMAIL"],
+    "name": os.environ["NAME"],
+    "lang": os.environ.get("QM_LANG", "en"),
+    "stage": "post_install",
+}).encode()
+req = urllib.request.Request(
+    "https://myceliumai.co/api/install/quick-mint",
+    data=payload, headers={"content-type": "application/json"}, method="POST")
+try:
+    with urllib.request.urlopen(req, timeout=12) as r:
+        body = json.loads(r.read().decode() or "{}")
+    tok = body.get("token", "")
+    if tok:
+        mp = os.path.expanduser("~/.claude/.ai-brain-starter-email-on-file")
+        with open(mp, "w") as f:
+            f.write(tok + "\n")
+        os.chmod(mp, 0o600)
+    print("ok")
+except Exception as e:
+    print(f"failed: {e}")
+PY
+```
+
+`QM_LANG` is `en` or `es`. The `stage: "post_install"` field tells the server to record the lead WITHOUT emailing an install link — the install already ran.
+
+- If it prints `ok`: tell the user warmly, in PRIMARY_LANGUAGE — "You're on the list. You'll get update notes and the free workflow audit details by email." / "Estás en la lista. Vas a recibir las novedades y los detalles de la auditoría gratuita por email."
+- If it prints `failed: ...`: do NOT alarm the user. Say one calm line — "Noted — I'll make sure that's saved." / "Anotado." — and move on. The install is complete regardless; a network hiccup here is not the user's problem.
+
+Then go to Phase 24.5.
+
+**Why this phase exists:** the install used to gate on email — a hard wall before any value, which turned people away. The email now lives here, at the end, after the value is delivered, as a genuine optional request tied to a real offer (update notes and the free workflow audit). Capturing it here means the people on the list actually used the system and chose to stay in touch — a better signal than a coerced address, and no one is ever blocked.
+
+**Banned framings:**
+- "You need to give your email to finish." — false; the install is already done.
+- Asking twice, or re-asking after a decline.
+- "Sunk cost" / "you've come this far" / "after all that" framing — manipulative. Never.
+- Implying anything stops working, syncs less, or is limited without the email.
+
+---
+
 ## Phase 24.5 — Session-close walkthrough (15 seconds)
 
 After the handoff link, do a quick verbal pointer to how the close works. This is the last setup beat. Say in PRIMARY_LANGUAGE:
@@ -473,17 +539,18 @@ Then truly stop.
 - **NEVER LET INFORMATION GO NOWHERE.** Anything personal the user reveals must land in `🏠 Home/About Me.md` (or the right structured destination: CLAUDE.md quick fields, a per-person CRM file, the Health folder, etc.) before the conversation moves on. Universal capture rule codified in Phase 3c. The failure mode this prevents: user says "I have ADHD" during the tools question, model nods and moves on, the fact never lands anywhere, six months later there's no context for "why am I forgetting things?" Capture must be lossless. Append, never overwrite. Do not pause to confirm — just write the bullet and continue.
 - GO SLOW. Wait for answers. Don't dump instructions.
 - **NEVER STOP MID-SETUP.** After completing each phase, ALWAYS continue to the next phase automatically. Do not wait for the user to ask "what's next?" — tell them what's coming and proceed. The only reasons to pause are: (1) the user explicitly says "let's stop here" or "I need a break," (2) a critical install failed and needs manual intervention, or (3) the user asks a question that needs answering before continuing. After the journal phase especially — there are 10+ more phases. Don't stop there.
-- **PHASES 3b, 11, 13, 19.5, 24, 24.5, 24.6, AND 24.7 ARE MANDATORY.** Fire ALL EIGHT even if a prior phase already surfaced the topic, even if the user seemed disinterested, even if an optional phase (20 team vault, 22 patterns, 23 theme) was skipped, even if 23.5 errored mid-script. Each mandatory phase covers a distinct activation or capture moment the install cannot afford to skip:
+- **PHASES 3b, 11, 13, 19.5, 24, 24.4, 24.5, 24.6, AND 24.7 ARE MANDATORY.** Fire ALL NINE even if a prior phase already surfaced the topic, even if the user seemed disinterested, even if an optional phase (20 team vault, 22 patterns, 23 theme) was skipped, even if 23.5 errored mid-script. Each mandatory phase covers a distinct activation or capture moment the install cannot afford to skip:
   - Phase 3b = create `🏠 Home/About Me.md` from the template. Without it, the universal capture rule has nowhere to write to. Phase 4 fills the first sections; subsequent sessions append.
   - Phase 11 = external-tool wiring. Most common skip: user mentioned Gmail in Phase 4 question 3, model treated that as "answered" and never installed `google-workspace-mcp`. Phase 11 must fire and ACT on the prior mention.
   - Phase 13 = health data import (devices AND labs). Two distinct halves; the labs question is its own mandatory ask, NOT subsumed by the wearables answer.
   - Phase 19.5 = activation moment (user imports their first active doc IN THIS SESSION because we can't assume another session will happen).
   - Phase 24 = Substack first-week handoff with inline three-commands-and-one-habit orientation.
+  - Phase 24.4 = the optional email ask, at the value moment. Mandatory to ASK once; the user's answer is their free choice. It is the de-gated install's only signup touchpoint.
   - Phase 24.5 = session-close walkthrough.
   - Phase 24.6 = progressive-use pointer.
   - Phase 24.7 = AUTO-FIRE session-close cascade (do NOT wait for the user to say "bye"). Without this, the install conversation never gets logged to a session file, the aggregators don't run, and the user's next session opens with no record of what got installed. Phase 24.7 is the difference between "install was saved" and "install evaporated when the user closed the window."
 
-  Skipping any of these silently is the known failure mode: install reaches the second-brain-mapping setup, the model thinks "we're done," closes the session without firing the activation + connection + capture + closing phases. Do not do that. The install is not complete until all eight fire.
+  Skipping any of these silently is the known failure mode: install reaches the second-brain-mapping setup, the model thinks "we're done," closes the session without firing the activation + connection + capture + closing phases. Do not do that. The install is not complete until all nine fire.
 - At the start of each phase, briefly tell the user where they are: "Phase [X] of 21: [Name]. This is where we [one sentence]."
 - If context gets compressed mid-setup (long session), re-read SKILL.md to pick up where you left off. Check which phases are done by looking at what exists in the vault (folders, CLAUDE.md, skills, templates).
 - If they seem overwhelmed, say: "We can stop here and pick up the rest tomorrow. What we've done so far is already working." But default is to KEEP GOING.

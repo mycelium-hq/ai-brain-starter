@@ -18,47 +18,13 @@ As bootstrap prints its own check-mark lines per tool, you don't need to narrate
 
 ---
 
-### Step 0.1a. Email — ask once, in chat (skip if marker already on disk)
+### Step 0.1. Invoke the bootstrap
 
-Before invoking bootstrap, check whether the email gate is already satisfied:
-
-```bash
-test -f "$HOME/.claude/.ai-brain-starter-email-on-file" && echo on-file || echo missing
-```
-
-**If `on-file`**, skip ahead to Step 0.1b. Bootstrap will pass through silently.
-
-**If `missing`**, ask the user — once, in chat — exactly these two questions, in their detected language:
-
-> "What's your email? (Used once to send you a heads-up if anything changes; never spammed.)"
->
-> "And what should I call you?"
-
-Optional: if you don't already know their language preference, ask "English or Spanish?" — default to whatever they've been speaking. Do NOT ask role / company / intent here; Phase 1 covers that.
-
-Once you have email + name (+ optional lang), invoke bootstrap with those pre-set so it mints the token inline via the API (no browser, no email round-trip, no terminal copy-paste):
-
-```bash
-EMAIL="user@example.com" NAME="Their Name" LANG_HINT="en" bash "$HOME/.claude/skills/ai-brain-starter/bootstrap.sh"
-```
-
-```powershell
-$env:EMAIL="user@example.com"; $env:NAME="Their Name"; $env:LANG_HINT="en"; & "$env:USERPROFILE\.claude\skills\ai-brain-starter\bootstrap.ps1"
-```
-
-Bootstrap POSTs to `/api/install/quick-mint`, gets a token, writes the marker, and continues. The user never leaves Claude Code.
-
-**If bootstrap prints `[ai-brain-starter:NEEDS_EMAIL]`** (no email was provided and no marker exists), that's the script telling you to do exactly the above. Re-invoke with `EMAIL=` `NAME=` set.
-
-**Never** send the user to `myceliumai.co/install` and tell them to copy a token from their inbox. That flow exists only as a fallback for users who run bootstrap from a plain shell outside Claude Code.
-
----
-
-### Step 0.1b. Invoke the bootstrap
+The install does not gate on email. Do NOT ask the user for an email or a name before running the installer — just run it. The setup interview makes one optional email ask at the very end (Phase 24.4).
 
 By the time `/setup-brain` fires, the ai-brain-starter skill folder already exists at `~/.claude/skills/ai-brain-starter/` (that's how Claude Code found this phase file). So the bootstrap is always a local invocation, never a fresh curl. It is idempotent: safe on fresh machines and on re-runs. It skips anything already installed.
 
-Detect platform with `uname -s` (Mac/Linux) or `$PSVersionTable` (Windows), then run the matching bootstrap (with `EMAIL=` `NAME=` pre-set per Step 0.1a if the marker was missing):
+Detect platform with `uname -s` (Mac/Linux) or `$PSVersionTable` (Windows), then run the matching bootstrap:
 
 #### Mac / Linux
 
