@@ -426,11 +426,7 @@ PY
 fi
 
 # ───────────────────────────────────────────────────────────────────────────────
-# Optional signup. The install does NOT gate on email. The block below runs
-# only when an email or token was already provided (the web-form path, or
-# EMAIL=/NAME= env vars); with nothing provided it is skipped and the install
-# proceeds. The setup interview makes one optional email ask at the end.
-#
+# Optional signup (the install never blocks on it; the block below explains).
 # Bypass entirely for development: EMAIL_GATE_BYPASS=1 bash bootstrap.sh
 # ───────────────────────────────────────────────────────────────────────────────
 EMAIL_MARKER="$HOME/.claude/.ai-brain-starter-email-on-file"
