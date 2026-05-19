@@ -76,7 +76,12 @@ See `retention/defaults.md`.
 /vertical-healthcare init
 ```
 
-Stages drafts, prints a review checklist, stops.
+The init command:
+
+1. Verifies the substrate is installed and at a compatible version.
+2. Stages all schema, connector, retention, and decision-audit files under `drafts/healthcare/`. Nothing is auto-applied; the privacy officer, security officer, and clinical informatics lead must review and merge.
+3. Prints a review checklist that names every file staged and the HIPAA / state-law citation each enforces.
+4. Stops. The covered entity reviews and merges manually.
 
 ## Status
 
