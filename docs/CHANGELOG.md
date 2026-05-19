@@ -9,6 +9,24 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-18: NVIDIA Tier-2 helpers + two new SessionStart hooks
+
+**Who this affects:** anyone running LLM-calling scripts in their vault, or anyone whose Claude desktop sessions sometimes wedge after a few days.
+
+Three small additions, all opt-in.
+
+**`scripts/nvidia.sh` + `scripts/_nvidia_router.py`** — bash and Python helpers for the NVIDIA build endpoint (Llama 3.3 70B, Llama 4, Qwen3, DeepSeek V4, Nemotron). The Python helper mirrors the API surface of a Claude router so vault scripts can swap one import + one call when the workload is mechanical (classification, extraction, format conversion, structured-output regex work). Free credits on developer accounts. Reads `NVIDIA_API_KEY` from the standard fallback chain (env → `.zshenv` → `.zsh_secrets` → `.zshrc` → …). NEVER use this for judgment, voice-sensitive prose, or agentic loops — the quality gap is real.
+
+**`scripts/nvidia_compare.py`** — comparison harness. Before flipping any pipeline from Claude to a Tier-2 model, run real samples through both and require ≥90% agreement. Text mode uses an LLM-as-judge; JSON mode does structural equality. Pluggable judge callable — defaults to the Claude router next to it if one exists, otherwise accepts `judge_fn=...`. Fails loudly on quality drift instead of letting a cheaper price tag hide it.
+
+**`hooks/check-cron-paths.sh`** — SessionStart hook that warns if your crontab references absolute paths under `$HOME` that no longer exist. Useful after any directory move that affects cron jobs. Silent on success, never blocks.
+
+**`hooks/pty-pressure-check.sh`** — SessionStart hook that warns when the macOS pseudo-terminal pool is ≥75% full. Long-running Claude desktop processes can leak ptys over multi-day sessions; at 100% no new shell can spawn. Silent on success, never blocks.
+
+**What you should do:** the bash hooks land in `~/.claude/hooks/` if you want them — register in your `settings.json` under `hooks.SessionStart`. The NVIDIA helpers live in `scripts/` and are unused unless you call them.
+
+---
+
 ## 2026-05-18: removed the `no-duplicate-h1` hookify template
 
 **Who this affects:** anyone who installed the `no-duplicate-h1.local.md` warn rule from `templates/hookify-rules/`.
