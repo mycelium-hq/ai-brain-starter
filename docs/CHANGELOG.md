@@ -9,6 +9,22 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-18: removed the `no-duplicate-h1` hookify template
+
+**Who this affects:** anyone who installed the `no-duplicate-h1.local.md` warn rule from `templates/hookify-rules/`.
+
+The rule fired on any `# Title` line in `.md` files and was meant to keep H1s out of Obsidian notes (where the filename already renders as the title). In practice the regex `^# .+` matched H1-looking lines inside fenced code blocks too. Every bash comment starting `# Setup` at column 0 inside a triple-backtick block would warn, and the friction outweighed the benefit.
+
+**What changed:**
+- `templates/hookify-rules/hookify.no-duplicate-h1.local.md` removed.
+- Matching test cases dropped from `templates/scripts/hookify-rule-tests.py`.
+
+**What you should do:** if you installed the rule in your own vault and want it gone, delete your `.claude/hookify.no-duplicate-h1.local.md`. If you like the rule and want to keep it, it will keep working. The template removal does not touch installed copies.
+
+The Obsidian rendering behavior (filename = title) is unchanged. You can still avoid H1 in note bodies as a personal style; there is just no enforcement template shipping with the starter kit.
+
+---
+
 ## 2026-05-17: the session-close cascade no longer strands artifacts in a worktree
 
 **Who this affects:** anyone who uses git worktrees and runs the session-close cascade.

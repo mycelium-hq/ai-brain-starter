@@ -95,25 +95,6 @@ TESTS: list[tuple[str, str, str, str, bool, str]] = [
         False,
         "no exclamation: silent",
     ),
-    # no-duplicate-h1 should fire on `# Title` at start of content
-    # (the rule's pattern `^# .+` is anchored to string start, not line start)
-    (
-        "no-duplicate-h1",
-        "Write",
-        str(VAULT_ROOT / "Notes" / "draft.md"),
-        "# Duplicate Title\n\nBody.",
-        True,
-        "H1 at content start: fires",
-    ),
-    # no-duplicate-h1 should NOT fire when content starts with H2
-    (
-        "no-duplicate-h1",
-        "Write",
-        str(VAULT_ROOT / "Notes" / "draft.md"),
-        "## Section\n\nBody.",
-        False,
-        "H2 only: silent",
-    ),
 ]
 
 
