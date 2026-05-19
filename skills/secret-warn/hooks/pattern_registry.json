@@ -1,0 +1,283 @@
+{
+  "_meta": {
+    "schema_version": "0.1",
+    "purpose": "Public substrate (MIT) pattern catalog. Subset of the Mycelium AI Vault Security Pack \u2014 drops the MCP-install audit and per-client personal-data scrub layers (Mycelium-only). Patterns base64-encoded so the registry doesn't trigger pattern-matching tools that scan it.",
+    "license": "MIT",
+    "upgrade_path": "https://myceliumai.co for the enterprise version with quarterly reports + MCP audit + per-client tuning"
+  },
+  "rules": [
+    {
+      "id": "secret-stripe-key",
+      "category": "secrets",
+      "description": "Stripe live or test secret key",
+      "severity": "block",
+      "regex_b64": "KD86c2t8cmt8cGspXyg/OmxpdmV8dGVzdClfWzAtOWEtekEtWl17MjQsfQ==",
+      "applies_to": [
+        "edit",
+        "commit"
+      ],
+      "false_positive_hint": "Test fixtures should use sk_test_xxx_FIXTURE_xxx style with FIXTURE marker."
+    },
+    {
+      "id": "secret-aws-access-key",
+      "category": "secrets",
+      "description": "AWS access key ID",
+      "severity": "block",
+      "regex_b64": "QUtJQVswLTlBLVpdezE2fQ==",
+      "applies_to": [
+        "edit",
+        "commit"
+      ],
+      "false_positive_hint": "Examples in docs should use AKIAEXAMPLEEXAMPLEXX with EXAMPLE marker."
+    },
+    {
+      "id": "secret-aws-secret-key",
+      "category": "secrets",
+      "description": "AWS secret access key adjacent to aws context",
+      "severity": "block",
+      "regex_b64": "YXdzX3NlY3JldF9hY2Nlc3Nfa2V5XHMqWzo9XVxzKlsiJ10/W0EtWmEtejAtOS8rPV17NDB9WyInXT8=",
+      "entropy_min": 4.0,
+      "applies_to": [
+        "edit",
+        "commit"
+      ]
+    },
+    {
+      "id": "secret-gcp-service-account",
+      "category": "secrets",
+      "description": "GCP service account private key JSON",
+      "severity": "block",
+      "regex_b64": "InR5cGUiXHMqOlxzKiJzZXJ2aWNlX2FjY291bnQiLiooInByaXZhdGVfa2V5Iik=",
+      "applies_to": [
+        "edit",
+        "commit"
+      ]
+    },
+    {
+      "id": "secret-openai-key",
+      "category": "secrets",
+      "description": "OpenAI API key",
+      "severity": "block",
+      "regex_b64": "c2stW0EtWmEtejAtOV17MjAsfVQzQmxia0ZKW0EtWmEtejAtOV17MjAsfQ==",
+      "applies_to": [
+        "edit",
+        "commit"
+      ]
+    },
+    {
+      "id": "secret-anthropic-key",
+      "category": "secrets",
+      "description": "Anthropic API key",
+      "severity": "block",
+      "regex_b64": "c2stYW50LVtBLVphLXowLTlfLV17NjAsfQ==",
+      "applies_to": [
+        "edit",
+        "commit"
+      ]
+    },
+    {
+      "id": "secret-github-token",
+      "category": "secrets",
+      "description": "GitHub personal access token or fine-grained token",
+      "severity": "block",
+      "regex_b64": "KD86Z2hwfGdob3xnaHV8Z2hzfGdocnxnaXRodWJfcGF0KV9bQS1aYS16MC05X117MjAsfQ==",
+      "applies_to": [
+        "edit",
+        "commit"
+      ]
+    },
+    {
+      "id": "secret-slack-token",
+      "category": "secrets",
+      "description": "Slack token bot user app or refresh",
+      "severity": "block",
+      "regex_b64": "eG94W2FicHJzXS1bQS1aYS16MC05LV17MjAsfQ==",
+      "applies_to": [
+        "edit",
+        "commit"
+      ]
+    },
+    {
+      "id": "secret-private-key-block",
+      "category": "secrets",
+      "description": "PEM private key block (RSA OpenSSH EC DSA PGP)",
+      "severity": "block",
+      "regex_b64": "LS0tLS1CRUdJTiAoPzpSU0EgfE9QRU5TU0ggfEVDIHxEU0EgfFBHUCApP1BSSVZBVEUgS0VZLS0tLS0=",
+      "applies_to": [
+        "edit",
+        "commit"
+      ]
+    },
+    {
+      "id": "secret-jwt",
+      "category": "secrets",
+      "description": "JWT token",
+      "severity": "warn",
+      "regex_b64": "ZXlKW0EtWmEtejAtOV8tXXsxMCx9XC5leUpbQS1aYS16MC05Xy1dezEwLH1cLltBLVphLXowLTlfLV17MTAsfQ==",
+      "applies_to": [
+        "edit",
+        "commit"
+      ],
+      "false_positive_hint": "JWTs often appear in docs. Warn not block."
+    },
+    {
+      "id": "secret-generic-high-entropy",
+      "category": "secrets",
+      "description": "High-entropy string adjacent to key-like assignment",
+      "severity": "warn",
+      "regex_b64": "KD9pKSg/OmFwaVtfLV0/a2V5fHNlY3JldHx0b2tlbnxwYXNzd29yZHxwYXNzd2R8cHdkKVxzKls6PV1ccypbIiddKFtBLVphLXowLTlfLystPV17MjAsfSlbIiddPw==",
+      "entropy_min": 4.5,
+      "applies_to": [
+        "edit",
+        "commit"
+      ],
+      "false_positive_hint": "Allowlisted placeholders (your-key-here, REPLACE_ME, EXAMPLE, FIXTURE)."
+    },
+    {
+      "id": "injection-python-dynamic-codegen-userinput",
+      "category": "injection",
+      "description": "Python dynamic code generation on a variable name suggesting user input",
+      "severity": "warn",
+      "regex_b64": "KD86ZXZhbHxleGVjKVxzKlwoXHMqKD86cmVxdWVzdHxpbnB1dHx1c2VyfGRhdGF8Ym9keXxwYXJhbXN8YXJnc3xmb3JtfHF1ZXJ5KQ==",
+      "applies_to": [
+        "edit"
+      ]
+    },
+    {
+      "id": "injection-python-subprocess-shell-mode",
+      "category": "injection",
+      "description": "Python subprocess with shell mode enabled",
+      "severity": "warn",
+      "regex_b64": "c3VicHJvY2Vzc1wuKD86Y2FsbHxydW58UG9wZW58Y2hlY2tfb3V0cHV0fGNoZWNrX2NhbGwpXChbXildKnNoZWxsXHMqPVxzKlRydWU=",
+      "applies_to": [
+        "edit"
+      ]
+    },
+    {
+      "id": "injection-os-shell-call",
+      "category": "injection",
+      "description": "Python os module shell command call",
+      "severity": "warn",
+      "regex_b64": "b3NcLnN5c3RlbVxzKlwo",
+      "applies_to": [
+        "edit"
+      ]
+    },
+    {
+      "id": "injection-js-child-process-string-mode",
+      "category": "injection",
+      "description": "Node child_process command builder with string interpolation",
+      "severity": "warn",
+      "regex_b64": "Y2hpbGRfcHJvY2Vzc1wuKD86ZXhlY3xleGVjU3luYylccypcKFxzKltgIidd",
+      "applies_to": [
+        "edit"
+      ],
+      "remediation": "Use execFile with arg array. See scripts/remediations.md."
+    },
+    {
+      "id": "injection-sql-string-concat",
+      "category": "injection",
+      "description": "SQL query built via string concat with a variable",
+      "severity": "warn",
+      "regex_b64": "KD86U0VMRUNUfElOU0VSVHxVUERBVEV8REVMRVRFKVxzK1teIic7XSpbIiddXHMqXCtccypcdys=",
+      "applies_to": [
+        "edit"
+      ],
+      "remediation": "Use parameterized queries or a query builder."
+    },
+    {
+      "id": "injection-html-direct-assign",
+      "category": "injection",
+      "description": "Direct DOM HTML assignment from a variable (XSS risk)",
+      "severity": "warn",
+      "regex_b64": "XC5pbm5lckhUTUxccyo9XHMqW2EtekEtWl8kXQ==",
+      "applies_to": [
+        "edit"
+      ],
+      "remediation": "Use textContent or sanitize via DOMPurify before assignment."
+    },
+    {
+      "id": "injection-react-unsafe-html",
+      "category": "injection",
+      "description": "React unsafe HTML injection prop",
+      "severity": "warn",
+      "regex_b64": "ZGFuZ2Vyb3VzbHlTZXRJbm5lckhUTUxccyo9XHMqXHs=",
+      "applies_to": [
+        "edit"
+      ],
+      "remediation": "Sanitize HTML via DOMPurify before passing to the unsafe HTML prop."
+    },
+    {
+      "id": "install-pipe-to-shell-untrusted",
+      "category": "install",
+      "description": "Pipe-to-shell install pattern from non-allowlisted host",
+      "severity": "block",
+      "regex_b64": "KD86Y3VybHx3Z2V0KVxzK1tefF0qXHwgKlxzKig/OnNofGJhc2h8enNofGZpc2gp",
+      "applies_to": [
+        "bash"
+      ],
+      "allowlist_hosts": [
+        "sh.rustup.rs",
+        "bun.sh",
+        "nodejs.org",
+        "get.docker.com",
+        "get.helm.sh"
+      ]
+    },
+    {
+      "id": "insecure-cors-wildcard-credentials",
+      "category": "insecure-default",
+      "description": "CORS allow-origin wildcard with credentials enabled",
+      "severity": "warn",
+      "regex_b64": "QWNjZXNzLUNvbnRyb2wtQWxsb3ctT3JpZ2luW15cbl0qXCpbXlxuXSpBY2Nlc3MtQ29udHJvbC1BbGxvdy1DcmVkZW50aWFsc1tdXG5dKnRydWU=",
+      "applies_to": [
+        "edit"
+      ]
+    },
+    {
+      "id": "insecure-hardcoded-debug-true",
+      "category": "insecure-default",
+      "description": "DEBUG flag hardcoded true in non-local config",
+      "severity": "warn",
+      "regex_b64": "KD9pKSg/OkRFQlVHfEZMQVNLX0RFQlVHfERKQU5HT19ERUJVR3xOT0RFX0VOVilccypbOj1dXHMqWyInXT8oPzp0cnVlfDF8ZGV2ZWxvcG1lbnQpWyInXT8=",
+      "applies_to": [
+        "edit"
+      ],
+      "applies_to_paths_inverse_match": [
+        ".env.local",
+        "*.test.*",
+        "*-dev.*"
+      ]
+    },
+    {
+      "id": "insecure-weak-crypto",
+      "category": "insecure-default",
+      "description": "MD5 or SHA1 used in crypto context",
+      "severity": "warn",
+      "regex_b64": "KD86aGFzaGxpYlwuKD86bWQ1fHNoYTEpfGNyeXB0b1wuY3JlYXRlSGFzaFwoWyciXSg/Om1kNXxzaGExKSlcYg==",
+      "applies_to": [
+        "edit"
+      ],
+      "remediation": "Use SHA-256 or stronger for crypto."
+    }
+  ],
+  "allowlist": {
+    "hosts": [
+      "sh.rustup.rs",
+      "bun.sh",
+      "nodejs.org",
+      "get.docker.com",
+      "get.helm.sh"
+    ],
+    "placeholder_values": [
+      "your-key-here",
+      "REPLACE_ME",
+      "EXAMPLE",
+      "FIXTURE",
+      "TODO",
+      "your_token_here",
+      "xxx",
+      "***"
+    ]
+  }
+}

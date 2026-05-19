@@ -1,0 +1,40 @@
+{
+  "_meta": {
+    "purpose": "Hook registration for the secret-warn public skill. Merged into ~/.claude/settings.json by install.sh (non-destructive: appends to existing arrays).",
+    "license": "MIT"
+  },
+  "PreToolUse": [
+    {
+      "matcher": "Write|Edit|MultiEdit",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 \"${SECRET_WARN_ROOT:-$HOME/.claude/secret-warn}/secret_warn.py\"",
+          "description": "secret-warn: scan file content before edit"
+        }
+      ]
+    },
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 \"${SECRET_WARN_ROOT:-$HOME/.claude/secret-warn}/secret_warn.py\"",
+          "description": "secret-warn: scan bash command before run"
+        }
+      ]
+    }
+  ],
+  "PostToolUse": [
+    {
+      "matcher": "Write|Edit|MultiEdit",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python3 \"${SECRET_WARN_ROOT:-$HOME/.claude/secret-warn}/secret_warn.py\"",
+          "description": "secret-warn: re-scan after edit"
+        }
+      ]
+    }
+  ]
+}
