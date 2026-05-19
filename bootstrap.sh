@@ -437,8 +437,14 @@ fi
 EMAIL_MARKER="$HOME/.claude/.ai-brain-starter-email-on-file"
 INSTALL_API_BASE="${MYCELIUM_INSTALL_API:-https://myceliumai.co}"
 
-if [[ "${EMAIL_GATE_BYPASS:-0}" != "1" && $DRY_RUN -eq 0 && ! -f "$EMAIL_MARKER" ]]; then
-  hdr "$(t "Email gate (one-time)" "Verificación de email (una sola vez)")"
+# Optional signup. This block only runs when the user already provided an
+# email -- a web-form token (TOKEN=) or EMAIL=/NAME= env vars. With nothing
+# provided it is skipped entirely and the install proceeds; the setup
+# interview makes one optional email ask at the end. The install never
+# blocks on signup.
+if [[ "${EMAIL_GATE_BYPASS:-0}" != "1" && $DRY_RUN -eq 0 && ! -f "$EMAIL_MARKER" \
+      && ( -n "${TOKEN:-}" || ( -n "${EMAIL:-}" && -n "${NAME:-}" ) ) ]]; then
+  hdr "$(t "Signup" "Registro")"
 
   # Inline path: EMAIL+NAME provided as env vars (typically by Claude Code
   # after asking the user inline). POST to quick-mint to get a token without
@@ -489,104 +495,57 @@ PY
     fi
   fi
 
-  if [[ -z "${TOKEN:-}" ]]; then
-    # No token, no inline EMAIL+NAME. Two paths:
-    #   (a) Inside Claude Code → emit a sentinel telling Claude to collect
-    #       email + name inline and re-run with EMAIL= NAME= LANG= preset.
-    #   (b) Standalone shell → print the form URL fallback.
-    if [[ -n "${CLAUDE_CODE_ENTRYPOINT:-}" ]]; then
-      cat <<EOF
+  # If a token was provided (web-form path) or minted inline above, validate
+  # it and capture the recap. On ANY failure here, warn and continue
+  # tokenless. The install must never abort over an optional signup.
+  if [[ -n "${TOKEN:-}" ]]; then
+    TOKEN="$(echo "$TOKEN" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+    if [[ ! "$TOKEN" =~ ^[a-f0-9]{32}$ ]]; then
+      warn "$(t "Token shape invalid - continuing without it." \
+               "Formato de token inválido - seguimos sin él.")"
+      TOKEN=""
+    fi
+  fi
+  if [[ -n "${TOKEN:-}" ]]; then
+    log "$(t "Validating token against $INSTALL_API_BASE..." \
+            "Validando token contra $INSTALL_API_BASE...")"
+    set +e
+    VERIFY_RESP="$(curl -sS -m 10 "$INSTALL_API_BASE/api/install/verify?token=$TOKEN" 2>/dev/null)"
+    set -e
+    if [[ -z "$VERIFY_RESP" ]] || ! echo "$VERIFY_RESP" | grep -q '"valid":true'; then
+      warn "$(t "Token did not validate - continuing without it." \
+               "El token no validó - seguimos sin él.")"
+      TOKEN=""
+    fi
+  fi
+  if [[ -n "${TOKEN:-}" ]]; then
+    ok "$(t "Token valid. Recording email-on-file marker." \
+            "Token válido. Guardando marca de email-en-archivo.")"
+    mkdir -p "$HOME/.claude"
+    printf '%s\n' "$TOKEN" > "$EMAIL_MARKER"
+    chmod 600 "$EMAIL_MARKER"
 
-[ai-brain-starter:NEEDS_EMAIL]
-
-$(t "Bootstrap needs an email before installing. To keep this in-chat (no browser, no terminal copy-paste):" \
-    "El bootstrap necesita un email antes de instalar. Para mantenerlo en chat (sin navegador, sin copiar y pegar):")
-
-$(t "1. Ask the user: 'What's your email?' and 'What name should I use?' Optional: language preference (en/es)." \
-    "1. Preguntale al usuario: '¿Cuál es tu email?' y '¿Qué nombre uso?' Opcional: idioma (en/es).")
-$(t "2. Re-invoke this script with those values pre-set:" \
-    "2. Volvé a correr este script con esos valores ya cargados:")
-
-   EMAIL="user@example.com" NAME="Their Name" LANG_HINT="en" bash $0
-
-$(t "Bootstrap will POST to /api/install/quick-mint, get a token, write the marker, and continue installing. The user never leaves Claude Code." \
-    "El bootstrap llama a /api/install/quick-mint, obtiene el token, escribe el marker y continúa. El usuario nunca sale de Claude Code.")
-
-EOF
-      exit 3
+    # Fetch the recap so the setup-brain skill can pre-populate Phase 1 with
+    # the user's name, role, intent, language, voice link, etc.
+    RECAP_FILE="$HOME/.claude/.ai-brain-starter-recap.json"
+    set +e
+    RECAP_RESP="$(curl -sS -m 8 "$INSTALL_API_BASE/api/install/recap?token=$TOKEN" 2>/dev/null)"
+    set -e
+    if [[ -n "$RECAP_RESP" ]] && echo "$RECAP_RESP" | grep -q '"ok":true'; then
+      printf '%s\n' "$RECAP_RESP" > "$RECAP_FILE"
+      chmod 600 "$RECAP_FILE"
+      ok "$(t "Recap cached for setup-brain Phase 1." \
+              "Recap guardado para Phase 1 de setup-brain.")"
     fi
 
-    # Standalone terminal fallback (curl-to-bash from a plain shell).
-    cat <<EOF
-
-  $(t "We need your email before installing the second brain." \
-        "Necesitamos tu email antes de instalar el segundo cerebro.")
-
-  $(t "Easiest path: open Claude Code and say 'install ai-brain-starter'. It" \
-        "Camino más fácil: abrí Claude Code y decí 'instalá ai-brain-starter'.")
-  $(t "will ask for your email in chat and handle the rest. No browser." \
-        "Te pide el email en el chat y se encarga del resto. Sin navegador.")
-
-  $(t "Or, if you'd rather use the form:" "O, si preferís el formulario:")
-
-  1. $(t "Open this URL in your browser:" "Abrí este URL en tu navegador:")
-     https://myceliumai.co/install
-     ($(t "Spanish:" "Español:") https://myceliumai.co/es/install)
-
-  2. $(t "Check your email for the install command and paste it back into a shell." \
-          "Revisá tu email para el comando y pegalo en una terminal.")
-
-         TOKEN=<your-token-from-email> bash $0
-
-EOF
-    exit 3
+    # Fire install_bootstrap_started event (best-effort, fail-open).
+    set +e
+    curl -sS -m 6 -X POST "$INSTALL_API_BASE/api/install/started" \
+      -H "content-type: application/json" \
+      -d "{\"token\":\"$TOKEN\",\"os\":\"$(uname -srm 2>/dev/null || echo unknown)\"}" \
+      >/dev/null 2>&1 || true
+    set -e
   fi
-
-  # Token provided — validate against the API.
-  TOKEN="$(echo "$TOKEN" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
-  if [[ ! "$TOKEN" =~ ^[a-f0-9]{32}$ ]]; then
-    err "$(t "Token shape invalid. Expected 32 hex characters." \
-            "Formato de token inválido. Esperaba 32 caracteres hexadecimales.")"
-    exit 4
-  fi
-  log "$(t "Validating token against $INSTALL_API_BASE..." \
-          "Validando token contra $INSTALL_API_BASE...")"
-  set +e
-  VERIFY_RESP="$(curl -sS -m 10 "$INSTALL_API_BASE/api/install/verify?token=$TOKEN" 2>/dev/null)"
-  set -e
-  if [[ -z "$VERIFY_RESP" ]] || ! echo "$VERIFY_RESP" | grep -q '"valid":true'; then
-    REASON="$(echo "${VERIFY_RESP:-}" | grep -oE '"reason":"[^"]+"' | sed 's/.*"reason":"\([^"]*\)".*/\1/' || true)"
-    err "$(t \
-      "Token validation failed (reason: ${REASON:-unknown}). Get a fresh token at https://myceliumai.co/install and re-run." \
-      "Falló la validación del token (motivo: ${REASON:-desconocido}). Conseguí un token nuevo en https://myceliumai.co/install y volvé a correr.")"
-    exit 4
-  fi
-  ok "$(t "Token valid. Recording email-on-file marker." \
-          "Token válido. Guardando marca de email-en-archivo.")"
-  mkdir -p "$HOME/.claude"
-  printf '%s\n' "$TOKEN" > "$EMAIL_MARKER"
-  chmod 600 "$EMAIL_MARKER"
-
-  # Fetch the recap so the setup-brain skill can pre-populate Phase 1 with
-  # the user's name, role, intent, language, voice link, etc.
-  RECAP_FILE="$HOME/.claude/.ai-brain-starter-recap.json"
-  set +e
-  RECAP_RESP="$(curl -sS -m 8 "$INSTALL_API_BASE/api/install/recap?token=$TOKEN" 2>/dev/null)"
-  set -e
-  if [[ -n "$RECAP_RESP" ]] && echo "$RECAP_RESP" | grep -q '"ok":true'; then
-    printf '%s\n' "$RECAP_RESP" > "$RECAP_FILE"
-    chmod 600 "$RECAP_FILE"
-    ok "$(t "Recap cached for setup-brain Phase 1." \
-            "Recap guardado para Phase 1 de setup-brain.")"
-  fi
-
-  # Fire install_bootstrap_started event (best-effort, fail-open).
-  set +e
-  curl -sS -m 6 -X POST "$INSTALL_API_BASE/api/install/started" \
-    -H "content-type: application/json" \
-    -d "{\"token\":\"$TOKEN\",\"os\":\"$(uname -srm 2>/dev/null || echo unknown)\"}" \
-    >/dev/null 2>&1 || true
-  set -e
 fi
 
 # ───────────────────────────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@
 
 ### Step 1.−2 — Read the install recap if present (run FIRST, before any user-facing question)
 
-If the bootstrap completed via the email-gated install path, it cached the user's metadata at `~/.claude/.ai-brain-starter-recap.json`. The file looks like:
+The bootstrap caches the user's metadata at `~/.claude/.ai-brain-starter-recap.json` only when the user installed through the web form (most installs do not — they go straight to the interview). If the file is present, it looks like:
 
 ```json
 {

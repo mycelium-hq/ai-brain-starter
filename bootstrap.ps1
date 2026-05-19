@@ -80,8 +80,12 @@ function T([string]$en, [string]$es) {
 $emailMarker = "$env:USERPROFILE\.claude\.ai-brain-starter-email-on-file"
 $installApiBase = if ($env:MYCELIUM_INSTALL_API) { $env:MYCELIUM_INSTALL_API } else { "https://myceliumai.co" }
 
-if ($env:EMAIL_GATE_BYPASS -ne "1" -and -not $DryRun -and -not (Test-Path $emailMarker)) {
-    Hdr (T "Email gate (one-time)" "Verificación de email (una sola vez)")
+# Optional signup. This block only runs when the user already provided an
+# email - a web-form token or EMAIL/NAME env vars. With nothing provided it
+# is skipped and the install proceeds; the setup interview makes one optional
+# ask at the end. The install never blocks on signup.
+if ($env:EMAIL_GATE_BYPASS -ne "1" -and -not $DryRun -and -not (Test-Path $emailMarker) -and ($env:TOKEN -or ($env:EMAIL -and $env:NAME))) {
+    Hdr (T "Signup" "Registro")
 
     # Inline path: EMAIL+NAME passed as env vars (typically by Claude Code
     # after asking the user inline). POST to quick-mint to get a token
@@ -116,97 +120,61 @@ if ($env:EMAIL_GATE_BYPASS -ne "1" -and -not $DryRun -and -not (Test-Path $email
         }
     }
 
-    if (-not $env:TOKEN) {
-        if ($env:CLAUDE_CODE_ENTRYPOINT) {
-            Write-Host ""
-            Write-Host "[ai-brain-starter:NEEDS_EMAIL]"
-            Write-Host ""
-            Write-Host (T "Bootstrap needs an email before installing. To keep this in-chat:" `
-                         "El bootstrap necesita un email antes de instalar. Para mantenerlo en chat:")
-            Write-Host ""
-            Write-Host (T "1. Ask the user: 'What's your email?' and 'What name should I use?' Optional: language (en/es)." `
-                         "1. Preguntale: '¿Cuál es tu email?' y '¿Qué nombre uso?' Opcional: idioma (en/es).")
-            Write-Host (T "2. Re-invoke this script with those values pre-set:" `
-                         "2. Volvé a correr este script con esos valores ya cargados:")
-            Write-Host ""
-            Write-Host '   $env:EMAIL="user@example.com"; $env:NAME="Their Name"; $env:LANG_HINT="en"; & "$env:USERPROFILE\.claude\skills\ai-brain-starter\bootstrap.ps1"'
-            Write-Host ""
-            Write-Host (T "Bootstrap will POST to /api/install/quick-mint, get a token, and continue. The user never leaves Claude Code." `
-                         "El bootstrap llama a /api/install/quick-mint, obtiene el token y continúa. El usuario nunca sale de Claude Code.")
-            Write-Host ""
-            exit 3
+    # If a token was provided (web-form path) or minted inline above,
+    # validate it. On ANY failure here, warn and continue tokenless. The
+    # install must never abort over an optional signup.
+    $tk = if ($env:TOKEN) { $env:TOKEN.ToLower().Trim() } else { "" }
+    if ($tk -and $tk -notmatch '^[a-f0-9]{32}$') {
+        Warn (T "Token shape invalid - continuing without it." `
+               "Formato de token inválido - seguimos sin él.")
+        $tk = ""
+    }
+    if ($tk) {
+        Log (T "Validating token against $installApiBase..." `
+              "Validando token contra $installApiBase...")
+        try {
+            $verifyUri = "$installApiBase/api/install/verify?token=$tk"
+            $resp = Invoke-RestMethod -Uri $verifyUri -Method Get -TimeoutSec 10 -ErrorAction Stop
+            if ($resp.valid -ne $true) {
+                Warn (T "Token did not validate - continuing without it." `
+                       "El token no validó - seguimos sin él.")
+                $tk = ""
+            }
+        } catch {
+            Warn (T "Token validation request failed - continuing without it." `
+                   "Falló la solicitud de validación - seguimos sin él.")
+            $tk = ""
+        }
+    }
+    if ($tk) {
+        Ok (T "Token valid. Recording email-on-file marker." `
+              "Token válido. Guardando marca de email-en-archivo.")
+        New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude" | Out-Null
+        Set-Content -Path $emailMarker -Value $tk -Encoding ASCII
+
+        # Fetch recap for setup-brain Phase 1 pre-population
+        try {
+            $recapUri = "$installApiBase/api/install/recap?token=$tk"
+            $recap = Invoke-WebRequest -Uri $recapUri -Method Get -TimeoutSec 8 -UseBasicParsing -ErrorAction Stop
+            if ($recap.StatusCode -eq 200) {
+                $recapPath = "$env:USERPROFILE\.claude\.ai-brain-starter-recap.json"
+                Set-Content -Path $recapPath -Value $recap.Content -Encoding UTF8
+                Ok (T "Recap cached for setup-brain Phase 1." `
+                      "Recap guardado para Phase 1 de setup-brain.")
+            }
+        } catch {
+            # Best-effort. Setup-brain Phase 1 falls back to asking the questions.
         }
 
-        Write-Host ""
-        Write-Host ("  " + (T "We need your email before installing the second brain." `
-                              "Necesitamos tu email antes de instalar el segundo cerebro."))
-        Write-Host ""
-        Write-Host ("  " + (T "Easiest path: open Claude Code and say 'install ai-brain-starter'." `
-                              "Camino más fácil: abrí Claude Code y decí 'instalá ai-brain-starter'."))
-        Write-Host ("  " + (T "It asks for your email in chat and handles the rest. No browser." `
-                              "Te pide el email en el chat y se encarga del resto. Sin navegador."))
-        Write-Host ""
-        Write-Host ("  " + (T "Or, if you'd rather use the form:" "O, si preferís el formulario:"))
-        Write-Host ("  1. " + (T "Open this URL in your browser:" "Abrí este URL en tu navegador:"))
-        Write-Host "     https://myceliumai.co/install"
-        Write-Host ("     (" + (T "Spanish:" "Español:") + " https://myceliumai.co/es/install)")
-        Write-Host ""
-        Write-Host ("  2. " + (T "Check your email for the install command and paste it back into PowerShell." `
-                              "Revisá tu email para el comando y pegalo en PowerShell."))
-        Write-Host ""
-        Write-Host '         $env:TOKEN = "<your-token-from-email>"; pwsh bootstrap.ps1'
-        Write-Host ""
-        exit 3
-    }
-    $tk = $env:TOKEN.ToLower().Trim()
-    if ($tk -notmatch '^[a-f0-9]{32}$') {
-        Err (T "Token shape invalid. Expected 32 hex characters." `
-              "Formato de token inválido. Esperaba 32 caracteres hexadecimales.")
-        exit 4
-    }
-    Log (T "Validating token against $installApiBase..." `
-          "Validando token contra $installApiBase...")
-    try {
-        $verifyUri = "$installApiBase/api/install/verify?token=$tk"
-        $resp = Invoke-RestMethod -Uri $verifyUri -Method Get -TimeoutSec 10 -ErrorAction Stop
-        if ($resp.valid -ne $true) {
-            $reason = if ($resp.reason) { $resp.reason } else { "unknown" }
-            Err (T "Token validation failed (reason: $reason). Get a fresh token at https://myceliumai.co/install and re-run." `
-                  "Falló la validación del token (motivo: $reason). Conseguí un token nuevo en https://myceliumai.co/install y volvé a correr.")
-            exit 4
+        # Fire install_bootstrap_started event (best-effort)
+        try {
+            $os = "$([System.Environment]::OSVersion.VersionString) $env:PROCESSOR_ARCHITECTURE"
+            $body = @{ token = $tk; os = $os } | ConvertTo-Json -Compress
+            Invoke-RestMethod -Uri "$installApiBase/api/install/started" -Method Post `
+                -Body $body -ContentType "application/json" -TimeoutSec 6 -ErrorAction SilentlyContinue | Out-Null
+        } catch {
+            # Best-effort. Funnel telemetry, not a hard dependency.
         }
-    } catch {
-        Err (T "Token validation request failed: $_. Get a fresh token at https://myceliumai.co/install and re-run." `
-              "Falló la solicitud de validación de token: $_. Conseguí un token nuevo en https://myceliumai.co/install y volvé a correr.")
-        exit 4
-    }
-    Ok (T "Token valid. Recording email-on-file marker." `
-          "Token válido. Guardando marca de email-en-archivo.")
-    New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude" | Out-Null
-    Set-Content -Path $emailMarker -Value $tk -Encoding ASCII
-
-    # Fetch recap for setup-brain Phase 1 pre-population
-    try {
-        $recapUri = "$installApiBase/api/install/recap?token=$tk"
-        $recap = Invoke-WebRequest -Uri $recapUri -Method Get -TimeoutSec 8 -UseBasicParsing -ErrorAction Stop
-        if ($recap.StatusCode -eq 200) {
-            $recapPath = "$env:USERPROFILE\.claude\.ai-brain-starter-recap.json"
-            Set-Content -Path $recapPath -Value $recap.Content -Encoding UTF8
-            Ok (T "Recap cached for setup-brain Phase 1." `
-                  "Recap guardado para Phase 1 de setup-brain.")
-        }
-    } catch {
-        # Best-effort. Setup-brain Phase 1 falls back to asking the questions.
-    }
-
-    # Fire install_bootstrap_started event (best-effort)
-    try {
-        $os = "$([System.Environment]::OSVersion.VersionString) $env:PROCESSOR_ARCHITECTURE"
-        $body = @{ token = $tk; os = $os } | ConvertTo-Json -Compress
-        Invoke-RestMethod -Uri "$installApiBase/api/install/started" -Method Post `
-            -Body $body -ContentType "application/json" -TimeoutSec 6 -ErrorAction SilentlyContinue | Out-Null
-    } catch {
-        # Best-effort. Funnel telemetry, not a hard dependency.
     }
 }
 
