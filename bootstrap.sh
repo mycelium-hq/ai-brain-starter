@@ -426,13 +426,12 @@ PY
 fi
 
 # ───────────────────────────────────────────────────────────────────────────────
-# Email gate (universal). Every install passes through the form once. The form
-# at https://myceliumai.co/install captures email + context, mints a 32-char
-# token, and emails the install command. Bootstrap validates the token and
-# writes a marker file. Future bootstrap re-runs find the marker and skip the
-# gate. Existing users (no marker yet) get the same prompt on their next run.
+# Optional signup. The install does NOT gate on email. The block below runs
+# only when an email or token was already provided (the web-form path, or
+# EMAIL=/NAME= env vars); with nothing provided it is skipped and the install
+# proceeds. The setup interview makes one optional email ask at the end.
 #
-# Bypass for development: EMAIL_GATE_BYPASS=1 bash bootstrap.sh
+# Bypass entirely for development: EMAIL_GATE_BYPASS=1 bash bootstrap.sh
 # ───────────────────────────────────────────────────────────────────────────────
 EMAIL_MARKER="$HOME/.claude/.ai-brain-starter-email-on-file"
 INSTALL_API_BASE="${MYCELIUM_INSTALL_API:-https://myceliumai.co}"
