@@ -14,9 +14,14 @@ Problem this fixes:
 - The warning is a false positive but trains the eye to ignore it, which would
   mask a real loss the day a worktree edit ISN'T also at main.
 
-This hook detects identical-to-main shared-canonical files and stages+commits
-them on the worktree branch silently. Real divergences are surfaced for human
-review and left alone.
+This hook handles each identical-to-main shared-canonical file two ways:
+- git knows it (tracked on the branch, or committed on master/main): stage it;
+  a fast-forward merge reconciles it onto the worktree branch with no orphan
+  commit.
+- no git ref knows it (a genuine orphan duplicate): prune the worktree copy --
+  the real content already lives at main vault, so this is a zero-data-loss
+  cleanup of a false `??`.
+Real divergences are surfaced for human review and left alone.
 
 CONFIG (per user, once):
 1. Set VAULT_ROOT below to your vault root, OR rely on auto-detect (walks up
@@ -88,6 +93,30 @@ def files_identical(a: Path, b: Path) -> bool:
         return False
 
 
+def reconcilable_via_git(wt: Path, rel_path: str) -> bool:
+    """True if git can reconcile this file via stage + fast-forward.
+
+    True when the file is tracked on the worktree branch, OR committed on
+    master/main (a later FF-merge restores it as tracked + clean). False only
+    when no git ref knows the file at all -- a genuine orphan duplicate that
+    FF cannot clean, so it must be pruned instead.
+    """
+    # Tracked on the current (worktree) branch?
+    if subprocess.run(
+        ["git", "-C", str(wt), "ls-files", "--error-unmatch", "--", rel_path],
+        capture_output=True,
+    ).returncode == 0:
+        return True
+    # Committed on master/main? An FF-merge will restore + track it.
+    for branch in ("master", "main"):
+        if subprocess.run(
+            ["git", "-C", str(wt), "cat-file", "-e", f"{branch}:{rel_path}"],
+            capture_output=True,
+        ).returncode == 0:
+            return True
+    return False
+
+
 def main() -> None:
     if os.environ.get("WORKTREE_RECONCILE_BYPASS"):
         return
@@ -106,22 +135,62 @@ def main() -> None:
 
     reconciled: list[str] = []
     divergent: list[str] = []
+    pruned: list[str] = []
 
     for pattern in SHARED_PATTERNS:
         for wt_file in wt.glob(pattern):
             rel = wt_file.relative_to(wt)
             main_file = main_vault / rel
             if not main_file.exists():
+                # No main copy: genuine worktree-only content. Leave alone --
+                # the real stranding case; needs human review.
                 continue
             if not files_identical(wt_file, main_file):
                 divergent.append(str(rel))
                 continue
-            res = subprocess.run(
-                ["git", "-C", str(wt), "add", "--", str(rel)],
-                capture_output=True,
+            # Identical to the main vault copy. Two sub-cases:
+            if reconcilable_via_git(wt, str(rel)):
+                # git knows this file (tracked on the branch, or committed on
+                # master/main). Stage it; the FF/commit step below makes it
+                # clean by advancing the branch to a tip that contains it.
+                res = subprocess.run(
+                    ["git", "-C", str(wt), "add", "--", str(rel)],
+                    capture_output=True,
+                )
+                if res.returncode == 0:
+                    reconciled.append(str(rel))
+            else:
+                # No git ref knows this file -> a genuine orphan duplicate
+                # (created this session, written to main, not yet committed
+                # anywhere). FF cannot clean it and `git add` would only turn
+                # a `??` into a staged `A` that still trips the archive
+                # warning. The content is safe at the main vault (main_file
+                # exists + verified identical) and the worktree is a throwaway
+                # checkout, so delete the worktree copy. Zero data loss.
+                try:
+                    wt_file.unlink()
+                    pruned.append(str(rel))
+                except OSError:
+                    pass
+
+    # Report prunes + real divergences regardless of whether any tracked file
+    # needs an FF/commit reconcile below.
+    if pruned:
+        print(json.dumps({
+            "systemMessage": (
+                f"[reconcile-worktree-shared] pruned {len(pruned)} redundant "
+                f"untracked duplicate(s) from the worktree -- byte-identical to "
+                f"main vault, which keeps its copy (zero data loss): "
+                f"{', '.join(pruned[:5])}"
             )
-            if res.returncode == 0:
-                reconciled.append(str(rel))
+        }))
+    if divergent:
+        print(json.dumps({
+            "systemMessage": (
+                f"[reconcile-worktree-shared] {len(divergent)} shared-canonical "
+                f"file(s) DIVERGE from main vault: {', '.join(divergent[:5])}"
+            )
+        }), file=sys.stderr)
 
     if not reconciled:
         return
@@ -191,14 +260,6 @@ def main() -> None:
                     f"via scripts/recover-orphan-claude-branches.py."
                 )
             }))
-
-    if divergent:
-        print(json.dumps({
-            "systemMessage": (
-                f"[reconcile-worktree-shared] {len(divergent)} shared-canonical "
-                f"file(s) DIVERGE from main vault: {', '.join(divergent[:5])}"
-            )
-        }), file=sys.stderr)
 
 
 if __name__ == "__main__":
