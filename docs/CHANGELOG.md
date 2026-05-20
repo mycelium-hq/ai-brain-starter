@@ -9,6 +9,28 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-19: close the commit-time race for reconcile-worktree-shared
+
+**Who this affects:** anyone using git worktrees inside an Obsidian vault with the `reconcile-worktree-shared.py` SessionEnd hook, who has ALSO seen the worktree-archive prompt fire "N uncommitted changes will be discarded" warnings on byte-identical-to-main files.
+
+Reconcile fires at SessionEnd. Between then and the worktree-archive prompt, OTHER committers (hookify-auto-commit, auto-snapshot, your own commit wrappers) can land commits on master. The active worktree branch falls behind. Archive sees those byte-identical files as "uncommitted" and warns. False positive, but it trains the eye to ignore the warning - which would mask a real loss the day a worktree edit ISN'T also at main.
+
+**What's new:**
+
+**`scripts/post-commit-ff-worktrees.sh`** - a generic helper any committer can call after landing a commit on main. It enumerates active claude/* worktrees via `git worktree list --porcelain` and `git merge --ff-only` each one to the main branch tip. Silent on success, silent on FF-impossible (diverged branches are the reconcile-on-SessionEnd fallback's job, not ours). Parses worktree-list output line-by-line via bash `case` - never `awk $2`, because AWK's default field split silently truncates worktree paths containing spaces.
+
+**`tests/integration/test_post_commit_ff_worktrees.sh`** - CI test for the helper. Three assertions: FF advances a strict-ancestor worktree branch, space-containing paths parse correctly, diverged branches are left alone.
+
+**What you should do:** if you maintain your own commit wrapper(s), call the helper as the last step after a successful commit:
+
+```bash
+bash /path/to/post-commit-ff-worktrees.sh "$MAIN_VAULT"
+```
+
+And ALSO wire `reconcile-worktree-shared.py` into your `~/.claude/settings.json` Stop hooks (not just SessionEnd) so the FF fires between assistant turns. SessionEnd alone leaves a race window between the hook firing and the archive prompt.
+
+---
+
 ## 2026-05-18: NVIDIA Tier-2 helpers + two new SessionStart hooks
 
 **Who this affects:** anyone running LLM-calling scripts in their vault, or anyone whose Claude desktop sessions sometimes wedge after a few days.
