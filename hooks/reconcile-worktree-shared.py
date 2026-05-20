@@ -27,13 +27,29 @@ CONFIG (per user, once):
 1. Set VAULT_ROOT below to your vault root, OR rely on auto-detect (walks up
    from cwd looking for the .claude/worktrees/ pattern).
 2. Edit SHARED_PATTERNS to match your worktree-discipline rules.
-3. Wire into ~/.claude/settings.json:
+3. Wire into ~/.claude/settings.json BOTH SessionEnd AND Stop hooks. SessionEnd
+   alone leaves a race window between when the hook fires and when the
+   worktree-archive prompt runs (other committers, like hookify-auto-commit
+   or auto-snapshot, can land commits on master in between). Stop fires after
+   every assistant turn and closes that window:
      "SessionEnd": [
        {"matcher": "", "hooks": [{
          "type": "command",
          "command": "python3 ~/.claude/hooks/reconcile-worktree-shared.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'"
        }]}
+     ],
+     "Stop": [
+       {"hooks": [{
+         "type": "command",
+         "command": "python3 ~/.claude/hooks/reconcile-worktree-shared.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'"
+       }]}
      ]
+
+4. (Optional, recommended) For zero-window race closure, have your commit
+   wrappers call scripts/post-commit-ff-worktrees.sh after each successful
+   commit on main. The helper enumerates active claude/* worktree branches
+   and FFs them to master, so an upcoming archive prompt never sees the
+   stale state in the first place.
 
 BYPASS: WORKTREE_RECONCILE_BYPASS=1
 """
