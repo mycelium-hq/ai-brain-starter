@@ -378,3 +378,22 @@ jobs:
             fi
           done < <(find README.md bootstrap.sh bootstrap.ps1 phases -type f \( -name '*.md' -o -name '*.sh' -o -name '*.ps1' \))
           exit $fail
+
+  trust-prompt-preframing:
+    name: install pre-frames Claude Code's trust prompt
+    runs-on: ubuntu-latest
+    # Catches the bug class from the May 2026 installer-panic incident: a
+    # non-technical user hit Claude Code's built-in trust prompt for the
+    # third-party plugins, marketplaces, and MCP servers the bootstrap
+    # registers, with no warning, and nearly abandoned the install thinking
+    # malware was being slipped onto the machine. The trust prompt is correct
+    # and is NOT suppressed; the fix is to pre-frame it everywhere the
+    # installer looks. Fails if any pre-framing surface is removed (README
+    # EN+ES sections, the maintainer-guide instruction, phase-00 Step 0.0b,
+    # the bootstrap.sh and bootstrap.ps1 heads-up lines), or if the false
+    # "no questions, it just runs" promise returns to the README.
+    # No untrusted user input is referenced in any run: command.
+    steps:
+      - uses: actions/checkout@v6
+      - name: run integration test
+        run: bash tests/integration/test_trust_prompt_preframing.sh
