@@ -20,13 +20,13 @@ As bootstrap prints its own check-mark lines per tool, you don't need to narrate
 
 ### Step 0.0b. Tell the user about the trust prompt before it appears
 
-The bootstrap registers third-party plugin marketplaces and MCP servers (see the install table in Step 0.1). Once that happens, Claude Code shows its **built-in trust prompt** for the third-party content. You cannot suppress that prompt, and you should not want to — it is a real safety feature. But a non-technical user who hits it cold, with no warning, reads it as "malicious software is sneaking onto my machine," panics, and abandons the install. This has happened to a real installer.
+The bootstrap registers third-party plugin marketplaces and MCP servers (see the install table in Step 0.1). Once that happens, Claude Code shows its **built-in trust prompt** for the third-party content. You cannot suppress that prompt, and you should not want to. It is a real safety feature. But a non-technical user who hits it cold, with no warning, reads it as "malicious software is sneaking onto my machine," panics, and abandons the install. This has happened to a real installer.
 
-So get ahead of it. **Before** you invoke the bootstrap — or the instant you see the prompt appear, whichever comes first — tell the user, in their language, something close to this:
+So get ahead of it. **Before** you invoke the bootstrap (or the instant you see the prompt appear, whichever comes first), tell the user, in their language, something close to this:
 
 > "Heads up on one thing: in a moment Claude Code will pause and ask you to approve the tools we're installing. It may warn that they come from third parties or are not verified by Anthropic. That is Claude Code's normal safety check for anything that did not come from Anthropic itself, not a sign that anything is wrong. It is safe to approve. Everything being added is listed, with licenses, in the project's README. Go ahead and approve it when you see it, and I'll keep going."
 
-Adapt the wording to the user and the moment; do not read it robotically. The non-negotiable part: before they read the prompt themselves, the user must KNOW it is coming, that it is expected, and that approving is the normal choice. Never let the trust prompt be the first time they hear of it — an unframed trust prompt is the single most common reason a non-technical install gets abandoned.
+Adapt the wording to the user and the moment; do not read it robotically. The non-negotiable part: before they read the prompt themselves, the user must KNOW it is coming, that it is expected, and that approving is the normal choice. Never let the trust prompt be the first time they hear of it. An unframed trust prompt is the single most common reason a non-technical install gets abandoned.
 
 ---
 
@@ -62,7 +62,7 @@ If the user reached /setup-brain WITHOUT running bootstrap first (rare), the rep
 | Sub-skills | graphify, meeting-todos, patterns, insights, deconstruct, daily-journal, repurpose-talk, nano-banana (skill folder only; plugin install is deferred) |
 | Humanizer | cloned from its own public fork (idempotent, never touched on re-run) |
 | MCPs | granola + chatprd (registered in ~/.claude/.mcp.json with backup) |
-| Marketplaces / plugins | obsidian-skills (kepano), enabling obsidian/context7/playwright; PLUS seven vendor skill-pack marketplaces (getsentry, trailofbits, stripe, cloudflare, AgriciDaniel/claude-seo, obra/superpowers, coreyhaines31/marketingskills), skippable with SKIP_VENDOR_SKILLS=1. These third-party marketplaces are what trigger Claude Code's trust prompt — pre-frame it per Step 0.0b. |
+| Marketplaces / plugins | obsidian-skills (kepano), enabling obsidian/context7/playwright; PLUS seven vendor skill-pack marketplaces (getsentry, trailofbits, stripe, cloudflare, AgriciDaniel/claude-seo, obra/superpowers, coreyhaines31/marketingskills), skippable with SKIP_VENDOR_SKILLS=1. These third-party marketplaces are what trigger Claude Code's trust prompt; pre-frame it per Step 0.0b. |
 
 **Bootstrap does NOT touch:**
 - The user's vault CLAUDE.md (vault path isn't known until Phase 5)
