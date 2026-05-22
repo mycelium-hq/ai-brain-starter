@@ -381,7 +381,7 @@ If no morning `/rise` entry exists for today: `/journal` runs its normal flow wi
 - Does NOT do pattern detection across weeks (use `/patterns`)
 - Does NOT write to calendar — surfaces conflicts only
 - Does NOT prescribe gym workouts — only the post-wake mobility flow (use `/coach` for the full session)
-- Does NOT auto-trigger — runs on explicit `/rise` invocation only
+- Does NOT fire on its own. The user starts it, with `/rise` or a plain morning greeting like "good morning" / "let's start the day". No hook runs it in the background
 
 ---
 
