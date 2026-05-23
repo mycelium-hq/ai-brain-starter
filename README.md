@@ -1,5 +1,18 @@
 # AI Brain Starter
 
+
+<!-- mycelium-badges:start -->
+
+<p>
+  <a href="https://github.com/adelaidasofia/ai-brain-starter/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/adelaidasofia/ai-brain-starter?color=blue"></a>
+  <a href="https://github.com/adelaidasofia/ai-brain-starter/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/adelaidasofia/ai-brain-starter?color=eab308"></a>
+  <a href="https://github.com/adelaidasofia/ai-brain-starter/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/adelaidasofia/ai-brain-starter"></a>
+  <a href="https://github.com/adelaidasofia/ai-brain-starter/issues"><img alt="Open issues" src="https://img.shields.io/github/issues/adelaidasofia/ai-brain-starter"></a>
+  <a href="https://myceliumai.co"><img alt="Built by Mycelium AI" src="https://img.shields.io/badge/built_by-Mycelium_AI-15B89A"></a>
+</p>
+
+<!-- mycelium-badges:end -->
+
 A verification harness around your AI agent. So memory compounds instead of corrupts.
 
 ---
