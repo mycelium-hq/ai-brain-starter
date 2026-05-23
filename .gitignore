@@ -34,3 +34,6 @@ secrets.json
 *.duckdb.wal
 *.duckdb.tmp
 **/health-mcp-extract/
+
+# codegraph local index (per-clone, 100MB+, regenerated on demand).
+.codegraph/

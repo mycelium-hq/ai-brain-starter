@@ -99,6 +99,13 @@ Bootstrap touches your `~/.claude/` directory and registers third-party content.
 | `coreyhaines31/marketingskills` | marketing-skills (41 marketing sub-skills) | MIT |
 | `kepano/obsidian-skills` | obsidian, context7, playwright | MIT |
 
+> **macOS vs Windows.** All eight marketplaces install via `bootstrap.sh` on macOS. On Windows, `bootstrap.ps1` installs only `obsidian-skills` plus the two MCP servers below; the seven vendor skill-packs are not ported yet. To add any of them manually after install, paste this into Claude Code (substituting names from the table above):
+>
+> ```
+> /plugin marketplace add <owner>/<repo>
+> /plugin install <plugin>@<marketplace-id>
+> ```
+
 **MCP servers wired in `~/.claude/.mcp.json`:** `granola` (meeting transcription), `chatprd` (PRD drafting). Existing MCPs you wired yourself are preserved.
 
 **System tools (skipped if already present):** Homebrew, Python 3.10+, Node, npm, pipx, gh, fastmcp, graphify (via pipx), skill-seekers (via pipx), Obsidian.
@@ -201,30 +208,30 @@ Instalá ai-brain-starter para mí. Leé https://github.com/adelaidasofia/ai-bra
 
 Ese es el prompt entero. Después de pegarlo, lo que pasa:
 
-- Claude corre el instalador por vos. Configura Homebrew, Python, Node, Obsidian, y las skills y herramientas que el sistema usa. Tarda unos minutos.
-- **Algo que vas a ver:** durante la instalación, Claude Code va a pausar y pedirte que apruebes las herramientas que se están agregando. Esa pausa es normal. Es el chequeo de seguridad propio de Claude Code, el mismo que te protege de software realmente malo. La sección de abajo, "Qué te va a preguntar Claude", lo explica en lenguaje simple. Aprobarlo es lo correcto, y podés leer exactamente qué se está agregando primero.
-- La entrevista de setup arranca automáticamente. Abre preguntándote en qué idioma querés hacerlo, y de ahí te guía por el setup.
-- Cerca del final, Claude te pregunta una vez, opcional, si querés novedades ocasionales de la instalación y una auditoría gratis de tu flujo de trabajo por email. Decí que sí o saltala. La instalación está completa y es tuya igual.
+- Claude corre el instalador por vos. Instala Homebrew, Python, Node, Obsidian, y las skills y herramientas que el sistema usa. Toma unos minutos.
+- **Una cosa con la que vas a cruzarte:** durante la instalación, Claude Code va a frenar un momento para pedirte que apruebes las herramientas que se están agregando. Es su chequeo de seguridad normal, el mismo que te cuida cuando se instala algo que no viene de Anthropic. La sección de abajo, "Qué te va a preguntar Claude", lo explica con calma. Cuando aparezca, dale aprobar tranquilo; y si querés, podés revisar antes qué se está agregando.
+- La entrevista de setup arranca automáticamente. Empieza preguntándote en qué idioma querés hacerlo, y de ahí te guía por todo el resto.
+- Cerca del final, Claude te pregunta una sola vez, y es opcional, si querés que te lleguen las novedades importantes y una auditoría gratis de tu flujo de trabajo para founders. Decí que sí o decí que no. La instalación está completa y es tuya igual.
 
-Sin pestaña del navegador. Sin Terminal. Sin email para instalar. Sólo pegás, y aprobás el chequeo de seguridad cuando aparezca.
+Sin pestaña del navegador. Sin Terminal. Sin email para instalar. Pegás el prompt, le das aprobar al chequeo de seguridad cuando aparezca, y eso es todo.
 
 *Instalación local. Los datos de tu vault no salen de tu máquina. El email — si elegís darlo — es lo único que toca nuestros servidores, y sólo lo que está listado en [`SECURITY.md`](SECURITY.md) y la [política de privacidad](https://myceliumai.co/privacy).*
 
 ### Qué te va a preguntar Claude, y por qué es seguro
 
-En algún momento de la instalación, Claude Code frena y te muestra un aviso de seguridad. Te pide que apruebes los plugins y herramientas que se están agregando, y te advierte, en un tono bastante fuerte, que vienen de terceros y que Anthropic no los verificó.
+En algún momento de la instalación, Claude Code va a frenar para mostrarte un aviso de seguridad. Te pide aprobar los plugins y herramientas que se están agregando, y te avisa, en un tono bien firme, que vienen de terceros y que Anthropic no los verificó.
 
-**Esto es esperado, y leerlo con cuidado fue el instinto correcto.** Claude Code muestra ese aviso para *cualquier* herramienta que no venga de Anthropic. No es señal de que algo esté mal. Es el mismo chequeo que te protege de software realmente dañino, haciendo su trabajo en una instalación normal.
+**Esto es esperado, y hacés bien en leerlo con calma.** Claude Code muestra ese aviso para *cualquier* herramienta que no venga de Anthropic. No es señal de que algo esté mal. Es el mismo chequeo que te cuida cuando se está instalando algo de afuera, haciendo su trabajo en una instalación normal.
 
 Esto es lo que estás aprobando:
 
-- **El plugin ai-brain-starter.** Este proyecto. Licencia MIT, público, cada archivo se puede leer en GitHub.
-- **Un grupo chico de packs de skills de nombres establecidos.** Trail of Bits (una firma de seguridad), Stripe, Cloudflare, Sentry, y algunos autores de skills independientes. Cada uno, con su licencia y lo que hace, está listado en [Before you paste](#before-you-paste--what-gets-installed) más arriba.
-- **Dos servidores MCP.** Granola (notas de reuniones) y ChatPRD (borradores). Ayudantes opcionales que podés remover después.
+- **El plugin ai-brain-starter.** Este proyecto. MIT, público, todos los archivos visibles en GitHub.
+- **Un grupo pequeño de packs de skills de nombres conocidos.** Trail of Bits (firma de seguridad), Stripe, Cloudflare, Sentry, y algunos autores independientes. Cada uno, con su licencia y para qué sirve, está en [Before you paste](#before-you-paste--what-gets-installed) más arriba.
+- **Dos servidores MCP.** Granola (notas de reuniones) y ChatPRD (borradores). Opcionales, los quitás cuando quieras.
 
-Nada de esto manda tus archivos a ningún lado. La instalación es local y tu vault se queda en tu máquina. Si preferís saltarte los packs de terceros del todo, podés: poné `SKIP_VENDOR_SKILLS=1`, descrito en [Before you paste](#before-you-paste--what-gets-installed).
+Nada de esto manda tus archivos a ningún lado. Es una instalación local; tu vault no sale de tu máquina. Si preferís saltarte los packs de terceros, poné `SKIP_VENDOR_SKILLS=1`. Está descrito en [Before you paste](#before-you-paste--what-gets-installed).
 
-Cuando aparezca el aviso, aprobarlo es la opción normal. Y si alguna vez querés deshacer todo, `bash bootstrap.sh --uninstall` lo remueve completo.
+Cuando aparezca el aviso, dale aprobar. Es lo normal. Y si alguna vez querés deshacer todo, `bash bootstrap.sh --uninstall` lo quita completo.
 
 <details>
 <summary>Usuarios existentes (re-corriendo después de un `git pull`)</summary>

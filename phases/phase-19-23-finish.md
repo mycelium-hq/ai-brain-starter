@@ -374,15 +374,15 @@ Tell the user in their PRIMARY_LANGUAGE only. Show one link, matching their lang
 >
 > Tres comandos y un hábito para tu primera semana:
 >
-> 1. `/journal` — todas las noches. Este es el hábito. Construye los datos sobre los que corren los insights semanales y mensuales. Si te saltas una semana, el insight semanal pierde la mayor parte de la semana.
-> 2. `/second-brain-mapping` — cuando hayas traído tus notas activas (en la próxima sesión), corre esto para mapear el vault en lotes pequeños y dejar todo consultable.
-> 3. "¿Qué pensaría el panel?" — pregúntalo antes de cualquier decisión estratégica. Trae de 3 a 5 voces nombradas con disenso incorporado.
+> 1. `/journal` — todas las noches. Este es el hábito. Construye los datos que alimentan los insights semanales y mensuales. Si te saltás una semana, el insight semanal pierde la mayor parte de la semana.
+> 2. `/second-brain-mapping` — cuando hayas traído tus notas activas (en la próxima sesión), corrélo para mapear el vault en lotes pequeños y dejar todo consultable.
+> 3. "¿Qué pensaría el panel?" — preguntalo antes de cualquier decisión estratégica. Trae de 3 a 5 voces nombradas con disenso incorporado.
 >
-> La primera semana se va a sentir callada. Si haces estas tres cosas, para el día ocho vas a sentir para qué sirve el cerebro. Si te las saltas, el vault se queda en tu carpeta de Obsidian sin hacer nada.
+> La primera semana se va a sentir callada. Si hacés estas tres cosas, para el día ocho vas a sentir para qué sirve el cerebro. Si te las saltás, el vault se queda en tu carpeta de Obsidian sin hacer nada.
 >
 > Recorrido más largo: https://perspectivasblog.substack.com/p/tu-primera-semana-con-tu-segundo
 >
-> Léelo esta noche. ¿Atascado en algo? Solo dilo en cualquier sesión."
+> Leelo esta noche. ¿Atascado en algo? Solo decilo en cualquier sesión."
 
 ---
 
@@ -458,7 +458,7 @@ After the handoff link, do a quick verbal pointer to how the close works. This i
 
 **EN:** "One more thing. When you're done with a session, just say 'bye' or 'thanks, that's all' and the system will save everything automatically — your decisions, journal seeds, to-dos, all of it. You don't need to type a special command. If you ever want to be explicit, type `/wrap-up` or `/close`. To roll back the most recent close, run `python3 ~/.claude/skills/ai-brain-starter/scripts/undo-last-close.py`. That's it."
 
-**ES:** "Una última cosa. Cuando termines una sesión, solo di 'chao' o 'listo, gracias' y el sistema guarda todo automáticamente — decisiones, semillas para el diario, to-dos, todo. No tienes que escribir un comando especial. Si quieres ser explícito, escribe `/cerrar` o `/wrap-up`. Para deshacer el último cierre: `python3 ~/.claude/skills/ai-brain-starter/scripts/undo-last-close.py`. Eso es todo."
+**ES:** "Una última cosa. Cuando termines una sesión, solo decí 'chao' o 'listo, gracias' y el sistema guarda todo automáticamente — decisiones, semillas para el diario, to-dos, todo. No tenés que escribir un comando especial. Si querés ser explícito, escribí `/cerrar` o `/wrap-up`. Para deshacer el último cierre: `python3 ~/.claude/skills/ai-brain-starter/scripts/undo-last-close.py`. Eso es todo."
 
 Why this phase matters: the close cascade is the most active piece of the setup, firing on every "bye". If users don't know it exists or don't trust it, they keep typing `/wrap-up` defensively (annoying) or skip closes entirely (lost context). One sentence pointing at the natural-language path is enough to flip default behavior to trust.
 
@@ -474,7 +474,7 @@ After the close walkthrough, set the expectation for how the vault grows AS THEY
 > "One last thing about pacing. The doc you just brought in plus tonight's journal are the first two real things in your vault. Over the next couple of weeks, when you reach for a note in your old system (Apple Notes, Google Docs, Notion, paper, whatever), just bring it in here instead. You don't have to migrate everything at once — let it happen organically. When you have ten or so real notes in, ask me 'can the panel review how my files are organized?' and we'll clean it up together. The `/second-brain-mapping` skill keeps the index fresh as content accumulates — run it weekly per the first-week post. The vault gets smarter the more of your actual life lives in here."
 
 **ES:**
-> "Una última cosa sobre el ritmo. El documento que acabas de traer más el diario de esta noche son las primeras dos cosas reales en tu vault. En las próximas semanas, cuando estés buscando una nota en tu sistema anterior (Apple Notes, Google Docs, Notion, papel, lo que sea), simplemente tráela acá en vez. No tienes que migrar todo de una — déjalo pasar de forma orgánica. Cuando tengas unas diez notas reales adentro, pregúntame '¿puede el panel revisar cómo están organizados mis archivos?' y la limpiamos juntos. El skill `/second-brain-mapping` mantiene el índice fresco a medida que se acumula contenido — córrelo semanalmente como dice el post de la primera semana. El vault se vuelve más inteligente mientras más de tu vida real viva acá adentro."
+> "Una última cosa sobre el ritmo. El documento que acabás de traer más el diario de esta noche son las primeras dos cosas reales en tu vault. En las próximas semanas, cuando estés buscando una nota en tu sistema anterior (Apple Notes, Google Docs, Notion, papel, lo que sea), simplemente traela acá en vez. No tenés que migrar todo de una — dejalo pasar de forma orgánica. Cuando tengas unas diez notas reales adentro, preguntame '¿puede el panel revisar cómo están organizados mis archivos?' y la limpiamos juntos. El skill `/second-brain-mapping` mantiene el índice fresco a medida que se acumula contenido — corrélo semanalmente como dice el post de la primera semana. El vault se vuelve más inteligente mientras más de tu vida real viva acá adentro."
 
 Why this phase matters: install completion is the moment of highest motivation AND highest decision fatigue. The user already did the activation moment in Phase 19.5 (one doc imported). This phase tells them HOW the rest gets brought in — progressively, naturally, not as a homework assignment for a future session that may never happen.
 

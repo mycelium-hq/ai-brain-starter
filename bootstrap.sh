@@ -1243,11 +1243,11 @@ if [[ "${SKIP_VENDOR_SKILLS:-0}" != "1" ]]; then
   # don't panic. Pairs with phase-00-install.md Step 0.0b.
   log ""
   log "  ℹ️  $(t "HEADS UP: Claude Code may pause to ask you to approve these tools." \
-                  "AVISO: Claude Code puede pausar para pedirte que apruebes estas herramientas.")"
+                  "AVISO: Claude Code puede frenar en un momento para pedirte que apruebes estas herramientas.")"
   log "  ℹ️  $(t "That prompt is its normal safety check for anything not from Anthropic." \
-                  "Ese aviso es su chequeo normal de seguridad para algo que no viene de Anthropic.")"
+                  "Ese aviso es su chequeo de seguridad normal para cualquier cosa que no viene de Anthropic.")"
   log "  ℹ️  $(t "It is expected and safe to approve. The README explains what gets added." \
-                  "Es esperado y seguro aprobarlo. El README explica qué se agrega.")"
+                  "Es esperado, y aprobarlo es lo normal. El README explica todo lo que se está agregando.")"
   log ""
 
   # Register a marketplace + install a plugin (idempotent + DRY_RUN-safe).
