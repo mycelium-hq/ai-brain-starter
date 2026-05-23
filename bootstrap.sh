@@ -32,7 +32,10 @@
 #       influencer-pack) live in the repo as opt-in installs; not auto-installed.
 #     - humanizer (de-AI writing) — cloned from its own fork repo
 #     - Granola + ChatPRD MCPs
-#     - Marketplace: obsidian-skills (kepano); plugins: obsidian, context7, playwright
+#     - Marketplaces: obsidian-skills (kepano), enabling obsidian/context7/playwright;
+#       plus 7 vendor skill-pack marketplaces (sentry, trailofbits, stripe, cloudflare,
+#       claude-seo, superpowers, marketingskills). Skip all vendor packs with
+#       SKIP_VENDOR_SKILLS=1.
 #     - Mac: Obsidian CLI symlink to /usr/local/bin/obsidian (if the app ships it)
 #     - The ai-brain-starter skill itself
 #
@@ -1234,6 +1237,18 @@ fi
 # ───────────────────────────────────────────────────────────────────────────────
 
 if [[ "${SKIP_VENDOR_SKILLS:-0}" != "1" ]]; then
+
+  # Trust-prompt heads-up: adding third-party marketplaces triggers Claude
+  # Code's built-in trust prompt. Pre-frame it so non-technical installers
+  # don't panic. Pairs with phase-00-install.md Step 0.0b.
+  log ""
+  log "  ℹ️  $(t "HEADS UP: Claude Code may pause to ask you to approve these tools." \
+                  "AVISO: Claude Code puede pausar para pedirte que apruebes estas herramientas.")"
+  log "  ℹ️  $(t "That prompt is its normal safety check for anything not from Anthropic." \
+                  "Ese aviso es su chequeo normal de seguridad para algo que no viene de Anthropic.")"
+  log "  ℹ️  $(t "It is expected and safe to approve. The README explains what gets added." \
+                  "Es esperado y seguro aprobarlo. El README explica qué se agrega.")"
+  log ""
 
   # Register a marketplace + install a plugin (idempotent + DRY_RUN-safe).
   # Args: $1=owner/repo (marketplace source) $2=plugin@marketplace-id (install target)
