@@ -51,6 +51,33 @@ In a Phase 0 short-circuit, reading further is malpractice. File the deal-breake
 
 NOTE: a Phase 3 security gate failure (privacy / data-handling / dangerous defaults) is NOT a Phase 0 shortcut. By Phase 3 the content has been engaged with; the extraction discipline applies. Document the security failure AND the cherry-picks separately.
 
+## Axis B — score against the full operating-company surface
+
+Every audit scores TWO axes for the operator:
+
+- **Axis A** — Can this repo become a paid offering or product upgrade the operator charges clients for? (`charge-direct` / `charge-upgrade` / `lead-magnet` / `none`)
+- **Axis B** — Can this repo remove human-hours, raise quality, or unblock async execution inside the operator's OWN companies?
+
+**Axis B spans the FULL operating-company surface, NOT just dev tooling.** Bug class to prevent: **AXIS-B-DEV-TOOLING-TUNNEL** (family with `LANDSCAPE-KEYWORD-TUNNEL`). Both are the auditor inheriting the repo's vocabulary instead of scoring the actual surface.
+
+When the linked repo is a coding-agent / subagent / dev-tooling catalog, the auditor's default instinct is "score the dev axes." That instinct misses everything else the operator does. An operator running a real business has at least:
+
+- **Sales** (pipeline, outreach, proposals, RFPs, follow-up)
+- **Marketing** (content, social, brand, lead generation, site upkeep)
+- **Operations** (delivery, ops runbooks, contractor coordination, workflow automation)
+- **Finance** (billing, P&L, invoicing, cash-flow)
+- **Content + writing** (blog, newsletter, social posts, bilingual publishing)
+- **People-matching** (network coordination, partner/vendor matching, talent matching) — if applicable to the operator
+- **Events** (event ops, attendee management) — if applicable to the operator
+- **Investor / fundraising** (passive maintenance, deck upkeep) — if applicable to the operator
+- **Site upkeep** (marketing pages, product surfaces, blog hosting)
+- **Agent fleet** (custom assistants, MCPs, cron jobs, overnight QA, scheduled tasks)
+- **Personal ops** (journal, planning, weekly/monthly review)
+
+**Operational rule:** an audit memo that touches "Axis B" MUST enumerate the per-surface scoring — not collapse the whole operating-company surface into a single "internal growth" sentence. Per-surface "None" is a legitimate verdict; overall "None" without per-surface enumeration is the bug pattern this rule blocks.
+
+**For the operator's specific surface, read the operator's `repo-evaluation.md` rule file** (or wherever the operator codified their company list). The public skill teaches the discipline; the private rule names the surfaces. The discipline is *enumerate the surface before declaring None.*
+
 ## The dissent test
 
 A useful internal check before declaring "Cherry-pick: None":
