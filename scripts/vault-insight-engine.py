@@ -44,11 +44,33 @@ def _default_output_path():
 OUTPUT_PATH = _default_output_path()
 
 # Names to filter out of person-based insights (self-references).
-# Populate SELF_REFERENCE_NAMES env var (comma-separated) with your own variants.
-# Example: SELF_REFERENCE_NAMES="Jane Doe,Jane,Jane D."
-SELF_REFERENCE_NAMES = set(
-    filter(None, (n.strip() for n in os.environ.get("SELF_REFERENCE_NAMES", "").split(",")))
-)
+# Resolution order:
+#   1. SELF_REFERENCE_NAMES env var (comma-separated) — explicit override
+#   2. <vault>/⚙️ Meta/self-reference-names.txt — vault-side config (one name
+#      per line, blank lines + `#` comments ignored). Portable across installs.
+#      See templates/self-reference-names.txt.example for the template.
+#   3. Empty set — engine still runs, just skips the self-ref filter
+def _load_self_reference_names():
+    env = os.environ.get("SELF_REFERENCE_NAMES", "").strip()
+    if env:
+        return set(filter(None, (n.strip() for n in env.split(","))))
+    config_path = os.path.join(VAULT, "⚙️ Meta", "self-reference-names.txt")
+    if os.path.isfile(config_path):
+        try:
+            with open(config_path, encoding="utf-8") as fh:
+                names = set()
+                for raw in fh:
+                    line = raw.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    names.add(line)
+                return names
+        except OSError:
+            pass
+    return set()
+
+
+SELF_REFERENCE_NAMES = _load_self_reference_names()
 
 
 def _is_self_reference(name):

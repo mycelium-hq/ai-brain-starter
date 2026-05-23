@@ -1,0 +1,19 @@
+# Self-reference names — vault owner identity, one per line.
+# Copy this file to <your-vault>/⚙️ Meta/self-reference-names.txt and replace
+# the placeholders below with your own name variants. vault-insight-engine.py
+# uses it to exclude you from person-based insights (cold-contacts, drag-people,
+# lucky-charm, etc.) — otherwise your own name shows up as a "person" to warm.
+#
+# Loader rules:
+#   - Lines starting with # are comments and ignored
+#   - Blank lines ignored
+#   - Each non-comment line is a name variant (exact match OR first-name prefix match)
+#   - SELF_REFERENCE_NAMES env var (if set) takes precedence over this file
+#
+# Adding entries: include your legal name + every spelling variant your vault
+# has used (CRM, journal frontmatter, meeting notes). The engine's prefix-match
+# on first name covers most cases, but listing every spelling is safest.
+
+Jane Doe
+Jane
+Jane D.
