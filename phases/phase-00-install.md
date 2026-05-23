@@ -26,6 +26,10 @@ So get ahead of it. **Before** you invoke the bootstrap (or the instant you see 
 
 > "Heads up on one thing: in a moment Claude Code will pause and ask you to approve the tools we're installing. It may warn that they come from third parties or are not verified by Anthropic. That is Claude Code's normal safety check for anything that did not come from Anthropic itself, not a sign that anything is wrong. It is safe to approve. Everything being added is listed, with licenses, in the project's README. Go ahead and approve it when you see it, and I'll keep going."
 
+For Spanish-speaking installs, the same beat in voseo register (peer-to-peer, not a translation):
+
+> "Ojo con una cosa: Claude Code va a frenar en un momento para pedirte que apruebes las herramientas que estamos instalando. Te puede avisar, en un tono firme, que son de terceros o que Anthropic no las verificó. Ese es su chequeo de seguridad normal para cualquier cosa que no venga directo de Anthropic, no una señal de que algo esté mal. Es seguro aprobarlo. Todo lo que se está agregando está listado, con licencias, en el README del proyecto. Cuando aparezca, dale aprobar y seguimos."
+
 Adapt the wording to the user and the moment; do not read it robotically. The non-negotiable part: before they read the prompt themselves, the user must KNOW it is coming, that it is expected, and that approving is the normal choice. Never let the trust prompt be the first time they hear of it. An unframed trust prompt is the single most common reason a non-technical install gets abandoned.
 
 ---

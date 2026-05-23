@@ -625,9 +625,9 @@ if (Test-Path $humDir) { Ok "humanizer skill installed" } else { Err "humanizer 
 # Claude Code's built-in trust prompt. Pre-frame it so non-technical installers
 # don't panic. Pairs with phase-00-install.md Step 0.0b.
 Write-Host ""
-Write-Host ("  " + (T "HEADS UP: Claude Code may pause to ask you to approve these tools." "AVISO: Claude Code puede pausar para pedirte que apruebes estas herramientas."))
-Write-Host ("  " + (T "That prompt is its normal safety check for anything not from Anthropic." "Ese aviso es su chequeo normal de seguridad para algo que no viene de Anthropic."))
-Write-Host ("  " + (T "It is expected and safe to approve. The README explains what gets added." "Es esperado y seguro aprobarlo. El README explica todo lo que se instala."))
+Write-Host ("  " + (T "HEADS UP: Claude Code may pause to ask you to approve these tools." "AVISO: Claude Code puede frenar en un momento para pedirte que apruebes estas herramientas."))
+Write-Host ("  " + (T "That prompt is its normal safety check for anything not from Anthropic." "Ese aviso es su chequeo de seguridad normal para cualquier cosa que no viene de Anthropic."))
+Write-Host ("  " + (T "It is expected and safe to approve. The README explains what gets added." "Es esperado, y aprobarlo es lo normal. El README explica todo lo que se esta agregando."))
 Write-Host ""
 
 # ─── Granola MCP ─────────────────────────────────────────────────────────────
