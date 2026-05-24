@@ -38,13 +38,13 @@
   ],
 
   "ambiguous": [
-    "\\bok(ay)?[!.\\s]*$",
-    "\\bdale[!.\\s]*$",
-    "\\bbueno[!.\\s]*$",
-    "\\bperfecto[!.\\s]*$",
-    "\\bgenial[!.\\s]*$",
-    "\\bsuena bien[!.\\s]*$",
-    "\\bva[!.\\s]*$"
+    "^ok(ay)?[!.\\s]*$",
+    "^dale[!.\\s]*$",
+    "^bueno[!.\\s]*$",
+    "^perfecto[!.\\s]*$",
+    "^genial[!.\\s]*$",
+    "^suena bien[!.\\s]*$",
+    "^va[!.\\s]*$"
   ],
 
   "emoji_only": [
