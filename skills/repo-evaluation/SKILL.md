@@ -126,9 +126,29 @@ When the audit lands as a memory file, structure the body so the cherry-pick dis
 
 ## Shipped cherry-picks (if any landed same-session)
 [explicit list of what got adopted + where it landed in the stack]
+
+## Wiring Checklist (MANDATORY per ADOPT cherry-pick — file BEFORE declaring done)
+
+For each ADOPT cherry-pick, fill out THREE columns same-session. Empty cells mean unshipped wiring — fix in this session, do NOT defer.
+
+| ADOPT # | Artifact created | Discoverability wires (where it's found) | Automation surface (what fires it) | Verification path (how we know it works) |
+|---|---|---|---|---|
+| 1 | <e.g., new rule file `⚙️ Meta/rules/X.md`> | <e.g., CLAUDE.md `# Rules` section + MCP Build Runbook + Build Standards + sibling umbrella SKILL.md (named umbrellas)> | <e.g., new hookify rule `.claude/hookify.warn-X.local.md` (file event) + PostToolUse hook registered in settings.json + cron job> | <e.g., smoke test command + expected output + Stop hook coverage> |
+| 2 | ... | ... | ... | ... |
+| 3 | ... | ... | ... | ... |
+
+**Cells that may legitimately read "N/A":**
+
+- Discoverability "N/A" — only when the artifact IS the umbrella / runbook / index entry itself (it doesn't need to be wired INTO another surface, it IS the wiring surface).
+- Automation "N/A" — only when the artifact is rule-content read at decision-time (e.g., a band-cap inside a rule file Claude reads when running the audit). Most rule edits propagate via the surfaces that already reference the rule — list those surfaces, not "N/A".
+- Verification "N/A" — never. If you can't write a verification step, the cherry-pick isn't done.
+
+**Bug class this checklist prevents: ARTIFACT-WITHOUT-AUTOMATION-WIRING** (parent class of ARTIFACT-WITHOUT-DISCOVERABILITY + ARTIFACT-WITHOUT-UMBRELLA-WIRING). Failure pattern: auditor adopts a cherry-pick, writes the artifact file, and DOES NOT enumerate the wiring layers, so the user has to ask "did it go in the right umbrella? are we auto-triggering it? all upgrades shipped?" The checklist is the structural fix — the auditor cannot declare done without filling the cells.
+
+**Discipline check:** if filling this table is uncomfortable, the artifact is probably underspecified. Re-read the ADOPT cherry-pick reasoning and identify the surfaces it touches.
 ```
 
-The table format is one option. A numbered list with each candidate as a section also works. What matters: ≥3 named candidates, verbatim quotes, scored, dissented.
+The table format is one option. A numbered list with each candidate as a section also works. What matters: ≥3 named candidates, verbatim quotes, scored, dissented, AND wiring-checklist filled per ADOPT.
 
 ## Phase 5.5 — verify foundation primitives in the target repo before issue creation
 
