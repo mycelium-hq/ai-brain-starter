@@ -692,6 +692,28 @@ def main() -> int:
             emit_passthrough()
             return 0
 
+        # Skip detection on Stop-hook-feedback prompts. Claude Code injects
+        # blocking-hook stderr output as the next "user message" so the model
+        # can self-correct. These are NOT user-initiated close signals; letting
+        # them through creates a retry-loop where every Stop-hook block spawns
+        # a new pre-built session file at a new timestamp.
+        #
+        # Codified 2026-05-24 after verify-session-close-cascade kept blocking
+        # the session close (legitimately — uncommitted session artifacts), and
+        # its feedback message contained "claims to close the session" which
+        # re-fired this hook's `\bclose\s+(this|the)\s+session\b` regex,
+        # spawning stubs at T10-55, T11-00 on each retry. Same bug class as
+        # CASCADE-PHASE-SILENT-SKIP: hook-feedback re-injection is not a
+        # user-prompt event and must be filtered before any signal detection.
+        if (
+            prompt.startswith("Stop hook feedback:")
+            or prompt.startswith("Hook feedback:")
+            or "BLOCKED by " in prompt[:300]
+        ):
+            log_debug("Stop-hook-feedback prompt, skipping close detection")
+            emit_passthrough()
+            return 0
+
         # Resolve the vault root. When the close cascade fires from inside a
         # worktree, cwd IS the worktree; resolve_main_vault collapses it back
         # so every session artifact lands in the main vault, never a throwaway
