@@ -138,6 +138,29 @@ text = call_claude_text(system=variant, user=q, cache_system=False)
 
 First call is cached by default. Second call opts out, e.g. for a benchmark.
 
+## N x M reviews: iterate doc-outer, column-inner
+
+For tabular-review style work (N columns × M documents = N×M LLM calls) the cache architecture is:
+
+- `system` block: cached, stable across the entire review (1 write, N×M−1 reads)
+- `user[0]` text block: document_text, cached PER DOCUMENT (M writes, M×(N−1) reads)
+- `user[1]` text block: per-column directive + JSON reply ask, varies per column (no cache)
+
+This only works with `for document in documents: for column in columns:` iteration. The reverse order (column-outer) invalidates the document cache on every iteration because the document varies in the inner loop. Always iterate doc-outer. Break-even on per-document caching: N ≥ 2 columns (i.e. every real review).
+
+If your runtime assembles the prompt server-side, return the parts separately so the client can apply `cache_control` to each layer. Example response shape:
+
+```json
+{
+  "prompt": "<full assembled string, deprecated for new code>",
+  "system": "<stable instruction template, cache anchor>",
+  "column_directive": "<question + format suffix, varies per column>",
+  "document_text": "<echoed back so clients don't have to track>"
+}
+```
+
+Keep the legacy `prompt` field so old clients keep working until they migrate.
+
 ## New-code rule (enforced by hookify)
 
 Any new file that imports `anthropic.Anthropic` / calls `messages.create` / imports `@anthropic-ai/sdk` ships with `cache_control` on the system block from the start.
