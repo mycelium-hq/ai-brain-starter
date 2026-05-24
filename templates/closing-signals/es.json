@@ -4,7 +4,7 @@
 
   "explicit": [
     "^/(cerrar|terminar|bye|chao)\\b",
-    "\\b/(cerrar|terminar|bye|chao)\\b"
+    "(?:^|\\s)/(cerrar|terminar|bye|chao)\\b"
   ],
 
   "high_confidence": [

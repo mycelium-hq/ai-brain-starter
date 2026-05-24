@@ -4,7 +4,7 @@
 
   "explicit": [
     "^/(close|wrap-?up|bye|done|finish)\\b",
-    "\\b/(close|wrap-?up|bye|done|finish)\\b"
+    "(?:^|\\s)/(close|wrap-?up|bye|done|finish)\\b"
   ],
 
   "high_confidence": [

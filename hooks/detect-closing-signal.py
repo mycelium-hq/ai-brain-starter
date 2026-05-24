@@ -705,11 +705,25 @@ def main() -> int:
         # spawning stubs at T10-55, T11-00 on each retry. Same bug class as
         # CASCADE-PHASE-SILENT-SKIP: hook-feedback re-injection is not a
         # user-prompt event and must be filtered before any signal detection.
-        if (
-            prompt.startswith("Stop hook feedback:")
-            or prompt.startswith("Hook feedback:")
-            or "BLOCKED by " in prompt[:300]
-        ):
+        #
+        # Expanded 2026-05-24 (T14 round): the original `startswith` check
+        # missed re-injections that arrived with prepended system-reminder
+        # context, and `BLOCKED by` was bounded to the first 300 chars which
+        # also missed wrapped messages. Now we scan the first ~2KB for any
+        # of the distinctive markers, including verifier-hook names that
+        # uniquely identify Claude Code feedback re-injection. Same session
+        # spawned 6 spurious stubs (T14-16, T14-20, T14-23, T14-25, T14-27,
+        # T14-30) before the broader filter shipped.
+        prefix = prompt[:2000]
+        feedback_markers = (
+            "Stop hook feedback:",
+            "Hook feedback:",
+            "BLOCKED by ",
+            "verify-session-close-cascade",
+            "verify-discoverability-on-close",
+            "verify-cascade",
+        )
+        if any(m in prefix for m in feedback_markers):
             log_debug("Stop-hook-feedback prompt, skipping close detection")
             emit_passthrough()
             return 0
