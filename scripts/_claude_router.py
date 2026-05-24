@@ -159,6 +159,17 @@ def _call_via_cli(
         "authentication required",
         "authentication failed",
         "session expired",
+        # Transport / connectivity errors. When the network is not ready
+        # (e.g. a launchd-fired job during wake-from-sleep), `claude -p` can
+        # emit "API Error: Unable to connect to API (ConnectionRefused)" on
+        # stdout and exit 1 — the accept-non-zero-with-stdout branch below
+        # would otherwise accept that error string as a 55-char "response".
+        # Treat them as RouterUnavailable so the CLI-retry path (below) has
+        # a chance once the network comes up.
+        "api error",
+        "unable to connect to api",
+        "connectionrefused",
+        "failedtoopensocket",
     )
     if stdout and any(m in stdout.lower() for m in refusal_markers):
         raise RouterUnavailable(
@@ -277,10 +288,21 @@ def call_claude_text(
 
     cli = None if prefer_api else _resolve_cli()
     if cli is not None:
-        try:
-            return _call_via_cli(cli, system, user, model)
-        except RouterUnavailable as e:
-            _log(f"CLI failed, falling back to API: {e}")
+        # One retry: an unattended `claude -p` (cron, launchd, agent) can
+        # intermittently hang or return a stale-OAuth refusal on the first
+        # try and clear on the second. Cheap insurance for unattended
+        # callers; the happy path (first attempt succeeds) is unchanged.
+        cli_attempts = 2
+        for cli_attempt in range(1, cli_attempts + 1):
+            try:
+                return _call_via_cli(cli, system, user, model)
+            except RouterUnavailable as e:
+                if cli_attempt < cli_attempts:
+                    _log(f"CLI attempt {cli_attempt}/{cli_attempts} failed "
+                         f"({e}); retrying")
+                else:
+                    _log(f"CLI failed after {cli_attempts} attempts, "
+                         f"falling back to API: {e}")
 
     api_key = _resolve_api_key()
     if api_key is not None:
