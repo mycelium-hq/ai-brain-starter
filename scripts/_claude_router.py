@@ -190,13 +190,34 @@ def _call_via_api(
     user: str,
     model: str,
     max_tokens: int,
+    cache_system: bool = True,
 ) -> str:
-    """POST to api.anthropic.com Messages API. Returns the first text block."""
+    """POST to api.anthropic.com Messages API. Returns the first text block.
+
+    When `cache_system=True` (default), wraps the system prompt in a single
+    `cache_control=ephemeral` block so the Anthropic prompt cache is reused
+    across calls with the same prefix. The API silently no-ops when the
+    prefix is below the model's cache minimum (1K tokens for Sonnet 4.5 /
+    Opus 4.1, 4K for Opus 4.7 / Sonnet 4.6 / Haiku 4.5), so opt-in is
+    safe at any size.
+
+    Logs `cache_read_input_tokens` / `cache_creation_input_tokens` from the
+    response so logs can confirm caching fires on repeated calls.
+    """
+    system_payload: object
+    if cache_system:
+        system_payload = [{
+            "type": "text",
+            "text": system,
+            "cache_control": {"type": "ephemeral"},
+        }]
+    else:
+        system_payload = system
     payload = json.dumps(
         {
             "model": model,
             "max_tokens": max_tokens,
-            "system": system,
+            "system": system_payload,
             "messages": [{"role": "user", "content": user}],
         }
     ).encode()
@@ -210,7 +231,7 @@ def _call_via_api(
         },
         method="POST",
     )
-    _log(f"calling via API key ({model})")
+    _log(f"calling via API key (model={model}, cache_system={cache_system})")
     try:
         with urllib.request.urlopen(req, timeout=API_TIMEOUT_SECONDS) as resp:
             body = json.loads(resp.read())
@@ -220,6 +241,12 @@ def _call_via_api(
         ) from e
     except urllib.error.URLError as e:
         raise RouterUnavailable(f"Anthropic network error: {e}") from e
+    # Cache metrics. Non-zero read means a hit (0.1x cost for those tokens).
+    usage = body.get("usage", {}) or {}
+    cache_read = usage.get("cache_read_input_tokens", 0) or 0
+    cache_write = usage.get("cache_creation_input_tokens", 0) or 0
+    if cache_read or cache_write:
+        _log(f"cache: read={cache_read} tok, write={cache_write} tok")
     blocks = body.get("content", [])
     if not blocks:
         return ""
@@ -231,6 +258,7 @@ def call_claude_text(
     user: str,
     model: str = "haiku",
     max_tokens: int = 4096,
+    cache_system: bool = True,
 ) -> str:
     """Call Claude and return the response text.
 
@@ -239,6 +267,11 @@ def call_claude_text(
 
     Model aliases: "haiku", "sonnet", "opus", or any full model ID
     (e.g., "claude-haiku-4-5-20251001"). The CLI accepts both forms.
+
+    `cache_system` controls Anthropic prompt caching on the API path. Default
+    True. The CLI path caches automatically — Claude Code handles it
+    transparently and the flag is ignored there. Set False only when the
+    caller varies the system prompt per call (benchmarks, evals, sweeps).
     """
     prefer_api = os.environ.get("CLAUDE_ROUTER_PREFER_API_KEY") == "1"
 
@@ -251,7 +284,7 @@ def call_claude_text(
 
     api_key = _resolve_api_key()
     if api_key is not None:
-        return _call_via_api(api_key, system, user, model, max_tokens)
+        return _call_via_api(api_key, system, user, model, max_tokens, cache_system)
 
     raise RouterUnavailable(
         "no claude CLI and no ANTHROPIC_API_KEY — install `claude` "
@@ -267,14 +300,17 @@ def call_claude_json(
     user: str,
     model: str = "haiku",
     max_tokens: int = 4096,
+    cache_system: bool = True,
 ) -> dict | list:
     """Call Claude and parse the response as JSON.
 
     Strips markdown code fences if the model adds them. Raises
     `RouterUnavailable` if no transport is available, or `ValueError`
     if the response is not valid JSON.
+
+    See `call_claude_text` for `cache_system` semantics (default True).
     """
-    text = call_claude_text(system, user, model, max_tokens)
+    text = call_claude_text(system, user, model, max_tokens, cache_system)
     stripped = text.strip()
     fence_match = _FENCE_RE.match(stripped)
     if fence_match:
