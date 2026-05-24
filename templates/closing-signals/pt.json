@@ -29,12 +29,12 @@
   ],
 
   "ambiguous": [
-    "\\bok(ay)?[!.\\s]*$",
-    "\\bbeleza[!.\\s]*$",
-    "\\blegal[!.\\s]*$",
-    "\\bperfeito[!.\\s]*$",
-    "\\bótim[oa][!.\\s]*$",
-    "\\bparece bom[!.\\s]*$"
+    "^ok(ay)?[!.\\s]*$",
+    "^beleza[!.\\s]*$",
+    "^legal[!.\\s]*$",
+    "^perfeito[!.\\s]*$",
+    "^ótim[oa][!.\\s]*$",
+    "^parece bom[!.\\s]*$"
   ],
 
   "emoji_only": [

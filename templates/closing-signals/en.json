@@ -43,13 +43,13 @@
   ],
 
   "ambiguous": [
-    "\\bok(ay)?[!.\\s]*$",
-    "\\bcool[!.\\s]*$",
-    "\\bgreat[!.\\s]*$",
-    "\\bperfect[!.\\s]*$",
-    "\\bnice[!.\\s]*$",
-    "\\bsounds good[!.\\s]*$",
-    "\\bawesome[!.\\s]*$"
+    "^ok(ay)?[!.\\s]*$",
+    "^cool[!.\\s]*$",
+    "^great[!.\\s]*$",
+    "^perfect[!.\\s]*$",
+    "^nice[!.\\s]*$",
+    "^sounds good[!.\\s]*$",
+    "^awesome[!.\\s]*$"
   ],
 
   "emoji_only": [
