@@ -166,9 +166,9 @@ Then act on it:
 
 This step has two parts: **structural extraction** (deterministic, free) and **semantic extraction** (Claude, costs tokens).
 
-**Run Part A (AST) and Part B (semantic) in parallel. Dispatch all semantic subagents AND start AST extraction in the same message. Both can run simultaneously since they operate on different file types. Merge results in Part C as before.**
+**Run Part A (AST), Part A.5 (zero-LLM typed edges, if available), and Part B (semantic) in parallel. Dispatch all semantic subagents AND start the structural extractions in the same message. They operate on different surfaces — AST on code files, Part A.5 on markdown frontmatter + wikilinks, Part B on docs/papers/images via subagents — so they can run simultaneously. Merge results in Part C as before.**
 
-Note: Parallelizing AST + semantic saves 5-15s on large corpora. AST is deterministic and fast; start it while subagents are processing docs/papers.
+Note: Parallelizing structural + semantic saves 5-15s on large corpora. The structural passes are deterministic and fast; start them while subagents process the rest.
 
 #### Part A - Structural extraction for code files
 
@@ -196,9 +196,43 @@ else:
 "
 ```
 
+#### Part A.5 - Zero-LLM typed-relationship extraction for markdown
+
+If a typed-relationship extractor is available, run it in parallel with Part A and Part B. It walks markdown, reads frontmatter + body, and emits typed edges (`works_at`, `floor_at`, `journaled_about`, `attended`, `mentions`, `governs`, `created_on`, `investor_for`) to JSONL at zero LLM cost. Extracts ~80% of explicit edges (frontmatter + wikilinks); Part B's semantic extraction is configured to skip entities + edges already covered by this pass, so the LLM only fires on the genuinely-ambiguous ~20% (proper-noun disambiguation, novel entity types, negation parsing).
+
+```bash
+# Locate the shipped script; PATH fallback for users who installed it standalone.
+WIRE_SCRIPT=""
+for candidate in \
+    "$HOME/.claude/skills/graphify/scripts/wire_typed_relationships.py" \
+    "$HOME/.claude/plugins/graphify/scripts/wire_typed_relationships.py" \
+    "./scripts/wire_typed_relationships.py"; do
+    if [ -f "$candidate" ]; then
+        WIRE_SCRIPT="$candidate"
+        break
+    fi
+done
+if [ -z "$WIRE_SCRIPT" ] && command -v wire_typed_relationships.py >/dev/null 2>&1; then
+    WIRE_SCRIPT="$(command -v wire_typed_relationships.py)"
+fi
+
+if [ -n "$WIRE_SCRIPT" ]; then
+    "$(cat graphify-out/.graphify_python)" "$WIRE_SCRIPT" \
+        --root "INPUT_PATH" \
+        --output graphify-out/.graphify_typed_edges.jsonl \
+        2>&1 | tail -5
+fi
+```
+
+Pattern source: [garrytan/gbrain](https://github.com/garrytan/gbrain) — zero-LLM graph wiring. The script itself ships at `scripts/wire_typed_relationships.py` inside this skill; it's standalone and zero-dep (stdlib only) so it runs in any Python 3.10+ environment.
+
+If `graphify-out/.graphify_typed_edges.jsonl` exists after this step, Part B's dispatch must pass the path to each subagent so they honor the skip list. Cost savings only materialize if the skip list is honored — otherwise this pass just duplicates work.
+
 #### Part B - Semantic extraction (parallel subagents)
 
 **Fast path:** If detection found zero docs, papers, and images (code-only corpus), skip Part B entirely and go straight to Part C. AST handles code - there is nothing for semantic subagents to do.
+
+**If Part A.5 ran:** pass the path to `graphify-out/.graphify_typed_edges.jsonl` to each subagent as a "skip list" so they don't re-extract what regex already covered. This is where the cost savings happen — Part A.5 by itself just creates a redundant edge set if Part B ignores the file.
 
 **MANDATORY: You MUST use the Agent tool here. Reading files yourself one-by-one is forbidden - it is 5-10x slower. If you do not use the Agent tool you are doing this wrong.**
 
