@@ -130,8 +130,28 @@ When the audit lands as a memory file, structure the body so the cherry-pick dis
 
 The table format is one option. A numbered list with each candidate as a section also works. What matters: ≥3 named candidates, verbatim quotes, scored, dissented.
 
+## Phase 5.5 — verify foundation primitives in the target repo before issue creation
+
+When an ADOPT cherry-pick translates into a build issue (Linear / GitHub / internal tracker), verify that the target repo actually has the foundational primitives the cherry-pick assumes BEFORE writing the issue body.
+
+Failure mode this prevents: **CHERRY-PICK-WITHOUT-TARGET-REPO-VERIFICATION.** The audit reads the upstream's elegant primitive (model presets, tier-aware caps, message-chain guards, GET-side audit middleware) and writes a confident issue body — "Ship X primitive in repo Y, wire into Y's existing tier / middleware / chain." The build session opens repo Y, finds the assumed foundations don't exist, and the issue's Work + Done = criteria evaporate. The build session then spends time re-scoping issues that should have been re-scoped at audit time.
+
+Verification checklist (apply once per cherry-pick before issue body is written):
+
+1. **List the foundations the cherry-pick assumes.** What primitives does this build sit on? Examples: a tier / plan field on a tenant or account schema, an HTTP middleware layer, a message-chain primitive in the agent runtime, an RBAC role library, a settings store, an audit log, a feature flag system.
+2. **`rg` or equivalent grep against the target repo for each.** Cite the file + line if present; mark "MISSING" if absent.
+3. **For each MISSING foundation, the cherry-pick is NOT yet shippable as written.** Pick one path:
+   - (a) **Split** into foundation-issue + feature-issue. Foundation issue ships first; feature issue inherits.
+   - (b) **Re-scope** the feature issue to include the foundation work (becomes a bigger ship, but coherent).
+   - (c) **Defer** the cherry-pick to a different target repo where the foundation exists, or to a future phase after the foundation lands.
+4. **The issue body MUST cite the verification.** Either "Foundation primitives verified at `<file>:<line>`" OR "Foundation primitive `<name>` MISSING — depends on issue `<other-issue-id>` shipping first."
+
+When the audit is producing pattern files / spec amendments / runbooks (not yet issues), the verification can be deferred to the build session — but the Pattern file MUST flag the assumed foundations so the build session catches the gap on first read, not on first attempt to wire.
+
+Bug class: **CHERRY-PICK-WITHOUT-TARGET-REPO-VERIFICATION**. Family with `ARTIFACT-WITHOUT-DEPENDENCY-WIRING`, `ARTIFACT-WITHOUT-UMBRELLA-WIRING`, `ARTIFACT-WITHOUT-MEASUREMENT` — all instances of a thing created without one of its structural connections verified in the same beat.
+
 ## Family
 
-This skill exists because the failure mode it prevents recurred 7 times across one team's audit history before getting codified at the principle level. Each prior fix closed a surface (skipped landscape scan / read 2 of 11 source files / README-only audit / deferred sibling audit / keyword-tunneled the landscape search / 8 memory blocks treated as capability equivalence). The principle — *default-open extraction* — names the discipline directly so the next audit can't fail under yet-another surface.
+This skill exists because the failure mode it prevents recurred 7 times across one team's audit history before getting codified at the principle level. Each prior fix closed a surface (skipped landscape scan / read 2 of 11 source files / README-only audit / deferred sibling audit / keyword-tunneled the landscape search / 8 memory blocks treated as capability equivalence / 7 confident cherry-picks shipped without target-repo verification). The principle — *default-open extraction* — names the discipline directly so the next audit can't fail under yet-another surface.
 
-If you find yourself rationalizing "this is just a quick check" or "the surface is already covered, no need to read deeper" — that exact thought is the trigger to run the extraction pass, not to skip it.
+If you find yourself rationalizing "this is just a quick check" or "the surface is already covered, no need to read deeper" — that exact thought is the trigger to run the extraction pass, not to skip it. The same instinct applies at Phase 5.5: if you find yourself thinking "the issue body is detailed enough, the build session will figure it out" — that is the trigger to verify the target repo first.
