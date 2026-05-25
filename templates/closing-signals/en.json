@@ -89,5 +89,29 @@
       "_comment": "Don't match question-form prompts ending in '?'",
       "pattern": "\\b(bye|ttyl|cya|done|good\\s+night|wrapping|signing\\s+off)\\b[^?]*\\?\\s*$"
     }
+  ],
+
+  "_strict_guards_comment": "STRICT guards override ALL tiers (including explicit + high_confidence). Use only for unambiguous non-close contexts where false positives are very costly. Codified 2026-05-25 after 139 empty session stubs accumulated from meta-discussion of close cascade matching high_confidence patterns.",
+  "strict_guards": [
+    {
+      "_comment": "Meta-discussion / debugging of the close cascade itself ('why does the session keep firing', 'fix close session', 'diagnose why sessions auto archive').",
+      "pattern": "\\b(why|how|when|fix|diagnose|debug|stop|prevent|disable|broken|wrong|bug|issue|problem|trace|inspect|hook|regex|cascade|firing|trigger|over[\\s-]?fire|over[\\s-]?match|false[\\s-]?positive)\\b.{0,80}\\b(close|archiv|wrap|end|finish)\\b.{0,80}\\b(session|cascade|stub|hook|sessions|markers?)\\b"
+    },
+    {
+      "_comment": "User describing the bug pattern ('sessions keep auto archiving', 'sessions are getting created', 'session keeps firing').",
+      "pattern": "\\bsessions?\\s+(keep|kept|are|is|got|getting|auto|wrongly|always|never|won'?t|don'?t|fir(e|ing)|trigger|create|writ)"
+    },
+    {
+      "_comment": "Backtick/quote-wrapped technical references to close phrases (regex/code/script content).",
+      "pattern": "[`].*\\b(close\\s+(this|the|out|up)\\s+session|bye|ttyl|cya)\\b.*[`]"
+    },
+    {
+      "_comment": "'close out X session' where X is a noun other than this/the (database session, customer session, narrative session, etc.).",
+      "pattern": "\\bclose\\s+(out\\s+|up\\s+|down\\s+)?(my\\s+|the\\s+|a\\s+|that\\s+|each\\s+|every\\s+|some\\s+)?(database|db|customer|client|user|narrative|book|chapter|writing|coaching|terminal|browser|tab|ssh|http|tcp|websocket|connection|stream|pipe|file|tmux|screen|repl|debug|debugger|gdb|lldb|trade|deal|loan|case|ticket|chat|conversation|interview|meeting|class|panel|story|scene)\\s+session"
+    },
+    {
+      "_comment": "Prompt is clearly a question / request about closing behavior rather than a sign-off itself (auto archiv|keep firing|keep creating|keep writing).",
+      "pattern": "\\b(auto[\\s-]?archiv|keep\\s+firing|keep\\s+creating|keep\\s+writing|over[\\s-]?firing|over[\\s-]?triggering|spurious|false[\\s-]?positive|extra\\s+stubs?|empty\\s+stubs?)\\b"
+    }
   ]
 }
