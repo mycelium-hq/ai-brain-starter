@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+# claude-dev-worktree — per-session git worktree wrapper for ~/dev/<repo>.
+#
+# Prevents the CONCURRENT-SESSION-HEAD-DRIFT bug class where two concurrent
+# Claude Code sessions writing in the same physical checkout collide on the
+# shared .git/HEAD + index + working tree. Each session gets its own
+# physical directory `~/dev/<repo>-<slug>/`, with its own HEAD + index +
+# working tree, sharing only the underlying object store.
+#
+# Usage:
+#   claude-dev-worktree start <repo> <slug>
+#     Creates ~/dev/<repo>-<slug>/ as a worktree on branch claude/<slug>
+#     based on origin/main, then prints the worktree path on stdout.
+#     Session should `cd` to that path before any further work.
+#
+#   claude-dev-worktree cleanup <repo> <slug>
+#     Removes the worktree directory + deletes the local claude/<slug>
+#     branch. No-op if either is already gone.
+#
+#   claude-dev-worktree list
+#     Lists every active worktree under DEV_ROOT, one path per line.
+#
+# Configuration:
+#   DEV_ROOT      Where your code repos live. Defaults to ~/dev.
+#                 Override per-call: DEV_ROOT=~/projects claude-dev-worktree ...
+#
+# Exit codes:
+#   0  success
+#   1  invalid args / missing repo
+#   2  worktree already exists (start) or doesn't exist (cleanup)
+#   3  git operation failed
+#
+# Pattern source: this skill (dev-repo-worktrees). License: MIT.
+
+set -euo pipefail
+
+DEV_ROOT="${DEV_ROOT:-${HOME}/dev}"
+
+usage() {
+    cat <<'EOF' >&2
+Usage:
+  claude-dev-worktree start <repo> <slug>
+  claude-dev-worktree cleanup <repo> <slug>
+  claude-dev-worktree list
+
+The repo is a directory name under $DEV_ROOT (default ~/dev). The slug
+becomes both the worktree directory suffix ($DEV_ROOT/<repo>-<slug>) AND
+the branch name (claude/<slug>).
+EOF
+    exit 1
+}
+
+cmd_start() {
+    local repo="$1"
+    local slug="$2"
+    local main_path="${DEV_ROOT}/${repo}"
+    local worktree_path="${DEV_ROOT}/${repo}-${slug}"
+    local branch="claude/${slug}"
+
+    if [[ ! -d "$main_path/.git" ]]; then
+        echo "error: $main_path is not a git repo" >&2
+        exit 1
+    fi
+
+    if [[ -e "$worktree_path" ]]; then
+        echo "error: $worktree_path already exists" >&2
+        exit 2
+    fi
+
+    cd "$main_path"
+    git fetch origin --quiet
+
+    # If the branch already exists locally (recovered session, etc.), use
+    # it as-is instead of recreating. Otherwise create from origin/main.
+    if git show-ref --verify --quiet "refs/heads/${branch}"; then
+        git worktree add "$worktree_path" "$branch" >&2
+    else
+        git worktree add "$worktree_path" -b "$branch" origin/main >&2
+    fi
+
+    echo "$worktree_path"
+}
+
+cmd_cleanup() {
+    local repo="$1"
+    local slug="$2"
+    local main_path="${DEV_ROOT}/${repo}"
+    local worktree_path="${DEV_ROOT}/${repo}-${slug}"
+    local branch="claude/${slug}"
+
+    if [[ ! -d "$main_path/.git" ]]; then
+        echo "error: $main_path is not a git repo" >&2
+        exit 1
+    fi
+
+    cd "$main_path"
+
+    if [[ -d "$worktree_path" ]]; then
+        # `--force` covers the case where the worktree has uncommitted
+        # changes. The caller is expected to verify merge BEFORE calling
+        # cleanup; refusing here would strand artifacts.
+        git worktree remove --force "$worktree_path" >&2 || true
+    fi
+
+    # Prune to clean up stale .git/worktrees/<id> records.
+    git worktree prune >&2
+
+    if git show-ref --verify --quiet "refs/heads/${branch}"; then
+        git branch -D "$branch" >&2 || true
+    fi
+}
+
+cmd_list() {
+    # Walk every git repo under DEV_ROOT, dump its worktree list. The first
+    # entry per repo is the main checkout; the rest are session worktrees.
+    for dir in "$DEV_ROOT"/*/.git; do
+        [[ -d "$dir" || -f "$dir" ]] || continue
+        local repo_dir
+        repo_dir="$(dirname "$dir")"
+        (cd "$repo_dir" && git worktree list --porcelain 2>/dev/null) \
+            | grep '^worktree ' \
+            | sed 's/^worktree //'
+    done
+}
+
+if [[ $# -lt 1 ]]; then
+    usage
+fi
+
+case "$1" in
+    start)
+        [[ $# -eq 3 ]] || usage
+        cmd_start "$2" "$3"
+        ;;
+    cleanup)
+        [[ $# -eq 3 ]] || usage
+        cmd_cleanup "$2" "$3"
+        ;;
+    list)
+        cmd_list
+        ;;
+    *)
+        usage
+        ;;
+esac
