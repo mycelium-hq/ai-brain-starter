@@ -111,7 +111,14 @@ def find_repo_root() -> Path:
 
 
 def load_language_packs(langs: list[str]) -> dict:
-    """Load JSON language packs and merge into a single rule set."""
+    """Load JSON language packs and merge into a single rule set.
+
+    strict_guards (codified 2026-05-25): override ALL tiers including
+    explicit + high_confidence. Used for unambiguous non-close contexts
+    (meta-discussion of close cascade, debugging, technical references)
+    where false positives are very costly. The original false_positive_guards
+    only suppress weak tiers (ambiguous / emoji_only).
+    """
     repo = find_repo_root()
     pack_dir = repo / "templates" / "closing-signals"
     merged = {
@@ -120,6 +127,7 @@ def load_language_packs(langs: list[str]) -> dict:
         "ambiguous": [],
         "emoji_only": [],
         "false_positive_guards": [],
+        "strict_guards": [],
     }
     for lang in langs:
         path = pack_dir / f"{lang.strip()}.json"
@@ -195,6 +203,16 @@ def classify_signal(prompt: str, packs: dict, custom: list[str]) -> tuple[str | 
     # an "Okay, let's close this session" prompt was silently suppressed by the
     # `^ok(ay)?[,.\s]+(let'?s|now)...` guard despite high_confidence pattern
     # `\b(let'?s\s+)?close\s+(this|the)\s+session\b` also matching.
+
+    # STRICT guards (codified 2026-05-25): override EVERYTHING, including
+    # explicit/high_confidence/custom. Use only for unambiguous non-close
+    # contexts where false positives are very costly. Checked FIRST so
+    # meta-discussion of close cascade never fires a stub. The original
+    # FP guards remain for weak-tier-only suppression — strict guards do
+    # NOT override the user's custom patterns, those still win.
+    if is_false_positive(text, packs.get("strict_guards", [])):
+        log_debug("strict guard matched, suppressing ALL tiers")
+        return (None, None)
 
     # User custom patterns are highest authority — always win, FP guard skipped
     for pattern in custom:
@@ -639,10 +657,20 @@ PHASE 2 — Batch writes (one tool-call block, append never overwrite):
   • Append journal seeds to Captures.
   • Personal vs team firewall: never let personal content leak to a team vault.
 
-The post-Stop hook handles ONLY the mechanical pieces: aggregators
-(aggregate-sessions.py / aggregate-decisions.py), retention cleanup
-(stubs >7d), git snapshot (vault-safe-commit.sh), worktree-archive-prep.
-Don't run those yourself — they fire automatically after your turn ends.
+PHASE 2b — vault-safe-commit IS YOUR MANUAL JOB (codified 2026-05-25
+after the cascade double-fire incident). You MUST run vault-safe-commit.sh
+with explicit paths for every session-close artifact you wrote (session
+file + decisions + captures + time-tracking + any rule/inventory edits)
+BEFORE drafting the goodbye. The verify-session-close-cascade Stop hook
+checks for uncommitted session-close artifacts and BLOCKS the close if
+any are present — earlier docs said the post-Stop hook would auto-commit
+this, which was wrong: the verify hook fires BEFORE the post-Stop hook,
+so trusting auto-commit causes a hard block + forced re-run.
+
+The post-Stop hook handles ONLY: aggregators (aggregate-sessions.py /
+aggregate-decisions.py), retention cleanup (stubs >7d), worktree-archive
+preparation. It does NOT auto-commit; that is Phase 2b above and it is
+your job before goodbye.
 
 Phases 0c/0d/0e and the Phase 3 audit are MODEL-SIDE. The post-Stop hook
 does NOT run them.
