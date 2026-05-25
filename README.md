@@ -430,6 +430,7 @@ If what you need is agent federation, swarm topologies, or a 300-tool MCP server
 - **[`docs/MEMORY_SYSTEM.md`](docs/MEMORY_SYSTEM.md)** — how Claude accumulates knowledge across sessions using typed memories
 - **[`docs/TOKEN_OPTIMIZATION.md`](docs/TOKEN_OPTIMIZATION.md)** — how to stop burning tokens on overhead: compress Claude-facing files, cap memory, route cheap work to cheap models
 - **[`docs/BUILD_STANDARDS.md`](docs/BUILD_STANDARDS.md)** — read before any MCP/skill/script build. Pre-build checklist, optimization pass, pre-extraction patterns
+- **[`docs/LLM_RAILS_QUICKSTART.md`](docs/LLM_RAILS_QUICKSTART.md)** — five-rail taxonomy (INPUT / RETRIEVAL / DIALOG / EXECUTION / OUTPUT) + six patterns from NVIDIA-NeMo/Guardrails (REJECT/OMIT/SANITIZE, output_mapping inversion-safety, self-consistency hallucination check, YARA prefilter, OpenTelemetry GenAI semconv, content-capture-off default). For AI coding agents shipping production LLM features without taking on a framework dependency.
 - **[`skills/graphify/RUNBOOK.md`](skills/graphify/RUNBOOK.md)** — production playbook for running graphify on a large vault, with cost guardrails
 - **[`skills/graphify/LESSONS.md`](skills/graphify/LESSONS.md)** — 104 operational lessons from running graphify on a 10K-file vault across 70+ sessions
 - **[`templates/dataview-queries.md`](templates/dataview-queries.md)** — reusable Dataview query library for journals, CRM, AI chats, decision logs
