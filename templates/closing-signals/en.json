@@ -27,7 +27,7 @@
     "\\bcalling it (a (day|night))\\b",
     "\\bthat'?s? (all|it) for (today|now)\\b",
     "\\bthanks?,? that'?s? (all|it)\\b",
-    "\\bi'?m (out|done|good)\\b",
+    "\\bi'?m (out|done|good)[.!?\\s]*$",
     "^(ok(ay)?[,.\\s]+)?done\\s+for\\s+(today|now|the\\s+day)[!.\\s]*$",
     "^(ok(ay)?[,.\\s]+)?(thanks|thx|ty)[,!.\\s]*$",
     "\\blater[!.\\s]*$",

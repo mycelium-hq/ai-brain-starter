@@ -19,7 +19,7 @@
     "\\blisto[,.!\\s]*(gracias)?[!.\\s]*$",
     "\\bgracias,? (eso|esto) es todo\\b",
     "\\bnos hablamos\\b",
-    "\\bme voy\\b",
+    "\\bme voy[.!?\\s]*$",
     "\\bcerremos (acá|aquí|esto|por (hoy|ahora))\\b",
     "\\bcerr(emos|ar|amos)\\s+(la\\s+|esta\\s+)?sesi[oó]n\\b",
     "\\b(termin(amos|emos)|listo)\\s+por\\s+(hoy|ahora)\\b",
