@@ -23,6 +23,8 @@ Every audit memo body MUST contain:
 
 3. **At least one panel dissent voice arguing FOR adopt on each DROP.** Proves the candidate was tested by adversarial framing, not pre-filtered by closed-minded surface mapping. If you can't summon a dissent voice that takes the candidate seriously, the candidate wasn't really considered.
 
+4. **Per-ADOPT cherry-pick: scan the team's issue tracker (Linear / Jira / GitHub Issues / etc.) for prior or in-flight coverage in the same domain.** The audit may identify a candidate the team already has an issue for — in-flight, recently shipped, or backlogged. Declaring it "new work" when it already exists in the tracker burns engineering hours on duplicate scope. The cherry-pick output table carries an explicit `Tracker coverage` column per ADOPT showing `<issue-id>` / `<issue-id>:done-recent` / `<issue-id>:backlog` / `NONE`. See Phase 5.4 below for the check protocol.
+
 If all 3 candidates score DROP after dissent, "Cherry-pick: None" is earned and the audit is complete.
 
 ## When this skill applies
@@ -115,14 +117,39 @@ When the audit lands as a memory file, structure the body so the cherry-pick dis
 
 ## Phase 4.5 — capability surface + cherry-pick candidates
 
-| Candidate | Source quote (verbatim) | Score | Reason | Dissent voice (for DROP only) |
-|---|---|---|---|---|
-| <name 1> | "..." | ADOPT \| DROP \| DEFER | <one sentence> | <voice arguing FOR adopt> |
-| <name 2> | "..." | ... | ... | ... |
-| <name 3> | "..." | ... | ... | ... |
+| Candidate | Source quote (verbatim) | Score | Reason | Tracker coverage | Dissent voice (for DROP only) |
+|---|---|---|---|---|---|
+| <name 1> | "..." | ADOPT \| DROP \| DEFER | <one sentence> | `<issue-id>` \| `<issue-id>:done-recent` \| `<issue-id>:backlog` \| `NONE` | <voice arguing FOR adopt> |
+| <name 2> | "..." | ... | ... | ... | ... |
+| <name 3> | "..." | ... | ... | ... | ... |
 
 ## Phase 5 — decision
 [verdict + one-sentence reason]
+
+## Phase 5.4 — issue-tracker coverage check (per ADOPT cherry-pick, before any new tracker issue gets filed)
+
+For each ADOPT cherry-pick that translates into trackable dev work, search the team's issue tracker BEFORE declaring it new work. Three signals matter:
+
+1. **Active in-flight issue covering the same domain.** Cherry-pick becomes "comment on existing issue reinforcing the priority" or "add as a sibling refinement under the existing issue" — not a new tracker entry.
+2. **Recently shipped (Done within ~30 days) issue covering the domain.** Cherry-pick may already be partially landed; verify what shipped before specifying new scope. The audit may collapse into "this is a follow-up refinement, file as next-iteration, not a parallel scope."
+3. **Backlog issue named but not yet in flight.** Cherry-pick can either prompt promotion of the existing issue or extend its description with the new spec details from the audit.
+
+Search protocol:
+
+1. Use the team's issue tracker's full-text search across both the title + description (Linear: `search_issues` with the candidate keywords; Jira: JQL `text ~ "<keywords>"`; GitHub Issues: `is:issue <keywords>`).
+2. Scope to the relevant team / project / workspace; do NOT search globally unless the candidate could legitimately land in any team.
+3. Capture matches with state (Backlog / In Progress / In Review / Done / Canceled) and updated date.
+4. Decide per match: link / refine / promote / file-fresh.
+
+Output: the Phase 4.5 candidate table's `Tracker coverage` column carries one of:
+- `<issue-id>` (verbatim, e.g. `TEAM-94`) — existing in-flight issue covers this; cherry-pick links / refines / closes-as-dup.
+- `<issue-id>:done-recent` — recently shipped; cherry-pick is a refinement or follow-up; file a new issue ONLY IF the audit surfaced genuinely new scope beyond what shipped.
+- `<issue-id>:backlog` — exists in backlog; cherry-pick prompts promotion + adds the audit's spec details to the existing issue.
+- `NONE` — no prior coverage; cherry-pick becomes a new tracker issue per the Wiring Checklist + Phase 5.5 foundation verification.
+
+Bug class this prevents: **CHERRY-PICK-DUPLICATES-EXISTING-TRACKER-WORK** (family with `CONCURRENT-SESSION-SAME-SCOPE`). Failure pattern: the audit identifies a candidate, declares it new work, fails to notice the team's existing in-flight issue (which may be in a sibling session or a sibling worktree as we speak), and burns engineering time on duplicate scope. The check turns the audit into a first-class consumer of the team's coordination layer instead of a parallel pipeline.
+
+Sibling discipline already in flight: if the team has a concurrent-session safeguard at issue-creation time (a hookify rule, a MCP guard, or a project-level lint), this Phase 5.4 fires earlier — at audit-output time, before the issue body even gets drafted. Both are needed; this is the upstream half.
 
 ## Shipped cherry-picks (if any landed same-session)
 [explicit list of what got adopted + where it landed in the stack]
