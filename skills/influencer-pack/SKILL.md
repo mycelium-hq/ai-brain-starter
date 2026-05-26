@@ -65,6 +65,21 @@ The influencer-pack assumes these substrate skills are also installed in `~/.cla
 | `/repurposing-engine` | Turns a long-form recording (podcast, YouTube video, keynote) into platform-native cuts: short-form video, newsletter post, X thread, LinkedIn post. Reads transcripts from the typed-memory layer, which means `ingest-youtube` must run first on the source URL. | Per-recording |
 | `/launch-automation` | Course or cohort or paid-product launch sequence with email plus DM plus Story plus Reel cadence. | Per-launch |
 
+## Companion visual surface (cover art, thumbnails, post visuals)
+
+Creator content lives or dies on the visual layer. The pack assumes one of two image-gen MCPs is available; the engine routes to whichever matches the visual register:
+
+| Use case | Primary | Backup / alternate |
+|---|---|---|
+| Hero / OG / blog cover for a content idea (photorealistic register) | `nano-banana` (Gemini 3 Pro Image) — structured deliverables with alt-text | `midjourney-mcp` for the MJ aesthetic |
+| Cinematic / painterly / fantastical cover (Midjourney register) | `midjourney-mcp` `imagine` → `wait_for_task` → `upscale` U1-U4 on the keeper | `nano-banana` (cheaper, different aesthetic) |
+| Reverse-engineer a competitor's hero aesthetic | `midjourney-mcp` `describe` (image-to-prompt) — pass `image_url`, get 4 candidate prompts | manual prompt-writing |
+| Composite reference moodboard into one new cover | `midjourney-mcp` `blend` (2-5 image URLs in, 4-up grid out, optional dimension `square\|portrait\|landscape`) | manual moodboard |
+| Iterate on a chosen direction | `midjourney-mcp` `variation` V1-V4 (regenerates a new 4-up grid off a chosen position) | `imagine` with tweaked prompt |
+| Sharp-edges discipline before any image-gen call | Anti-keyword-soup, anti-text-in-prompt, positive framing, physics-aware relationships, character continuity, Perfect Prompt formula, intent → framing mapping | inline in each MCP's README |
+
+**Cost discipline.** `midjourney-mcp` (PiAPI-backed; `github.com/adelaidasofia/midjourney-mcp`) gates every cost-incurring call on a daily USD cap (`MIDJOURNEY_MCP_DAILY_USD_CAP`, default $5/day, calendar-day reset at the configured UTC offset). Per-call estimates: imagine $0.04, variation $0.04, upscale $0.01, describe $0.005, blend $0.04 (fast mode). For creator-scale batches (10+ covers/week), pre-flight by raising the cap or switching to PiAPI Host-Your-Account ($8/seat/mo flat, set cap=0). `nano-banana` (Gemini 3 Pro Image) is free of per-call cost — default for high-volume work; reach for `midjourney-mcp` when the AESTHETIC specifically calls for it.
+
 ## Init flow
 
 1. The operator runs `/influencer-pack init`.
