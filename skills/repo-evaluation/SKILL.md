@@ -53,6 +53,22 @@ In a Phase 0 short-circuit, reading further is malpractice. File the deal-breake
 
 NOTE: a Phase 3 security gate failure (privacy / data-handling / dangerous defaults) is NOT a Phase 0 shortcut. By Phase 3 the content has been engaged with; the extraction discipline applies. Document the security failure AND the cherry-picks separately.
 
+## Phase 0 scope tier — count files before reading content
+
+Count tracked + non-vendored source files in the target repo before reading content. Apply tier:
+
+- **Small (<1,000 files):** read every content file the discipline names (SKILL.md / AGENTS.md / learnings.md / agent files / spec docs).
+- **Medium (1,000-10,000 files):** prioritize the content file at known locations (`SKILL.md`, `references/`, `docs/adr/`, `AGENTS.md`, `CLAUDE.md`). Then sample 2-3 source files referenced from the content.
+- **Large (10,000+ files):** critical-path only — content files + architecture-doc + first-screen of `src/` index. Audit memo MUST report coverage % (files read / total) so future re-audits know the scan boundary.
+
+Command:
+
+```bash
+find <repo> -type f -not -path '*/node_modules/*' -not -path '*/.git/*' -not -path '*/vendor/*' -not -path '*/__pycache__/*' -not -path '*/dist/*' -not -path '*/build/*' -not -path '*/.next/*' -not -path '*/target/*' | wc -l
+```
+
+Bug class: **AUDIT-SILENT-TRUNCATION** (parent: ARTIFACT-WITHOUT-MEASUREMENT). Prevents "I read what I had time for" failure mode where a 50K-file monorepo gets a 5-file audit and the gap is invisible.
+
 ## Axis B — score against the full operating-company surface
 
 Every audit scores TWO axes for the operator:
