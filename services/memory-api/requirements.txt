@@ -1,4 +1,6 @@
-fastapi>=0.110.0
+# != 0.136.3: MAL-2026-4750 — that release ships a malicious 'fastar'
+# typosquat dependency in the [standard] extras (Amazon Inspector, 2026-05-23).
+fastapi>=0.110.0,!=0.136.3
 uvicorn[standard]>=0.27.0
 networkx>=3.0
 pydantic>=2.5.0
