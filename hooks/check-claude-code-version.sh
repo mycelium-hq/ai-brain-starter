@@ -1,24 +1,21 @@
 #!/usr/bin/env bash
 # Check Claude Code installed version against the latest GitHub release.
-# Warns at SessionStart if behind by >=3 patch versions. Caches result for 24h
-# to avoid hammering the GitHub API on every session.
+# When behind, also surfaces what's new (bullets between current and latest)
+# so the user sees WHAT changed, not just THAT she's behind.
+# Caches result for 24h to avoid hammering GitHub.
 #
-# Why: Claude Code drift is silent — there's no built-in "you're behind"
-# notification. Multi-version drift means you miss memory-leak fixes, bash-cwd
-# fixes, and other reliability improvements that ship every few weeks. This
-# hook surfaces the gap at SessionStart so it can't hide.
-#
-# Wiring: SessionStart (no matcher needed). Pairs with vault-context.py or any
-# UserPromptSubmit hook that wants to surface the warning inline by reading
-# the cache file.
-#
-# Requires `gh` CLI installed and authenticated. Exits silently if missing.
+# Wired into SessionStart. Permanent guard against (a) falling behind on releases
+# AND (b) missing release-payload features that should drive setup changes.
+# Cantrill blind-spot fix codified 2026-05-08: the previous version was a tier-1
+# alarm without payload — surfaced "you're behind" but not "here's the diff that
+# changed worktree.baseRef behavior."
 
 set -uo pipefail
 
 CACHE_FILE="$HOME/.claude/.claude-code-version-check"
 CACHE_TTL_SEC=$((24 * 60 * 60))   # 24 hours
-WARN_VERSION_GAP=3                # warn if behind by N or more patch versions
+WARN_VERSION_GAP=3                # warn loudly if behind by N or more patch versions
+DIFF_BULLET_LIMIT=8               # max bullets to surface from the changelog diff
 
 now=$(date +%s)
 if [[ -f "$CACHE_FILE" ]]; then
@@ -41,20 +38,94 @@ current=$(claude --version 2>/dev/null | awk '{print $1}')
 latest=$(gh api repos/anthropics/claude-code/releases/latest --jq .tag_name 2>/dev/null | sed 's/^v//')
 [[ -z "$latest" ]] && exit 0
 
-# Parse semver patch components (X.Y.Z)
+# Up to date — short message, cache, exit.
+if [[ "$current" == "$latest" ]]; then
+  : > "$CACHE_FILE"
+  exit 0
+fi
+
 cur_patch=$(echo "$current" | awk -F. '{print $3}')
 lat_patch=$(echo "$latest" | awk -F. '{print $3}')
+gap=""
+[[ -n "$cur_patch" && -n "$lat_patch" ]] && gap=$(( lat_patch - cur_patch ))
 
-if [[ "$current" == "$latest" ]]; then
-  msg=""
-elif [[ -n "$cur_patch" && -n "$lat_patch" ]] && (( lat_patch - cur_patch >= WARN_VERSION_GAP )); then
-  gap=$(( lat_patch - cur_patch ))
-  msg="[claude-code-version] $current -> latest $latest ($gap versions behind). Upgrade: npm i -g @anthropic-ai/claude-code@latest"
+# Build the headline.
+if [[ -n "$gap" ]] && (( gap >= WARN_VERSION_GAP )); then
+  headline="[claude-code-version] $current → latest $latest ($gap versions behind). Upgrade: npm i -g @anthropic-ai/claude-code@latest"
 else
-  msg="[claude-code-version] $current -> latest $latest. Upgrade when convenient: npm i -g @anthropic-ai/claude-code@latest"
+  headline="[claude-code-version] $current → latest $latest. Upgrade when convenient: npm i -g @anthropic-ai/claude-code@latest"
+fi
+
+# Fetch the CHANGELOG.md diff between current and latest. Best-effort:
+# any failure here just means we fall back to the headline-only message.
+# Use a temp file rather than a pipe to avoid SIGPIPE in nested heredocs.
+diff_block=""
+changelog_tmp=$(mktemp -t claude-code-changelog.XXXXXX 2>/dev/null)
+if [[ -n "$changelog_tmp" ]]; then
+  if gh api repos/anthropics/claude-code/contents/CHANGELOG.md \
+       -H "Accept: application/vnd.github.raw" \
+       > "$changelog_tmp" 2>/dev/null && [[ -s "$changelog_tmp" ]]; then
+    diff_block=$(python3 - "$current" "$latest" "$DIFF_BULLET_LIMIT" "$changelog_tmp" <<'PY' 2>/dev/null
+import sys, re
+current = sys.argv[1]
+latest = sys.argv[2]
+limit = int(sys.argv[3])
+text = open(sys.argv[4]).read()
+
+sections = re.split(r'^## ', text, flags=re.MULTILINE)
+
+def parse_version(s):
+    m = re.match(r'^(\d+)\.(\d+)\.(\d+)', s.strip())
+    return tuple(int(x) for x in m.groups()) if m else None
+
+cur_t = parse_version(current)
+lat_t = parse_version(latest)
+if not cur_t or not lat_t:
+    sys.exit(0)
+
+picked = []
+for sec in sections[1:]:
+    head_line = sec.split('\n', 1)[0].strip()
+    v = parse_version(head_line)
+    if not v:
+        continue
+    if cur_t < v <= lat_t:
+        picked.append((v, head_line, sec))
+
+if not picked:
+    sys.exit(0)
+
+picked.sort(reverse=True)
+
+bullets = []
+for v, head, sec in picked:
+    body = sec.split('\n', 1)[1] if '\n' in sec else ''
+    for line in body.splitlines():
+        line = line.rstrip()
+        if line.startswith('- ') and not line.startswith('  - '):
+            bullets.append(f"  . [{head.split()[0]}] {line[2:]}")
+            if len(bullets) >= limit:
+                break
+    if len(bullets) >= limit:
+        break
+
+if bullets:
+    print(f"[claude-code-version] What's new since {current} (top {len(bullets)} bullets):")
+    print('\n'.join(bullets))
+PY
+    )
+  fi
+  rm -f "$changelog_tmp"
+fi
+
+if [[ -n "$diff_block" ]]; then
+  msg="${headline}
+${diff_block}"
+else
+  msg="$headline"
 fi
 
 # Cache for 24h
 printf '%s\n' "$msg" > "$CACHE_FILE"
-[[ -n "$msg" ]] && echo "$msg" >&2
+echo "$msg" >&2
 exit 0

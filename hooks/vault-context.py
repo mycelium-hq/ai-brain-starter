@@ -1,152 +1,70 @@
 #!/usr/bin/env python3
 """
-UserPromptSubmit hook: auto-inject personalized vault context on strategic prompts.
-
-Fires on every prompt. If the prompt contains a strategic keyword, reads
-`⚙️ Meta/Current Priorities.md` and `⚙️ Meta/Open Loops.md` (always), plus any
-files routed by the user's topic map for the keywords it detects.
-
-Personalization:
-  Edit `⚙️ Meta/topic-map.json` in your vault to define your own topics.
-  Each topic has a name, a list of trigger keywords, and a list of vault files
-  to inject when any trigger matches.
-
-  Example entry:
-      {
-        "name": "fundraising",
-        "triggers": ["raise", "investor", "pitch", "seed", "angel"],
-        "files": ["🚀 Company/💰 Raise/Dashboard.md"]
-      }
-
-  If `topic-map.json` does not exist, the hook ships core files only.
-
-Vault root auto-detection (in order):
-  1. VAULT_ROOT env var
-  2. Walk up from cwd looking for ⚙️ Meta/Current Priorities.md
-  3. Silent exit if not found
-
-Wire into settings.json:
-  "UserPromptSubmit": [{"matcher": "", "hooks": [
-    {"type": "command", "command": "python3 ~/.claude/hooks/vault-context.py"}
-  ]}]
+UserPromptSubmit hook: detect strategic topics, read key vault files, inject as additionalContext.
+Fires before Claude responds — no instructions needed, context is just there.
 """
-from __future__ import annotations
-
 import json
 import os
+from pathlib import Path
 import re
 import sys
-from pathlib import Path
 
-MAX_CHARS = 2500  # per-file truncation (tightened from 4000 — see token-burn audit)
+VAULT = os.environ.get("VAULT_ROOT", str(Path.home() / "vault"))
+MAX_CHARS = 4000  # per file truncation limit
 
-# ─── Files always injected for high-confidence strategic-INTENT questions ──
-
+# Always load these for strategic questions
 CORE_FILES = [
     "⚙️ Meta/Current Priorities.md",
     "⚙️ Meta/Open Loops.md",
 ]
 
-# ─── INTENT signals (high-confidence strategy questions) ──────────────────
-# Match → load CORE_FILES + matching topic files. These are explicit asks
-# for direction, status, priority, decision-shape — not bare topic mentions.
-# Override by creating a "_signals" key at the top of topic-map.json.
-#
-# Tightened design (lesson from token-burn audit): the prior version fired on
-# bare topic words like \braise\b / \bclient\b / \bplan\b, pulling 8-50KB of
-# context into routine builds, fixes, and file ops. Now requires explicit
-# strategy intent (what / how / should / status / priority / decision-shape).
-
-DEFAULT_SIGNALS = [
-    r"\bstrateg",
-    r"\bprioritiz", r"\bpriorities\b",
-    r"\bdecision\b", r"\bdeciding\b", r"\bdecide\b",
-    r"\bnext step",
-    r"\bopen loop",
-    r"\bwhat should (i|we)\b", r"\bhow (should|do|can) (i|we)\b",
-    r"\bwhat.s (my|our|the) (plan|status|situation|focus|priority|next)\b",
-    r"\bwhere (am|are) (i|we)\b",
-    r"\bwhat (am|are) (i|we) (doing|working|missing)\b",
-    r"\bpending\b",
-    r"\bfocus(ing|ed)? on\b",
-    r"\bwhat.s left\b",
-    r"\bplan (week|morning|review|touch|today|tomorrow)\b",
-    r"\bstatus (of|on|update)\b",
+# Load for raise/investor/pitch topics
+RAISE_FILES = [
+    "🚀 team-vault/💰 Raise/Raise Dashboard.md",
+    "🚀 team-vault/💰 Raise/Raise Sprint - Apr 2026.md",
 ]
 
-# ─── TOPIC-only signals (load topic files but NOT core) ───────────────────
-# Override by creating a "_topic_only_signals" key at the top of topic-map.json.
+# Load for the user's primary org product/strategy topics
+ONDE_STRATEGY_FILES = [
+    "🚀 team-vault/📋 Strategy/the user's primary org.md",
+    "🚀 team-vault/📋 Strategy/Strategy Index.md",
+]
 
-DEFAULT_TOPIC_ONLY_SIGNALS = [
-    r"\braise\b", r"\binvestor", r"\bpitch\b",
-    r"\brevenue\b", r"\bclient\b", r"\bproduct\b",
-    r"\bsales\b", r"\bconsulting\b",
-    r"\bwriting\b", r"\bnewsletter\b", r"\bessay\b",
+# Signals → which extra files to load
+TOPIC_MAP = [
+    (
+        [r"\braise\b", r"\binvestor", r"\bpitch\b", r"\bseed\b", r"\bangel\b",
+         r"\bvaluation\b", r"\bterm sheet\b", r"\bnyc trip\b", r"\bapr(il)? 24\b",
+         r"\bapr(il)? 30\b", r"\bdata room\b"],
+        RAISE_FILES,
+    ),
+    (
+        [r"\bonde\b", r"\bproduct\b", r"\baccenture\b", r"\bclient\b",
+         r"\bvenue tool\b", r"\bcorporate structure\b", r"\bsales\b",
+         r"\bgo.to.market\b", r"\bgtm\b"],
+        ONDE_STRATEGY_FILES,
+    ),
+]
+
+# Broad strategic signals — if any match, inject CORE_FILES
+STRATEGIC_SIGNALS = [
+    r"\bstrateg", r"\bonde\b", r"\braise\b", r"\binvestor", r"\bpitch\b",
+    r"\bdecision\b", r"\bprioritiz", r"\bpriorities\b", r"\bnyc\b",
+    r"\bplan\b", r"\bfocus\b", r"\bnext step", r"\bopen loop",
+    r"\bwhat should (i|we)\b", r"\bhow (should|do) (i|we)\b",
+    r"\bwhat.s (my|our|the) (plan|status|situation)\b",
+    r"\bwhere (am|are) (i|we)\b", r"\bpending\b", r"\bwhat (am|are) (i|we) (doing|working)\b",
+    r"\brevenue\b", r"\bclient\b", r"\bproduct\b", r"\baccenture\b",
+    r"\bseed\b", r"\bangel\b", r"\bsales\b", r"\bconsulting\b",
+    r"\bwriting\b", r"\bsubstack\b", r"\bhigh.rise\b", r"\bafter the shock\b",
 ]
 
 
-def find_vault_root() -> str | None:
-    if env := os.environ.get("VAULT_ROOT"):
-        p = Path(env)
-        if (p / "⚙️ Meta" / "Current Priorities.md").exists():
-            return str(p)
-
-    cwd = Path(os.getcwd()).resolve()
-    for candidate in [cwd, *cwd.parents]:
-        if (candidate / "⚙️ Meta" / "Current Priorities.md").exists():
-            return str(candidate)
-
-    return None
-
-
-def load_topic_map(vault_root: str) -> tuple[list[str], list[tuple[list[str], list[str]]]]:
-    """
-    Returns (signals, topics) where signals is a list of regex strings and
-    topics is a list of (triggers, files) tuples. Falls back to defaults if
-    the config is missing or malformed.
-    """
-    config_path = Path(vault_root) / "⚙️ Meta" / "topic-map.json"
-    if not config_path.exists():
-        return DEFAULT_SIGNALS, []
-
+def read_file(rel_path: str) -> str | None:
+    full = os.path.join(VAULT, rel_path)
     try:
-        raw = json.loads(config_path.read_text(encoding="utf-8"))
-    except Exception:
-        return DEFAULT_SIGNALS, []
-
-    # Supports two shapes:
-    #   [ {name, triggers, files}, ... ]                  (simple)
-    #   { "_signals": [...], "topics": [...] }            (extended)
-    if isinstance(raw, dict):
-        signals = raw.get("_signals") or DEFAULT_SIGNALS
-        topics_raw = raw.get("topics") or []
-    elif isinstance(raw, list):
-        signals = DEFAULT_SIGNALS
-        topics_raw = raw
-    else:
-        return DEFAULT_SIGNALS, []
-
-    topics: list[tuple[list[str], list[str]]] = []
-    for entry in topics_raw:
-        if not isinstance(entry, dict):
-            continue
-        triggers = entry.get("triggers") or []
-        files = entry.get("files") or []
-        if not isinstance(triggers, list) or not isinstance(files, list):
-            continue
-        # Wrap bare keywords in word-boundary regex for safety
-        patterns = [t if any(c in t for c in r".*+?^$()[]{}\|") else rf"\b{re.escape(t)}\b"
-                    for t in triggers if isinstance(t, str)]
-        file_list = [f for f in files if isinstance(f, str)]
-        if patterns and file_list:
-            topics.append((patterns, file_list))
-
-    return signals, topics
-
-
-def read_file(vault_root: str, rel_path: str) -> str | None:
-    try:
-        content = (Path(vault_root) / rel_path).read_text(encoding="utf-8")
+        with open(full, "r", encoding="utf-8") as f:
+            content = f.read()
         if len(content) > MAX_CHARS:
             content = content[:MAX_CHARS] + "\n...[truncated — read full file if needed]"
         return content
@@ -154,47 +72,34 @@ def read_file(vault_root: str, rel_path: str) -> str | None:
         return None
 
 
-def main() -> None:
+def main():
     try:
         payload = json.load(sys.stdin)
     except Exception:
         sys.exit(0)
 
-    prompt = (payload.get("prompt") or "").lower().strip()
-    if not prompt:
+    prompt = payload.get("prompt", "") or ""
+    p = prompt.lower().strip()
+
+    if not any(re.search(sig, p) for sig in STRATEGIC_SIGNALS):
         sys.exit(0)
 
-    vault_root = find_vault_root()
-    if not vault_root:
-        sys.exit(0)
+    files_to_load = list(CORE_FILES)
+    for signals, extra_files in TOPIC_MAP:
+        if any(re.search(sig, p) for sig in signals):
+            files_to_load.extend(extra_files)
 
-    signals, topics = load_topic_map(vault_root)
-
-    # Intent + topic split: routine builds/fixes/file-ops with no strategic
-    # intent and no topic mention exit silently (no context injection).
-    # Topic mention without intent loads topic files only, NOT core.
-    # Intent signal loads CORE_FILES + matching topic files.
-    has_intent = any(re.search(sig, prompt) for sig in signals)
-    has_topic_only = any(re.search(sig, prompt) for sig in DEFAULT_TOPIC_ONLY_SIGNALS)
-
-    if not has_intent and not has_topic_only:
-        sys.exit(0)
-
-    files_to_load = list(CORE_FILES) if has_intent else []
-    for triggers, extras in topics:
-        if any(re.search(t, prompt) for t in triggers):
-            files_to_load.extend(extras)
-
-    seen: set[str] = set()
-    unique: list[str] = []
+    # Deduplicate while preserving order
+    seen = set()
+    unique_files = []
     for f in files_to_load:
         if f not in seen:
             seen.add(f)
-            unique.append(f)
+            unique_files.append(f)
 
     parts = ["[vault-context] Vault files auto-loaded for this query:\n"]
-    for rel_path in unique:
-        content = read_file(vault_root, rel_path)
+    for rel_path in unique_files:
+        content = read_file(rel_path)
         if content:
             parts.append(f"\n=== {rel_path} ===\n{content}")
 
