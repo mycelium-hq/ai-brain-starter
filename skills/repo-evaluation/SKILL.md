@@ -109,6 +109,7 @@ The kinds of cherry-picks closed-minded audits miss:
 - **Anti-patterns the upstream explicitly bans** ("don't manufacture content," "no praise no philosophical tangents"). What they ban is often what you should also ban.
 - **The session-end / observability discipline** (when does memory get pruned, when does state get reconciled, when does the agent admit it doesn't know). Usually buried in agent-instruction text, not in the README.
 - **Composition primitives** (how do multiple agents communicate, how does memory cross sessions, how does state get serialized for handoff). Often the most-reusable layer.
+- **Concise verification tests where the directive is already covered.** Pattern: *"implied is not adopted."* A principle the substrate enforces via N directive rules ("don't refactor unrelated code") may STILL be missing the concise one-line VERIFICATION TEST from the upstream ("every changed line should trace directly to the user's request"). The directive tells the agent what to avoid; the verification test tells the agent how to self-check in the moment. Both surfaces are needed. The first-pass cherry-pick gate *"vibe-rule not structural, skip"* is too aggressive when a concise test phrasing fills the verification-surface gap.
 
 ## Output template
 
