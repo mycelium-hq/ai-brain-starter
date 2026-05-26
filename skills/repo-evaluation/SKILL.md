@@ -189,6 +189,32 @@ For each ADOPT cherry-pick, fill out THREE columns same-session. Empty cells mea
 **Bug class this checklist prevents: ARTIFACT-WITHOUT-AUTOMATION-WIRING** (parent class of ARTIFACT-WITHOUT-DISCOVERABILITY + ARTIFACT-WITHOUT-UMBRELLA-WIRING). Failure pattern: auditor adopts a cherry-pick, writes the artifact file, and DOES NOT enumerate the wiring layers, so the user has to ask "did it go in the right umbrella? are we auto-triggering it? all upgrades shipped?" The checklist is the structural fix — the auditor cannot declare done without filling the cells.
 
 **Discipline check:** if filling this table is uncomfortable, the artifact is probably underspecified. Re-read the ADOPT cherry-pick reasoning and identify the surfaces it touches.
+
+### Domain matrix for new or extended rules (vault rules / team conventions / SKILL.md edits)
+
+When the cherry-pick lands as a NEW or EXTENDED team rule (vault rule file / team convention / SKILL.md), the "Discoverability wires" column MUST enumerate each surface this matrix marks as mandatory. A close-time verifier should enforce this — gaps surface as `rule-domain wiring: ... unwired: ...` at session close.
+
+| Rule body signal | Mandatory surface (MUST reference the rule) | Bypass |
+|---|---|---|
+| **Universal (every new rule):** any | Top-level agent instructions (`CLAUDE.md` / `AGENTS.md` / `GEMINI.md`) `# Rules` section bullet | none — every rule MUST be listed |
+| **Universal (every new rule):** any | If rule declares `Bug class:` → team's incident catalog (Critical Failure Inventory or equivalent) MUST have an entry | none — every named bug class needs an incident anchor |
+| **CI/CD domain:** `CI[-\s]?CD` / `github actions` / `\.github/workflows` / `workflow (file\|inject\|yaml\|yml)` / `(deploy\|build\|release) pipeline` / `cron job` / `launchd` | Team's CI/CD umbrella SKILL.md routing table (e.g. shipping-code / dev-ops) | team-defined bypass env var |
+| **MCP domain:** `mcp` / `fastmcp` / `tool semantics` / `stdio transport` / `model context protocol` | Team's MCP build runbook PRE-FLIGHT CHECKLIST | team-defined bypass env var |
+| **Build-discipline domain:** `three-layer wiring` / `build artifact` / `BUILD-WITHOUT-WIRING` / `BUILD RULES` / `optimization pass` | Team's Build Standards runbook GENERAL BUILD RULES | team-defined bypass env var |
+| **Agent/subagent domain:** `subagent` / `sub-agent` / `agent briefing` / `Task tool` / `Agent (Task` | Global agent instructions `# Agent (Task tool) briefings` section | team-defined bypass env var |
+| **Security domain:** `security` / `vuln` / `vulnerability` / `CWE-\d+` / `OWASP` / `injection` / `SAST` / `CVE` / `exploit` / `threat model` | Team's code-security umbrella SKILL.md routing table | team-defined bypass env var |
+
+**How to apply per cherry-pick:**
+
+1. Read the rule body the cherry-pick is shipping.
+2. Walk the matrix top to bottom; for each row, ask: does the rule body match this signal regex?
+3. Every YES row produces a wiring obligation. Fill the "Discoverability wires" cell with the union.
+4. Ship the cross-references SAME SESSION. Banned framings: "wired into umbrella TBD," "future cross-link," "v2 candidate."
+5. Universal gates (top-level instructions `# Rules` + incident catalog on `Bug class:`) are NOT skippable.
+
+**Multiple domains common.** A single rule frequently matches 2-4 domains (e.g., an LLM-guardrails rule matches MCP + Security; a CI/CD-injection rule matches CI/CD + Security). Cross-reference into EVERY matched surface, not just the strongest match.
+
+Bug class: **ARTIFACT-WITHOUT-DOMAIN-WIRING** (subclass of ARTIFACT-WITHOUT-AUTOMATION-WIRING). Failure pattern: a new rule ships with hookify + scanner + 1-2 SKILL.md edits but skips the universal gates plus several mandatory domain surfaces from this matrix. The user surfaces the gap with "did it go in the right umbrella?" — that question IS the bug.
 ```
 
 The table format is one option. A numbered list with each candidate as a section also works. What matters: ≥3 named candidates, verbatim quotes, scored, dissented, AND wiring-checklist filled per ADOPT.
