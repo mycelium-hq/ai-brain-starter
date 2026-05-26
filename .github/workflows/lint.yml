@@ -24,7 +24,7 @@ jobs:
     name: bash syntax (.sh)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
       - name: bash -n every .sh
         run: |
           set -e
@@ -42,7 +42,7 @@ jobs:
     name: PowerShell parse (.ps1)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
       - name: pwsh ParseFile every .ps1
         shell: pwsh
         run: |
@@ -66,7 +66,7 @@ jobs:
     name: UTF-8 BOM on .ps1 (Windows PS 5.1 fix)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
       - name: every .ps1 must start with EF BB BF
         run: |
           set -e
@@ -88,7 +88,7 @@ jobs:
     # Even with BOM, keeping .ps1 ASCII-clean is defense-in-depth against the next
     # time someone saves a file without BOM.
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
       - name: scan .ps1
         run: |
           set -e
@@ -111,8 +111,8 @@ jobs:
     # canonical fix and works on 3.7+. This job catches the regression class
     # before merge. No untrusted input used in any run: command.
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6
         with:
           python-version: "3.9"
       - name: py_compile every .py
@@ -132,7 +132,7 @@ jobs:
     name: JSON validity (hooks.json, *.mcp.json)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
       - name: validate
         run: |
           set -e
@@ -165,7 +165,7 @@ jobs:
     # in https://github.blog/security/vulnerability-research/how-to-catch-github-actions-workflow-injections-before-attackers-do/
     if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
         with:
           fetch-depth: 0
       - name: fetch base branch
@@ -222,7 +222,7 @@ jobs:
     #   3. worktree-prune still deletes fully-merged orphan branches
     # No untrusted user input is referenced in any run: command.
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
       - name: configure git identity
         run: |
           git config --global user.email "ci@example.com"
@@ -241,7 +241,7 @@ jobs:
     # error that only surfaces when a real install runs.
     # No untrusted user input referenced.
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
       - name: run E2E test
         run: bash tests/integration/test_bootstrap_dry_run.sh
 
@@ -257,7 +257,7 @@ jobs:
     # docs has (a) a matching skill folder in skills/ AND (b) is in the
     # bootstrap install loop.
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
       - name: run integration test
         run: bash tests/integration/test_phase_doc_slash_commands_installed.sh
 
@@ -275,7 +275,7 @@ jobs:
     #      (worktree branch diverged with its own commits).
     # No untrusted user input is referenced in any run: command.
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
       - name: configure git identity
         run: |
           git config --global user.email "ci@example.com"
@@ -296,7 +296,7 @@ jobs:
     # We only enforce category 1: backticked, repo-relative, no [VAULT_PATH] prefix,
     # no `<VAULT>` prefix, no leading slash, no `~/`.
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
       - name: scan repo-relative backticked references
         run: |
           set -e
@@ -328,7 +328,7 @@ jobs:
     # vault, never under .claude/worktrees/, and the worktree slug is kept.
     # No untrusted user input is referenced in any run: command.
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
       - name: run integration test
         run: bash tests/integration/test_detect_closing_signal_worktree.sh
 
@@ -342,7 +342,7 @@ jobs:
     # silent when worktrees are clean, and does not flag committed artifacts.
     # No untrusted user input is referenced in any run: command.
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
       - name: configure git identity
         run: |
           git config --global user.email "ci@example.com"
@@ -363,7 +363,7 @@ jobs:
     # reintroduces a remote-pipe-to-shell pattern. No untrusted user input is
     # referenced in any run: command.
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
       - name: scan install surfaces
         run: |
           set -e
@@ -394,6 +394,6 @@ jobs:
     # "no questions, it just runs" promise returns to the README.
     # No untrusted user input is referenced in any run: command.
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
       - name: run integration test
         run: bash tests/integration/test_trust_prompt_preframing.sh
