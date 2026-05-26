@@ -1,48 +1,22 @@
 #!/usr/bin/env python3
 """
 PreToolUse hook for the Agent (Task) tool: warn when the prompt looks
-unbounded, vague, bundles multiple tasks, OR cascades into other agents.
+unbounded, vague, or bundles multiple tasks.
 
-Why agents go off the rails:
-  Empirically, vague briefings balloon to 20+ turns (target <8). The
-  worst offenders share one or more failure patterns:
-    - unbounded scope ("all", "every", "everything", "make sure")
-    - no exit criterion (no count, no time cap, no done-when)
-    - no file paths (vague target)
-    - bundled multi-task work in one agent
-    - delegation cascades (subagent told to spawn another subagent)
-    - role overlap ("use code-reviewer OR code-architect OR ...")
-    - skill-dir-relative paths in the prompt (subagents don't get
-      ${CLAUDE_SKILL_DIR} / ./references/ / ./scripts/)
-    - router-persona / meta-orchestrator framing (subagent told to
-      DECIDE which other subagent to call)
+Why: 2026-04-26 weekly performance digest flagged avg agent turns at 19.4
+(target <8). Worst offender was a 136-char prompt: "look at all recently
+imported notes and make sure they are optimized with wikilinks and
+everything in your claude.md instructions please" — 485 turns. Five top
+offenders all shared one or more failure patterns:
+  - unbounded scope ("all", "every", "everything", "make sure")
+  - no exit criterion (no count, no time cap, no done-when)
+  - no file paths (vague target)
+  - bundled multi-task work in one agent
 
 This hook does NOT block. It nudges the parent session to refine the
 prompt before spawning. Agents are still useful; vague briefings are not.
 
-Bypass: AGENT_BRIEFING_BYPASS=1 in env. Use sparingly — Explore and Plan
-agents are auto-exempted because they're inherently multi-step.
-
-CONFIG (wire once in your ~/.claude/settings.json):
-
-    "PreToolUse": [
-      {
-        "matcher": "Agent",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/usr/bin/python3 ~/.claude/hooks/agent-briefing-check.py"
-          }
-        ]
-      }
-    ]
-
-Then copy this file to ~/.claude/hooks/ (or symlink) so the path resolves.
-
-Source: cherry-picked patterns from crewAI delegation taxonomy,
-Hainrixz/cyber-neo skill-dir resolution gap, addyosmani/agent-skills
-router-persona anti-pattern. See CLAUDE.md `# Agent (Task tool)
-briefings` in this repo for the full provenance + the codified rule.
+Bypass: AGENT_BRIEFING_BYPASS=1 in env.
 """
 from __future__ import annotations
 
@@ -65,29 +39,26 @@ PATH_RE = re.compile(r"(?:/[^\s]+|\.(md|py|sh|json|ts|tsx|js)\b)")
 BUNDLE_HINT_RE = re.compile(
     r"(?im)^\s*(##\s|\d+\.\s|task\s*\d|step\s*\d).*(\n.*){0,40}^\s*(##\s|\d+\.\s|task\s*\d|step\s*\d)"
 )
-# Circular delegation: subagent told to spawn another subagent. Per the
-# crewAI rule: "Setting all agents to allow_delegation=True without
-# hierarchy creates infinite back-and-forth." Use a Plan agent in the
-# parent session for nested planning instead of cascading Agent calls.
+# Anti-patterns lifted 2026-05-24 from crewAI collaboration docs (Candidate 2,
+# CLAUDE.md (see canonical rule)). The framework names 4 delegation anti-patterns;
+# 2 are net-new to this hook's coverage.
 CIRCULAR_DELEGATION_RE = re.compile(
     r"\b(spawn|launch|invoke|create|dispatch)\s+(an?\s+)?(sub)?agent\b.*"
     r"(spawn|launch|invoke|create|dispatch).*(sub)?agent",
     re.IGNORECASE | re.DOTALL,
 )
-# Role overlap: prompt names 2+ overlapping subagent types without picking
-# one. Pick the most specific match; the umbrella's job is to route, the
-# caller's job is to choose.
 ROLE_OVERLAP_HINT_RE = re.compile(
     r"\b(code-?(explorer|architect|reviewer)|feature-?dev|general-?purpose|plan|explore)\b.*"
     r"\b(or|and|either|also use|could use)\b.*"
     r"\b(code-?(explorer|architect|reviewer)|feature-?dev|general-?purpose|plan|explore)\b",
     re.IGNORECASE,
 )
-# Skill-dir-relative paths: subagents do NOT have access to
-# ${CLAUDE_SKILL_DIR} / ${SKILL_DIR} / ${CLAUDE_PROJECT_DIR}/skills/ /
-# ./references/ / ./scripts/. These resolve to empty or fail silently.
-# Parent must resolve to absolute path before spawning, OR embed file
-# CONTENTS directly into the prompt.
+# Gate 6 (2026-05-25, from Hainrixz/cyber-neo SKILL.md L153-156): subagents do
+# NOT have access to ${CLAUDE_SKILL_DIR} / ${SKILL_DIR} / parent-relative paths.
+# Embedding references via interpolated env vars or skill-dir-relative paths
+# silently fails (subagent reads empty / errors). Pattern catches the symptom
+# at briefing time so the parent embeds reference content or absolute paths
+# instead.
 SKILL_DIR_RELATIVE_RE = re.compile(
     r"\$\{?CLAUDE_SKILL_DIR\}?|"
     r"\$\{?SKILL_DIR\}?|"
@@ -96,14 +67,15 @@ SKILL_DIR_RELATIVE_RE = re.compile(
     r"(?<![\w/])\./scripts/",
     re.IGNORECASE,
 )
-# Router-persona / meta-orchestrator anti-pattern. A subagent whose job
-# is to DECIDE which OTHER subagent to call. Pure routing layer with no
-# domain value: adds two paraphrasing hops (information loss + roughly
-# 2x token cost) and replicates work the umbrella dispatchers + intent
-# mapping in CLAUDE.md already do. The umbrella IS the router; subagents
-# should be specialists, never dispatchers. Sibling of
-# CIRCULAR_DELEGATION_RE (which catches the cascading multi-hop case);
-# this catches the single-hop dispatcher case.
+# Router-persona anti-pattern (2026-05-26, from addyosmani/agent-skills
+# references/orchestration-patterns.md Anti-pattern A, audited at
+# CLAUDE.md (see canonical rule) Candidate 5). A subagent whose job is
+# to decide WHICH OTHER subagent to call. Pure routing layer with no domain
+# value: adds two paraphrasing hops (information loss + ~2x token cost) and
+# replicates work that umbrella dispatchers + intent mapping already do. The
+# umbrella IS the router; subagents should be specialists, never dispatchers.
+# Sibling of CIRCULAR_DELEGATION_RE (which catches the cascading multi-hop
+# case); this catches the single-hop dispatcher case.
 ROUTER_PERSONA_RE = re.compile(
     r"\b("
     r"decide\s+which\s+|"
@@ -211,7 +183,8 @@ def main() -> None:
             "/ ./references/ / ./scripts/. The path resolves to empty or fails "
             "silently. Instead: (1) resolve to absolute path in the parent and "
             "interpolate the resolved value, OR (2) embed the file CONTENTS "
-            "directly in the prompt."
+            "directly in the prompt. Per Hainrixz/cyber-neo SKILL.md L153-156 "
+            "(audited 2026-05-25 at CLAUDE.md (see canonical rule))."
         )
 
     if ROUTER_PERSONA_RE.search(prompt):
@@ -222,16 +195,17 @@ def main() -> None:
             "picks the specialist in the parent session; never delegate the "
             "picking. Pure routing layer = info-loss + ~2x token cost + "
             "duplicates umbrella dispatch. Fix: caller picks one specific "
-            "subagent_type and brief THAT one with the work."
+            "subagent_type and brief THAT one with the work. Per "
+            "addyosmani/agent-skills orchestration-patterns Anti-pattern A "
+            "(audited 2026-05-26 at CLAUDE.md (see canonical rule))."
         )
 
     if not issues:
         sys.exit(0)
 
     warn(
-        f"Agent briefing has likely-verbose patterns for {subagent}. "
-        "Vague briefings empirically balloon to 20+ turns when target is <8. "
-        "Issues:"
+        "Agent briefing has likely-verbose patterns. The 2026-04-26 digest "
+        f"showed avg 19.4 turns/agent (target <8) for {subagent}. Issues:"
     )
     for i, msg in enumerate(issues, 1):
         warn(f"  [{i}] {msg}")

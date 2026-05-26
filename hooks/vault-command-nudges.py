@@ -1,31 +1,35 @@
 #!/usr/bin/env python3
 """
-PreToolUse hook: block full-tree git staging on the personal Obsidian vault.
+PreToolUse Bash hook: vault-wide command nudges + blocks.
 
-Dangerous patterns (all walk a 60K-file tree, lock .git/index.lock 10+ min):
-  git add -A
-  git add --all
-  git add .          (whole-tree, not git add ./path/to/file)
+Adapted from anthropics/claude-code examples/hooks/bash_command_validator_example.py.
 
-Safe patterns (pass through):
-  git add "specific/file.md"
-  git add CLAUDE.md "⚙️ Meta/rules/foo.md"
-  git diff --cached --name-only
+Enforces CLAUDE.md rules that were codified but not hook-blocked:
+- Blocks `git push` against the personal vault repo (no remote configured)
+- Blocks unscoped `git status` against the vault repo (60K-file walk)
+- Blocks `rm -rf` against the vault root or top-level emoji folders
+- Nudges `grep` -> Grep tool / rg, `find -name` -> Glob tool
 
-Scope: fires ONLY when the git op targets the personal vault repo itself, or a
-worktree of it. The repo is identified by `git rev-parse --git-common-dir`, NOT
-by a path-string prefix. A string prefix mis-fires on symlinks that sit in the
-vault namespace but point at a SEPARATE repo: `🍄 the user's consulting brand/` is a symlink to
-~/dev/mycelium-vault. Do NOT revert this to `cwd.startswith(VAULT)` — a 60K-file
-walk only hurts the vault; `git add -A` in a standard-sized ~/dev/* repo is
-instant and must pass straight through.
+Two scoping models, tagged per rule:
 
-Value-taking git options whose value is a SEPARATE argument are matched WITH
-their value, so the `add` cannot hide behind the value and a quoted value's
-space cannot end the match early. `-C <dir>` and an explicit `--git-dir <dir>`
-retarget the op; `-c <name>=<value>`, `--work-tree` and `--namespace` are
-consumed too. `git -C "<vault>" add -A`, `git --git-dir="<vault>/.git" add -A`,
-and `git -c core.hooksPath=/dev/null add -A` are all detected.
+- repo-scoped (git push / git status): fire ONLY when the git op targets
+  the personal vault repo itself, or a worktree of it. Repo identity is
+  resolved via `git rev-parse --git-common-dir`, NOT a path-string
+  prefix. A prefix mis-fires on `🍄 the user's consulting brand/`, a symlink that lives
+  inside the vault namespace but points at ~/dev/mycelium-vault -- a
+  separate repo that HAS a GitHub remote and is a normal size. Targeting
+  follows `git -C <dir>` and an explicit `git --git-dir <dir>`; the
+  value-taking options (`-C`, `-c`, `--git-dir`, `--work-tree`,
+  `--namespace`) are matched WITH their separate-argument value, so a
+  subcommand cannot hide behind the value or a quoted value's space.
+
+- namespace-scoped (rm -rf / grep / find): fire whenever the command
+  touches the vault path namespace (cwd under it, or the literal path in
+  the command). `rm -rf` through the 🍄 symlink still destroys real data,
+  and the grep/find slow-walk concern is about the filesystem tree, not
+  git, so these keep the path-prefix gate.
+
+Escape hatch: prefix the command with VAULT_VALIDATOR_BYPASS=1.
 """
 import os
 from pathlib import Path
@@ -165,51 +169,110 @@ def _targets_vault(opts_blob: str, base_cwd: str) -> bool:
     return _targets_vault_repo(eff_cwd)
 
 
-try:
-    data = json.load(sys.stdin)
-except Exception:
+# (regex, severity, message, repo_scoped).
+#   severity 'block' -> exit 2 ; 'nudge' -> exit 2 with softer wording.
+#   repo_scoped True  -> fire only when the op targets the vault repo. The
+#                        regex captures the git options blob as group 1 so
+#                        targeting can follow any `git -C <dir>`.
+#   repo_scoped False -> fire whenever the command is in the vault namespace.
+RULES = [
+    (
+        r'(?:^|&&|\|\|?|;(?!;))\s*git\s+' + _GIT_OPTS_CAP + r'push\b',
+        'block',
+        "git push in the vault: no remote is configured. This is a local-only snapshot repo. "
+        "If you truly need to push, set up a remote first and confirm with the user. "
+        "Rule: CLAUDE.md §'Git in this vault'.",
+        True,
+    ),
+    (
+        r'(?:^|&&|\|\|?|;(?!;))\s*git\s+' + _GIT_OPTS_CAP + r'status\s*(?:$|&&|;|\|)',
+        'block',
+        "Unscoped `git status` in a 60K-file vault walks the full tree (~10min, locks .git/index.lock). "
+        "Pass explicit paths: git status -- \"⚙️ Meta/\" \"path/to/file.md\" "
+        "Or use `git status --short --untracked-files=no -- <path>`.",
+        True,
+    ),
+    (
+        r'(?:^|&&|\|\|?|;(?!;))\s*rm\s+(?:-[A-Za-z]*[rRf][A-Za-z]*\s+)+"?(?:$HOME/vault|⚙️ Meta|✍️ Writing|📓 Journals|🚀 team-vault)',
+        'block',
+        "rm -rf against the vault root or a top-level emoji folder would destroy live work. "
+        "Use explicit file paths or move to Archive/ instead.",
+        False,
+    ),
+    (
+        r'(?:^|&&|\|\|?|;(?!;)|\|)\s*grep\b(?!\s+--?version|\s+--?help)',
+        'nudge',
+        "Prefer the Grep tool (or `rg`) over `grep` — faster, proper ignores, no full-tree walks. "
+        "If you really need plain grep (e.g. piping fixed stdin), prefix with VAULT_VALIDATOR_BYPASS=1.",
+        False,
+    ),
+    (
+        r'(?:^|&&|\|\|?|;(?!;)|\|)\s*find\s+\S+\s+-name\b',
+        'nudge',
+        "Prefer the Glob tool over `find -name` — faster and respects vault ignores. "
+        "If you really need find, prefix with VAULT_VALIDATOR_BYPASS=1.",
+        False,
+    ),
+]
+
+
+def main():
+    try:
+        data = json.load(sys.stdin)
+    except Exception:
+        sys.exit(0)
+
+    if data.get("tool_name", "") != "Bash":
+        sys.exit(0)
+
+    command = data.get("tool_input", {}).get("command", "")
+    if not command:
+        sys.exit(0)
+
+    if "VAULT_VALIDATOR_BYPASS=1" in command:
+        sys.exit(0)
+
+    cwd = os.environ.get("CLAUDE_CWD", data.get("cwd", ""))
+    cwd = _effective_cwd(command, cwd)
+
+    # Namespace-scoped rules fire when the command touches the vault path
+    # namespace: cwd under the vault, or the literal vault path in the
+    # command (so `cd /tmp && rm -rf <abs vault path>` is still caught).
+    in_vault_namespace = (bool(cwd) and cwd.startswith(VAULT)) or (VAULT in command)
+
+    # Repo-scoped rules consult `git rev-parse` -- run it lazily, and
+    # cache by the captured git-options blob.
+    base = cwd or os.getcwd()
+    repo_cache = {}
+
+    def opts_target_vault(opts_blob: str) -> bool:
+        if opts_blob not in repo_cache:
+            repo_cache[opts_blob] = _targets_vault(opts_blob, base)
+        return repo_cache[opts_blob]
+
+    hits = []
+    for pattern, severity, message, repo_scoped in RULES:
+        matches = list(re.finditer(pattern, command, re.MULTILINE))
+        if not matches:
+            continue
+        if repo_scoped:
+            fired = any(
+                opts_target_vault(m.group(1) or "")
+                for m in matches
+            )
+        else:
+            fired = in_vault_namespace
+        if fired:
+            hits.append((severity, message))
+
+    if hits:
+        for severity, message in hits:
+            tag = "BLOCKED" if severity == "block" else "NUDGE"
+            print(f"{tag} by vault-command-nudges hook:\n  {message}", file=sys.stderr)
+        sys.exit(2)
+
     sys.exit(0)
 
-command = data.get("tool_input", {}).get("command", "")
 
-# Block git add -A / --all / bare dot.
-# Only match at command-start positions (line start, after &&, ;, or |)
-# to avoid false positives inside commit messages, heredocs, or comments.
-# Group 1 captures the git options blob (incl. any `-C <dir>`); group 2
-# the dangerous argument.
-# Does NOT match: git add ./relative/path, git add .gitignore, or
-#   mentions of "git add -A" inside quoted strings/heredocs.
-DANGEROUS = re.compile(
-    r'(?:^|&&|;(?!;)|\|\|?)\s*git\s+'
-    + _GIT_OPTS_CAP +                       # group 1: git options blob
-    r'add\s+('                              # group 2: the dangerous argument
-    r'-A\b'
-    r'|--all\b'
-    r'|\.\s*(?:$|&&|;|2>|>>|>|\|)'          # lone dot (not ./path or .gitignore)
-    r')',
-    re.MULTILINE
-)
-
-matches = list(DANGEROUS.finditer(command))
-if not matches:
-    sys.exit(0)
-
-# A full-tree `git add` is present. Resolve which repo each invocation
-# targets -- the 60K walk only hurts the vault repo; ~/dev/* repos stage
-# instantly. `git -C <dir>` retargets the op, so fold it onto the cwd.
-cwd = os.environ.get("CLAUDE_CWD", data.get("cwd", ""))
-base_cwd = _effective_cwd(command, cwd) or os.getcwd()
-
-if not any(_targets_vault(m.group(1) or "", base_cwd) for m in matches):
-    sys.exit(0)
-
-print(
-    "BLOCKED by block-vault-git-fullwalk hook:\n"
-    "  git add -A / --all / . walks 60,000+ files in the vault.\n"
-    "  That locks .git/index.lock for 10+ minutes and burns context.\n"
-    "  Use explicit paths instead:\n"
-    "    git add \"⚙️ Meta/Sessions/file.md\" \"⚙️ Meta/rules/foo.md\"\n"
-    "  Rule: CLAUDE.md §'Git in this vault'",
-    file=sys.stderr
-)
-sys.exit(2)
+if __name__ == "__main__":
+    main()
