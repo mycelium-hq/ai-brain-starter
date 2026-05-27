@@ -1,6 +1,13 @@
 #!/bin/bash
 # PostToolUse hook — fires after every Write tool call
 # Auto-triggers meeting-todos extraction when a meeting note is saved
+#
+# Folder matching is i18n-aware: by default we match "Meeting Notes" and
+# "Meeting-Notes". To match other languages or custom folder names
+# (Reuniones, Réunions, 会议笔记, Notas de Reunión, etc.) set
+#   AI_BRAIN_MEETING_NOTES_DIR="Meeting Notes:Reuniones:Réunions"
+# in your shell init (Phase 11 of /setup-brain writes this for you).
+# Colon-separated; case-insensitive; substring match, no regex escaping.
 
 INPUT=$(cat)
 
@@ -15,7 +22,30 @@ except:
     print('')
 " 2>/dev/null)
 
-if echo "$FILE_PATH" | grep -qi "Meeting Notes/\|Meeting-Notes/"; then
+# Default folders if env var unset. Both EN variants — the original
+# write-hook.sh hardcoded these two and we preserve them as the floor.
+DEFAULT_FOLDERS="Meeting Notes:Meeting-Notes"
+FOLDERS="${AI_BRAIN_MEETING_NOTES_DIR:-$DEFAULT_FOLDERS}"
+
+# Case-insensitive substring check. `tr` ASCII-lowercases the lookup side;
+# multibyte characters in non-EN folder names pass through unchanged (so
+# `Réunions/` stays `réunions/` and matches a path containing `Réunions/`
+# after that path is also lowered). Fixed-string match — no regex needed.
+LOWER_PATH=$(echo "$FILE_PATH" | tr '[:upper:]' '[:lower:]')
+MATCHED=0
+IFS=':' read -ra FOLDER_ARRAY <<< "$FOLDERS"
+for folder in "${FOLDER_ARRAY[@]}"; do
+  # Strip any trailing slash the user may have included.
+  folder="${folder%/}"
+  [[ -z "$folder" ]] && continue
+  LOWER_FOLDER=$(echo "$folder" | tr '[:upper:]' '[:lower:]')
+  if echo "$LOWER_PATH" | grep -qF "${LOWER_FOLDER}/"; then
+    MATCHED=1
+    break
+  fi
+done
+
+if [[ $MATCHED -eq 1 ]]; then
   BASENAME=$(basename "$FILE_PATH" .md)
   echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"Meeting note saved: '$BASENAME'. Run /meeting-todos on this file now -- extract action items, show the user a preview, and add confirmed tasks to the to-do file. Do this automatically without waiting to be asked.\"}}"
 else
