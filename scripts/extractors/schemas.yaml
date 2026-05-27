@@ -140,7 +140,7 @@ writing_draft:
     - draft_published_iso
     - draft_word_count
     - draft_themes             # wikilinks from ## Themes
-    - draft_chapter_of         # from path (e.g., "Moving Through the High-Rise")
+    - draft_chapter_of         # from path (e.g., "Your Book Title Series")
 
 strategy:
   folder_hint: "📋 Strategy"
