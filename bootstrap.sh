@@ -1597,11 +1597,17 @@ echo
 USER_HOOK_INSTALLER="$SKILL_DIR/scripts/install-hooks-user-level.py"
 if [[ -f "$USER_HOOK_INSTALLER" ]] && [[ "$DRY_RUN" -eq 0 ]]; then
   hdr "Installing hooks at user level (so they fire inside worktrees)"
+  # This is the load-bearing step that wires every UserPromptSubmit hook
+  # (including the "I just had a meeting" trigger) into ~/.claude/settings.json.
+  # A silent failure here means the meeting cascade + 6 other hooks never fire.
+  # We escalate to `err` so the install summary surfaces it prominently.
   if python3 "$USER_HOOK_INSTALLER" --quiet 2>&1 | tee -a "$BOOTSTRAP_LOG"; then
     ok "User-level hooks installed (~/.claude/settings.json)"
   else
-    warn "User-level hook install had issues; check $BOOTSTRAP_LOG"
+    err "User-level hook install FAILED — meeting trigger + 6 other UserPromptSubmit hooks WILL NOT FIRE until resolved. See $BOOTSTRAP_LOG. Re-run manually: python3 $USER_HOOK_INSTALLER"
   fi
+elif [[ -f "$USER_HOOK_INSTALLER" ]] && [[ "$DRY_RUN" -eq 1 ]]; then
+  dry "would run: python3 $USER_HOOK_INSTALLER --quiet  # wires 7 UserPromptSubmit hooks incl. meeting-workflow trigger"
 fi
 
 # ───────────────────────────────────────────────────────────────────────────────

@@ -208,35 +208,60 @@ def read_rule(path: str) -> str:
 FALLBACK_SUMMARY = """[meeting-workflow fallback — vault rule file not found]
 
 The user just signaled a meeting ended. Run the standard post-meeting
-cascade WITHOUT asking for clarification:
+cascade WITHOUT asking for clarification. The user has NOT yet completed
+the conversational `/setup-brain` flow (Phase 11 wires the per-tool
+discovery), so probe their tool stack at runtime.
 
-1. Find the transcript. Check Granola (~/Library/Application Support/
-   com.granola.granola/), Google Meet+Gemini transcripts in Drive,
-   Otter/Fireflies/Zoom export folders, or the Meeting Notes/ folder
-   in the vault — whichever tool the user configured. Search the LAST
-   24 HOURS in parallel.
-2. Read the transcript in full. Never skim. Verbatim transcript wins
-   over post-processed summaries.
+1. Find the transcript. Probe in PARALLEL — do not pick one and ignore
+   the rest:
+   - **Granola** (macOS): run
+     `python3 ~/.claude/skills/ai-brain-starter/scripts/granola_sync.py`
+     which reads the local cache and exports transcripts to the vault's
+     Meeting Notes folder. The script auto-detects paths — do not
+     hard-code anything. Read the most recent exported `*Transcript*.md`.
+   - **Google Meet + Gemini**: if the google-workspace MCP is wired,
+     search Drive for a Doc named `<title> - YYYY/MM/DD - Transcript`
+     in the user's "Meet Recordings" folder (or whichever folder
+     Gemini writes to).
+   - **Otter.ai / Fireflies / Zoom / Teams / Notion AI Notetaker**:
+     search the user's configured export folder. If unknown, ask once.
+   - **Vault Meeting Notes folder**: glob for `*Transcript*.md`,
+     `*Meeting*.md`, or any .md modified in the last 24 hours in any
+     folder containing "Meeting" or "Meet" or "Granola Notes" (and
+     localized variants like "Reuniones/").
+   - **Conversation history**: if the user named the meeting or
+     attendee, scope the search by that name.
+2. Read the transcript in full. Never skim. Verbatim timestamped
+   transcripts (Gemini, Otter, Fireflies, Zoom AI, Teams Copilot)
+   are the source of truth; post-processed summaries (Granola summary,
+   Notion AI notetaker condensed view) are backup, not substitute.
 3. Enrich the meeting note in the vault: TL;DR, decisions table,
    action items, verbatim quotes, meta-observations. Wikilink every
-   named person to their CRM file.
-4. Cascade to canonical docs. Update strategy/vision/target docs
-   the meeting changed. Rule-consistency scan after rule edits.
-5. Update Decision Log. One entry per high-stakes decision: What/
-   Why/Floor/Stakes/Speed.
-6. Update each attendee's CRM file: meeting notes wikilink, refreshed
-   last_interaction / next_step. Read 2 adjacent CRM files first to
-   confirm the pattern. Preserve dataview blocks.
-7. Update to-dos. Business -> team to-do file. Personal -> personal
-   to-do file. Never duplicate. Default personal when ambiguous.
+   named person to their CRM file (skip if no CRM folder exists).
+4. Cascade to canonical docs. Update strategy / vision / target /
+   pricing / OKR docs the meeting changed. Rule-consistency scan
+   after edits.
+5. Update Decision Log if it exists (`Decision Log.md`, typically in
+   `⚙️ Meta/` or `Home/`). One entry per high-stakes decision: What /
+   Why / Floor / Stakes / Speed. If no log exists, skip — don't create.
+6. Update each attendee's CRM file: meeting-note wikilink, refreshed
+   `last_interaction` + `next_step` frontmatter. Read 2 adjacent CRM
+   files first to confirm the pattern. Preserve any dataview blocks.
+   Skip if no CRM folder.
+7. Update to-dos. Read the user's to-do file path from CLAUDE.md (it
+   varies — `Home/✅ Get to-do.md`, `Team To-dos.md`, scope-specific
+   files). Business items → team file; personal items → personal file.
+   Never duplicate. Default personal when ambiguous.
 8. Humanizer pass on any external-facing prose written.
-9. Verify with backlinks: open the CRM file, confirm the meeting
-   note shows up. Open the to-do file, confirm team embeds render.
-10. Report every file changed, flag what the user should eyeball,
-    state which sources were read with byte counts as evidence.
+9. Verify with backlinks: open the CRM file, confirm the meeting note
+   shows. Open the to-do file, confirm team embeds render. Fix drifts.
+10. Report every file changed. Flag what the user should eyeball.
+    State which sources were read with byte counts as evidence of
+    completeness.
 
-If no transcript or notes file is found in step 1, SAY SO immediately
-— do not invent a meeting note from chat context.
+If step 1 finds NO transcript or notes file anywhere, SAY SO
+immediately — do not invent a meeting note from chat context.
+Suggest the user run `/setup-brain` to wire their meeting tool.
 """
 
 

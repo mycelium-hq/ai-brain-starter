@@ -760,6 +760,58 @@ if ($Installed.Count -eq 0 -and $Updated.Count -eq 0 -and $Skipped.Count -eq 0 -
 }
 Write-Host ""
 
+# ─── User-level hook install (closes #6 — fires universally inside worktrees) ────────
+# Parity with bootstrap.sh:1593-1605. Without this block, every hook in
+# hooks.json (incl. inject-meeting-workflow-on-trigger.py) ships to disk
+# but nothing ever wires it into $env:USERPROFILE\.claude\settings.json.
+# The "I just had a meeting" trigger silently produces nothing for Windows
+# users. Caught by adversarial audit 2026-05-27 before the 30x-team install.
+
+$userHookInstaller = "$SkillDir\scripts\install-hooks-user-level.py"
+if ((Test-Path $userHookInstaller) -and -not $DryRun) {
+    Write-Host ""
+    Write-Host ("━━━ " + (T "Installing hooks at user level (so they fire inside worktrees)" `
+                              "Instalando hooks a nivel de usuario (para que disparen dentro de worktrees)") + " ━━━") -ForegroundColor Cyan
+
+    $pythonCmd = $null
+    foreach ($candidate in @("python3", "python", "py")) {
+        $resolved = Get-Command $candidate -ErrorAction SilentlyContinue
+        if ($resolved) { $pythonCmd = $resolved.Source; break }
+    }
+
+    if (-not $pythonCmd) {
+        Write-Host ("  ! " + (T "Python 3 not on PATH — skipping user-level hook install." `
+                                "Python 3 no está en el PATH — saltando la instalación de hooks.")) -ForegroundColor Yellow
+        Write-Host ("  ! " + (T "Install Python 3 (microsoft.com/python or python.org), then re-run this bootstrap." `
+                                "Instalá Python 3 (microsoft.com/python o python.org), luego volvé a correr este bootstrap.")) -ForegroundColor Yellow
+        $Failed += "user-level hook install (missing python3) — meeting trigger + 6 other hooks WILL NOT FIRE until resolved"
+    } else {
+        try {
+            & $pythonCmd $userHookInstaller --quiet
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host ("  OK " + (T "User-level hooks installed (~/.claude/settings.json)" `
+                                          "Hooks a nivel de usuario instalados (~/.claude/settings.json)")) -ForegroundColor Green
+            } else {
+                Write-Host ("  X " + (T "User-level hook install FAILED (exit $LASTEXITCODE)." `
+                                         "La instalación de hooks a nivel de usuario FALLÓ (exit $LASTEXITCODE).")) -ForegroundColor Red
+                Write-Host ("  X " + (T "The meeting trigger + 6 other UserPromptSubmit hooks will not fire." `
+                                         "El trigger de meetings + 6 hooks UserPromptSubmit no van a disparar.")) -ForegroundColor Red
+                Write-Host ("  X " + (T "Re-run manually: python3 $userHookInstaller" `
+                                         "Volvé a correr manualmente: python3 $userHookInstaller")) -ForegroundColor Red
+                $Failed += "user-level hook install (exit $LASTEXITCODE) — meeting trigger + 6 other hooks WILL NOT FIRE"
+            }
+        } catch {
+            Write-Host ("  X " + (T "User-level hook install threw: $_" `
+                                     "La instalación de hooks tiró: $_")) -ForegroundColor Red
+            $Failed += "user-level hook install (exception) — meeting trigger + 6 other hooks WILL NOT FIRE"
+        }
+    }
+    Write-Host ""
+} elseif ($DryRun) {
+    Write-Host ("  > [dry-run] would run: python3 $userHookInstaller --quiet  " + `
+                  "# wires 7 UserPromptSubmit hooks incl. meeting-workflow trigger") -ForegroundColor DarkGray
+}
+
 Write-Host ""
 Write-Host ("━━━ " + (T "Install complete" "Instalación completa") + " ━━━") -ForegroundColor Cyan
 Write-Host ""
