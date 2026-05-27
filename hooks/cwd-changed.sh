@@ -14,10 +14,11 @@ OLD_CWD=$(printf '%s' "$PAYLOAD" | python3 -c 'import json,sys;d=json.load(sys.s
 
 printf '%s\t%s -> %s\n' "$(date -Iseconds)" "$OLD_CWD" "$NEW_CWD" >> "$LOG"
 
-# If entering the the user's primary org team vault wrapper, run plugin-hooks fix once.
+# Example: if entering a specific shared vault folder, run plugin-hooks fix once.
+# Replace this pattern with your actual vault path.
 case "$NEW_CWD" in
-  */the user's primary org\ Team/*|*/the user\ Notes/🚀\ the user's primary org\ Team*)
-    FIX=$HOME/vault/⚙️\ Meta/scripts/fix-plugin-hooks.sh
+  */Team/*Meta/scripts*)
+    FIX="$HOME/vault/Meta/scripts/fix-plugin-hooks.sh"
     if [ -x "$FIX" ]; then
       "$FIX" >/dev/null 2>&1 || true
     fi
