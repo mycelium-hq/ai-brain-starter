@@ -37,6 +37,57 @@ The workflow file header still says "Auto-managed by ~/.local/bin/gh-harden-repo
 
 ---
 
+## 2026-05-27 (late evening): install verification + auto-update rewires hooks correctly
+
+**Who this affects:** anyone whose local `~/.claude/skills/ai-brain-starter` clone has local commits (a "divergent fork"), and anyone who relies on the weekly auto-update hook to keep hooks current.
+
+### Bug 1: divergent fork = settings.json points at scripts that don't exist on disk
+
+**The problem:** `bootstrap.sh` detects when your local clone has commits not on `origin/main` and origin has commits not on yours — a "divergent fork." It skips the pull so your local work isn't overwritten. Good. But the user-level hook installer ran anyway, writing every new hook entry from `hooks.json` into `~/.claude/settings.json`. If your local fork was missing scripts those new entries reference, hooks would silently fail at runtime — the `2>/dev/null || echo '{"continue":true}'` wrapper in every hook command swallowed the `python3: can't open file` errors without telling anyone. Result: meeting cascade + other UserPromptSubmit hooks never fired, no clue why.
+
+**The fix:** the installer now has a `--fail-on-missing` flag that walks every hook command in the merged settings, extracts the script path, and verifies it exists on disk. Gated commands (`[ -f X ] && python3 X ...`) are recognized as intentionally optional — those don't trigger the failure. Bootstrap calls the installer with `--fail-on-missing` and escalates a missing-paths exit to a red `err` block listing every missing path plus the recovery command: `cd ~/.claude/skills/ai-brain-starter && git pull --rebase origin main && python3 scripts/install-hooks-user-level.py`. Idempotent; back-compat preserved (no flag = same behavior as before).
+
+### Bug 2: weekly auto-update hook pointed at the wrong file + didn't tell Claude what command to run
+
+**The problem:** the `UserPromptSubmit` auto-update hook in `hooks.json` pulls origin once a week and asks Claude to walk you through what changed. Step 4 of the post-update prompt said "Check if hooks.json differs from the local settings.local.json — if so, offer to update settings.local.json." Two bugs in one sentence: (a) the installer writes to `settings.json`, not `settings.local.json` — so the diff check was against an irrelevant file; (b) Claude was told to "offer to update" but never given the actual command, so even when Claude wanted to help, it would either guess or fail to act. After a weekly auto-update added new hooks, settings.json could stay stale indefinitely with the user none the wiser.
+
+**The fix:** step 4 of the post-update prompt now explicitly tells Claude to run `python3 ~/.claude/skills/ai-brain-starter/scripts/install-hooks-user-level.py --quiet --fail-on-missing` and surface its output if it fails. The installer is idempotent and backed up, so this is safe to run automatically. The `_how_to_update` doc string at the bottom of `hooks.json` was updated to match.
+
+### Verification
+
+New regression test at `tests/integration/test_install_path_verification.sh` covers four cases: (1) all scripts present → exit 0; (2) required script missing with `--fail-on-missing` → exit 1 + recovery hint; (3) optional gated script missing → not flagged; (4) `--verify` alone (without `--fail-on-missing`) → exit 0 + report (back-compat). All 11 integration tests pass.
+
+**Bug class:** SILENT-STRAND-DIVERGENT-FORK (sibling of SILENT-FAILURE-IN-EXCEPT-BLOCK, ARTIFACT-WITHOUT-AUTOMATION-WIRING).
+
+---
+
+## 2026-05-27 (late evening): meeting note auto-extract now works for non-English folder names
+
+**Who this affects:** anyone whose meeting-notes folder is named something other than `Meeting Notes` or `Meeting-Notes` — Spanish (`Reuniones`), French (`Réunions`), German (`Besprechungen`), Chinese (`会议笔记`), or any custom folder.
+
+### The problem
+
+`scripts/write-hook.sh` is the PostToolUse hook that fires when you save a meeting note and asks Claude to run `/meeting-todos` to extract action items. It detected the meeting folder by hardcoded substring match: only `Meeting Notes/` or `Meeting-Notes/` would trigger the prompt. Save a note under `Reuniones/` → silent no-op, no auto-extract, no signal that the cascade was wired for EN only.
+
+### The fix
+
+The hook now reads `AI_BRAIN_MEETING_NOTES_DIR` — a colon-separated list of folder names, same shape as `PATH`. Defaults to `"Meeting Notes:Meeting-Notes"` if unset, so existing installs are unchanged. Set it in your shell init to add or replace the matched folders:
+
+```bash
+# In ~/.zshenv or ~/.bashrc
+export AI_BRAIN_MEETING_NOTES_DIR="Meeting Notes:Reuniones:Réunions"
+```
+
+Folder names are matched case-insensitively as fixed-string substrings — no regex escaping, multibyte characters work (Chinese, accented Latin, etc.), trailing slashes are tolerated. Phase 11 of `/setup-brain` writes this for you when it detects a non-English vault.
+
+### Verification
+
+New regression test at `tests/integration/test_write_hook_meeting_folder_i18n.sh` covers seven cases: EN defaults, Spanish/French/Chinese folder names, multiple folders in one var, case-insensitivity, trailing-slash tolerance, and env-var-overrides-defaults. All integration tests pass.
+
+**Bug class:** I18N-IN-INFRA-LAYER (cascade wired for EN-only folder names).
+
+---
+
 ## 2026-05-27 (late evening, part 4): meeting-workflow truncation flag now reads first, cap raised to 16K
 
 **Who this affects:** anyone whose customized `⚙️ Meta/rules/meeting-workflow.md` exceeds 8K chars — the cap was hitting most real-world vaults (the canonical template is 4.8K, but customized rules typically grow to 8–12K once Phase 11 has folded in the user's tool stack + per-vault folder conventions).
