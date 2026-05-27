@@ -74,7 +74,7 @@ CONCEPT_BLACKLIST = {
 }
 
 # Person name: exactly 2 or 3 Title-cased words, each 3-20 chars, no disqualifying word.
-# Allows hyphenated last names: "Diaz-Roa" is one word.
+# Allows hyphenated last names: "Garcia-Lopez" is one word.
 PERSON_NAME_RE = re.compile(r"^[A-Z][a-záéíóúñ]+(?:-[A-Z][a-záéíóúñ]+)?(?:\s[A-Z][a-záéíóúñ]+(?:-[A-Z][a-záéíóúñ]+)?){1,2}$")
 
 

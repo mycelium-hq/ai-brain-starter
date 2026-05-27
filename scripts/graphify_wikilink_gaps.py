@@ -112,8 +112,9 @@ def is_wikilink_candidate(label: str, ntype: str) -> bool:
     # Sentence-opener words at start of 3+ word phrases, case-insensitive.
     # "When Climbing Becomes Rising", "The People in Your Elevator",
     # "Rest as the Path to Capacity" — all get filtered.
-    # Named concepts she already uses ("The High-Rise Series") are already wikilinked
-    # so they won't appear in this gap report anyway.
+    # Named multi-word concepts the user already uses ("The Floor Framework",
+    # "Your Series Name") are already wikilinked so they won't appear in
+    # this gap report anyway.
     if len(words) >= 3 and words[0].lower() in SENTENCE_STARTERS:
         return False
 
@@ -169,7 +170,7 @@ def scan_wikilinks(vault: Path) -> dict[str, int]:
             text = md.read_text(encoding="utf-8", errors="ignore")
             for m in WIKILINK_RE.finditer(text):
                 counts[m.group(1).strip().lower()] += 1
-                if m.group(2):  # alias display text e.g. [[Adelaida Diaz-Roa|Adelaida]]
+                if m.group(2):  # alias display text e.g. [[Full Name|Display Text]]
                     counts[m.group(2).strip().lower()] += 1
         except OSError:
             continue
