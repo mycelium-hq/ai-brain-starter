@@ -9,6 +9,33 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-27 (late evening): meeting note auto-extract now works for non-English folder names
+
+**Who this affects:** anyone whose meeting-notes folder is named something other than `Meeting Notes` or `Meeting-Notes` — Spanish (`Reuniones`), French (`Réunions`), German (`Besprechungen`), Chinese (`会议笔记`), or any custom folder.
+
+### The problem
+
+`scripts/write-hook.sh` is the PostToolUse hook that fires when you save a meeting note and asks Claude to run `/meeting-todos` to extract action items. It detected the meeting folder by hardcoded substring match: only `Meeting Notes/` or `Meeting-Notes/` would trigger the prompt. Save a note under `Reuniones/` → silent no-op, no auto-extract, no signal that the cascade was wired for EN only.
+
+### The fix
+
+The hook now reads `AI_BRAIN_MEETING_NOTES_DIR` — a colon-separated list of folder names, same shape as `PATH`. Defaults to `"Meeting Notes:Meeting-Notes"` if unset, so existing installs are unchanged. Set it in your shell init to add or replace the matched folders:
+
+```bash
+# In ~/.zshenv or ~/.bashrc
+export AI_BRAIN_MEETING_NOTES_DIR="Meeting Notes:Reuniones:Réunions"
+```
+
+Folder names are matched case-insensitively as fixed-string substrings — no regex escaping, multibyte characters work (Chinese, accented Latin, etc.), trailing slashes are tolerated. Phase 11 of `/setup-brain` writes this for you when it detects a non-English vault.
+
+### Verification
+
+New regression test at `tests/integration/test_write_hook_meeting_folder_i18n.sh` covers seven cases: EN defaults, Spanish/French/Chinese folder names, multiple folders in one var, case-insensitivity, trailing-slash tolerance, and env-var-overrides-defaults. All integration tests pass.
+
+**Bug class:** I18N-IN-INFRA-LAYER (cascade wired for EN-only folder names).
+
+---
+
 ## 2026-05-27 (evening): meeting cascade — Windows install + Granola fallback path + louder install failure
 
 **Who this affects:** every user, especially Windows installers and anyone who runs `bootstrap.sh` without then completing the conversational `/setup-brain` flow. Three critical bugs caught by a pre-deployment adversarial audit before a 30-user install batch.
