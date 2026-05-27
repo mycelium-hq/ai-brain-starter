@@ -15,6 +15,35 @@ After a meeting, pull action items from the transcript/notes and update your to-
 - `/meeting-todos 2026-04-09` → finds meeting from that date
 - `/meeting-todos Team Sync` → finds meeting matching that title
 
+## Step 0 — Locate (or create) the to-do file
+
+**Run this first, before searching for the meeting note.** A fresh-install vault may not have a to-do file yet, and you don't want to do all the extraction work only to discover at Step 5 that there's no destination.
+
+1. **Try the common paths first** (fastest — one `Glob` or `Read` per location, stop on the first hit):
+   - `🏠 Home/✅ Get to-do.md` (canonical layout)
+   - `Home/✅ Get to-do.md`
+   - `✅ Get to-do.md` (vault root)
+   - `Home/TODO.md` / `TODO.md` / `tasks.md`
+2. **If none of those exist**, read the user's vault `CLAUDE.md` for a vault-map / to-do location hint. If the hint resolves to an existing file, use it and proceed to Step 1.
+3. **If still nothing**, ASK the user before creating anything:
+   > I don't see a to-do file in your vault. Want me to create `🏠 Home/✅ Get to-do.md` with a basic structure (frontmatter + Inbox section) so the meeting items have somewhere to land? You can move or rename it later.
+4. **On yes**, create the file with this canonical structure (replace `YYYY-MM-DD` with today's date in both places):
+   ```markdown
+   ---
+   type: todo
+   created: YYYY-MM-DD
+   updated: YYYY-MM-DD
+   ---
+
+   # To-do
+
+   ## Inbox
+   ```
+   Tell the user where you put it, then proceed to Step 1.
+5. **On no**, stop here. Don't extract action items from a meeting you can't file anywhere; that's silent-no-op territory. Tell the user `/meeting-todos` needs a destination file and ask them to create one (or point you at where their tasks live) before re-running.
+
+Cache the resolved to-do path mentally for Step 5 — don't re-search the filesystem there.
+
 ## Step 1 — Find the meeting note
 
 Check these locations for the most recent (or matching) meeting note:
@@ -69,7 +98,7 @@ Wait for confirmation before writing.
 
 ## Step 5 — Update to-do
 
-Find the to-do file: look for a file named `✅ Get to-do.md`, `TODO.md`, or similar in the vault root or `🏠 Home/` folder.
+Use the to-do file path resolved (or created) in Step 0. Do NOT re-search the filesystem — you already did that.
 
 Rules:
 - Read the file first to understand current structure

@@ -88,6 +88,26 @@ New regression test at `tests/integration/test_write_hook_meeting_folder_i18n.sh
 
 ---
 
+## 2026-05-27 (late evening, part 3): `/meeting-todos` no longer dead-ends on fresh-install vaults
+
+**Who this affects:** anyone whose vault doesn't yet have a to-do file (every fresh install, plus anyone using a non-standard layout).
+
+### The problem
+
+`skills/meeting-todos/SKILL.md` Step 5 said "look for a file named `✅ Get to-do.md` or `TODO.md` in the vault root or `🏠 Home/` folder." If none of those existed, Claude had already done the whole extraction — read the meeting, separated your tasks from others' tasks, surfaced open questions — and then errored with "file not found" at the final write step. No guidance, no recovery, no offer to create the file.
+
+### The fix
+
+New **Step 0** runs first. It tries the canonical paths (`🏠 Home/✅ Get to-do.md`, `Home/✅ Get to-do.md`, `✅ Get to-do.md`, `TODO.md`, etc.), falls back to reading the vault `CLAUDE.md` for a hint, and if nothing is found, ASKS the user before creating `🏠 Home/✅ Get to-do.md` with canonical frontmatter (`type: todo`, `created:`, `updated:`) and a single `## Inbox` section. On "no", the skill stops cleanly rather than wasting an extraction it can't file. Step 5 was rewritten to reuse the path Step 0 already resolved — no filesystem re-search at write time.
+
+### Verification
+
+Regression test at `tests/integration/test_meeting_todos_step0_create_if_absent.sh` asserts Step 0 is present, names the canonical path, falls back to CLAUDE.md, asks before creating, names the canonical frontmatter + Inbox section, has an explicit "on no, stop" branch, and that Step 5 reuses the resolved path.
+
+**Bug class:** WORKFLOW-DEAD-ENDS-ON-MISSING-DESTINATION (sibling of SILENT-NO-OP-AFTER-WORK-ALREADY-DONE).
+
+---
+
 ## 2026-05-27 (evening): meeting cascade — Windows install + Granola fallback path + louder install failure
 
 **Who this affects:** every user, especially Windows installers and anyone who runs `bootstrap.sh` without then completing the conversational `/setup-brain` flow. Three critical bugs caught by a pre-deployment adversarial audit before a 30-user install batch.
