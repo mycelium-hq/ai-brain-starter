@@ -112,8 +112,8 @@ def is_wikilink_candidate(label: str, ntype: str) -> bool:
     # Sentence-opener words at start of 3+ word phrases, case-insensitive.
     # "When Climbing Becomes Rising", "The People in Your Elevator",
     # "Rest as the Path to Capacity" — all get filtered.
-    # Named multi-word concepts the user already uses ("The Floor Framework",
-    # "Your Series Name") are already wikilinked so they won't appear in
+    # Named multi-word concepts the user already uses ("The Framework Series",
+    # "Your Project Name") are already wikilinked so they won't appear in
     # this gap report anyway.
     if len(words) >= 3 and words[0].lower() in SENTENCE_STARTERS:
         return False
