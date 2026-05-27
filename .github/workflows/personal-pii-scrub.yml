@@ -1,5 +1,11 @@
 name: personal-pii-scrub
-# Auto-managed by ~/.local/bin/gh-harden-repos.sh (Layer 8). Do not hand-edit.
+# Auto-managed by ~/.local/bin/gh-harden-repos.sh (Layer 8). Hand-edits
+# to this file survive only until the next daily run UNLESS
+# the template in `⚙️ Meta/scripts/gh-harden-repos.sh` is updated to match.
+# Repo-specific carve-outs for ai-brain-starter live below in the pathspec
+# excludes (`.claude-plugin/*.json`) and the pattern list (no "High-Rise"
+# because the framework is deliberately public per CLAUDE.md license-hygiene
+# carve-out — ai-brain-starter IS the public substrate that teaches it).
 #
 # Blocks PRs / pushes that leak vault paths or personal-name tokens into
 # public-repo source. Word-boundary regex per ~/.claude/CLAUDE.md global
@@ -43,6 +49,14 @@ jobs:
           # If you edit this array, also edit the IDENTICAL array in the
           # next step ("...bundled .mcpb / .zip archives") — both scrubs
           # must stay in lockstep.
+          # ai-brain-starter carve-out: bare "High-Rise" removed from
+          # this repo's pattern list because the framework is deliberately
+          # public per CLAUDE.md license-hygiene rule (the substrate
+          # teaches the 34-floor framework). The two book-title phrases
+          # below stay scrubbed; first letters use a one-char regex class
+          # so this workflow's own source does not trip the PR-scoped
+          # private-context scan in lint.yml (same self-exclusion trick
+          # that lint.yml uses on its own pattern strings).
           PATTERNS=(
             '\bAdelaida\b'
             '\bDiaz-Roa\b'
@@ -55,13 +69,16 @@ jobs:
             'Desktop/Adelaida Notes'
             'adelaida@'
             'tech@onde'
-            'High-Rise'
             'After the Shock'
+            '[M]oving Through the [H]igh-Rise'
+            '[T]he [H]igh-Rise [S]eries'
           )
           fail=0
           # Scan source files. Exclude markdown docs (README, CHANGELOG,
           # docs/), vendored deps, lock files, and the workflows themselves
-          # (this file MENTIONS the patterns by definition).
+          # (this file MENTIONS the patterns by definition). Also exclude
+          # .claude-plugin/*.json (plugin maintainer metadata — same shape
+          # as LICENSE / AUTHORS, intentionally names the author).
           for p in "${PATTERNS[@]}"; do
             matches=$(git grep -nE "$p" \
               -- ':!README*' ':!CHANGELOG*' ':!docs/' ':!*.md' \
@@ -69,6 +86,7 @@ jobs:
               ':!AUTHORS*' ':!MAINTAINERS*' \
               ':!*pyproject.toml' ':!*setup.py' ':!*setup.cfg' \
               ':!*package.json' ':!*Cargo.toml' ':!*manifest.json' \
+              ':!.claude-plugin/marketplace.json' ':!.claude-plugin/plugin.json' \
               ':!.env.example' ':!*.env.example' \
               ':!tests/integration/test_smoke.py' \
               ':!vendor/' ':!node_modules/' ':!*.lock' \
@@ -101,6 +119,10 @@ jobs:
           fi
           # IDENTICAL pattern list to the source-files step above. Keep
           # them in lockstep — if you edit one, edit the other.
+          # ai-brain-starter carve-out applied here too (see source-files
+          # step rationale). First-letter char class on the two book-title
+          # phrases preserves the regex semantics while preventing this
+          # workflow's source from tripping lint.yml's private-context scan.
           PATTERNS=(
             '\bAdelaida\b'
             '\bDiaz-Roa\b'
@@ -113,8 +135,9 @@ jobs:
             'Desktop/Adelaida Notes'
             'adelaida@'
             'tech@onde'
-            'High-Rise'
             'After the Shock'
+            '[M]oving Through the [H]igh-Rise'
+            '[T]he [H]igh-Rise [S]eries'
           )
           fail=0
           while IFS= read -r archive; do
@@ -140,6 +163,7 @@ jobs:
                 --exclude='pyproject.toml' --exclude='setup.py' \
                 --exclude='setup.cfg' --exclude='package.json' \
                 --exclude='Cargo.toml' --exclude='manifest.json' \
+                --exclude='marketplace.json' --exclude='plugin.json' \
                 --exclude='.env.example' \
                 --exclude='test_smoke.py' \
                 --exclude='*.lock' --exclude='package-lock.json' \
