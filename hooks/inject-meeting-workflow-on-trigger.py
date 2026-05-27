@@ -44,7 +44,13 @@ import sys
 import unicodedata
 from typing import Optional
 
-MAX_RULE_CHARS = 8000  # truncate very large customized rules
+MAX_RULE_CHARS = 16000  # additionalContext budget is generous; covers the
+# canonical template (4.8K) plus most customized rules (typically 8-12K
+# once Phase 11 has folded in the user's tool stack + per-vault folder
+# conventions). When this cap fires anyway, we prepend a prominent
+# TRUNCATED flag so the model reads the file before running the cascade
+# (the alternative — silently dropping the tail — buried late steps like
+# Decision Log + CRM updates).
 BYPASS_ENV = "MEETING_WORKFLOW_BYPASS"
 BYPASS_TOKENS = ["MEETING_WORKFLOW_BYPASS=1", "ignore meeting workflow"]
 
@@ -194,15 +200,26 @@ def find_rule_file(vault_root: Optional[str]) -> Optional[str]:
     return None
 
 
-def read_rule(path: str) -> str:
+def read_rule(path: str) -> tuple[str, bool]:
+    """Read the rule file. Returns (content, truncated).
+
+    truncated=True means we cut the tail at MAX_RULE_CHARS; the caller
+    must prepend a prominent flag so the model reads the file BEFORE
+    starting the cascade. Without that flag, the model sees only the
+    first N chars and runs an incomplete cascade silently.
+    """
     try:
         with open(path, "r", encoding="utf-8") as f:
             content = f.read()
     except Exception:
-        return ""
+        return "", False
     if len(content) > MAX_RULE_CHARS:
-        content = content[:MAX_RULE_CHARS] + "\n...[truncated — read full file at " + path + "]"
-    return content
+        content = (
+            content[:MAX_RULE_CHARS]
+            + f"\n\n...[remainder of rule omitted from injection — full file at {path}]"
+        )
+        return content, True
+    return content, False
 
 
 FALLBACK_SUMMARY = """[meeting-workflow fallback — vault rule file not found]
@@ -286,15 +303,37 @@ def main() -> int:
     vault_root = find_vault_root()
     rule_path = find_rule_file(vault_root)
     if rule_path:
-        rule_body = read_rule(rule_path)
+        rule_body, truncated = read_rule(rule_path)
         if rule_body:
-            header = (
-                "[meeting-workflow auto-injected — trigger matched: "
-                f"{match!r}]\n"
-                "The user just signaled a meeting ended. Run the FULL cascade "
-                "below WITHOUT asking for clarification. Source rule: "
-                f"{rule_path}\n"
-            )
+            if truncated:
+                # When the rule is too long for the injection budget, put
+                # the TRUNCATED flag FIRST so the model reads the file
+                # before running the cascade. Burying the flag at the
+                # tail (the previous behavior) meant the model started
+                # the cascade against the first N chars and silently
+                # missed late steps like Decision Log + CRM updates.
+                header = (
+                    f"[TRUNCATED — the meeting-workflow rule exceeds {MAX_RULE_CHARS} "
+                    "chars. The text below is the BEGINNING only. Before running the "
+                    "cascade, READ THE FULL FILE: "
+                    f"{rule_path} "
+                    "— skipping this read will silently drop late steps (Decision Log, "
+                    "CRM updates, humanizer pass, backlinks verify, final report).]\n\n"
+                    "[meeting-workflow auto-injected — trigger matched: "
+                    f"{match!r}]\n"
+                    "The user just signaled a meeting ended. Run the FULL cascade — "
+                    "from the partial text below plus the full file referenced above — "
+                    "WITHOUT asking for clarification. Source rule: "
+                    f"{rule_path}\n"
+                )
+            else:
+                header = (
+                    "[meeting-workflow auto-injected — trigger matched: "
+                    f"{match!r}]\n"
+                    "The user just signaled a meeting ended. Run the FULL cascade "
+                    "below WITHOUT asking for clarification. Source rule: "
+                    f"{rule_path}\n"
+                )
             body = header + "\n" + rule_body
         else:
             body = FALLBACK_SUMMARY
