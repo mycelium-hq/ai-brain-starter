@@ -108,6 +108,30 @@ Regression test at `tests/integration/test_meeting_todos_step0_create_if_absent.
 
 ---
 
+## 2026-05-27 (late evening, part 4): meeting-workflow truncation flag now reads first, cap raised to 16K
+
+**Who this affects:** anyone whose customized `⚙️ Meta/rules/meeting-workflow.md` exceeds 8K chars — the cap was hitting most real-world vaults (the canonical template is 4.8K, but customized rules typically grow to 8–12K once Phase 11 has folded in the user's tool stack + per-vault folder conventions).
+
+### The problem
+
+`hooks/inject-meeting-workflow-on-trigger.py` caps the injected rule content at `MAX_RULE_CHARS`. When the cap fired, the truncation marker was appended at the END (`...[truncated — read full file at <path>]`). But the header BEFORE it said "Run the FULL cascade below" — so Claude started executing the cascade against the first 8K chars without knowing late steps had been dropped. Decision Log entries, CRM updates, humanizer passes, backlinks verification, and final reporting could silently not happen, with Claude only noticing the truncation marker after irreversible writes were already done.
+
+### The fix
+
+Two changes:
+
+1. **Cap raised from 8K to 16K.** The additionalContext budget is generous; the canonical template plus a Phase-11-customized version fits comfortably. Most real-world rules no longer trigger truncation at all.
+
+2. **When truncation does fire, the TRUNCATED flag now goes FIRST.** It appears at the very top of `additionalContext`, before the cascade-instruction. The flag names the rule-file path, tells Claude to read the full file before running the cascade, and explicitly lists the silent-drop categories at risk (Decision Log, CRM updates, humanizer pass, backlinks verify, final report). The tail marker stays as defense in depth.
+
+### Verification
+
+Regression test at `tests/integration/test_inject_meeting_workflow_truncation_flag.sh` covers six properties: cap is 16K, below-cap rules don't get the flag, above-cap rules get the flag at the TOP (asserted via byte-position comparison vs. the cascade-instruction), the flag names the rule path, the flag warns about silent-drop categories, and the tail marker is preserved. All 11 integration tests pass.
+
+**Bug class:** TRUNCATION-FLAG-AFTER-DAMAGE-DONE (sibling of READING-ORDER-MATTERS-FOR-INSTRUCTION-INJECTION).
+
+---
+
 ## 2026-05-27 (evening): meeting cascade — Windows install + Granola fallback path + louder install failure
 
 **Who this affects:** every user, especially Windows installers and anyone who runs `bootstrap.sh` without then completing the conversational `/setup-brain` flow. Three critical bugs caught by a pre-deployment adversarial audit before a 30-user install batch.
