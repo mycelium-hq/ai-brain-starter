@@ -9,6 +9,33 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-27: "I just had a meeting" now actually fires the cascade
+
+**Who this affects:** every user. If you've said "I just had a meeting" or "pull the transcript" and Claude shrugged instead of pulling the transcript and updating your to-dos, this is the fix.
+
+**The bug:** `templates/rules/meeting-workflow.md` shipped with a `trigger:` frontmatter field listing the phrases — "I just had a meeting", "pull meeting notes", "pull the transcript", "[name] meeting is done". The README and POWER_TOOLS.md both promised the rule "fires" on those phrases. But the `trigger:` field was just informational text — nothing in `hooks.json` actually pattern-matched the phrases. The only thing surfacing the rule to Claude was a single bullet in the once-per-session `session-start-context.py` dump ("- meeting-workflow.md for meetings"). If the user said "I just had a meeting" any time after the first prompt of the session, the rule wasn't in context and Claude had no way to know to read it. Cascade silently no-op'd. Bug class: **ARTIFACT-WITHOUT-AUTOMATION-WIRING**.
+
+**What's new:**
+
+**`hooks/inject-meeting-workflow-on-trigger.py`** — a UserPromptSubmit hook that pattern-matches "I just had a meeting" + variants (EN and ES, accent-insensitive), reads the user's vault `⚙️ Meta/rules/meeting-workflow.md` (so Phase 11's per-tool customization is preserved), and injects the full rule as `additionalContext`. Fires on every matching prompt, not just the first one of the session. Same proven pattern as `inject-best-of-best-on-consulting.py` and `inject-love-language-context.py`.
+
+Trigger regex is temporal-anchored to avoid false positives — "I just had a meeting" fires, "I have a meeting tomorrow" does not. Bilingual coverage:
+
+- EN: *"I just had a meeting"*, *"the meeting just ended"*, *"meeting with John just ended"*, *"pull the transcript"*, *"pull my meeting notes"*, *"process today's meeting"*, *"[name]'s meeting is done"*, *"done with my interview"*, *"wrapped up the sync"*, and more.
+- ES: *"acabo de tener una reunión"*, *"la reunión ya terminó"*, *"ya terminé la reunión"*, *"trae las notas de la reunión"*, *"saca el transcript"*, *"reunión con María ya terminó"*, etc. Works whether the user types accents or not.
+
+If the rule file doesn't exist in the vault (user skipped Phase 4), the hook falls back to an embedded summary so the cascade still fires — never silent.
+
+**Bypass:** set `MEETING_WORKFLOW_BYPASS=1` env var, or include the literal `MEETING_WORKFLOW_BYPASS=1` token in the prompt.
+
+**`tests/integration/test_meeting_workflow_trigger_hook.sh`** — regression test asserting (1) hook is present, (2) hook is wired into `hooks.json` under `UserPromptSubmit`, (3) 13 EN positive triggers fire, (4) 12 ES positive triggers fire, (5) 14 negative cases (future/past-week/planning/asking-about) do NOT fire, (6) injected payload references the rule body, (7) bypass env var works, (8) in-prompt bypass token works, (9) empty prompt produces no output, (10) fallback summary fires when no vault rule exists.
+
+**`hooks.json`** — added the new hook to the `UserPromptSubmit` chain between `inject-love-language-context.py` and `email-gate-hook.py`. `scripts/install-hooks-user-level.py` ABS_FINGERPRINTS list updated so the migrator owns the new hook on subsequent installs.
+
+**What you should do:** nothing. The SessionStart auto-update flow picks this up on your next session (or `git pull` manually in `~/.claude/skills/ai-brain-starter/` to grab it immediately). Existing `settings.local.json` files will be offered the update via the standard auto-update prompt.
+
+---
+
 ## 2026-05-19: close the commit-time race for reconcile-worktree-shared
 
 **Who this affects:** anyone using git worktrees inside an Obsidian vault with the `reconcile-worktree-shared.py` SessionEnd hook, who has ALSO seen the worktree-archive prompt fire "N uncommitted changes will be discarded" warnings on byte-identical-to-main files.
