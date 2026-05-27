@@ -131,7 +131,11 @@ Store the answer as `MEETING_TOOLS` (a list — could be multiple). Then for eac
 
 ---
 
-**After collecting the answer**, generate the meeting workflow rule **adapted to their tools** and append it to their CLAUDE.md. The template (substitute the variables based on their answers):
+**After collecting the answer**, generate the meeting workflow rule **adapted to their tools** and write it to `<vault>/⚙️ Meta/rules/meeting-workflow.md`, **overwriting** the generic Granola-default template that Phase 4 copied there. The customized rule file is the canonical source of truth — the `inject-meeting-workflow-on-trigger.py` hook reads it when the user says "I just had a meeting" and injects it as `additionalContext`. Phase 4 placed a generic copy so the cascade isn't empty for users who skip Phase 11; once Phase 11 runs, that generic copy must be replaced with the tool-specific version.
+
+A short pointer in CLAUDE.md is added separately (see the routing block below) — do NOT duplicate the rule body into CLAUDE.md, that would force the model to reconcile two near-identical bodies and drift over time as one or the other is edited.
+
+The template to write to `<vault>/⚙️ Meta/rules/meeting-workflow.md` (substitute the variables based on their answers):
 
 ```markdown
 # Meeting workflow — "I just had a meeting" trigger

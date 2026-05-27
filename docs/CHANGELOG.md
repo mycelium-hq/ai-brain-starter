@@ -132,6 +132,26 @@ Regression test at `tests/integration/test_inject_meeting_workflow_truncation_fl
 
 ---
 
+## 2026-05-27 (late evening, part 5): Phase 11 writes the customized meeting-workflow rule to the vault file, not just CLAUDE.md
+
+**Who this affects:** anyone running `/setup-brain` and Phase 11 after this change. Existing users with a customized rule in CLAUDE.md are unaffected — re-run `/setup-brain` Phase 11 if you want the rule file rebuilt.
+
+### The problem
+
+Phase 4 of `/setup-brain` copies a generic Granola-default `meeting-workflow.md` template into `<vault>/⚙️ Meta/rules/`. Phase 11 then interviews the user about which meeting tool they actually use (Otter / Google Meet + Gemini / Fireflies / Zoom / Teams + Copilot / Notion AI / manual) and generates a tool-specific rule. The bug: Phase 11 appended that customized rule to CLAUDE.md and left the generic Granola template untouched in the vault rule file. But `hooks/inject-meeting-workflow-on-trigger.py` reads from the vault rule file. So the hook kept injecting the generic Granola guidance into context every time the user said "I just had a meeting," even though Phase 11 had already generated a perfectly customized version that lived elsewhere.
+
+### The fix
+
+Phase 11 now writes the customized rule to `<vault>/⚙️ Meta/rules/meeting-workflow.md`, **overwriting** the generic copy Phase 4 placed. The vault rule file is the canonical source of truth — same file the inject hook reads. Phase 11 also explicitly warns against duplicating the rule body into CLAUDE.md (the prior bug-source) — drift between two near-identical bodies was the failure mode.
+
+### Verification
+
+Regression test at `tests/integration/test_phase11_writes_to_vault_rule_file.sh` asserts the Phase 11 instruction names the vault rule path, names "overwriting" intent, explains why (the inject hook reads from this file), and warns against duplication. All integration tests pass.
+
+**Bug class:** CUSTOMIZATION-LIVES-IN-WRONG-FILE (sibling of TWO-SOURCES-OF-TRUTH-DRIFT).
+
+---
+
 ## 2026-05-27 (evening): meeting cascade — Windows install + Granola fallback path + louder install failure
 
 **Who this affects:** every user, especially Windows installers and anyone who runs `bootstrap.sh` without then completing the conversational `/setup-brain` flow. Three critical bugs caught by a pre-deployment adversarial audit before a 30-user install batch.
