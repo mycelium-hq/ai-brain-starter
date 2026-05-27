@@ -271,7 +271,10 @@ def main() -> int:
                     help="target settings.json (default: ~/.claude/settings.json)")
     ap.add_argument("--quiet", action="store_true")
     ap.add_argument("--verify", action="store_true",
-                    help="after install, fire each hook with a sample input and report")
+                    help="after install, verify each referenced script exists on disk and report")
+    ap.add_argument("--fail-on-missing", action="store_true",
+                    help="exit nonzero if any required hook script is missing on disk "
+                         "(implies --verify; used by bootstrap.sh to escalate divergent-fork strands)")
     args = ap.parse_args()
 
     # === locate hooks template ===
@@ -354,36 +357,109 @@ def main() -> int:
             print(f"\nWrote {settings_path}")
             if backup:
                 print(f"Backup: {backup}")
-        if args.verify:
-            run_verification(merged)
+        if args.verify or args.fail_on_missing:
+            rc = run_verification(merged, fail_on_missing=args.fail_on_missing)
+            if rc != 0:
+                return rc
         return 0
     return 2
 
 
-def run_verification(settings: dict) -> None:
-    """Smoke-test that hook commands resolve."""
-    print("\n--- Verification ---")
-    import shlex
-    failures = 0
+def _is_gated_command(cmd: str, script_path: str) -> bool:
+    """True if the command is wrapped in `[ -f <script> ] && ...` — meaning
+    the script is intentionally optional and missing on disk is not a bug.
+    The auto-update flow uses this for cross-vault portability."""
+    import re
+    # Match `[ -f <path> ]` where <path> is the same as the script being run.
+    # Allow `~` prefix and arbitrary whitespace; match either bare or quoted.
+    norm = script_path.replace("'", "").replace('"', "")
+    pattern = re.compile(
+        r"\[\s*-f\s+['\"]?" + re.escape(norm) + r"['\"]?\s*\]\s*&&"
+    )
+    return bool(pattern.search(cmd))
+
+
+def verify_paths_on_disk(settings: dict) -> tuple[list[tuple[str, str, str]], list[tuple[str, str, str]]]:
+    """Inspect every ABS-owned hook command in settings; verify the referenced
+    script exists on disk. Distinguishes:
+
+      - REQUIRED: command runs the script directly (`python3 <path> ...`).
+        Script missing = silent hook failure at runtime.
+      - OPTIONAL: command wraps in `[ -f <path> ] && ...`. Missing is fine;
+        the guard suppresses the call.
+
+    Returns (missing_required, missing_optional), each a list of
+    (event, script_path, full_command_short).
+
+    The full_command_short is the first 80 chars of the command for grep-friendly
+    error output without dumping the entire 1500-char auto-update one-liner.
+    """
+    import re
+    missing_required: list[tuple[str, str, str]] = []
+    missing_optional: list[tuple[str, str, str]] = []
+    # Match `python3 <path>` or `bash <path>` with optional quotes and ~ prefix.
+    # Non-greedy stops at whitespace, quote, pipe, ampersand, semicolon.
+    path_re = re.compile(r"(?:python3|bash)\s+['\"]?(~?[^\s'\"|&;]+)['\"]?")
+
     for event, groups in (settings.get("hooks") or {}).items():
         for g in groups:
             for h in g.get("hooks", []):
                 cmd = h.get("command", "")
                 if not cmd or not is_abs_owned(cmd):
                     continue
-                # Heuristic: extract first absolute path after `python3` or `bash`
-                import re
-                m = re.search(r"(?:python3|bash)\s+'?(~?[^\s'|&;]+)'?", cmd)
-                if not m:
-                    continue
-                p = Path(os.path.expanduser(m.group(1)))
-                if p.is_file():
-                    print(f"  OK    {event}: {p.name}")
-                else:
-                    print(f"  FAIL  {event}: {p} not found")
-                    failures += 1
-    if failures:
-        print(f"\n{failures} hook script(s) missing on disk. Run bootstrap.sh to install them.")
+                # Find every script path the command references — a single
+                # hook may chain `python3 a.py && bash b.sh`.
+                for m in path_re.finditer(cmd):
+                    raw = m.group(1)
+                    p = Path(os.path.expanduser(raw))
+                    if p.is_file():
+                        continue
+                    short = cmd[:80] + ("…" if len(cmd) > 80 else "")
+                    entry = (event, str(p), short)
+                    if _is_gated_command(cmd, raw):
+                        missing_optional.append(entry)
+                    else:
+                        missing_required.append(entry)
+    return missing_required, missing_optional
+
+
+def run_verification(settings: dict, fail_on_missing: bool = False) -> int:
+    """Print verification report. Returns 0 if all required paths exist, 1 otherwise.
+
+    With fail_on_missing=True, the caller should propagate the nonzero exit
+    (used by bootstrap.sh to escalate a divergent-fork strand to `err`).
+    """
+    print("\n--- Verification ---")
+    missing_required, missing_optional = verify_paths_on_disk(settings)
+    ok_count = 0
+    for event, groups in (settings.get("hooks") or {}).items():
+        for g in groups:
+            for h in g.get("hooks", []):
+                cmd = h.get("command", "")
+                if cmd and is_abs_owned(cmd):
+                    ok_count += 1
+    # Print OK count rather than every entry to keep output scannable
+    ok_count -= len(missing_required) + len(missing_optional)
+    print(f"  OK     {ok_count} hook(s) — referenced scripts exist on disk")
+    if missing_optional:
+        print(f"  SKIP   {len(missing_optional)} hook(s) — optional (gated by [ -f ... ] guard):")
+        for event, p, _short in missing_optional:
+            print(f"           {event}: {p}")
+    if missing_required:
+        print(f"  FAIL   {len(missing_required)} hook(s) — script not on disk:")
+        for event, p, short in missing_required:
+            print(f"           {event}: {p}")
+            print(f"             command: {short}")
+        print()
+        print("  Likely cause: ai-brain-starter clone is on a DIVERGENT FORK and")
+        print("  bootstrap.sh skipped the pull, but the installer wrote new")
+        print("  hook entries that reference files only present on origin/main.")
+        print("  Recover:")
+        print("    cd ~/.claude/skills/ai-brain-starter && git pull --rebase origin main")
+        print("    python3 ~/.claude/skills/ai-brain-starter/scripts/install-hooks-user-level.py")
+        if fail_on_missing:
+            return 1
+    return 0
 
 
 if __name__ == "__main__":
