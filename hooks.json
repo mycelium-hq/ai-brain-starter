@@ -40,6 +40,11 @@
           },
           {
             "type": "command",
+            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/inject-meeting-workflow-on-trigger.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "statusMessage": "Checking for 'I just had a meeting' trigger..."
+          },
+          {
+            "type": "command",
             "command": "python3 ~/.claude/skills/ai-brain-starter/scripts/email-gate-hook.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Checking email-on-file marker..."
           },
