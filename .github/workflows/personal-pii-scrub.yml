@@ -1,5 +1,11 @@
 name: personal-pii-scrub
-# Auto-managed by ~/.local/bin/gh-harden-repos.sh (Layer 8). Do not hand-edit.
+# Auto-managed by ~/.local/bin/gh-harden-repos.sh (Layer 8). Hand-edits
+# to this file survive only until the next daily run UNLESS
+# the template in `⚙️ Meta/scripts/gh-harden-repos.sh` is updated to match.
+# Repo-specific carve-outs for ai-brain-starter live below in the pathspec
+# excludes (`.claude-plugin/*.json`) and the pattern list (no "High-Rise"
+# because the framework is deliberately public per CLAUDE.md license-hygiene
+# carve-out — ai-brain-starter IS the public substrate that teaches it).
 #
 # Blocks PRs / pushes that leak vault paths or personal-name tokens into
 # public-repo source. Word-boundary regex per ~/.claude/CLAUDE.md global
@@ -43,6 +49,13 @@ jobs:
           # If you edit this array, also edit the IDENTICAL array in the
           # next step ("...bundled .mcpb / .zip archives") — both scrubs
           # must stay in lockstep.
+          # ai-brain-starter carve-out: "High-Rise" removed from this
+          # repo's pattern list because the framework is deliberately
+          # public per CLAUDE.md license-hygiene rule (the substrate
+          # teaches the 34-floor framework). Her book titles
+          # ("Moving Through the High-Rise", "The High-Rise Series")
+          # are her IP and stay scrubbed via separate phrase patterns
+          # if they ever leak.
           PATTERNS=(
             '\bAdelaida\b'
             '\bDiaz-Roa\b'
@@ -55,13 +68,16 @@ jobs:
             'Desktop/Adelaida Notes'
             'adelaida@'
             'tech@onde'
-            'High-Rise'
             'After the Shock'
+            'Moving Through the High-Rise'
+            'The High-Rise Series'
           )
           fail=0
           # Scan source files. Exclude markdown docs (README, CHANGELOG,
           # docs/), vendored deps, lock files, and the workflows themselves
-          # (this file MENTIONS the patterns by definition).
+          # (this file MENTIONS the patterns by definition). Also exclude
+          # .claude-plugin/*.json (plugin maintainer metadata — same shape
+          # as LICENSE / AUTHORS, intentionally names the author).
           for p in "${PATTERNS[@]}"; do
             matches=$(git grep -nE "$p" \
               -- ':!README*' ':!CHANGELOG*' ':!docs/' ':!*.md' \
@@ -69,6 +85,7 @@ jobs:
               ':!AUTHORS*' ':!MAINTAINERS*' \
               ':!*pyproject.toml' ':!*setup.py' ':!*setup.cfg' \
               ':!*package.json' ':!*Cargo.toml' ':!*manifest.json' \
+              ':!.claude-plugin/marketplace.json' ':!.claude-plugin/plugin.json' \
               ':!.env.example' ':!*.env.example' \
               ':!tests/integration/test_smoke.py' \
               ':!vendor/' ':!node_modules/' ':!*.lock' \
@@ -101,6 +118,8 @@ jobs:
           fi
           # IDENTICAL pattern list to the source-files step above. Keep
           # them in lockstep — if you edit one, edit the other.
+          # ai-brain-starter carve-out applied here too (see source-files
+          # step rationale).
           PATTERNS=(
             '\bAdelaida\b'
             '\bDiaz-Roa\b'
@@ -113,8 +132,9 @@ jobs:
             'Desktop/Adelaida Notes'
             'adelaida@'
             'tech@onde'
-            'High-Rise'
             'After the Shock'
+            'Moving Through the High-Rise'
+            'The High-Rise Series'
           )
           fail=0
           while IFS= read -r archive; do
@@ -140,6 +160,7 @@ jobs:
                 --exclude='pyproject.toml' --exclude='setup.py' \
                 --exclude='setup.cfg' --exclude='package.json' \
                 --exclude='Cargo.toml' --exclude='manifest.json' \
+                --exclude='marketplace.json' --exclude='plugin.json' \
                 --exclude='.env.example' \
                 --exclude='test_smoke.py' \
                 --exclude='*.lock' --exclude='package-lock.json' \

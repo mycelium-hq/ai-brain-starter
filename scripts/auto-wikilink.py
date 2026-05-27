@@ -9,8 +9,8 @@ wikilinks. Replaces the v1 script which had three critical bugs:
   2. Reached across the team-vault symlink, linking team-vault files to
      personal-vault concept notes. Violated the team-vault firewall rule.
   3. The substitution regex over-matched and ate adjacent characters when
-     emoji or special characters were near a match (e.g. "A VP at Accenture"
-     became "Curiosities/Colombiaccenture]]").
+     emoji or special characters were near a match (e.g. "A VP at BigCo"
+     became "Curiosities/CountryBigCo]]").
 
 v2 fixes all three:
   - Vault-scope-aware: a file inside `🚀 Onde Team/` only links to terms
@@ -164,9 +164,10 @@ else:
 
 # Concept directories scanned for the team-vault scope term list.
 # Auto-discovers all non-hidden, non-excluded immediate subdirs of the team
-# vault. If the legacy Adelaida-specific subfolder names exist, they'll be
-# picked up automatically; if the team vault uses different names, those
-# are picked up too. Empty list if no team vault exists.
+# vault. If user-specific subfolder names exist from the starter's
+# canonical layout, they'll be picked up automatically; if the team vault
+# uses different names, those are picked up too. Empty list if no team
+# vault exists.
 TEAM_CONCEPT_DIRS = _discover_subdirs(TEAM_VAULT_PREFIX)
 
 
