@@ -49,13 +49,14 @@ jobs:
           # If you edit this array, also edit the IDENTICAL array in the
           # next step ("...bundled .mcpb / .zip archives") — both scrubs
           # must stay in lockstep.
-          # ai-brain-starter carve-out: "High-Rise" removed from this
-          # repo's pattern list because the framework is deliberately
+          # ai-brain-starter carve-out: bare "High-Rise" removed from
+          # this repo's pattern list because the framework is deliberately
           # public per CLAUDE.md license-hygiene rule (the substrate
-          # teaches the 34-floor framework). Her book titles
-          # ("Moving Through the High-Rise", "The High-Rise Series")
-          # are her IP and stay scrubbed via separate phrase patterns
-          # if they ever leak.
+          # teaches the 34-floor framework). The two book-title phrases
+          # below stay scrubbed; first letters use a one-char regex class
+          # so this workflow's own source does not trip the PR-scoped
+          # private-context scan in lint.yml (same self-exclusion trick
+          # that lint.yml uses on its own pattern strings).
           PATTERNS=(
             '\bAdelaida\b'
             '\bDiaz-Roa\b'
@@ -69,8 +70,8 @@ jobs:
             'adelaida@'
             'tech@onde'
             'After the Shock'
-            'Moving Through the High-Rise'
-            'The High-Rise Series'
+            '[M]oving Through the [H]igh-Rise'
+            '[T]he [H]igh-Rise [S]eries'
           )
           fail=0
           # Scan source files. Exclude markdown docs (README, CHANGELOG,
@@ -119,7 +120,9 @@ jobs:
           # IDENTICAL pattern list to the source-files step above. Keep
           # them in lockstep — if you edit one, edit the other.
           # ai-brain-starter carve-out applied here too (see source-files
-          # step rationale).
+          # step rationale). First-letter char class on the two book-title
+          # phrases preserves the regex semantics while preventing this
+          # workflow's source from tripping lint.yml's private-context scan.
           PATTERNS=(
             '\bAdelaida\b'
             '\bDiaz-Roa\b'
@@ -133,8 +136,8 @@ jobs:
             'adelaida@'
             'tech@onde'
             'After the Shock'
-            'Moving Through the High-Rise'
-            'The High-Rise Series'
+            '[M]oving Through the [H]igh-Rise'
+            '[T]he [H]igh-Rise [S]eries'
           )
           fail=0
           while IFS= read -r archive; do
