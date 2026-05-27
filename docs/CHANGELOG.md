@@ -9,6 +9,34 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-27 (evening): meeting cascade — Windows install + Granola fallback path + louder install failure
+
+**Who this affects:** every user, especially Windows installers and anyone who runs `bootstrap.sh` without then completing the conversational `/setup-brain` flow. Three critical bugs caught by a pre-deployment adversarial audit before a 30-user install batch.
+
+### Bug 1: Windows users got NO hook wiring
+
+**The problem:** `bootstrap.sh` (Mac/Linux) ran `python3 ~/.claude/skills/ai-brain-starter/scripts/install-hooks-user-level.py` at the end of install, which writes every hook (incl. the new "I just had a meeting" trigger) into `~/.claude/settings.json`. `bootstrap.ps1` (Windows) had ZERO equivalent — 841 lines, zero references to the installer. Windows users got hook files on disk but nothing wired in settings, so the trigger phrase silently produced nothing.
+
+**The fix:** ported the user-level-hook install block into `bootstrap.ps1`. Auto-detects `python3` / `python` / `py` from PATH. Hard-fails (red error) with the manual re-run command if Python is missing or the installer exits non-zero, so a non-tech user can't miss it. Dry-run prints a preview line.
+
+### Bug 2: `FALLBACK_SUMMARY` pointed at a non-existent Granola cache path
+
+**The problem:** when the hook fires but the user hasn't run `/setup-brain` (so no customized `⚙️ Meta/rules/meeting-workflow.md` in the vault), it falls back to an embedded summary. That summary told Claude to "Check Granola (`~/Library/Application Support/com.granola.granola/`)" — but the real path per `scripts/granola_sync.py` is `~/Library/Application Support/Granola/cache-v6.json`. Claude searched a non-existent folder, found nothing, told the user "no transcript" — when in fact one existed.
+
+**The fix:** the fallback now instructs Claude to invoke `granola_sync.py` directly (which auto-detects the real cache path) rather than embedding any hard-coded path. Tool-agnostic — also lists Google Meet+Gemini / Otter / Fireflies / Zoom / Teams / Notion AI Notetaker as parallel branches, plus the vault Meeting Notes folder with localized variants. If everything fails, suggests `/setup-brain` to wire the user's actual tool.
+
+### Bug 3: `bootstrap.sh` installer failure was a quiet yellow `warn`
+
+**The problem:** if the user-level hook installer (`install-hooks-user-level.py`) exited non-zero on Mac/Linux (e.g., pre-existing settings.json with parse errors), the bootstrap output buried the failure as a single yellow `warn` line. The 30x team install would walk away thinking everything worked while the meeting trigger + 6 other hooks silently never fired.
+
+**The fix:** escalated to a red `err` that gets surfaced in the install-summary `Failed:` list at the very end. Message names the consequence ("meeting trigger + 6 other UserPromptSubmit hooks WILL NOT FIRE until resolved") and the manual re-run command.
+
+**What you should do:** nothing. The SessionStart auto-update flow picks this up on your next session. Windows users specifically: re-run `bootstrap.ps1` to get the hook-installer step.
+
+**Acknowledgement:** thanks to the adversarial-review pass that caught these before the install batch — the original PR shipped morning of 2026-05-27, the FP/FN fix landed afternoon, and this set landed evening. All three made it into the user's first cluster install in one day.
+
+---
+
 ## 2026-05-27 (afternoon): broader natural-language coverage on the meeting trigger
 
 **Who this affects:** every user. Tightening from the morning ship (PR #120). Real-world stress testing surfaced 6 false negatives on common phrasings — "I just had my discovery call", "I just got out of the kickoff call", "1:1 with my manager just ended", "meeting with the founders just ended", "Just had a great call!", "pull my notes from this morning's meeting" — and 2 false positives — "I just had to call the bank" (verb-of-action, not a meeting), "pull request review" (code-context, not a meeting note).
