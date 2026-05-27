@@ -10,7 +10,7 @@ Captures/{date}-{slug}.md` for triage during /sunday-review.
 Engram's `mem_capture_passive` exposes this as an MCP tool the agent
 calls. We invert: the script scans transcripts post-hoc, so the user
 (not the agent) drives what gets surfaced. The capture is a candidate,
-never a commit. Adelaida triages weekly; adopted captures move to the
+never a commit. The user triages weekly; adopted captures move to the
 matching canonical surface (CLAUDE.md, rules/*.md, Decision Log), the
 rest go to Passive Captures/Archive/.
 
