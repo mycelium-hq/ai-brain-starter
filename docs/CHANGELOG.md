@@ -9,6 +9,26 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-05-27 (afternoon): broader natural-language coverage on the meeting trigger
+
+**Who this affects:** every user. Tightening from the morning ship (PR #120). Real-world stress testing surfaced 6 false negatives on common phrasings — "I just had my discovery call", "I just got out of the kickoff call", "1:1 with my manager just ended", "meeting with the founders just ended", "Just had a great call!", "pull my notes from this morning's meeting" — and 2 false positives — "I just had to call the bank" (verb-of-action, not a meeting), "pull request review" (code-context, not a meeting note).
+
+**The fix:**
+
+- **Compound-noun handling.** The regex now allows up to 3 hyphen-aware adjective tokens between a required determiner ("a / the / my / our / today's") and the meeting noun. "I just had my discovery call" / "I just wrapped up the all-hands meeting" / "I just got out of the kickoff call" all match because "discovery", "all-hands", "kickoff" sit in the modifier slot. "I just had to call the bank" doesn't match because there's no determiner between "had" and "call" (just the infinitive marker "to"), so the pattern fails.
+- **Terse forms ("Just had a great call!").** New trigger without the "I" prefix.
+- **Phone-end signal.** "I just got off the phone with X" now fires.
+- **Artifact-pull discipline.** The `pull / process / file / capture / extract` patterns now have TWO branches: (1) artifact-list-only (`notes / transcript / recording / granola / action items / to-dos`) — so `pull request review` can't match `review` as a meeting noun; (2) `<verb> + <det> + <noun>` — requires a determiner after the verb, so `pull request review` (no det) doesn't match but `pull the standup note` does.
+- **Spanish "salir del".** Contracted "salir del kickoff" now matches alongside "salir de la junta".
+- **Expanded noun lists.** Added `check-in / session / demo / kickoff / kick-off / retro / retrospective / review / briefing / workshop / offsite / alignment / all-hands` (EN), `entrevista / charla / junta / reu / demo / kickoff / sesión / check-in / taller` (ES), `chat` as a standalone noun (was previously gated behind `chat with`).
+- **Bilingual mixing.** "acabo de tener un meeting con el cliente" / "ya terminé el call con el equipo" now match — EN nouns with ES verbs are common in bilingual teams.
+
+**Coverage now:** 27 EN positives + 18 ES positives + 38 negatives in the regression test (`tests/integration/test_meeting_workflow_trigger_hook.sh`). All pass. Validated against an additional 48-positive + 34-negative external stress test.
+
+**What you should do:** nothing. The SessionStart auto-update flow picks this up on your next session.
+
+---
+
 ## 2026-05-27: "I just had a meeting" now actually fires the cascade
 
 **Who this affects:** every user. If you've said "I just had a meeting" or "pull the transcript" and Claude shrugged instead of pulling the transcript and updating your to-dos, this is the fix.

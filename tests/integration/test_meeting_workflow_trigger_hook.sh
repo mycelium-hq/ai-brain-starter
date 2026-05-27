@@ -73,6 +73,7 @@ run_hook() {
 
 # 3. EN triggers FIRE
 EN_POSITIVE=(
+    # Standard "I just <verb> <det> <noun>"
     "I just had a meeting with Sara"
     "i just finished a call"
     "I just wrapped up the standup"
@@ -83,9 +84,26 @@ EN_POSITIVE=(
     "pull the transcript"
     "pull my meeting notes"
     "process today's meeting"
+    "file the meeting note"
     "Diego's meeting is done"
     "done with my interview"
     "wrapped up the sync"
+    # Compound nouns (det + adj×0-3 + noun)
+    "I just had my discovery call with the prospect"
+    "I just got out of the kickoff call"
+    "I just finished my client interview"
+    "I just wrapped up the all-hands meeting"
+    "1:1 with my manager just ended"
+    "meeting with the founders just ended"
+    "pull my notes from this morning's meeting"
+    # Terse forms (no "I")
+    "Just had a great call!"
+    "just wrapped the demo"
+    "done with the workshop"
+    "got off the phone"
+    # Artifact pulls + capture verbs
+    "extract action items from the sync"
+    "capture the to-dos from the meeting"
 )
 for p in "${EN_POSITIVE[@]}"; do
     out=$(run_hook "$p")
@@ -102,6 +120,7 @@ ES_POSITIVE=(
     "acabo de tener una reunion"
     "acabo de terminar la llamada"
     "acabo de salir de una junta"
+    "acabo de salir del kickoff"
     "la reunión ya terminó"
     "la reunion ya termino"
     "mi reunión recién acabó"
@@ -110,6 +129,13 @@ ES_POSITIVE=(
     "trae las notas de la reunión"
     "saca el transcript"
     "reunión con María ya terminó"
+    # ES compound nouns
+    "Acabo de tener una llamada de descubrimiento"
+    "ya terminé mi entrevista con el cliente"
+    "mi sync con producto recién terminó"
+    # Bilingual mixing (EN noun, ES verb)
+    "acabo de tener un meeting con el cliente"
+    "ya terminé el call con el equipo"
 )
 for p in "${ES_POSITIVE[@]}"; do
     out=$(run_hook "$p")
@@ -120,20 +146,51 @@ done
 
 # 5. Negative cases — must NOT fire
 NEGATIVE=(
+    # Future
     "I have a meeting tomorrow"
-    "I had a meeting last week"
     "I'm going to a meeting later"
-    "What was that meeting about?"
-    "Looking forward to the meeting"
-    "I need to prep for a meeting"
-    "Did you join the meeting?"
     "Cancel my meeting"
     "Tengo una reunión mañana"
     "Voy a una reunión luego"
+    "Schedule a meeting with John for next week"
+    "the meeting is tomorrow"
+    "the meeting will be on Tuesday"
+    # Past without "just"
+    "I had a meeting last week"
+    "What was that meeting about?"
+    "what did we discuss in yesterday's meeting?"
+    "I had a great meeting last month"
+    "tuvimos una reunión la semana pasada"
+    "remember our meeting from March?"
+    # Asking / planning / referring
+    "Looking forward to the meeting"
+    "I need to prep for a meeting"
+    "Did you join the meeting?"
+    "let's plan the agenda for the meeting"
     "¿De qué se trata la reunión?"
     "Necesito prepararme para la reunión"
+    "¿quién estaba en la reunión?"
+    "agenda una reunión con Diego"
+    "estoy preparando la reunión"
     "what's on my calendar"
+    "what's on my agenda for the meeting?"
+    "who's invited to the meeting?"
+    # Current / mid
+    "I'm in a meeting right now"
+    "estoy en una reunión ahora"
+    "currently on a call"
+    # Verb-of-action / code-context (FP risk)
     "build a new feature"
+    "I just had to call the bank"
+    "pull request review"
+    "transcript me this YouTube video"
+    "pull the latest deployment logs"
+    "review this design"
+    "process this CSV file"
+    "I just had lunch"
+    "I just had coffee"
+    "saca un café"
+    "trae el café"
 )
 for p in "${NEGATIVE[@]}"; do
     out=$(run_hook "$p" 2>/dev/null || true)

@@ -51,43 +51,87 @@ BYPASS_TOKENS = ["MEETING_WORKFLOW_BYPASS=1", "ignore meeting workflow"]
 # Trigger regexes. Each requires a temporal "just / done / ended / finished"
 # anchor so generic mentions of "meeting" (future / past-week / planning) do
 # NOT fire. English first, then Spanish — the public starter is bilingual.
+#
+# Modifier slot `(?:\w+\s+){0,4}` allows compound noun phrases — "discovery
+# call", "kickoff meeting", "team sync", "my client interview" — without
+# admitting cross-sentence false positives, because punctuation breaks \w+.
+
+# Noun lists. Hyphens kept inside the compound-modifier slot (so "all-hands",
+# "kick-off", "stand-up" survive as a single token). After strip_accents,
+# "reunión" → "reunion", "sesión" → "sesion".
+NOUN_EN = (
+    r"meeting(?:s)?|call(?:s)?|sync(?:s)?|standup(?:s)?|stand-?up(?:s)?|"
+    r"1[:\- ]on[:\- ]1|1[:\- ]1|one[:\- ]?on[:\- ]?one|"
+    r"interview(?:s)?|huddle(?:s)?|conversation(?:s)?|chat(?:s)?|catch[\-\s]?up(?:s)?|"
+    r"check[\-\s]?in(?:s)?|session(?:s)?|demo(?:s)?|kickoff(?:s)?|kick[\-\s]?off(?:s)?|"
+    r"retro(?:s)?|retrospective(?:s)?|review(?:s)?|briefing(?:s)?|workshop(?:s)?|"
+    r"offsite(?:s)?|alignment(?:s)?|all-?hands"
+)
+NOUN_ES = (
+    r"reunion(?:es)?|llamada(?:s)?|sync(?:s)?|standup(?:s)?|stand-?up(?:s)?|"
+    r"entrevista(?:s)?|conversacion(?:es)?|charla(?:s)?|junta(?:s)?|reu|"
+    r"demo(?:s)?|kickoff(?:s)?|sesion(?:es)?|check[\-\s]?in(?:s)?|taller(?:es)?|"
+    r"meeting(?:s)?|call(?:s)?"  # bilingual users mix EN/ES in the same sentence
+)
+
+# Determiner classes. Required after a "I just <verb>" anchor so verb-of-action
+# usages (e.g. "I just had to call the bank") cannot match — no det between
+# "had" and the noun → no fire. Modifier slot uses `[\w\-]+` so hyphenated
+# compounds like "all-hands" / "kick-off" / "one-on-one" count as one token.
+DET_EN = r"a|an|the|my|our|your|today'?s|that|this|some|another"
+DET_ES = r"una|la|mi|nuestra|el|este|esa|esta|nuestro|otro|otra"
+MOD = r"(?:[\w\-]+\s+){0,3}"  # 0-3 hyphen-aware adjective tokens
+
 TRIGGERS_EN = [
-    # "I just had / finished / wrapped / got out of (my / a / the) (meeting|call|sync|standup|1:1|interview|...)"
-    r"\bi\s+just\s+(had|finished|wrapped(?:\s+up)?|got\s+out\s+of|came\s+out\s+of|ended)\s+(?:my|a|the|an|our)?\s*"
-    r"(meeting|call|sync|standup|stand-?up|1[:\- ]on[:\- ]1|1[:\- ]1|one[:\- ]?on[:\- ]?one|"
-    r"interview|huddle|conversation|chat\s+with|catch[\-\s]?up)",
-    # "the meeting just ended / wrapped / is done / finished"
-    r"\b(the|that|our|my)\s+(meeting|call|sync|standup|stand-?up|1[:\- ]on[:\- ]1|1[:\- ]1|interview)\s+"
-    r"(just\s+)?(ended|wrapped|finished|is\s+done|was\s+done|just\s+(ended|wrapped|finished))",
-    # "meeting (with X) (just) (ended|done|over)"
-    r"\b(meeting|call|sync|standup|stand-?up|interview)\s+(with\s+\w+\s+)?(just\s+)?(ended|wrapped(?:\s+up)?|is\s+done|is\s+over|over)\b",
-    # "pull (the / my) (meeting notes / transcript)"
-    r"\bpull\s+(the|my|our)?\s*(meeting\s+notes|meeting\s+note|transcript|recording|granola)\b",
-    # "process / file / save (the / my / today's) meeting"
-    r"\b(process|file|save)\s+(the|my|today'?s|that|this)?\s*(meeting|call|sync|interview)\b",
-    # "[name]'s meeting is done / ended" (very common short form)
-    r"\b[\w\-]+(?:'s|s')\s+(meeting|call|sync|interview|1[:\- ]?on[:\- ]?1)\s+(is\s+done|just\s+ended|ended|wrapped|finished)\b",
-    # "done with (my / the / that) meeting"
-    r"\bdone\s+with\s+(my|the|that|our)\s+(meeting|call|sync|standup|interview)\b",
-    # "wrapped (up) (the / my) meeting"
-    r"\bwrapped\s+(up\s+)?(my|the|our|that)\s+(meeting|call|sync|interview)\b",
+    # "I just <verb> <det> [adj×0-3] <noun>" — the standard form.
+    rf"\bi\s+just\s+(?:had|finished|wrapped(?:\s+up)?|got\s+out\s+of|came\s+out\s+of|ended|got\s+off)\s+"
+    rf"(?:{DET_EN})\s+{MOD}({NOUN_EN})\b",
+    # "Just <verb> <det> [adj×0-3] <noun>" — terse, no "I".
+    rf"\bjust\s+(?:had|finished|wrapped(?:\s+up)?|got\s+out\s+of|came\s+out\s+of|ended|got\s+off)\s+"
+    rf"(?:{DET_EN})\s+{MOD}({NOUN_EN})\b",
+    # "<det> [adj×0-3] <noun> [with X×1-5] just (ended|wrapped|finished|is done)"
+    rf"\b(?:{DET_EN})\s+{MOD}({NOUN_EN})\s+(?:with\s+(?:[\w\-]+\s+){{1,5}})?(?:just\s+)?"
+    rf"(?:ended|wrapped(?:\s+up)?|finished|is\s+done|was\s+done|is\s+over)\b",
+    # "<noun> [with X×1-5] just (ended|wrapped|...)"  — no det, e.g. "meeting just ended"
+    rf"\b({NOUN_EN})\s+(?:with\s+(?:[\w\-]+\s+){{1,5}})?(?:just\s+)?"
+    rf"(?:ended|wrapped(?:\s+up)?|is\s+done|was\s+done|is\s+over)\b",
+    # "[name]'s [adj×0-2] <noun> (is done|just ended|...)"
+    rf"\b[\w\-]+(?:'s|s')\s+(?:[\w\-]+\s+){{0,2}}({NOUN_EN})\s+"
+    rf"(?:is\s+done|just\s+ended|ended|wrapped|finished)\b",
+    # "done|finished with <det> [adj×0-3] <noun>"
+    rf"\b(?:done|finished)\s+with\s+(?:{DET_EN})\s+{MOD}({NOUN_EN})\b",
+    # "wrapped (up) <det> [adj×0-3] <noun>"
+    rf"\bwrapped(?:\s+up)?\s+(?:{DET_EN})\s+{MOD}({NOUN_EN})\b",
+    # "Pull|process|file|save|capture|extract [det] [adj×0-3] (notes|transcript|...)"
+    # Artifact list — pull/process targeting the meeting artifact.
+    rf"\b(?:pull|process|file|save|capture|extract)\s+(?:{DET_EN}|all)?\s*"
+    rf"{MOD}(?:notes?|transcripts?|recordings?|granola|action\s+items?|to-?dos)\b",
+    # "Pull|process|file|... <det> [adj×0-3] <noun>" — det REQUIRED so verb-of-
+    # action usages can't match ("pull request review" has no det after "pull"
+    # → no fire). "process today's meeting" / "file the standup note" → fire.
+    rf"\b(?:pull|process|file|save|capture|extract)\s+(?:{DET_EN})\s+"
+    rf"{MOD}({NOUN_EN})\b",
+    # "I just got off the phone (with X)" — phone-call end signal.
+    r"\b(?:i\s+just\s+)?got\s+off\s+the\s+phone\b",
 ]
 
 TRIGGERS_ES = [
-    # "acabo de (tener / terminar / salir de) (una / la / mi) reunion / llamada / sync / entrevista"
-    r"\bacabo\s+de\s+(tener|terminar|salir\s+de|colgar(?:\s+(?:una|la|mi))?)\s+"
-    r"(una|la|mi|nuestra|el|este)?\s*(reunion|llamada|sync|standup|stand-?up|"
-    r"entrevista|conversacion|charla|junta|reu)\b",
-    # "(la / mi / nuestra) reunion (ya / recien) (termino / acabo / se acabo / fue)"
-    r"\b(la|mi|nuestra|esta|esa)\s+(reunion|llamada|junta|reu|entrevista|sync|standup)\s+"
-    r"(ya\s+)?(recien\s+)?(termino|acabo|se\s+acabo|se\s+termino|fue|ya\s+acabo|ya\s+termino)\b",
-    # "ya termine / acabe (la / mi) reunion"
-    r"\bya\s+(termine|acabe)\s+(la|mi|nuestra|esa|esta)?\s*(reunion|llamada|junta|entrevista|sync)\b",
-    # "trae / saca / pull (las / mis) notas / transcript / transcripcion de la reunion"
-    r"\b(trae|saca|pull|busca|consigue)\s+(las|mis|el|la)?\s*(notas|transcript|transcripcion|grabacion|granola)"
-    r"(\s+de\s+(la|mi|nuestra|esa|esta)?\s*(reunion|llamada|junta|entrevista|meeting|call|sync))?\b",
-    # "(meeting / reunion) con X (ya / recien) (termino / acabo)"
-    r"\b(reunion|llamada|junta|entrevista|meeting|call|sync)\s+con\s+\w+\s+(ya\s+)?(termino|acabo|se\s+acabo|ended)\b",
+    # "acabo de (tener|terminar|salir del?|colgar) [det] [adj×0-3] <noun>"
+    rf"\bacabo\s+de\s+(?:tener|terminar|salir\s+del?|colgar)\s+"
+    rf"(?:(?:{DET_ES})\s+)?{MOD}({NOUN_ES})\b",
+    # "(la|mi|...) [adj×0-3] <noun> [con X] (ya|recien) (termino|acabo|...)"
+    rf"\b(?:{DET_ES})\s+{MOD}({NOUN_ES})\s+(?:con\s+(?:[\w\-]+\s+){{1,5}})?"
+    rf"(?:ya\s+)?(?:recien\s+)?"
+    rf"(?:termino|acabo|se\s+acabo|se\s+termino|fue|ya\s+acabo|ya\s+termino|acabo\s+de\s+terminar)\b",
+    # "<noun> con X [ya] (termino|acabo|...)"
+    rf"\b({NOUN_ES})\s+con\s+(?:[\w\-]+\s+){{1,5}}"
+    rf"(?:ya\s+)?(?:termino|acabo|se\s+acabo|ended|ya\s+termino|ya\s+acabo)\b",
+    # "ya (termine|acabe|sali de) [det] [adj×0-3] <noun>"
+    rf"\bya\s+(?:termine|acabe|sali\s+del?)\s+(?:(?:{DET_ES})\s+)?{MOD}({NOUN_ES})\b",
+    # "trae|saca|pull|... [det] (notas|transcript|...) [de [det] [adj×0-3] <noun>]"
+    rf"\b(?:trae|saca|pull|busca|consigue|extrae)\s+(?:las|los|mis|el|la|todas?|todos?)?\s*"
+    rf"{MOD}(?:notas|transcript|transcripcion|grabacion|granola|to-?dos|tareas|pendientes)"
+    rf"(?:\s+del?\s+(?:(?:{DET_ES})\s+)?{MOD}({NOUN_ES}))?\b",
 ]
 
 
