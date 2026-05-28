@@ -225,8 +225,19 @@ _GENERIC = [
             # md5.) added for pnpm's `packageManager` field format
             # `pnpm@VERSION+sha256.HASH` (also yarn integrity
             # `<algo>-<base64>` and some lockfile formats).
+            #
+            # Bumblebee content-addressed record_id prefixes (scan_summary:
+            # / package: / finding: / diagnostic:) added after
+            # perplexityai/bumblebee (Apache-2.0 supply-chain endpoint
+            # inventory tool) tripped this pattern on documented public
+            # content hashes. Per upstream docs/state-model.md:
+            # "`record_id` is a content-addressed hash from a canonical
+            # tuple per record type, not the full JSON payload."
+            # Sibling carve-out to sha256: / sha512: above. Verified
+            # precise: bumblebee shapes clean, bare-hex secrets still trip.
             r"(?<!sha256:)(?<!sha512:)(?<!sha384:)(?<!sha1:)(?<!md5:)"
             r"(?<!sha256\.)(?<!sha512\.)(?<!sha384\.)(?<!sha1\.)(?<!md5\.)"
+            r"(?<!scan_summary:)(?<!package:)(?<!finding:)(?<!diagnostic:)"
             r"(?<![A-Fa-f0-9])([A-Fa-f0-9]{64})(?![A-Fa-f0-9])",
             re.ASCII,
         ),
