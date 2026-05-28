@@ -350,6 +350,28 @@ jobs:
       - name: run integration test
         run: bash tests/integration/test_stranded_session_artifacts_watchdog.sh
 
+  session-coordination-guards:
+    name: session-coordination guard hooks (cd-into-main / F821 pre-commit / sibling lock)
+    runs-on: ubuntu-latest
+    # Regression test for the three multi-session guard hooks in hooks/:
+    # check-cd-outside-worktree.py (blocks `cd` into the main checkout from a
+    # worktree-rooted session), check-py-import-precommit.py (blocks committing
+    # F821 / missing-import Python), and session-lock.py (warns when two sessions
+    # share a repo). Asserts block + allow + bypass-env + fail-open for each, so
+    # any logic/bypass/fail-open regression flips an assertion and fails the job.
+    # ruff is installed so the F821 block path is exercised, not just fail-open.
+    # No untrusted user input is referenced in any run: command.
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - name: configure git identity
+        run: |
+          git config --global user.email "ci@example.com"
+          git config --global user.name "ci"
+      - name: install ruff (exercise the F821 block path)
+        run: pipx install ruff || python3 -m pip install --user ruff || true
+      - name: run integration test
+        run: bash tests/integration/test_session_coordination_guards.sh
+
   no-remote-pipe-install:
     name: install docs never pipe remote code into a shell
     runs-on: ubuntu-latest
