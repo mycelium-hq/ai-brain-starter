@@ -107,6 +107,36 @@ The three patterns are complementary:
 
 A robust setup runs all three. Worktree-per-session is the cheapest insurance — disk cost is ~500MB per worktree (typical Node + Cargo project), trivially less than the cost of one corruption incident.
 
+## Enforcement companions (hooks in the starter `hooks/`)
+
+The worktree convention above is the structural fix; two PreToolUse / SessionStart hooks enforce it so discipline doesn't silently lapse under load. Both ship in this starter's `hooks/` directory.
+
+### `check-cd-outside-worktree.py` — blocks the `cd`-into-main move
+
+A worktree has its own HEAD; the main checkout has a different HEAD shared with every other main-checkout session. The classic recurrence is a worktree-rooted session that `cd`s back into the main checkout and then commits — landing the commit on the wrong branch. This PreToolUse(Bash) hook detects a worktree-rooted session (cwd under `<repo>/.claude/worktrees/<slug>`) and blocks any `cd`/`pushd` whose resolved target lands in the main tree but outside the worktrees subtree. Use `git -C <path> …` for read-only queries against the main checkout instead. Bypass: `WORKTREE_CD_BYPASS=1`.
+
+### `session-lock.py` — sibling-session coordination
+
+Worktree isolation prevents the shared-HEAD collision structurally, but two sessions can still pick the SAME repo and clobber each other's in-flight work (e.g. a sibling commits a broken state, CI fails, it reverts, and ~45 min of work is wiped). The coordination layer:
+
+- **SessionStart**: resolves the MAIN repo root (`git rev-parse --git-common-dir`, shared across every worktree of the repo), reads `<main_root>/.claude/.session-lock.json`, and warns if a DIFFERENT session was active in the repo within the last 5 min. Then writes / refreshes this session's lock.
+- **Stop**: bumps `last_activity_at` so an actively-working session keeps the slot warm and a later sibling still sees it as live.
+- Auto-expires after 30 min idle; the per-session cache is pruned after 7 days. Bypass: `SIBLING_SESSION_LOCK_BYPASS=1` (intentional parallel / collaborative work).
+
+Install both (canonical runtime location is `~/.claude/hooks/`):
+
+```bash
+cp hooks/check-cd-outside-worktree.py hooks/check-py-import-precommit.py hooks/session-lock.py ~/.claude/hooks/
+```
+
+Then wire them in `~/.claude/settings.json` — `check-cd-outside-worktree.py` + `check-py-import-precommit.py` under `PreToolUse` (matcher `Bash`), and `session-lock.py` under both `SessionStart` and `Stop`:
+
+```json
+{ "type": "command", "command": "python3 ~/.claude/hooks/session-lock.py" }
+```
+
+`check-py-import-precommit.py` is the third companion: it runs `ruff check --select F821` on staged `.py` before a `git commit` and warn-blocks on undefined-name findings (the missing-import class that triggers the broken-commit-then-revert collision). Requires `ruff` on PATH (`uv tool install ruff`); it nudges once/day if absent rather than failing silently. Bypass: `PRECOMMIT_F821_BYPASS=1`.
+
 ## Disk cost
 
 Each worktree is a full checkout. With 3 concurrent sessions on a typical fullstack repo (~500MB working tree with build-tool caches like `target/`, `.next/`, `.gradle/`, etc.), worktrees add ~1.5GB. Some package managers share their store across worktrees automatically (e.g. pnpm via `node_modules/.pnpm`); language build caches (cargo `target/`, gradle `.gradle/`) are typically per-worktree and cannot easily share without symlink tricks.
