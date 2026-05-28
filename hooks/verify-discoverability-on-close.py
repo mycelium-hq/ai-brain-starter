@@ -2,7 +2,7 @@
 """Stop hook: blocks session close if any artifact committed in this session
 lacks a same-session discoverability companion.
 
-Per `⚙️ Meta/rules/repo-evaluation.md` SAME-SESSION ENFORCEMENT
+Per the same-session discoverability-enforcement rule
 (codified 2026-05-13 after the gbrain-build wiring gap).
 
 Bug class blocked: ARTIFACT-WITHOUT-DISCOVERABILITY.
@@ -156,7 +156,7 @@ def main() -> int:
 
     msg = (
         f"BLOCKED by verify-discoverability-on-close hook.\n\n"
-        f"Per ⚙️ Meta/rules/repo-evaluation.md SAME-SESSION ENFORCEMENT\n"
+        f"Per the same-session discoverability-enforcement rule\n"
         f"(codified 2026-05-13): every artifact ships discoverability wiring\n"
         f"in the same session as the artifact itself.\n\n"
         f"Bug class: ARTIFACT-WITHOUT-DISCOVERABILITY.\n\n"
