@@ -63,6 +63,22 @@ If Claude asks for permission to do something and you are not sure what it does,
 
 ---
 
+## Non-goals: what this security model deliberately does NOT do
+
+A useful security model is also a fence around what it does not try to handle. Listing non-goals stops over-trust ("the vault must be doing X for me, since X is a security thing") and over-fear ("the vault is missing X, so it's insecure") simultaneously.
+
+This Vault Security Pack does NOT:
+
+- **Execute discovered packages.** Reading a `package.json` or a lockfile never calls `npm install`, never runs install scripts, never executes whatever the package would have done if it were run.
+- **Download package contents or fetch threat intelligence at runtime.** Catalog input (CVE list, advisory feed) is operator-supplied. The pack does not phone home to fetch advisories on its own. You decide which feed to trust and feed it in.
+- **Parse source code.** This is a structural choice. Source parsing is a much larger attack surface and a much larger maintenance burden. The pack reads lockfiles + manifests + config metadata only.
+- **Inventory installed packages on your machine.** That is a separate concern. If you need it, use a dedicated endpoint-inventory tool (e.g. [perplexityai/bumblebee](https://github.com/perplexityai/bumblebee) — Apache 2.0, single Go binary, read-only). The vault security pack covers commit-time + push-time leak prevention; bumblebee covers installed-state inventory for supply-chain incident response.
+- **Rotate credentials for you.** If the pack catches a secret on push, you rotate the leaked credential yourself. Automatic rotation requires runtime access to every service the credential touches; the pack is local-tooling, not a credential manager.
+- **Promise zero false positives.** Word-boundary regex on names + API-key regex on tokens will sometimes match harmless strings. The pack errs toward over-flagging because false negatives are unrecoverable (a leaked secret stays leaked) and false positives are cheap to dismiss.
+- **Replace a real EDR / SIEM / SCA platform.** This is a personal-vault security model. If your threat model includes targeted attackers, regulated data, or a fleet of devices, you need real infrastructure. The pack is a floor, not a ceiling.
+
+The pattern of explicit non-goals is cherry-picked from [perplexityai/bumblebee SECURITY.md](https://github.com/perplexityai/bumblebee/blob/main/SECURITY.md), which lists *"execute discovered packages"*, *"download package contents or fetch threat intelligence at runtime"*, and *"parse source code"* as deliberate out-of-scope items. Good security tools name their fence; better tools cite the upstream they learned the fencing pattern from.
+
 ## Reporting a security issue
 
 If you find a security issue in this repo (a leaked secret, a script that does something unexpected, a hook that can be exploited), open a GitHub issue with the label `security` or contact the maintainer directly. Do not include the full exploit details in a public issue if the fix requires coordination.
