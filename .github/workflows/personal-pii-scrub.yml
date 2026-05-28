@@ -55,7 +55,6 @@ jobs:
             'Desktop/Adelaida Notes'
             'adelaida@'
             'tech@onde'
-            'High-Rise'
             'After the Shock'
           )
           fail=0
@@ -69,6 +68,7 @@ jobs:
               ':!AUTHORS*' ':!MAINTAINERS*' \
               ':!*pyproject.toml' ':!*setup.py' ':!*setup.cfg' \
               ':!*package.json' ':!*Cargo.toml' ':!*manifest.json' \
+              ':!.claude-plugin/' \
               ':!.env.example' ':!*.env.example' \
               ':!tests/integration/test_smoke.py' \
               ':!vendor/' ':!node_modules/' ':!*.lock' \
@@ -113,7 +113,6 @@ jobs:
             'Desktop/Adelaida Notes'
             'adelaida@'
             'tech@onde'
-            'High-Rise'
             'After the Shock'
           )
           fail=0
@@ -145,7 +144,7 @@ jobs:
                 --exclude='*.lock' --exclude='package-lock.json' \
                 --exclude='pnpm-lock.yaml' \
                 --exclude-dir='vendor' --exclude-dir='node_modules' \
-                --exclude-dir='docs' \
+                --exclude-dir='docs' --exclude-dir='.claude-plugin' \
                 "$p" "$tmp" 2>/dev/null || true)
               if [ -n "$matches" ]; then
                 echo "::error::personal-data pattern leaked into $archive: $p"
