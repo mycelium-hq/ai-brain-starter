@@ -118,6 +118,32 @@ python3 ~/.claude/skills/ai-brain-starter/scripts/closed-loop-week-report.py \
 
 Reports the previous week's automatic activity in the episodic→procedural memory loop: how many promotion candidates landed in `Meta/Promotion-Candidates/` awaiting human ratification, how many got auto-promoted into `Meta/Workflows/` / `Meta/Exceptions/` / `Meta/Facts/`, how many rules were demoted to `status: superseded`, and the current resolver conflict count. Inline the script's output into the synthesis under "Closed-loop activity." If candidates are pending, the user's "One thing to do this week" should be reviewing them. The closed-loop runs hourly (promote) and weekly (demote/conflicts), but the human ratification gate only fires once a week, here. Skip silently if the script is missing.
 
+### Step 4g — Security cadence check (if the script exists in this vault)
+
+Run:
+```bash
+python3 "$VAULT_ROOT/⚙️ Meta/scripts/security-cadence-report.py"
+```
+
+Reads telemetry from every autonomous security layer (gh-harden daily fleet, workflow-injection scanner, endpoint-inventory daily NDJSON, secret-detection log, permission-denied log, Dependabot backlog per repo, hookify auto-commit volume) and writes `⚙️ Meta/Security Cadence Report.md`. Designed as the weekly meta-audit of automation coverage — the question Layer-1 cron substrate doesn't answer: *"is the automation still catching what it should?"*
+
+After the script lands the report, inline a 5-minute Claude pass answering the 6 drift questions at the report tail:
+
+1. Did any cron-layer fail silently this week? (Baselines missing days, gh-harden log gap > 24h, scanner returning identical lines for multiple days)
+2. Did any hookify rule fire zero times in 30d? (Rule earning its slot, or drifted off the actual risk surface — candidate for deletion)
+3. Did secret-detection or permission-denied counts spike? (Spike = new risk surface OR false-positive class needing carve-out; investigate)
+4. Any production-tier repo with >5 open Dependabot PRs? (Tier-protected prod repos cannot accumulate unreviewed vuln PRs)
+5. Has the threat landscape shifted since last check? (Read 2-3 CISA + OWASP + vendor advisories — does any layer need a new pattern?)
+6. Any new public repo / endpoint / agentic surface shipped this week not classified into the 4-layer detection model? (CI-publish workflow-injection / post-publish Dependabot / outbound SSRF / endpoint-installed-state inventory)
+
+The Claude pass surfaces signals INTO the /sunday-review synthesis under a "Security cadence" subsection. If any question's answer is non-trivial → escalate to `/code-security` as event-driven, NOT calendar-driven. The three-layer cadence model:
+
+- **Layer 1** — daily cron (gh-harden + workflow-injection scan + endpoint inventory + Dependabot + hookify family). Auto, no skill invocation.
+- **Layer 2** — weekly meta-audit (this Step 4g via security-cadence-report.py).
+- **Layer 3** — event-driven `/code-security` (new endpoint, new agentic surface, new CVE class, drift escalation from Layer 2). Not calendar.
+
+Source: panel synthesis (Schneier + Charity Majors + Patrick Collison + DHH-dissent, 2026-05-27) on cadence-vs-event-driven security. Bug class prevented: `ARTIFACT-WITH-OVER-STRICT-VERIFICATION` applied to time — over-scheduled verification trains a bypass habit; real fires get ignored. Skip silently if the script is missing.
+
 ### Step 5 — Decision retrospective
 
 Run:
