@@ -598,30 +598,41 @@ def _full_cascade_block(
 {tt_line}
   Decisions with empty Outcome (review for backfill): {pending}
 
-PHASE 0b — Incomplete-work gate (DO THIS FIRST, before any writes):
+PHASE 0a — RUN THE CANONICAL RUNNER FIRST (codified 2026-05-27 after the
+session-close-runner stale-report block incident). Single most-important
+step in the cascade. This bash invocation IS Phases 0c + 0d + 0e + Phase 2
+aggregators executed deterministically, AND it refreshes the report file
+the verify-session-close-cascade Stop hook checks. Skipping it = guaranteed
+Stop-hook block + forced cascade re-run + redundant manual phase-walking.
+
+  bash "{meta_dir}/scripts/session-close-runner.sh"
+
+The runner handles: handoff-folder scan, orphan-task-list check, launchd
+health, aggregate-sessions / aggregate-decisions / Session Start Brief /
+passive-capture / drift-detection / Rule Conflicts. Output ends with the
+list of Phases that are STILL your manual job (0b + 1 + 2 + 2b + 3).
+
+After it finishes, walk the remaining Phases (0b → 1 → 2 → 2b → 3) below.
+The detailed phase descriptions that follow are reference for those manual
+steps — do NOT re-walk Phases 0c/0d/0e by hand; the runner already did
+those deterministically.
+
+Banned framings (treating the runner as optional): "I walked Phases 0c-0e
+manually," "the runner is one of several ways," "I skipped the runner since
+I checked individually." The runner IS the canonical entry point; manual
+phase-walking races with the verifier hooks and burns a close-attempt.
+
+PHASE 0b — Incomplete-work gate (DO THIS AFTER 0a, before any writes):
 Surface any background tasks still running, pipeline phases killed mid-run,
 errors not retried. Ask the user "finish now, or defer?" Wait for their call.
 If nothing incomplete: say "No incomplete work" and proceed.
 
-PHASE 0c — Consumable-artifact cleanup (model, BEFORE writes):
-Quick scan for handoff files + consumes_when artifacts. Run these (silent on
-empty), classify each match (consumed/in-flight/stale-untouched), and propose
-`git mv` to Handoffs/Archive/ for consumed items. Never delete without user
-confirm. If no matches found: silent skip, do NOT mention.
-  find "{meta_dir}/Handoffs" -maxdepth 1 -type f -name "*.md" 2>/dev/null
-  grep -lE "^consumes_when:" "{meta_dir}"/*.md 2>/dev/null
-
-PHASE 0d — Orphan task-list guard (model, BEFORE writes):
-Run the orphan-task-list scanner if it exists on this install (skip silently
-on missing — not all installs have it):
-  python3 "{meta_dir}/scripts/check-orphan-task-lists.py" 2>/dev/null || true
-If it fires and reports violators, surface the count + first sample to the
-user before proceeding to Phase 1.
-
-PHASE 0e — Launchd health check (model, BEFORE writes; macOS only):
-On macOS, re-bootstrap any unloaded launchd agents (skip silently if script
-missing or on non-Mac):
-  bash "{meta_dir}/scripts/check-launchd-health.sh" 2>/dev/null || true
+PHASE 0c / 0d / 0e — Already run by Phase 0a's runner.
+(Listed below only as reference for what the runner did. Do NOT re-execute
+these manually; trust the runner output.)
+  Phase 0c — Consumable-artifact cleanup: scans Handoffs/ + consumes_when frontmatter.
+  Phase 0d — Orphan task-list guard: runs check-orphan-task-lists.py.
+  Phase 0e — Launchd health check: runs check-launchd-health.sh.
 
 PHASE 1 — Single-pass conversation scan (compose all in memory before writing):
   • Belief shifts: did the user end the session believing something different?
