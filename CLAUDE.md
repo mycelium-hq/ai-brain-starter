@@ -73,7 +73,6 @@ These rules ship to every user's vault CLAUDE.md via Phase 4 / `templates/genera
 - `skills/daily-journal/SKILL.md` — daily journal interview
 - `skills/repurpose-talk/SKILL.md` — turn talks into content pieces
 - `skills/nano-banana/SKILL.md` — image generation via Gemini
-- `skills/repo-evaluation/SKILL.md` — default-open extraction pass for auditing third-party repos; prevents the "Cherry-pick: None" failure mode
 
 ## Reference docs (for users, not embedded in SKILL.md)
 - `docs/POWER_TOOLS.md` — catalog of every third-party skill, MCP server, Obsidian plugin this setup uses, with attribution and install commands

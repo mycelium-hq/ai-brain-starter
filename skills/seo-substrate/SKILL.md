@@ -367,4 +367,4 @@ The substrate primitives stay opinionated and lean. The full SEO/marketing surfa
 
 **Audit gap closed 2026-05-10.** v1 of this substrate (initial build) cited only AgriciDaniel/claude-seo as the source. The everything-comparison rule required cross-checking the broader marketing-skill landscape, which surfaced the coreyhaines marketingskills bundle. v2 (this revision) incorporates the missing capabilities with proper attribution.
 
-Per `⚙️ Meta/rules/repo-evaluation.md` cherry-pick rule + everything-comparison rule: substrate primitives stay opinionated, full domain surface stays in plugin-installed bundles, cross-skill references make the delegation explicit.
+Substrate primitives stay opinionated, full domain surface stays in plugin-installed bundles, cross-skill references make the delegation explicit.

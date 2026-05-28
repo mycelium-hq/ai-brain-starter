@@ -721,4 +721,4 @@ The toolchain (this skill) is necessary but not sufficient. The cycle is the dis
 
 ## Source attribution
 
-Source-comparison build per the repo-evaluation runbook "build with everything-comparison" rule. Patterns from CC-BY-SA-4.0 sources (trailofbits/skills/modern-python, trailofbits/skills/property-based-testing) were reimplemented clean per the license-hygiene rule.
+Source-comparison build comparing against multiple upstream sources. Patterns from CC-BY-SA-4.0 sources (trailofbits/skills/modern-python, trailofbits/skills/property-based-testing) were reimplemented clean per the license-hygiene rule.

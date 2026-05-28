@@ -383,4 +383,4 @@ The cycle runs: brainstorming (no code yet) → TDD (one failing test) → if-bu
 
 ## Source attribution
 
-Source-comparison build per the repo-evaluation runbook "build with everything-comparison" rule. No source's content was forked verbatim; the patterns were extracted, merged, and re-expressed in caveman-form. Where obra owns specific framings ("Iron Law", "Violating the letter is violating the spirit", "verify-fail diamond"), those frames are credited inline.
+Source-comparison build comparing against multiple upstream sources. No source's content was forked verbatim; the patterns were extracted, merged, and re-expressed in caveman-form. Where obra owns specific framings ("Iron Law", "Violating the letter is violating the spirit", "verify-fail diamond"), those frames are credited inline.
