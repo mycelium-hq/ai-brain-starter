@@ -70,6 +70,12 @@ ABS_FINGERPRINTS = [
     # Legacy session-start context loaders shipped via ai-brain-starter:
     "SESSION START: CLAUDE.md is already auto-loaded",
     ".ai-brain-starter-last-update",
+    # Worktree-lifecycle hooks (cleanup + footprint observability):
+    "ai-brain-starter/hooks/snapshot-pending-work-on-stop.py",
+    "ai-brain-starter/hooks/surface-orphan-worktree-snapshots.py",
+    "ai-brain-starter/hooks/remove-ended-worktree.py",
+    "ai-brain-starter/hooks/enforce-worktree-cap.py",
+    "ai-brain-starter/hooks/worktree-footprint-signal.py",
 ]
 
 
