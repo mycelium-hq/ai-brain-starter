@@ -62,18 +62,7 @@ jobs:
           # docs/), vendored deps, lock files, and the workflows themselves
           # (this file MENTIONS the patterns by definition).
           for p in "${PATTERNS[@]}"; do
-            matches=$(git grep -nE "$p" \
-              -- ':!README*' ':!CHANGELOG*' ':!docs/' ':!*.md' \
-              ':!LICENSE*' ':!COPYING*' ':!NOTICE*' \
-              ':!AUTHORS*' ':!MAINTAINERS*' \
-              ':!*pyproject.toml' ':!*setup.py' ':!*setup.cfg' \
-              ':!*package.json' ':!*Cargo.toml' ':!*manifest.json' \
-              ':!.claude-plugin/' \
-              ':!.env.example' ':!*.env.example' \
-              ':!tests/integration/test_smoke.py' \
-              ':!vendor/' ':!node_modules/' ':!*.lock' \
-              ':!package-lock.json' ':!pnpm-lock.yaml' \
-              ':!.github/workflows/personal-pii-scrub.yml' 2>/dev/null || true)
+            matches=$(git grep -nE "$p"               -- ':!README*' ':!CHANGELOG*' ':!docs/' ':!*.md'               ':!LICENSE*' ':!COPYING*' ':!NOTICE*'               ':!AUTHORS*' ':!MAINTAINERS*'               ':!*pyproject.toml' ':!*setup.py' ':!*setup.cfg'               ':!*package.json' ':!*Cargo.toml' ':!*manifest.json'               ':!.claude-plugin/'               ':!.env.example' ':!*.env.example'               ':!tests/integration/test_smoke.py'               ':!vendor/' ':!node_modules/' ':!*.lock'               ':!package-lock.json' ':!pnpm-lock.yaml'               ':!.github/workflows/personal-pii-scrub.yml' 2>/dev/null || true)
             if [ -n "$matches" ]; then
               echo "::error::personal-data pattern leaked into source: $p"
               echo "$matches"
@@ -132,20 +121,7 @@ jobs:
             # -a forces grep to treat binary-detected files as text so
             # extracted scripts with non-UTF8 bytes still get scanned.
             for p in "${PATTERNS[@]}"; do
-              matches=$(grep -rnaE \
-                --exclude='README*' --exclude='CHANGELOG*' --exclude='*.md' \
-                --exclude='LICENSE*' --exclude='COPYING*' --exclude='NOTICE*' \
-                --exclude='AUTHORS*' --exclude='MAINTAINERS*' \
-                --exclude='pyproject.toml' --exclude='setup.py' \
-                --exclude='setup.cfg' --exclude='package.json' \
-                --exclude='Cargo.toml' --exclude='manifest.json' \
-                --exclude='.env.example' \
-                --exclude='test_smoke.py' \
-                --exclude='*.lock' --exclude='package-lock.json' \
-                --exclude='pnpm-lock.yaml' \
-                --exclude-dir='vendor' --exclude-dir='node_modules' \
-                --exclude-dir='docs' --exclude-dir='.claude-plugin' \
-                "$p" "$tmp" 2>/dev/null || true)
+              matches=$(grep -rnaE                 --exclude='README*' --exclude='CHANGELOG*' --exclude='*.md'                 --exclude='LICENSE*' --exclude='COPYING*' --exclude='NOTICE*'                 --exclude='AUTHORS*' --exclude='MAINTAINERS*'                 --exclude='pyproject.toml' --exclude='setup.py'                 --exclude='setup.cfg' --exclude='package.json'                 --exclude='Cargo.toml' --exclude='manifest.json'                 --exclude='.env.example'                 --exclude='test_smoke.py'                 --exclude='*.lock' --exclude='package-lock.json'                 --exclude='pnpm-lock.yaml'                 --exclude-dir='vendor' --exclude-dir='node_modules'                 --exclude-dir='docs' --exclude-dir='.claude-plugin'                 "$p" "$tmp" 2>/dev/null || true)
               if [ -n "$matches" ]; then
                 echo "::error::personal-data pattern leaked into $archive: $p"
                 echo "$matches" | sed "s|^$tmp/|$archive::|"
