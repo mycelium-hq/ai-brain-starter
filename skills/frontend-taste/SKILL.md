@@ -430,6 +430,7 @@ When the brief is editorial / clean / quiet premium:
 | Magnetic hover collapses performance on mobile | Framer Motion `useMotionValue` + `useTransform`, NOT `useState`. |
 | Tailwind v4 syntax in v3 project | Check `package.json` first. v4: `@tailwindcss/postcss` or Vite plugin. |
 | Layout jumps from animating top/left/width/height | EXCLUSIVELY `transform` + `opacity`. |
+| Framer Motion `x`/`y`/`scale` props drop frames under load | These shorthands run on rAF/main thread, NOT the GPU. Use the full string: `animate={{ transform: "translateX(100px)" }}`, not `animate={{ x: 100 }}`. CSS animations stay smooth when the main thread is busy; Framer shorthands don't. |
 | Grain/noise filters tank scroll FPS | Filters EXCLUSIVELY on fixed `pointer-events-none` overlays. |
 | `'use client'` everywhere | Default Server Components. Extract interactive leaves. |
 | `backdrop-blur` everywhere kills scroll FPS | ONLY fixed/sticky elements. |
