@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+"""Remove the just-ended session's scratch worktree — the event-driven fix
+for git-worktree pileup.
+
+THE BUG THIS FIXES
+------------------
+Stock Claude Code creates a fresh worktree under `.claude/worktrees/<slug>/`
+per session but never removes it. The weekly prune script only deletes
+*branches* whose worktree dir is already gone — nothing removes the DIRECTORY.
+So worktrees accumulate, each a full vault checkout, until a cloud-sync daemon
+(iCloud/OneDrive/Dropbox) or the disk falls over (observed: 102 worktrees /
+1.29M files / ~25GB). Scheduled cleanup of an unbounded resource is the
+anti-pattern; this removes each worktree at the moment its session ends.
+
+SAFETY (see _lib/worktree_safety.py for the full guarantee)
+-----------------------------------------------------------
+  * Only acts on `claude/<slug>` SCRATCH branches — never a deliberate
+    feature-branch worktree you created on purpose.
+  * Snapshots any genuinely-unsaved content (not in git's object DB) to
+    `⚙️ Meta/Worktree Snapshots/<slug>/` first. If ANY such file can't be
+    copied, REFUSES to delete (fail safe).
+  * `git worktree remove` keeps the branch ref, so committed work survives.
+  * Runs LAST in the SessionEnd chain (after reconcile/scrub) so it doesn't
+    pull the rug from under sibling hooks.
+
+Bypass: KEEP_WORKTREE_ON_END=1  (keep every worktree — opt back into manual cleanup)
+
+WIRING (SessionEnd, last):
+  "SessionEnd": [
+    {"hooks": [{
+      "type": "command",
+      "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/remove-ended-worktree.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'"
+    }]}
+  ]
+Pairs with snapshot-pending-work-on-stop.py (Stop) and enforce-worktree-cap.py
+(SessionStart, backstop for sessions that crash before SessionEnd fires).
+"""
+from __future__ import annotations
+
+import json
+import os
+import sys
+from datetime import datetime
+from pathlib import Path
+
+HOOK_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(HOOK_DIR))
+
+from _lib.worktree_safety import (  # noqa: E402
+    current_worktree,
+    find_main_repo,
+    git,
+    remove_worktree,
+    snapshot_unrecoverable,
+)
+
+LOG_REL = "⚙️ Meta/logs/worktree-cleanup.log"
+
+
+def _log(main_repo: Path, msg: str) -> None:
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        log = main_repo / LOG_REL
+        log.parent.mkdir(parents=True, exist_ok=True)
+        with open(log, "a", encoding="utf-8") as f:
+            f.write(f"[{ts}] {msg}\n")
+    except OSError:
+        pass
+
+
+def _done() -> int:
+    print(json.dumps({"continue": True, "suppressOutput": True}))
+    return 0
+
+
+def main() -> int:
+    if os.environ.get("KEEP_WORKTREE_ON_END") == "1":
+        return _done()
+
+    cw = current_worktree()
+    if cw is None:
+        return _done()  # not in a worktree — nothing to clean
+    worktree, slug = cw
+
+    main_repo = find_main_repo()
+    if main_repo is None or main_repo.resolve() == worktree.resolve():
+        return _done()
+
+    # Only auto-remove throwaway claude/<slug> scratch worktrees. A deliberate
+    # feature-branch worktree is left untouched.
+    try:
+        br = git(worktree, ["rev-parse", "--abbrev-ref", "HEAD"], timeout=15)
+        branch = br.stdout.decode().strip()
+    except Exception:
+        return _done()
+    if not branch.startswith("claude/"):
+        _log(main_repo, f"keep {slug}: branch {branch!r} is not claude/* scratch")
+        return _done()
+
+    snapped, recoverable, all_safe = snapshot_unrecoverable(main_repo, worktree, slug)
+    if not all_safe:
+        _log(main_repo, f"REFUSE remove {slug}: a genuinely-unsaved file could "
+                        f"not be snapshotted (snapped={snapped}). Worktree kept.")
+        return _done()
+
+    # chdir out of the worktree before removing it.
+    try:
+        os.chdir(main_repo)
+    except OSError:
+        pass
+
+    if remove_worktree(main_repo, worktree, force=True):
+        _log(main_repo, f"removed {slug} (branch {branch} kept; "
+                        f"snapshotted {snapped} unsaved, {recoverable} recoverable-from-git)")
+    else:
+        _log(main_repo, f"WARN: git worktree remove failed for {slug}")
+    return _done()
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except Exception:
+        # Never let cleanup break session teardown.
+        print(json.dumps({"continue": True, "suppressOutput": True}))
+        sys.exit(0)
