@@ -214,6 +214,23 @@ def test_project_scoping():
         check("feedback_voice_no_em_dash" in slugs, "global instinct still visible everywhere")
 
 
+def test_cli_invocation():
+    print("test_cli_invocation")
+    import subprocess
+    with tempfile.TemporaryDirectory() as t:
+        md = make_memory(Path(t))
+        cli_path = str(ROOT / "scripts" / "instinct.py")
+        # --memory-dir must work AFTER the subcommand (the natural position)
+        r = subprocess.run([sys.executable, cli_path, "backfill", "--memory-dir", str(md), "--no-backup"],
+                           capture_output=True, text=True)
+        check(r.returncode == 0, f"`backfill --memory-dir X` exits 0 (rc={r.returncode}; {r.stderr.strip()[:80]})")
+        r = subprocess.run([sys.executable, cli_path, "report", "--memory-dir", str(md), "--json"],
+                           capture_output=True, text=True)
+        check(r.returncode == 0 and '"instincts"' in r.stdout, "`report --json` exits 0 with JSON")
+        # --no-backup leaves no .bak-instinct files
+        check(not list(md.glob("*.bak-instinct")), "--no-backup leaves no .bak-instinct siblings")
+
+
 def main():
     print("=== Instinct Engine regression tests ===")
     test_confidence_math()
@@ -222,6 +239,7 @@ def main():
     test_export_import_roundtrip()
     test_evolve()
     test_project_scoping()
+    test_cli_invocation()
     print(f"\n{'ALL PASS' if not FAILS else str(len(FAILS)) + ' FAILURE(S): ' + '; '.join(FAILS)}")
     return 1 if FAILS else 0
 

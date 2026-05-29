@@ -432,33 +432,37 @@ def _render_proposal(domain: str, members: list, median: float, today: date) -> 
 # main
 # ---------------------------------------------------------------------------
 def build_parser() -> argparse.ArgumentParser:
+    # --memory-dir lives on a shared parent so it is accepted AFTER the
+    # subcommand (the natural position: `instinct.py backfill --memory-dir X`).
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--memory-dir", help="Agent Memory dir (default: auto-detect)")
+
     p = argparse.ArgumentParser(description="Instinct Engine v2 CLI")
-    p.add_argument("--memory-dir", help="Agent Memory dir (default: auto-detect)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    sp = sub.add_parser("backfill")
+    sp = sub.add_parser("backfill", parents=[common])
     sp.add_argument("--dry-run", action="store_true")
     sp.add_argument("--no-backup", action="store_true",
                     help="skip .bak-instinct snapshots (use when files are git-tracked)")
-    sp = sub.add_parser("reinforce"); sp.add_argument("ident"); sp.add_argument("--dry-run", action="store_true")
-    sp = sub.add_parser("correct"); sp.add_argument("ident"); sp.add_argument("--dry-run", action="store_true")
-    sp = sub.add_parser("decay"); sp.add_argument("--dry-run", action="store_true")
+    sp = sub.add_parser("reinforce", parents=[common]); sp.add_argument("ident"); sp.add_argument("--dry-run", action="store_true")
+    sp = sub.add_parser("correct", parents=[common]); sp.add_argument("ident"); sp.add_argument("--dry-run", action="store_true")
+    sp = sub.add_parser("decay", parents=[common]); sp.add_argument("--dry-run", action="store_true")
 
-    sp = sub.add_parser("recompute")
+    sp = sub.add_parser("recompute", parents=[common])
     sp.add_argument("--dry-run", action="store_true"); sp.add_argument("--limit", type=int, default=20)
 
-    sp = sub.add_parser("report")
+    sp = sub.add_parser("report", parents=[common])
     sp.add_argument("--project"); sp.add_argument("--min-confidence", type=float, default=0.0)
     sp.add_argument("--stale", action="store_true"); sp.add_argument("--json", action="store_true")
     sp.add_argument("--limit", type=int)
 
-    sp = sub.add_parser("export")
+    sp = sub.add_parser("export", parents=[common])
     sp.add_argument("--project"); sp.add_argument("--min-confidence", type=float, default=0.0)
     sp.add_argument("--all", action="store_true"); sp.add_argument("--out")
 
-    sp = sub.add_parser("import"); sp.add_argument("file"); sp.add_argument("--dry-run", action="store_true")
+    sp = sub.add_parser("import", parents=[common]); sp.add_argument("file"); sp.add_argument("--dry-run", action="store_true")
 
-    sp = sub.add_parser("evolve"); sp.add_argument("--out")
+    sp = sub.add_parser("evolve", parents=[common]); sp.add_argument("--out")
     return p
 
 
