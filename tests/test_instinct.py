@@ -60,6 +60,14 @@ def test_confidence_math():
     check(il.seed_confidence("correction") == 0.75, "correction seeds 0.75")
     check(il.seed_confidence("implicit") == 0.50, "implicit seeds 0.50")
     check(il.seed_confidence(None) == il.SEED_DEFAULT, "no-strength seeds default")
+    check(il.seed_confidence(None, "feedback", "you MUST always commit") == il.SEED_FEEDBACK_CODIFIED,
+          "feedback + codified-rule language seeds high (0.82)")
+    check(il.seed_confidence(None, "feedback", "a mild preference here") == il.SEED_FEEDBACK,
+          "feedback w/o hard-rule language seeds 0.72")
+    check(il.seed_confidence(None, "discovery", "an audit finding") == il.SEED_DISCOVERY,
+          "discovery seeds 0.60")
+    check(il.seed_confidence("explicit", "discovery", "x") == 0.90,
+          "explicit strength overrides type-based seed")
     c0 = 0.5
     c1 = il.reinforce_confidence(c0)
     check(c0 < c1 < 1.0, f"reinforce increases + bounded ({c0}->{c1})")
@@ -214,6 +222,36 @@ def test_project_scoping():
         check("feedback_voice_no_em_dash" in slugs, "global instinct still visible everywhere")
 
 
+def test_reseed():
+    print("test_reseed")
+    with tempfile.TemporaryDirectory() as t:
+        md = Path(t) / "Agent Memory"
+        md.mkdir(parents=True)
+        # a feedback rule backfilled under the OLD flat 0.60 seed, codified body
+        (md / "feedback_codified_rule.md").write_text(
+            "---\nname: always commit\ntype: feedback\nconfidence: 0.6\n"
+            "observations: 1\nlast_seen: 2026-05-01\nproject_id: global\n---\n"
+            "You must ALWAYS commit when done. Never skip.\n", encoding="utf-8")
+        # a reinforced instinct that must NOT be reset
+        (md / "feedback_earned.md").write_text(
+            "---\nname: earned\ntype: feedback\nconfidence: 0.95\n"
+            "observations: 5\nlast_seen: 2026-05-20\nproject_id: global\n---\nbody\n", encoding="utf-8")
+        # an explicit-strength instinct that must NOT be reset
+        (md / "feedback_explicit.md").write_text(
+            "---\nname: explicit\ntype: feedback\nstrength: explicit\nconfidence: 0.9\n"
+            "observations: 1\nlast_seen: 2026-05-20\nproject_id: global\n---\nbody\n", encoding="utf-8")
+        cli.cmd_reseed(Args(no_backup=True), md)
+        c1 = il.parse_float(il.parse_instinct(md / "feedback_codified_rule.md").get("confidence"))
+        check(c1 == il.SEED_FEEDBACK_CODIFIED,
+              f"reseed lifts codified feedback 0.6 -> {il.SEED_FEEDBACK_CODIFIED} (got {c1})")
+        ls1 = il.parse_date(il.parse_instinct(md / "feedback_codified_rule.md").get("last_seen"))
+        check(ls1 == cli._today(), "reseed resets last_seen to engine-birth (today)")
+        c2 = il.parse_float(il.parse_instinct(md / "feedback_earned.md").get("confidence"))
+        check(c2 == 0.95, "reseed leaves reinforced (observations>1) instinct untouched")
+        c3 = il.parse_float(il.parse_instinct(md / "feedback_explicit.md").get("confidence"))
+        check(c3 == 0.9, "reseed leaves explicit-strength instinct untouched")
+
+
 def test_cli_invocation():
     print("test_cli_invocation")
     import subprocess
@@ -239,6 +277,7 @@ def main():
     test_export_import_roundtrip()
     test_evolve()
     test_project_scoping()
+    test_reseed()
     test_cli_invocation()
     print(f"\n{'ALL PASS' if not FAILS else str(len(FAILS)) + ' FAILURE(S): ' + '; '.join(FAILS)}")
     return 1 if FAILS else 0

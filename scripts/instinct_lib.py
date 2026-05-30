@@ -50,7 +50,22 @@ SEED_BY_STRENGTH = {
     "correction": 0.75,
     "implicit": 0.50,
 }
-SEED_DEFAULT = 0.60  # memory with no strength field (most discovery_* files)
+SEED_DEFAULT = 0.60  # memory with no strength field and no other signal
+
+# When `strength:` is absent we seed from the memory TYPE + content. A
+# `feedback_*` memory is a codified preference/correction by nature (higher
+# confidence); a `discovery_*` memory is an audit/finding (informational).
+# A feedback memory whose body carries hard-rule language is treated as an
+# explicit codified rule. This is a numeric SEED only — it never sets the
+# categorical `strength:` label (that stays judgment-gated, per the
+# preference-strength rule); the seed decays and reinforces from here.
+SEED_FEEDBACK_CODIFIED = 0.82
+SEED_FEEDBACK = 0.72
+SEED_DISCOVERY = 0.60
+CODIFIED_SIGNALS = (
+    "never", "always", "banned", "non-negotiable", "codified", " must ",
+    "do not", "don't", "mandatory", "required", "critical", "rule:",
+)
 
 CONF_FLOOR = 0.05  # a corrected/stale instinct never hits 0 — it can recover
 CONF_CEIL = 0.99   # never fully certain; leaves headroom for a future correction
@@ -76,9 +91,27 @@ def clamp(x: float, lo: float = CONF_FLOOR, hi: float = CONF_CEIL) -> float:
     return max(lo, min(hi, x))
 
 
-def seed_confidence(strength: str | None) -> float:
+def seed_confidence(strength: str | None,
+                    mtype: str | None = None,
+                    text: str | None = None) -> float:
+    """Initial confidence for a memory.
+
+    An explicit `strength:` always wins. Absent that, seed from the memory
+    type + content so the genuinely-codified rules are not flattened to the
+    default. `mtype`/`text` are optional so read-time fallbacks can call this
+    with just `strength`.
+    """
     if strength:
-        return SEED_BY_STRENGTH.get(strength.strip().lower(), SEED_DEFAULT)
+        s = strength.strip().lower()
+        if s in SEED_BY_STRENGTH:
+            return SEED_BY_STRENGTH[s]
+    t = (mtype or "").strip().lower()
+    if t == "feedback":
+        if text and any(sig in text.lower() for sig in CODIFIED_SIGNALS):
+            return SEED_FEEDBACK_CODIFIED
+        return SEED_FEEDBACK
+    if t == "discovery":
+        return SEED_DISCOVERY
     return SEED_DEFAULT
 
 

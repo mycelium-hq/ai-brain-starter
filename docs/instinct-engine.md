@@ -32,12 +32,20 @@ project_id: global    # scope (see §3)
 
 **Seeding** maps the existing `strength:` taxonomy onto a number:
 
-| strength | seed confidence |
+| signal | seed confidence |
 |---|---|
-| `explicit` (user stated it verbatim) | 0.90 |
-| `correction` (user corrected an action) | 0.75 |
-| `implicit` (inferred, unconfirmed) | 0.50 |
-| (no strength field) | 0.60 |
+| `strength: explicit` (user stated it verbatim) | 0.90 |
+| `strength: correction` (user corrected an action) | 0.75 |
+| `strength: implicit` (inferred, unconfirmed) | 0.50 |
+| no strength · `feedback_*` with hard-rule language (never / always / banned / codified / must) | 0.82 |
+| no strength · `feedback_*` (a codified preference) | 0.72 |
+| no strength · `discovery_*` (an audit / finding) | 0.60 |
+| no strength · other | 0.60 |
+
+Most memories never carried a `strength:` label, so the type/content seed is
+what gives the engine real signal on day one. `instinct.py reseed` recomputes
+this seed for instincts that have no `strength:` and have never been reinforced
+(it never resets a strengthened or reinforced instinct).
 
 **Bidirectional update** (the rule ECC states as "increases when repeatedly
 observed / decreases when corrected / decreases when unseen"):
@@ -133,7 +141,8 @@ one is skipped, and a brand-new one lands in `inherited/` (tagged
 ## 6. CLI reference
 
 ```
-python3 scripts/instinct.py backfill [--dry-run]
+python3 scripts/instinct.py backfill [--dry-run] [--no-backup]
+python3 scripts/instinct.py reseed   [--dry-run] [--no-backup]
 python3 scripts/instinct.py reinforce <slug>
 python3 scripts/instinct.py correct   <slug>
 python3 scripts/instinct.py decay     [--dry-run]

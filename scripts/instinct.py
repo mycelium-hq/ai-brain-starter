@@ -84,11 +84,16 @@ def cmd_backfill(args, memory_dir: Path) -> int:
             continue
         updates: dict[str, object] = {}
         if "confidence" not in fm:
-            updates["confidence"] = round(il.seed_confidence(fm.get("strength")), 3)
+            updates["confidence"] = round(
+                il.seed_confidence(fm.get("strength"), fm.get("type"), inst.body), 3)
         if "observations" not in fm:
             updates["observations"] = 1
         if "last_seen" not in fm:
-            updates["last_seen"] = il.file_mtime_date(path)
+            # Engine birth = today. File mtime is a poor proxy for "last
+            # observed": an active codified rule is in force regardless of when
+            # the file was written, so decay must accrue from the engine's
+            # first sight, not the file's age.
+            updates["last_seen"] = _today()
         if "project_id" not in fm:
             updates["project_id"] = il.PROJECT_GLOBAL
         if args.dry_run:
@@ -101,6 +106,40 @@ def cmd_backfill(args, memory_dir: Path) -> int:
     print(f"backfill: {touched} {'would be ' if args.dry_run else ''}updated, "
           f"{skipped} already complete (of "
           f"{sum(1 for _ in il.iter_instinct_paths(memory_dir))} instincts)")
+    return 0
+
+
+def cmd_reseed(args, memory_dir: Path) -> int:
+    """Recompute the SEED confidence (type/content-aware) for instincts that
+    have no explicit `strength:` and have never been reinforced
+    (observations <= 1). Leaves strengthened or reinforced instincts alone —
+    those carry earned signal that must not be reset."""
+    changed = skipped = 0
+    for path in il.iter_instinct_paths(memory_dir):
+        inst = il.parse_instinct(path)
+        fm = inst.fm
+        if fm.get("strength"):
+            skipped += 1
+            continue
+        if il.parse_int(fm.get("observations"), 0) > 1:
+            skipped += 1
+            continue
+        new_c = round(il.seed_confidence(None, fm.get("type"), inst.body), 3)
+        cur = il.parse_float(fm.get("confidence"))
+        today = _today()
+        conf_same = cur is not None and abs(cur - new_c) < 1e-6
+        seen_same = il.parse_date(fm.get("last_seen")) == today
+        if conf_same and seen_same:
+            continue
+        if args.dry_run:
+            print(f"WOULD reseed {path.name}: confidence {cur} -> {new_c}, last_seen -> {today}")
+            changed += 1
+            continue
+        new_text = il.set_managed_fields(inst, {"confidence": new_c, "last_seen": today})
+        if il.write_instinct(inst, new_text, backup=not getattr(args, "no_backup", False)):
+            changed += 1
+    print(f"reseed: {changed} {'would be ' if args.dry_run else ''}reseeded, "
+          f"{skipped} left untouched (strengthened or reinforced)")
     return 0
 
 
@@ -444,6 +483,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--dry-run", action="store_true")
     sp.add_argument("--no-backup", action="store_true",
                     help="skip .bak-instinct snapshots (use when files are git-tracked)")
+    sp = sub.add_parser("reseed", parents=[common])
+    sp.add_argument("--dry-run", action="store_true")
+    sp.add_argument("--no-backup", action="store_true")
     sp = sub.add_parser("reinforce", parents=[common]); sp.add_argument("ident"); sp.add_argument("--dry-run", action="store_true")
     sp = sub.add_parser("correct", parents=[common]); sp.add_argument("ident"); sp.add_argument("--dry-run", action="store_true")
     sp = sub.add_parser("decay", parents=[common]); sp.add_argument("--dry-run", action="store_true")
@@ -467,7 +509,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 DISPATCH = {
-    "backfill": cmd_backfill, "reinforce": cmd_reinforce, "correct": cmd_correct,
+    "backfill": cmd_backfill, "reseed": cmd_reseed,
+    "reinforce": cmd_reinforce, "correct": cmd_correct,
     "decay": cmd_decay, "recompute": cmd_recompute, "report": cmd_report,
     "export": cmd_export, "import": cmd_import, "evolve": cmd_evolve,
 }
