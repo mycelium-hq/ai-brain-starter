@@ -1,16 +1,19 @@
 name: lint
 
-# Catches the bug class that historically slipped through:
-#   - bash syntax errors in bootstrap.sh and other shell scripts
-#   - PowerShell parser errors in bootstrap.ps1, drift-check.ps1, update-check.ps1
-#   - missing UTF-8 BOM on .ps1 files (Windows PS 5.1 reads BOM-less as Windows-1252,
-#     crashes on first non-ASCII byte: em dash, the gear emoji, box-drawing chars)
-#   - em dashes in shell/PS scripts (defense-in-depth + matches voice rules)
-#   - invalid JSON in hooks.json and any *.mcp.json
-#   - phase docs that reference scripts which do not exist
+# Two kinds of check live here:
 #
-# Runs on every push and PR. ~60 seconds. $0 on public repos.
-# No untrusted user input used in any run: command (safe by construction).
+#   1. Pure-lint jobs (below): bash syntax, PowerShell parse, UTF-8 BOM on .ps1,
+#      no em dashes in .ps1, JSON validity, private-context tokens, phase-doc
+#      references, and the no-remote-pipe-install guard.
+#
+#   2. The unit/type gate: the `ci` job, which runs `bash scripts/ci.sh`. That
+#      script is the SINGLE source of truth for the unit/type gate - it runs
+#      (a) py_compile over every tracked *.py under Python 3.9 (the PEP 604
+#      `X | None` crash class) and (b) the 8 named tests in tests/integration/.
+#      The local pre-push gate (~/.local/bin/ci-test) runs the SAME
+#      `bash scripts/ci.sh`, so CI and the laptop gate cannot drift.
+#
+# Runs on every push and PR. No untrusted user input is used in any run: command.
 
 on:
   push:
@@ -102,32 +105,6 @@ jobs:
           done < <(find . -name '*.ps1' -not -path './.git/*')
           exit $fail
 
-  python-syntax:
-    name: Python syntax (3.9 - macOS system default)
-    runs-on: ubuntu-latest
-    # macOS ships /usr/bin/python3 as Python 3.9. Many users invoke hooks via
-    # that exact path. PEP 604 union syntax (X | None) in annotations crashes
-    # 3.9 at module load time. `from __future__ import annotations` is the
-    # canonical fix and works on 3.7+. This job catches the regression class
-    # before merge. No untrusted input used in any run: command.
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6
-        with:
-          python-version: "3.9"
-      - name: py_compile every .py
-        run: |
-          set -e
-          fail=0
-          while IFS= read -r f; do
-            if ! python3 -m py_compile "$f" 2>err; then
-              echo "::error file=$f::python3 -m py_compile failed on Python 3.9"
-              cat err | sed "s|^|  |"
-              fail=1
-            fi
-          done < <(find . -name '*.py' -not -path './.git/*' -not -path './node_modules/*' -not -path '*/__pycache__/*')
-          exit $fail
-
   json:
     name: JSON validity (hooks.json, *.mcp.json)
     runs-on: ubuntu-latest
@@ -210,79 +187,6 @@ jobs:
           fi
           echo "Private-context scan passed (added lines only)."
 
-  worktree-session-close:
-    name: worktree session-close invariant (#65)
-    runs-on: ubuntu-latest
-    # Catches the bug class from issue #65: session-end-hook.sh resolving
-    # VAULT to a worktree path instead of the main vault, which routed
-    # session commits to `claude/<slug>` branches that worktree-prune.sh
-    # later deleted. Test spawns a fake vault + worktree and asserts:
-    #   1. resolve_main_vault strips the worktree segment
-    #   2. worktree-prune refuses to delete branches with unmerged commits
-    #   3. worktree-prune still deletes fully-merged orphan branches
-    # No untrusted user input is referenced in any run: command.
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
-      - name: configure git identity
-        run: |
-          git config --global user.email "ci@example.com"
-          git config --global user.name "ci"
-      - name: run integration test
-        run: bash tests/integration/test_worktree_session_close.sh
-
-  bootstrap-dry-run:
-    name: bootstrap.sh end-to-end dry-run (no parse errors, all skills + commands fire)
-    runs-on: ubuntu-latest
-    # End-to-end coverage of the install path. Asserts bootstrap.sh
-    # --dry-run exits 0 (no syntax errors, no unbound variables, no
-    # logic breaks in any of the install sections) AND mentions every
-    # required skill AND fires the commands install section.
-    # Catches the bug class where a new section in bootstrap.sh has an
-    # error that only surfaces when a real install runs.
-    # No untrusted user input referenced.
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
-      - name: run E2E test
-        run: bash tests/integration/test_bootstrap_dry_run.sh
-
-  phase-doc-skills-installed:
-    name: phase-doc slash commands have matching install entries
-    runs-on: ubuntu-latest
-    # Catches the bug class where a phase doc tells the user to "run /foo"
-    # but the bootstrap install loop never copies the skill folder to
-    # ~/.claude/skills/, so /foo doesn't appear in their slash command list.
-    # Source incident: fresh install completed but /second-brain-mapping
-    # was missing because bootstrap.sh's install loop didn't include it.
-    # Test asserts: every user-runnable slash command referenced in phase
-    # docs has (a) a matching skill folder in skills/ AND (b) is in the
-    # bootstrap install loop.
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
-      - name: run integration test
-        run: bash tests/integration/test_phase_doc_slash_commands_installed.sh
-
-  reconcile-ff-invariant:
-    name: reconcile-worktree-shared FF invariant (PR #68)
-    runs-on: ubuntu-latest
-    # Catches the bug class from PR #68: reconcile-worktree-shared.py
-    # committing on the worktree branch instead of fast-forwarding it
-    # to master, which accumulated orphan commits on `claude/*` branches.
-    # Same family as #65, different mechanism. Test asserts:
-    #   1. Hook FF-merges worktree branch to master when files are
-    #      byte-identical and branch is a strict ancestor.
-    #   2. No new commits are created on `claude/<slug>` after FF.
-    #   3. Hook falls back to commit-on-branch when FF is impossible
-    #      (worktree branch diverged with its own commits).
-    # No untrusted user input is referenced in any run: command.
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
-      - name: configure git identity
-        run: |
-          git config --global user.email "ci@example.com"
-          git config --global user.name "ci"
-      - name: run integration test
-        run: bash tests/integration/test_reconcile_ff_invariant.sh
-
   references:
     name: phase docs reference real repo files
     runs-on: ubuntu-latest
@@ -315,63 +219,6 @@ jobs:
           done < <(grep -rn -E '`scripts/[A-Za-z0-9_./-]+\.(sh|ps1|py|plist)`' phases/ 2>/dev/null || true)
           [ -f /tmp/lint-ref-fail ] && exit 1 || exit 0
 
-  detect-closing-signal-worktree:
-    name: detect-closing-signal resolves to main vault from a worktree
-    runs-on: ubuntu-latest
-    # Catches the session-artifact stranding bug class: the UserPromptSubmit
-    # close-cascade hook (hooks/detect-closing-signal.py) set vault_root from
-    # its cwd, so when the cascade fired inside a worktree the session file,
-    # Decisions, Captures and Time Tracking all resolved worktree-side and
-    # were discarded when the worktree was archived. Same class as the
-    # worktree-session-close job (#65) but for Layer 1 of the cascade, not the
-    # Stop hook. Test asserts the resolved session file lands in the MAIN
-    # vault, never under .claude/worktrees/, and the worktree slug is kept.
-    # No untrusted user input is referenced in any run: command.
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
-      - name: run integration test
-        run: bash tests/integration/test_detect_closing_signal_worktree.sh
-
-  stranded-session-artifacts-watchdog:
-    name: stranded-session-artifacts watchdog detects uncommitted worktree writes
-    runs-on: ubuntu-latest
-    # Layer 3 of the stranding defense: hooks/surface-stranded-session-artifacts.py
-    # is a SessionStart watchdog that flags session artifacts left uncommitted
-    # inside a worktree (which the archive step would discard). Test asserts it
-    # detects an uncommitted session file, names the offending worktree, stays
-    # silent when worktrees are clean, and does not flag committed artifacts.
-    # No untrusted user input is referenced in any run: command.
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
-      - name: configure git identity
-        run: |
-          git config --global user.email "ci@example.com"
-          git config --global user.name "ci"
-      - name: run integration test
-        run: bash tests/integration/test_stranded_session_artifacts_watchdog.sh
-
-  session-coordination-guards:
-    name: session-coordination guard hooks (cd-into-main / F821 pre-commit / sibling lock)
-    runs-on: ubuntu-latest
-    # Regression test for the three multi-session guard hooks in hooks/:
-    # check-cd-outside-worktree.py (blocks `cd` into the main checkout from a
-    # worktree-rooted session), check-py-import-precommit.py (blocks committing
-    # F821 / missing-import Python), and session-lock.py (warns when two sessions
-    # share a repo). Asserts block + allow + bypass-env + fail-open for each, so
-    # any logic/bypass/fail-open regression flips an assertion and fails the job.
-    # ruff is installed so the F821 block path is exercised, not just fail-open.
-    # No untrusted user input is referenced in any run: command.
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
-      - name: configure git identity
-        run: |
-          git config --global user.email "ci@example.com"
-          git config --global user.name "ci"
-      - name: install ruff (exercise the F821 block path)
-        run: pipx install ruff || python3 -m pip install --user ruff || true
-      - name: run integration test
-        run: bash tests/integration/test_session_coordination_guards.sh
-
   no-remote-pipe-install:
     name: install docs never pipe remote code into a shell
     runs-on: ubuntu-latest
@@ -401,21 +248,35 @@ jobs:
           done < <(find README.md bootstrap.sh bootstrap.ps1 phases -type f \( -name '*.md' -o -name '*.sh' -o -name '*.ps1' \))
           exit $fail
 
-  trust-prompt-preframing:
-    name: install pre-frames Claude Code's trust prompt
+  ci:
+    name: ci gate (py_compile + integration tests)
     runs-on: ubuntu-latest
-    # Catches the bug class from the May 2026 installer-panic incident: a
-    # non-technical user hit Claude Code's built-in trust prompt for the
-    # third-party plugins, marketplaces, and MCP servers the bootstrap
-    # registers, with no warning, and nearly abandoned the install thinking
-    # malware was being slipped onto the machine. The trust prompt is correct
-    # and is NOT suppressed; the fix is to pre-frame it everywhere the
-    # installer looks. Fails if any pre-framing surface is removed (README
-    # EN+ES sections, the maintainer-guide instruction, phase-00 Step 0.0b,
-    # the bootstrap.sh and bootstrap.ps1 heads-up lines), or if the false
-    # "no questions, it just runs" promise returns to the README.
+    # The repo's unit/type gate, consolidated into ONE command - scripts/ci.sh -
+    # so this workflow and the local pre-push gate (~/.local/bin/ci-test, which
+    # resolves this repo to mode=canon) run the EXACT same thing and cannot drift.
+    #
+    # scripts/ci.sh runs:
+    #   (a) py_compile every tracked *.py. The setup-python step below pins
+    #       Python 3.9 so `python3` is 3.9, catching the PEP 604 `X | None`
+    #       annotation class that crashes 3.9 at module load (many users invoke
+    #       hooks via macOS's system /usr/bin/python3, which is 3.9).
+    #   (b) the 8 named integration tests under tests/integration/, in order.
+    #
+    # The setup mirrors what the old per-test jobs did: setup-python 3.9 for the
+    # py_compile check, a git identity (the tests create temp repos and commit),
+    # and ruff so test_session_coordination_guards exercises the F821 block path
+    # (it fails open and stays green when ruff is absent).
     # No untrusted user input is referenced in any run: command.
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
-      - name: run integration test
-        run: bash tests/integration/test_trust_prompt_preframing.sh
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6
+        with:
+          python-version: "3.9"
+      - name: configure git identity (integration tests create temp repos)
+        run: |
+          git config --global user.email "ci@example.com"
+          git config --global user.name "ci"
+      - name: install ruff (exercise the F821 block path in session-coordination-guards)
+        run: pipx install ruff || python3 -m pip install --user ruff || true
+      - name: run the canonical CI gate
+        run: bash scripts/ci.sh
