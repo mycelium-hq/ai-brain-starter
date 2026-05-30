@@ -123,6 +123,24 @@
             "statusMessage": "Validating skill frontmatter (skill.json schema)..."
           }
         ]
+      },
+      {
+        "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit|Read|Glob|Grep|Task|Agent|Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/observe-tool-calls.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/observe-tool-calls.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'"
+          }
+        ]
       }
     ],
 

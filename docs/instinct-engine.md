@@ -1,0 +1,170 @@
+# The Instinct Engine
+
+A self-improving memory layer for your second brain. It turns flat-file agent
+memories (`feedback_*.md` / `discovery_*.md`) into a **confidence-weighted,
+decaying, project-scoped, portable** instinct library — and captures 100% of
+tool calls deterministically so pattern extraction stops being guesswork.
+
+Before this engine, `/patterns` reconstructed "what happened this session" by
+re-reading the transcript in context — probabilistic (~50-80%) and lossy — and
+memories had only a categorical `strength:` (explicit / correction / implicit),
+no number, no decay, no portability. The Instinct Engine adds the six things
+that were missing.
+
+> **Provenance.** The patterns here were derived from an audit of
+> [affaan-m/ECC](https://github.com/affaan-m/ECC) (`continuous-learning-v2`,
+> `/evolve`, `/instinct-import`) and **reimplemented clean** per the
+> license-hygiene rule — pattern adopted, code original.
+
+---
+
+## 1. Confidence + decay
+
+Every instinct carries four managed frontmatter keys (added by `backfill`,
+never clobbering your existing keys or body):
+
+```yaml
+confidence: 0.90      # 0.0–1.0, effective belief in this instinct
+observations: 4       # times reinforced
+last_seen: 2026-05-29 # last reinforce/correct/decay date
+project_id: global    # scope (see §3)
+```
+
+**Seeding** maps the existing `strength:` taxonomy onto a number:
+
+| signal | seed confidence |
+|---|---|
+| `strength: explicit` (user stated it verbatim) | 0.90 |
+| `strength: correction` (user corrected an action) | 0.75 |
+| `strength: implicit` (inferred, unconfirmed) | 0.50 |
+| no strength · `feedback_*` with hard-rule language (never / always / banned / codified / must) | 0.82 |
+| no strength · `feedback_*` (a codified preference) | 0.72 |
+| no strength · `discovery_*` (an audit / finding) | 0.60 |
+| no strength · other | 0.60 |
+
+Most memories never carried a `strength:` label, so the type/content seed is
+what gives the engine real signal on day one. `instinct.py reseed` recomputes
+this seed for instincts that have no `strength:` and have never been reinforced
+(it never resets a strengthened or reinforced instinct).
+
+**Bidirectional update** (the rule ECC states as "increases when repeatedly
+observed / decreases when corrected / decreases when unseen"):
+
+- **reinforce** — `c' = c + 0.15·(1 − c)` (climbs with diminishing returns; ceiling 0.99).
+- **correct** — `c' = max(0.05, c · 0.5)` (sharp, recoverable halving).
+- **decay** — flat for a 30-day grace window, then a 180-day half-life curve
+  on time since `last_seen`. Non-compounding: decay applies the true elapsed
+  staleness once and advances `last_seen`, so running it daily never
+  double-erodes.
+
+The CLI does the math; `/patterns` decides WHICH instinct to reinforce or
+correct based on the observation ledger + the conversation.
+
+---
+
+## 2. The 100% observe loop
+
+`hooks/observe-tool-calls.py` is a `PreToolUse` hook that fires on **every**
+matched tool call and appends one scrubbed JSON line to
+`~/.claude/instinct/observations.jsonl`:
+
+```json
+{"ts":"2026-05-29T23:40:00Z","session":"a1b2c3d4","project":"repo:my-app","tool":"Bash","action":"bash:git","detail":"git status"}
+```
+
+It is built to three hard contracts:
+
+1. **Never blocks** — always emits the neutral passthrough, even on its own
+   internal error. A ledger must never degrade a real tool call.
+2. **Fast** — no subprocess on the hot path; the project key comes from a cheap
+   filesystem walk.
+3. **Sensitive-path-safe** — logs the tool + a COARSE action + a short detail,
+   never file CONTENT; suppresses detail for secret-bearing paths
+   (`.env`, `admin.env`, `*.key`, `.ssh/`, …); runs every captured string
+   through a secret scrubber (AWS/GitHub/Stripe/Anthropic/OpenAI/npm patterns +
+   `key=`/`token=`/`Bearer` forms).
+
+This is **complementary to** `post-tool-use-learnings.py`, which captures only
+failures + explicit `<learning>` annotations as episodic notes. The observe
+ledger is the full, scrubbed tool-call stream that `/patterns` reads instead of
+re-scanning the transcript.
+
+---
+
+## 3. Project scoping
+
+`project_id` isolates instincts so a repo-specific convention does not bleed
+into unrelated work:
+
+- `global` — applies everywhere (the default; all existing memories backfill to this).
+- `personal-vault` — the vault's own instincts.
+- `repo:<name>` / a remote-url hash — a specific code repo.
+
+A context loader (and `export`) surfaces `project_id == current OR global`, so
+project isolation is **opt-in for future instincts** and **never hides**
+anything that is currently global.
+
+---
+
+## 4. /evolve — promote a cluster into a structure
+
+When a domain accumulates several high-confidence instincts, `/evolve` proposes
+promoting them into ONE structure:
+
+```bash
+python3 scripts/instinct.py evolve
+```
+
+Clusters instincts by inferred domain; any cluster with **≥ 2 instincts and
+median confidence ≥ 0.80** gets a proposed-skill scaffold written to
+`⚙️ Meta/Instinct Proposals/`. Promotion to a real Command/Skill/Agent is a
+human judgment call — the scaffold is a starting point, not an auto-created skill.
+
+---
+
+## 5. Portable export / import
+
+```bash
+python3 scripts/instinct.py export --min-confidence 0.70 --out pack.yaml
+python3 scripts/instinct.py import pack.yaml --dry-run   # review
+python3 scripts/instinct.py import pack.yaml             # apply
+```
+
+The pack unit is one instinct: `id / trigger / confidence / domain /
+source_repo` + `action` + `evidence`. Import is **confidence-gated**: a
+higher-confidence incoming instinct updates the local one, an equal-or-lower
+one is skipped, and a brand-new one lands in `inherited/` (tagged
+`inherited: true`, `observations: 0`).
+
+---
+
+## 6. CLI reference
+
+```
+python3 scripts/instinct.py backfill [--dry-run] [--no-backup]
+python3 scripts/instinct.py reseed   [--dry-run] [--no-backup]
+python3 scripts/instinct.py reinforce <slug>
+python3 scripts/instinct.py correct   <slug>
+python3 scripts/instinct.py decay     [--dry-run]
+python3 scripts/instinct.py recompute [--limit N]      # decay + report
+python3 scripts/instinct.py report    [--project P] [--min-confidence F] [--stale] [--json] [--limit N]
+python3 scripts/instinct.py export    [--project P] [--min-confidence F] [--all] [--out FILE]
+python3 scripts/instinct.py import    FILE [--dry-run]
+python3 scripts/instinct.py evolve    [--out DIR]
+```
+
+Memory dir resolves from `--memory-dir` → `$INSTINCT_MEMORY_DIR` → an upward
+walk for `*Meta/Agent Memory` → the default vault path.
+
+---
+
+## 7. Safety + tests
+
+- Every managed-field write keeps a one-time `<file>.bak-instinct` snapshot.
+- Edits are **surgical**: only the four managed keys change; all other
+  frontmatter lines and the entire body are byte-preserved.
+- Runs are idempotent — a second identical run writes nothing.
+- `python3 tests/test_instinct.py` covers the math, surgical editing,
+  backfill/correct/reinforce, export/import round-trip, evolve, and project
+  scoping. `python3 hooks/observe-tool-calls.py --self-test` covers capture +
+  redaction.
