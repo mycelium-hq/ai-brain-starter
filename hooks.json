@@ -25,6 +25,12 @@
           },
           {
             "type": "command",
+            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/inject-instinct-context.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "once": true,
+            "statusMessage": "Loading project-scoped instincts..."
+          },
+          {
+            "type": "command",
             "command": "bash '[VAULT_PATH]/⚙️ Meta/scripts/graph-context-hook.sh'",
             "statusMessage": "Checking graph routing..."
           },
