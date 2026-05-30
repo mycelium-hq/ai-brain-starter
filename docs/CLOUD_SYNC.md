@@ -95,6 +95,56 @@ Your vault `.gitignore` should contain at least:
   the source notes on a local disk; the heavy index never touches your
   machine's sync scope.
 
+## The guardrails, concretely
+
+These ship as session hooks (install via `docs/HOOKS_INSTALL.md`). They are
+**non-destructive by design**: they reclaim only what is provably
+reconstructible, and they *surface* (never auto-delete) anything that needs
+judgment.
+
+| When | Hook | What it does |
+|---|---|---|
+| SessionEnd | `remove-ended-worktree.py` | removes that session's scratch worktree (committed work stays on its branch, unsaved work is snapshotted first) |
+| SessionStart | `enforce-worktree-cap.py` | caps scratch worktrees (default 12), reclaiming the oldest idle ones a crash left behind |
+| SessionStart | `worktree-footprint-signal.py` | warns early on worktree count, orphan dirs, low free disk, and the dangerous vault-in-a-cloud-sync-folder combo |
+| SessionStart | `remediate-runaway-procs.py` | reaps orphaned runaway processes (the `yes`-pileup class), pure waste with zero recoverable output |
+| weekly cron | `scripts/worktree-prune.sh` | backstop: safe reclaim of orphan dirs + merged-branch cleanup + snapshot retention |
+
+**The non-destructive contract.** Auto-remediation fixes only reconstructible
+things: a scratch worktree directory (recreatable from its branch), an orphaned
+runaway process (no output to lose), git's stale worktree refs. It NEVER
+auto-deletes the judgment calls (unpushed commits, stashes, or a directory
+whose git metadata it cannot reason about); those are *surfaced* for you to
+decide. The discriminator for worktree removal is **location**
+(`.claude/worktrees/` scratch), not branch name: a deliberate
+`~/dev/<repo>-<slug>` sibling worktree is never touched, even when idle and on a
+`claude/*` branch.
+
+**Force a reclaim now** (snapshot-first; classifies each dir, never
+blind-deletes; a dir with genuinely-unsaved work or dangling git metadata is
+kept and reported):
+
+```bash
+# preview what would be reclaimed
+python3 ~/.claude/skills/ai-brain-starter/scripts/worktree-reclaim.py --dry-run
+# do it
+python3 ~/.claude/skills/ai-brain-starter/scripts/worktree-reclaim.py
+```
+
+**Don't write secrets into notes.** A live API key in a note gets committed,
+synced, and indexed. The `block-secret-in-note.py` write guard refuses a
+Write/Edit that would put a high-confidence credential (AWS / GitHub PAT /
+provider keys / database-URL passwords) into a `.md`/`.txt` note. Store it in
+the keychain or a gitignored secrets file and reference it by name instead.
+
+## Order matters: back up before you move
+
+Relocating the vault out of a sync folder is the right fix, but the vault is
+often the one irreplaceable asset, so **stand up an encrypted backup and pull a
+real restore from it FIRST, then relocate.** A backup you have never restored is
+a hope, not a backup. Encrypted restic to a local repo gets you protected
+immediately; add an offsite copy when you can. (See `docs/MAINTENANCE.md`.)
+
 A brain that melts the machine it runs on isn't a brain you'll keep. Local
 disk for the source, server-side for the index, encrypted-and-verified for
 the backup. That's the whole policy.

@@ -46,6 +46,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime
@@ -76,7 +77,34 @@ ABS_FINGERPRINTS = [
     "ai-brain-starter/hooks/remove-ended-worktree.py",
     "ai-brain-starter/hooks/enforce-worktree-cap.py",
     "ai-brain-starter/hooks/worktree-footprint-signal.py",
+    # Auto-remediation (the FIX side of the surfacing hooks):
+    "ai-brain-starter/hooks/remediate-runaway-procs.py",
+    # Write-time secret guard:
+    "ai-brain-starter/hooks/block-secret-in-note.py",
 ]
+
+# Path-divergence-robust matching: an ai-brain-starter hook may be wired at the
+# skill path (~/.claude/skills/ai-brain-starter/hooks/) OR copied into the user
+# hooks dir (~/.claude/hooks/). Dedup must recognize both as the same hook by
+# SCRIPT BASENAME, else a re-run duplicates every hook a hand-maintained config
+# wired at the user-hooks path. Only OUR script basenames are matched this way.
+ABS_OWNED_BASENAMES = {
+    "detect-closing-signal.py", "lint-vault-frontmatter.py", "log-skill-usage.py",
+    "first-week-checkin.py", "migrate-to-user-level.py",
+    "inject-love-language-context.py", "inject-meeting-workflow-on-trigger.py",
+    "session-end-hook.sh", "email-gate-hook.py", "graph-context-hook.sh",
+    "snapshot-pending-work-on-stop.py", "surface-orphan-worktree-snapshots.py",
+    "remove-ended-worktree.py", "enforce-worktree-cap.py",
+    "worktree-footprint-signal.py", "remediate-runaway-procs.py",
+    "block-secret-in-note.py",
+}
+
+_SCRIPT_RE = re.compile(r"([\w.-]+\.(?:py|sh))")
+
+
+def _owned_basenames(cmd: str) -> set[str]:
+    """Owned ai-brain-starter script basenames referenced in a command."""
+    return {os.path.basename(m) for m in _SCRIPT_RE.findall(cmd)} & ABS_OWNED_BASENAMES
 
 
 def find_repo_root() -> Path:
@@ -98,15 +126,20 @@ def load_hooks_template(path: Path) -> dict:
 
 
 def is_abs_owned(command: str) -> bool:
-    return any(fp in command for fp in ABS_FINGERPRINTS)
+    if any(fp in command for fp in ABS_FINGERPRINTS):
+        return True
+    return bool(_owned_basenames(command))
 
 
 def is_same_command(a: str, b: str) -> bool:
-    """Two commands count as the same if they reference the same script and
-    fall under the same ABS fingerprint."""
+    """Two commands count as the same hook if they share an ABS fingerprint OR
+    an owned script basename (so a skill-path entry and a ~/.claude/hooks/ entry
+    for the same script dedup to one), else if the literal text matches."""
     for fp in ABS_FINGERPRINTS:
         if fp in a and fp in b:
             return True
+    if _owned_basenames(a) & _owned_basenames(b):
+        return True
     return a.strip() == b.strip()
 
 
