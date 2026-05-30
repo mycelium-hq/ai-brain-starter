@@ -40,6 +40,7 @@ from _lib.worktree_safety import (  # noqa: E402
     WORKTREES_SEG,
     detect_cloud_sync,
     find_main_repo,
+    is_scratch_worktree,
     list_worktrees,
 )
 
@@ -72,7 +73,9 @@ def main() -> int:
     except ValueError:
         free_floor = DEFAULT_FREE_GB
 
-    registered = len(list_worktrees(main_repo))
+    # Count only scratch worktrees for the cap warning; deliberate sibling
+    # worktrees (~/dev/<repo>-<slug>) are not part of the pileup problem.
+    registered = sum(1 for w in list_worktrees(main_repo) if is_scratch_worktree(w))
 
     wt_dir = main_repo / WORKTREES_SEG
     on_disk = 0

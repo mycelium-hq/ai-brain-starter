@@ -121,6 +121,11 @@
             "type": "command",
             "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/validate-skill-frontmatter.py 2>/dev/null || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'",
             "statusMessage": "Validating skill frontmatter (skill.json schema)..."
+          },
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/block-secret-in-note.py 2>/dev/null || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'",
+            "statusMessage": "Checking for live secrets in note writes..."
           }
         ]
       }
@@ -178,6 +183,11 @@
             "type": "command",
             "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/enforce-worktree-cap.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Enforcing worktree cap (reclaim-then-allow)..."
+          },
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/remediate-runaway-procs.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "statusMessage": "Reaping orphaned runaway processes..."
           }
         ]
       }

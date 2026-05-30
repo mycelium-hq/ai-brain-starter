@@ -43,6 +43,7 @@ from _lib.worktree_safety import (  # noqa: E402
     find_main_repo,
     git,
     is_idle,
+    is_scratch_worktree,
     list_worktrees,
     remove_worktree,
     snapshot_unrecoverable,
@@ -91,7 +92,10 @@ def main() -> int:
     if main_repo is None:
         return _emit(None)
 
-    wts = list_worktrees(main_repo)
+    # Only SCRATCH worktrees (under .claude/worktrees/) count against the cap
+    # and are eligible for reclaim. Deliberate ~/dev/<repo>-<slug> sibling
+    # worktrees are never auto-removed, even when idle and on a claude/* branch.
+    wts = [w for w in list_worktrees(main_repo) if is_scratch_worktree(w)]
     if len(wts) <= cap:
         return _emit(None)  # healthy
 

@@ -136,6 +136,22 @@ def list_worktrees(repo: Path) -> list[Path]:
     return [p for p in paths if p.resolve() != repo_r]
 
 
+def is_scratch_worktree(wt: Path) -> bool:
+    """True if `wt` is a throwaway scratch worktree under `.claude/worktrees/`.
+
+    The cap + reclaim only AUTO-REMOVE scratch worktrees. A deliberate
+    `~/dev/<repo>-<slug>` sibling worktree (created by the dev-repo-worktrees
+    pattern, often on its own feature branch) is NEVER auto-removed even when
+    idle and on a `claude/*` branch — its lifecycle belongs to that workflow,
+    not to this cap. Location, not branch name, is the safe discriminator.
+    """
+    marker = "/" + WORKTREES_SEG + "/"
+    try:
+        return marker in str(wt.resolve())
+    except OSError:
+        return marker in str(wt)
+
+
 def is_idle(path: Path, idle_min: int = 60) -> bool:
     """True if no work file under `path` was modified in the last idle_min minutes.
 
@@ -248,6 +264,92 @@ def remove_worktree(main_repo: Path, worktree: Path, force: bool = True) -> bool
         return git(main_repo, args).returncode == 0
     except (subprocess.TimeoutExpired, OSError):
         return False
+
+
+def list_orphan_dirs(main_repo: Path) -> list[Path]:
+    """Dirs under `.claude/worktrees/` that git no longer registers.
+
+    These accumulate when a worktree's git registration is pruned (or never
+    completed) but the directory is left on disk — each a full stale checkout.
+    The cap/remove hooks only see REGISTERED worktrees (`git worktree list`),
+    so orphan dirs are invisible to them and need this dedicated sweep. This
+    is the gap that let the vault reach 19 orphan dirs even with the hooks live.
+    """
+    wt_dir = main_repo / WORKTREES_SEG
+    if not wt_dir.is_dir():
+        return []
+    registered = {p.resolve() for p in list_worktrees(main_repo)}
+    orphans: list[Path] = []
+    try:
+        for c in sorted(wt_dir.iterdir()):
+            if c.is_dir() and c.resolve() not in registered:
+                orphans.append(c)
+    except OSError:
+        return []
+    return orphans
+
+
+def reclaim_orphan_dir(main_repo: Path, orphan: Path, idle_min: int = 60) -> tuple[str, int]:
+    """Safely reclaim one orphan worktree dir. Returns (action, snapshotted).
+
+    action ∈ {removed, snapshot+removed, kept-active, kept-unsafe, kept-dangling}.
+
+    Fast + fail-safe — never `rm -rf` a dir we can't reason about:
+      * idle gate: a dir touched < idle_min ago is left (a live/paused session).
+      * `git -C <orphan> status` decides recoverability cheaply (uses the index):
+          - clean       → rm (every file is committed/recoverable from a branch)
+          - dirty       → snapshot ONLY the dirty set (small; definitive object-DB
+                          recoverability test) then rm iff every unsaved file was
+                          safely copied.
+          - git errors  → the dir is disconnected from git; KEEP it and report
+                          `kept-dangling` for manual review. Never delete a dir
+                          whose recoverability we cannot establish.
+
+    Unlike the bash prune's section-2 (`rm -rf` with no snapshot), this can lose
+    nothing: the only dirs deleted are clean checkouts or dirs whose unsaved
+    files were copied out first.
+    """
+    slug = orphan.name
+    if not is_idle(orphan, idle_min):
+        return ("kept-active", 0)
+    try:
+        st = git(orphan, ["status", "--porcelain", "-z"], timeout=60)
+    except (subprocess.TimeoutExpired, OSError):
+        return ("kept-dangling", 0)
+    if st.returncode != 0:
+        return ("kept-dangling", 0)
+    dirty = [
+        orphan / e[3:].decode("utf-8", "replace")
+        for e in st.stdout.split(b"\x00")
+        if len(e) >= 4 and e[3:]
+    ]
+    snapped = 0
+    if dirty:
+        uniq = unrecoverable_content(main_repo, dirty)
+        snap_root = snapshot_dir_for(main_repo) / slug
+        all_safe = True
+        for src in uniq:
+            if not src.is_file():
+                continue
+            try:
+                rel = src.relative_to(orphan)
+            except ValueError:
+                all_safe = False
+                continue
+            dst = snap_root / rel
+            try:
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+                snapped += 1
+            except OSError:
+                all_safe = False
+        if not all_safe:
+            return ("kept-unsafe", snapped)
+    try:
+        shutil.rmtree(orphan)
+    except OSError:
+        return ("kept-unsafe", snapped)
+    return ("snapshot+removed" if snapped else "removed", snapped)
 
 
 def detect_cloud_sync(path: Path) -> str | None:
