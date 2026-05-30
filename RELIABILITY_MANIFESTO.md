@@ -40,12 +40,20 @@ Every session ends with a deterministic three-layer pipeline that scans the conv
 
 **Failure mode prevented: knowledge loss.** The lessons that surface inside a session always end up in permanent storage, so the next session inherits the new context without anyone copying anything by hand.
 
+## 6. Verify external state before asserting or acting on it
+
+Pillar 1 stops the model inventing facts from its own memory. This pillar stops a subtler failure: the model asserting the state of an *external system* — a ticket's status, whether a file was deleted on purpose, whether a commit shipped, whether a step is "already done" — without a confirming read in the same turn. The fact may be real, but the model has not looked. It is recalling, or inferring from a stale signal, or reasoning over the result of a tool call that never actually returned.
+
+The rule is mechanical: before the agent names an external fact or acts on it, a tool result confirming that fact must exist *in the current turn*. A health check that reports something missing is a question, not an instruction — the agent reads the source's own history before "fixing" it, because an intentional removal and an accidental loss look identical from the outside and demand opposite responses. A cancelled or failed tool call produces no result to reason over; the agent re-runs it rather than proceeding on what it assumed the answer would be.
+
+**Failure mode prevented: confident wrong action.** The agent cannot restore what was deliberately deleted, close the wrong ticket, or report a phantom success, because every claim about an external system is gated on a fresh observation rather than on memory, inference, or an unconfirmed result.
+
 ---
 
 ## Why this matters
 
-The five pillars are not features. They are the substrate. Features that violate them are bugs.
+The six pillars are not features. They are the substrate. Features that violate them are bugs.
 
 Most AI tools optimize for the demo: a model that answers cleverly inside a five-minute conversation. Real operating companies do not run on demos. They run on processes that drift, knowledge that decays, and exceptions that surface at the worst possible moment.
 
-The reliability story for AI inside companies starts with the architecture, not the model. Drift, hallucination, silent failure, cold start, knowledge loss: name the failure modes first, then build the substrate that prevents each one. Everything else is downstream.
+The reliability story for AI inside companies starts with the architecture, not the model. Drift, hallucination, silent failure, cold start, knowledge loss, confident wrong action: name the failure modes first, then build the substrate that prevents each one. Everything else is downstream.
