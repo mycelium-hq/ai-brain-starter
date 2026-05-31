@@ -37,17 +37,22 @@ jobs:
       - name: Personal-name + vault-path scrub (source files)
         run: |
           set -e
-          # Word-boundary patterns from ~/.claude/CLAUDE.md. NOT case-
-          # insensitive: 'wOnder' (34-floor framework #32) contains 'Onde'
-          # but \bOnde\b skips it (CLAUDE.md false-positive trap).
-          # If you edit this array, also edit the IDENTICAL array in the
-          # next step ("...bundled .mcpb / .zip archives") — both scrubs
-          # must stay in lockstep.
+          # Word-boundary patterns (auto-injected from a single source; this
+          # array and the archive-step array below are filled from the same
+          # list, so they cannot drift). NOT case-insensitive: 'wOnder'
+          # contains 'Onde' but \bOnde\b skips it (CLAUDE.md false-positive trap).
           PATTERNS=(
             '\bAdelaida\b'
             '\bDiaz-Roa\b'
-            '\bSergio Perez\b'
-            '\bSneider Alfonso\b'
+            '\bSergio\b'
+            '\bSneider\b'
+            '\bAlfonso\b'
+            '\bPanorama\b'
+            '\bDiana\b'
+            '\bPaola\b'
+            '\bBeverly\b'
+            '\bNatalia\b'
+            '\bSilvia\b'
             '\bAccenture\b'
             '\bCentre415\b'
             '\bvinitos\b'
@@ -88,13 +93,21 @@ jobs:
             echo "No tracked .mcpb / .zip archives. Skipping archive scan."
             exit 0
           fi
-          # IDENTICAL pattern list to the source-files step above. Keep
-          # them in lockstep — if you edit one, edit the other.
+          # Same single-source pattern list as the source-files step above
+          # (both arrays are injected from one placeholder, so they cannot
+          # drift).
           PATTERNS=(
             '\bAdelaida\b'
             '\bDiaz-Roa\b'
-            '\bSergio Perez\b'
-            '\bSneider Alfonso\b'
+            '\bSergio\b'
+            '\bSneider\b'
+            '\bAlfonso\b'
+            '\bPanorama\b'
+            '\bDiana\b'
+            '\bPaola\b'
+            '\bBeverly\b'
+            '\bNatalia\b'
+            '\bSilvia\b'
             '\bAccenture\b'
             '\bCentre415\b'
             '\bvinitos\b'
