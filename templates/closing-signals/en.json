@@ -71,7 +71,15 @@
     },
     {
       "_comment": "Don't match inside code fences",
-      "pattern": "```[\\s\\S]*?\\b(bye|done|ttyl)\\b[\\s\\S]*?```"
+      "pattern": "```[\\s\\S]*?\\b(bye|done|ttyl|later)\\b[\\s\\S]*?```"
+    },
+    {
+      "_comment": "Don't match 'try again later' / 'try later' — common in error messages pasted as content, not a sign-off",
+      "pattern": "\\btry\\s+(it\\s+|again\\s+)?later\\b"
+    },
+    {
+      "_comment": "Don't match 'X later' inside indented / quoted blocks (4-space or > prefix) — pasted error text or quoted message",
+      "pattern": "(^|\\n)(?:    |>\\s).*\\blater\\b"
     },
     {
       "_comment": "Don't match 'done with X' — user describing state, not closing",
