@@ -22,6 +22,16 @@ at worktree paths, reversing the prior WORKTREE_OK allow-list. Those strand
 on the throwaway claude/<slug> branch and are discarded when the worktree is
 archived. Resolves the contradiction with CLAUDE.md (see canonical rule).
 
+Extended 2026-06-03: same block on the vault's automation log dir,
+`<vault>/⚙️ Meta/logs/*.{log,err}`. Each name has exactly one canonical
+writer (worktree-prune, enforce-worktree-cap, remove-ended-worktree,
+session-end-hook, auto-snapshot, decision-outcome-check, traffic-snapshot).
+A worktree-path write to one of these is either a script computing its log
+path against SCRIPT_DIR (and so anchored at the worktree copy of itself) or
+an LLM hand-writing a line at the wrong root; both lose data when the
+worktree archives. Bug class:
+WORKTREE-CWD-RELATIVE-LOG-PATH-STRANDS-DATA.
+
 Bypass: `WORKTREE_VAULT_EDIT_BYPASS=1` (rare; document why).
 """
 
@@ -68,6 +78,15 @@ SESSION_ARTIFACT_PATTERNS = [
     re.compile(r"^⚙️ Meta/Pending Team Broadcasts/.+\.md$"),
     re.compile(r"^⚙️ Meta/Session Captures\.md$"),
     re.compile(r"^⚙️ Meta/Time Tracking\.md$"),
+]
+
+# Vault automation logs. Each filename has exactly one canonical writer; a
+# worktree-side write is always either a SCRIPT_DIR-relative path bug or an
+# LLM hand-writing at the wrong root. In both cases the entries strand on
+# the claude/<slug> branch and are discarded at archive. Match `*.log` and
+# `*.err` under the canonical logs directory.
+LOG_PATH_PATTERNS = [
+    re.compile(r"^⚙️ Meta/logs/.+\.(log|err)$"),
 ]
 
 
@@ -121,6 +140,25 @@ def main() -> int:
                 f"Edit at the main vault path instead:\n"
                 f"  {main_path}\n"
                 f"Worktree slug: {slug}\n"
+                f"Bypass: WORKTREE_VAULT_EDIT_BYPASS=1 (document why).",
+                file=sys.stderr,
+            )
+            return 2
+
+    for pat in LOG_PATH_PATTERNS:
+        if pat.match(rel):
+            main_path = f"{VAULT_ROOT}/{rel}"
+            print(
+                f"BLOCKED: '{rel}' is a vault automation log. Writes belong "
+                f"at the main vault path so the canonical log accumulates "
+                f"all entries; a worktree-side write strands the entries on "
+                f"the claude/{slug} branch and they are discarded at "
+                f"worktree archive.\n"
+                f"Write at the main vault path instead:\n"
+                f"  {main_path}\n"
+                f"If a script computed this path against SCRIPT_DIR, source "
+                f"scripts/_resolve_main_vault.sh and pass the path through "
+                f"resolve_main_vault before anchoring LOG_DIR.\n"
                 f"Bypass: WORKTREE_VAULT_EDIT_BYPASS=1 (document why).",
                 file=sys.stderr,
             )
