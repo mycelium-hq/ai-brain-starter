@@ -292,7 +292,25 @@ El bootstrap es idempotente — al re-correrlo después de un `git pull` instala
 
 </details>
 
+### Después de instalar
+
+Tu vault queda vivo apenas termina el instalador. La primera semana, lo que importa es el hábito: corré `/journal` cada noche, corré `/second-brain-mapping` cuando tus notas estén adentro, y preguntá "¿qué pensaría el panel?" antes de cualquier decisión importante. Para el día ocho vas a sentir para qué sirve el cerebro.
+
+El recorrido: [Tu primera semana con tu segundo cerebro](https://perspectivasblog.substack.com/p/tu-primera-semana-con-tu-segundo). Vale leerlo la noche que instalás.
+
+### Qué es gratis, y qué agrega Mycelium
+
+Todo lo de arriba es gratis, MIT, y tuyo. El vault vive en tu disco y la inteligencia vive en tu suscripción de Claude. Nada se mide. Una persona, una máquina, sin cuenta. Si eso es todo lo que querés, queda completo.
+
+[Mycelium](https://myceliumai.co/#pricing) es el mismo cerebro, hospedado y conectado, para cuando una sola máquina deja de alcanzar: tu memoria sincronizada en todos tus dispositivos (Personal), el cerebro de tu empresa con capas personales privadas debajo (Team), o todo corriendo dentro de tu propia nube con un ingeniero senior que lo instala con vos (Enterprise). La escalera completa y los precios: [myceliumai.co/#pricing](https://myceliumai.co/#pricing).
+
 ---
+
+### After you install
+
+Your vault is live the moment the installer finishes. For the first week, the habit is what matters: run `/journal` each night, run `/second-brain-mapping` once your notes are in, and ask "what would the panel think?" before any real decision. By day eight you feel what the brain is for.
+
+The walkthrough: [Your First Week With Your Second Brain](https://adelaidadiazroa.substack.com/p/your-first-week-with-your-second). Worth reading the night you install.
 
 ### Joining an existing team vault
 
@@ -311,6 +329,20 @@ Just tell Claude: "Update my AI Brain Starter." Claude pulls the latest version 
 ### Something feels off?
 
 Tell Claude: "Diagnose my AI Brain Starter." It runs ~10 checks against your vault (CLAUDE.md present, hooks registered, journal index fresh, skills installed, etc.) and reports in plain English what's working and what isn't. Safe any time.
+
+---
+
+## What's free, and what Mycelium adds
+
+Everything above is free, MIT, and yours. The vault lives on your disk, the intelligence lives in your Claude subscription, and nothing is metered. One person, one machine, no account required. If that is all you ever want, it stays complete.
+
+[Mycelium](https://myceliumai.co/#pricing) is the same brain, hosted and connected, for when one machine stops being enough:
+
+- **Personal** keeps your memory in sync across every device, so your context follows you instead of living in one folder.
+- **Team** gives your company its own brain with private personal layers underneath, so a group shares context without anyone's private notes leaking.
+- **Enterprise** runs it inside your own cloud, with the connectors, SLAs, and a senior engineer who installs it with you.
+
+The full ladder and prices live at [myceliumai.co/#pricing](https://myceliumai.co/#pricing). If you would rather it was built around your stack than self-installed, that is [consulting](https://myceliumai.co/consulting).
 
 ---
 
