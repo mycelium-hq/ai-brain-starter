@@ -21,6 +21,7 @@
     "\\bwrap\\s+(this|it)\\s+up\\b",
     "\\b(let'?s\\s+)?close\\s+(this|the|out|up)\\s+session\\b",
     "\\b(let'?s\\s+)?close\\s+(this|the)\\s+session\\b",
+    "\\b(let'?s\\s+)?close\\s+(out|up|down)\\s+(this|the)\\s+session\\b",
     "\\b(let'?s\\s+)?(end|finish)\\s+(this|the)\\s+session\\b",
     "\\bclose\\s+(it|us|this|that)\\s+(out|up|down)\\b",
     "\\bend\\s+for\\s+(today|now|the\\s+day)\\b",

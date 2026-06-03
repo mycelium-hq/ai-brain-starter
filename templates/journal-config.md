@@ -13,6 +13,7 @@ data_sources:
   calendar: off               # today's calendar events (Google Workspace MCP) — opt-in
   imessage_24h: off           # iMessage threads with traffic in last 24h — opt-in (sees private conversations)
   whatsapp_24h: off           # WhatsApp threads with traffic in last 24h — opt-in (sees private conversations)
+  body_health: off            # Step 0h: sleep/HRV/RHR/steps/workouts/recovery/cycle from health-mcp DuckDB — opt-in (most sensitive; local-only, never leaves your machine)
 # Per-source filters (only consulted when the source is "on")
 imessage_filters:
   exclude_chats: []           # phone numbers, emails, or contact names to skip on every pull
