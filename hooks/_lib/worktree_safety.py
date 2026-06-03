@@ -65,6 +65,11 @@ def find_main_repo(cwd: Path | None = None) -> Path | None:
     """Resolve the main checkout that owns `.claude/worktrees/`.
 
     1. CLAUDE_PROJECT_DIR env var (set by Claude Code) if it's a real dir.
+       If that value itself sits inside `.../.claude/worktrees/<slug>/`
+       (Claude Code commonly sets it to the session cwd, which IS the
+       worktree path), collapse it back to the part before so logs and
+       snapshots written via this helper never strand on a throwaway
+       claude/<slug> branch.
     2. If cwd is inside `.../.claude/worktrees/<slug>/`, the part before
        `.claude/worktrees`.
     3. cwd itself if it contains `.claude/worktrees/`.
@@ -72,14 +77,18 @@ def find_main_repo(cwd: Path | None = None) -> Path | None:
     Returns None if nothing resolves.
     """
     cwd = (cwd or Path.cwd()).resolve()
+    marker = "/" + WORKTREES_SEG + "/"
 
     env_root = os.environ.get("CLAUDE_PROJECT_DIR")
     if env_root:
         cand = Path(env_root)
         if cand.is_dir():
-            return cand.resolve()
+            cand = cand.resolve()
+            s = str(cand)
+            if marker in s:
+                return Path(s.split(marker, 1)[0]).resolve()
+            return cand
 
-    marker = "/" + WORKTREES_SEG + "/"
     s = str(cwd)
     if marker in s:
         return Path(s.split(marker, 1)[0]).resolve()
