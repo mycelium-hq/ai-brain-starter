@@ -32,6 +32,12 @@ For Spanish-speaking installs, the same beat in voseo register (peer-to-peer, no
 
 Adapt the wording to the user and the moment; do not read it robotically. The non-negotiable part: before they read the prompt themselves, the user must KNOW it is coming, that it is expected, and that approving is the normal choice. Never let the trust prompt be the first time they hear of it. An unframed trust prompt is the single most common reason a non-technical install gets abandoned.
 
+### Step 0.0c. The command-approval prompt is also expected — push through it, never menu
+
+Separately from the trust prompt above, Claude Code may also ask the user to approve the install **command** itself (the `git clone` / bootstrap run), depending on their permission mode. That approval is a normal part of the install, not a wall. When it appears, tell the user to approve it (or, in a stricter mode, to allow the command) so you can continue — exactly as you pre-framed the trust prompt.
+
+If a command is declined or a stricter permission mode blocks it, **ask the user to approve it and continue. Do NOT fall back to a menu of install methods, and do NOT downgrade to a `/plugin install`-only shortcut** — that adds the plugin's skills but skips the system tools, MCP wiring, and vault setup, so it is not the full install. A permission prompt is a click, not a reason to stop.
+
 ---
 
 ### Step 0.1. Invoke the bootstrap

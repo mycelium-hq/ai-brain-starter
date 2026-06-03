@@ -110,6 +110,25 @@ must_contain "$README" \
   "README is missing the Spanish anti-menu install directive (correr ya, sin menú)" \
   "No armes un menú"
 
+# 7. The README + phase-00 must pre-frame Claude Code's command-approval prompt
+#    (distinct from the trust prompt) and forbid the two failure modes a real
+#    Windows installer hit: falling back to a menu when a command is blocked,
+#    and downgrading to the /plugin-only install (which skips the system tools,
+#    MCP wiring, and vault setup). Source: second install-UX incident (Windows,
+#    command blocked by a stricter permission mode).
+must_contain "$README" \
+  "README is missing the English command-approval pre-frame" \
+  "approve running the install command"
+must_contain "$README" \
+  "README is missing the Spanish command-approval pre-frame" \
+  "apruebe correr el comando de instalación"
+must_contain "$README" \
+  "README is missing the '/plugin-only is not the full install' downgrade guard" \
+  "not the full install"
+must_contain "$PHASE00" \
+  "phase-00 is missing the command-approval step (Step 0.0c)" \
+  "Step 0.0c"
+
 if [ "$FAILED" -gt 0 ]; then
   echo "" >&2
   echo "$FAILED trust-prompt pre-framing check(s) failed." >&2
@@ -118,4 +137,4 @@ if [ "$FAILED" -gt 0 ]; then
   exit 1
 fi
 
-echo "PASS: trust-prompt pre-framing intact (README EN+ES, maintainer guide, phase-00 Step 0.0b, bootstrap.sh, bootstrap.ps1) + anti-menu install directive present (README EN+ES)."
+echo "PASS: trust-prompt pre-framing intact (README EN+ES, maintainer guide, phase-00 Step 0.0b, bootstrap.sh, bootstrap.ps1) + anti-menu install directive (README EN+ES) + command-approval pre-frame & no-/plugin-downgrade guard (README EN+ES, phase-00 Step 0.0c)."
