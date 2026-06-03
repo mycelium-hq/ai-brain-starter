@@ -96,6 +96,20 @@ must_contain "$BOOTSTRAP_PS1" \
   "bootstrap.ps1 is missing the trust-prompt heads-up line" \
   "may pause to ask you to approve these tools"
 
+# 6. The README must tell the installing assistant NOT to put up a menu.
+#    Sibling install-UX regression class to the trust-prompt ambush above:
+#    a fresh Claude reading the README would respond to "install this for me"
+#    with a 3-option menu (show me the script / just the skill / don't install)
+#    instead of installing, stalling non-technical conversions. The fix is a
+#    VISIBLE anti-menu directive at the top of each Install section (EN + ES);
+#    these assertions guard it against silent removal. Source: PR #146.
+must_contain "$README" \
+  "README is missing the English anti-menu install directive (run now, no menu)" \
+  "Do not put up a menu"
+must_contain "$README" \
+  "README is missing the Spanish anti-menu install directive (correr ya, sin menú)" \
+  "No armes un menú"
+
 if [ "$FAILED" -gt 0 ]; then
   echo "" >&2
   echo "$FAILED trust-prompt pre-framing check(s) failed." >&2
@@ -104,4 +118,4 @@ if [ "$FAILED" -gt 0 ]; then
   exit 1
 fi
 
-echo "PASS: trust-prompt pre-framing intact. README (EN+ES), maintainer guide, phase-00 Step 0.0b, bootstrap.sh, and bootstrap.ps1 all carry it."
+echo "PASS: trust-prompt pre-framing intact (README EN+ES, maintainer guide, phase-00 Step 0.0b, bootstrap.sh, bootstrap.ps1) + anti-menu install directive present (README EN+ES)."
