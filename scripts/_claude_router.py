@@ -153,6 +153,34 @@ def _call_via_cli(
     # not an actual model response. Treat as CLI unavailable so the router
     # falls back to API. Patched 2026-05-19 after hallucination-sample-audit
     # accepted "Not logged in · Please run /login" as a 33-char success.
+    # Rate-limit banners — transient refusals when a Max account hits its
+    # weekly cap or 5-hour session cap. The CLI returns the banner as stdout
+    # and exits non-zero, so the accept-non-zero-with-stdout branch below
+    # would otherwise return the banner as a "response" (e.g. 63 chars of
+    # "You've hit your session limit · resets <time>"). Detecting them here
+    # raises RouterUnavailable instead, so callers fall back to the API path
+    # or surface a real error rather than consuming the banner as content.
+    # The bug class is PRODUCER-OUTPUT-CONSUMED-WITHOUT-CONTENT-VALIDITY-CHECK
+    # — substring matching is a stopgap; the principled fix is to use
+    # `claude -p --output-format json` and read `is_error` / `subtype` from
+    # the result envelope. Keeping the substring list short and scoped.
+    ratelimit_markers = (
+        "weekly limit",
+        "hit your weekly",
+        "session limit",
+        "hit your session",
+        "rate limit",
+        "rate_limit_exceeded",
+        "usage limit",
+        "quota exceeded",
+    )
+    if stdout and any(m in stdout.lower() for m in ratelimit_markers):
+        raise RouterUnavailable(
+            f"claude CLI returned rate-limit banner: {stdout[:200]!r}. "
+            "Transient — wait for the limit window to reset, or set "
+            "ANTHROPIC_API_KEY for an API-key fallback."
+        )
+
     refusal_markers = (
         "not logged in",
         "please run /login",
