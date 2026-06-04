@@ -9,6 +9,31 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-06-03: stop asking for your email over and over
+
+**Who this affects:** anyone who installed without giving an email, or who declined the optional ask. Previously you could be asked again and again, in every kind of session (even while journaling), and pointed at a "token" to paste.
+
+### The problem
+
+A background hook ran on every message of every session. If it did not find an email-on-file marker, it interrupted with "give us your email" and walked you through fetching and pasting a token. It came back every few hours, forever. Declining was never remembered, and a network hiccup while signing up left no record, so the asking never stopped. People who had already given their email still got asked.
+
+### The fix
+
+The every-session ask is gone. Your email is now asked at exactly two moments, both optional and freely declinable, and neither involves a token:
+
+- Once during first-time setup, at the very end of the install interview.
+- At most once after an update actually downloads a new version, and only if there is still no email on file. After that it waits at least two weeks before it could come up again.
+
+Declining is now remembered permanently, so "no" means no. Normal sessions, especially journaling, never ask. Nothing ever tells you to paste a token.
+
+Existing installs heal themselves: the next time the starter updates, it removes the old hook from your settings automatically.
+
+### Verification
+
+New automated tests cover the post-update hook (it asks only after a real version change, stays silent on a normal session, and respects a decline) and the installer's new "retire a removed hook" step (with a negative control proving it leaves your own hooks and the other starter hooks untouched). Full rationale in [ADR-0003](adr/0003-no-runtime-email-gate.md).
+
+---
+
 ## 2026-05-27 (late evening, part 6): unblock the personal-pii-scrub CI gate
 
 **Who this affects:** every PR. Previously: main HEAD failed CI from the moment the scrub gate was added (commit 21162b2), and every downstream PR inherited the failure.

@@ -12,7 +12,7 @@
 #                           `X | None` annotation class that crashes Python 3.9
 #                           at module load (many users invoke hooks via macOS's
 #                           system /usr/bin/python3, which is 3.9).
-#   (b) Shell integration - the 8 named tests under tests/integration/, in
+#   (b) Shell integration - the named tests under tests/integration/, in
 #                           order, stopping at the first failure.
 #
 # It does NOT run the pure-lint jobs (bash -n, pwsh ParseFile, BOM, em-dash,
@@ -79,7 +79,7 @@ fi
 echo "    OK - $count file(s) compiled clean"
 
 # ---- (b) Shell integration gate --------------------------------------------
-# The 8 named tests that constitute lint.yml's integration gate, in order.
+# The named tests that constitute lint.yml's integration gate, in order.
 # `set -e` aborts on the first non-zero test, which is the required
 # stop-on-first-failure behavior. This list is the gate's source of truth:
 # tests/integration/ also holds .sh/.py files that are NOT part of this gate, so
@@ -93,6 +93,8 @@ INTEGRATION_TESTS=(
   test_stranded_session_artifacts_watchdog
   test_session_coordination_guards
   test_trust_prompt_preframing
+  test_post_update_email_ask
+  test_installer_retires_email_gate
 )
 echo "==> (b) Shell integration: ${#INTEGRATION_TESTS[@]} tests"
 for t in "${INTEGRATION_TESTS[@]}"; do

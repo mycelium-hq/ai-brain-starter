@@ -404,7 +404,11 @@ If `missing`, make the ask ONCE, in PRIMARY_LANGUAGE:
 
 **ES:** "Tu vault está listo y es tuyo — nada de esto cambia eso. Una cosa opcional: te puedo mandar una nota corta cuando hay una actualización importante del sistema, y hay una auditoría gratuita de flujo de trabajo para founders, algunas cada mes. Si querés cualquiera de las dos, ¿cuál es tu mejor email? O simplemente decí saltar — todo funciona exactamente igual de cualquier forma."
 
-**If they decline** (skip / no / move on): say one warm line ("Done — you're all set." / "Listo — todo en orden.") and go to Phase 24.5. Never ask twice.
+**If they decline** (skip / no / move on): say one warm line ("Done — you're all set." / "Listo — todo en orden."). Record the decline so no later surface ever re-asks, then go to Phase 24.5. Never ask twice.
+
+```bash
+mkdir -p ~/.claude && printf 'declined\n' > ~/.claude/.ai-brain-starter-email-on-file && chmod 600 ~/.claude/.ai-brain-starter-email-on-file
+```
 
 **If they give an email**, record it. You already have their name (Phase 1) and PRIMARY_LANGUAGE. Substitute them and run:
 
@@ -423,12 +427,14 @@ req = urllib.request.Request(
 try:
     with urllib.request.urlopen(req, timeout=12) as r:
         body = json.loads(r.read().decode() or "{}")
-    tok = body.get("token", "")
-    if tok:
-        mp = os.path.expanduser("~/.claude/.ai-brain-starter-email-on-file")
-        with open(mp, "w") as f:
-            f.write(tok + "\n")
-        os.chmod(mp, 0o600)
+    # Always settle the marker on a successful POST: the token if the server
+    # returned one, else "recorded". Its existence is what stops every runtime
+    # surface from re-asking — so it must be written even when no token comes
+    # back, not only `if tok`.
+    mp = os.path.expanduser("~/.claude/.ai-brain-starter-email-on-file")
+    with open(mp, "w") as f:
+        f.write((body.get("token") or "recorded") + "\n")
+    os.chmod(mp, 0o600)
     print("ok")
 except Exception as e:
     print(f"failed: {e}")
