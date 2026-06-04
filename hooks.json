@@ -51,8 +51,8 @@
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/scripts/email-gate-hook.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
-            "statusMessage": "Checking email-on-file marker..."
+            "command": "python3 ~/.claude/skills/ai-brain-starter/scripts/post-update-email-ask.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "statusMessage": "Checking for post-update email ask..."
           },
           {
             "type": "command",

@@ -67,6 +67,7 @@ ABS_FINGERPRINTS = [
     "ai-brain-starter/hooks/inject-meeting-workflow-on-trigger.py",
     "ai-brain-starter/scripts/session-end-hook.sh",
     "ai-brain-starter/scripts/email-gate-hook.py",
+    "ai-brain-starter/scripts/post-update-email-ask.py",
     "ai-brain-starter/⚙️ Meta/scripts/graph-context-hook.sh",
     # Legacy session-start context loaders shipped via ai-brain-starter:
     "SESSION START: CLAUDE.md is already auto-loaded",
@@ -93,10 +94,31 @@ ABS_OWNED_BASENAMES = {
     "first-week-checkin.py", "migrate-to-user-level.py",
     "inject-love-language-context.py", "inject-meeting-workflow-on-trigger.py",
     "session-end-hook.sh", "email-gate-hook.py", "graph-context-hook.sh",
+    "post-update-email-ask.py",
     "snapshot-pending-work-on-stop.py", "surface-orphan-worktree-snapshots.py",
     "remove-ended-worktree.py", "enforce-worktree-cap.py",
     "worktree-footprint-signal.py", "remediate-runaway-procs.py",
     "block-secret-in-note.py",
+}
+
+# Hooks ai-brain-starter USED TO ship and has deliberately RETIRED. The
+# installer actively REMOVES any of these still wired in a user's
+# settings.json — merge_hooks() only adds/replaces template hooks, it never
+# deletes one that's gone from the template, so without this step a retired
+# hook stays wired (and keeps firing) forever on every existing install.
+# This is what un-nags users who installed before a hook was removed.
+# When retiring a hook: add its fingerprint AND basename here, keep it in the
+# ABS_* lists above (so uninstall still recognizes it), and never reuse a
+# retired basename for a new hook.
+ABS_RETIRED_FINGERPRINTS = [
+    # Retired 2026-06-03: fired on EVERY prompt of EVERY session and nagged
+    # for an email forever until a marker existed — a stealth reversal of
+    # docs/adr/0002-no-email-gate.md. Replaced by post-update-email-ask.py
+    # (asks at most once, only after a git pull, when no email is on file).
+    "ai-brain-starter/scripts/email-gate-hook.py",
+]
+ABS_RETIRED_BASENAMES = {
+    "email-gate-hook.py",
 }
 
 _SCRIPT_RE = re.compile(r"([\w.-]+\.(?:py|sh))")
@@ -127,6 +149,8 @@ def load_hooks_template(path: Path) -> dict:
 
 def is_abs_owned(command: str) -> bool:
     if any(fp in command for fp in ABS_FINGERPRINTS):
+        return True
+    if any(fp in command for fp in ABS_RETIRED_FINGERPRINTS):
         return True
     return bool(_owned_basenames(command))
 
@@ -263,6 +287,49 @@ def remove_abs_hooks(existing: dict) -> tuple[dict, int]:
     return cleaned, removed
 
 
+def _is_retired(command: str) -> bool:
+    """True if a command runs a RETIRED ai-brain-starter hook."""
+    if not command:
+        return False
+    if any(fp in command for fp in ABS_RETIRED_FINGERPRINTS):
+        return True
+    found = {os.path.basename(m) for m in _SCRIPT_RE.findall(command)}
+    return bool(found & ABS_RETIRED_BASENAMES)
+
+
+def retire_stale_hooks(existing: dict) -> tuple[dict, int]:
+    """Remove every hook entry whose command runs a RETIRED hook.
+
+    merge_hooks() only adds/replaces hooks present in the template — it never
+    deletes one that's gone from the template. So a retired hook would stay
+    wired in an existing user's settings.json and keep firing forever. This is
+    the propagation step that actually un-wires a removed hook on the next
+    install / auto-update. Returns (cleaned, count_removed).
+
+    Groups emptied by retirement are dropped. Non-retired hooks (ours and the
+    user's own) are preserved untouched."""
+    cleaned = json.loads(json.dumps(existing))
+    removed = 0
+    if "hooks" not in cleaned:
+        return cleaned, 0
+    for event, groups in list(cleaned["hooks"].items()):
+        new_groups = []
+        for g in groups:
+            hooks = g.get("hooks", [])
+            kept = [h for h in hooks if not _is_retired(h.get("command", ""))]
+            removed += len(hooks) - len(kept)
+            if kept:
+                ng = dict(g)
+                ng["hooks"] = kept
+                new_groups.append(ng)
+            # else: group emptied by retirement -> drop it
+        if new_groups:
+            cleaned["hooks"][event] = new_groups
+        else:
+            del cleaned["hooks"][event]
+    return cleaned, removed
+
+
 def backup_settings(settings_path: Path) -> Path | None:
     if not settings_path.is_file():
         return None
@@ -367,6 +434,9 @@ def main() -> int:
 
     # === install / update path ===
     merged, summary = merge_hooks(existing, template)
+    # Retire hooks deleted from the template but still wired in this user's
+    # settings.json (merge never deletes). This un-wires removed hooks.
+    merged, retired_count = retire_stale_hooks(merged)
 
     if not args.quiet:
         print(f"Merging into: {settings_path}")
@@ -374,6 +444,7 @@ def main() -> int:
         print(f"Events:       {', '.join(summary['events_touched'])}")
         print(f"Added:        {len(summary['added'])} hook(s)")
         print(f"Updated:      {len(summary['updated'])} hook(s)")
+        print(f"Retired:      {retired_count} stale hook(s) removed")
         print(f"Preserved:    {len(set(summary['kept']))} non-ABS hook(s) untouched")
 
     if args.dry_run:
@@ -383,9 +454,11 @@ def main() -> int:
                 print(f"  + {entry}")
             for entry in summary["updated"]:
                 print(f"  ~ {entry}")
+            if retired_count:
+                print(f"  - retire {retired_count} stale hook(s)")
         return 0
 
-    if not summary["added"] and not summary["updated"]:
+    if not summary["added"] and not summary["updated"] and not retired_count:
         if not args.quiet:
             print("\nAlready in sync. Nothing to write.")
         return 0

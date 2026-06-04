@@ -677,23 +677,28 @@ TOKEN_FILE="$HOME/.claude/.ai-brain-starter-email-on-file"
 SENTINEL="$HOME/.claude/.ai-brain-starter-first-journal-fired"
 if [ -f "$TOKEN_FILE" ] && [ ! -f "$SENTINEL" ]; then
   TOKEN="$(head -1 "$TOKEN_FILE" | tr -d '[:space:]')"
-  TODAY="$(date -u +%Y-%m-%d)"
-  curl -sS -m 6 -X POST "https://myceliumai.co/api/install/first-journal" \
-    -H "content-type: application/json" \
-    -d "{\"token\":\"$TOKEN\",\"journalDate\":\"$TODAY\"}" \
-    >/dev/null 2>&1 \
-    && touch "$SENTINEL"
+  # Only a real 32-char hex token is a funnel token. The marker may instead
+  # hold "declined" or "recorded" (the user declined, or opted in but the
+  # server returned no token). In those cases send nothing.
+  if printf '%s' "$TOKEN" | grep -Eq '^[a-f0-9]{32}$'; then
+    TODAY="$(date -u +%Y-%m-%d)"
+    curl -sS -m 6 -X POST "https://myceliumai.co/api/install/first-journal" \
+      -H "content-type: application/json" \
+      -d "{\"token\":\"$TOKEN\",\"journalDate\":\"$TODAY\"}" \
+      >/dev/null 2>&1 \
+      && touch "$SENTINEL"
+  fi
 fi
 ```
 
 What this does:
 - Token + sentinel are local files; nothing leaves the machine without them.
-- Reads the install token (already on file from the email gate).
+- Reads the install token, but only when the marker holds a real 32-char hex token (the user opted in). A `declined` or `recorded` marker sends nothing.
 - POSTs `{token, journalDate}` to the Mycelium funnel endpoint.
 - On success, writes the sentinel so we never re-fire.
 - Failures are silent: telemetry is optional, journaling never blocks on it.
 
-If `$HOME/.claude/.ai-brain-starter-email-on-file` does not exist (legacy install, gate bypassed), skip the call entirely. The user has not opted into the email loop, so we have no token to attach.
+If `$HOME/.claude/.ai-brain-starter-email-on-file` does not exist, or holds `declined` / `recorded` rather than a hex token, skip the call entirely. The user has not opted into the email loop, so we have no token to attach. Never ask for the email here — journaling is not a capture surface.
 
 ## Notes
 
