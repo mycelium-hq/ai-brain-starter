@@ -63,6 +63,23 @@ If Claude asks for permission to do something and you are not sure what it does,
 
 ---
 
+## 5. What the install sends to our servers (and what it never sends)
+
+Local-first by default. Your vault, journals, notes, and files never leave your machine. The install does not require an email and does not phone home about your content.
+
+There is exactly one opt-in. At the end of setup you may choose to give an email (for occasional update notes and a free workflow audit). If you do, an install token is minted: `myceliumai.co/api/install/quick-mint` receives the email, name, and language you gave, plus a short OS label (e.g. `mac-arm`). That is the email submission you chose to make.
+
+While that token exists on your machine, three best-effort, fail-open events may be sent. Each carries only the token and a coarse signal — never any content:
+
+- **install started** and **install completed** — the token plus an OS string (e.g. `Darwin 24.5.0 arm64`).
+- **first journal saved** (one time only) — the token plus the calendar date. Not the journal text. Not a word of it.
+
+If you never give an email, or you decline the ask, none of these fire. A decline is recorded locally and nothing is sent.
+
+What is **never** sent, under any path: journal text, note contents, file contents, file names, your contacts, or anything from your vault. Only the opaque token tied to the email you chose to give, an OS label, and (once) a single date. The token is local to your machine; delete `~/.claude/.ai-brain-starter-email-on-file` to stop all of the above.
+
+---
+
 ## Non-goals: what this security model deliberately does NOT do
 
 A useful security model is also a fence around what it does not try to handle. Listing non-goals stops over-trust ("the vault must be doing X for me, since X is a security thing") and over-fear ("the vault is missing X, so it's insecure") simultaneously.

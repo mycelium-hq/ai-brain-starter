@@ -80,4 +80,9 @@ OUT3="$(python3 "$INSTALLER" --hooks-source "$HOOKS_SRC" --settings "$SETTINGS" 
 echo "$OUT3" | grep -q "0 stale hook(s) removed" || { echo "$OUT3"; fail "5: clean config must retire 0 (no false removal)"; }
 grep -q "CUSTOM_HOOK_SENTINEL" "$SETTINGS" || fail "5: custom hook dropped on a clean config"
 
-echo "PASS: installer retires the dead email-gate hook, wires the replacement, preserves siblings + custom hooks, idempotent, no false retire"
+# --- 6. executable ADR-0003 invariant: the SHIPPED template never re-introduces
+#        a retired every-session email gate, and keeps the gated replacement. ---
+grep -q "email-gate-hook.py" "$HOOKS_SRC" && fail "6: retired email-gate-hook.py reappeared in hooks.json (ADR-0003 violated)"
+grep -q "post-update-email-ask.py" "$HOOKS_SRC" || fail "6: the gated replacement hook is not wired in hooks.json"
+
+echo "PASS: installer retires the dead email-gate hook, wires the replacement, preserves siblings + custom hooks, idempotent, no false retire, template stays gate-free (ADR-0003)"
