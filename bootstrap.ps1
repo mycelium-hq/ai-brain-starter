@@ -820,7 +820,10 @@ Write-Host ""
 if ((Test-Path $emailMarker) -and -not $DryRun) {
     try {
         $recordedToken = (Get-Content -Path $emailMarker -TotalCount 1).Trim()
-        if ($recordedToken) {
+        # Only a real 32-char hex token is a funnel token. The marker may
+        # instead hold "declined" or "recorded"; in those cases send nothing
+        # (a declined user's machine must not ping the server).
+        if ($recordedToken -match '^[a-f0-9]{32}$') {
             $os = "$([System.Environment]::OSVersion.VersionString) $env:PROCESSOR_ARCHITECTURE"
             $sigPath = "$env:USERPROFILE\.claude\.ai-brain-starter-hmac-secret"
             $signature = $null

@@ -1624,7 +1624,11 @@ fi
 
 if [[ -f "$EMAIL_MARKER" && $DRY_RUN -eq 0 ]]; then
   RECORDED_TOKEN="$(head -1 "$EMAIL_MARKER" 2>/dev/null | tr -d '[:space:]')"
-  if [[ -n "$RECORDED_TOKEN" ]]; then
+  # Only a real 32-char hex token is a funnel token. The marker may instead
+  # hold "declined" or "recorded" (the user declined, or opted in but the
+  # server returned no token). In those cases send nothing — a declined user's
+  # machine must not ping the server, and a non-token must never be POSTed.
+  if [[ "$RECORDED_TOKEN" =~ ^[a-f0-9]{32}$ ]]; then
     OS_INFO="$(uname -srm 2>/dev/null || echo unknown)"
     # Sign the completion request with HMAC if we have a secret. The shared
     # secret can ship with the bootstrap (it's only meaningful as a key for
