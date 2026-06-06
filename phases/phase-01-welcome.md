@@ -25,7 +25,7 @@ If the file exists and parses cleanly, capture these into your working memory:
 - `RECAP_BRANCH` (informational, used to tune Phase 11 wiring)
 - `RECAP_OS` (informational, used to skip the OS-detection step in Phase 5)
 
-`name` + `email` are facts the user typed themselves on the install page. Reuse them. `lang` is a server-side default from a one-field form (the install page defaults to `"en"` if no language is selected — Sneider's signup hit this default and the recap.lang was `"en"` even though no one ever asked him). Treat it as background context only.
+`name` + `email` are facts the user typed themselves on the install page. Reuse them. `lang` is a server-side default from a one-field form (the install page defaults to `"en"` if no language is selected — an early signup hit this default and the recap.lang was `"en"` even though no one ever asked the user). Treat it as background context only.
 
 If the file is missing or malformed, fall back to the standard interview flow below (ask everything from scratch).
 
@@ -169,7 +169,7 @@ Then store:
 - `PRIMARY_LANGUAGE` — the language they chose to set up in (whatever they answered in / wrote)
 - `SECONDARY_LANGUAGES` — list (possibly empty) of every other language they mentioned. These drive the alias generation later.
 
-**Why the recap.lang cannot drive this:** the install signup form defaults to `lang: "en"` when no field is provided (which is most of the time, because the form prefills it from URL params or browser locale). A user who never picked English ends up with `recap.lang: "en"` and a setup interview that silently runs in English. The first install where this surfaced: Sneider, 2026-05-12, recap-defaulted to English without ever being asked. Don't trust recap.lang as authoritative. Open polyglot. Let the user pick by responding.
+**Why the recap.lang cannot drive this:** the install signup form defaults to `lang: "en"` when no field is provided (which is most of the time, because the form prefills it from URL params or browser locale). A user who never picked English ends up with `recap.lang: "en"` and a setup interview that silently runs in English. The first install where this surfaced recap-defaulted to English without the user ever being asked. Don't trust recap.lang as authoritative. Open polyglot. Let the user pick by responding.
 
 Wait for their answer. Store it as:
 - `PRIMARY_LANGUAGE` — the one language the whole bot runs in

@@ -689,7 +689,7 @@ Added a new CLAUDE.md template block (`SKILL.md` Phase 0) that tells future Clau
 | "What links to this file?" | `obsidian backlinks file="Name"` | Source of each backlink |
 | Editing a specific file | `Read` the file directly | — |
 
-**Also documented:** when merging duplicate concept nodes (e.g. "Accenture" vs "Accenture Colombia" vs "Accenture LATAM"), always update **aliases in the canonical file's frontmatter**. Never rename or delete — aliases preserve existing `[[Old Name]]` wikilinks automatically. Hit real cases of this during Adelaida's 2026-04-10 runs (Accenture, Anthony Rose).
+**Also documented:** when merging duplicate concept nodes (e.g. "Acme Corp" vs "Acme Corp West" vs "Acme Corp LATAM"), always update **aliases in the canonical file's frontmatter**. Never rename or delete — aliases preserve existing `[[Old Name]]` wikilinks automatically. Hit real cases of this during the 2026-04-10 runs (a corporate-client node and a person node).
 
 ---
 
@@ -701,7 +701,7 @@ Added `scripts/auto-wikilink.py` (v2). The previous version had three critical b
 
 2. **Reached across the team-vault symlink** when building its term list, linking team-vault files to personal-vault concept notes. This violated the team-vault firewall: team members opening the synced docs would see references to private personal-vault folders they don't have access to.
 
-3. **Substitution regex over-matched** when emoji or special characters were near a match. "A VP at Accenture" became "Curiosities/Colombiaccenture]]" because the negative lookbehind `(?<!\[\[)` only checked 2 characters back, and the lookahead `(?!\]\]|[^\[]*\]\])` was fragile around unicode.
+3. **Substitution regex over-matched** when emoji or special characters were near a match. "A VP at Acme Corp" became "Curiosities/Colombiacme Corp]]" because the negative lookbehind `(?<!\[\[)` only checked 2 characters back, and the lookahead `(?!\]\]|[^\[]*\]\])` was fragile around unicode.
 
 **v2 fixes all three:**
 
