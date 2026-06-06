@@ -1051,7 +1051,7 @@ The full session-close cascade, all 14 bundled skills, all the Phase 5 setup, ev
 
 ### Layer 1 — Reliability foundations
 
-- **Vault schema linter.** Same permanent-fix pattern that saved settings.json. New `hooks/lint-vault-frontmatter.py` is a PreToolUse hook that catches malformed YAML in Decisions/, Sessions/, and journal frontmatter before it lands. New `scripts/vault-schema-validator.py` is a standalone validator with 9-fixture self-test, runnable in CI or on-demand. Per-type schemas at `templates/schemas/{decision,session,journal}.json`. Closes the same class of bug that nuked Sergio's CRM 2026-04-27 (silent YAML parse error → empty re-marshal over real content).
+- **Vault schema linter.** Same permanent-fix pattern that saved settings.json. New `hooks/lint-vault-frontmatter.py` is a PreToolUse hook that catches malformed YAML in Decisions/, Sessions/, and journal frontmatter before it lands. New `scripts/vault-schema-validator.py` is a standalone validator with 9-fixture self-test, runnable in CI or on-demand. Per-type schemas at `templates/schemas/{decision,session,journal}.json`. Closes the same class of bug that nuked a real CRM record 2026-04-27 (silent YAML parse error → empty re-marshal over real content).
 - **Bootstrap reliability bundle (closes [#2](https://github.com/adelaidasofia/ai-brain-starter/issues/2), [#3](https://github.com/adelaidasofia/ai-brain-starter/issues/3), [#4](https://github.com/adelaidasofia/ai-brain-starter/issues/4) at once).** New flags: `--restore` for interactive recovery from .bak files, `--smoke-test` for end-to-end install verification, `--detect-partial` for finding half-installed components. Persistent log at `~/.claude/.bootstrap.log` with size-based rotation. Three new scripts: `bootstrap-restore.sh`, `detect-partial-installs.sh`, `post-install-smoke-test.sh`. The smoke test runs Python syntax, bash syntax, JSON validity, hook smoke tests, aggregator smoke tests, schema validator self-test, and the closing-signal fixture harness — 130+ checks in one command.
 
 ### Layer 2 — Telemetry foundation
@@ -1749,7 +1749,7 @@ Existing installs aren't auto-removed — this only affects new `/setup-brain` r
 
 Post-consolidation audit caught three things: a PowerShell parser bug that broke every Windows bootstrap run, bun left in as dead weight, and install verbs that leaked past the phase-file firewall.
 
-- **`bootstrap.ps1`**: `"$sub:"` in two status lines was parsed by PowerShell as a scope accessor (`$scope:name`), erroring on every bundled sub-skill. Fixed with `"${sub}:"`. Sergio (and any Windows user) would have hit this on every install.
+- **`bootstrap.ps1`**: `"$sub:"` in two status lines was parsed by PowerShell as a scope accessor (`$scope:name`), erroring on every bundled sub-skill. Fixed with `"${sub}:"`. Windows users would have hit this on every install.
 - **`bootstrap.sh` + `.ps1`**: removed bun. It was a claude-mem runtime dep that stayed after claude-mem was dropped. Nothing currently depends on it.
 - **`phases/`**: pulled remaining install verbs (brew/winget/snap/flatpak/git-clone/cp -R/mcpServers) out of phase-01, -04, -06-09, -11. Phases now defer to bootstrap for any install recovery.
 - **CHANGELOG**: compressed the top three entries from 3-paragraph templates to 1-paragraph + bullets. Cleanup commits don't need the full template.
