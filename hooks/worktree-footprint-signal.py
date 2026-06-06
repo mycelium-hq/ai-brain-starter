@@ -96,14 +96,24 @@ def main() -> int:
 
     lines: list[str] = []
 
-    if cloud and (registered or on_disk):
+    # Fire on ANY git-backed vault inside cloud sync — not only once worktrees
+    # exist. A fresh iCloud install with zero worktrees is ALREADY dangerous: the
+    # `.git/` rewrites on every commit and the sync daemon chokes on that alone
+    # (the .git-in-mirror variant). Catching it at first SessionStart beats
+    # catching it after the machine is already churning.
+    has_git = (main_repo / ".git").exists()
+    if cloud and (has_git or registered or on_disk):
+        if on_disk:
+            wt_note = f"it has {on_disk} worktree checkout(s); "
+        else:
+            wt_note = "even with zero worktrees its `.git/` rewrites on every commit; "
         lines.append(
-            f"⚠️  [footprint] This vault is inside **{cloud}**, and it has "
-            f"{on_disk} worktree checkout(s). Consumer cloud-sync + churning git "
-            f"worktrees = the sync-storm failure mode (millions of files, pegged "
-            f"CPU). The vault belongs on a local disk; the index belongs "
-            f"server-side. Move it out of the sync folder (see docs/CLOUD_SYNC.md), "
-            f"or at minimum keep `.claude/`, `.git/`, `.smart-env/` out of sync scope."
+            f"⚠️  [footprint] This vault is inside **{cloud}** — {wt_note}"
+            f"consumer cloud-sync + git churn = the sync-storm failure mode "
+            f"(millions of file events, pegged CPU, frozen machine). The vault "
+            f"belongs on a local disk; the index belongs server-side. Move it out "
+            f"of the sync folder (see docs/CLOUD_SYNC.md), or at minimum keep "
+            f"`.claude/`, `.git/`, `.smart-env/` out of sync scope."
         )
 
     if registered > warn_at or orphans > 0:

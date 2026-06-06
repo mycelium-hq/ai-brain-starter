@@ -285,6 +285,28 @@ else
   warn "~/.claude/skills/ai-brain-starter is not a git repo" "Re-run bootstrap.sh to clone it."
 fi
 
+# ----- 11. cloud-sync location (the freeze class) -----
+section "11. Cloud-sync location"
+CHECK_CLOUD=""
+for c in "$(cd "$(dirname "$0")" && pwd)/check-cloud-sync.py" \
+         "$HOME/.claude/skills/ai-brain-starter/scripts/check-cloud-sync.py"; do
+  [ -f "$c" ] && CHECK_CLOUD="$c" && break
+done
+if [ -n "$CHECK_CLOUD" ]; then
+  verdict="$(python3 "$CHECK_CLOUD" --porcelain "$VAULT" 2>/dev/null)"
+  case "$verdict" in
+    OK_LOCAL)
+      ok "Vault is on a local disk (not a consumer cloud-sync root)" ;;
+    CLOUD_SYNC_RISK:*)
+      bad "Vault is inside ${verdict#CLOUD_SYNC_RISK:} — a consumer cloud-sync folder" \
+        "A git-backed vault here melts the sync daemon (pegged CPU / frozen machine). Move it local (e.g. ~/Brain). See docs/CLOUD_SYNC.md." ;;
+    *)
+      warn "Could not evaluate cloud-sync location" "check-cloud-sync.py returned: ${verdict:-<empty>}" ;;
+  esac
+else
+  warn "check-cloud-sync.py not found" "Cannot verify the vault is outside a cloud-sync root."
+fi
+
 # ----- summary -----
 echo
 echo "${B}Summary${N}"

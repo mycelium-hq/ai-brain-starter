@@ -254,3 +254,12 @@ Then say: *"I just installed Obsidian for you. Let's create your vault now."*
 
 Save the vault path — you'll use it for all file operations.
 
+8.5. **GUARD — before saving the path, verify it is NOT inside a cloud-sync folder.** This is mandatory: a git-backed vault inside iCloud / OneDrive / Dropbox / Google Drive / Box melts the OS sync daemon (pegged CPU, frozen machine). Run:
+
+```bash
+python3 ~/.claude/skills/ai-brain-starter/scripts/check-cloud-sync.py --porcelain "<VAULT_PATH>"
+```
+
+- Output starts with `OK_LOCAL` → good, continue.
+- Output starts with `CLOUD_SYNC_RISK:` → **STOP. Do not continue the install.** Tell the user plainly: *"That location is inside <service>, which is cloud-synced — a vault there will freeze your machine. Please move the vault (or create a new one) somewhere local like `~/Brain` or `~/vaults/<name>`, then paste the new path."* Re-run this check on the new path. Do not proceed until it returns `OK_LOCAL`. (If the vault is large and already there, see `docs/CLOUD_SYNC.md` for how to move it out safely.)
+
