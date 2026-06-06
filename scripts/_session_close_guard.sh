@@ -86,8 +86,17 @@ _close_mutex_cleanup() {
 }
 
 _close_lock_mtime() {
-  # Epoch mtime of $1, cross-platform (BSD `stat -f%m` vs GNU `stat -c%Y`).
-  stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo ""
+  # Epoch mtime of $1, cross-platform. Try GNU `stat -c %Y` first, then BSD
+  # `stat -f %m`, and VALIDATE the result is numeric after each attempt. We must
+  # not rely on exit code alone: GNU `stat -f` means `--file-system`, so
+  # `stat -f %m FILE` on Linux exits 0 with non-numeric filesystem text instead
+  # of failing - if we trusted `||` that garbage would make lock_age huge and
+  # the mutex would falsely reclaim a live lock on Linux.
+  local m
+  m=$(stat -c %Y "$1" 2>/dev/null)              # GNU/Linux
+  case "$m" in ''|*[!0-9]*) m=$(stat -f %m "$1" 2>/dev/null) ;; esac   # BSD/macOS
+  case "$m" in ''|*[!0-9]*) m="" ;; esac        # neither gave a plain integer
+  echo "$m"
 }
 
 close_mutex_acquire() {
