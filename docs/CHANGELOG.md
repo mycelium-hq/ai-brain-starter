@@ -9,6 +9,27 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-06-06: your brain can no longer end up with zero off-machine backup, silently
+
+**Who this affects:** everyone. If your vault lives on one disk with no off-machine copy, one hardware failure loses everything — every note, every journal entry — with no warning. A real person hit exactly this: about 1,100 notes, no Time Machine, no cloud copy, no git remote, a single drive. The product never said a word about it.
+
+### The problem
+
+The hourly git auto-snapshot is *local-only* by design (it refuses to run with a remote), so "I have snapshots" still meant one disk away from total loss. Nothing detected the no-backup state, nothing offered a fix, and onboarding actively waved backup off — the old Phase 15 told the installer "your normal backup habits already cover it, no special setup needed." For anyone whose normal habits were *nothing*, that was the bug, encoded into setup.
+
+### The fix
+
+- **A loud, repeated session-start signal.** When no off-machine backup of any kind is detected — not our backup, not Time Machine, not a cloud copy, not a pushed git remote — every session opens with a warning and the one command to fix it. It is advisory (it never blocks) but it does not go quiet until a backup exists.
+- **One-command backup.** `bash scripts/vault-backup.sh setup` asks one thing — a destination you already have (an external drive, or a Google Drive / Dropbox / OneDrive folder) — then writes one compressed daily snapshot there (a single file, not the churning git tree, so a cloud folder syncs it fine), schedules it daily, and excludes the regenerable machine-exhaust. `--encrypt` for a vault with journals or client notes (AES-256, passphrase in your OS keychain). `verify` does a real restore to prove it works — a backup you have never restored is a hope, not a backup. Windows parity ships (`vault-backup.ps1`).
+- **Onboarding now establishes a backup** (Phase 1, step 8.6) and **confirms it before setup is called done** (the rewritten Phase 15), or makes you decline on purpose with the consequence stated plainly.
+- **`/diagnose`** gained a backup check (section 12), and `docs/BACKUP.md` is the full guide (cross-linked from `docs/CLOUD_SYNC.md` and `docs/MAINTENANCE.md`).
+
+### Verification
+
+Two new self-tests ship with it, both with negative controls. The detector test proves a bare local vault reports NO_BACKUP (exit 1) and that every real off-machine-copy path reports BACKED_UP (exit 0) — so the guard is not just always-firing or always-silent. The round-trip test runs the whole loop on a fixture vault: one archive written, machine-exhaust excluded, the detector flips to backed-up, a real restore extracts the notes back, rotation honors the keep count, and the encrypted path round-trips without leaking plaintext.
+
+---
+
 ## 2026-06-05: stop SessionStart hooks from piling up and freezing your machine
 
 **Who this affects:** anyone who runs more than one Claude Code session at a time (a common, intended workflow). Two SessionStart hooks could pile up under concurrency and peg every CPU core.

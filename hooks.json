@@ -205,6 +205,11 @@
           },
           {
             "type": "command",
+            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/surface-backup-status.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "statusMessage": "Checking off-machine backup..."
+          },
+          {
+            "type": "command",
             "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/enforce-worktree-cap.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Enforcing worktree cap (reclaim-then-allow)..."
           },

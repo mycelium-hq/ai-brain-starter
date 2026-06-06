@@ -2,6 +2,23 @@
 
 Automated hygiene checks to keep your vault clean over time. These complement the one-time setup from `bootstrap.sh` with ongoing maintenance.
 
+## Off-machine backup (read this first)
+
+The single most important piece of ongoing maintenance is making sure the vault
+is not your only copy. The hourly git auto-snapshot is *local-only* — rollback
+history, not a backup. One disk failure with no off-machine copy loses
+everything.
+
+Set up a daily off-machine backup in one command (provider-agnostic destination,
+optional encryption, with a real restore check):
+
+```bash
+bash scripts/vault-backup.sh setup     # then: ... verify   to prove the restore
+```
+
+The session-start signal (`surface-backup-status.py`) and `/diagnose` (section
+12) both nag until a backup exists. Full guide: **[docs/BACKUP.md](BACKUP.md)**.
+
 ## Scripts
 
 ### vault_maintenance.py

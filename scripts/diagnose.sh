@@ -307,6 +307,34 @@ else
   warn "check-cloud-sync.py not found" "Cannot verify the vault is outside a cloud-sync root."
 fi
 
+# ----- 12. off-machine backup (the one-disk-failure class) -----
+section "12. Off-machine backup"
+CHECK_BACKUP=""
+for c in "$(cd "$(dirname "$0")" && pwd)/check-vault-backup.py" \
+         "$HOME/.claude/skills/ai-brain-starter/scripts/check-vault-backup.py"; do
+  [ -f "$c" ] && CHECK_BACKUP="$c" && break
+done
+if [ -n "$CHECK_BACKUP" ]; then
+  bverdict="$(python3 "$CHECK_BACKUP" --porcelain "$VAULT" 2>/dev/null)"
+  case "$bverdict" in
+    BACKED_UP:vault-backup:*)
+      ok "Off-machine backup present (vault-backup, ~${bverdict##*:} days old)" ;;
+    BACKED_UP:timemachine)   ok "Off-machine backup present (Time Machine destination configured)" ;;
+    BACKED_UP:cloud:*)       ok "Off-machine copy present (${bverdict#BACKED_UP:cloud:} — a cloud copy; single-file snapshots are safer, see docs/BACKUP.md)" ;;
+    BACKED_UP:git-remote)    ok "Off-machine backup present (git HEAD pushed to a remote)" ;;
+    NO_BACKUP:configured-not-run)
+      warn "Backup configured but no snapshot exists yet (or destination unreachable)" \
+        "Run: bash scripts/vault-backup.sh run --vault '$VAULT'" ;;
+    NO_BACKUP)
+      bad "Vault has NO off-machine backup — one disk failure loses everything" \
+        "Set one up (one command): bash scripts/vault-backup.sh setup --vault '$VAULT'. See docs/BACKUP.md." ;;
+    *)
+      warn "Could not evaluate backup status" "check-vault-backup.py returned: ${bverdict:-<empty>}" ;;
+  esac
+else
+  warn "check-vault-backup.py not found" "Cannot verify the vault has an off-machine backup."
+fi
+
 # ----- summary -----
 echo
 echo "${B}Summary${N}"

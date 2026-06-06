@@ -86,10 +86,11 @@ Your vault `.gitignore` should contain at least:
   the session ends; a session-start cap reclaims any that a crash left behind;
   unsaved work is snapshotted first and committed work is preserved on its
   branch. You never accumulate a pile. (See `docs/HOOKS_INSTALL.md`.)
-- **Backups are a deliberate, encrypted choice** — restic to an encrypted
-  remote, with a restore you actually verify — not a side effect of a sync
-  daemon that also happens to hold your secrets in plaintext. (See
-  `docs/MAINTENANCE.md`.)
+- **Backups are a deliberate, off-machine choice** — one compressed daily
+  snapshot to a destination you pick, with a restore you actually verify — not a
+  side effect of a sync daemon that also happens to hold your secrets in
+  plaintext. One command sets it up: `bash scripts/vault-backup.sh setup`
+  (encrypted with `--encrypt`). (See `docs/BACKUP.md`.)
 - **The index is server-side.** For Mycelium runtime users, the searchable
   index lives in the runtime, not in a synced local folder. Your laptop holds
   the source notes on a local disk; the heavy index never touches your
@@ -203,10 +204,12 @@ Verify success the way you diagnosed it: the `itemNotFound` count collapses and
 ## Order matters: back up before you move
 
 Relocating the vault out of a sync folder is the right fix, but the vault is
-often the one irreplaceable asset, so **stand up an encrypted backup and pull a
+often the one irreplaceable asset, so **stand up an off-machine backup and pull a
 real restore from it FIRST, then relocate.** A backup you have never restored is
-a hope, not a backup. Encrypted restic to a local repo gets you protected
-immediately; add an offsite copy when you can. (See `docs/MAINTENANCE.md`.)
+a hope, not a backup. One command gets you protected immediately —
+`bash scripts/vault-backup.sh setup` (add `--encrypt` for a sensitive vault),
+then `bash scripts/vault-backup.sh verify` to prove the restore. Full guide,
+including the restic option for an offsite tier: `docs/BACKUP.md`.
 
 A brain that melts the machine it runs on isn't a brain you'll keep. Local
 disk for the source, server-side for the index, encrypted-and-verified for

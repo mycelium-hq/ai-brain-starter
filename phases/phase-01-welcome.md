@@ -263,3 +263,32 @@ python3 ~/.claude/skills/ai-brain-starter/scripts/check-cloud-sync.py --porcelai
 - Output starts with `OK_LOCAL` → good, continue.
 - Output starts with `CLOUD_SYNC_RISK:` → **STOP. Do not continue the install.** Tell the user plainly: *"That location is inside <service>, which is cloud-synced — a vault there will freeze your machine. Please move the vault (or create a new one) somewhere local like `~/Brain` or `~/vaults/<name>`, then paste the new path."* Re-run this check on the new path. Do not proceed until it returns `OK_LOCAL`. (If the vault is large and already there, see `docs/CLOUD_SYNC.md` for how to move it out safely.)
 
+### Step 8.6 — Establish an off-machine backup (or explicitly defer, with a warning) — BEFORE declaring setup complete
+
+The vault is the one irreplaceable thing here. Local-disk-only is the silent killer: it works perfectly right up until the drive dies, and then everything is gone — every note, every journal entry. The hourly git auto-snapshot is **local-only** (it refuses to run with a remote), so it is rollback history, not a backup. A real person hit exactly this: ~1,100 notes, no iCloud, no Time Machine, no remote, one disk. One failure from total loss.
+
+**So a brand-new vault does not count as "set up" until it has an off-machine backup, or the user has explicitly chosen to defer with eyes open.** Do not skip this silently.
+
+First, check what they already have:
+
+```bash
+python3 ~/.claude/skills/ai-brain-starter/scripts/check-vault-backup.py "<VAULT_PATH>"
+```
+
+- Verdict `OK ...` (Time Machine, a cloud copy, or a pushed git remote already exists) → say so warmly: *"Good — you already have an off-machine copy via <source>, so you're covered. I'll move on."* Done.
+- Verdict `FAIL  ... NO off-machine backup` → set one up now. It is one command and picks a destination the user already has:
+
+```bash
+bash ~/.claude/skills/ai-brain-starter/scripts/vault-backup.sh setup --vault "<VAULT_PATH>"
+```
+
+Walk them through it in their language: it asks for a destination folder — **an external drive, or a Google Drive / Dropbox / OneDrive folder** (a single daily archive syncs fine; it is the churning vault that must never live in cloud sync, not one compressed file). It writes one compressed snapshot immediately, installs a daily schedule, and never touches the machine-exhaust dirs. **For a vault that will hold journals, health data, or client/CRM notes, add `--encrypt`** — it stores the passphrase in the OS keychain, never in plaintext.
+
+Then have them prove it actually restores (a backup nobody has restored is a hope, not a backup):
+
+```bash
+bash ~/.claude/skills/ai-brain-starter/scripts/vault-backup.sh verify --vault "<VAULT_PATH>"
+```
+
+**If the user genuinely wants to defer** (no external disk handy, wants to decide on a cloud folder later): do not fight them, but do not let it pass silently either. Say plainly: *"Okay — just so you know, your brain currently has no off-machine backup, so right now one disk failure would lose everything. I've left it un-set-up at your call. You'll see a reminder at the start of every session until a backup exists, and the one command to fix it is `bash ~/.claude/skills/ai-brain-starter/scripts/vault-backup.sh setup`."* The SessionStart signal (`surface-backup-status.py`) then keeps it visible until it's done — it is advisory and never blocks, but it does not go quiet. See `docs/BACKUP.md`.
+

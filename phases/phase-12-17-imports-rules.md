@@ -94,17 +94,31 @@ type: concept
 
 This is what turns a vault from a filing system into a thinking system. The concepts are the nodes. The links are the edges. The graph becomes navigable.
 
-## Phase 15: Backup confirmation (one sentence, then move on)
+## Phase 15: Backup confirmation (verify before declaring setup done)
 
-**The vault lives on the Desktop. That's the canonical home — set in Phase 1 step 7 ("Put it somewhere easy to find, like your Desktop") and it stays that way.** Do NOT ask the user to pick a backup mechanism. Do NOT push them to move the vault into iCloud / Google Drive / Dropbox. Their normal backup habits (Time Machine, external drive, cloud sync at the OS level, whatever they already do) cover the vault — it's just a folder of markdown files.
+This is the final backup checkpoint. The off-machine backup was established in **Phase 1, step 8.6** (right after the vault path was confirmed local). Here you confirm it actually took — and if step 8.6 was deferred or skipped, this is the last chance to set it up before you call setup complete.
 
-One sentence acknowledgment, then move on. In their PRIMARY_LANGUAGE.
+**Do NOT wave backup off.** The old version of this phase said "whatever you normally use already covers it — no special setup needed." That assumption is exactly what fails people: a real user had ~1,100 notes, no Time Machine, no cloud copy, no remote, one disk — one failure from losing everything, because everyone assumed their "normal habits" had it covered. A markdown folder on a single disk with no off-machine copy is one hardware fault from total loss. Confirm, don't assume.
 
-**EN:** "One thing to mention: your vault is a folder of markdown files. Whatever you normally use to back up your computer (Time Machine, an external drive, a cloud sync, whatever) already covers it. No special backup setup needed. Moving on."
+Run the detector (single source of truth) against their vault path:
 
-**ES:** "Una cosa: tu vault es una carpeta con archivos markdown. Lo que sea que normalmente uses para hacer copias de seguridad de tu computador (Time Machine, un disco externo, una sync en la nube, lo que sea) ya lo cubre. No hace falta una configuración especial. Sigamos."
+```bash
+python3 ~/.claude/skills/ai-brain-starter/scripts/check-vault-backup.py "<VAULT_PATH>"
+```
 
-That's it. Do NOT recommend a specific backup tool, do NOT surface a five-option menu, do NOT trigger an alarm because the vault lives on Desktop. Desktop is correct.
+- **`OK ...`** (vault-backup archive present, or Time Machine / a cloud copy / a pushed git remote already exists) → confirm it warmly in their PRIMARY_LANGUAGE, then nudge the one-time restore check if they haven't done it:
+  - *EN:* "Your brain is backed up off-machine (via <source>) — good. Run `bash ~/.claude/skills/ai-brain-starter/scripts/vault-backup.sh verify` once to prove the restore actually works, and you're set."
+- **`FAIL ... NO off-machine backup`** → do NOT move on. Set it up now (this is the same one command from step 8.6):
+
+```bash
+bash ~/.claude/skills/ai-brain-starter/scripts/vault-backup.sh setup --vault "<VAULT_PATH>"
+```
+
+  It asks for a destination they already have (an external drive, or a Google Drive / Dropbox / OneDrive folder), writes one compressed daily snapshot (no sync-storm), and schedules it. Add `--encrypt` for a vault holding journals / health / client notes. Then have them `verify` the restore.
+
+  If they still choose to defer, say it plainly (do not soften it away): *"Okay — just know your brain has no off-machine backup right now, so one disk failure would lose it. You'll see a reminder at the start of every session until a backup exists. The one command to fix it is `bash ~/.claude/skills/ai-brain-starter/scripts/vault-backup.sh setup`."* The SessionStart signal then keeps it visible until it's done.
+
+Full guide: `docs/BACKUP.md`. Never push the live vault *into* iCloud / Drive / Dropbox as the "backup" — that is the sync-storm failure mode (`docs/CLOUD_SYNC.md`); the backup is a single daily archive *sent to* such a folder, not the churning vault living in one.
 
 Team-vault sharing is handled separately in Phase 20.
 
