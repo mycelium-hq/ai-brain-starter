@@ -9,6 +9,25 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-06-05: stop SessionStart hooks from piling up and freezing your machine
+
+**Who this affects:** anyone who runs more than one Claude Code session at a time (a common, intended workflow). Two SessionStart hooks could pile up under concurrency and peg every CPU core.
+
+### The problem
+
+The secret-scan hook (`scan-prior-sessions-for-secrets.py`) stamped its 6-hour cooldown marker *after* its slow corpus scan finished, not before. So every session that started while a scan was still running saw no fresh marker and launched its own full scan. Several multi-minute scans running at once pinned the CPU until a machine froze under heavy load. There was no single-instance lock, no incremental mode, and no time budget. The runaway-process reaper (`remediate-runaway-procs.py`) only cleaned up orphaned no-op processes (a dead parent), so it was blind to exactly this kind of stuck hook — one with a live parent.
+
+### The fix
+
+- The secret-scan hook now claims its cooldown marker *first*, holds a single-instance lock so only one scan can run at a time, scans incrementally (only files changed since the last full pass), de-prioritizes itself, caps each pass with a wall-clock budget, and skips oversized transcripts. A second session can no longer start a second scan.
+- The reaper now also clears a stuck hook process — one running under `~/.claude/hooks/` for many minutes at high CPU — which is the exact class that caused the freeze. It is path-scoped with a dual age-and-CPU gate, so a fast hook, a bounded scan, or a busy compiler is never touched. Tune or disable it with `RUNAWAY_HOOK_MIN_AGE_MIN` / `RUNAWAY_HOOK_MIN_CPU` / `RUNAWAY_REMEDIATE_BYPASS=1`.
+
+### Verification
+
+Two new automated tests ship with the fix. The reaper test is a positive-and-negative control over the kill decision (a stuck hook process is reaped; a young one, a low-CPU one, a non-hook program, a non-python process, and the reaper's own process are all left alone). The scan test proves a second concurrent run backs off instead of starting a second scan — with a mutation check confirming the test goes red if the lock is removed. Every other SessionStart hook was audited and found bounded (each works on a small, capped set — worktrees, branches, a single marker file — never the unbounded session corpus the scan hook walks).
+
+---
+
 ## 2026-06-03: stop asking for your email over and over
 
 **Who this affects:** anyone who installed without giving an email, or who declined the optional ask. Previously you could be asked again and again, in every kind of session (even while journaling), and pointed at a "token" to paste.

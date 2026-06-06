@@ -95,6 +95,8 @@ INTEGRATION_TESTS=(
   test_trust_prompt_preframing
   test_post_update_email_ask
   test_installer_retires_email_gate
+  test_remediate_runaway_procs
+  test_scan_prior_single_instance
 )
 echo "==> (b) Shell integration: ${#INTEGRATION_TESTS[@]} tests"
 for t in "${INTEGRATION_TESTS[@]}"; do

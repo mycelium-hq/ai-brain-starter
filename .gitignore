@@ -37,3 +37,9 @@ secrets.json
 
 # codegraph local index (per-clone, 100MB+, regenerated on demand).
 .codegraph/
+
+# scan-prior-sessions-for-secrets.py runtime state (markers + single-instance
+# lock, regenerated each run; never belongs in version control).
+hooks/.last-secret-scan
+hooks/.last-secret-scan-full
+hooks/.secret-scan.lock
