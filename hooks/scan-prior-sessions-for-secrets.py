@@ -7,6 +7,22 @@ THIS hook catches anything historical that slipped through — from sessions
 that ended before the scrub hook existed, or before a given pattern was
 added to the registry.
 
+Resource governance (added after a 2026-06-05 freeze on the maintainer's
+machine, where the OLD version stamped its 6h cooldown AFTER the slow scan:
+every session that started during the scan window blew past the cooldown
+and launched its OWN full corpus scan, and four concurrent multi-minute
+scans pegged the CPU until the machine froze). The pile-up class is now
+closed by FOUR guards, all in this file:
+
+  * single-instance flock — at most ONE scan runs at a time; a concurrent
+    session backs off immediately instead of starting a second scan;
+  * stamp-at-START — the cooldown marker is claimed BEFORE the work, so a
+    session that starts mid-scan sees the cooldown and skips;
+  * incremental — once a full pass completes, later runs only read files
+    modified since that pass (a handful, not the whole corpus);
+  * wall-clock budget + per-file size cap + os.nice(10) — a single pass can
+    never run away or starve the foreground session.
+
 Behavior:
   - Detect: scans every `~/.claude/projects/**/*.jsonl` against the
     registry (`_lib/secret_patterns.scan`). Rate-limited to one run per 6h
@@ -31,6 +47,8 @@ Environment:
   - `SCAN_PRIOR_AUTO_SCRUB_BYPASS=1` — forensic mode: skip auto-scrub
     even when VAULT_ROOT is set. Useful for inspecting findings before
     scrubbing.
+  - `SECRET_SCAN_BUDGET_SECONDS` — override the per-pass wall-clock budget
+    (applies to both the cold and warm budgets). Ops escape hatch.
 
 Pairs with the other secret-defense layers; see `_lib/secret_patterns.py`
 docstring for the full architecture.
@@ -39,6 +57,7 @@ docstring for the full architecture.
 from __future__ import annotations
 
 import datetime as _dt
+import fcntl
 import json
 import os
 import shutil
@@ -52,8 +71,19 @@ sys.path.insert(0, str(HOOK_DIR))
 
 from _lib.secret_patterns import redact, scan  # noqa: E402
 
-MARKER = HOOK_DIR / ".last-secret-scan"
+MARKER = HOOK_DIR / ".last-secret-scan"            # last ATTEMPT (cooldown, stamped at start)
 COOLDOWN_SECONDS = 6 * 60 * 60  # 6h
+FULL_MARKER = HOOK_DIR / ".last-secret-scan-full"  # last COMPLETED full pass (incremental baseline)
+LOCK = HOOK_DIR / ".secret-scan.lock"              # single-instance guard (flock)
+MAX_FILE_BYTES = 3 * 1024 * 1024                    # skip outsized transcripts (cost without proportional secret risk)
+# Per-pass wall-clock ceiling. COLD start (no completed full pass yet) gets a
+# generous budget so it can finish ONE full pass and prime the incremental
+# baseline — else it truncates forever and silently covers only part of the
+# corpus. WARM runs are incremental (only changed files) so a short budget is
+# ample. Env override wins for ops.
+_BUDGET_OVERRIDE = os.environ.get("SECRET_SCAN_BUDGET_SECONDS")
+COLD_BUDGET_SECONDS = int(_BUDGET_OVERRIDE) if _BUDGET_OVERRIDE else 600
+WARM_BUDGET_SECONDS = int(_BUDGET_OVERRIDE) if _BUDGET_OVERRIDE else 60
 
 # Auto-scrub additions
 AUTO_SCRUB_LOG = Path.home() / ".claude" / "secret-detection-log.jsonl"
@@ -62,21 +92,22 @@ BYPASS_ENV = "SCAN_PRIOR_AUTO_SCRUB_BYPASS"
 BACKUP_SUFFIX_TEMPLATE = ".bak.{date}-secret-scrub"
 
 
-def _within_cooldown() -> bool:
-    if not MARKER.exists():
-        return False
+def _read_epoch(path: Path) -> float | None:
     try:
-        last = float(MARKER.read_text().strip())
+        return float(path.read_text().strip())
     except (ValueError, OSError):
-        return False
-    return (time.time() - last) < COOLDOWN_SECONDS
+        return None
+
+
+def _write_epoch(path: Path) -> None:
+    try:
+        path.write_text(f"{time.time():.0f}\n")
+    except OSError:
+        pass
 
 
 def _stamp() -> None:
-    try:
-        MARKER.write_text(f"{time.time():.0f}\n")
-    except OSError:
-        pass
+    _write_epoch(MARKER)
 
 
 def _vault_root() -> Path | None:
@@ -184,18 +215,62 @@ def _auto_scrub(jsonl: Path) -> tuple[bool, str]:
 
 
 def main() -> int:
-    if _within_cooldown():
+    # Cooldown (fast path): skip if a scan was ATTEMPTED < COOLDOWN_SECONDS ago.
+    # The marker is stamped at the START of a run (below), so a session that
+    # starts mid-scan sees a fresh marker and backs off here.
+    last_attempt = _read_epoch(MARKER)
+    if last_attempt is not None and (time.time() - last_attempt) < COOLDOWN_SECONDS:
         print(json.dumps({"continue": True, "suppressOutput": True}))
         return 0
+
+    # Single-instance lock. If another scan already holds it, back off NOW.
+    # This is the primary guard against the SessionStart pile-up that froze
+    # the maintainer's machine on 2026-06-05: without it, N concurrent
+    # sessions each launched their own full corpus scan.
+    try:
+        _lock_fh = LOCK.open("w")  # noqa: F841 (held open to keep the flock for the process lifetime)
+        fcntl.flock(_lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        print(json.dumps({"continue": True, "suppressOutput": True}))
+        return 0
+
+    # Claim the cooldown NOW (before the work) so concurrent starts back off.
+    _stamp()
+
+    # De-prioritise: never starve the foreground session, even mid-scan.
+    try:
+        os.nice(10)
+    except OSError:
+        pass
 
     projects = Path.home() / ".claude" / "projects"
     if not projects.exists():
-        _stamp()
         print(json.dumps({"continue": True, "suppressOutput": True}))
         return 0
 
+    # Incremental: once a full pass has completed, only read files modified
+    # since then (unchanged files were already covered). Turns a 1000+-file
+    # walk into the handful touched in the last 6h. Bounded by a wall-clock
+    # budget and a per-file size cap so a single pass can never run away.
+    full_baseline = _read_epoch(FULL_MARKER)
+    incremental = full_baseline is not None
+    cutoff = (full_baseline or 0) - 5  # small clock-skew buffer
+    deadline = time.time() + (WARM_BUDGET_SECONDS if incremental else COLD_BUDGET_SECONDS)
+    truncated = False
+
     findings: list[tuple[Path, list[tuple[str, int]]]] = []
     for jsonl in projects.rglob("*.jsonl"):
+        if time.time() > deadline:
+            truncated = True
+            break
+        try:
+            st = jsonl.stat()
+        except OSError:
+            continue
+        if incremental and st.st_mtime < cutoff:
+            continue
+        if st.st_size > MAX_FILE_BYTES:
+            continue  # outsized transcript: cost without proportional secret risk
         try:
             text = jsonl.read_text(errors="replace")
         except OSError:
@@ -204,7 +279,10 @@ def main() -> int:
         if hits:
             findings.append((jsonl, hits))
 
-    _stamp()
+    # Advance the incremental baseline only after a pass that finished without
+    # truncation — so a truncated pass never leaves an unscanned hole.
+    if not truncated:
+        _write_epoch(FULL_MARKER)
 
     if not findings:
         print(json.dumps({"continue": True, "suppressOutput": True}))
