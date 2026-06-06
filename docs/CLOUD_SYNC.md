@@ -1,86 +1,108 @@
-# Keep your brain local-first
+# Your vault can live in iCloud. Its machinery can't.
 
 Your brain is a living git repository. Claude Code works inside it with
 per-session git **worktrees** — fast, throwaway checkouts under
 `.claude/worktrees/`. That design is what makes parallel sessions safe. It
 also means the directory churns constantly: thousands of files created and
-deleted as you work.
+deleted as you work, a `.git` that a single `git gc` rewrites wholesale, and
+search-index caches that rebuild on the fly.
 
-**Consumer cloud-sync tools — iCloud Drive, OneDrive, Dropbox, Google Drive,
-Box — are built for documents, not for a churning git tree.** Point one at
-your brain and it tries to upload every worktree file, every `.git` object,
-every search-index cache, in real time. On an active machine that compounds
-into hundreds of thousands of files and a sync daemon pinned at full CPU for
-hours. It is the single most common way to make a healthy brain feel broken.
+Point a consumer cloud-sync daemon — iCloud Drive, OneDrive, Dropbox, Google
+Drive, Box — at that churn and it tries to upload every worktree file, every
+`.git` object, every cache, in real time. On an active machine that compounds
+into hundreds of thousands of file events and a sync daemon pinned at full CPU
+for hours. It is the single most common way to make a healthy brain feel broken.
 
-So the rule is simple, and it is a design principle, not a workaround:
+The storm hides one fact: your *notes* are not the problem. Markdown is tiny
+and barely changes. The freeze comes entirely from the **machinery** — `.git`,
+worktrees, caches — living inside the synced tree. So the rule is not "never
+sync your brain." The rule is:
 
-> **The vault lives on a local disk. The index lives server-side. Neither
-> belongs in a consumer cloud-sync folder.**
+> **The vault may be synced. The machinery never is.**
 
-The footprint signal at session start will warn you if it detects your vault
-inside a sync folder. Here is how to fix it.
+That gives you two supported shapes, both first-class. Pick by whether you want
+your notes on your phone. The footprint signal at session start will warn you if
+it sees machinery inside a sync folder; here is how to set up either shape.
 
 ---
 
-## The fix, in order of preference
+## Two supported shapes
 
-### 1. Best: keep the vault outside every sync folder
+### Shape A — vault fully local (simplest)
 
-Put the vault on a normal local path — `~/brain`, `~/vaults/<name>`,
-anywhere that is **not** inside a sync root. On macOS that specifically means
-**not** `~/Desktop` or `~/Documents` when iCloud "Desktop & Documents
-folders" is on (both are synced). On Windows, not inside `OneDrive\`. Anywhere
-else under your home directory is fine.
+Put the vault on a normal local path — `~/brain`, `~/vaults/<name>`, anywhere
+**not** inside a sync root. On macOS that means **not** `~/Desktop` or
+`~/Documents` when iCloud "Desktop & Documents" is on (both are synced); on
+Windows, not inside `OneDrive\`. The index lives server-side; backups are a
+deliberate off-machine choice (below). Nothing to configure — this is the
+default.
 
-Already living in a sync folder? Move it out and leave a symlink behind so
-every tool that points at the old path keeps working:
+Already inside a sync folder and you don't need phone access? Move it out and
+leave a symlink so every tool that points at the old path keeps working:
 
 ```bash
-# macOS / Linux — example moving a vault off the iCloud-synced Desktop
 mv ~/Desktop/MyVault ~/MyVault
 ln -s ~/MyVault ~/Desktop/MyVault   # old path still resolves; iCloud syncs only the tiny symlink
 ```
 
-Then re-open the vault in Obsidian from the new location and confirm your
-tools still resolve. Sync daemons follow the *symlink file* (a few bytes),
-not the target's contents — so the churn leaves iCloud's scope entirely.
+Sync daemons follow the *symlink file* (a few bytes), not the target's
+contents — so the churn leaves the sync scope entirely.
 
-### 2. If you truly cannot move it: exclude the machine-exhaust
+### Shape B — vault synced, machinery in a local sidecar (notes on every device)
 
-If the vault must stay inside a sync folder, exclude the three directories
-that actually churn. This stops the storm even if the notes keep syncing.
+This is the mode that lets you **keep your notes in iCloud and edit them on your
+iPhone**, two-way, without the storm. It relocates every churning machinery dir
+OUT of the synced tree into a local sidecar and leaves only tiny static pointers
+behind:
 
-- **iCloud Drive (macOS):** iCloud has no per-subfolder toggle. Rename the
-  exhaust dirs with a `.nosync` suffix and symlink them back, or — simpler and
-  what we recommend — move the *whole vault* out per option 1. Excluding
-  subfolders under iCloud is fiddly and easy to get wrong; relocation is the
-  honest fix.
-- **Dropbox:** Selective Sync (Preferences → Sync) → uncheck
-  `.claude`, `.git`, `.smart-env`.
-- **OneDrive (Windows/Mac):** right-click the folder → "Always keep on this
-  device" off is not enough; use OneDrive settings → "Choose folders" to
-  exclude `.claude`, `.git`, `.smart-env`.
-- **Google Drive / Box:** use the desktop client's selective-sync / ignore
-  settings to exclude the same three.
+- `.git` → a real git directory outside the tree, via
+  `git init --separate-git-dir`, leaving a one-line `.git` **pointer file** in
+  the vault (static, safe to sync).
+- `.claude/worktrees/` and the caches (`.smart-env`, `.codegraph`, graph output,
+  session logs, snapshots) → relocated to the sidecar with a symlink back. The
+  sync daemon follows the symlink (a few bytes), never the target's churn.
 
-### 3. Always: keep machine-exhaust out of git too
+One command sets it up. Run it with **all Claude sessions closed and no scratch
+worktrees live** — separating the git directory orphans live worktrees, so the
+script refuses unless the window is clean (`--force` to override):
 
-Separate concern, same dirs. `.gitignore` stops you *committing* the exhaust;
-it does **not** stop a cloud daemon from *syncing* it (that's option 1/2).
-Your vault `.gitignore` should contain at least:
-
-```gitignore
-.claude/worktrees/
-.smart-env/
-.codegraph/
-⚙️ Meta/Worktree Snapshots/
-⚙️ Meta/logs/
+```bash
+# preview first (changes nothing)
+bash scripts/relocate-machinery-sidecar.sh "/path/to/vault" --dry-run
+# do it (default sidecar: ~/.brain-sidecar; override with --sidecar or $BRAIN_SIDECAR)
+bash scripts/relocate-machinery-sidecar.sh "/path/to/vault"
+# fully reversible — restores a normal local repo
+bash scripts/relocate-machinery-sidecar.sh "/path/to/vault" --rollback
 ```
+
+Then turn on iCloud Drive (or Desktop & Documents) for that folder. The docs
+sync to every device; the machinery never leaves your Mac. Verify the calm
+yourself: run a `git gc` plus a full session and watch Activity Monitor —
+`fileproviderd`/`bird` stay idle.
+
+> **Second Mac?** The `.git` pointer syncs as static text but points at *this*
+> Mac's sidecar. On another Mac, re-run the helper there to stand up its own
+> sidecar. On iPhone there is no git, so the pointer is harmless — you just see
+> your notes.
+
+> **`.gitignore` is not enough.** It stops you *committing* the machinery; it
+> does **not** stop a cloud daemon from *syncing* it. The bytes must physically
+> leave the synced tree (Shape B) or be flagged `.nosync` (the helper's
+> `--nosync` mode renames caches to `<name>.nosync`, which iCloud ignores by
+> name). Keep the machinery out of git too — your `.gitignore` should contain at
+> least:
+>
+> ```gitignore
+> .claude/worktrees/
+> .smart-env/
+> .codegraph/
+> ⚙️ Meta/Worktree Snapshots/
+> ⚙️ Meta/logs/
+> ```
 
 ---
 
-## What the brain does instead of cloud sync
+## What the brain does for sync safety
 
 - **Worktree hygiene is automatic.** Each session's worktree is removed when
   the session ends; a session-start cap reclaims any that a crash left behind;
@@ -184,9 +206,11 @@ too corrupted for in-place repair — go to step 3.
 
 **3. Rebuild from the server (the supported reset).** System Settings → your
 Apple Account → iCloud → **iCloud Drive** → turn it **off**, choosing **"Keep a
-Copy"** of files on this Mac. Reboot. Turn iCloud Drive back **on**, and do
-**not** re-enable "Desktop & Documents folders". This discards the corrupt local
-DB and re-fetches a clean one from Apple's servers.
+Copy"** of files on this Mac. Reboot. Turn iCloud Drive back **on**. Leave
+"Desktop & Documents folders" off *unless* you have set up Shape B above (the
+machinery sidecar) — once the machinery is out of the synced tree, re-enabling
+D&D is safe. This discards the corrupt local DB and re-fetches a clean one from
+Apple's servers.
 
 - Expect a CPU spike and a long re-sync afterward — that part is normal; let it
   run (hours, on a large drive).
@@ -211,6 +235,7 @@ a hope, not a backup. One command gets you protected immediately —
 then `bash scripts/vault-backup.sh verify` to prove the restore. Full guide,
 including the restic option for an offsite tier: `docs/BACKUP.md`.
 
-A brain that melts the machine it runs on isn't a brain you'll keep. Local
-disk for the source, server-side for the index, encrypted-and-verified for
-the backup. That's the whole policy.
+A brain that melts the machine it runs on isn't a brain you'll keep. Whichever
+shape you pick — fully local, or synced with the machinery in a sidecar — the
+invariant is the same: notes can sync, machinery never does, the index lives
+server-side, and the backup is encrypted-and-verified. That's the whole policy.

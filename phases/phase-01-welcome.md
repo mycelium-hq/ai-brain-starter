@@ -246,7 +246,7 @@ Then say: *"I just installed Obsidian for you. Let's create your vault now."*
 
 **Never** ask the user to "go download Obsidian" — that breaks the one-command promise and assumes they know what Obsidian is and how to install a desktop app.
 
-7. "Now open Obsidian and choose 'Create new vault.' Name it whatever feels right — your name, 'Brain,' 'Notes,' whatever. Save it in your home folder (like `~/Brain` or `~/Notes`) — **not** Desktop or Documents, because those are cloud-synced (iCloud on Mac, OneDrive on Windows) and a vault should never live inside a sync folder; the churn melts the sync daemon (see `docs/CLOUD_SYNC.md`). Let me know when it's created."
+7. "Now open Obsidian and choose 'Create new vault.' Name it whatever feels right — your name, 'Brain,' 'Notes,' whatever. The simplest spot is your home folder (like `~/Brain` or `~/Notes`) — **not** Desktop or Documents, because those are cloud-synced (iCloud on Mac, OneDrive on Windows) and a *raw* vault there melts the sync daemon. **If you want these notes on your iPhone**, that's supported too — pick Documents/Desktop and tell me, and I'll set up the safe sync mode that keeps the notes in iCloud while moving the machinery out (see `docs/CLOUD_SYNC.md`). Let me know when it's created."
 
 **Wait for confirmation before continuing.**
 
@@ -254,14 +254,24 @@ Then say: *"I just installed Obsidian for you. Let's create your vault now."*
 
 Save the vault path — you'll use it for all file operations.
 
-8.5. **GUARD — before saving the path, verify it is NOT inside a cloud-sync folder.** This is mandatory: a git-backed vault inside iCloud / OneDrive / Dropbox / Google Drive / Box melts the OS sync daemon (pegged CPU, frozen machine). Run:
+8.5. **GUARD — before saving the path, check whether it is inside a cloud-sync folder.** A *raw* git-backed vault inside iCloud / OneDrive / Dropbox / Google Drive / Box melts the OS sync daemon (pegged CPU, frozen machine). Run:
 
 ```bash
 python3 ~/.claude/skills/ai-brain-starter/scripts/check-cloud-sync.py --porcelain "<VAULT_PATH>"
 ```
 
 - Output starts with `OK_LOCAL` → good, continue.
-- Output starts with `CLOUD_SYNC_RISK:` → **STOP. Do not continue the install.** Tell the user plainly: *"That location is inside <service>, which is cloud-synced — a vault there will freeze your machine. Please move the vault (or create a new one) somewhere local like `~/Brain` or `~/vaults/<name>`, then paste the new path."* Re-run this check on the new path. Do not proceed until it returns `OK_LOCAL`. (If the vault is large and already there, see `docs/CLOUD_SYNC.md` for how to move it out safely.)
+- Output starts with `CLOUD_SYNC_RISK:` → the path is inside `<service>`. This is **supported, but only with the machinery out of the synced tree** — never proceed with a raw synced vault (that is the freeze class). Offer BOTH supported shapes and pick by the user's answer to "do you want these notes on your iPhone?":
+
+  - **Shape A — move it local (simplest; default if they don't need phone sync):** *"That folder is inside <service>. The simplest fix is a local path like `~/Brain`. Paste a new path and I'll re-check."* Re-run the check until it returns `OK_LOCAL`, then continue. (Large vault already there → `docs/CLOUD_SYNC.md` for how to move it out safely.)
+  - **Shape B — keep it synced, notes on every device:** *"I'll keep the vault in <service> and move just the machinery (git + caches) to a local sidecar so the notes sync to your iPhone without the storm."* With all other Claude sessions closed (separating the git dir orphans live worktrees — the script refuses otherwise), run:
+
+    ```bash
+    bash ~/.claude/skills/ai-brain-starter/scripts/relocate-machinery-sidecar.sh "<VAULT_PATH>" --dry-run   # preview
+    bash ~/.claude/skills/ai-brain-starter/scripts/relocate-machinery-sidecar.sh "<VAULT_PATH>"             # apply
+    ```
+
+    Then confirm `<VAULT_PATH>/.git` is now a one-line pointer file (`cat "<VAULT_PATH>/.git"` shows `gitdir: ...`) and continue. The helper is **idempotent and safe to re-run** — run it once more after your first working session to sweep any caches (`.smart-env`, `.codegraph`) that get created later. Fully reversible with `--rollback`. Details: `docs/CLOUD_SYNC.md` Shape B.
 
 ### Step 8.6 — Establish an off-machine backup (or explicitly defer, with a warning) — BEFORE declaring setup complete
 
