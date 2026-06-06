@@ -289,6 +289,34 @@ if (Test-Path -LiteralPath (Join-Path $absDir ".git") -PathType Container) {
   Warn "ai-brain-starter is not a git repo" "Re-run bootstrap.ps1 to clone it."
 }
 
+# ----- 11. cloud-sync location (the freeze class) -----
+Section "11. Cloud-sync location"
+$checkCloud = $null
+$cloudCands = @(
+  (Join-Path $PSScriptRoot "check-cloud-sync.py"),
+  (Join-Path $env:USERPROFILE ".claude\skills\ai-brain-starter\scripts\check-cloud-sync.py")
+)
+foreach ($c in $cloudCands) { if (Test-Path -LiteralPath $c) { $checkCloud = $c; break } }
+if ($checkCloud) {
+  $py = Get-Command python -ErrorAction SilentlyContinue
+  if (-not $py) { $py = Get-Command python3 -ErrorAction SilentlyContinue }
+  if ($py) {
+    $verdict = "$(& $py.Source $checkCloud --porcelain $Vault 2>$null)".Trim()
+    if ($verdict -like "OK_LOCAL*") {
+      Ok "Vault is on a local disk (not a consumer cloud-sync root)"
+    } elseif ($verdict -like "CLOUD_SYNC_RISK:*") {
+      $svc = ($verdict -replace "^CLOUD_SYNC_RISK:", "")
+      Bad "Vault is inside $svc (a consumer cloud-sync folder)" "A git-backed vault here melts the sync engine (pegged CPU / frozen machine). Move it local. See docs/CLOUD_SYNC.md."
+    } else {
+      Warn "Could not evaluate cloud-sync location" "check-cloud-sync.py returned: $verdict"
+    }
+  } else {
+    Warn "python not found" "Cannot verify the vault is outside a cloud-sync root."
+  }
+} else {
+  Warn "check-cloud-sync.py not found" "Cannot verify the vault is outside a cloud-sync root."
+}
+
 # ----- summary -----
 Write-Host ""
 Write-Host "Summary" -ForegroundColor White
