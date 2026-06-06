@@ -109,6 +109,7 @@ judgment.
 | SessionStart | `worktree-footprint-signal.py` | warns early on worktree count, orphan dirs, low free disk, and the dangerous vault-in-a-cloud-sync-folder combo |
 | SessionStart | `remediate-runaway-procs.py` | reaps orphaned runaway processes (the `yes`-pileup class), pure waste with zero recoverable output |
 | weekly cron | `scripts/worktree-prune.sh` | backstop: safe reclaim of orphan dirs + merged-branch cleanup + snapshot retention |
+| on-demand / weekly | `hooks/check-sync-folder-machinery.py` | audits **every** cloud-synced root (iCloud Drive, iCloud Desktop & Documents, OneDrive, Dropbox, Box, Google Drive) for machinery — `.git`, `node_modules`, build dirs, any 5k+-file dir — *anywhere on the machine*, not just the vault. Broader than the per-session `worktree-footprint-signal.py` (which only checks the vault's own location). Advisory, never blocks; `--self-test` proves it fires. |
 
 **The non-destructive contract.** Auto-remediation fixes only reconstructible
 things: a scratch worktree directory (recreatable from its branch), an orphaned
@@ -136,6 +137,68 @@ synced, and indexed. The `block-secret-in-note.py` write guard refuses a
 Write/Edit that would put a high-confidence credential (AWS / GitHub PAT /
 provider keys / database-URL passwords) into a `.md`/`.txt` note. Store it in
 the keychain or a gitignored secrets file and reference it by name instead.
+
+## Already melting? Rebuild the sync DB
+
+If a sync daemon is *already* pinned — on macOS, iCloud's `fileproviderd` and
+`bird` at 70-130% CPU for hours, a Finder that beachballs, files that won't
+download — the damage is usually a **corrupted local sync database**: it
+references hundreds of thousands of items that no longer exist and retries them
+forever. Removing the churn (above) stops it getting *worse*; it does **not**
+drain a backlog that already exists. You have to rebuild the database.
+
+Do it in this order, and **measure before and after each step — don't guess.**
+Stop at whichever step drops the CPU.
+
+**0. Confirm the diagnosis** (macOS):
+
+```bash
+# how many phantom entries is the File Provider DB retrying?
+fileproviderctl dump 2>/dev/null | grep -c itemNotFound
+# is fileproviderd actually pegged? (watch several samples, not one)
+top -l 4 -s 12 -o cpu -stats command,cpu | grep -E 'fileproviderd|bird'
+```
+
+A six-figure `itemNotFound` count plus sustained high CPU is the signature.
+
+**1. Remove the cause first.** Run the machinery audit and move anything it flags
+out of every sync folder. A rebuild only stays clean if nothing is still feeding
+it:
+
+```bash
+python3 ~/.claude/skills/ai-brain-starter/hooks/check-sync-folder-machinery.py
+```
+
+**2. Try the in-place repair (non-destructive).** macOS ships a consistency
+checker/repairer for the File Provider DB:
+
+```bash
+fileproviderctl check  -P -o /tmp/fpck-check.txt    # read-only: see the breakage
+fileproviderctl repair -P -o /tmp/fpck-repair.txt   # attempt an in-place reconcile
+```
+
+Re-measure. If the `itemNotFound` count and CPU drop, you're done. If `repair`
+finishes with `FPCKDomain Code=65` and the counts **don't** move, the domain is
+too corrupted for in-place repair — go to step 3.
+
+**3. Rebuild from the server (the supported reset).** System Settings → your
+Apple Account → iCloud → **iCloud Drive** → turn it **off**, choosing **"Keep a
+Copy"** of files on this Mac. Reboot. Turn iCloud Drive back **on**, and do
+**not** re-enable "Desktop & Documents folders". This discards the corrupt local
+DB and re-fetches a clean one from Apple's servers.
+
+- Expect a CPU spike and a long re-sync afterward — that part is normal; let it
+  run (hours, on a large drive).
+- **Back up first** (next section). Your local files are kept, but a tested backup
+  is the only safe way into an irreversible iCloud operation.
+
+> Heads-up: some users report Calendar/Contacts duplication after toggling iCloud,
+> and especially after signing out of the **whole** Apple Account. Toggle **only
+> iCloud Drive** — it's the narrower, safer move — and avoid a full account
+> sign-out unless step 3 alone doesn't take.
+
+Verify success the way you diagnosed it: the `itemNotFound` count collapses and
+`fileproviderd` settles to near-zero at idle.
 
 ## Order matters: back up before you move
 

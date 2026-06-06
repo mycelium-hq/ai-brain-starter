@@ -246,7 +246,7 @@ Then say: *"I just installed Obsidian for you. Let's create your vault now."*
 
 **Never** ask the user to "go download Obsidian" — that breaks the one-command promise and assumes they know what Obsidian is and how to install a desktop app.
 
-7. "Now open Obsidian and choose 'Create new vault.' Name it whatever feels right — your name, 'Brain,' 'Notes,' whatever. Put it somewhere easy to find, like your Desktop. Let me know when it's created."
+7. "Now open Obsidian and choose 'Create new vault.' Name it whatever feels right — your name, 'Brain,' 'Notes,' whatever. Save it in your home folder (like `~/Brain` or `~/Notes`) — **not** Desktop or Documents, because those are cloud-synced (iCloud on Mac, OneDrive on Windows) and a vault should never live inside a sync folder; the churn melts the sync daemon (see `docs/CLOUD_SYNC.md`). Let me know when it's created."
 
 **Wait for confirmation before continuing.**
 
