@@ -98,6 +98,7 @@ INTEGRATION_TESTS=(
   test_remediate_runaway_procs
   test_scan_prior_single_instance
   test_vault_safety_guards
+  test_resource_aware_session_close
 )
 echo "==> (b) Shell integration: ${#INTEGRATION_TESTS[@]} tests"
 for t in "${INTEGRATION_TESTS[@]}"; do

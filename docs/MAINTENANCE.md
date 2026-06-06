@@ -21,6 +21,38 @@ The session-start signal (`surface-backup-status.py`) and `/diagnose` (section
 
 ## Scripts
 
+### vault-daily-maintenance.sh (resource-gated daily cron)
+
+The home for heavy maintenance that should never run on the interactive session-close path. On a mature vault (10k-60k+ files) the close-time git snapshot is heavy, and the full-tree hygiene scans are heavier still; running them at close on an already-busy machine can pin or crash it right when you wrap up. This script moves that work to a once-a-day, low-priority, load-gated pass.
+
+It does two jobs:
+
+1. **Reconcile (data safety).** Re-runs the aggregators and commits any session / decision / captures files a session-close left uncommitted. The close hook (`scripts/session-end-hook.sh`) defers its git snapshot when the machine is saturated or a sibling close holds the cascade mutex; this is the catch-up that snapshots that work within a day, so a deferred close loses nothing.
+2. **Heavy hygiene (best effort).** Runs the full-tree / git-log-walking scripts the substrate ships but that are too heavy for every close: `drift-detection.py`, `check-rule-conflicts.py --scan-all`, `passive-capture.py --scan-today`. Each runs only if present, never aborts the pass, and runs at `nice -n 10`.
+
+```bash
+# load-gated normal run (skips heavy work if 1-min loadavg/core >= 3.0)
+bash scripts/vault-daily-maintenance.sh --vault-root /path/to/vault
+
+# ignore the load gate (run now no matter what)
+bash scripts/vault-daily-maintenance.sh --vault-root /path/to/vault --force
+
+# only the deferred-close catch-up, skip heavy hygiene
+bash scripts/vault-daily-maintenance.sh --vault-root /path/to/vault --reconcile-only
+```
+
+Resource-awareness (load gate + close-cascade mutex) is shared with the close hook via `scripts/_session_close_guard.sh`, so the two can never drift. Override the threshold with `CLOSE_MAX_LOAD_PER_CORE` (default `3.0`). Logs to `<vault>/Meta/logs/vault-daily-maintenance.log`. See the close-side documentation in `templates/rules/session-close.md` ("Resource-aware close").
+
+**Install the schedule:**
+
+```bash
+# macOS (launchd, runs daily at 04:30 local, low CPU + IO priority)
+bash scripts/install-vault-daily-maintenance.sh /path/to/vault
+
+# Linux (cron), add to `crontab -e`:
+30 4 * * *  /bin/bash /abs/path/to/ai-brain-starter/scripts/vault-daily-maintenance.sh --vault-root /path/to/vault >> ~/.local/state/ai-brain-starter/vault-daily-maintenance.out.log 2>&1
+```
+
 ### vault_maintenance.py
 
 Monthly scan that checks 7 categories of vault hygiene issues:
@@ -88,6 +120,12 @@ Workaround until upstream supports a `cron_only: true` frontmatter flag (tracked
 | `monthly-token-optimization` | `_monthly-token-cron` |
 
 Edit the existing task by renaming the directory and updating the `name:` field in its `SKILL.md` frontmatter to match. `/diagnose` will warn on any scheduled task that does not follow this convention or that collides with an installed skill name.
+
+### Daily Vault Maintenance (recommended for mature vaults)
+- **What:** the resource-gated daily cron above (`vault-daily-maintenance.sh`): deferred-close reconciliation + heavy hygiene, off the interactive close path.
+- **Install (macOS):** `bash scripts/install-vault-daily-maintenance.sh /path/to/vault` (runs daily at 04:30 local, low CPU + IO priority).
+- **Install (Linux):** add the cron line shown in the `vault-daily-maintenance.sh` section above.
+- **Why a launchd/cron job and not a Claude Code scheduled task:** this is a deterministic shell pass with no model judgment, and it must run at low IO/CPU priority even when no Claude session is open, exactly what launchd/cron does and a scheduled task does not.
 
 ### Monthly Vault Maintenance (recommended)
 - **Schedule:** 1st of every month, 9am
