@@ -57,7 +57,7 @@ jobs:
             '\bCentre415\b'
             '\bvinitos\b'
             '/Users/adelaidadiaz-roa/'
-            'Desktop/Adelaida Notes'
+            'AdelaidaNotes'
             'adelaida@'
             'tech@onde'
             'After the Shock'
@@ -112,7 +112,7 @@ jobs:
             '\bCentre415\b'
             '\bvinitos\b'
             '/Users/adelaidadiaz-roa/'
-            'Desktop/Adelaida Notes'
+            'AdelaidaNotes'
             'adelaida@'
             'tech@onde'
             'After the Shock'
@@ -148,3 +148,49 @@ jobs:
             exit 1
           fi
           echo "Archive scrub clean."
+      - name: Personal-name + vault-path scrub (markdown prose)
+        # PII-GATE-MARKDOWN-BLIND-SPOT fix (2026-06-06). The source-file step
+        # above excludes *.md + docs/, so private third-party names + vault
+        # paths leaked into published markdown were NEVER scanned. This step
+        # scans *.md for a NARROWER token set (private third-party names +
+        # vault paths only). It deliberately does NOT scan for the author's
+        # own name (legitimate attribution in README/LICENSE/CHANGELOG) or
+        # published feature/brand tokens (Onde/Colombia/High-Rise). Conventional
+        # attribution files (README/LICENSE/CONTRIBUTING/AUTHORS/...) are
+        # excluded; CHANGELOG + docs/ ARE scanned — that's where leaks hid.
+        # MD_PATTERNS is injected from the SAME pii_markdown_scan_patterns the
+        # dry-run uses (single source; the regression test asserts lockstep).
+        run: |
+          set -e
+          MD_PATTERNS=(
+            '\bSergio\b'
+            '\bSneider\b'
+            '\bAlfonso\b'
+            '\bPanorama\b'
+            '\bDiana\b'
+            '\bPaola\b'
+            '\bBeverly\b'
+            '\bNatalia\b'
+            '\bSilvia\b'
+            '\bAccenture\b'
+            '\bCentre415\b'
+            '\bvinitos\b'
+            '/Users/adelaidadiaz-roa/'
+            'AdelaidaNotes'
+            'adelaida@'
+            'tech@onde'
+          )
+          fail=0
+          for p in "${MD_PATTERNS[@]}"; do
+            matches=$(git grep -nE "$p"               -- '*.md'               ':!README*' ':!LICENSE*' ':!COPYING*' ':!NOTICE*'               ':!AUTHORS*' ':!MAINTAINERS*' ':!CONTRIBUTING*'               ':!CONTRIBUTORS*' ':!CITATION*'               ':!vendor/' ':!node_modules/'               ':!.github/workflows/personal-pii-scrub.yml' 2>/dev/null || true)
+            if [ -n "$matches" ]; then
+              echo "::error::private-data pattern leaked into markdown prose: $p"
+              echo "$matches"
+              fail=1
+            fi
+          done
+          if [ $fail -eq 1 ]; then
+            echo "::error::Markdown-prose scrub failed. A private third-party name or vault path leaked into published .md. Author attribution (README/LICENSE/CHANGELOG) + published-feature tokens are exempt — this is a real third-party leak. See CLAUDE.md 'Personal-data scrub' + auto-managed-gate-self-dos.md."
+            exit 1
+          fi
+          echo "Markdown-prose scrub clean."
