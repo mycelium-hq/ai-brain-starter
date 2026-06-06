@@ -38,6 +38,7 @@ Pure stdlib.
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -500,3 +501,64 @@ def detect_cloud_sync(path: Path) -> str | None:
         if (p == str(base) or p.startswith(str(base) + "/")) and (icloud / folder).exists():
             return f"iCloud Drive ({folder} sync)"
     return None
+
+
+# Optional session-liveness file written by session-lock.py (a sibling hook).
+# Reading it lets the cap reaper distinguish "this scratch worktree belongs to a
+# session that is still running" from "its session is gone" — so a crashed
+# session's worktree can be reclaimed promptly (regardless of the count cap)
+# while a live-but-idle session's worktree is never pulled out from under it.
+SESSION_LOCK_REL = ".claude/.session-lock.json"
+
+
+def _pid_alive(pid: int) -> bool:
+    """True if `pid` names a running process. Errs toward 'alive' (over-preserve)."""
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # exists, owned by another uid
+    except OSError:
+        return True  # unsure → treat as alive so we never reap a maybe-live session
+
+
+def live_session_cwds(main_repo: Path, grace_min: int = 35) -> set[str] | None:
+    """Resolved cwd paths of currently-LIVE Claude sessions, from the session lock.
+
+    A session counts as live if its PID is running OR it was active within the
+    last `grace_min` minutes (the lock prunes idle entries at ~30 min, so 35 min
+    gives a margin). Both checks err toward "live" — the only safe direction,
+    since the consumer uses this to decide what NOT to reclaim.
+
+    Returns None when liveness is UNKNOWN (lock absent / unreadable / wrong shape).
+    None is distinct from an empty set: callers MUST treat None as "do not reap on
+    liveness" (never interpret a missing lock as "no sessions are live → reap all").
+    """
+    lock = main_repo / SESSION_LOCK_REL
+    try:
+        data = json.loads(lock.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    sessions = data.get("sessions") if isinstance(data, dict) else None
+    if not isinstance(sessions, dict):
+        return None
+    cutoff = time.time() - grace_min * 60
+    live: set[str] = set()
+    for s in sessions.values():
+        if not isinstance(s, dict):
+            continue
+        cwd = s.get("cwd")
+        if not cwd:
+            continue
+        la = s.get("last_activity_at")
+        recent = isinstance(la, (int, float)) and la >= cutoff
+        if recent or _pid_alive(s.get("pid")):
+            try:
+                live.add(str(Path(cwd).resolve()))
+            except OSError:
+                live.add(str(cwd))
+    return live
