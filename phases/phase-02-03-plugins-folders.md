@@ -96,6 +96,21 @@ if app_file.exists():
     except Exception:
         app_settings = {}
 app_settings.setdefault("fileSortOrder", "byModifiedTime")
+
+# Exclude machine-generated folders from Obsidian's index. The brain's hooks
+# write thousands of files into these over a vault's lifetime — session stubs,
+# worktree snapshots, rotating logs. They are machinery, not notes. On a mature
+# vault, leaving them indexed pins "Obsidian Helper (Renderer)" at 100%+ CPU and
+# makes the app feel broken. Excluding them keeps the index to your real
+# documents. Merge so we never clobber filters the user set themselves.
+machinery_excludes = [
+    "⚙️ Meta/Worktree Snapshots/",
+    "⚙️ Meta/Sessions/",
+    "⚙️ Meta/logs/",
+]
+existing_filters = app_settings.get("userIgnoreFilters") or []
+app_settings["userIgnoreFilters"] = list(dict.fromkeys(existing_filters + machinery_excludes))
+
 app_file.write_text(json.dumps(app_settings, indent=2))
 
 # Write sortspec.md for custom-sort plugin — sorts ALL folders by the most
