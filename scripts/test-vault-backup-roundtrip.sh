@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# Round-trip self-test for vault-backup.sh.
+# A backup you have never restored is a hope, not a backup — so this proves the
+# whole loop on a fixture vault: setup -> ONE archive -> exhaust excluded ->
+# detector flips to BACKED_UP -> a real restore extracts the notes back ->
+# rotation honors --keep -> (if gpg/openssl) the encrypted path round-trips too.
+# Run: bash scripts/test-vault-backup-roundtrip.sh
+set -u
+HERE="$(cd "$(dirname "$0")" && pwd)"
+BACKUP="$HERE/vault-backup.sh"
+CHECK="$HERE/check-vault-backup.py"
+ROOT="$(mktemp -d)"
+trap 'rm -rf "$ROOT"' EXIT
+export VAULT_BACKUP_CONF="$ROOT/conf.json"
+export VAULT_BACKUP_MARKER="$ROOT/marker"
+fails=0
+pass() { echo "PASS  $1"; }
+fail() { echo "FAIL  $1"; fails=$((fails+1)); }
+
+# ---- fixture vault: real notes + machine-exhaust that MUST be excluded ----
+V="$ROOT/Brain"
+mkdir -p "$V/⚙️ Meta" "$V/.claude/worktrees/scratch" "$V/.smart-env" "$V/.codegraph"
+printf '# CLAUDE.md\nbrain memory\n' > "$V/CLAUDE.md"
+printf 'a private journal entry\n'   > "$V/journal.md"
+printf 'EXHAUST-should-not-appear\n' > "$V/.claude/worktrees/scratch/junk.md"
+printf 'EXHAUST-cache\n'             > "$V/.smart-env/cache.bin"
+DEST="$ROOT/dest"
+
+# ---- 1. setup (non-interactive: --dest given, no encrypt, no schedule) ----
+bash "$BACKUP" setup --vault "$V" --dest "$DEST" --schedule none >/dev/null 2>&1 \
+  && pass "setup ran" || fail "setup failed"
+
+# ---- 2. exactly ONE archive, and it is a single .tar.gz file ----
+n=$(ls -1 "$DEST"/vault-backup-* 2>/dev/null | wc -l | tr -d ' ')
+[ "$n" = "1" ] && pass "exactly one archive written ($n)" || fail "expected 1 archive, got $n"
+arc=$(ls -1 "$DEST"/vault-backup-* 2>/dev/null | head -1)
+case "$arc" in *.tar.gz) pass "archive is a single .tar.gz" ;; *) fail "archive not .tar.gz: $arc" ;; esac
+
+# ---- 3. notes present, machine-exhaust EXCLUDED ----
+listing="$(tar -tzf "$arc" 2>/dev/null)"
+printf '%s\n' "$listing" | grep -q './CLAUDE.md'  && pass "CLAUDE.md is in the archive" || fail "CLAUDE.md missing from archive"
+printf '%s\n' "$listing" | grep -q './journal.md' && pass "journal.md is in the archive" || fail "journal.md missing"
+if printf '%s\n' "$listing" | grep -q 'worktrees\|smart-env\|codegraph'; then
+  fail "machine-exhaust leaked into the archive"
+else
+  pass "machine-exhaust (.claude/worktrees, .smart-env, .codegraph) excluded"
+fi
+
+# ---- 4. detector now says BACKED_UP (exit 0) ----
+verdict="$(python3 "$CHECK" --porcelain "$V" 2>/dev/null)"; rc=$?
+case "$verdict" in BACKED_UP:vault-backup*) pass "detector -> $verdict (rc=$rc)";; *) fail "detector wrong: $verdict (rc=$rc)";; esac
+
+# ---- 5. a REAL restore extracts the notes back ----
+out="$(bash "$BACKUP" verify --vault "$V" 2>&1)"
+echo "$out" | grep -q "Restore verified" && pass "verify reports a successful restore" || fail "verify did not confirm: $out"
+# last_verify recorded
+lv="$(python3 -c "import json;print((json.load(open('$VAULT_BACKUP_CONF')).get('vaults',{}).get('$(python3 -c "import os;print(os.path.realpath('$V'))")',{}) or {}).get('last_verify',''))" 2>/dev/null)"
+[ -n "$lv" ] && pass "last_verify recorded ($lv)" || fail "last_verify not recorded"
+
+# ---- 6. rotation honors --keep ----
+# Pre-seed 5 older dummy archives, set keep=2, run once -> at most 2 remain.
+for i in 1 2 3 4 5; do : > "$DEST/vault-backup-2000010$i-000000.tar.gz"; done
+python3 - "$VAULT_BACKUP_CONF" "$(python3 -c "import os;print(os.path.realpath('$V'))")" <<'PY'
+import json,sys
+c=json.load(open(sys.argv[1])); c['vaults'][sys.argv[2]]['keep']=2; json.dump(c,open(sys.argv[1],'w'))
+PY
+sleep 1
+bash "$BACKUP" run --vault "$V" >/dev/null 2>&1
+left=$(ls -1 "$DEST"/vault-backup-* 2>/dev/null | wc -l | tr -d ' ')
+[ "$left" -le 2 ] && pass "rotation kept <= keep (=2): $left remain" || fail "rotation kept too many: $left"
+
+# ---- 7. encrypted round-trip (only if gpg or openssl is available) ----
+if command -v gpg >/dev/null 2>&1 || command -v openssl >/dev/null 2>&1; then
+  V2="$ROOT/Brain2"; DEST2="$ROOT/dest2"
+  mkdir -p "$V2"; printf '# CLAUDE.md\n' > "$V2/CLAUDE.md"; printf 'secret journal\n' > "$V2/secret.md"
+  # Feed the passphrase twice on stdin (setup reads it with read -rs).
+  printf 'pw-correct-horse\npw-correct-horse\n' | bash "$BACKUP" setup --vault "$V2" --dest "$DEST2" --encrypt --schedule none >/dev/null 2>&1
+  enc="$(ls -1 "$DEST2"/vault-backup-* 2>/dev/null | head -1)"
+  case "$enc" in
+    *.tar.gz.gpg|*.tar.gz.enc) pass "encrypted archive written ($(basename "$enc"))" ;;
+    *) fail "encrypted archive not produced: $enc" ;;
+  esac
+  # The encrypted blob must NOT contain the plaintext.
+  if grep -qa "secret journal" "$enc" 2>/dev/null; then fail "plaintext leaked into encrypted archive"; else pass "ciphertext does not contain plaintext"; fi
+  vout="$(bash "$BACKUP" verify --vault "$V2" 2>&1)"
+  echo "$vout" | grep -q "Restore verified" && pass "encrypted backup restores" || fail "encrypted restore failed: $vout"
+else
+  echo "SKIP  encrypted round-trip (no gpg/openssl)"
+fi
+
+echo
+if [ "$fails" -gt 0 ]; then echo "FAILED: $fails"; exit 1; fi
+echo "ALL TESTS PASSED"

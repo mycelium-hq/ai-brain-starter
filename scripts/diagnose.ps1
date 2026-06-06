@@ -317,6 +317,43 @@ if ($checkCloud) {
   Warn "check-cloud-sync.py not found" "Cannot verify the vault is outside a cloud-sync root."
 }
 
+# ----- 12. off-machine backup (the one-disk-failure class) -----
+Section "12. Off-machine backup"
+$checkBackup = $null
+$backupCands = @(
+  (Join-Path $PSScriptRoot "check-vault-backup.py"),
+  (Join-Path $env:USERPROFILE ".claude\skills\ai-brain-starter\scripts\check-vault-backup.py")
+)
+foreach ($c in $backupCands) { if (Test-Path -LiteralPath $c) { $checkBackup = $c; break } }
+if ($checkBackup) {
+  $py = Get-Command python -ErrorAction SilentlyContinue
+  if (-not $py) { $py = Get-Command python3 -ErrorAction SilentlyContinue }
+  if ($py) {
+    $bverdict = "$(& $py.Source $checkBackup --porcelain $Vault 2>$null)".Trim()
+    if ($bverdict -like "BACKED_UP:vault-backup:*") {
+      $age = ($bverdict -split ":")[-1]
+      Ok "Off-machine backup present (vault-backup, ~$age days old)"
+    } elseif ($bverdict -eq "BACKED_UP:timemachine") {
+      Ok "Off-machine backup present (Time Machine destination configured)"
+    } elseif ($bverdict -like "BACKED_UP:cloud:*") {
+      $svc = ($bverdict -replace "^BACKED_UP:cloud:", "")
+      Ok "Off-machine copy present ($svc - a cloud copy; single-file snapshots are safer, see docs/BACKUP.md)"
+    } elseif ($bverdict -eq "BACKED_UP:git-remote") {
+      Ok "Off-machine backup present (git HEAD pushed to a remote)"
+    } elseif ($bverdict -eq "NO_BACKUP:configured-not-run") {
+      Warn "Backup configured but no snapshot exists yet (or destination unreachable)" "Run: pwsh scripts/vault-backup.ps1 run -Vault '$Vault'"
+    } elseif ($bverdict -eq "NO_BACKUP") {
+      Bad "Vault has NO off-machine backup - one disk failure loses everything" "Set one up (one command): pwsh scripts/vault-backup.ps1 setup -Vault '$Vault'. See docs/BACKUP.md."
+    } else {
+      Warn "Could not evaluate backup status" "check-vault-backup.py returned: $bverdict"
+    }
+  } else {
+    Warn "python not found" "Cannot verify the vault has an off-machine backup."
+  }
+} else {
+  Warn "check-vault-backup.py not found" "Cannot verify the vault has an off-machine backup."
+}
+
 # ----- summary -----
 Write-Host ""
 Write-Host "Summary" -ForegroundColor White
