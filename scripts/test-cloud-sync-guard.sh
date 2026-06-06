@@ -38,6 +38,24 @@ assert_rc "RISK exits 1"       1                  "$TMP/OneDrive/Brain"
 assert    "plain local path"   "OK_LOCAL"         "$TMP/Brain"
 assert_rc "OK exits 0"         0                  "$TMP/Brain"
 
+# iCloud "Desktop & Documents" sync — the realpath-resolved branch (MYC-544
+# Work item 4). A vault under ~/Documents or ~/Desktop is RISK *only when* iCloud
+# D&D is actually on, i.e. ~/Library/Mobile Documents/com~apple~CloudDocs/<folder>
+# exists. Hermetic: override HOME so the real one is never touched.
+FH="$TMP/fakehome"; mkdir -p "$FH/Documents/Brain"
+# negative control FIRST — D&D OFF (no CloudDocs/Documents) must read OK_LOCAL,
+# proving the branch is conditional on iCloud actually syncing, not "any ~/Documents".
+got="$(HOME="$FH" python3 "$CHECK" --porcelain "$FH/Documents/Brain" 2>/dev/null)"
+case "$got" in OK_LOCAL*) echo "PASS  D&D off -> OK_LOCAL ($got)";; *) echo "FAIL  D&D off want=OK_LOCAL got=$got"; fails=$((fails+1));; esac
+# now turn D&D ON for Documents -> RISK
+mkdir -p "$FH/Library/Mobile Documents/com~apple~CloudDocs/Documents"
+got="$(HOME="$FH" python3 "$CHECK" --porcelain "$FH/Documents/Brain" 2>/dev/null)"
+case "$got" in CLOUD_SYNC_RISK*) echo "PASS  D&D on (Documents) -> RISK ($got)";; *) echo "FAIL  D&D on Documents want=RISK got=$got"; fails=$((fails+1));; esac
+# Desktop variant too
+mkdir -p "$FH/Desktop/Notes" "$FH/Library/Mobile Documents/com~apple~CloudDocs/Desktop"
+got="$(HOME="$FH" python3 "$CHECK" --porcelain "$FH/Desktop/Notes" 2>/dev/null)"
+case "$got" in CLOUD_SYNC_RISK*) echo "PASS  D&D on (Desktop) -> RISK ($got)";; *) echo "FAIL  D&D on Desktop want=RISK got=$got"; fails=$((fails+1));; esac
+
 echo
 if [ "$fails" -gt 0 ]; then echo "FAILED: $fails"; exit 1; fi
 echo "ALL TESTS PASSED"
