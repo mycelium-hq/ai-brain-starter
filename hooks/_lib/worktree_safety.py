@@ -298,10 +298,107 @@ def list_orphan_dirs(main_repo: Path) -> list[Path]:
     return orphans
 
 
+def _gitfile_target(orphan: Path) -> Path | None:
+    """If `orphan/.git` is a `gitdir: <path>` pointer file, return <path>, else None.
+
+    A worktree's `.git` is a one-line pointer file (not a dir). A relocation
+    copies it verbatim, so it still points at the OLD location's gitdir.
+    """
+    gitfile = orphan / ".git"
+    try:
+        if not gitfile.is_file():
+            return None
+        txt = gitfile.read_text(encoding="utf-8", errors="replace").strip()
+    except OSError:
+        return None
+    if not txt.startswith("gitdir:"):
+        return None
+    target = txt[len("gitdir:"):].strip()
+    if not target:
+        return None
+    p = Path(target)
+    if not p.is_absolute():
+        p = orphan / p
+    return p
+
+
+def _is_relocation_orphan(orphan: Path, main_repo: Path) -> bool:
+    """True iff `orphan/.git` points at a gitdir that is DANGLING (gone) or
+    EXTERNAL (outside this repo's `.git`) — the vault-relocation / copied-checkout
+    class that `git status` can't evaluate but the MAIN object DB still can.
+
+    Conservative: no clear pointer → False (keep, unknown provenance).
+    """
+    target = _gitfile_target(orphan)
+    if target is None:
+        return False
+    try:
+        main_git = (main_repo / ".git").resolve()
+    except OSError:
+        return False
+    if not target.exists():
+        return True  # dangling: original gitdir is gone (the relocation case)
+    try:
+        target.resolve().relative_to(main_git)
+        return False  # inside this repo's own .git tree — a real registration
+    except (ValueError, OSError):
+        return True  # external: points at a different/foreign .git tree
+
+
+def _reclaim_disconnected_orphan(main_repo: Path, orphan: Path, slug: str) -> tuple[str, int]:
+    """Reclaim a relocation-orphan whose own git metadata is unusable.
+
+    A worktree is a checkout of commits in the MAIN repo's shared object store,
+    so `unrecoverable_content(main_repo, ...)` stays a definitive recoverability
+    oracle even when the orphan's `.git` pointer is dead. Snapshot the
+    genuinely-unique files (uncommitted work that survived the move), then remove.
+    Fails SAFE: never deletes a file whose content isn't provably in the object DB
+    (unrecoverable_content over-preserves on any hiccup), and never removes the
+    dir if any unique file could not be copied out first.
+    """
+    files: list[Path] = []
+    try:
+        for root, dirs, fs in os.walk(orphan):
+            dirs[:] = [d for d in dirs if d not in EXHAUST]
+            for f in fs:
+                if f in EXHAUST:  # skip the .git pointer file, .DS_Store, etc.
+                    continue
+                files.append(Path(root) / f)
+    except OSError:
+        return ("kept-unsafe", 0)
+    uniq = unrecoverable_content(main_repo, files)
+    snap_root = snapshot_dir_for(main_repo) / slug
+    snapped = 0
+    all_safe = True
+    for src in uniq:
+        if not src.is_file():
+            continue
+        try:
+            rel = src.relative_to(orphan)
+        except ValueError:
+            all_safe = False
+            continue
+        dst = snap_root / rel
+        try:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+            snapped += 1
+        except OSError:
+            all_safe = False
+    if not all_safe:
+        return ("kept-unsafe", snapped)
+    try:
+        shutil.rmtree(orphan)
+    except OSError:
+        return ("kept-unsafe", snapped)
+    return ("relocation-orphan+removed" if snapped else "relocation-orphan-removed", snapped)
+
+
 def reclaim_orphan_dir(main_repo: Path, orphan: Path, idle_min: int = 60) -> tuple[str, int]:
     """Safely reclaim one orphan worktree dir. Returns (action, snapshotted).
 
-    action ∈ {removed, snapshot+removed, kept-active, kept-unsafe, kept-dangling}.
+    action ∈ {removed, snapshot+removed, kept-active, kept-unsafe, kept-dangling,
+              relocation-orphan-removed, relocation-orphan+removed}.
 
     Fast + fail-safe — never `rm -rf` a dir we can't reason about:
       * idle gate: a dir touched < idle_min ago is left (a live/paused session).
@@ -310,9 +407,12 @@ def reclaim_orphan_dir(main_repo: Path, orphan: Path, idle_min: int = 60) -> tup
           - dirty       → snapshot ONLY the dirty set (small; definitive object-DB
                           recoverability test) then rm iff every unsaved file was
                           safely copied.
-          - git errors  → the dir is disconnected from git; KEEP it and report
-                          `kept-dangling` for manual review. Never delete a dir
-                          whose recoverability we cannot establish.
+          - git errors  → the dir is disconnected from git. If its `.git` pointer
+                          is dangling/external (the vault-RELOCATION copied-checkout
+                          class that let `.claude/worktrees` reach 100k+ files), the
+                          MAIN repo's object DB is still a definitive recoverability
+                          oracle: snapshot the genuinely-unique files, then remove.
+                          Otherwise (unknown provenance) KEEP + report `kept-dangling`.
 
     Unlike the bash prune's section-2 (`rm -rf` with no snapshot), this can lose
     nothing: the only dirs deleted are clean checkouts or dirs whose unsaved
@@ -323,9 +423,15 @@ def reclaim_orphan_dir(main_repo: Path, orphan: Path, idle_min: int = 60) -> tup
         return ("kept-active", 0)
     try:
         st = git(orphan, ["status", "--porcelain", "-z"], timeout=60)
+        status_rc = st.returncode
     except (subprocess.TimeoutExpired, OSError):
-        return ("kept-dangling", 0)
-    if st.returncode != 0:
+        status_rc = -1
+    if status_rc != 0:
+        # git can't evaluate this dir. A relocation-orphan (dangling/external
+        # .git pointer — copied during a vault move; original gitdir gone) is
+        # still reclaimable against the MAIN object DB; anything else stays kept.
+        if _is_relocation_orphan(orphan, main_repo):
+            return _reclaim_disconnected_orphan(main_repo, orphan, slug)
         return ("kept-dangling", 0)
     dirty = [
         orphan / e[3:].decode("utf-8", "replace")
