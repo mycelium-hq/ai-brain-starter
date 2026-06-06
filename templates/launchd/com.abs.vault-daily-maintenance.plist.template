@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  com.abs.vault-daily-maintenance.plist.template
+
+  macOS launchd template for ai-brain-starter's daily vault maintenance.
+
+  Runs scripts/vault-daily-maintenance.sh once a day at 04:30 local time, at low
+  CPU + IO priority, so the heavy hygiene scripts (drift-detection,
+  check-rule-conflicts, passive-capture) and the deferred-close reconciliation
+  never run on the interactive session-close path. The script is itself
+  load-gated + mutex-serialized, so a 04:30 run on a busy machine cleanly defers
+  to the next day instead of piling on.
+
+  Replace the three placeholders below with absolute paths on your machine, then
+  drop the rendered file at ~/Library/LaunchAgents/ and load with `launchctl`.
+  The install script at scripts/install-vault-daily-maintenance.sh does both
+  substitution and load in one step.
+
+  Placeholders:
+    {{REPO_ROOT}}    absolute path to the ai-brain-starter clone
+                     example: /Users/me/Desktop/ai-brain-starter
+    {{VAULT_ROOT}}   absolute path to your Obsidian vault
+                     example: /Users/me/Documents/MyVault
+    {{LOG_DIR}}      absolute directory for stdout/stderr logs
+                     example: /Users/me/.local/state/ai-brain-starter
+
+  After the file lands at ~/Library/LaunchAgents/, run:
+    launchctl load ~/Library/LaunchAgents/com.abs.vault-daily-maintenance.plist
+  Stop with:
+    launchctl unload ~/Library/LaunchAgents/com.abs.vault-daily-maintenance.plist
+
+  Linux users: there is no launchd. Use cron instead -
+    30 4 * * *  /bin/bash {{REPO_ROOT}}/scripts/vault-daily-maintenance.sh --vault-root {{VAULT_ROOT}} >> {{LOG_DIR}}/vault-daily-maintenance.out.log 2>&1
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.abs.vault-daily-maintenance</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>{{REPO_ROOT}}/scripts/vault-daily-maintenance.sh</string>
+        <string>--vault-root</string>
+        <string>{{VAULT_ROOT}}</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>4</integer>
+        <key>Minute</key>
+        <integer>30</integer>
+    </dict>
+
+    <key>Nice</key>
+    <integer>10</integer>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>LowPriorityIO</key>
+    <true/>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>{{LOG_DIR}}/vault-daily-maintenance.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>{{LOG_DIR}}/vault-daily-maintenance.err.log</string>
+</dict>
+</plist>

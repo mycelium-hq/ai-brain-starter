@@ -27,6 +27,21 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Resource-awareness + close-cascade serialization (load gate + mutex), shared
+# with the daily-maintenance cron via _session_close_guard.sh. FAIL-OPEN: if the
+# guard is absent (older install) define no-op fallbacks so close never breaks -
+# never "high" (so never defer) and always "acquired" (so no serialization).
+CLOSE_GUARD="$SCRIPT_DIR/_session_close_guard.sh"
+if [ -f "$CLOSE_GUARD" ]; then
+  # shellcheck source=/dev/null
+  . "$CLOSE_GUARD"
+else
+  close_resource_high() { return 1; }
+  close_load_per_core() { echo "0"; }
+  close_mutex_acquire() { return 0; }
+  close_mutex_release() { :; }
+fi
+
 # Resolve VAULT to the MAIN vault root, never a worktree.
 #
 # If $SCRIPT_DIR matches `.../<vault>/.claude/worktrees/<slug>/.../scripts`,
@@ -189,6 +204,26 @@ if [ -f "$FALLBACK_SCRIPT" ] && [ -n "$TRANSCRIPT_PATH" ]; then
     >/dev/null 2>>"$ERROR_LOG" || log_err "fallback exited non-zero"
 fi
 
+# === Step 2b2: Resource gate + close-cascade mutex ===
+# The aggregators (2c) + git snapshot (2d) below are the heavy part of the close
+# path - on a mature vault the git index is megabytes and `git commit` rewrites
+# it. DEFER them when the machine is already saturated, or while a sibling close
+# holds the cascade mutex, so we never pile git IO onto an overloaded system at
+# close. Nothing is lost: the captured session file is already on disk (model or
+# Haiku fallback wrote it), and the daily cron vault-daily-maintenance.sh re-runs
+# the aggregators and commits any session / decision / captures files this close
+# left uncommitted. The cheap path (Step 1 timestamp + retention) already ran.
+CLOSE_DEFER=0
+if close_resource_high; then
+  CLOSE_DEFER=1
+  log_err "close: deferred aggregation + snapshot - load $(close_load_per_core)/core >= ${CLOSE_MAX_LOAD_PER_CORE:-3.0}; daily maintenance will catch up"
+elif ! close_mutex_acquire 20; then
+  CLOSE_DEFER=1
+  log_err "close: deferred aggregation + snapshot - a sibling close holds the cascade mutex; daily maintenance will catch up"
+fi
+
+if [ "$CLOSE_DEFER" = "0" ]; then
+
 # === Step 2c: Aggregators (foreground, sequential) ===
 
 if [ -f "$AGGREGATE_SESSIONS" ]; then
@@ -245,6 +280,9 @@ if [ -d "$VAULT/.git" ] || git -C "$VAULT" rev-parse --git-dir >/dev/null 2>&1; 
     log_err "git index.lock held >60s; skipped snapshot"
   fi
 fi
+
+close_mutex_release
+fi   # end Step 2b2 resource gate (aggregators + snapshot)
 
 # === Step 3: Clean up marker ===
 
