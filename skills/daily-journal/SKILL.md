@@ -130,6 +130,17 @@ This includes:
 
 **Initial context dump goes IN the journal too.** Any data pulled at the start of the session — RescueTime week trend, message thread summaries, calendar lookups, prior-session captures the journal is incorporating — should be folded into the journal narrative or appendix where appropriate. Don't keep it as scratch context that disappears after the session ends. The user's day-context becomes part of the day's journal record.
 
+### Step 0.0: Resume-or-create check (run FIRST — before Step 0)
+
+Capture-first writes today's entry early, so a SECOND `/journal` the same day must resume it, not create a duplicate. Before anything else:
+
+1. Set the target date with the 3:45 AM day-boundary rule (defined in Step 0 below — a 2 AM session belongs to the prior day).
+2. Look for today's entry: prefer `⚙️ Meta/journal-index.json` (entry whose `date` == target date); if there's no index, scan the journal monthly subfolder for a file whose frontmatter `creationDate` matches the target date (YYYY-MM-DD prefix).
+3. **Found → RESUME it.** Read it into working memory. Do NOT create a new file. Every save this session — the capture-first save (Step 1.5) AND the finalize (Step 7) — UPDATES that file: new content folds into the body, the verbatim appendix grows, the floor is re-read on the fuller picture. Open with a light "Picking up today's entry — keep going," then continue the normal flow.
+4. **Not found → create.** Proceed normally; Step 1.5 writes today's file.
+
+One calendar day = ONE journal entry that grows across sessions (an afternoon check-in and the evening journal land in the same file; the morning `/rise` entry stays its own paired file per Step 0h). Start a second journal file only if the user explicitly asks ("a separate entry, don't touch this morning's").
+
 ### Step 0: Pull data sources per opt-in config (ALWAYS — config-gated)
 
 **0-pre. Read the journal config (mandatory).** Look for `⚙️ Meta/journal-config.md` (or `Meta/journal-config.md` if the vault doesn't use emoji-prefixed Meta). Parse the `data_sources:` frontmatter block.
@@ -246,7 +257,7 @@ Capture their answer. After saving the journal entry (Step 9), update the weekly
 **Capture must not be blocked by data pulls.** If the user opened with a full dump, write the file FIRST from their words, THEN run the Step 0 source pulls and fold them into the `## Today` section during enrichment. RescueTime / iMessage / WhatsApp / calendar latency must never delay the first save.
 
 **Write a complete, standalone entry** using the Step 7 format, with these capture-stage values:
-- **Frontmatter:** all required fields present. `floor` / `floor_level` = your best read from what they've said so far (provisional — Step 4 finalizes it). Fill the habit fields you already know; omit the optional RescueTime and morning-pairing fields you don't have yet rather than faking them.
+- **Frontmatter:** all required fields present. `floor` / `floor_level` = your best read from what they've said so far (provisional — Step 4 finalizes it). Set `entry_status: captured` now; Step 7 flips it to `enriched` if the interview or panel runs (so the insights/patterns skills can tell a quick capture from a full session and weight the provisional floor accordingly). Fill the habit fields you already know; omit the optional RescueTime and morning-pairing fields you don't have yet rather than faking them.
 - **`## Today`:** include it only if you already pulled that data; otherwise leave it out for now and add it at enrichment.
 - **`## Journal — [user]'s voice`:** their content so far, in their voice, lightly shaped. This is a real entry, not a stub.
 - **`### My responses to the panel (verbatim...)`:** every message they have typed this session so far, word-for-word. The verbatim-capture rule applies from message one.
@@ -257,7 +268,9 @@ Capture their answer. After saving the journal entry (Step 9), update the weekly
 
 **Don't announce the save as a production.** A light "Got it — saved." is enough, then flow into Step 2. The floor under them is already there; they don't need to feel the mechanics.
 
-**Every later save is an UPDATE to this file**, not a new write. On each update, regenerate the verbatim appendix to include all messages to date and keep the body, floor, and frontmatter current.
+**Every later save is an UPDATE to this file**, not a new write. On each update, regenerate the verbatim appendix to include all messages to date and keep the body, floor, and frontmatter current. (If Step 0.0 found an existing entry for today, the very first save this session is already an update to that file — resume and capture-first are the same write path.)
+
+**First-ever entry → fire telemetry now.** If this is the user's first journal save in this vault, fire the Step 9.5 telemetry at this capture (the block is sentinel-idempotent — safe to run here). A capture-and-bail still counts as the funnel's first-journal event; don't wait for the end of the flow that may never come.
 
 ### Step 2: Follow the thread (2-4 follow-up questions)
 
@@ -522,7 +535,7 @@ Wait for explicit confirmation, then update the file (Step 7). Showing panel con
 
 **Filename format:** Create a descriptive title from the content (5-8 words, Title Case), like:
 - "Ranch Weekend Dad Health Worries.md"
-- "Great Onde Meeting Feeling Momentum.md"
+- "Great Team Meeting Feeling Momentum.md"
 - "Mom Visit Kept Cool This Time.md"
 
 **Entry format:**
@@ -532,6 +545,7 @@ Wait for explicit confirmation, then update the file (Step 7). Showing panel con
 creationDate: YYYY-MM-DDTHH:MM
 floor: Primary              # single floor name (or [Primary, Secondary] for elevator emotions) — this is the EVENING floor
 floor_level: Low | Middle | High
+entry_status: captured | enriched   # captured = saved at first touch (Step 1.5); enriched = the interview/panel ran
 # Morning pairing fields — ONLY include if a /rise entry was found in Step 0h:
 # floor_morning: <Floor at sunrise from /rise frontmatter>
 # floor_morning_level: Low | Middle | High
@@ -596,7 +610,7 @@ deep_work: X                # blocks completed today
 **Concept tags:** Use existing vault concepts that match the content. Common ones:
 - People: [[Mom]] [[Dad]] (use real names from the user's vault)
 - Emotions: [[Fear]] [[Anger]] [[Guilt]] [[Love]] [[Joy]] [[Peace]] [[Courage]] [[Shame]] [[Grief]]
-- Themes: [[Money]] [[Abundance]] [[Entrepreneurship]] [[Relationships]] [[Friendship]] [[Inner Work]] [[Growth]] [[Therapy]] [[Writing]] [[Travel & Escape]] [[Colombia & Latinidad]] [[Routine & Discipline]] [[Energy]] [[Rest & Sleep]] [[Connection]] [[Boundaries]] [[Decision Making]] [[Networking]] [[Gym]]
+- Themes: [[Money]] [[Abundance]] [[Entrepreneurship]] [[Relationships]] [[Friendship]] [[Inner Work]] [[Growth]] [[Therapy]] [[Writing]] [[Travel & Escape]] [[Heritage & Culture]] [[Routine & Discipline]] [[Energy]] [[Rest & Sleep]] [[Connection]] [[Boundaries]] [[Decision Making]] [[Networking]] [[Gym]]
 - Framework: [[The High-Rise Series]] [[Low Floors]] [[Middle Floors]] [[High Floors]] [[Awareness]]
 
 **Important:**
@@ -712,7 +726,7 @@ This is automatic — never ask the user to approve the log append. If there's n
 
 ### Step 9.5: Fire first-journal-saved telemetry (one-time, fail-open)
 
-After the journal entry has saved successfully, check whether this is the user's FIRST journal save in this vault. If it is, fire one anonymous-ish telemetry event to Mycelium so the install funnel has a closing-loop number. Subsequent journal saves do not re-fire.
+After the entry first persists (the capture-first save in Step 1.5 — or here, if the session reaches the end first), check whether this is the user's FIRST journal save in this vault. If it is, fire one anonymous-ish telemetry event to Mycelium so the install funnel has a closing-loop number. Subsequent journal saves do not re-fire.
 
 ```bash
 TOKEN_FILE="$HOME/.claude/.ai-brain-starter-email-on-file"
