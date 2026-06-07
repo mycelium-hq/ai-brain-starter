@@ -44,5 +44,5 @@ You likely have paid plans or free tiers on many tools. **Don't burn Claude toke
 |------|------|-----|
 | Keyword/exact match | `obsidian search` or Grep | Fastest for known terms |
 | Structural neighbors ("what links to X?") | graphify graph.json query | Explicit relationships, communities |
-| Semantic similarity ("what else talks about themes like X?") | Smart Connections sidebar in Obsidian | Finds conceptually related notes even without shared links or keywords |
+| Semantic similarity ("what else talks about themes like X?") | Smart Connections sidebar in Obsidian *(optional — heavy indexer; opt-in on large vaults, scope to a few folders)* | Finds conceptually related notes even without shared links or keywords |
 | Visual graph exploration | Neo4j Browser | Cypher queries, visual cluster browsing |

@@ -338,6 +338,30 @@ else
   warn "check-vault-backup.py not found" "Cannot verify the vault has an off-machine backup."
 fi
 
+# ----- 13. Obsidian renderer crashes (the large-vault OOM class) -----
+section "13. Obsidian renderer crashes"
+CHECK_RENDERER=""
+for c in "$(cd "$(dirname "$0")" && pwd)/check-renderer-crashes.py" \
+         "$HOME/.claude/skills/ai-brain-starter/scripts/check-renderer-crashes.py"; do
+  [ -f "$c" ] && CHECK_RENDERER="$c" && break
+done
+if [ -n "$CHECK_RENDERER" ]; then
+  rverdict="$(python3 "$CHECK_RENDERER" --porcelain 2>/dev/null)"
+  case "$rverdict" in
+    OK_NO_CRASHES)
+      ok "No repeated Obsidian renderer crashes" ;;
+    SKIP_NOT_MACOS)
+      ok "Renderer-crash check skipped (macOS-only crash reports)" ;;
+    RENDERER_CRASHES:*)
+      warn "Repeated Obsidian renderer crashes (${rverdict#RENDERER_CRASHES:} in ~14 days, EXC_BREAKPOINT / renderer OOM)" \
+        "A heavy indexer plugin is likely exhausting the renderer on a large vault. Quit Obsidian, set .obsidian/community-plugins.json to [] (restricted mode), reopen, enable Dataview only, then add others one at a time. Scope or drop Smart Connections / Tasks. See templates/rules/obsidian-plugins.md 'Large-vault plugin posture'." ;;
+    *)
+      warn "Could not evaluate renderer-crash history" "check-renderer-crashes.py returned: ${rverdict:-<empty>}" ;;
+  esac
+else
+  warn "check-renderer-crashes.py not found" "Cannot check for repeated Obsidian renderer crashes."
+fi
+
 # ----- summary -----
 echo
 echo "${B}Summary${N}"

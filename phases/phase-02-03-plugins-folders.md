@@ -2,7 +2,7 @@
 
 **AUTO-INSTALL FIRST. Don't make the user click through Obsidian's plugin browser unless the auto-install fails.** Non-technical users miss-click in the plugin UI, install the wrong plugin, or skip the "Enable" step after "Install" — these are the top three Phase 2 support requests.
 
-Tell the user: *"I'm going to install your Obsidian plugins in the background. These power live queries, templates, task tracking, and AI-powered note linking. Give me a few seconds."*
+Tell the user: *"I'm going to install your Obsidian plugins in the background. These power live queries, templates, and task tracking, and let Claude work with your vault directly. Give me a few seconds."*
 
 Then run this Python helper, substituting `[VAULT_PATH]` with the actual vault path saved in Phase 1 step 8:
 
@@ -18,11 +18,19 @@ PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Plugin id → GitHub repo (owner/repo). The release ZIP for each contains
 # main.js, manifest.json, and (sometimes) styles.css — Obsidian's plugin format.
+#
+# This is the DEFAULT set — light enough to enable on a vault of any size.
+# Smart Connections is deliberately NOT here: it is a heavy indexer (SQLite-
+# backed embeddings of every note) that can exhaust Obsidian's single renderer
+# process and crash it on open once a vault grows past a few thousand notes
+# (EXC_BREAKPOINT / renderer out-of-memory). It is offered as an explicit opt-in
+# instead — see "Optional: Smart Connections (opt-in)" below. graphify already
+# covers explicit relationships, and where the Mycelium runtime is in use that
+# runtime is the semantic retrieval layer, so Smart Connections is redundant.
 PLUGINS = {
     "dataview":  "blacksmithgu/obsidian-dataview",
     "templater-obsidian": "SilentVoid13/Templater",
     "obsidian-tasks-plugin": "obsidian-tasks-group/obsidian-tasks",
-    "smart-connections": "brianpetro/obsidian-smart-connections",
     "obsidian-local-rest-api": "coddingtonbear/obsidian-local-rest-api",
     "custom-sort": "SebastianMC/obsidian-custom-sort",
 }
@@ -162,10 +170,32 @@ Walk them through installing and enabling each one:
 1. **Dataview** — "Search 'Dataview' → Install → Enable. Powers live queries and dashboards."
 2. **Templater** — "Search 'Templater' → Install → Enable. Auto-applies templates when you create notes."
 3. **Tasks** — "Search 'Tasks' → Install → Enable. Tracks to-dos across your vault."
-4. **Smart Connections** — "Search 'Smart Connections' → Install → Enable. AI-powered note linking, finds connections you'd miss."
-5. **Local REST API** — "Search 'Local REST API' → Install → Enable. Lets Claude interact with your vault directly."
+4. **Local REST API** — "Search 'Local REST API' → Install → Enable. Lets Claude interact with your vault directly."
+
+(Smart Connections is intentionally omitted from the default set — it is an opt-in heavy indexer; see "Optional: Smart Connections" below.)
 
 "All installed and enabled? Let's keep going."
+
+### Optional: Smart Connections (opt-in, not enabled by default)
+
+Smart Connections adds semantic ("meaning-based") search over the vault. It is **deliberately not in the default install** because it is a heavy indexer: it builds SQLite-backed embeddings of every note and holds them in Obsidian's single renderer process. On a vault beyond ~5K notes, that — alongside other heavy indexers loading at once — can exhaust the renderer's memory and crash Obsidian on open (`EXC_BREAKPOINT (SIGTRAP)`, CPU pinned).
+
+Only offer it if the user explicitly asks for semantic search AND accepts the tradeoff. If they do:
+
+- **Scope it to a subset of folders, never the whole vault.** Point its inclusions at the few folders where semantic discovery actually helps (e.g. `📝 Notes/`, `📓 Journals/`), not everything.
+- graphify already covers explicit relationships; where the Mycelium runtime is in use, that runtime is the semantic retrieval layer and Smart Connections is redundant.
+- To install: add `"smart-connections": "brianpetro/obsidian-smart-connections"` back into the `PLUGINS` dict above and re-run, or manually do Community Plugins → search "Smart Connections" → Install → Enable, then immediately set its folder scope.
+
+Full settings and crash-recovery steps live in the obsidian-plugins rule ("Large-vault plugin posture").
+
+### Large-vault plugin posture
+
+Obsidian renders the whole vault in one Electron renderer with a bounded memory heap, and each "indexer" plugin holds an in-memory index. Past ~5K notes, several heavy ones loading at once can crash the renderer on open. As the user's vault grows, tell them:
+
+- **Keep Dataview** — it is the lightest indexer and the dashboards depend on it. Dataview alone opens fine even at 13K+ notes.
+- **Scope or disable the heavy indexers** — Smart Connections (embeddings of every note) is heaviest; Tasks (full-vault checkbox scan) compounds it.
+- Machine-generated folders are already excluded from Obsidian's index by the installer above (`userIgnoreFilters`); that bounds session/log/snapshot churn but not a plugin that indexes real notes.
+- If the renderer ever crashes on open, the recovery steps (restricted mode → re-add Dataview only → add others one at a time) are in the obsidian-plugins rule ("Large-vault plugin posture").
 
 ## Phase 3: Create Folder Structure
 

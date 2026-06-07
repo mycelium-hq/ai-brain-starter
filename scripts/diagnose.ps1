@@ -354,6 +354,36 @@ if ($checkBackup) {
   Warn "check-vault-backup.py not found" "Cannot verify the vault has an off-machine backup."
 }
 
+# ----- 13. Obsidian renderer crashes (the large-vault OOM class) -----
+Section "13. Obsidian renderer crashes"
+$checkRenderer = $null
+$rendererCands = @(
+  (Join-Path $PSScriptRoot "check-renderer-crashes.py"),
+  (Join-Path $env:USERPROFILE ".claude\skills\ai-brain-starter\scripts\check-renderer-crashes.py")
+)
+foreach ($c in $rendererCands) { if (Test-Path -LiteralPath $c) { $checkRenderer = $c; break } }
+if ($checkRenderer) {
+  $py = Get-Command python -ErrorAction SilentlyContinue
+  if (-not $py) { $py = Get-Command python3 -ErrorAction SilentlyContinue }
+  if ($py) {
+    $rverdict = "$(& $py.Source $checkRenderer --porcelain 2>$null)".Trim()
+    if ($rverdict -eq "OK_NO_CRASHES") {
+      Ok "No repeated Obsidian renderer crashes"
+    } elseif ($rverdict -eq "SKIP_NOT_MACOS") {
+      Ok "Renderer-crash check skipped (macOS-only crash reports)"
+    } elseif ($rverdict -like "RENDERER_CRASHES:*") {
+      $cnt = ($rverdict -replace "^RENDERER_CRASHES:", "")
+      Warn "Repeated Obsidian renderer crashes ($cnt in ~14 days, EXC_BREAKPOINT / renderer OOM)" "A heavy indexer plugin is likely exhausting the renderer on a large vault. Quit Obsidian, set .obsidian/community-plugins.json to [] (restricted mode), reopen, enable Dataview only, then add others one at a time. Scope or drop Smart Connections / Tasks. See templates/rules/obsidian-plugins.md 'Large-vault plugin posture'."
+    } else {
+      Warn "Could not evaluate renderer-crash history" "check-renderer-crashes.py returned: $rverdict"
+    }
+  } else {
+    Warn "python not found" "Cannot check for repeated Obsidian renderer crashes."
+  }
+} else {
+  Warn "check-renderer-crashes.py not found" "Cannot check for repeated Obsidian renderer crashes."
+}
+
 # ----- summary -----
 Write-Host ""
 Write-Host "Summary" -ForegroundColor White

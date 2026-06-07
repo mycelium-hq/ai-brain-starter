@@ -109,6 +109,7 @@ INTEGRATION_TESTS=(
   test_resource_aware_session_close
   test_cloud_sync_guard
   test_machinery_sidecar
+  test_renderer_crash_guard
 )
 echo "==> (b) Shell integration: ${#INTEGRATION_TESTS[@]} tests"
 for t in "${INTEGRATION_TESTS[@]}"; do
