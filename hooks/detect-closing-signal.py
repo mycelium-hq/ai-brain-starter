@@ -587,6 +587,34 @@ def _full_cascade_block(
         )
     else:
         tt_line = "  Time tracking:    (not in this vault, skip the time-tracking step)"
+
+    # Phase 0a is self-healing: the deterministic runner is an OPTIONAL,
+    # separately-installed vault script. Reference it only when it actually
+    # exists; otherwise tell the model to run the aggregators by hand. Before
+    # 2026-06-07 the cascade hard-referenced session-close-runner.sh as mandatory
+    # and claimed skipping it "guaranteed a Stop-hook block" — but the runner
+    # shipped without its script and the verify hook is opt-in, so every vault
+    # without the script was pointed at a missing file as the "single most
+    # important step."
+    runner = meta_dir / "scripts" / "session-close-runner.sh"
+    if runner.is_file():
+        phase_0a = f"""PHASE 0a — RUN THE CANONICAL RUNNER FIRST. One bash call runs the
+deterministic aggregation (Phases 0c-0e + the session/decision aggregators) and
+writes the report the optional verify-session-close-cascade Stop hook checks. It
+runs whichever sub-scripts are installed and skips the rest (never fatal):
+
+  bash "{runner}"
+
+After it finishes, walk the remaining Phases (0b -> 1 -> 2 -> 2b -> 3) below. Do
+NOT re-walk 0c/0d/0e by hand — the runner already did those."""
+    else:
+        phase_0a = f"""PHASE 0a — DETERMINISTIC AGGREGATION (run by hand; the canonical
+runner is not installed in this vault — expected on vaults that predate it or
+have not re-synced scripts, and NOT a blocker). Run whichever of these exist
+under "{meta_dir}/scripts/", each non-fatal, with VAULT_ROOT set:
+  - aggregate-sessions.py    (refreshes Last Session.md)
+  - aggregate-decisions.py   (refreshes the Decision Log)
+Then walk Phases 0b -> 1 -> 2 -> 2b -> 3 below."""
     return f"""SESSION CLOSE — pre-resolved context (use these exact values):
 
   Timestamp:        {timestamp_human}
@@ -598,38 +626,16 @@ def _full_cascade_block(
 {tt_line}
   Decisions with empty Outcome (review for backfill): {pending}
 
-PHASE 0a — RUN THE CANONICAL RUNNER FIRST (codified 2026-05-27 after the
-session-close-runner stale-report block incident). Single most-important
-step in the cascade. This bash invocation IS Phases 0c + 0d + 0e + Phase 2
-aggregators executed deterministically, AND it refreshes the report file
-the verify-session-close-cascade Stop hook checks. Skipping it = guaranteed
-Stop-hook block + forced cascade re-run + redundant manual phase-walking.
-
-  bash "{meta_dir}/scripts/session-close-runner.sh"
-
-The runner handles: handoff-folder scan, orphan-task-list check, launchd
-health, aggregate-sessions / aggregate-decisions / Session Start Brief /
-passive-capture / drift-detection / Rule Conflicts. Output ends with the
-list of Phases that are STILL your manual job (0b + 1 + 2 + 2b + 3).
-
-After it finishes, walk the remaining Phases (0b → 1 → 2 → 2b → 3) below.
-The detailed phase descriptions that follow are reference for those manual
-steps — do NOT re-walk Phases 0c/0d/0e by hand; the runner already did
-those deterministically.
-
-Banned framings (treating the runner as optional): "I walked Phases 0c-0e
-manually," "the runner is one of several ways," "I skipped the runner since
-I checked individually." The runner IS the canonical entry point; manual
-phase-walking races with the verifier hooks and burns a close-attempt.
+{phase_0a}
 
 PHASE 0b — Incomplete-work gate (DO THIS AFTER 0a, before any writes):
 Surface any background tasks still running, pipeline phases killed mid-run,
 errors not retried. Ask the user "finish now, or defer?" Wait for their call.
 If nothing incomplete: say "No incomplete work" and proceed.
 
-PHASE 0c / 0d / 0e — Already run by Phase 0a's runner.
-(Listed below only as reference for what the runner did. Do NOT re-execute
-these manually; trust the runner output.)
+PHASE 0c / 0d / 0e — covered in Phase 0a (by the runner if installed, else the
+manual aggregation). Listed below only as reference for what 0a covered; do not
+re-execute these by hand.
   Phase 0c — Consumable-artifact cleanup: scans Handoffs/ + consumes_when frontmatter.
   Phase 0d — Orphan task-list guard: runs check-orphan-task-lists.py.
   Phase 0e — Launchd health check: runs check-launchd-health.sh.
