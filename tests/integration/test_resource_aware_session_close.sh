@@ -48,19 +48,24 @@ trap 'rm -rf "$TMP"' EXIT
 echo "PASS: guard sources clean and defines close_{resource_high,load_per_core,mutex_acquire,mutex_release}"
 
 # ─── Assertion 2: load gate is deterministic ───────────────────────────────
+# shellcheck source=/dev/null
 ( . "$GUARD"
+  # shellcheck disable=SC2034  # consumed by close_resource_high in the sourced $GUARD
   CLOSE_MAX_LOAD_PER_CORE=0
   close_resource_high || { echo "thr=0 should be HIGH" >&2; exit 1; }
+  # shellcheck disable=SC2034  # consumed by close_resource_high in the sourced $GUARD
   CLOSE_MAX_LOAD_PER_CORE=99999
   close_resource_high && { echo "thr=99999 should be low" >&2; exit 1; }
   exit 0 ) || fail "load gate threshold logic wrong"
 echo "PASS: load gate defers at threshold 0 and runs at threshold 99999"
 
 # ─── Assertion 3: mutex acquire / contend / release / stale-reclaim ─────────
+# shellcheck source=/dev/null
 ( . "$GUARD"
   export CLOSE_MUTEX="$TMP/mutex3.lock"
   close_mutex_acquire 2 || { echo "acquire#1 failed" >&2; exit 1; }
   # A child trying to acquire while we hold it (live holder) must time out.
+  # shellcheck source=/dev/null
   ( . "$GUARD"; export CLOSE_MUTEX="$TMP/mutex3.lock"
     if close_mutex_acquire 2; then echo "contended acquire wrongly succeeded" >&2; exit 1; fi )
   contend_rc=$?
@@ -85,7 +90,7 @@ echo "PASS: session-end-hook.sh sources the guard and carries the CLOSE_DEFER ga
 make_vault() {
   local v="$1"
   mkdir -p "$v/⚙️ Meta/Sessions"
-  ( cd "$v"
+  ( cd "$v" || exit 1
     git init --quiet --initial-branch=master
     git config user.email "t@example.com"; git config user.name "t"
     echo "# vault" > README.md

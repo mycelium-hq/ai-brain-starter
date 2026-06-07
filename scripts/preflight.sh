@@ -49,10 +49,10 @@ t() { [[ "$LANG_CODE" == "es" ]] && echo "$2" || echo "$1"; }
 
 # ─── Color helpers (suppressed in JSON / quiet mode) ──────────────────────────
 if [[ $JSON_MODE -eq 1 || $QUIET_MODE -eq 1 ]]; then
-  C_RED=""; C_YEL=""; C_GRN=""; C_BLU=""; C_DIM=""; C_BLD=""; C_RST=""
+  C_RED=""; C_YEL=""; C_GRN=""; C_DIM=""; C_BLD=""; C_RST=""
 else
   C_RED=$'\033[31m'; C_YEL=$'\033[33m'; C_GRN=$'\033[32m'
-  C_BLU=$'\033[34m'; C_DIM=$'\033[2m'; C_BLD=$'\033[1m'; C_RST=$'\033[0m'
+  C_DIM=$'\033[2m'; C_BLD=$'\033[1m'; C_RST=$'\033[0m'
 fi
 
 red()    { RED_LINES+=("$1"); RED_COUNT=$((RED_COUNT+1)); [[ $JSON_MODE -eq 0 && $QUIET_MODE -eq 0 ]] && printf "  ${C_RED}✗${C_RST} %s\n" "$1"; }
@@ -79,7 +79,6 @@ section "$(t "Operating system" "Sistema operativo")"
 OS_KIND="$(uname -s)"
 case "$OS_KIND" in
   Darwin)
-    OS_NAME="macOS"
     MACOS_VER="$(sw_vers -productVersion 2>/dev/null || echo unknown)"
     MACOS_MAJOR="${MACOS_VER%%.*}"
     if [[ "$MACOS_MAJOR" =~ ^[0-9]+$ && "$MACOS_MAJOR" -ge 11 ]]; then
@@ -97,7 +96,6 @@ case "$OS_KIND" in
     info "$(t "Architecture: $ARCH" "Arquitectura: $ARCH")"
     ;;
   Linux)
-    OS_NAME="Linux"
     DISTRO=""
     [[ -f /etc/os-release ]] && DISTRO="$(. /etc/os-release && echo "${PRETTY_NAME:-$NAME}")"
     green "$(t "Linux: ${DISTRO:-detected}" "Linux: ${DISTRO:-detectado}")"
@@ -147,13 +145,11 @@ declare -a HOSTS=(
   "https://claude.ai|claude.ai (Claude Code sign-in)"
 )
 
-NET_BLOCKED=0
 for entry in "${HOSTS[@]}"; do
   url="${entry%%|*}"; name="${entry##*|}"
   if reachable "$url"; then
     green "$(t "$name reachable" "$name accesible")"
   else
-    NET_BLOCKED=1
     red "$(t \
       "$name NOT reachable at $url — check VPN / firewall / corporate proxy" \
       "$name NO accesible en $url — revisá VPN / firewall / proxy corporativo")"

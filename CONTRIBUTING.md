@@ -23,7 +23,9 @@ Same thing — open an issue. Describe the problem you're trying to solve, not j
 2. Make your changes
 3. Open a pull request with a one-sentence description of what changed and why
 
-Before opening the PR, run the full CI gate locally: `bash scripts/ci.sh` (the same `py_compile` over every tracked `*.py` plus the integration tests that CI runs).
+Before opening the PR, run the full CI gate locally: `bash scripts/ci.sh` (the same `py_compile` over every tracked `*.py`, the integration tests, and `shellcheck` over every tracked `*.sh` that CI runs).
+
+**Shell scripts must run on macOS AND Linux** (users install on both; CI is ubuntu). `bash scripts/shellcheck.sh` is wired into the gate above and into CI as its own job. For the GNU-vs-BSD differences shellcheck cannot catch (`stat`, `date`, `sed -i`, bash 3.2), see [`scripts/PORTABILITY.md`](scripts/PORTABILITY.md).
 
 **For SKILL.md changes:** The most important thing is that instructions stay prescriptive and complete. Vague instructions like "ask about habits" produce inconsistent results across different users and models. If you're changing how the skill behaves, spell out exactly what Claude should do, in what order, and with what fallbacks. See the existing phases for the right level of detail.
 

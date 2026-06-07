@@ -70,6 +70,7 @@ EOF
 # 2. Hookify-auto-commit hook would commit on master. Simulate that:
 git add .claude/hookify.test-rule.local.md
 git commit --quiet -m "auto-commit: hookify rule update"
+# shellcheck disable=SC2034  # snapshot of master after the edit; documents the step (not asserted)
 MASTER_SHA_AFTER_EDIT=$(git rev-parse HEAD)
 
 # 3. The worktree's filesystem ALSO has a copy of this file (because
@@ -148,6 +149,7 @@ git commit --quiet -m "auto-commit: second hookify rule update"
 cp .claude/hookify.another-rule.local.md ".claude/worktrees/diverged-slug/.claude/hookify.another-rule.local.md"
 
 DIVERGED_BRANCH_SHA_PRE=$(git rev-parse refs/heads/claude/diverged-slug)
+# shellcheck disable=SC2034  # snapshot of master pre-fallback; documents the pre-state (not asserted)
 MASTER_SHA_PRE_FALLBACK=$(git rev-parse refs/heads/master)
 
 cd ".claude/worktrees/diverged-slug"

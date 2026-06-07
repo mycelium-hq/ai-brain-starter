@@ -14,10 +14,18 @@
 #                           system /usr/bin/python3, which is 3.9).
 #   (b) Shell integration - the named tests under tests/integration/, in
 #                           order, stopping at the first failure.
+#   (c) Shell static analysis - scripts/shellcheck.sh, the SAME script lint.yml's
+#                           dedicated `shellcheck` job runs, so the local pre-push
+#                           gate and CI cannot drift on shell quality. Skipped here
+#                           when running inside GitHub Actions (the dedicated job
+#                           already covers it); locally it is warn-and-skipped
+#                           when the shellcheck binary is absent (CI enforces it).
 #
-# It does NOT run the pure-lint jobs (bash -n, pwsh ParseFile, BOM, em-dash,
+# It does NOT run the OTHER pure-lint jobs (bash -n, pwsh ParseFile, BOM, em-dash,
 # JSON, privacy, references, no-remote-pipe-install). Those stay as their own
-# lint.yml jobs - they are lint, not the unit/type gate.
+# lint.yml jobs - they are lint, not the unit/type gate. shellcheck is the one
+# exception: it is the cross-platform CORRECTNESS gate (it catches the GNU-vs-BSD
+# `stat` mtime class), so it is worth enforcing pre-push, not only in CI.
 #
 # Environment the integration tests need (lint.yml provides these in the `ci`
 # job; this script adds a non-invasive fallback so a fresh `bash scripts/ci.sh`
@@ -113,5 +121,27 @@ for t in "${INTEGRATION_TESTS[@]}"; do
   bash "$script"
 done
 
+# ---- (c) Shell static analysis gate ----------------------------------------
+# Runs the SAME canonical gate as lint.yml's `shellcheck` job - scripts/shellcheck.sh
+# - so the local pre-push gate (~/.local/bin/ci-test) and CI cannot drift on shell
+# quality. In CI we skip it here because the dedicated `shellcheck` job already runs
+# scripts/shellcheck.sh; running it again in this job would only duplicate work and
+# muddy failure attribution. Locally there is no such job, so this is where the
+# pre-push gate gets shellcheck coverage. If shellcheck is not installed locally we
+# warn and skip (CI still enforces it) rather than blocking the python + integration
+# gates a contributor can still run.
+if [ -n "${GITHUB_ACTIONS:-}" ]; then
+  shellcheck_note="skipped in CI (dedicated lint.yml 'shellcheck' job runs scripts/shellcheck.sh)"
+  echo "==> (c) shellcheck: $shellcheck_note"
+elif command -v shellcheck >/dev/null 2>&1; then
+  echo "==> (c) shellcheck: bash scripts/shellcheck.sh"
+  bash scripts/shellcheck.sh
+  shellcheck_note="passed"
+else
+  shellcheck_note="skipped (shellcheck not installed locally; CI enforces it)"
+  echo "==> (c) shellcheck: $shellcheck_note"
+  echo "    install: brew install shellcheck  (macOS)  /  sudo apt-get install -y shellcheck  (Debian/Ubuntu)"
+fi
+
 echo
-echo "All gates passed: py_compile ($count file(s)) + ${#INTEGRATION_TESTS[@]} integration tests."
+echo "All gates passed: py_compile ($count file(s)) + ${#INTEGRATION_TESTS[@]} integration tests + shellcheck [$shellcheck_note]."

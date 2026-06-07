@@ -22,7 +22,6 @@ fi
 fixed=0
 while IFS= read -r hooks_file; do
     if grep -q 'CLAUDE_PLUGIN_ROOT' "$hooks_file" 2>/dev/null; then
-        plugin_dir=$(dirname "$hooks_file")
         echo "Fixing: $hooks_file"
         python3 -c "
 import sys

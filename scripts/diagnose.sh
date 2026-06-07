@@ -80,6 +80,7 @@ fi
 section "3. Claude Code skills"
 SKILLS_DIR="$HOME/.claude/skills"
 if [ -d "$SKILLS_DIR" ]; then
+  # shellcheck disable=SC2088  # literal ~ in user-facing message, not a path
   ok "~/.claude/skills/ exists"
   # ai-brain-starter itself
   if [ -d "$SKILLS_DIR/ai-brain-starter" ]; then
@@ -94,6 +95,7 @@ if [ -d "$SKILLS_DIR" ]; then
     warn "daily-journal skill not installed" "/setup-brain Phase 10a creates it."
   fi
 else
+  # shellcheck disable=SC2088  # literal ~ in user-facing message, not a path
   bad "~/.claude/skills/ missing" "Claude Code may not be installed, or the skills dir was deleted."
 fi
 
@@ -181,7 +183,7 @@ fi
 
 # ----- 8. .ps1 sanity (if any exist) -----
 section "8. PowerShell files (Windows compat)"
-ps1_files=$(find "$VAULT" "$HOME/.claude/skills/ai-brain-starter" 2>/dev/null \
+ps1_files=$(find "$VAULT" "$HOME/.claude/skills/ai-brain-starter" \
   -name '*.ps1' -not -path '*/.git/*' 2>/dev/null | head -20)
 if [ -z "$ps1_files" ]; then
   ok "No .ps1 files to check"
@@ -266,7 +268,7 @@ fi
 section "10. ai-brain-starter freshness"
 ABS_DIR="$HOME/.claude/skills/ai-brain-starter"
 if [ -d "$ABS_DIR/.git" ]; then
-  cd "$ABS_DIR"
+  cd "$ABS_DIR" || exit 1
   local_sha=$(git rev-parse HEAD 2>/dev/null | cut -c1-7)
   if git fetch origin main --quiet 2>/dev/null; then
     remote_sha=$(git rev-parse origin/main 2>/dev/null | cut -c1-7)
@@ -280,8 +282,9 @@ if [ -d "$ABS_DIR/.git" ]; then
   else
     warn "Could not fetch from origin (offline?)"
   fi
-  cd - >/dev/null
+  cd - >/dev/null || exit 1
 else
+  # shellcheck disable=SC2088  # literal ~ in user-facing message, not a path
   warn "~/.claude/skills/ai-brain-starter is not a git repo" "Re-run bootstrap.sh to clone it."
 fi
 

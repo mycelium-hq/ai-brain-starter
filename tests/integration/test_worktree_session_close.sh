@@ -158,6 +158,7 @@ git branch claude/fully-merged-slug master
 # Confirm the directory doesn't exist
 mkdir -p .claude/worktrees  # keep the dir, just no slug subdir
 
+# shellcheck disable=SC2034  # capture silences prune stdout/stderr; the assertion reads $PRUNE_LOG2
 PRUNE_OUTPUT2="$(VAULT_ROOT="$VAULT" LOG_DIR="$TMP/logs2" bash "$PRUNE" 2>&1 || true)"
 PRUNE_LOG2="$TMP/logs2/worktree-prune.log"
 

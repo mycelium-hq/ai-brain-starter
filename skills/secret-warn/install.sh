@@ -8,7 +8,6 @@ set -euo pipefail
 
 SKILL_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILL_DEST="${SECRET_WARN_ROOT:-$HOME/.claude/secret-warn}"
-SETTINGS="$HOME/.claude/settings.json"
 
 echo "[secret-warn] installing to $SKILL_DEST"
 

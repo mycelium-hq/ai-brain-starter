@@ -2,9 +2,10 @@ name: lint
 
 # Two kinds of check live here:
 #
-#   1. Pure-lint jobs (below): bash syntax, PowerShell parse, UTF-8 BOM on .ps1,
-#      no em dashes in .ps1, JSON validity, private-context tokens, phase-doc
-#      references, and the no-remote-pipe-install guard.
+#   1. Pure-lint jobs (below): bash syntax, shellcheck (shell static analysis),
+#      PowerShell parse, UTF-8 BOM on .ps1, no em dashes in .ps1, JSON validity,
+#      private-context tokens, phase-doc references, and the no-remote-pipe-install
+#      guard.
 #
 #   2. The unit/type gate: the `ci` job, which runs `bash scripts/ci.sh`. That
 #      script is the SINGLE source of truth for the unit/type gate - it runs
@@ -40,6 +41,26 @@ jobs:
             fi
           done < <(find . -name '*.sh' -not -path './.git/*' -not -path './node_modules/*')
           exit $fail
+
+  shellcheck:
+    name: shellcheck (.sh, -S warning)
+    runs-on: ubuntu-latest
+    # `bash -n` (the `shell` job) is syntax-only. shellcheck adds the portability /
+    # quoting / correctness layer over every tracked *.sh: BSD-only flags, unquoted
+    # expansions (SC2086), unset vars, exit codes masked by a pipe. A real GNU-vs-BSD
+    # `stat -c` / `stat -f` mtime bug once passed macOS-local + `bash -n` and only
+    # failed on the ubuntu runner; this job catches that class. scripts/shellcheck.sh
+    # is the SINGLE
+    # source of truth - scripts/ci.sh runs the SAME script locally so the laptop
+    # pre-push gate and CI cannot drift. The severity gate starts at error + warning
+    # (info/style excluded) to match the real ship/hold boundary, not the strictest
+    # possible signal. No untrusted user input is referenced in any run: command.
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - name: ensure shellcheck present
+        run: command -v shellcheck >/dev/null || { sudo apt-get update && sudo apt-get install -y shellcheck; }
+      - name: run the canonical shellcheck gate
+        run: bash scripts/shellcheck.sh
 
   powershell:
     name: PowerShell parse (.ps1)

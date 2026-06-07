@@ -105,6 +105,7 @@ MANIFEST="$SIDECAR/manifests/$SLUG.json"
 say()  { [ "$QUIET" = 1 ] || printf '%s\n' "$*"; }
 warn() { printf 'WARN  %s\n' "$*" >&2; }
 err()  { printf 'ERROR %s\n' "$*" >&2; }
+# shellcheck disable=SC2294  # run() intentionally evals a command STRING; every caller passes redirections + quoted space/emoji paths that "$@" cannot parse
 run()  { if [ "$DRYRUN" = 1 ]; then printf 'DRY   %s\n' "$*"; else eval "$@"; fi; }
 
 # ---- manifest helpers (python3 for safe JSON over emoji/space paths) ---------
