@@ -235,14 +235,26 @@ _GENERIC = [
             # tuple per record type, not the full JSON payload."
             # Sibling carve-out to sha256: / sha512: above. Verified
             # precise: bumblebee shapes clean, bare-hex secrets still trip.
+            #
+            # Skip the Workflow runtime's content-addressed agent-call cache
+            # keys, serialized as `"key":"v2:<64-hex>"` in
+            # subagents/workflows/wf_*/journal.jsonl. Those are sha256 cache
+            # keys (a content address, not a secret). Critically the SAME
+            # redact() runs in the SessionEnd scrub layer — without this
+            # carve-out a scrub rewrites the cache key to [REDACTED-hex-256bit]
+            # and breaks Workflow resume. The lookbehind anchors on the JSON
+            # value structure `:"v<digit>:` so it survives a version bump
+            # (v2 -> v3) yet never masks a bare-hex secret, which is never
+            # preceded by that prefix. Fixed-width (\d = 1 char).
             r"(?<!sha256:)(?<!sha512:)(?<!sha384:)(?<!sha1:)(?<!md5:)"
             r"(?<!sha256\.)(?<!sha512\.)(?<!sha384\.)(?<!sha1\.)(?<!md5\.)"
             r"(?<!scan_summary:)(?<!package:)(?<!finding:)(?<!diagnostic:)"
+            r'(?<!:"v\d:)'
             r"(?<![A-Fa-f0-9])([A-Fa-f0-9]{64})(?![A-Fa-f0-9])",
             re.ASCII,
         ),
         redaction="[REDACTED-hex-256bit]",
-        description="64-char hex string (256-bit secret; HMAC, openssl rand -hex 32). Skips common content-digest prefixes (sha{1,256,384,512}:, md5:) and integrity-hash dot prefixes (sha{1,256,384,512}., md5.) used by pnpm/yarn.",
+        description="64-char hex string (256-bit secret; HMAC, openssl rand -hex 32). Skips common content-digest prefixes (sha{1,256,384,512}:, md5:), integrity-hash dot prefixes (sha{1,256,384,512}., md5.) used by pnpm/yarn, and the Workflow runtime's content-addressed cache key shape (\":\"v<digit>:<hex>\").",
     ),
 ]
 
@@ -321,6 +333,12 @@ if __name__ == "__main__":
         "sha512-hex": "sha512:" + "b" * 64,
         # pnpm packageManager integrity hash (dot separator, not colon)
         "pnpm-package-manager": '"packageManager": "pnpm@10.11.1+sha256.' + "c" * 64 + '"',
+        # Workflow runtime content-addressed cache key — `"key":"v2:<hex>"` in
+        # subagents/workflows/wf_*/journal.jsonl. The SAME redact() runs in the
+        # SessionEnd scrub, so this MUST be skipped or a scrub breaks Workflow resume.
+        "workflow-cache-key-v2": '{"type":"started","key":"v2:' + "e" * 64 + '","agentId":"x"}',
+        # Version-robustness: a future v3: prefix must also be skipped.
+        "workflow-cache-key-v3": '"key":"v3:' + "f" * 64 + '"',
         # Real 256-bit hex secret — MUST still match
         "real-hex-secret": "API_KEY=" + "d" * 64,
         # Resend literal placeholder (`re_x` * 30 in .env.example)
@@ -340,6 +358,8 @@ if __name__ == "__main__":
         "github-asset-digest": [],   # sha256: prefix → skipped
         "sha512-hex": [],            # sha512: prefix → skipped
         "pnpm-package-manager": [],  # sha256. prefix → skipped
+        "workflow-cache-key-v2": [],  # :"v2: prefix → skipped (Workflow cache key)
+        "workflow-cache-key-v3": [],  # :"v3: prefix → skipped (version-robust)
         "real-hex-secret": ["hex-256bit-secret"],
         "resend-placeholder-xs": [],
         "resend-placeholder-your": [],

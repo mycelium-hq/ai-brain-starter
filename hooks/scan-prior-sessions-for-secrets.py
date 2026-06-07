@@ -23,6 +23,14 @@ closed by FOUR guards, all in this file:
   * wall-clock budget + per-file size cap + os.nice(10) — a single pass can
     never run away or starve the foreground session.
 
+Cross-platform note: this stays a SessionStart hook rather than a launchd /
+cron worker. ai-brain-starter installs on macOS, Linux, AND Windows, so a
+launchd-only worker would silently disable the historical sweep everywhere
+except macOS. The four in-session guards above bound the cost so the cold-start
+path is safe on every platform; a maintainer who wants the heavy walk fully off
+cold-start can schedule this script out-of-band (it is safe to run standalone —
+the single-instance flock + budget apply either way).
+
 Behavior:
   - Detect: scans every `~/.claude/projects/**/*.jsonl` against the
     registry (`_lib/secret_patterns.scan`). Rate-limited to one run per 6h
@@ -35,6 +43,11 @@ Behavior:
   - Mid-session safety: a JSONL whose worktree IS active is SKIPPED with
     "will retry next SessionStart after close" — scrubbing a mid-session
     JSONL corrupts Claude Code's resume state.
+  - Fail-closed scrub decision: if the active-worktree set cannot be
+    positively determined (git error) OR is empty, scrub NOTHING — an
+    empty/unknown set is never proof a JSONL is safe (the current session may
+    run from the main checkout, which has no `claude/*` worktree entry). See
+    `partition_for_scrub`.
   - Warn: surfaces residual findings (post-scrub) + threat-model reminder
     so the next response checks the leak vector before recommending
     rotation.
@@ -119,16 +132,23 @@ def _vault_root() -> Path | None:
     return p if p.exists() else None
 
 
-def _active_worktree_slugs(vault_root: Path) -> set[str]:
-    """Return slugs of currently active vault worktrees.
+def _active_worktree_slugs(vault_root: Path) -> set[str] | None:
+    """Slugs of currently active vault worktrees, or None when UNKNOWN.
 
     Slugs look like `silly-edison-565ec5` from branches named
     `claude/silly-edison-565ec5`. Used to skip scrubbing JSONLs whose
-    parent worktree is mid-session — mid-session scrub corrupts Claude
+    parent worktree is mid-session — a mid-session scrub corrupts Claude
     Code's resume state.
 
-    Empty set on any error (fail-closed: if we can't tell which worktrees
-    are active, we DON'T auto-scrub anything — the warn path still fires).
+    Returns None — the UNKNOWN sentinel — when the set cannot be determined
+    (git error / timeout / non-zero exit). The OLD code returned an EMPTY set
+    on these errors, which the consumer could NOT tell apart from "git ran,
+    genuinely zero active worktrees" — so on any git error it scrubbed
+    EVERYTHING, including active-session JSONLs (fail-OPEN; the exact
+    corruption the skip exists to prevent). Callers MUST treat None (and an
+    empty set) as "do not scrub". See partition_for_scrub().
+
+    output_mapping: error / cannot-determine -> None ; ran-ok -> set (maybe empty).
     """
     try:
         proc = subprocess.run(
@@ -139,9 +159,9 @@ def _active_worktree_slugs(vault_root: Path) -> set[str]:
             timeout=5,
         )
     except (OSError, subprocess.TimeoutExpired):
-        return set()
+        return None
     if proc.returncode != 0:
-        return set()
+        return None
     slugs: set[str] = set()
     for line in proc.stdout.splitlines():
         if line.startswith("branch refs/heads/claude/"):
@@ -160,6 +180,39 @@ def _jsonl_is_in_active_worktree(jsonl: Path, active_slugs: set[str]) -> bool:
         project_dir = project_dir.parent.parent
     name = project_dir.name
     return any(slug in name for slug in active_slugs)
+
+
+def partition_for_scrub(
+    finding_paths: list[Path], active_slugs: set[str] | None
+) -> tuple[list[Path], list[Path], list[Path]]:
+    """Decide which findings are safe to auto-scrub. PURE + the fail-closed core.
+
+    Returns (to_scrub, skipped_active, skipped_unknown).
+
+    FAIL-CLOSED: when `active_slugs` is None (could not determine) OR an EMPTY
+    set (no worktree positively identified as active), we cannot confirm any
+    JSONL is safe to scrub — the current session may be running from the main
+    checkout, which leaves no `claude/*` worktree entry. So scrub NOTHING; every
+    finding goes to `skipped_unknown`. The warn surface still reports them for
+    manual review.
+
+    With a NON-EMPTY active set we have a positive boundary: scrub everything
+    that is NOT inside an active worktree (`to_scrub`), skip the ones that are
+    (`skipped_active`).
+
+    output_mapping: `not active_slugs` (None or empty) -> to_scrub is ALWAYS []
+    (the safe side). Only a non-empty set ever yields scrub targets.
+    """
+    if not active_slugs:  # None or empty set -> fail closed, scrub nothing
+        return [], [], list(finding_paths)
+    to_scrub: list[Path] = []
+    skipped_active: list[Path] = []
+    for p in finding_paths:
+        if _jsonl_is_in_active_worktree(p, active_slugs):
+            skipped_active.append(p)
+        else:
+            to_scrub.append(p)
+    return to_scrub, skipped_active, []
 
 
 def _log_scrub(record: dict) -> None:
@@ -297,16 +350,25 @@ def main() -> int:
     bypass_auto_scrub = os.environ.get(BYPASS_ENV, "").strip() not in ("", "0", "false")
     vault_root = _vault_root()
     auto_scrub_enabled = (vault_root is not None) and (not bypass_auto_scrub)
-    active_slugs = _active_worktree_slugs(vault_root) if auto_scrub_enabled else set()
+
+    # FAIL-CLOSED partition. `_active_worktree_slugs` returns None on a git
+    # error and a (possibly empty) set when it ran cleanly. partition_for_scrub
+    # treats BOTH None and empty as "cannot confirm safe -> scrub nothing", so a
+    # git hiccup (or a session running from the main checkout, which has no
+    # `claude/*` worktree entry) can never scrub an active session's JSONL — the
+    # corruption the active-worktree skip exists to prevent.
+    finding_paths = [path for path, _hits in findings]
+    if auto_scrub_enabled:
+        active_slugs = _active_worktree_slugs(vault_root)  # set | None
+        to_scrub, skipped_active, skipped_unknown = partition_for_scrub(
+            finding_paths, active_slugs
+        )
+    else:
+        active_slugs = None
+        to_scrub, skipped_active, skipped_unknown = [], [], []
 
     auto_scrubbed: list[tuple[Path, str]] = []
-    skipped_active: list[Path] = []
-    for path, _hits in list(findings):
-        if not auto_scrub_enabled:
-            continue
-        if _jsonl_is_in_active_worktree(path, active_slugs):
-            skipped_active.append(path)
-            continue
+    for path in to_scrub:
         ok, msg = _auto_scrub(path)
         if ok:
             auto_scrubbed.append((path, msg))
@@ -333,6 +395,14 @@ def main() -> int:
         lines.append(f"Skipped {len(skipped_active)} active-worktree JSONL(s) (mid-session safety):")
         for path in skipped_active:
             lines.append(f"  ⏸  {path.name}: will retry next SessionStart after close")
+    if skipped_unknown and auto_scrub_enabled:
+        lines.append(
+            f"Skipped {len(skipped_unknown)} JSONL(s) — could not confirm which "
+            f"worktrees are active (git error, or none detected). FAIL-CLOSED: "
+            f"scrubbed nothing (a mid-session scrub corrupts resume state):"
+        )
+        for path in skipped_unknown:
+            lines.append(f"  ⏸  {path.name}: left intact; retries once active worktrees are detectable")
     if residual_findings:
         lines.append("Residual findings (re-scan post-scrub):")
         for path, hits in residual_findings:

@@ -105,6 +105,7 @@ INTEGRATION_TESTS=(
   test_installer_retires_email_gate
   test_remediate_runaway_procs
   test_scan_prior_single_instance
+  test_scan_prior_failclosed_scrub
   test_vault_safety_guards
   test_resource_aware_session_close
   test_cloud_sync_guard
