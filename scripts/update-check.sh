@@ -66,7 +66,7 @@ if [[ ! -d "$REPO_DIR/.git" ]]; then
   exit 0
 fi
 
-cd "$REPO_DIR"
+cd "$REPO_DIR" || { echo "STATUS: ERROR"; echo "REASON: cannot enter $REPO_DIR"; exit 0; }
 
 # Fetch quietly. If network is down or auth fails, treat as ERROR but don't crash.
 if ! git fetch --quiet origin main 2>/dev/null; then

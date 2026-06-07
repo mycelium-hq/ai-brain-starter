@@ -143,7 +143,7 @@ is_ignored() {
     pat="${pat#"${pat%%[![:space:]]*}"}"  # strip leading whitespace
     pat="${pat%"${pat##*[![:space:]]}"}"  # strip trailing whitespace
     [[ -z "$pat" ]] && continue
-    # shellcheck disable=SC2254 — intentional unquoted glob match
+    # shellcheck disable=SC2254  # intentional unquoted glob match
     case "$path" in
       $pat) return 0 ;;
     esac

@@ -36,7 +36,7 @@ trap 'rm -rf "$TMP"' EXIT
 
 REPO="$TMP/test-vault"
 mkdir -p "$REPO"
-cd "$REPO"
+cd "$REPO" || exit 1
 git init -b main --quiet 2>/dev/null
 git config user.email "test@example.com"
 git config user.name "test"
@@ -66,7 +66,7 @@ log "Using detector: $DETECTOR"
 
 hdr "Test 1: hook fires from main worktree"
 
-cd "$REPO"
+cd "$REPO" || exit 1
 RESPONSE=$(echo '{"prompt":"bye","session_id":"test-1","cwd":"'"$REPO"'"}' \
   | python3 "$DETECTOR" 2>/dev/null)
 if echo "$RESPONSE" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); assert 'hookSpecificOutput' in d; assert 'CLOSE detected' in d.get('hookSpecificOutput',{}).get('additionalContext','')" 2>/dev/null; then
@@ -89,7 +89,7 @@ git worktree add .claude/worktrees/test-wt --quiet 2>/dev/null || {
 }
 
 if [[ -d ".claude/worktrees/test-wt" ]]; then
-  cd .claude/worktrees/test-wt
+  cd .claude/worktrees/test-wt || exit 1
   WORKTREE_PWD="$(pwd)"
   log "Worktree cwd: $WORKTREE_PWD"
 
@@ -127,7 +127,7 @@ fi
 
 hdr "Test 3: installer preserves non-ABS hooks"
 
-cd "$TMP"
+cd "$TMP" || exit 1
 cat > test-settings.json <<'EOF'
 {
   "model": "opus",
@@ -165,7 +165,7 @@ else
     fail "hooks.json source not found"
     FAIL=$((FAIL+1))
   else
-    python3 "$INSTALLER" --settings test-settings.json --hooks-source "$HOOKS_SOURCE" --quiet 2>&1 >/dev/null
+    python3 "$INSTALLER" --settings test-settings.json --hooks-source "$HOOKS_SOURCE" --quiet >/dev/null 2>&1
 
     if python3 -c "import json,sys; d=json.load(open('test-settings.json')); cmds=[h['command'] for g in d['hooks']['UserPromptSubmit'] for h in g.get('hooks',[])]; assert any('user custom hook' in c for c in cmds), 'user hook lost'" 2>/dev/null; then
       ok "installer preserved user's custom hook"
@@ -185,7 +185,7 @@ else
 
     # Re-run for idempotency
     BEFORE_HASH=$(python3 -c "import hashlib; print(hashlib.sha256(open('test-settings.json','rb').read()).hexdigest())")
-    python3 "$INSTALLER" --settings test-settings.json --hooks-source "$HOOKS_SOURCE" --quiet 2>&1 >/dev/null
+    python3 "$INSTALLER" --settings test-settings.json --hooks-source "$HOOKS_SOURCE" --quiet >/dev/null 2>&1
     AFTER_HASH=$(python3 -c "import hashlib; print(hashlib.sha256(open('test-settings.json','rb').read()).hexdigest())")
     if [[ "$BEFORE_HASH" == "$AFTER_HASH" ]]; then
       ok "installer is idempotent (re-run produced identical file)"

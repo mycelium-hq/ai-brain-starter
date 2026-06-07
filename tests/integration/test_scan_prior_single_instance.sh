@@ -58,6 +58,7 @@ FULL_MARKER="$HOOKS/.last-secret-scan-full"
 MARKER="$HOOKS/.last-secret-scan"
 LOCK="$HOOKS/.secret-scan.lock"
 
+# shellcheck disable=SC2120  # run_hook optionally takes extra env assignments; some callers pass none
 run_hook() {  # args: extra env assignments
   printf '{}' | env HOME="$TMP" SCAN_PRIOR_AUTO_SCRUB_BYPASS=1 "$@" python3 "$HOOK" 2>/dev/null
 }

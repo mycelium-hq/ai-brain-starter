@@ -474,15 +474,14 @@ PY
       -H "content-type: application/json" \
       -d "$QM_PAYLOAD" 2>/dev/null)"
     set -e
-    QM_TOKEN="$(printf '%s' "${QM_RESP:-}" | python3 <<'PY' 2>/dev/null
+    QM_TOKEN="$(printf '%s' "${QM_RESP:-}" | python3 -c '
 import json, sys
 try:
     d = json.load(sys.stdin)
     print(d.get("token","") if d.get("ok") else "")
 except Exception:
     print("")
-PY
-)"
+' 2>/dev/null)"
     if [[ -z "$QM_TOKEN" || ! "$QM_TOKEN" =~ ^[a-f0-9]{32}$ ]]; then
       err "$(t "Inline mint failed. Falling back to form." \
               "Falló la generación inline. Caemos al formulario.")"
@@ -590,7 +589,7 @@ do_cmd() {
 backup_file() {
   local f="$1"
   [[ ! -f "$f" ]] && return 0
-  local bak="${f}.bak-$(date +%Y-%m-%d-%H%M)"
+  local bak; bak="${f}.bak-$(date +%Y-%m-%d-%H%M)"
   if [[ $DRY_RUN -eq 1 ]]; then
     dry "would back up: $f → $bak"
   else
