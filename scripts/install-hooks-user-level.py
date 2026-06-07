@@ -59,6 +59,7 @@ from pathlib import Path
 # that no third-party hook would accidentally include it.
 ABS_FINGERPRINTS = [
     "ai-brain-starter/hooks/detect-closing-signal.py",
+    "ai-brain-starter/hooks/verify-session-close-cascade.py",
     "ai-brain-starter/hooks/lint-vault-frontmatter.py",
     "ai-brain-starter/hooks/log-skill-usage.py",
     "ai-brain-starter/hooks/first-week-checkin.py",
@@ -94,7 +95,8 @@ ABS_FINGERPRINTS = [
 # SCRIPT BASENAME, else a re-run duplicates every hook a hand-maintained config
 # wired at the user-hooks path. Only OUR script basenames are matched this way.
 ABS_OWNED_BASENAMES = {
-    "detect-closing-signal.py", "lint-vault-frontmatter.py", "log-skill-usage.py",
+    "detect-closing-signal.py", "verify-session-close-cascade.py",
+    "lint-vault-frontmatter.py", "log-skill-usage.py",
     "first-week-checkin.py", "migrate-to-user-level.py",
     "inject-love-language-context.py", "inject-meeting-workflow-on-trigger.py",
     "session-end-hook.sh", "email-gate-hook.py", "graph-context-hook.sh",

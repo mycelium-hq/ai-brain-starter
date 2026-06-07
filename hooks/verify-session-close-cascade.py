@@ -13,7 +13,7 @@ Failure modes this prevents:
     permanent."
 
 Three-gate check when a closing claim is detected:
-  1. Session file exists at ⚙️ Meta/Sessions/YYYY-MM-DD*<worktree>*.md
+  1. Session file exists at <meta>/Sessions/YYYY-MM-DD*<worktree>*.md
   2. session-close-runner.sh ran in the last 30 min — verified via
      /tmp/abs-session-close-runner.report ending in `RUNNER COMPLETE @ <ts>`.
   3. No uncommitted session-close artifacts (today's Sessions/Decisions/
@@ -27,9 +27,23 @@ warnings; block at the model layer.
 
 Spanish closing patterns added 2026-05-13 — the same session's goodbye
 ("Que descanses, Ade") slipped past the English-only regex, so the
-two-gate check never even fired.
+three-gate check never even fired.
 
-Bypass: VERIFY_CASCADE_BYPASS=1.
+FAIL-SAFE / conditional enforcement (so this hook is safe to wire by
+default for every vault):
+  - The hard-block (exit 2) is gated on the session-close cascade actually
+    being INSTALLED in this vault — i.e. <meta>/scripts/session-close-runner.sh
+    exists. If it does NOT, the vault never opted into the cascade and the
+    hook NEVER blocks; it degrades to a non-blocking advisory. This prevents
+    the "missing runner blocks every close forever" failure: gate 2 can only
+    fire against a runner that is actually present to run.
+  - When the runner IS installed, the user has opted into the close
+    machinery, so all three gates get teeth.
+
+Bypass / overrides:
+  - VERIFY_CASCADE_BYPASS=1  — skip the check entirely (no block, no advisory).
+  - VERIFY_CASCADE_SOFT=1    — force advisory mode even when the runner is
+                               installed (warn, never block).
 """
 
 import json
@@ -40,9 +54,52 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 VAULT_ROOT = Path(os.environ.get("VAULT_ROOT", str(Path.home() / "vault")))
-SESSIONS_DIR = VAULT_ROOT / "⚙️ Meta" / "Sessions"
-RUNNER_REPORT = Path("/tmp/abs-session-close-runner.report")
+
+
+def _find_meta_dir(vault_root: Path) -> Path:
+    """Deterministically resolve THIS vault's human-memory Meta folder.
+
+    Mirrors hooks/detect-closing-signal.py — decorated "⚙️ Meta" is probed
+    BEFORE plain "Meta". Vaults intentionally run two meta folders: "⚙️ Meta"
+    (human memory: Sessions/, Decisions/) and plain "Meta" (instinct-engine
+    machine memory). A naive `sorted(iterdir())[0]` picks plain "Meta" first
+    (the letter M sorts before the emoji codepoint), which would point this
+    hook's session-file + runner checks at the wrong folder. The explicit
+    decorated-first probe avoids that.
+    """
+    for candidate_name in ("⚙️ Meta", "Meta"):
+        candidate = vault_root / candidate_name
+        if candidate.is_dir():
+            return candidate
+    try:
+        for child in sorted(vault_root.iterdir()):
+            if child.is_dir() and child.name.endswith("Meta"):
+                return child
+    except OSError:
+        pass
+    return vault_root / "Meta"
+
+
+META_DIR = _find_meta_dir(VAULT_ROOT)
+META_NAME = META_DIR.name
+SESSIONS_DIR = META_DIR / "Sessions"
+RUNNER_SCRIPT = META_DIR / "scripts" / "session-close-runner.sh"
+# Default is the exact path session-close-runner.sh writes; the env override is
+# for hermetic tests (and any setup where both sides agree to relocate it).
+RUNNER_REPORT = Path(os.environ.get("ABS_RUNNER_REPORT", "/tmp/abs-session-close-runner.report"))
 RUNNER_FRESH_SECONDS = 1800  # 30 minutes
+
+
+def runner_installed() -> bool:
+    """True iff session-close-runner.sh is installed in THIS vault's meta dir.
+
+    This is the fail-safe signal. When the runner is NOT installed, the vault
+    never opted into the session-close cascade, so the hook must NOT hard-block
+    — a missing runner would otherwise block EVERY close forever (the exact
+    failure this fail-safe prevents). Enforcement (hard-block) is gated on this
+    returning True; otherwise the hook degrades to a non-blocking advisory.
+    """
+    return RUNNER_SCRIPT.is_file()
 
 # High-confidence closing-claim patterns. Conservative — only matches when the
 # model is CLAIMING closure, not discussing the rule meta.
@@ -221,7 +278,8 @@ def uncommitted_session_artifacts(worktree_slug: str) -> list[str]:
     try:
         result = subprocess.run(
             ["git", "-C", str(VAULT_ROOT), "status", "--short",
-             "--", "⚙️ Meta/Sessions/", "⚙️ Meta/Decisions/", "⚙️ Meta/Session Captures.md"],
+             "--", f"{META_NAME}/Sessions/", f"{META_NAME}/Decisions/",
+             f"{META_NAME}/Session Captures.md"],
             capture_output=True, text=True, timeout=10,
         )
     except Exception:
@@ -240,11 +298,11 @@ def uncommitted_session_artifacts(worktree_slug: str) -> list[str]:
         if "Session Captures.md" in path:
             captures_unc.append(path)
             continue
-        if "/Sessions/" in path or path.startswith("⚙️ Meta/Sessions/"):
+        if "/Sessions/" in path or path.startswith(f"{META_NAME}/Sessions/"):
             if (today in path or yesterday in path) and worktree_slug and worktree_slug in path:
                 sessions_unc.append(path)
             continue
-        if "/Decisions/" in path or path.startswith("⚙️ Meta/Decisions/"):
+        if "/Decisions/" in path or path.startswith(f"{META_NAME}/Decisions/"):
             if today in path or yesterday in path:
                 if _decision_belongs_to_worktree(path, worktree_slug):
                     decisions_unc.append(path)
@@ -278,6 +336,11 @@ def runner_ran_recently() -> bool:
     # Accept either trailing Z (zulu) or +00:00 offset
     if ts_raw.endswith("Z"):
         ts_raw = ts_raw[:-1] + "+00:00"
+    # Normalize a no-colon UTC offset (e.g. -0500 / +0530) to +05:00 form.
+    # session-close-runner.sh stamps the report with `date '+%z'`, which emits
+    # the no-colon form, but datetime.fromisoformat() rejects it before Python
+    # 3.11 — without this a fresh report parses as stale and spuriously blocks.
+    ts_raw = re.sub(r"([+-]\d{2})(\d{2})$", r"\1:\2", ts_raw)
     try:
         ts = datetime.fromisoformat(ts_raw)
     except Exception:
@@ -308,15 +371,40 @@ def main() -> int:
     if not is_closing_claim(last_text):
         return 0  # no closing claim — skip
 
-    # Two-gate check: BOTH must be true. Single-gate (file-only) was the
-    # 2026-05-11 gallant-kalam miss — session file existed but runner never
-    # ran, so aggregators / Phase 0c-e / worktree settle all silently skipped.
+    # Enforcement (hard-block) is conditional on the session-close cascade
+    # being INSTALLED in this vault — see runner_installed(). This is what
+    # makes the hook safe to wire by default: a vault that never set up the
+    # cascade can always close (the "missing runner blocks every close
+    # forever" failure is structurally impossible). VERIFY_CASCADE_SOFT=1
+    # forces advisory mode even when the runner IS installed.
+    enforce = runner_installed() and os.environ.get("VERIFY_CASCADE_SOFT") != "1"
+
     today = datetime.now().strftime("%Y-%m-%d")
     file_ok = session_file_exists_for_today(worktree_slug)
-    runner_ok = runner_ran_recently()
     uncommitted = uncommitted_session_artifacts(worktree_slug)
     commit_ok = not uncommitted
 
+    if not enforce:
+        # Advisory mode: NEVER block. The only signal worth surfacing without
+        # the cascade is genuinely-uncommitted session artifacts (lost-work
+        # risk). Don't nag about the runner (absent by design here) or the
+        # session file (a non-cascade vault legitimately may not author one).
+        if uncommitted:
+            sample = "\n".join(f"      {p}" for p in uncommitted[:8])
+            more = f"\n      ... and {len(uncommitted) - 8} more" if len(uncommitted) > 8 else ""
+            print(
+                "verify-session-close-cascade (advisory — session-close cascade\n"
+                "not installed in this vault, so NOT blocking):\n"
+                f"  • {len(uncommitted)} uncommitted session artifact(s) at risk:\n"
+                f"{sample}{more}\n"
+                f"    Commit them before closing (e.g. vault-safe-commit.sh), or\n"
+                f"    install the cascade for automatic handling.",
+                file=sys.stderr,
+            )
+        return 0
+
+    # Enforce mode: all three gates must pass; hard-block on any failure.
+    runner_ok = runner_ran_recently()
     if file_ok and runner_ok and commit_ok:
         return 0  # all three gates clear — cascade ran fully
 
@@ -324,7 +412,7 @@ def main() -> int:
     failures = []
     if not file_ok:
         failures.append(
-            f"  • Session file missing at ⚙️ Meta/Sessions/{today}T*-{worktree_slug}.md\n"
+            f"  • Session file missing at {META_NAME}/Sessions/{today}T*-{worktree_slug}.md\n"
             f"    Author it manually (Phase 2 of session-close.md) before retry."
         )
     if not runner_ok:
@@ -332,7 +420,7 @@ def main() -> int:
         failures.append(
             f"  • session-close-runner.sh report is {runner_state}\n"
             f"    Path: {RUNNER_REPORT}\n"
-            f"    Run: bash \"⚙️ Meta/scripts/session-close-runner.sh\"\n"
+            f"    Run: bash \"{META_NAME}/scripts/session-close-runner.sh\"\n"
             f"    The runner handles Phase 0c-0e + Phase 2 aggregators +\n"
             f"    Phase 2c worktree settle deterministically."
         )
@@ -343,7 +431,7 @@ def main() -> int:
             f"  • Session-close artifacts uncommitted ({len(uncommitted)} files):\n"
             f"{sample}{more}\n"
             f"    Run vault-safe-commit.sh BEFORE the goodbye:\n"
-            f"      bash \"⚙️ Meta/scripts/vault-safe-commit.sh\" \\\n"
+            f"      bash \"{META_NAME}/scripts/vault-safe-commit.sh\" \\\n"
             f"        \"session-close: <worktree> — <one-line summary>\" \\\n"
             f"        \"<path1>\" \"<path2>\" ..."
         )
@@ -351,13 +439,14 @@ def main() -> int:
     msg = (
         f"BLOCKED by verify-session-close-cascade hook.\n\n"
         f"Your last response claims to close the session, but the cascade\n"
-        f"did not fully run. Two-gate check (BOTH required):\n\n"
+        f"did not fully run. Three-gate check (ALL required):\n\n"
         + "\n".join(failures) + "\n\n"
         f"Manual phases (not in runner — still your job): Phase 0b\n"
         f"(incomplete-work gate), Phase 1 (conversation scan + Pending\n"
         f"Signals), Phase 2 (session file authorship), Phase 2b\n"
         f"(vault-safe-commit), Phase 3 (functional audit on public ships).\n\n"
-        f"Bypass (use sparingly): VERIFY_CASCADE_BYPASS=1\n"
+        f"Bypass (use sparingly): VERIFY_CASCADE_BYPASS=1 (skip) or\n"
+        f"VERIFY_CASCADE_SOFT=1 (advisory, never block).\n"
     )
     print(msg, file=sys.stderr)
     return 2  # block
