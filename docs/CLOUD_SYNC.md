@@ -37,16 +37,36 @@ Windows, not inside `OneDrive\`. The index lives server-side; backups are a
 deliberate off-machine choice (below). Nothing to configure — this is the
 default.
 
-Already inside a sync folder and you don't need phone access? Move it out and
-leave a symlink so every tool that points at the old path keeps working:
+Already inside a sync folder and you don't need phone access? Move it out onto a
+local disk with the helper — **not** a raw `mv`. A bare move relocates the files
+but silently orphans your **Claude Code session history**: Claude keys
+per-project state on the vault's absolute path, so moving the vault makes every
+prior transcript read *"Session history unavailable"* and leaves the agent-memory
+symlink dangling. The helper does the move, leaves a symlink at the old path, AND
+re-homes that Claude state (copying it, so the old location stays a backup):
 
 ```bash
-mv ~/Desktop/MyVault ~/MyVault
-ln -s ~/MyVault ~/Desktop/MyVault   # old path still resolves; iCloud syncs only the tiny symlink
+# preview first (changes nothing)
+bash scripts/relocate-vault.sh ~/Desktop/MyVault ~/MyVault --dry-run
+# do it (quit Obsidian + close Claude sessions first; --force overrides the soft gates)
+bash scripts/relocate-vault.sh ~/Desktop/MyVault ~/MyVault
+```
+
+Already moved it with a plain `mv` and lost your session picker? Re-home just the
+Claude Code state, no second move:
+
+```bash
+bash scripts/relocate-vault.sh --migrate-claude-state ~/Desktop/MyVault ~/MyVault
 ```
 
 Sync daemons follow the *symlink file* (a few bytes), not the target's
 contents — so the churn leaves the sync scope entirely.
+
+> **One failure, two shapes.** Whether a bare `.git/` sits inside a sync mirror
+> or a whole git-backed vault sits inside a sync root, the cause is identical:
+> high-churn git machinery + a real-time sync daemon. Shape A (above) moves the
+> vault out; Shape B (below) keeps the vault synced and moves only the machinery.
+> Either removes the churn from the sync scope — that is the whole policy.
 
 ### Shape B — vault synced, machinery in a local sidecar (notes on every device)
 
