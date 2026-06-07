@@ -65,11 +65,10 @@ else
   close_mutex_release() { :; }
 fi
 
-# Auto-detect the Meta folder (with or without emoji prefix), like the close hook.
-META_DIR=""
-for candidate in "$VAULT"/*Meta; do
-  [ -d "$candidate" ] && { META_DIR="$candidate"; break; }
-done
+# Auto-detect the Meta folder via the shared resolver (prefers the variant
+# containing a known human-memory subfolder), like the close hook. See
+# scripts/_meta_resolver.py.
+META_DIR="$(python3 "$SCRIPT_DIR/_meta_resolver.py" "$VAULT" Sessions Decisions 2>/dev/null || true)"
 [ -z "$META_DIR" ] && META_DIR="$VAULT/Meta"
 
 LOG_DIR="$META_DIR/logs"

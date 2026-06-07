@@ -78,14 +78,12 @@ HOOK_INPUT="$(cat || true)"
 SESSION_ID=$(echo "$HOOK_INPUT" | python3 -c "import json,sys; d=json.loads(sys.stdin.read() or '{}'); print(d.get('session_id',''))" 2>/dev/null || echo "")
 TRANSCRIPT_PATH=$(echo "$HOOK_INPUT" | python3 -c "import json,sys; d=json.loads(sys.stdin.read() or '{}'); print(d.get('transcript_path',''))" 2>/dev/null || echo "")
 
-# Auto-detect the Meta folder (with or without emoji prefix)
-META_DIR=""
-for candidate in "$VAULT"/*Meta; do
-  if [ -d "$candidate" ]; then
-    META_DIR="$candidate"
-    break
-  fi
-done
+# Auto-detect the Meta folder via the shared resolver, which prefers the variant
+# containing a known human-memory subfolder. This stops a machine-memory "Meta/"
+# (Learnings/, created by the closed-loop capture) from shadowing the human
+# "⚙️ Meta/" just because plain "Meta" sorts before the emoji prefix. See
+# scripts/_meta_resolver.py.
+META_DIR="$(python3 "$SCRIPT_DIR/_meta_resolver.py" "$VAULT" Sessions Decisions 2>/dev/null || true)"
 [ -z "$META_DIR" ] && META_DIR="$VAULT/Meta"
 
 SESSIONS_DIR="$META_DIR/Sessions"

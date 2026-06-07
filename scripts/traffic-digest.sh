@@ -17,14 +17,10 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VAULT="${VAULT_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 
-# Auto-detect Meta folder
-VAULT_META=""
-for candidate in "$VAULT"/*Meta; do
-  if [ -d "$candidate" ]; then
-    VAULT_META="$candidate"
-    break
-  fi
-done
+# Auto-detect the Meta folder via the shared resolver (prefers the variant
+# containing a known human-memory subfolder, so a machine "Meta/" can't shadow
+# the human "⚙️ Meta/"). See scripts/_meta_resolver.py.
+VAULT_META="$(python3 "$SCRIPT_DIR/_meta_resolver.py" "$VAULT" Decisions 2>/dev/null || true)"
 [ -z "$VAULT_META" ] && VAULT_META="$VAULT/Meta"
 
 LOG_FILE="$VAULT_META/repo-traffic-log.jsonl"

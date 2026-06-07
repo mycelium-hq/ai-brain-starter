@@ -98,6 +98,7 @@ INTEGRATION_TESTS=(
   test_phase_doc_slash_commands_installed
   test_reconcile_ff_invariant
   test_detect_closing_signal_worktree
+  test_meta_resolver
   test_stranded_session_artifacts_watchdog
   test_session_coordination_guards
   test_trust_prompt_preframing
