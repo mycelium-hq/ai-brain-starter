@@ -9,6 +9,28 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-06-06: Smart Connections is no longer enabled by default (it could crash Obsidian on large vaults)
+
+**Who this affects:** anyone whose vault grows past a few thousand notes. On a large vault, opening Obsidian crashed the renderer repeatedly — a hard `EXC_BREAKPOINT (SIGTRAP)` V8 fatal, CPU pinned — because heavy "indexer" plugins were building full indexes on open and exhausting Obsidian's single renderer process. Smart Connections is the heaviest of them.
+
+### The problem
+
+Obsidian renders your whole vault in one Electron renderer with a bounded memory heap, and every indexer plugin holds an in-memory index of your notes. Setup used to install **and enable** Smart Connections by default — it builds SQLite-backed embeddings of every note. On a small vault that is invisible; past ~5K notes, that plus the other heavy indexers loading at once can exhaust the heap and crash the app on open, before you can even disable anything from inside Obsidian. The crash needed the heavy combination — core Obsidian and Dataview alone were stable.
+
+### The fix
+
+- **Smart Connections is no longer in the default install.** It is documented as an explicit opt-in, with a large-vault warning and a "scope it to a subset of folders, not the whole vault" instruction. graphify already covers explicit relationships; where the Mycelium runtime is in use, that runtime is the semantic retrieval layer, so Smart Connections is redundant.
+- **Dataview stays default** — it is the lightest indexer and the dashboards depend on it; it opens fine even at 13K+ notes.
+- **A "large-vault plugin posture" guide** (`templates/rules/obsidian-plugins.md`): keep Dataview, scope or disable Tasks + Smart Connections as the vault grows, plus step-by-step crash recovery — quit, set `.obsidian/community-plugins.json` to `[]` (restricted mode), reopen, re-add Dataview only, then add others one at a time watching Activity Monitor. Crash reports live at `~/Library/Logs/DiagnosticReports/*Obsidian*Renderer*.ips`; an `EXC_BREAKPOINT` there means the renderer ran out of memory.
+- This complements the machine-folder index exclusion shipped earlier the same day: that bounded the session/log/snapshot churn; this bounds the plugins that index your real notes.
+- **`/diagnose` gained a renderer-crash check (section 13).** It scans for repeated `Obsidian*Renderer*.ips` crash reports carrying `EXC_BREAKPOINT` (macOS) and, when it finds them, prints the recovery remedy. On a clean machine it stays quiet; off macOS it skips.
+
+### Verification
+
+A negative-control test ships with it (`scripts/test-renderer-crash-guard.sh`, wired into `scripts/ci.sh`): it proves a reports dir with repeated Obsidian-renderer `EXC_BREAKPOINT` reports is flagged (exit 1), and that every negative control stays silent (exit 0) — an empty dir, a different app, a different crash signature, a single isolated crash (below the "repeated" threshold), and crashes outside the time window. So the check is neither always-firing nor always-silent.
+
+---
+
 ## 2026-06-06: your brain can no longer end up with zero off-machine backup, silently
 
 **Who this affects:** everyone. If your vault lives on one disk with no off-machine copy, one hardware failure loses everything — every note, every journal entry — with no warning. A real person hit exactly this: about 1,100 notes, no Time Machine, no cloud copy, no git remote, a single drive. The product never said a word about it.

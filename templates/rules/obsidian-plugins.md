@@ -31,10 +31,12 @@ The API runs on `https://127.0.0.1:27124/` (localhost only, self-signed HTTPS). 
 
 ---
 
-## Smart Connections
+## Smart Connections (optional — not enabled by default)
 
 **Plugin**: Smart Connections by Brian Petro
-**What it gives Claude Code**: Semantic search (meaning-based, not just keyword/link-based) over the entire vault.
+**What it gives Claude Code**: Semantic search (meaning-based, not just keyword/link-based) over the vault.
+
+> ⚠️ **Large-vault warning.** Smart Connections is a heavy indexer — it builds SQLite-backed embeddings of every note and holds them in Obsidian's single renderer process. On a vault beyond ~5K notes, enabling it (alongside other heavy indexers) can exhaust the renderer's memory and crash Obsidian on open: a hard `EXC_BREAKPOINT (SIGTRAP)` V8 fatal, CPU pinned. For that reason it is **not in the default install**. If you enable it, **scope it to a subset of folders, not the whole vault.** graphify already covers explicit relationships; if you run the paid Mycelium runtime, that runtime is your semantic retrieval layer and Smart Connections is redundant. See "Large-vault plugin posture" below.
 
 ### How it complements graphify
 
@@ -46,9 +48,10 @@ The API runs on `https://127.0.0.1:27124/` (localhost only, self-signed HTTPS). 
 
 Use both: graphify for navigating explicit relationships, Smart Connections for discovering notes you forgot to link.
 
-### Recommended settings
+### Recommended settings (if you opt in)
 
-- **Excluded folders**: `⚙️ Meta/scripts/`, `Archive/`, `.obsidian/`, `graphify-out/`
+- **Scope it: include only a subset of folders, not the whole vault.** On a large vault this is the difference between stable and a renderer crash. Point it at the few folders where semantic discovery helps (e.g. `📝 Notes/`, `📓 Journals/`) rather than embedding everything.
+- **Excluded folders**: `⚙️ Meta/scripts/`, `⚙️ Meta/Sessions/`, `⚙️ Meta/logs/`, `⚙️ Meta/Worktree Snapshots/`, `Archive/`, `.obsidian/`, `graphify-out/`
 - **Minimum file length**: 50 characters (skip stubs)
 - **Embedding model**: Local model (default) to avoid API costs
 - **Re-embed interval**: "On file change" (switch to "On vault open" if you notice lag)
@@ -56,8 +59,32 @@ Use both: graphify for navigating explicit relationships, Smart Connections for 
 
 ### Watch out for
 
+- **Renderer crash on large vaults.** Past ~5K notes the embedding index can exhaust Obsidian's renderer heap and crash the app on open (`EXC_BREAKPOINT`). Scoping it to a few folders is the fix; full crash recovery is under "Large-vault plugin posture" below.
 - Initial embedding of a large vault (thousands of files) takes 30-60 minutes and spikes CPU. Run overnight.
 - Pause the plugin during bulk vault operations (auto-wikilink, graphify multi-stage) to avoid hundreds of queued re-embeddings.
+
+---
+
+## Large-vault plugin posture
+
+Obsidian renders your entire vault in a single Electron renderer process with a bounded JavaScript heap. Every "indexer" plugin you enable builds and holds an in-memory index of your notes. On a small vault that is invisible. Past roughly **5,000 notes**, several heavy indexers loading at once can exhaust the renderer heap and crash Obsidian on open — a hard `EXC_BREAKPOINT (SIGTRAP)` V8 fatal, CPU pinned while it builds the index.
+
+As your vault grows:
+
+- **Keep Dataview.** It is the lightest indexer and the dashboards/queries depend on it. A vault with Dataview alone opens fine at 13K+ notes.
+- **Scope or disable the heavy indexers.** Smart Connections (SQLite-backed embeddings of every note) is the heaviest; Tasks (full-vault scan for checkboxes) compounds it. Scope them to a subset of folders or turn them off.
+- **Machine-generated folders are already excluded** from Obsidian's index by the installer (`userIgnoreFilters` in `.obsidian/app.json` — session stubs, logs, worktree snapshots). That bounds machinery churn; it does not bound a plugin that indexes your real notes.
+- **graphify already covers explicit relationships**, and if you run the paid Mycelium runtime, that runtime is your semantic retrieval layer — so Smart Connections is redundant in that setup.
+
+### Recover from a renderer crash (Obsidian won't open)
+
+1. Fully quit Obsidian.
+2. Edit `<vault>/.obsidian/community-plugins.json` and set its contents to `[]`. This is "restricted mode" — no community plugins load.
+3. Reopen Obsidian. It should open cleanly with core features only.
+4. Re-add **Dataview only**, reopen, confirm it is stable.
+5. Add the other plugins back **one at a time**, reopening between each, watching CPU in Activity Monitor (macOS) or Task Manager (Windows). The plugin that pins "Obsidian Helper (Renderer)" at 100%+ and crashes on open is the culprit — leave it off or scope it to fewer folders.
+
+**Crash reports (macOS):** `~/Library/Logs/DiagnosticReports/*Obsidian*Renderer*.ips`. An `EXC_BREAKPOINT (SIGTRAP)` in a `*Renderer*` report is the renderer running out of memory — the signature of the heavy-indexer-on-a-large-vault crash. Run `bash scripts/diagnose.sh` (section 13) to flag repeated such crashes and reprint this remedy.
 
 ---
 
@@ -100,7 +127,7 @@ When to use which search tool:
 |------|------|-----|
 | Keyword/exact match | `obsidian search` or Grep | Fastest for known terms |
 | Structural neighbors ("what links to X?") | graphify graph.json query | Explicit relationships, communities |
-| Semantic similarity ("what else talks about themes like X?") | Smart Connections sidebar in Obsidian | Finds conceptually related notes even without shared links or keywords |
+| Semantic similarity ("what else talks about themes like X?") | Smart Connections sidebar in Obsidian *(optional, opt-in — see warning above)* | Finds conceptually related notes even without shared links or keywords |
 | Visual graph exploration | Neo4j Browser | Cypher queries, visual cluster browsing. Requires CSVs imported via `graph-to-neo4j.py` |
 
 ---
@@ -108,5 +135,5 @@ When to use which search tool:
 ## Installation checklist
 
 - [ ] Local REST API: install from Community Plugins, set API key in shell profile, test with `curl -sk -H "Authorization: Bearer $OBSIDIAN_REST_API_KEY" "https://127.0.0.1:27124/"`
-- [ ] Smart Connections: install from Community Plugins, configure exclusions, wait for initial embedding
+- [ ] Smart Connections *(optional, not in the default set — only on vaults under ~5K notes, or scoped to a few folders)*: install from Community Plugins, **scope it to a subset of folders**, configure exclusions, wait for initial embedding
 - [ ] Neo4j: install when you want Cypher query power (requires Neo4j Desktop or Docker)
