@@ -120,21 +120,38 @@ def file_path_from_stdin():
 
 
 def main(argv):
-    path = None
+    # CLI mode (--path) prints plain text for a human / CI. Hook mode (stdin tool
+    # JSON) MUST emit the PostToolUse additionalContext envelope: plain stdout from
+    # a hook is NOT surfaced to the model, so a bare print would make the rule
+    # auto-apply cosmetic. The arriving input decides the mode.
+    cli_path = None
     if "--path" in argv:
         idx = argv.index("--path")
         if idx + 1 < len(argv):
-            path = argv[idx + 1]
-    if path is None and not sys.stdin.isatty():
-        path = file_path_from_stdin()
-    if not path:
-        return 0  # nothing to evaluate; silent no-op (never block an edit)
+            cli_path = argv[idx + 1]
 
+    if cli_path is not None:
+        rules = matching_rules(cli_path)
+        if rules:
+            sys.stdout.write(render(cli_path, rules) + "\n")
+        return 0
+
+    # Hook mode: read the edited path from the PostToolUse tool JSON on stdin.
+    if sys.stdin.isatty():
+        return 0  # no --path and no piped input: nothing to evaluate
+    path = file_path_from_stdin()
+    if not path:
+        return 0  # malformed / missing file_path -> fail open, never block the edit
     rules = matching_rules(path)
     if not rules:
-        return 0  # non-matching path -> silent
+        return 0  # non-matching path -> emit nothing (no context added)
 
-    sys.stdout.write(render(path, rules) + "\n")
+    sys.stdout.write(json.dumps({
+        "hookSpecificOutput": {
+            "hookEventName": "PostToolUse",
+            "additionalContext": render(path, rules),
+        }
+    }) + "\n")
     return 0
 
 

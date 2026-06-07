@@ -22,6 +22,14 @@ from pathlib import Path
 
 MUTATING_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit", "Bash"}
 READONLY_ROLES = {"planner", "reviewer", "research", "researcher"}
+# Claude Code accepts the bare aliases or a full model id; an invalid value has no
+# documented safe fallback, so a typo would silently mis-pin. `_model_ok` rejects it.
+MODEL_ALIASES = {"opus", "sonnet", "haiku", "inherit"}
+
+
+def _model_ok(model):
+    m = model.strip().lower()
+    return m in MODEL_ALIASES or m.startswith("claude-")
 
 
 def split_frontmatter(text):
@@ -89,6 +97,11 @@ def validate_file(path):
     model = data.get("model", "")
     if not (isinstance(model, str) and model.strip()):
         violations.append(f"{rel}: missing `model:` pin (every agent must pin a model)")
+    elif not _model_ok(model):
+        violations.append(
+            f"{rel}: invalid `model:` value '{model.strip()}' - use opus/sonnet/haiku/inherit "
+            f"or a full claude-* id (an invalid alias has no documented fallback)"
+        )
 
     if "tools" not in data:
         violations.append(f"{rel}: missing `tools:` (declare the exact tool surface)")
