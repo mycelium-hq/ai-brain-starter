@@ -6,12 +6,17 @@ Run the full panel setup as written below. Every user gets the advisory panel �
 
 ---
 
-#### Step 6: Confirm and save
-Tell the user: "Okay, I've got your entry. Here's what I'm hearing — [brief summary]. I'd tag this as [Floor]. The panel says [1-line summary]. Sound right?"
+#### Step 6: Confirm the enrichment (the entry is already saved)
 
-If they confirm (or adjust), save the entry.
+By now the entry was already written to disk at Step 1.5 (capture-first — see Phase 10a's Capture-First Contract). This step only confirms the enrichment and shows the panel before it lands in the file.
 
-#### Step 7: Save the journal entry
+If the panel ran, show the full panel section inline, then: "Okay, here's the panel, and I'd tag this [Floor]. Approve as-is, or swap/edit a voice?" On confirmation, UPDATE the saved file (Step 7).
+
+If the user opted out of the panel or disengaged, the captured entry stands as-is. Confirm what was saved and let them go. Never hold the entry until after the panel — the capture already happened.
+
+#### Step 7: Finalize the entry (in-place update of the file from Step 1.5)
+
+**This is an UPDATE of the file already written at capture time, not a fresh create.** Rewrite it in place with the finalized floor, the enriched body, the accountability line, and — only if the panel ran — the `## Panel dialogue` section. Never create a second file for the same session. If you refined the filename to match the day's theme, rename in place rather than leaving a stale duplicate.
 
 **File location:** `[VAULT_PATH]/📓 Journals/` — use the vault path from setup. This MUST be the user's actual vault path, verified during Phase 3. The folder is created with the 📓 emoji prefix in Phase 3 — do not save to a plain `Journals/` folder.
 

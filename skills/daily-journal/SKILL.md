@@ -20,7 +20,23 @@ Asco (1) · Vergüenza (2) · Bochorno (3) · Culpa (4) · Apatía (5) · Resign
 
 ## How It Works
 
-When the user invokes `/journal`, follow this exact flow:
+When the user invokes `/journal`, follow this exact flow.
+
+## The Capture-First Contract (the spine — read before everything else)
+
+**A journal entry is SAVED TO DISK from the user's first substantive message — before any follow-up questions, accountability check, floor analysis, or panel.** Everything after that first save is *enrichment* that updates the same file in place. The interview is opt-in. The capture is guaranteed.
+
+Why: most people open `/journal`, type what happened, and leave. If the entry only saves after the full interview + panel (the old flow), every one of those sessions loses the entry entirely. The single most important job of this skill is **not losing what the user already told you.** A captured raw entry beats a perfect entry that never got written.
+
+**The two phases:**
+
+1. **Capture (mandatory, immediate).** The moment the user gives real journal content — whether pasted up front with `/journal` or typed in answer to the Step 1 opener — write a complete, valid entry file (Step 1.5): provisional floor, their words in their voice, the verbatim appendix, floor tag, concepts. No panel section yet. If the session ends one second later, this file is a real, finished journal entry on its own.
+
+2. **Enrich (opt-in, in place).** If the user keeps going, run Steps 2–9 as usual — follow-ups, gratitude, accountability, finalize the floor, run the panel — and **update the same file** (Step 7 is now an in-place update, not a fresh create). Never create a second file.
+
+**Graceful exit — applies at every step after the first save.** If the user signals done ("that's it," "save it," "I'm good," "no panel tonight"), goes quiet, or declines to continue at any point: **finalize the existing file in place and stop.** Flush any messages they typed since the last save into the verbatim appendix, do a quick floor re-check on the fuller picture, run the light idea/to-do scans (Steps 8/8.5) on whatever exists, and confirm what you saved. Never hold the entry hostage to the panel or any later step. Re-prompt at most once. The entry already exists — your job from here is only to keep it current and let them go.
+
+This contract overrides any older "save only at the end" language anywhere below. Where a later step says to save at the end, read it as "update the already-saved file."
 
 ## Standing Rules — Panel Behavior (applies throughout the interview)
 
@@ -222,6 +238,26 @@ Let them answer freely — don't make them go priority-by-priority robotically. 
 > "It's Monday. Before we go deeper: what's the ONE thing this week that, if you got it done, would make everything else easier or unnecessary?"
 
 Capture their answer. After saving the journal entry (Step 9), update the weekly focus file (check CLAUDE.md for the path, e.g. `🏠 Home/✅ This Week.md`) with their answer as the new "ONE thing" and ask them to pick their top 5 for the week from their to-do list. Replace the previous week's items. This is the weekly reset for the focusing file.
+
+### Step 1.5: Capture-first save — write the entry NOW
+
+**Trigger:** the user has just given you real journal content — a pasted entry alongside `/journal`, or their answer to the Step 1 opener. As soon as there is substance (more than a bare "hey" or "/journal"), save. Do NOT wait for follow-ups, the floor analysis, or the panel.
+
+**Capture must not be blocked by data pulls.** If the user opened with a full dump, write the file FIRST from their words, THEN run the Step 0 source pulls and fold them into the `## Today` section during enrichment. RescueTime / iMessage / WhatsApp / calendar latency must never delay the first save.
+
+**Write a complete, standalone entry** using the Step 7 format, with these capture-stage values:
+- **Frontmatter:** all required fields present. `floor` / `floor_level` = your best read from what they've said so far (provisional — Step 4 finalizes it). Fill the habit fields you already know; omit the optional RescueTime and morning-pairing fields you don't have yet rather than faking them.
+- **`## Today`:** include it only if you already pulled that data; otherwise leave it out for now and add it at enrichment.
+- **`## Journal — [user]'s voice`:** their content so far, in their voice, lightly shaped. This is a real entry, not a stub.
+- **`### My responses to the panel (verbatim...)`:** every message they have typed this session so far, word-for-word. The verbatim-capture rule applies from message one.
+- **Floor tag + `## Concepts`:** best-effort from the current content.
+- **No `## Panel dialogue` section yet** — it is added at enrichment (Step 7) only if the panel actually runs. A captured-and-abandoned entry simply has no panel section, and that is a valid, complete entry.
+
+**Save it the same way Step 7 saves** (Bash `cat` heredoc into the monthly subfolder, then verify the file exists — never fail silently). Pick the filename now from the initial content using Step 7's descriptive-title rule. You may refine the filename later ONLY if the day's theme clearly shifts — rename in place, never create a second file.
+
+**Don't announce the save as a production.** A light "Got it — saved." is enough, then flow into Step 2. The floor under them is already there; they don't need to feel the mechanics.
+
+**Every later save is an UPDATE to this file**, not a new write. On each update, regenerate the verbatim appendix to include all messages to date and keep the body, floor, and frontmatter current.
 
 ### Step 2: Follow the thread (2-4 follow-up questions)
 
@@ -462,15 +498,21 @@ Jane Goodall (planetary compassion, stewardship, humility with action) · Charle
 *Creativity:*
 Rick Rubin (creativity via presence, subtractive genius, trust the muse) · Elizabeth Gilbert (creative courage, fear alchemy, permission to play) · Twyla Tharp (creative discipline, daily craft, choreographing excellence)
 
-### Step 6: Confirm and save
+### Step 6: Confirm the enrichment before writing the panel to the file
 
-**Show the full panel section inline in chat BEFORE saving.** Do not save with only a 1-line panel summary. Post the complete panel section (all panelists' paragraphs, dissent line, omission line) exactly as it will appear in the file, then say:
+The entry is already saved (Step 1.5). This step governs the ENRICHMENT update only — specifically the panel, which is the one part written to the file that the user has not yet seen.
+
+**If the panel ran:** show the full panel section inline in chat BEFORE writing it to the file. Do not write with only a 1-line summary. Post the complete panel section (all panelists' paragraphs, dissent line, omission line) exactly as it will appear, then say:
 
 > "Panel above. Floor: [Floor]. Approve as-is, edit a voice, swap a panelist, or add one?"
 
-Wait for explicit confirmation. Only save after the user says yes or suggests edits. Saving before showing the panel is a skill-contract violation.
+Wait for explicit confirmation, then update the file (Step 7). Showing panel content before it lands in the file is still non-negotiable — the user must see synthetic voices before they are saved next to their own words.
 
-### Step 7: Save the journal entry
+**If the panel did NOT run** (user opted out, disengaged, or asked to wrap): there is nothing new to show. The captured entry stands as-is, without a panel section. Skip straight to confirming what was saved. **The entry is never held hostage to the panel** — "save only after the panel" is the exact failure mode this skill was rebuilt to kill.
+
+### Step 7: Finalize the entry (in-place update of the file from Step 1.5)
+
+**This is an UPDATE, not a fresh create.** The file already exists from the capture-first save. Rewrite it in place with the finalized floor, the enriched body, the full verbatim appendix (every message to date), the accountability line, the `## Today` section, and — only if the panel ran — the `## Panel dialogue` section. Never create a second file for the same session. If you refined the filename to match the day's theme, rename in place (e.g. `mv`) rather than leaving a stale duplicate. Everything below is the finalized shape the file should end up in.
 
 **File location:** Journal files go in the **monthly subfolder**, not the root. Pattern: `[VAULT_PATH]/Journals/[Month YYYY]/filename.md` (e.g. `Journals/April 2026/filename.md`). Check your vault's journal folder structure and match it.
 
@@ -702,7 +744,7 @@ If `$HOME/.claude/.ai-brain-starter-email-on-file` does not exist, or holds `dec
 
 ## Notes
 
-- If the user just wants a quick check-in (1-2 sentences), still save it. Even "Good day. Worked on the product. Felt productive." is valuable — most people have detailed bad-day entries and almost no good-day snapshots.
+- **Capture beats completeness.** If the user just wants a quick check-in (1-2 sentences), save it immediately per the Capture-First Contract and let them go. Even "Good day. Worked on the product. Felt productive." is a valid, complete entry — most people have detailed bad-day entries and almost no good-day snapshots. Never make a quick entry wait on the interview or the panel.
 - The goal is to make journaling feel like a conversation, not homework.
 - Don't make this feel like a big production. Quick is fine. Deep is also fine. Match their energy.
 - Push on behavior change but don't be annoying about it. Coach energy, not parent energy.
