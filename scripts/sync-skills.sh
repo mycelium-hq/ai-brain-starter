@@ -176,6 +176,17 @@ fi
   echo ""
 } | tee -a "$LOG_FILE"
 
+# --- Also refresh the vault's own <meta>/scripts/ (the skill->vault half) -----
+# sync-skills.sh syncs skill->~/.claude/skills; vault scripts are the other half
+# that previously went stale because <meta>/scripts/ was only ever populated at
+# setup. sync-vault-scripts.sh self-resolves the vault (settings.json) and is a
+# non-fatal no-op when none is set up. Best-effort: it must NEVER flip this
+# script's exit code (a vault-side hiccup can't break the skill sync).
+if [ -f "$STARTER_DIR/scripts/sync-vault-scripts.sh" ]; then
+  bash "$STARTER_DIR/scripts/sync-vault-scripts.sh" --quiet 2>&1 \
+    | sed 's/^/[vault-scripts] /' || true
+fi
+
 # Exit non-zero if any errors, so the hook can surface them
 if [ "${#ERRORS[@]}" -gt 0 ]; then
   exit 2

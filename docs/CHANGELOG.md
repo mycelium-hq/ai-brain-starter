@@ -9,6 +9,27 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-06-07: your vault's own scripts now stay in sync with the repo (they used to silently rot)
+
+**Who this affects:** anyone who set up a vault more than a few updates ago. The helper scripts inside your vault's `⚙️ Meta/scripts/` folder were copied in once, at setup, and never refreshed. So every fix or new script shipped *after* your setup — the session-close runner, the rule-conflict and drift checks, the passive-capture helper — never reached your vault. Your skills updated on `git pull`; your vault scripts didn't.
+
+### The problem
+
+`scripts/sync-skills.sh` keeps your installed skills (`~/.claude/skills/…`) current on every update, but it never touched the *vault* copy of the scripts. Those were only ever written by the setup phases, the first time. Nothing brought an existing vault's `⚙️ Meta/scripts/` back up to date, so it drifted further behind the repo with every release.
+
+### The fix
+
+- **New `scripts/sync-vault-scripts.sh`** — the skill→vault half of the sync. It copies the canonical vault scripts from the repo into your vault's `<meta>/scripts/` with the *same* safety contract as the skill sync: a file you edited locally is backed up to `<file>.bak-YYYY-MM-DD-HHMM` before it's overwritten, a symlinked scripts dir (maintainers editing the repo live) is left untouched, and an identical file is a silent no-op. It finds your vault automatically (`--vault`, `$VAULT_ROOT`, or your `settings.json`), so it runs with no arguments.
+- **It runs automatically on update.** `sync-skills.sh` now calls it at the end, so a `git pull` refreshes your vault scripts the same way it refreshes your skills — no extra step.
+- **`/diagnose`'s partial-install check uses it.** `detect-partial-installs.sh` now checks your whole vault-script set (not just the two aggregators), and `--fix` re-syncs them.
+- The synced set is an explicit, **import-closed** manifest — a script ships only alongside the helper modules it needs, so it can't land half-broken in your vault.
+
+### Verification
+
+`tests/integration/test_vault_script_sync.sh` (wired into `scripts/ci.sh`) proves the manifest is import-closed, a fresh sync populates the folder, a re-run is a no-op, a locally-edited script is backed up before being updated, a symlinked scripts dir is skipped, `--dry-run` writes nothing, and an unresolvable vault is a non-fatal no-op.
+
+---
+
 ## 2026-06-06: Smart Connections is no longer enabled by default (it could crash Obsidian on large vaults)
 
 **Who this affects:** anyone whose vault grows past a few thousand notes. On a large vault, opening Obsidian crashed the renderer repeatedly — a hard `EXC_BREAKPOINT (SIGTRAP)` V8 fatal, CPU pinned — because heavy "indexer" plugins were building full indexes on open and exhausting Obsidian's single renderer process. Smart Connections is the heaviest of them.
