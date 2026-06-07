@@ -9,6 +9,26 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-06-07: session logs + traffic dashboards could silently leak into the wrong "Meta" folder
+
+**Who this affects:** anyone whose vault uses an emoji-decorated meta folder like `⚙️ Meta` for their human notes (rules, decisions, the session log). If the closed-loop memory engine ever created a plain `Meta/` folder for machine memory, five shell scripts could quietly start writing your session log, session archive, repo-traffic dashboard, and daily-maintenance logs into that machine folder instead of your real one — no error, nothing visibly wrong, until you noticed your history split across two folders.
+
+### The problem
+
+A vault can legitimately have two folders ending in "Meta": the human `⚙️ Meta/` (Decisions, Sessions, your Session Log) and a plain `Meta/` the closed-loop engine uses for machine memory (Learnings/). The Python scripts already resolved this correctly — they pick whichever variant contains the subfolder they actually read. But five shell scripts still used a naive glob, `for candidate in "$VAULT"/*Meta; ... break`, which takes the FIRST match in sort order. Plain `Meta` sorts before the emoji-prefixed `⚙️ Meta`, so the moment the machine folder appeared, the session-close hook and friends flipped to it and your human folder stopped receiving writes.
+
+### The fix
+
+- **All five scripts now call the shared resolver** (`scripts/_meta_resolver.py`) — the same one the Python scripts already use — through a new command-line entry point. The resolver prefers the Meta variant that contains a known human-memory subfolder (`Sessions`, `Decisions`), so the emoji folder wins regardless of sort order or locale. Affected: `session-end-hook.sh`, `vault-daily-maintenance.sh`, `traffic-digest.sh`, `traffic-snapshot.sh`, `detect-partial-installs.sh`.
+- **No logic was duplicated into bash.** There is one resolver, one source of truth, so the shell and Python paths can never disagree as the rules evolve.
+- **Stock single-`Meta` vaults are unaffected** — when only one Meta folder exists, it is still chosen.
+
+### Verification
+
+A regression test ships with it (`scripts/test-meta-resolver.sh`, wired into `scripts/ci.sh`): it proves that when both `Meta/` and `⚙️ Meta/` exist the resolver picks the human `⚙️ Meta/`, plus negative controls — a machine-memory caller still resolves to plain `Meta/`, a stock single-`Meta` vault still resolves to it, and a vault with no Meta folder exits non-zero so the caller's own fallback runs. So the check is neither always-passing nor always-failing.
+
+---
+
 ## 2026-06-06: Smart Connections is no longer enabled by default (it could crash Obsidian on large vaults)
 
 **Who this affects:** anyone whose vault grows past a few thousand notes. On a large vault, opening Obsidian crashed the renderer repeatedly — a hard `EXC_BREAKPOINT (SIGTRAP)` V8 fatal, CPU pinned — because heavy "indexer" plugins were building full indexes on open and exhausting Obsidian's single renderer process. Smart Connections is the heaviest of them.

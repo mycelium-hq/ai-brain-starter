@@ -23,6 +23,8 @@
 
 set -uo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 JSON_OUTPUT=0
 AUTO_FIX=0
 VAULT_ROOT=""
@@ -112,11 +114,10 @@ check_vault_aggregators() {
   if [[ ! -d "$vault" ]]; then
     return
   fi
-  # Auto-detect Meta folder
+  # Auto-detect Meta folder via the shared resolver (prefers the variant
+  # containing a known subfolder, so a machine "Meta/" can't shadow "⚙️ Meta/").
   local meta=""
-  for c in "$vault"/*Meta; do
-    [[ -d "$c" ]] && meta="$c" && break
-  done
+  meta="$(python3 "$SCRIPT_DIR/_meta_resolver.py" "$vault" scripts Decisions 2>/dev/null || true)"
   [[ -z "$meta" ]] && [[ -d "$vault/Meta" ]] && meta="$vault/Meta"
   if [[ -z "$meta" ]]; then
     add_issue "info" "vault-meta" "no Meta folder found in $vault (vault may not be set up yet)" "(run /setup-brain)"

@@ -25,6 +25,7 @@ promote-episodic-to-procedural reads Learnings/ which lives in plain Meta).
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 
@@ -48,3 +49,28 @@ def find_meta_dir(
         if any((c / sub).exists() for sub in prefer_subfolders):
             return c
     return candidates[0] if candidates else None
+
+
+def _cli(argv: list[str]) -> int:
+    """CLI shim so shell scripts share this ONE resolver instead of
+    re-implementing the glob (which sorts plain "Meta" before "⚙️ Meta").
+
+        meta=$(python3 _meta_resolver.py "$VAULT" Sessions Decisions) || meta="$VAULT/Meta"
+
+    Prints the resolved Meta dir and exits 0; exits 1 with no output when the
+    vault has no Meta-suffixed folder at all (caller applies its own fallback);
+    exits 2 on a usage error.
+    """
+    if not argv:
+        print("usage: _meta_resolver.py VAULT_ROOT [SUBFOLDER ...]", file=sys.stderr)
+        return 2
+    prefer = tuple(argv[1:]) or ("Decisions",)
+    resolved = find_meta_dir(Path(argv[0]), prefer)
+    if resolved is None:
+        return 1
+    print(resolved)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_cli(sys.argv[1:]))
