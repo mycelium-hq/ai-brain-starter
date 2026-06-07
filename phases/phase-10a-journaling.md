@@ -314,6 +314,7 @@ Bake these into the generated skill verbatim:
 
 - **Step 1.5 (immediate save).** The moment the user gives real content — pasted with `/journal` or typed in answer to the Step 1 opener — write a complete, valid entry: provisional floor, their words in their voice, the accountability line as known, floor tag, concepts. No panel section yet. If the session ends right there, that file is a finished entry on its own. Do not block this save on any data pull or MCP call.
 - **Enrich in place.** Steps 2–9 update the SAME file. Step 7 ("save") becomes an in-place update, never a second file.
+- **Resume, don't duplicate.** At the start, check whether today already has an entry (a journal index or a date-scan of the journal folder); if it exists, UPDATE it instead of creating a second file. One calendar day = one journal entry that grows across sessions.
 - **Graceful exit at every later step.** If the user says "that's it" / goes quiet / declines the panel, finalize the existing file as-is, do a quick floor re-check, and let them go. Never hold the entry hostage to the panel or any later step. A captured-and-abandoned entry, with no panel section, is valid and complete.
 
 #### Standing Rules — Panel Behavior (applies throughout the interview)
