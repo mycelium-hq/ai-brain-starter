@@ -112,6 +112,7 @@ INTEGRATION_TESTS=(
   test_machinery_sidecar
   test_relocate_vault
   test_renderer_crash_guard
+  test_agentic_os
 )
 echo "==> (b) Shell integration: ${#INTEGRATION_TESTS[@]} tests"
 for t in "${INTEGRATION_TESTS[@]}"; do
