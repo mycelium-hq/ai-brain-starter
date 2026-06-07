@@ -28,7 +28,7 @@ jobs:
     name: bash syntax (.sh)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
       - name: bash -n every .sh
         run: |
           set -e
@@ -56,7 +56,7 @@ jobs:
     # (info/style excluded) to match the real ship/hold boundary, not the strictest
     # possible signal. No untrusted user input is referenced in any run: command.
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
       - name: ensure shellcheck present
         run: command -v shellcheck >/dev/null || { sudo apt-get update && sudo apt-get install -y shellcheck; }
       - name: run the canonical shellcheck gate
@@ -66,7 +66,7 @@ jobs:
     name: PowerShell parse (.ps1)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
       - name: pwsh ParseFile every .ps1
         shell: pwsh
         run: |
@@ -90,7 +90,7 @@ jobs:
     name: UTF-8 BOM on .ps1 (Windows PS 5.1 fix)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
       - name: every .ps1 must start with EF BB BF
         run: |
           set -e
@@ -112,7 +112,7 @@ jobs:
     # Even with BOM, keeping .ps1 ASCII-clean is defense-in-depth against the next
     # time someone saves a file without BOM.
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
       - name: scan .ps1
         run: |
           set -e
@@ -130,7 +130,7 @@ jobs:
     name: JSON validity (hooks.json, *.mcp.json)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
       - name: validate
         run: |
           set -e
@@ -163,7 +163,7 @@ jobs:
     # in https://github.blog/security/vulnerability-research/how-to-catch-github-actions-workflow-injections-before-attackers-do/
     if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
         with:
           fetch-depth: 0
       - name: fetch base branch
@@ -221,7 +221,7 @@ jobs:
     # We only enforce category 1: backticked, repo-relative, no [VAULT_PATH] prefix,
     # no `<VAULT>` prefix, no leading slash, no `~/`.
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
       - name: scan repo-relative backticked references
         run: |
           set -e
@@ -253,7 +253,7 @@ jobs:
     # reintroduces a remote-pipe-to-shell pattern. No untrusted user input is
     # referenced in any run: command.
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
       - name: scan install surfaces
         run: |
           set -e
@@ -289,7 +289,7 @@ jobs:
     # (it fails open and stays green when ruff is absent).
     # No untrusted user input is referenced in any run: command.
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6
         with:
           python-version: "3.9"
