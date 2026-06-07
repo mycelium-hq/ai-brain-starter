@@ -306,6 +306,16 @@ Create a journal skill customized to their answers. Save it to `~/.claude/skills
 
 The journal skill MUST include ALL of the following steps, in this order:
 
+#### Capture-First Contract (bake this in as the skill's spine)
+
+The generated skill MUST save the entry from the user's first substantive message, BEFORE the follow-ups, accountability, floor analysis, or panel — then enrich the same file in place. Reason: most people open the journal, type what happened, and leave. If the entry only saves after the full interview (the naive flow), every one of those sessions loses the entry. Capturing a raw entry the user can walk away from is the whole point.
+
+Bake these into the generated skill verbatim:
+
+- **Step 1.5 (immediate save).** The moment the user gives real content — pasted with `/journal` or typed in answer to the Step 1 opener — write a complete, valid entry: provisional floor, their words in their voice, the accountability line as known, floor tag, concepts. No panel section yet. If the session ends right there, that file is a finished entry on its own. Do not block this save on any data pull or MCP call.
+- **Enrich in place.** Steps 2–9 update the SAME file. Step 7 ("save") becomes an in-place update, never a second file.
+- **Graceful exit at every later step.** If the user says "that's it" / goes quiet / declines the panel, finalize the existing file as-is, do a quick floor re-check, and let them go. Never hold the entry hostage to the panel or any later step. A captured-and-abandoned entry, with no panel section, is valid and complete.
+
 #### Standing Rules — Panel Behavior (applies throughout the interview)
 
 The advisory panel is a **live participant, not a closing credit.** Most journaling tools tack on a generic "insight" at the end. That is exactly when the user has already rationalized whatever they were going to rationalize. The panel has to be allowed to interrupt DURING the interview, and the final panel section has to have real dissent. Include both of these mechanisms in the generated skill.
