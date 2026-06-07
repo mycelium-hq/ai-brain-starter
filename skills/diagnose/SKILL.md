@@ -87,6 +87,10 @@ Most "Claude is broken" reports trace to one of:
 | 8 | All .ps1 have BOM, no em dashes, parse clean | Fix the parser error | Add BOM and strip em dashes (see SKILL.md notes) |
 | 9 | MCP config valid JSON | Fix the JSON | No MCPs registered (fine if intentional) |
 | 10 | ai-brain-starter up to date with origin/main | Re-clone | git pull in ~/.claude/skills/ai-brain-starter |
+| 10b | No scheduled-task name collides with a skill; cron-only tasks `_`-prefixed | - | Rename per docs/MAINTENANCE.md |
+| 11 | Vault on a local disk, not a consumer cloud-sync root | Move it local (docs/CLOUD_SYNC.md) | Could not evaluate the path |
+| 12 | Vault has an off-machine backup | Set one up: `bash scripts/vault-backup.sh setup` (docs/BACKUP.md) | Backup configured but no snapshot yet |
+| 13 | No repeated Obsidian renderer crashes (macOS; skips elsewhere) | - | Heavy indexer likely OOM-ing the renderer on a large vault: restricted mode -> Dataview only -> add others one at a time (see the obsidian-plugins rule, "Large-vault plugin posture") |
 
 ## When to suggest /diagnose proactively
 
@@ -94,6 +98,7 @@ Most "Claude is broken" reports trace to one of:
 - User says "the journal entries aren't showing up in /weekly"
 - User says "I just did a git pull and something feels off"
 - User says "my friend installed it but it's broken"
+- User says "Obsidian keeps crashing when I open it" / "Obsidian won't open" (likely a heavy-indexer renderer OOM on a large vault - check 13)
 - After every major upgrade prompt during /setup-brain
 
 Do NOT use /diagnose as an email-capture surface. If `~/.claude/.ai-brain-starter-email-on-file` is missing, that is fine and never a finding — the email is optional, and the only places it is ever asked are the setup interview (Phase 24.4) and the once-per-update post-pull nudge. Never tell the user to fetch or paste a token.
