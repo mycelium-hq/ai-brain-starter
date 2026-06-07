@@ -121,6 +121,32 @@ else
   bad "$overflow kernel/agent file(s) >= 100 lines"
 fi
 
+# ---- 8. HOOK MODE surfaces to the model: stdin tool JSON -> hookSpecificOutput.additionalContext
+# A PostToolUse hook only reaches the model via the additionalContext envelope; plain
+# stdout is NOT read. This asserts the matched rule is delivered in the real envelope.
+hook_out="$(printf '%s' '{"tool_input":{"file_path":"src/x.ts"}}' | "$PY" "$AOS/bin/paths_scoped_rules.py" 2>/dev/null || true)"
+if printf '%s' "$hook_out" | "$PY" -c 'import sys,json; d=json.load(sys.stdin); ac=d.get("hookSpecificOutput",{}).get("additionalContext",""); sys.exit(0 if "typescript" in ac else 1)' 2>/dev/null; then
+  ok "hook mode: tool JSON -> hookSpecificOutput.additionalContext carries the matched rule (reaches the model)"
+else
+  bad "hook mode: matched rule NOT delivered via hookSpecificOutput.additionalContext (auto-apply would be cosmetic)"
+  printf '       got: %s\n' "$hook_out"
+fi
+
+# ---- 9. NEGATIVE CONTROL: hook mode on a non-code edit emits nothing (no envelope, exit 0)
+hook_md="$(printf '%s' '{"tool_input":{"file_path":"notes/todo.md"}}' | "$PY" "$AOS/bin/paths_scoped_rules.py" 2>/dev/null || true)"
+if [ -z "$hook_md" ]; then
+  ok "hook mode NEGATIVE CONTROL: non-code edit emits no envelope (silent, never blocks the edit)"
+else
+  bad "hook mode NEGATIVE CONTROL: non-code edit wrongly emitted: $hook_md"
+fi
+
+# ---- 10. NEGATIVE CONTROL: validate_agents rejects an invalid model alias (would silently misfire)
+if "$PY" "$AOS/bin/validate_agents.py" "$AOS/tests/fixtures/bad_model" >/dev/null 2>&1; then
+  bad "NEGATIVE CONTROL: an agent with an invalid model: value was ACCEPTED (typo would silently mis-pin)"
+else
+  ok "NEGATIVE CONTROL: invalid model: alias is REJECTED (no silent fallback on a typo)"
+fi
+
 echo
 echo "agentic-os suite: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
