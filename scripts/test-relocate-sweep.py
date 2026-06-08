@@ -60,13 +60,19 @@ def fail(msg: str) -> None:
     fails += 1
 
 
-def run_sweep(*args: str):
-    """Run the sweep in --json mode; return (exit_code, parsed_obj_or_None, raw)."""
-    proc = subprocess.run(
-        [sys.executable, str(SWEEP), "--json", *args],
-        capture_output=True,
-        text=True,
-    )
+def run_sweep(*args, timeout=None):
+    """Run the sweep in --json mode; return (exit_code, parsed_obj_or_None, raw).
+    On a hang past `timeout`, returns ("TIMEOUT", None, msg) so a test FAILs
+    instead of hanging forever."""
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(SWEEP), "--json", *args],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return "TIMEOUT", None, "subprocess timed out (the tool hung)"
     obj = None
     try:
         obj = json.loads(proc.stdout)
@@ -316,6 +322,68 @@ def main() -> int:
     # =====================================================================
     rc4, _, _ = run_sweep("--no-auto-discover", "--root", str(goroot))
     (pass_ if rc4 == 2 else fail)(f"EXIT: 2 on usage error / missing --old (got {rc4})")
+
+    # =====================================================================
+    # RUN 5: BOUNDED READ — a blocking file (FIFO) is skipped, never hangs.
+    # The un-hangable invariant: a read that would block forever (cloud
+    # placeholder / FIFO / stalled mount) is abandoned + skipped, not awaited.
+    # =====================================================================
+    fifo_root = Path(tmp) / "fiforoot"
+    fifo_root.mkdir()
+    (fifo_root / "normal.txt").write_text("history: vault was at " + OLD + "\n")
+    if hasattr(os, "mkfifo"):
+        made_fifo = True
+        try:
+            os.mkfifo(str(fifo_root / "blocker.txt"))
+        except OSError:
+            made_fifo = False
+        if made_fifo:
+            rc5, obj5, raw5 = run_sweep(
+                "--old", OLD, "--no-auto-discover", "--root", str(fifo_root),
+                "--read-timeout", "1",
+                "--config-dir", str(Path(tmp) / "noexist-claude"),
+                timeout=30)
+            if rc5 == "TIMEOUT":
+                fail("BOUNDED READ: sweep HUNG on a FIFO — un-hangable invariant broken")
+            elif obj5 is None:
+                fail(f"BOUNDED READ: no JSON (rc={rc5}): {raw5[:200]}")
+            else:
+                pass_("BOUNDED READ: sweep completed on a FIFO root (did not hang)")
+                warned = any("timed out" in w for w in obj5.get("warnings", []))
+                (pass_ if warned else fail)("BOUNDED READ: the blocking file was timed-out + warned")
+    else:
+        pass_("BOUNDED READ: os.mkfifo unavailable here — skipped (cross-platform)")
+
+    # =====================================================================
+    # RUN 6: WORKTREE DE-DUP — sibling worktrees of ONE repo collapse to one,
+    # so a canonical ref is not reported once per worktree (the dogfood noise).
+    # =====================================================================
+    wrepo = Path(tmp) / "wtrepo"
+    wrepo.mkdir()
+    git("init", cwd=str(wrepo))
+    (wrepo / "cfg.py").write_text('CWD = "' + OLD + '"\n')
+    git("add", "cfg.py", cwd=str(wrepo))
+    git("commit", "-m", "cfg", cwd=str(wrepo))
+    git("branch", "-M", "main", cwd=str(wrepo))
+    wt2 = Path(tmp) / "wtrepo-wt2"
+    git("worktree", "add", "-b", "wt2", str(wt2), cwd=str(wrepo))
+    rc6, obj6, raw6 = run_sweep("--old", OLD, "--no-auto-discover",
+                                "--root", str(wrepo), "--root", str(wt2),
+                                "--config-dir", str(Path(tmp) / "noexist-claude"))
+    if obj6 is None:
+        fail(f"WORKTREE DEDUP: no JSON (rc={rc6}): {raw6[:200]}")
+    else:
+        cfg = [f for f in obj6.get("findings", []) if "cfg.py" in f.get("path", "")]
+        (pass_ if len(cfg) == 1 else fail)(
+            f"WORKTREE DEDUP: cfg.py reported once across 2 sibling worktrees (got {len(cfg)})")
+    rc6b, obj6b, _ = run_sweep("--old", OLD, "--no-auto-discover",
+                               "--root", str(wrepo), "--root", str(wt2),
+                               "--include-worktrees",
+                               "--config-dir", str(Path(tmp) / "noexist-claude"))
+    if obj6b is not None:
+        cfgb = [f for f in obj6b.get("findings", []) if "cfg.py" in f.get("path", "")]
+        (pass_ if len(cfgb) == 2 else fail)(
+            f"WORKTREE DEDUP: --include-worktrees scans both worktrees (got {len(cfgb)})")
 
     print()
     if fails:
