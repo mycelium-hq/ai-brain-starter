@@ -68,11 +68,17 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import tokenize
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 HOME = Path.home()
+
+# Per-file read timeout (s). A read slower than this — a cloud placeholder, a
+# stalled network mount, a FIFO — is abandoned and the file skipped, so the sweep
+# can NEVER block on one file. Overridable via --read-timeout.
+READ_TIMEOUT = 5.0
 
 # File suffixes worth scanning on a filesystem walk. Everything else is skipped.
 SCAN_EXTS = {".py", ".sh", ".bash", ".zsh", ".md", ".compressed", ".txt",
@@ -424,8 +430,28 @@ def git_grep_files(top, patterns, ref):
 
 
 def git_show(top, ref, relpath):
-    r = _git(["-C", top, "show", ref + ":" + relpath])
+    try:
+        r = _git(["-C", top, "show", ref + ":" + relpath], timeout=20)
+    except subprocess.TimeoutExpired:
+        WARNINGS.append("git show timed out: %s:%s" % (ref, relpath))
+        return None
     return r.stdout if r.returncode == 0 else None
+
+
+def git_common_dir(top):
+    """The shared git dir for a checkout. Every linked worktree of a repo shares
+    one; the main checkout's equals its own .git. None if unresolvable."""
+    r = _git(["-C", top, "rev-parse", "--git-common-dir"])
+    if r.returncode != 0 or not r.stdout.strip():
+        return None
+    p = r.stdout.strip()
+    return os.path.realpath(p if os.path.isabs(p) else os.path.join(top, p))
+
+
+def _pick_representative(tops):
+    """Of several worktrees sharing a common-dir, prefer the main checkout (its
+    .git is a real directory), then the shortest path."""
+    return sorted(tops, key=lambda t: (0 if os.path.isdir(os.path.join(t, ".git")) else 1, len(t), t))[0]
 
 
 # --------------------------------------------------------------------------- #
@@ -504,6 +530,32 @@ def _skip(path):
 # --------------------------------------------------------------------------- #
 # scanning                                                                     #
 # --------------------------------------------------------------------------- #
+def _read_text_bounded(path):
+    """Read a file's text, but NEVER block longer than READ_TIMEOUT seconds. A
+    cloud-sync placeholder, a stalled network mount, or a FIFO would otherwise
+    hang the entire sweep on a single file — the exact demand-paging hazard this
+    tool helps users escape. The read runs in a DAEMON thread; if it overruns we
+    abandon it (daemon → dies at process exit, never blocks teardown) and skip the
+    file with a loud warning. Cross-platform — no signal.alarm, works off the main
+    thread too (the parallel git pool calls this)."""
+    box = {}
+
+    def _read():
+        try:
+            box["text"] = Path(path).read_text()
+        except (OSError, UnicodeDecodeError):
+            box["text"] = None
+
+    t = threading.Thread(target=_read, daemon=True)
+    t.start()
+    t.join(READ_TIMEOUT)
+    if t.is_alive():
+        WARNINGS.append("read timed out (>%ss), skipped: %s (cloud placeholder / slow mount?)"
+                        % (READ_TIMEOUT, abbrev(str(path))))
+        return None
+    return box.get("text")
+
+
 def add_findings(findings, abspath, text, patterns, provenance, repo_label):
     cl, ftype = classify_text(abspath, text, patterns)
     for (ln, klass, reason) in cl:
@@ -539,10 +591,7 @@ def scan_git_repo(top, patterns):
             text = git_show(top, ref, rel)
             prov = "both" if in_work else ref_label
         else:
-            try:
-                text = Path(abspath).read_text()
-            except (OSError, UnicodeDecodeError):
-                text = None
+            text = _read_text_bounded(abspath)
             prov = "working-tree"
         if text is None:
             continue
@@ -560,11 +609,8 @@ def scan_fs_root(root, patterns):
             full = os.path.join(dirpath, fn)
             if _skip(full) or Path(fn).suffix.lower() not in SCAN_EXTS:
                 continue
-            try:
-                text = Path(full).read_text()
-            except (OSError, UnicodeDecodeError):
-                continue
-            if not line_hits(text, patterns):
+            text = _read_text_bounded(full)
+            if text is None or not line_hits(text, patterns):
                 continue
             add_findings(findings, full, text, patterns, "filesystem", None)
     return {"path": abbrev(root), "kind": "fs", "ref": None}, findings
@@ -590,10 +636,19 @@ def build_report(args):
         else:
             fs_roots.append(r)
 
+    # Collapse sibling worktrees of ONE repo: they share a git-common-dir and the
+    # same canonical ref, so scanning each reports the identical hit N times. Keep
+    # the main checkout as the representative. --include-worktrees disables this.
+    tops = sorted(repo_tops)
+    if tops and not args.include_worktrees:
+        groups = {}
+        for top in tops:
+            groups.setdefault(git_common_dir(top) or top, []).append(top)
+        tops = sorted(_pick_representative(g) for g in groups.values())
+
     findings, scanned = [], []
     # Per-repo git work is I/O-bound (subprocess git grep) — run repos in parallel.
     # A power user's ~/dev can hold 100+ repos; serial would take minutes.
-    tops = sorted(repo_tops)
     if tops:
         workers = min(16, (os.cpu_count() or 4) + 4)
         with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -609,11 +664,8 @@ def build_report(args):
     for f in discover_explicit_files(args.config_dir, not args.no_auto_discover):
         if _skip(f):
             continue
-        try:
-            text = Path(f).read_text()
-        except (OSError, UnicodeDecodeError):
-            continue
-        if line_hits(text, patterns):
+        text = _read_text_bounded(f)
+        if text and line_hits(text, patterns):
             add_findings(findings, f, text, patterns, "filesystem", None)
 
     # Dedupe identical findings reachable via two roots.
@@ -738,9 +790,15 @@ def main(argv=None):
     ap.add_argument("--config-dir", default=os.environ.get("CLAUDE_CONFIG_DIR", str(HOME / ".claude")))
     ap.add_argument("--claude-json", default=None)
     ap.add_argument("--no-auto-discover", action="store_true")
+    ap.add_argument("--include-worktrees", action="store_true",
+                    help="scan every sibling git worktree separately (default: one per repo)")
+    ap.add_argument("--read-timeout", type=float, default=5.0,
+                    help="per-file read timeout in seconds (default 5; a slower file is skipped, never blocks)")
     ap.add_argument("--json", action="store_true")
     # argparse exits 2 on a missing required arg / bad usage, which is our usage code.
     args = ap.parse_args(argv)
+    global READ_TIMEOUT
+    READ_TIMEOUT = args.read_timeout
 
     rep = build_report(args)
     if args.json:
