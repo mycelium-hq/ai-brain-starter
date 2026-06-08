@@ -25,6 +25,12 @@
 #   relocate-vault.sh <old-vault-path> <new-vault-path> [options]
 #   relocate-vault.sh --migrate-claude-state <old-abs-path> <new-abs-path>
 #     (state-only: the vault is already at the new path; just fix Claude history)
+#   relocate-vault.sh --sweep <old-path> [<new-path>]
+#     (report residual references to the old path — classified executed /
+#      doc-pointer / keep — with a go/no-go on retiring the symlink)
+#   relocate-vault.sh --drop-symlink <old-path> [<new-path>]
+#     (retire the old-path symlink, but ONLY when the sweep finds zero executed
+#      references; otherwise it refuses and lists what still points at the old path)
 #
 # Options:
 #   --dry-run            print intended actions, change nothing
@@ -34,10 +40,14 @@
 #   --config-dir <dir>   Claude Code config dir (default: $CLAUDE_CONFIG_DIR or ~/.claude)
 #   -h, --help           this help
 #
-# Exit codes: 0 ok / no-op · 1 refused (gate) · 2 usage · 4 partial failure
+# --sweep / --drop-symlink shell out to scripts/relocate-sweep.py (same dir).
+#
+# Exit codes: 0 ok / no-op / GO · 1 refused (gate) / NO-GO · 2 usage · 4 partial failure
 set -euo pipefail
 
-OLD="" ; NEW="" ; DRYRUN=0 ; FORCE=0 ; NOSYMLINK=0 ; MIGRATE_ONLY=0
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+OLD="" ; NEW="" ; DRYRUN=0 ; FORCE=0 ; NOSYMLINK=0 ; MIGRATE_ONLY=0 ; SWEEP=0 ; DROP=0
+SWEEP_EXTRA=()
 CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 
 while [ $# -gt 0 ]; do
@@ -47,7 +57,10 @@ while [ $# -gt 0 ]; do
     --force) FORCE=1; shift;;
     --config-dir) CONFIG_DIR="${2:?--config-dir needs a path}"; shift 2;;
     --migrate-claude-state) MIGRATE_ONLY=1; shift;;
-    -h|--help) sed -n '2,38p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
+    --sweep) SWEEP=1; shift;;
+    --drop-symlink) DROP=1; shift;;
+    --) shift; SWEEP_EXTRA=("$@"); break;;
+    -h|--help) sed -n '2,/^set -euo/p' "$0" | sed '/^set -euo/d; s/^# \{0,1\}//'; exit 0;;
     -*) echo "unknown option: $1" >&2; exit 2;;
     *) if [ -z "$OLD" ]; then OLD="$1"; elif [ -z "$NEW" ]; then NEW="$1"; else echo "unexpected arg: $1" >&2; exit 2; fi; shift;;
   esac
@@ -164,6 +177,49 @@ if [ "$MIGRATE_ONLY" = 1 ]; then
   NEW_ABS="$(abspath "$NEW")"
   say "relocate-vault: migrating Claude Code state only ($OLD_ABS -> $NEW_ABS)"
   migrate_claude_state "$OLD_ABS" "$NEW_ABS"
+  exit 0
+fi
+
+# Run the code-repo-aware residual sweep. Returns the sweep's exit code:
+# 0 = GO (zero executed references) · 1 = NO-GO (executed references remain).
+sweep_old_refs() {  # $1=old  [$2=new];  forwards any args given after `--`
+  local sweep_py="$SCRIPT_DIR/relocate-sweep.py"
+  [ -f "$sweep_py" ] || die "relocate-sweep.py not found next to this script ($sweep_py)"
+  local args=( --old "$1" )
+  [ -n "${2:-}" ] && args+=( --new "$2" )
+  if [ "${#SWEEP_EXTRA[@]}" -gt 0 ]; then args+=( "${SWEEP_EXTRA[@]}" ); fi
+  python3 "$sweep_py" "${args[@]}"
+}
+
+# =============================================================================
+# sweep mode: report residual references to the old path, classified, + go/no-go
+# =============================================================================
+if [ "$SWEEP" = 1 ]; then
+  [ -n "$OLD" ] || { echo "usage: $(basename "$0") --sweep <old-path> [<new-path>]" >&2; exit 2; }
+  set +e; sweep_old_refs "$OLD" "$NEW"; rc=$?; set -e
+  exit "$rc"
+fi
+
+# =============================================================================
+# drop-symlink mode: retire the old-path symlink ONLY when the sweep says GO
+# =============================================================================
+if [ "$DROP" = 1 ]; then
+  [ -n "$OLD" ] || { echo "usage: $(basename "$0") --drop-symlink <old-path> [<new-path>]" >&2; exit 2; }
+  [ -L "$OLD" ] || die "old path '$OLD' is not a symlink — nothing to drop (relocate first, or it is already gone)"
+  # If the caller did not pass the new path, read it from the symlink target so the
+  # sweep can name the repoint destination in its report.
+  [ -n "$NEW" ] || NEW="$(readlink "$OLD")"
+  say "relocate-vault: sweeping for residual references before retiring the symlink at '$OLD' ..."
+  set +e; sweep_old_refs "$OLD" "$NEW"; rc=$?; set -e
+  if [ "$rc" != 0 ]; then
+    die "NO-GO — executed references still resolve the old path (see report above). Repoint them, then re-run --drop-symlink." 1
+  fi
+  if [ "$DRYRUN" = 1 ]; then
+    say "DRY  would: rm '$OLD' (symlink) — sweep returned GO (zero executed references)."
+    exit 0
+  fi
+  rm "$OLD"
+  say "relocate-vault: retired the symlink '$OLD' — sweep returned GO (zero executed references)."
   exit 0
 fi
 

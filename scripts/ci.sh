@@ -112,6 +112,7 @@ INTEGRATION_TESTS=(
   test_cloud_sync_guard
   test_machinery_sidecar
   test_relocate_vault
+  test_relocate_sweep
   test_renderer_crash_guard
   test_agentic_os
 )
