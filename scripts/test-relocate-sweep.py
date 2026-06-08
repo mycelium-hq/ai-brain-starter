@@ -186,11 +186,13 @@ def main() -> int:
     # VALUE (load-bearing) both referencing the old path.
     # ---------------------------------------------------------------------
     claude_json = Path(tmp) / "claude.json"
+    # indent=2 so each value is on its own line (a real ~/.claude.json is indented)
+    # — keeps per-finding snippets meaningful instead of the whole one-line blob.
     claude_json.write_text(json.dumps({
         "projects": {OLD: {"history": []}},          # dict KEY = cosmetic
         "statusLine": {"command": OLD + "/bin/x"},   # string VALUE = load-bearing
         "permissions": {"allow": ["Read(" + OLD + "/**)"]},  # inert matcher = KEEP
-    }))
+    }, indent=2))
 
     # =====================================================================
     # RUN 1: full sweep over both roots + the .claude.json.
@@ -243,11 +245,15 @@ def main() -> int:
     # ---- CLASSIFY: KEEP --------------------------------------------------
     k = klass_of(obj, "keepme.sh")
     (pass_ if k == "keep" else fail)(f"KEEP: relocate-keep-marked line (keepme.sh) -> {k}")
-    # the inert permissions matcher in .claude.json must be KEEP, not EXECUTED
-    perm_exec = [f for f in obj.get("findings", [])
-                 if "permissions" in (f.get("reason", "") + f.get("snippet", ""))
-                 and f.get("klass") == "executed"]
-    (pass_ if not perm_exec else fail)("KEEP: inert permissions matcher not EXECUTED")
+    # The inert permissions matcher in .claude.json must be KEEP, not EXECUTED.
+    # Match on the semantic `reason` field, NOT the snippet: a finding's snippet is
+    # path-length-fragile (a compact one-line JSON or a long tmp path can push an
+    # unrelated key into/out of the 160-char window). `reason` is precise per-finding.
+    perm = [f for f in obj.get("findings", []) if "permission" in f.get("reason", "").lower()]
+    perm_exec = [f for f in perm if f.get("klass") == "executed"]
+    perm_keep = [f for f in perm if f.get("klass") == "keep"]
+    (pass_ if perm_keep and not perm_exec else fail)(
+        f"KEEP: inert permissions matcher kept, not executed (keep={len(perm_keep)} exec={len(perm_exec)})")
 
     # ---- PROVENANCE ------------------------------------------------------
     canon = [f for f in findings_with(obj, "config.py")
