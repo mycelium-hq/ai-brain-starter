@@ -99,6 +99,8 @@ INTEGRATION_TESTS=(
   test_reconcile_ff_invariant
   test_detect_closing_signal_worktree
   test_meta_resolver
+  test_meta_resolution_guard
+  test_split_meta
   test_stranded_session_artifacts_watchdog
   test_session_coordination_guards
   test_trust_prompt_preframing

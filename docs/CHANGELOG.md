@@ -9,6 +9,22 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-06-07: a follow-up — guard the "Meta" leak from coming back, and detect vaults it already hit
+
+**Who this affects:** the same people as the entry below (emoji-`⚙️ Meta` vaults), plus anyone setting up a fresh vault. The earlier fix stopped *new* leaks; this makes the fix permanent and helps anyone already bitten find and repair the damage.
+
+### What's new
+
+- **A guard so the bug can't return.** A CI check (`scripts/check-meta-resolution.sh`) now fails the build if any shell script reintroduces the naive `*Meta` glob instead of using the shared resolver. The fix below was point-in-time; this makes it durable.
+- **`/diagnose` detects an already-split vault.** A new check (section 14, backed by `scripts/check-split-meta.py`) flags a vault whose session log, session archive, or traffic dashboard leaked into a plain `Meta/` beside your real `⚙️ Meta/`, and tells you how to move them back. If you were bitten before updating, this is how you find it.
+- **`/diagnose`'s Meta check no longer assumes the emoji name.** Section 2 used to look only for `⚙️ Meta/` and would false-fail a stock vault that uses a plain `Meta/`. It now resolves whichever variant you actually have.
+
+### Verification
+
+Both new checks ship with negative-control tests wired into `scripts/ci.sh`: the guard test proves a *reintroduced* glob is caught (not just that a clean tree passes), and the detector test proves a leaked `Sessions/` in a plain `Meta/` is flagged while a healthy machine/human partition stays quiet.
+
+---
+
 ## 2026-06-07: session logs + traffic dashboards could silently leak into the wrong "Meta" folder
 
 **Who this affects:** anyone whose vault uses an emoji-decorated meta folder like `⚙️ Meta` for their human notes (rules, decisions, the session log). If the closed-loop memory engine ever created a plain `Meta/` folder for machine memory, five shell scripts could quietly start writing your session log, session archive, repo-traffic dashboard, and daily-maintenance logs into that machine folder instead of your real one — no error, nothing visibly wrong, until you noticed your history split across two folders.

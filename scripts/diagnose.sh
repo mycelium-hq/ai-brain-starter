@@ -62,18 +62,27 @@ fi
 
 # ----- 2. Meta folder structure -----
 section "2. Meta folder"
-META="$VAULT/⚙️ Meta"
+# Resolve the Meta folder via the shared resolver so a plain "Meta/" and an
+# emoji "⚙️ Meta/" are both handled (and a machine "Meta/" can't shadow the
+# human one). Falls back to the decorated default when the resolver is absent.
+META_RESOLVER="$(cd "$(dirname "$0")" && pwd)/_meta_resolver.py"
+[ -f "$META_RESOLVER" ] || META_RESOLVER="$HOME/.claude/skills/ai-brain-starter/scripts/_meta_resolver.py"
+META=""
+if [ -f "$META_RESOLVER" ]; then
+  META="$(python3 "$META_RESOLVER" "$VAULT" scripts rules Decisions 2>/dev/null || true)"
+fi
+[ -z "$META" ] && META="$VAULT/⚙️ Meta"
 if [ -d "$META" ]; then
-  ok "⚙️ Meta/ folder present"
+  ok "Meta folder present ($(basename "$META")/)"
   for sub in scripts rules; do
     if [ -d "$META/$sub" ]; then
-      ok "⚙️ Meta/$sub/ present"
+      ok "$(basename "$META")/$sub/ present"
     else
-      warn "⚙️ Meta/$sub/ missing"
+      warn "$(basename "$META")/$sub/ missing"
     fi
   done
 else
-  bad "⚙️ Meta/ folder missing" "Run /setup-brain Phase 3."
+  bad "Meta folder missing (looked for ⚙️ Meta/ and Meta/)" "Run /setup-brain Phase 3."
 fi
 
 # ----- 3. Skills installed -----
@@ -360,6 +369,28 @@ if [ -n "$CHECK_RENDERER" ]; then
   esac
 else
   warn "check-renderer-crashes.py not found" "Cannot check for repeated Obsidian renderer crashes."
+fi
+
+# ----- 14. Split Meta folders (the leaked-session class) -----
+section "14. Split Meta folders"
+CHECK_SPLIT=""
+for c in "$(cd "$(dirname "$0")" && pwd)/check-split-meta.py" \
+         "$HOME/.claude/skills/ai-brain-starter/scripts/check-split-meta.py"; do
+  [ -f "$c" ] && CHECK_SPLIT="$c" && break
+done
+if [ -n "$CHECK_SPLIT" ]; then
+  sverdict="$(python3 "$CHECK_SPLIT" --porcelain "$VAULT" 2>/dev/null)"
+  case "$sverdict" in
+    OK_NO_META|OK_SINGLE_META|OK_PARTITIONED)
+      ok "Meta folders are not split (session + traffic data is where it belongs)" ;;
+    SPLIT_META:*)
+      bad "Session/traffic data leaked into a plain 'Meta/' (${sverdict#SPLIT_META:} item(s)), not '⚙️ Meta/'" \
+        "Update ai-brain-starter (the resolver fix stops new leaks), then move the leaked items from 'Meta/' into '⚙️ Meta/' and merge 'Session Log.md'. See docs/CHANGELOG.md (2026-06-07 Meta entries)." ;;
+    *)
+      warn "Could not evaluate Meta-folder split" "check-split-meta.py returned: ${sverdict:-<empty>}" ;;
+  esac
+else
+  warn "check-split-meta.py not found" "Cannot check for split Meta folders."
 fi
 
 # ----- summary -----
