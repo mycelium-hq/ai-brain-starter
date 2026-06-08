@@ -62,6 +62,35 @@ bash scripts/relocate-vault.sh --migrate-claude-state ~/Desktop/MyVault ~/MyVaul
 Sync daemons follow the *symlink file* (a few bytes), not the target's
 contents — so the churn leaves the sync scope entirely.
 
+**Retiring the old-path symlink (optional, later).** That symlink is a safety net:
+while it is there, anything that still hardcodes the old path keeps working — which
+also *hides* which references you have actually migrated. The day the symlink dies,
+every un-migrated reference breaks (a scheduled job re-creates a phantom folder at
+the old path; a hook command points at nothing). When you want to retire the old
+path for good, sweep for what still resolves it first. The sweep reaches every
+surface a vault touches — code repos (including docstrings and comments), JSON
+config, MCP configs, docs, shell rc — greps each git repo at its **canonical**
+`origin/main` (a stale local branch can hide a reference the repo still ships), and
+classifies every hit:
+
+- **executed** — a real command or path (a code line, a fenced shell block, a JSON
+  string *value*). These break when the symlink dies. Repoint them first.
+- **doc-pointer** — a comment, a docstring, prose. Cosmetic; fix at leisure.
+- **keep** — intentional (a migration source, a dead JSON config *key*). Left alone.
+
+```bash
+# what still resolves the old path? (classified, with a go/no-go)
+bash scripts/relocate-vault.sh --sweep ~/Desktop/MyVault ~/MyVault
+# retire the symlink — refuses unless ZERO executed references remain
+bash scripts/relocate-vault.sh --drop-symlink ~/Desktop/MyVault
+```
+
+`--drop-symlink` runs the sweep and removes the symlink only when nothing
+executable still points at the old path; until then it tells you exactly what to
+repoint. It also reports the `~/.claude.json` blast radius separately (dead project
+*keys* are cosmetic; string *values* are load-bearing), and never edits anything
+itself — the repoint is yours.
+
 > **One failure, two shapes.** Whether a bare `.git/` sits inside a sync mirror
 > or a whole git-backed vault sits inside a sync root, the cause is identical:
 > high-churn git machinery + a real-time sync daemon. Shape A (above) moves the
