@@ -98,4 +98,21 @@ if git -C "$main_repo" show-ref --verify --quiet "refs/heads/claude/probe-fix"; 
     fail "branch claude/probe-fix still present after cleanup"
 fi
 
+# ---- 7: heal must be IDEMPOTENT — a second start on the healed repo --------
+# After migration, core.worktree lives in config.worktree, which the merged
+# config view still returns. A heal that re-detects it re-runs `--unset` on
+# the shared config, which exits 5 (key absent) and kills the script — the
+# second-ever start against a healed repo fails. (Caught live 2026-06-09.)
+wt2_path=""
+if ! wt2_path="$(DEV_ROOT="$sandbox/dev" bash "$WRAPPER" start myrepo probe-again 2>"$sandbox/start2.log")"; then
+    sed 's/^/    wrapper: /' "$sandbox/start2.log" >&2 || true
+    fail "wrapper 'start' exited non-zero on an ALREADY-HEALED repo (heal not idempotent)"
+fi
+expected_wt2="$sandbox/dev/myrepo-probe-again"
+[ "$wt2_path" = "$expected_wt2" ] || fail "second start printed '$wt2_path', expected '$expected_wt2'"
+got2="$(git -C "$expected_wt2" rev-parse --show-toplevel 2>/dev/null || true)"
+[ "$got2" = "$(cd "$expected_wt2" && pwd -P)" ] || fail "second worktree resolves to '$got2'"
+DEV_ROOT="$sandbox/dev" bash "$WRAPPER" cleanup myrepo probe-again 2>/dev/null \
+    || fail "wrapper 'cleanup' exited non-zero on second worktree"
+
 echo "PASS: test_dev_worktree_detached_gitdir (wrapper: $WRAPPER)"
