@@ -122,6 +122,7 @@ INTEGRATION_TESTS=(
   test_agentic_os
   test_dev_worktree_detached_gitdir
   test_install_api_canonical_base
+  test_cd_worktree_inline_bypass
 )
 echo "==> (b) Shell integration: ${#INTEGRATION_TESTS[@]} tests"
 for t in "${INTEGRATION_TESTS[@]}"; do
