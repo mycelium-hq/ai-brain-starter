@@ -33,7 +33,7 @@ def main():
     try:
         data = json.dumps({"plugin": PLUGIN_NAME, "version": VERSION}).encode()
         req = urllib.request.Request(
-            "https://myceliumai.co/api/install",
+            "https://www.mycelium-ai.co/api/install",
             data=data,
             headers={"Content-Type": "application/json"},
         )

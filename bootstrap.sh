@@ -502,7 +502,12 @@ fi
 # Bypass entirely for development: EMAIL_GATE_BYPASS=1 bash bootstrap.sh
 # ───────────────────────────────────────────────────────────────────────────────
 EMAIL_MARKER="$HOME/.claude/.ai-brain-starter-email-on-file"
-INSTALL_API_BASE="${MYCELIUM_INSTALL_API:-https://myceliumai.co}"
+# Canonical host. The bare/alternate domains 308-redirect here, and curl
+# does not follow redirects without -L: every install-API call against a
+# non-canonical base silently died for weeks (consumed/completed stayed 0
+# in the funnel while real installs ran). Keep the canonical host AND -L
+# on every call below — defense in depth against the next domain change.
+INSTALL_API_BASE="${MYCELIUM_INSTALL_API:-https://www.mycelium-ai.co}"
 
 # Optional signup. This block only runs when the user already provided an
 # email -- a web-form token (TOKEN=) or EMAIL=/NAME= env vars. With nothing
@@ -539,7 +544,7 @@ print(json.dumps({
 PY
 )"
     set +e
-    QM_RESP="$(curl -sS -m 12 -X POST "$INSTALL_API_BASE/api/install/quick-mint" \
+    QM_RESP="$(curl -sSL -m 12 -X POST "$INSTALL_API_BASE/api/install/quick-mint" \
       -H "content-type: application/json" \
       -d "$QM_PAYLOAD" 2>/dev/null)"
     set -e
@@ -576,7 +581,7 @@ except Exception:
     log "$(t "Validating token against $INSTALL_API_BASE..." \
             "Validando token contra $INSTALL_API_BASE...")"
     set +e
-    VERIFY_RESP="$(curl -sS -m 10 "$INSTALL_API_BASE/api/install/verify?token=$TOKEN" 2>/dev/null)"
+    VERIFY_RESP="$(curl -sSL -m 10 "$INSTALL_API_BASE/api/install/verify?token=$TOKEN" 2>/dev/null)"
     set -e
     if [[ -z "$VERIFY_RESP" ]] || ! echo "$VERIFY_RESP" | grep -q '"valid":true'; then
       warn "$(t "Token did not validate - continuing without it." \
@@ -595,7 +600,7 @@ except Exception:
     # the user's name, role, intent, language, voice link, etc.
     RECAP_FILE="$HOME/.claude/.ai-brain-starter-recap.json"
     set +e
-    RECAP_RESP="$(curl -sS -m 8 "$INSTALL_API_BASE/api/install/recap?token=$TOKEN" 2>/dev/null)"
+    RECAP_RESP="$(curl -sSL -m 8 "$INSTALL_API_BASE/api/install/recap?token=$TOKEN" 2>/dev/null)"
     set -e
     if [[ -n "$RECAP_RESP" ]] && echo "$RECAP_RESP" | grep -q '"ok":true'; then
       printf '%s\n' "$RECAP_RESP" > "$RECAP_FILE"
@@ -606,7 +611,7 @@ except Exception:
 
     # Fire install_bootstrap_started event (best-effort, fail-open).
     set +e
-    curl -sS -m 6 -X POST "$INSTALL_API_BASE/api/install/started" \
+    curl -sSL -m 6 -X POST "$INSTALL_API_BASE/api/install/started" \
       -H "content-type: application/json" \
       -d "{\"token\":\"$TOKEN\",\"os\":\"$(uname -srm 2>/dev/null || echo unknown)\"}" \
       >/dev/null 2>&1 || true
@@ -1756,7 +1761,7 @@ if [[ -f "$EMAIL_MARKER" && $DRY_RUN -eq 0 ]]; then
       PAYLOAD="{\"token\":\"$RECORDED_TOKEN\",\"os\":\"$OS_INFO\",\"completed\":true}"
     fi
     set +e
-    curl -sS -m 8 -X POST "$INSTALL_API_BASE/api/install/complete" \
+    curl -sSL -m 8 -X POST "$INSTALL_API_BASE/api/install/complete" \
       -H "content-type: application/json" \
       -d "$PAYLOAD" \
       >/dev/null 2>&1 || true
