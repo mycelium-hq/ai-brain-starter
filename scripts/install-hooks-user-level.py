@@ -167,18 +167,54 @@ def is_same_command(a: str, b: str) -> bool:
     return a.strip() == b.strip()
 
 
-def normalize_path_substitutions(template: dict, vault_path: str | None) -> dict:
-    """Replace [VAULT_PATH] in template strings with the actual vault path or
-    drop it (let the chained || ~/.claude/... fallback take over).
+def _hook_depends_on_vault(command: str) -> bool:
+    """True if a hook command can only run once the user's vault exists: it
+    references a [VAULT_PATH]/... path AND carries no ~/.claude home fallback.
 
-    For user-level install, the [VAULT_PATH]/.claude/skills/... fallback is
-    redundant — the ~/.claude/skills/... variant always works. We keep both
-    chains intact for resilience."""
+    The three vault-content hooks (graph-context-hook.sh, session-end-hook.sh,
+    write-hook.sh) live inside the vault at '[VAULT_PATH]/⚙️ Meta/scripts/' as a
+    single clause with no fallback. detect-closing-signal, by contrast, chains
+    '... || python3 ~/.claude/skills/...', so it runs fine with no vault and its
+    [VAULT_PATH]/.claude/skills/... clause resolves correctly under $HOME."""
+    return "[VAULT_PATH]" in command and "~/.claude" not in command
+
+
+def normalize_path_substitutions(template: dict, vault_path: str | None) -> dict:
+    """Resolve [VAULT_PATH] in template hook commands.
+
+    WITH a vault path: substitute the real, resolved vault path everywhere.
+
+    WITHOUT one (bootstrap time, before /setup-brain creates the vault): OMIT
+    every hook that depends on the vault (see _hook_depends_on_vault), then
+    substitute $HOME for any surviving [VAULT_PATH] (the fallback hooks, whose
+    [VAULT_PATH]/.claude/skills/... clause resolves correctly under $HOME).
+
+    Why omit rather than substitute $HOME for the vault-content hooks: pointing
+    them at $HOME produces dead '$HOME/⚙️ Meta/scripts/...' commands that error on
+    every prompt / write / session-end and force a "how do you want to remove
+    these?" decision on a non-technical user mid-install (MYC-739, surfaced by
+    the 2026-06-09 install workshop). /setup-brain (phase-05) wires these three
+    with the REAL vault path once it exists. Deferring them here is exactly what
+    phase-00-install.md documents ("Bootstrap does NOT touch Hooks")."""
     if not vault_path:
-        # Strip the [VAULT_PATH] alt in chained fallbacks; the
-        # ~/.claude/skills/... variant is sufficient for user-level.
-        s = json.dumps(template, ensure_ascii=False)
-        # Conservative: only replace the literal [VAULT_PATH] in commands
+        pruned = json.loads(json.dumps(template, ensure_ascii=False))  # deep copy
+        for event in list((pruned.get("hooks") or {}).keys()):
+            surviving_groups = []
+            for group in pruned["hooks"][event]:
+                group["hooks"] = [
+                    h for h in group.get("hooks", [])
+                    if not _hook_depends_on_vault(h.get("command", ""))
+                ]
+                if group["hooks"]:
+                    surviving_groups.append(group)
+            if surviving_groups:
+                pruned["hooks"][event] = surviving_groups
+            else:
+                # Every hook in this event depended on the vault (e.g. the
+                # PostToolUse(Write) group is only the vault write-hook). Drop
+                # the now-empty event rather than leave a bare "Event": [].
+                del pruned["hooks"][event]
+        s = json.dumps(pruned, ensure_ascii=False)
         s = s.replace("[VAULT_PATH]", str(Path.home()))
         return json.loads(s)
     s = json.dumps(template, ensure_ascii=False)
