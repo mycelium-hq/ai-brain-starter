@@ -41,6 +41,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import sys
 
 WORKTREE_RE = re.compile(r"^(?P<main>.+?)/\.claude/worktrees/(?P<slug>[^/]+)(?:/|$)")
@@ -49,6 +50,49 @@ WORKTREE_RE = re.compile(r"^(?P<main>.+?)/\.claude/worktrees/(?P<slug>[^/]+)(?:/
 # is evaluated in order (mirrors how the shell would run them).
 SEGMENT_SPLIT_RE = re.compile(r"&&|\|\||[;\n|]")
 CD_RE = re.compile(r"^(?:cd|pushd)\s+(?P<arg>.+)$")
+
+# --- inline-bypass + leading-env handling (self-contained) -------------------
+# A PreToolUse(Bash) gate runs in the hook process, whose env is the SESSION
+# env. An inline `WORKTREE_CD_BYPASS=1 cd ...` prefix lives only in the command
+# STRING, so the bypass this hook advertises must be read from the command, not
+# os.environ alone (bug class HOOK-READS-SESSION-ENV-NOT-COMMAND-ENV). These
+# helpers are LOCAL on purpose: a shared ~/.claude/hooks/_lib/ module would be
+# co-owned by multiple installers (last-writer-wins) and could be clobbered by a
+# version missing one of these functions, silently making the fix inert.
+_ENV_ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+_WRAPPER_PREFIXES = {"env", "command", "exec", "builtin", "nohup", "sudo", "time"}
+# Leading `VAR=value` (quote-aware value) + wrapper tokens at a segment start.
+_LEADING_ENV_PREFIX_RE = re.compile(
+    r'^\s*(?:(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|\'[^\']*\'|\S+)'
+    r'|env|command|exec|builtin|nohup|sudo|time)\s+)*'
+)
+
+
+def _inline_bypass(command, var):
+    """True iff a `<var>=1` assignment leads any shell segment of `command`
+    (`WORKTREE_CD_BYPASS=1 cd x`, `ls && WORKTREE_CD_BYPASS=1 cd x`). A token
+    inside quotes is not a leading assignment (`echo 'X=1'` -> no)."""
+    for seg in SEGMENT_SPLIT_RE.split(command):
+        try:
+            tokens = shlex.split(seg)
+        except ValueError:
+            tokens = seg.split()
+        i = 0
+        while i < len(tokens) and (_ENV_ASSIGN_RE.match(tokens[i])
+                                   or tokens[i] in _WRAPPER_PREFIXES):
+            if _ENV_ASSIGN_RE.match(tokens[i]):
+                k, _, v = tokens[i].partition("=")
+                if k == var and v == "1":
+                    return True
+            i += 1
+    return False
+
+
+def _strip_leading_env(segment):
+    """`segment` with any leading `VAR=value` / wrapper prefix removed, remainder
+    verbatim. Lets `^cd` see an env-prefixed cd — `FOO=1 cd /main` otherwise
+    slips past `^cd` undetected (a HEAD-drift false-negative)."""
+    return _LEADING_ENV_PREFIX_RE.sub("", segment, count=1)
 
 
 def _first_token(arg: str) -> str:
@@ -97,8 +141,17 @@ def main() -> int:
     if not command.strip():
         return 0
 
+    # Inline `WORKTREE_CD_BYPASS=1 cd ...` prefix: the session-env check at the
+    # top can't see a prefix that lives only in the command string.
+    if _inline_bypass(command, "WORKTREE_CD_BYPASS"):
+        return 0
+
     for seg in SEGMENT_SPLIT_RE.split(command):
-        seg = seg.strip()
+        # Strip any leading `VAR=val` / wrapper prefix so an env-prefixed cd is
+        # still detected — `^cd` alone misses `FOO=1 cd /main` (a real
+        # HEAD-drift false-negative). The WORKTREE_CD_BYPASS prefix is already
+        # honored above; any OTHER env-prefixed cd into main must still block.
+        seg = _strip_leading_env(seg.strip()).strip()
         cm = CD_RE.match(seg)
         if not cm:
             continue
