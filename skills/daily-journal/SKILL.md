@@ -738,7 +738,7 @@ if [ -f "$TOKEN_FILE" ] && [ ! -f "$SENTINEL" ]; then
   # server returned no token). In those cases send nothing.
   if printf '%s' "$TOKEN" | grep -Eq '^[a-f0-9]{32}$'; then
     TODAY="$(date -u +%Y-%m-%d)"
-    curl -sS -m 6 -X POST "https://myceliumai.co/api/install/first-journal" \
+    curl -sSL -m 6 -X POST "https://www.mycelium-ai.co/api/install/first-journal" \
       -H "content-type: application/json" \
       -d "{\"token\":\"$TOKEN\",\"journalDate\":\"$TODAY\"}" \
       >/dev/null 2>&1 \

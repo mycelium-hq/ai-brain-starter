@@ -74,7 +74,9 @@ function T([string]$en, [string]$es) {
 
 # ─── Optional signup (the install never blocks on it) ──────────────────────
 $emailMarker = "$env:USERPROFILE\.claude\.ai-brain-starter-email-on-file"
-$installApiBase = if ($env:MYCELIUM_INSTALL_API) { $env:MYCELIUM_INSTALL_API } else { "https://myceliumai.co" }
+# Canonical host: alternate domains 308-redirect and POST bodies are not
+# reliably re-sent on redirect by older PowerShell. Always call canonical.
+$installApiBase = if ($env:MYCELIUM_INSTALL_API) { $env:MYCELIUM_INSTALL_API } else { "https://www.mycelium-ai.co" }
 
 # Optional signup. This block only runs when the user already provided an
 # email - a web-form token or EMAIL/NAME env vars. With nothing provided it

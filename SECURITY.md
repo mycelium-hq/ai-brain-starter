@@ -67,7 +67,7 @@ If Claude asks for permission to do something and you are not sure what it does,
 
 Local-first by default. Your vault, journals, notes, and files never leave your machine. The install does not require an email and does not phone home about your content.
 
-There is exactly one opt-in. At the end of setup you may choose to give an email (for occasional update notes and a free workflow audit). If you do, an install token is minted: `myceliumai.co/api/install/quick-mint` receives the email, name, and language you gave, plus a short OS label (e.g. `mac-arm`). That is the email submission you chose to make.
+There is exactly one opt-in. At the end of setup you may choose to give an email (for occasional update notes and a free workflow audit). If you do, an install token is minted: `www.mycelium-ai.co/api/install/quick-mint` receives the email, name, and language you gave, plus a short OS label (e.g. `mac-arm`). That is the email submission you chose to make.
 
 While that token exists on your machine, three best-effort, fail-open events may be sent. Each carries only the token and a coarse signal — never any content:
 

