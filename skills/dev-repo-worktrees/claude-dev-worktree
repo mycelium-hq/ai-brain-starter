@@ -83,7 +83,11 @@ heal_worktree_config() {
     # where linked worktrees no longer see it.
     local main_path="$1"
     local shared_wt
-    shared_wt="$(git -C "$main_path" config --get core.worktree 2>/dev/null || true)"
+    # --local scope ONLY: after migration the value lives in config.worktree,
+    # which the merged view (--get without scope) still returns — re-detecting
+    # it made this non-idempotent: the re-run's `--unset` on the shared config
+    # exited 5 (key absent) and killed the script. (Caught live 2026-06-09.)
+    shared_wt="$(git -C "$main_path" config --local --get core.worktree 2>/dev/null || true)"
     [[ -z "$shared_wt" ]] && return 0
 
     echo "note: shared core.worktree detected ($shared_wt) — migrating to" >&2
