@@ -117,6 +117,7 @@ INTEGRATION_TESTS=(
   test_relocate_sweep
   test_renderer_crash_guard
   test_agentic_os
+  test_dev_worktree_detached_gitdir
 )
 echo "==> (b) Shell integration: ${#INTEGRATION_TESTS[@]} tests"
 for t in "${INTEGRATION_TESTS[@]}"; do
