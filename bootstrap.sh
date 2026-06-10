@@ -124,6 +124,13 @@ set -euo pipefail
 REPO_URL="https://github.com/adelaidasofia/ai-brain-starter.git"
 SKILL_DIR="$HOME/.claude/skills/ai-brain-starter"
 DRY_RUN=0
+# When SOFT_FAIL=1, the *_safe install helpers route a failure to warn() instead
+# of err() — i.e. it does NOT land in the red "checks failed" list. Scoped on
+# only around the OPTIONAL third-party vendor-pack block (skippable wholesale
+# with SKIP_VENDOR_SKILLS=1), so an upstream 404 / marketplace rename (claude-seo,
+# lean-ctx, …) reads as a yellow "safe to ignore", never a red failure a
+# non-technical installer thinks they caused. (MYC-739)
+SOFT_FAIL=0
 FAILED=()
 INSTALLED=()
 UPDATED=()
@@ -254,6 +261,16 @@ log()  { printf "  \033[36m·\033[0m %s\n" "$*"; }
 ok()   { printf "  \033[32m✓\033[0m %s\n" "$*"; }
 warn() { printf "  \033[33m!\033[0m %s\n" "$*"; }
 err()  { printf "  \033[31m✗\033[0m %s\n" "$*"; FAILED+=("$*"); }
+# Failure of an OPTIONAL component: warn (non-blocking) when SOFT_FAIL=1, else
+# err (counts toward the red failed list). Keeps the actionable-failures list
+# honest — only things the user should actually fix land in it.
+soft_err() {
+  if [[ "${SOFT_FAIL:-0}" == "1" ]]; then
+    warn "$* $(t "(optional third-party pack — safe to ignore)" "(paquete opcional de terceros — se puede ignorar)")"
+  else
+    err "$*"
+  fi
+}
 hdr()  { printf "\n\033[1m%s\033[0m\n" "$*"; }
 dry()  { printf "  \033[35m[dry-run]\033[0m %s\n" "$*"; }
 
@@ -313,6 +330,58 @@ detect_lang() {
 }
 LANG_CODE="$(detect_lang)"
 t() { [[ "$LANG_CODE" == "es" ]] && echo "$2" || echo "$1"; }
+
+# Print the "one Terminal step" recovery (Homebrew needs the Mac password, which
+# a non-interactive Claude Code shell can't type). Bilingual; uses $SKILL_DIR.
+# Factored out so it is unit-testable without running the whole installer. The
+# caller exits after this. (MYC-739)
+print_terminal_step() {
+  hdr "$(t "One Terminal step needed — Homebrew needs your Mac password" \
+          "Falta un paso en la Terminal — Homebrew necesita tu contraseña de Mac")"
+  if [[ "$LANG_CODE" == "es" ]]; then
+    cat <<EOF
+
+  ━━━ PASO EN LA TERMINAL ━━━
+
+  Homebrew todavía no está instalado y necesita tu contraseña de Mac, que no
+  puedo tipear desde acá. Es esperado, no es un error. Hacé esto una vez:
+
+    1. Abrí la Terminal  (Cmd+Espacio, escribí "terminal", Enter)
+    2. Pegá esta línea y presioná Enter:
+
+         bash "$SKILL_DIR/bootstrap.sh"
+
+    3. Tipeá tu contraseña de Mac cuando te la pida (la pantalla queda en blanco
+       mientras tipeás — es normal) y dejalo terminar (~2-3 min).
+    4. Volvé acá y decime "listo" — sigo con el setup desde ahí.
+
+  Ese comando instala Homebrew, Obsidian y el resto, y después continúa todo el
+  setup. Lo que ya esté instalado se saltea.
+
+EOF
+  else
+    cat <<EOF
+
+  ━━━ TERMINAL STEP NEEDED ━━━
+
+  Homebrew isn't installed yet, and it needs your Mac password — which I can't
+  type from here. This is expected, not an error. Do this once:
+
+    1. Open Terminal  (press Cmd+Space, type "terminal", press Return)
+    2. Paste this line and press Return:
+
+         bash "$SKILL_DIR/bootstrap.sh"
+
+    3. Type your Mac password when asked (the screen stays blank as you type —
+       that's normal), and let it finish (~2-3 min).
+    4. Come back here and tell me "done" — I'll pick up the setup from there.
+
+  That one command installs Homebrew, Obsidian, and the rest, then continues
+  the whole setup. Anything already in place is skipped.
+
+EOF
+  fi
+}
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Claude Code minimum-version check
@@ -615,9 +684,9 @@ git_clone_safe() {
   local ec=0
   run_with_timeout "$GIT_CLONE_TIMEOUT_SECS" git clone --quiet "$url" "$dest" 2>/dev/null || ec=$?
   if [[ "$ec" == "124" ]]; then
-    err "$desc — clone exceeded ${GIT_CLONE_TIMEOUT_SECS}s timeout. Skipping; re-run later."
+    soft_err "$desc — clone exceeded ${GIT_CLONE_TIMEOUT_SECS}s timeout. Skipping; re-run later."
   elif [[ "$ec" -ne 0 ]]; then
-    err "$desc — clone failed (exit $ec)"
+    soft_err "$desc — clone failed (exit $ec)"
   fi
   return 0
 }
@@ -633,7 +702,7 @@ claude_marketplace_safe() {
     return 0
   fi
   hdr "Adding marketplace: $repo"
-  claude plugin marketplace add "$repo" 2>&1 | tail -2 || err "marketplace add failed: $repo"
+  claude plugin marketplace add "$repo" 2>&1 | tail -2 || soft_err "marketplace add failed: $repo"
 }
 
 # claude_install_safe TARGET — respects DRY_RUN, idempotent.
@@ -647,7 +716,7 @@ claude_install_safe() {
     return 0
   fi
   hdr "Installing plugin: $target"
-  claude plugin install "$target" 2>&1 | tail -2 || err "plugin install failed: $target"
+  claude plugin install "$target" 2>&1 | tail -2 || soft_err "plugin install failed: $target"
 }
 
 # pipx_install_safe PKG — respects DRY_RUN.
@@ -659,7 +728,7 @@ pipx_install_safe() {
     dry "would: pipx install $pkg"
     return 0
   fi
-  pipx install "$pkg" 2>&1 | tail -3 || err "pipx install $pkg failed"
+  pipx install "$pkg" 2>&1 | tail -3 || soft_err "pipx install $pkg failed"
   return 0
 }
 
@@ -766,7 +835,45 @@ fi
 # Homebrew (Mac only)
 # ───────────────────────────────────────────────────────────────────────────────
 
+# An already-installed brew may not be on PATH yet. Homebrew lives at
+# /opt/homebrew/bin (Apple Silicon) or /usr/local/bin (Intel) and only adds
+# itself to PATH via ~/.zprofile, which a NON-LOGIN shell — like the one Claude
+# Code's Bash tool spawns — does not source. So a user who installed Homebrew in
+# Terminal (step 4 of the web guide) still looks brew-less from inside Claude
+# Code, and we'd wrongly try to reinstall it. Pull it into PATH before deciding
+# anything. (MYC-739)
 if is_mac && ! have brew; then
+  for _brew in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+    if [[ -x "$_brew" ]]; then
+      eval "$("$_brew" shellenv)"
+      break
+    fi
+  done
+fi
+
+if is_mac && ! have brew; then
+  # Homebrew is genuinely missing. Its installer needs the Mac password at an
+  # interactive sudo prompt. When stdin is NOT a TTY — the common case: the user
+  # pasted the install prompt into Claude Code, which runs this in a
+  # non-interactive shell — that prompt can't be answered. Attempting it anyway
+  # fails and drags Obsidian, gh, node, and every brew-installed tool down with
+  # it: a wall of red "failed" lines and no setup interview (the exact failure
+  # the 2026-06-09 workshop hit). Instead, stop here and hand the user ONE
+  # Terminal command that does every password-gated install, then re-runs this
+  # whole bootstrap idempotently. That is the same "open Terminal, run one line"
+  # step the web guide already lists; surfacing it cleanly here is the recovery
+  # for anyone who skipped it. (MYC-739)
+  if [[ $DRY_RUN -eq 0 ]] && [[ ! -t 0 ]]; then
+    print_terminal_step
+    # For the assistant reading bootstrap output: STOP here. Relay the command
+    # above to the user verbatim and WAIT for them to confirm it finished. Do
+    # NOT try to install Homebrew yourself, do NOT "work around" it, and do NOT
+    # continue to the setup interview until they confirm.
+    exit 0
+  fi
+
+  # Interactive terminal (or dry-run): install Homebrew for real — the password
+  # prompt below can actually be answered here.
   hdr "$(t "Installing Homebrew" "Instalando Homebrew")"
   log "$(t \
     "Homebrew is the package manager Mac uses for everything else here." \
@@ -1236,6 +1343,7 @@ fi
 # ───────────────────────────────────────────────────────────────────────────────
 
 if [[ "${SKIP_VENDOR_SKILLS:-0}" != "1" ]]; then
+  SOFT_FAIL=1  # optional third-party packs: failures warn, never red-fail (MYC-739)
 
   # Trust-prompt heads-up: adding third-party marketplaces triggers Claude
   # Code's built-in trust prompt. Pre-frame it so non-technical installers
@@ -1386,6 +1494,7 @@ if [[ "${SKIP_VENDOR_SKILLS:-0}" != "1" ]]; then
     rm -rf "$HOME/.claude/skills/skill-seekers"
   fi
 
+  SOFT_FAIL=0  # end of optional vendor-pack block (MYC-739)
 fi
 
 # ───────────────────────────────────────────────────────────────────────────────

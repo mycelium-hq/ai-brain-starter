@@ -14,6 +14,8 @@ Non-technical users will think nothing is happening if Claude goes silent during
 
 As bootstrap prints its own check-mark lines per tool, you don't need to narrate each one. The output is already reassuring. Chime in once at the end: *"All tools ready. Now let's get you set up."* Or, on failure: *"A couple of tools didn't install (listed above). I'll work around them for now and we can retry at the end. None of them are blocking what we're about to do."*
 
+**One exception to "work around it" — the Terminal step.** If the bootstrap prints `TERMINAL STEP NEEDED` (this happens on a Mac when Homebrew is missing: it needs the Mac password, which you cannot type from a non-interactive session), do NOT work around it and do NOT install Homebrew yourself. Relay the exact one-line Terminal command the bootstrap printed to the user, verbatim, ask them to run it and reply when it finishes, then continue. That one command does every password-gated install (Homebrew, Obsidian, gh) and re-runs the rest idempotently. See Step 0.1b.
+
 **DO NOT use the Monitor tool on bootstrap output.** Monitor renders every stdout line as a separate "Human:" turn in the conversation transcript — empty lines from brew/npm chatter included. Users see a wall of bare `Human:` labels interspersed with progress messages and leaked `<task-notification>` XML blocks. Bootstrap's own stdout is already user-visible — just `Bash(bash bootstrap.sh)` and let it print directly. If you want async progress, set `run_in_background: true` on the Bash call and read the result when it finishes. Monitor is for log-streaming long-running daemons, not installers.
 
 ---
@@ -76,11 +78,25 @@ If the user reached /setup-brain WITHOUT running bootstrap first (rare), the rep
 
 **Bootstrap does NOT touch:**
 - The user's vault CLAUDE.md (vault path isn't known until Phase 5)
-- Hooks (vault-path-dependent; installed by `/setup-brain` proper, not Phase 0)
+- **The three vault-content hooks** — `graph-context-hook.sh`, `write-hook.sh`, `session-end-hook.sh` — which live INSIDE the vault. Bootstrap DOES wire the user-level hooks that need no vault (closing-signal, frontmatter lint, skill-usage log, the meeting-workflow trigger) into `~/.claude/settings.json`, but these three are deferred to `/setup-brain` (phase-05) and wired with the real vault path once the vault exists. Wiring them earlier against a placeholder `$HOME` path is what produced the dead `~/⚙️ Meta/scripts/` hooks that errored on every prompt / write / session-end and forced a removal decision on the user mid-install (MYC-739). `install-hooks-user-level.py` now omits any vault-content hook when invoked without a `--vault-path`.
 - nano-banana plugin binary (needs `/plugin install` inside Claude Code plus a Gemini API key; deferred until the user actually asks for image generation. See Step 0.4 below)
 - Any custom skills, MCPs, marketplaces, permissions, or env vars already present
 
 **If bootstrap fails any check**, it prints an explicit failure list. Tell the user exactly which items failed and offer to retry each one. Do NOT proceed silently. Downstream phases assume these are working. This rule exists because of a real incident where a user's Phase 0 run left graphify partially installed and the broken state stayed invisible for days.
+
+---
+
+### Step 0.1b. The Terminal step (Mac password / Homebrew) — relay it, don't route around it
+
+On a Mac, if Homebrew isn't installed, the bootstrap can't install it from inside Claude Code: Homebrew's installer needs the Mac password at an interactive prompt, and Claude Code's shell has no way to type it. When that happens, the bootstrap stops cleanly and prints a block headed `TERMINAL STEP NEEDED` (Spanish: `PASO EN LA TERMINAL`) containing one command, then exits 0.
+
+This is expected and is the normal recovery — **not** a failure to work around. When you see it:
+
+1. Show the user the exact one-line command from that block, verbatim (it is `bash ~/.claude/skills/ai-brain-starter/bootstrap.sh`). Tell them to open Terminal (`Cmd+Space`, type "terminal", Return), paste it, press Return, and type their Mac password when asked (the screen stays blank while they type — that's normal Mac security).
+2. Wait for them to reply that it finished. Do **not** continue the setup interview until they confirm.
+3. Then continue. That one Terminal command installs Homebrew, Obsidian, gh, and everything else, and re-runs the whole bootstrap idempotently, so by the time they're back everything is in place.
+
+Do NOT try to install Homebrew yourself, do NOT "work around" it by skipping Obsidian (the entire vault lives in Obsidian), and do NOT downgrade to a partial install. A single framed Terminal step is the whole fix. Most users who followed the web guide already ran Homebrew in Terminal first, in which case the bootstrap finds it and this step never appears.
 
 ---
 

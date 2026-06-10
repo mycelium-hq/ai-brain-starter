@@ -106,6 +106,9 @@ INTEGRATION_TESTS=(
   test_trust_prompt_preframing
   test_post_update_email_ask
   test_installer_retires_email_gate
+  test_bootstrap_omits_vault_hooks
+  test_bootstrap_brew_terminal_step
+  test_bootstrap_optional_packs_soft_fail
   test_remediate_runaway_procs
   test_scan_prior_single_instance
   test_scan_prior_failclosed_scrub
