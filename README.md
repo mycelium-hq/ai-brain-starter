@@ -124,7 +124,7 @@ Bootstrap touches your `~/.claude/` directory and registers third-party content.
 | `cloudflare/skills` | cloudflare (workers, durable-objects, agents-sdk, web-perf, wrangler, sandbox-sdk) | Apache 2.0 |
 | `AgriciDaniel/claude-seo` | claude-seo (25 sub-skills + 18 sub-agents) | MIT |
 | `obra/superpowers` | superpowers (engineering discipline as plugin) | MIT |
-| `coreyhaines31/marketingskills` | marketing-skills (41 marketing sub-skills) | MIT |
+| `coreyhaines31/marketingskills` | marketing-skills (44 marketing sub-skills) | MIT |
 | `kepano/obsidian-skills` | obsidian, context7, playwright | MIT |
 
 > **macOS vs Windows.** All eight marketplaces install via `bootstrap.sh` on macOS. On Windows, `bootstrap.ps1` installs only `obsidian-skills` plus the two MCP servers below; the seven vendor skill-packs are not ported yet. To add any of them manually after install, paste this into Claude Code (substituting names from the table above):
