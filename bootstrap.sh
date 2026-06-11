@@ -1432,8 +1432,8 @@ if [[ "${SKIP_VENDOR_SKILLS:-0}" != "1" ]]; then
     ok "lean-ctx installed (top-level SKILL.md symlinked for auto-discovery)"
   fi
 
-  # coreyhaines31/marketingskills (MIT, 27.5k stars). Marketplace bundle with
-  # 41 marketing skills covering CRO, copywriting, SEO, paid ads, growth.
+  # coreyhaines31/marketingskills (MIT, 32.8k stars). Marketplace bundle with
+  # 44 marketing skills covering CRO, copywriting, SEO, paid ads, growth.
   # Direct fit for the Mycelium consulting funnel (myceliumai.co + diazroa.com),
   # Substack post launches, Apollo outreach sequences, pricing strategy.
   # Surfaced 2026-05-10 during proper WhatsApp-bar audit (missed in prior pass).

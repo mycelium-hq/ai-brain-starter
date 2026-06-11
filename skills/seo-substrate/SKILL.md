@@ -350,10 +350,10 @@ This substrate covers the substrate primitives. Delegate to specialist skills fo
 - **AI SEO deep-dive (citation chasing, LLM-specific tactics)** → `marketing-skills:ai-seo` (coreyhaines)
 - **Programmatic SEO at >50 pages or with paid APIs** → `marketing-skills:programmatic-seo` (coreyhaines)
 - **Site architecture mapping for new sites** → `marketing-skills:site-architecture` (coreyhaines)
-- **Schema markup beyond the 11 types covered above** → `marketing-skills:schema-markup` (coreyhaines)
+- **Schema markup beyond the 11 types covered above** → `marketing-skills:schema` (coreyhaines)
 - **Full claude-seo (25 sub-skills + 18 sub-agents) for deep niches** → `claude-seo:*` (AgriciDaniel)
-- **Conversion rate optimization on the resulting traffic** → `marketing-skills:form-cro`, `marketing-skills:onboarding-cro`, `marketing-skills:page-cro` (coreyhaines)
-- **Pricing page work** → `marketing-skills:pricing-strategy` (coreyhaines)
+- **Conversion rate optimization on the resulting traffic** → `marketing-skills:cro`, `marketing-skills:onboarding`, `marketing-skills:cro` (coreyhaines)
+- **Pricing page work** → `marketing-skills:pricing` (coreyhaines)
 
 The substrate primitives stay opinionated and lean. The full SEO/marketing surface is plugin-installed and discoverable when the user's prompt drifts beyond substrate scope.
 
