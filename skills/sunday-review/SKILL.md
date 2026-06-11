@@ -97,6 +97,15 @@ python3 "$VAULT_ROOT/⚙️ Meta/scripts/hallucination-sample-audit.py" --turns 
 
 The aggregator tallies pre-ship catches from the hookify-blocks log, post-ship corrections from the Critical Failure Inventory, and fabrication-class feedback memories. Output: `⚙️ Meta/Hallucination Watch.md`. The sample audit random-samples recent assistant turns, extracts verifiable factual claims, deterministic vault-greps the keywords, and Claude-classifies each claim as supported / contradicted / unverifiable. Output: `⚙️ Meta/Hallucination Sample Audit.md` (overwrites) + appended history to `⚙️ Meta/Hallucination Sample Audit History.jsonl`. Together they form a per-vault verification harness in the family DELEGATE-52 (arxiv 2604.15597, Apr 2026) identifies as the only consistent mitigation for multi-turn LLM corruption. Capture: this week's fabrication hook fires, any new Critical Failure Inventory rows, this run's `verified_fraction`, and the 4-week trend on verified_fraction (if 4+ history rows exist). Skip silently if either script is missing.
 
+### Step 4c.9 — Agent Memory orphan-debt trend (if the script exists in this vault)
+
+Run:
+```bash
+python3 "$VAULT_ROOT/⚙️ Meta/scripts/orphan-memo-trend.py"
+```
+
+Reports how many Agent Memory memos are NOT referenced in the `MEMORY.md` index, split into total (mostly expected cold mass) and **non-audit** (`feedback_`/`project_`/`performance_`/`user_` — the actionable hot tier the discoverability close-gate flags), with the delta since last run persisted to `⚙️ Meta/logs/orphan-memo-trend.json`. Policy: `MEMORY.md` is a curated, capped index (~200 lines / 24.4 KB Read-tool cliff), NOT a complete catalog — do NOT drive the count to zero; "orphan" is the correct resting state for cold / superseded memos. Only a RISING non-audit count is a regression (new hot memos written without an index entry — index them with the atomic `memo` / `memo-finalize` helper). Capture: this week's non-audit orphan count + delta. Skip silently if the script is missing.
+
 ### Step 4d — Passive captures triage (if the script exists in this vault)
 
 Run:
