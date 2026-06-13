@@ -34,9 +34,9 @@ Run the journal interview. Save the entry. Show them the file in their vault.
 
 Ask in PRIMARY_LANGUAGE:
 
-**EN:** "Before we wrap up — one thing that turns this from 'installed' to 'actually useful' is putting real content in. Not everything you've ever written. ONE active thing — the project doc you're working on, the goal you're tracking, a meeting note from this week, the notes on a book you're reading. What's something you're working with right now that you'd want me to know about in our next session?"
+**EN:** "Before we wrap up — one thing that turns this from 'installed' to 'actually useful' is putting real content in. Not everything you've ever written. ONE active thing — the project doc you're working on, the goal you're tracking, a meeting note from this week, the notes on a book you're reading. What's something you're working with right now that you'd want me to actually know — starting tonight?"
 
-**ES:** "Antes de cerrar — una cosa que convierte esto de 'instalado' a 'realmente útil' es meter contenido real. No todo lo que has escrito. UNA cosa activa: el documento del proyecto en el que estás, la meta que estás siguiendo, una nota de reunión de esta semana, los apuntes del libro que estás leyendo. ¿Qué es algo con lo que estés trabajando ahora que te gustaría que yo conociera en nuestra próxima sesión?"
+**ES:** "Antes de cerrar — una cosa que convierte esto de 'instalado' a 'realmente útil' es meter contenido real. No todo lo que has escrito. UNA cosa activa: el documento del proyecto en el que estás, la meta que estás siguiendo, una nota de reunión de esta semana, los apuntes del libro que estás leyendo. ¿Qué es algo con lo que estés trabajando ahora que te gustaría que yo conozca de verdad — desde esta noche?"
 
 Wait for their answer. Then help them import that ONE thing into the vault — into the right folder based on what they described:
 
@@ -51,13 +51,26 @@ Wait for their answer. Then help them import that ONE thing into the vault — i
 
 Ask them to paste the content (or copy-paste from their existing app — Apple Notes, Google Docs, Notion, paper photo, voice memo transcript, whatever they have). Write it to the vault yourself. Confirm by showing them the file path. Add basic frontmatter (`type: <type>`, `created: <today>`) if it fits.
 
-Tell them what just happened in plain language:
+First, confirm what just happened: "Done. That's now in your vault at `[PATH]`."
 
-**EN:** "Done. That's now in your vault at `[PATH]`. Next session I'll already know about it. The journal you just wrote and this document are the first two real things in your vault. Everything compounds from here."
+**The proof — answer a question from the doc, with a citation. Do NOT skip.** Don't end on faith. "Next session I'll know it" is a promise the user can't see, so they close the tab unconvinced. The doc is in the vault and you can read it — so demonstrate retrieval on their own content before they leave. The citation is the whole point: it shows the answer came from THEIR document, not from you guessing.
 
-**ES:** "Listo. Eso ya está en tu vault en `[PATH]`. En la próxima sesión ya lo voy a conocer. El diario que escribiste y este documento son las primeras dos cosas reales en tu vault. Todo se compone desde acá."
+1. Read the doc you just imported.
+2. Invite one question, in PRIMARY_LANGUAGE — **EN:** "Before we close, ask me one thing about what you just brought in — let's watch it work." **ES:** "Antes de cerrar, preguntame una cosa sobre lo que acabás de traer — veámoslo funcionar."
+3. Answer from the doc and name your source: quote the exact line or detail and point at the file. Shape: "From `[PATH]`, you wrote: '[exact quote from their doc]' — so [answer]." The part after "so" must follow directly from the quoted line — don't stretch past what the quote actually says; if the doc only partly answers, quote what it does say and name the gap ("that's as far as the doc goes").
+4. If they'd rather not ask, surface one fact you can quote from the doc back to them unprompted — same citation bar: "One thing I already know from that doc — you wrote: '[exact quote from their doc]' — from `[PATH]`." If the doc is too thin to quote a non-trivial fact (a one-line goal, a stub), don't invent one — say so plainly: "It's short, so there's not much to quote yet — but it's saved at `[PATH]` and I'll have it next session."
 
-**Why this phase matters:** the install has been about scaffolding (folders, CLAUDE.md, templates, skills, hooks). Scaffolding is invisible to the user — they can't tell whether it works until real content lives in it. ONE imported document is the activation moment that proves the system to them. Without it, they close the session and the vault stays as empty scaffolding waiting for a "next session" that may never happen.
+**Cite or don't claim — honesty-null over fabrication.** Every answer here must point to the exact place in their doc it came from. If the doc doesn't hold the answer, say so plainly ("That's not in what you brought in — but it's saved, and I'll have it next session") instead of filling the gap. Same when there's nothing substantial to surface unprompted (a one-line note, a near-empty doc): don't manufacture a "non-trivial fact" to hit the beat — name the limit plainly. The honesty bar holds whether or not they asked a question. A made-up proof is worse than none: on day one it teaches them the system invents things. Same rule the paid product runs on — one true, cited, specific fact, never a mock.
+
+**One question, one cited answer.** This is a proof, not a working session. Don't turn it into a long Q&A — the single "oh, it actually read my thing" moment is the whole job, then close.
+
+Then close the loop in plain language:
+
+**EN:** "That's the difference — I'm not promising I'll know it next session. I just answered from it now, and I'll still have it next session because it lives in your vault at `[PATH]`. The journal you just wrote and this document are the first two real things in there. Everything compounds from here."
+
+**ES:** "Esa es la diferencia — no te estoy prometiendo que lo voy a saber en la próxima sesión. Acabo de responderte desde ahí ahora, y lo voy a seguir teniendo en la próxima sesión porque vive en tu vault en `[PATH]`. El diario que escribiste y este documento son las primeras dos cosas reales ahí. Todo se compone desde acá."
+
+**Why this phase matters:** the install has been about scaffolding (folders, CLAUDE.md, templates, skills, hooks). Scaffolding is invisible to the user — they can't tell whether it works until real content lives in it. ONE imported document is the activation moment that proves the system to them — but only if they see it queried. A doc imported but never read back is still invisible; the live cited answer above is what turns "I dropped a file somewhere" into "it actually knows my thing." Without it, they close the session and the vault stays as empty scaffolding waiting for a "next session" that may never happen.
 
 **Bounded scope.** Resist the urge to push for more than one document. The user is tired. The point is proof, not bulk. If they say "I have a lot of stuff to bring in," answer: "Bring one now. The rest can come over the coming weeks — there's no rush. We just want one in tonight."
 
@@ -564,7 +577,7 @@ Then truly stop.
   - Phase 3b = create `🏠 Home/About Me.md` from the template. Without it, the universal capture rule has nowhere to write to. Phase 4 fills the first sections; subsequent sessions append.
   - Phase 11 = external-tool wiring. Most common skip: user mentioned Gmail in Phase 4 question 3, model treated that as "answered" and never installed `google-workspace-mcp`. Phase 11 must fire and ACT on the prior mention.
   - Phase 13 = health data import (devices AND labs). Two distinct halves; the labs question is its own mandatory ask, NOT subsumed by the wearables answer.
-  - Phase 19.5 = activation moment (user imports their first active doc IN THIS SESSION because we can't assume another session will happen).
+  - Phase 19.5 = activation moment (user imports their first active doc IN THIS SESSION because we can't assume another session will happen) AND sees the proof — one cited answer pulled live from that doc, so the session ends on a demonstration, not on faith that "next session I'll know it."
   - Phase 24 = Substack first-week handoff with inline three-commands-and-one-habit orientation.
   - Phase 24.4 = the optional email ask, at the value moment. Mandatory to ASK once; the user's answer is their free choice. It is the de-gated install's only signup touchpoint.
   - Phase 24.5 = session-close walkthrough.
