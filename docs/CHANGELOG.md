@@ -9,6 +9,22 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-06-13: the install now PROVES it read your doc — before you close, not "next session"
+
+**Who this affects:** everyone running a fresh install. The setup already asks you to bring in one real doc near the end (your first activation moment). Until now it ended on a promise — "next session I'll know about it" — and you closed the tab without ever seeing it work.
+
+### What's new
+
+- **A live "it already knew" proof.** Right after your first doc lands in the vault, the install now answers a question about it on the spot and cites the exact line it pulled from — so you watch the system read your own content before you leave, instead of taking it on faith.
+- **Cite or don't claim.** The proof is held to the same honesty bar as the paid product: one true, specific, cited fact from your doc — never an invented one. If the answer isn't in what you brought in, it says so plainly rather than making something up.
+- **Still bounded to one moment.** One question, one cited answer, then the install closes — it's a proof, not a working session.
+
+### Why
+
+An imported doc you never see queried is still invisible — you can't tell scaffolding from a working brain. Ending on "next session I'll know it" punted the only convincing moment to a session that may never happen. Closing the loop in-session is what turns "I dropped a file somewhere" into "it actually knows my thing."
+
+---
+
 ## 2026-06-07: a follow-up — guard the "Meta" leak from coming back, and detect vaults it already hit
 
 **Who this affects:** the same people as the entry below (emoji-`⚙️ Meta` vaults), plus anyone setting up a fresh vault. The earlier fix stopped *new* leaks; this makes the fix permanent and helps anyone already bitten find and repair the damage.
