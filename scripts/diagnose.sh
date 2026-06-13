@@ -393,6 +393,39 @@ else
   warn "check-split-meta.py not found" "Cannot check for split Meta folders."
 fi
 
+# ----- 15. First-run context load (the wrong-cwd / generic-answer class) -----
+# The install's "ask me what you know about you" test only works if the vault's
+# personalized CLAUDE.md actually loads — which depends on launching from the
+# right folder and on CLAUDE.md being filled in, not the bare template. This
+# simulates Claude Code's CLAUDE.md ancestor-walk and proves the load instead of
+# only checking that files exist (sections 1-2 check existence; this checks LOAD).
+section "15. First-run context load"
+CHECK_CTX=""
+for c in "$(cd "$(dirname "$0")" && pwd)/check-context-load.py" \
+         "$HOME/.claude/skills/ai-brain-starter/scripts/check-context-load.py"; do
+  [ -f "$c" ] && CHECK_CTX="$c" && break
+done
+if [ -n "$CHECK_CTX" ]; then
+  cverdict="$(python3 "$CHECK_CTX" "$VAULT" --porcelain 2>/dev/null)"
+  case "$cverdict" in
+    OK_WILL_LOAD)
+      ok "Personalized context will load — launch with: cd \"$VAULT\" && claude" ;;
+    FAIL_NO_CLAUDE_MD)
+      bad "No CLAUDE.md at the vault root — first run answers generically" \
+        "Re-run /setup-brain Phase 4 to build it." ;;
+    FAIL_TEMPLATE_UNFILLED:*)
+      bad "CLAUDE.md is the unfilled template or a stub (${cverdict#FAIL_TEMPLATE_UNFILLED:})" \
+        "The first-run 'what do you know about me' answer will be generic. Re-run /setup-brain Phase 4 to fill it in." ;;
+    WARN_MISSING_CONTEXT:*)
+      warn "CLAUDE.md references session-start files the vault is missing (${cverdict#WARN_MISSING_CONTEXT:})" \
+        "Run: python3 \"$CHECK_CTX\" \"$VAULT\" to see which. Create them or fix the references." ;;
+    *)
+      warn "Could not evaluate first-run context load" "check-context-load.py returned: ${cverdict:-<empty>}" ;;
+  esac
+else
+  warn "check-context-load.py not found" "Cannot verify the vault's context will load on first run."
+fi
+
 # ----- summary -----
 echo
 echo "${B}Summary${N}"

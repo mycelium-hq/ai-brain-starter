@@ -1,8 +1,22 @@
 ## Phase 19: First Test Drive
 
-"Everything is set up. Let's test it."
+"Everything is set up. Let's prove it actually loads — automatically — before you test it by hand."
 
-1. "Close this Claude session and open a new one in your vault folder."
+**Automated context-load self-test (run this — do NOT skip).** The manual "ask me what you know about you" check below only works if the user happens to relaunch from the right folder with a filled-in CLAUDE.md. Wrong folder or unfilled template = generic answer = "this doesn't work" = churn. So PROVE the personalized context will load FIRST, while we can still fix it. Run (substitute the real vault path):
+
+```bash
+python3 ~/.claude/skills/ai-brain-starter/scripts/check-context-load.py "[VAULT_PATH]"
+```
+
+It simulates how Claude Code discovers CLAUDE.md (walking up from the launch folder) and reports one of:
+
+- **Exit 0 (`OK_WILL_LOAD`)** — the vault is set up so context loads. The script prints the EXACT launch command; use THAT in step 1 below, not a vague "your vault folder."
+- **Exit 1 (`FAIL_*`)** — context will NOT load on first run (no CLAUDE.md, or the template was never filled in). **Do not declare the install done.** Re-run Phase 4 to build/fill CLAUDE.md, then re-run the self-test until it passes.
+- **Exit 2 (`WARN_MISSING_CONTEXT`)** — loads, but a session-start file CLAUDE.md references is missing. Create it or fix the reference.
+
+Then hand off the manual confirmation, using the exact command the self-test printed:
+
+1. "Close this Claude session and reopen with `cd \"[VAULT_PATH]\" && claude` — launching anywhere else loads a generic answer, not you."
 2. "Ask me: 'What do you know about me?'"
 3. "I should answer from your CLAUDE.md without you explaining anything."
 
@@ -516,6 +530,7 @@ After the cascade completes, run a self-verification check before saying goodbye
 - Hooks installed (session-start-context, post-tool-use-learnings, etc.)
 - session-end-hook.sh present and executable
 - No .ps1 BOM issues (Windows only)
+- First-run context load will succeed (CLAUDE.md is filled in, not the bare template, and loads on launch from the vault) — the diagnose "First-run context load" section, the same check Phase 19's self-test runs. A red here means the install's headline test ("what do you know about me") would answer generically; do NOT declare the install done until it is green.
 
 Read the diagnose output. If everything is green, proceed to the goodbye. If anything is yellow (warning) or red (failure), surface a one-paragraph summary in the user's PRIMARY_LANGUAGE BEFORE the goodbye:
 
