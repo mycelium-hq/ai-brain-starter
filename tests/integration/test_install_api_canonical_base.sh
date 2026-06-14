@@ -46,7 +46,9 @@ done < <(grep -E 'curl .*\$INSTALL_API_BASE/api' bootstrap.sh)
 
 # 4. no non-canonical API calls in install-facing files
 #    (myceliumai.co — no hyphen — 308s; so does bare mycelium-ai.co without www)
-if matches=$(grep -rnE '(myceliumai\.co|[^.w]mycelium-ai\.co)/api' \
+#    -I skips binary files: a stray __pycache__/*.pyc (the URL compiled into a
+#    bytecode string constant) is an untracked local artifact, not source to audit.
+if matches=$(grep -rnEI '(myceliumai\.co|[^.w]mycelium-ai\.co)/api' \
     bootstrap.sh bootstrap.ps1 phases/ scripts/ hooks/ skills/ SECURITY.md 2>/dev/null); then
   fail "non-canonical install-API base found:"
   echo "$matches" | head -5 | sed 's|^|  |' >&2
