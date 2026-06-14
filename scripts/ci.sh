@@ -124,6 +124,7 @@ INTEGRATION_TESTS=(
   test_dev_worktree_detached_gitdir
   test_install_api_canonical_base
   test_cd_worktree_inline_bypass
+  test_sessionstart_hook_snapshot_guard
 )
 echo "==> (b) Shell integration: ${#INTEGRATION_TESTS[@]} tests"
 for t in "${INTEGRATION_TESTS[@]}"; do
