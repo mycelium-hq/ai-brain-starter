@@ -426,6 +426,38 @@ else
   warn "check-context-load.py not found" "Cannot verify the vault's context will load on first run."
 fi
 
+# ----- 16. SessionStart hook boundedness (the effective wired set) -----
+# Section 11 + the CI gate prove the canonical hooks.json TEMPLATE is bounded.
+# This checks the EFFECTIVE wired set in THIS machine's settings.json — the
+# surface where the 2026-06-05 freeze actually happened: a per-session hook that
+# corpus-walks becomes N concurrent walks under N sessions. MYC-1113.
+section "16. SessionStart hook boundedness"
+AUDIT_SS=""
+for c in "$(cd "$(dirname "$0")" && pwd)/audit-sessionstart-boundedness.py" \
+         "$HOME/.claude/skills/ai-brain-starter/scripts/audit-sessionstart-boundedness.py"; do
+  [ -f "$c" ] && AUDIT_SS="$c" && break
+done
+SS_SETTINGS="$HOME/.claude/settings.json"
+if [ -z "$AUDIT_SS" ]; then
+  warn "audit-sessionstart-boundedness.py not found" "Cannot verify the effective SessionStart fleet is bounded."
+elif [ ! -f "$SS_SETTINGS" ]; then
+  ok "No ~/.claude/settings.json yet (no SessionStart fleet wired)"
+else
+  ssverdict="$(python3 "$AUDIT_SS" --settings "$SS_SETTINGS" --porcelain 2>/dev/null)"
+  case "$ssverdict" in
+    OK:*)
+      ok "Effective SessionStart fleet is bounded (${ssverdict#OK:} clean/declared/unresolved)" ;;
+    UNGUARDED:*)
+      _rest="${ssverdict#UNGUARDED:}"; _n="${_rest%%:*}"; _hooks="${_rest#*:}"
+      bad "$_n SessionStart hook(s) do an unguarded corpus walk: $_hooks" \
+        "Under N concurrent sessions each becomes N corpus walks (the 2026-06-05 freeze class). Run: python3 \"$AUDIT_SS\" --settings \"$SS_SETTINGS\" . Add a single-instance flock + cooldown stamped-at-START + wall-clock deadline, or a '# sessionstart-walk-bounded: <reason>' exemption. See docs/HOOK_FLEET_RESOURCE_GOVERNANCE.md." ;;
+    ERROR:*)
+      warn "Could not audit SessionStart boundedness" "settings.json missing or unparseable (${ssverdict#ERROR:})" ;;
+    *)
+      warn "Could not evaluate SessionStart boundedness" "audit returned: ${ssverdict:-<empty>}" ;;
+  esac
+fi
+
 # ----- summary -----
 echo
 echo "${B}Summary${N}"

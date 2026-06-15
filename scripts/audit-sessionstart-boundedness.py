@@ -94,10 +94,12 @@ WALK_SH = [
     (r"\bls\s+-[a-zA-Z]*R\b", "ls -R"),
     (r"\brg\b(?![^\n]*--files-with-matches[^\n]*\bNUL\b)[^\n]*\s[\"'$~/.]", "rg"),
 ]
-# `find` is recursive UNLESS it is pinned to one level (-maxdepth 0/1); handled
-# specially so `find ~/x -maxdepth 1` is not treated as a corpus walk.
+# `find` is recursive UNLESS it is depth-pinned (-maxdepth 0/1/2). A shallow
+# `find ~/x -maxdepth 2` is not the deep-corpus-walk freeze class; deeper or
+# unbounded `find` is still a walk. (Tightened MYC-1113 so the diagnose check does
+# not cry wolf on the common shallow-find idiom — over-strict teaches bypass.)
 FIND_SH = r"\bfind\s+[\"'$~/.]"
-FIND_SHALLOW = r"-maxdepth\s+[01]\b"
+FIND_SHALLOW = r"-maxdepth\s+[0-2]\b"
 
 ANNOT_EXEMPT = r"#\s*sessionstart-walk-bounded:\s*\S"  # token + non-empty reason
 
@@ -362,6 +364,102 @@ def cmd_check(path: str) -> int:
     return 0
 
 
+# ---- effective wired-set audit (the real harm surface) ------------------------
+def sessionstart_commands(settings_path: Path) -> list[str]:
+    """Raw SessionStart hook command strings from a settings.json / hooks.json."""
+    try:
+        data = json.loads(settings_path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    out: list[str] = []
+    for block in (data.get("hooks", {}).get("SessionStart") or []):
+        for hook in (block.get("hooks") or []):
+            c = (hook.get("command") or "").strip()
+            if c:
+                out.append(c)
+    return out
+
+
+def resolve_command_path(cmd: str) -> Path | None:
+    """Best-effort resolve the script a SessionStart command runs, to an ABSOLUTE
+    path. Handles `python3 ~/.claude/hooks/x.py --flag`, quoted paths, and a
+    leading `[ -f X ] && ...` guard. Returns None when no path is found OR it is
+    not absolute after expanduser — a relative/cwd-dependent command is reported
+    as unresolved, NEVER silently treated as bounded."""
+    for rx in (r"(?:python3?|bash|sh|zsh)\s+(?:-\w+\s+)*['\"]([^'\"]+\.(?:py|sh|bash))['\"]",
+               r"(?:python3?|bash|sh|zsh)\s+(?:-\w+\s+)*([^\s'\"]+\.(?:py|sh|bash))",
+               r"['\"]([^'\"]*?/[^'\"]+\.(?:py|sh|bash))['\"]",
+               r"([~/][^\s'\"]*\.(?:py|sh|bash))"):
+        m = re.search(rx, cmd)
+        if m:
+            p = m.group(1)
+            if p.startswith("~"):
+                p = str(Path.home()) + p[1:]
+            pp = Path(p)
+            return pp if pp.is_absolute() else None
+    return None
+
+
+def cmd_settings(settings_path: Path, porcelain: bool) -> int:
+    """Audit the EFFECTIVE wired SessionStart set in a real settings.json — the
+    surface where the freeze actually happens, vs the canonical hooks.json
+    template that --all checks (MYC-1113). Resolves each hook by its full command
+    path.
+
+    Exit: 0 = every resolved hook is bounded/declared; 1 = >=1 unguarded corpus
+    walker; 2 = settings.json missing / unparseable (fail LOUD, never silent)."""
+    p = Path(settings_path)
+    if not p.exists():
+        print("ERROR:not-found" if porcelain else f"ERROR: settings.json not found: {p}")
+        return 2
+    try:
+        json.loads(p.read_text(encoding="utf-8"))
+    except Exception as e:
+        print("ERROR:unparseable" if porcelain else f"ERROR: settings.json unparseable: {e}")
+        return 2
+    reds, exempts, clean, unresolved = [], 0, 0, 0
+    seen: set[str] = set()
+    for c in sessionstart_commands(p):
+        rp = resolve_command_path(c)
+        if rp is None:
+            unresolved += 1
+            continue
+        if str(rp) in seen:
+            continue
+        seen.add(str(rp))
+        if not rp.exists():
+            unresolved += 1
+            continue
+        src = _read_bounded(rp)
+        if not src:
+            unresolved += 1
+            continue
+        v = evaluate(src, _detect_lang(rp.name, src))
+        if v["walk"] and not v["ok"] and not v["exempt"]:
+            reds.append((rp.name, v))
+        elif v["exempt"]:
+            exempts += 1
+        else:
+            clean += 1
+    if porcelain:
+        if reds:
+            print("UNGUARDED:" + str(len(reds)) + ":" + ",".join(n for n, _ in reds))
+            return 1
+        print(f"OK:{clean}:{exempts}:{unresolved}")
+        return 0
+    total = clean + exempts + len(reds)
+    print(f"Effective SessionStart set ({p}): {total} resolved hook(s) — "
+          f"{clean} clean, {exempts} declared-bounded, {len(reds)} unguarded; "
+          f"{unresolved} unresolved.")
+    for n, v in reds:
+        print(f"  RED  {n}: walk={'+'.join(v['walks'])}  MISSING: {', '.join(v['missing'])}")
+    if reds:
+        print("\n" + _cite())
+        return 1
+    print("All resolved SessionStart corpus walks are guarded or declared-bounded. OK.")
+    return 0
+
+
 # ---- selftest (positive + negative controls) ----------------------------------
 _FX_NO_GUARDS = """#!/usr/bin/env python3
 import os
@@ -423,6 +521,9 @@ import subprocess
 def main():
     subprocess.run(['grep', '-r', 'secret', '/data/corpus'])  # shelled recursive walk, no guards
 """
+_FX_SH_MAXDEPTH2 = """#!/usr/bin/env bash
+find ~/x -maxdepth 2 -name '.draft' -type f   # depth-bounded, not the corpus-walk freeze class
+"""
 
 
 def cmd_selftest() -> int:
@@ -436,6 +537,7 @@ def cmd_selftest() -> int:
         ("no recursive walk (iterdir)",   _FX_NO_WALK,       "py", False),  # must PASS
         ("shell walk, no timeout/flock",  _FX_SH_NO_TIMEOUT, "sh", True),   # must BITE
         ("shell, shallow + exempt",       _FX_SH_OK,         "sh", False),  # must PASS
+        ("shell find -maxdepth 2",        _FX_SH_MAXDEPTH2,  "sh", False),  # must PASS (depth-bounded)
     ]
     fails = []
     for label, src, lang, want_bite in cases:
@@ -463,8 +565,11 @@ def main() -> int:
     repo = here.parent
     ap.add_argument("--all", action="store_true")
     ap.add_argument("--check", metavar="FILE")
+    ap.add_argument("--settings", metavar="PATH",
+                    help="audit the EFFECTIVE wired SessionStart set in a real settings.json")
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--porcelain", action="store_true", help="one-line verdict (with --settings)")
     ap.add_argument("--hooks-json", default=str(repo / "hooks.json"))
     ap.add_argument("--hooks-dir", default=str(repo / "hooks"))
     a = ap.parse_args()
@@ -482,6 +587,8 @@ def main() -> int:
     try:
         if a.selftest:
             return cmd_selftest()
+        if a.settings:
+            return cmd_settings(Path(a.settings), a.porcelain)
         if a.all:
             return cmd_all(Path(a.hooks_json), Path(a.hooks_dir), a.json)
     except Exception as e:
