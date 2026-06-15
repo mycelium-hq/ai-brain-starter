@@ -82,6 +82,8 @@ ABS_FINGERPRINTS = [
     "ai-brain-starter/hooks/remediate-runaway-procs.py",
     # Write-time secret guard:
     "ai-brain-starter/hooks/block-secret-in-note.py",
+    # Context-budget measurer (always-loaded text layer; MYC-619):
+    "ai-brain-starter/hooks/context-budget-measure.py",
 ]
 
 # Path-divergence-robust matching: an ai-brain-starter hook may be wired at the
@@ -98,7 +100,7 @@ ABS_OWNED_BASENAMES = {
     "snapshot-pending-work-on-stop.py", "surface-orphan-worktree-snapshots.py",
     "remove-ended-worktree.py", "enforce-worktree-cap.py",
     "worktree-footprint-signal.py", "remediate-runaway-procs.py",
-    "block-secret-in-note.py",
+    "block-secret-in-note.py", "context-budget-measure.py",
 }
 
 # Hooks ai-brain-starter USED TO ship and has deliberately RETIRED. The

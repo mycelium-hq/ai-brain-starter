@@ -155,6 +155,16 @@ if [[ -f "$SKILL_DIR/scripts/vault-schema-validator.py" ]]; then
   fi
 fi
 
+# === 7b. Context-budget measurer self-test (MYC-619) ===
+hdr "Context-budget measurer"
+if [[ -f "$SKILL_DIR/hooks/context-budget-measure.py" ]]; then
+  if python3 "$SKILL_DIR/hooks/context-budget-measure.py" --self-test >/dev/null 2>&1; then
+    ok "context-budget-measure.py self-test"
+  else
+    fail "context-budget-measure.py self-test failed"
+  fi
+fi
+
 # === 8. Closing-signal fixture harness ===
 hdr "Closing-signal fixtures"
 if [[ -f "$SKILL_DIR/scripts/test-closing-signals.py" ]]; then
