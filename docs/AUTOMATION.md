@@ -67,6 +67,8 @@ Howard Marks's dissent on the panel was load-bearing: name the cost. The cost is
 
 `hooks/health-auto-sync.py` ships in the repo and is fully tested but is NOT wired in the default `hooks.json` template. Users who want per-session sync (e.g., never journals but wants the data fresh) can manually add it to their `~/.claude/settings.json` SessionStart block. Documented at the bottom of this file.
 
+> Why it stays out by default is the general SessionStart resource-governance rule: a SessionStart hook fires once per session, so a machine running many concurrent sessions runs it many times at once. Heavy or network work (a corpus walk, a wearable sync) belongs on a scheduled job or once-daily Stop hook, never the cold-start path. The full invariant, the shipped-set audit, and the regression guards that enforce it are in [HOOK_FLEET_RESOURCE_GOVERNANCE.md](HOOK_FLEET_RESOURCE_GOVERNANCE.md).
+
 ## What auto-fires vs what stays manual
 
 **Auto:**
