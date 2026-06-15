@@ -104,6 +104,63 @@ else
   bad "positive control passes --check" "a fully-guarded walk was wrongly flagged"
 fi
 
+echo "=== 5. EFFECTIVE-SET audit (--settings): the real harm surface, MYC-1113 ==="
+EFF="$(mktemp -d)"
+TMPDIRS+=("$EFF")
+# an unguarded corpus-walk hook at a resolvable absolute path
+cat > "$EFF/evil-eff.py" <<'PY'
+#!/usr/bin/env python3
+import os
+def main():
+    for _r, _d, _f in os.walk(os.path.expanduser("~")):  # unbounded corpus walk
+        pass
+PY
+# a bounded hook (single iterdir level)
+cat > "$EFF/good-eff.py" <<'PY'
+#!/usr/bin/env python3
+from pathlib import Path
+def main():
+    for _p in Path("~/.claude/worktrees").expanduser().iterdir():
+        pass
+PY
+# settings.json wiring BOTH on SessionStart (absolute command paths)
+cat > "$EFF/settings_bad.json" <<JSON
+{"hooks": {"SessionStart": [{"hooks": [
+  {"type": "command", "command": "python3 $EFF/good-eff.py 2>/dev/null || true"},
+  {"type": "command", "command": "python3 $EFF/evil-eff.py 2>/dev/null || true"}
+]}]}}
+JSON
+cat > "$EFF/settings_ok.json" <<JSON
+{"hooks": {"SessionStart": [{"hooks": [
+  {"type": "command", "command": "python3 $EFF/good-eff.py 2>/dev/null || true"}
+]}]}}
+JSON
+# NEGATIVE CONTROL: an unguarded walker in the effective set trips --settings (exit 1)
+if python3 "$AUDIT" --settings "$EFF/settings_bad.json" >/dev/null 2>&1; then
+  bad "neg control --settings trips" "an unguarded walker in the effective set PASSED --settings"
+else
+  ok "neg control --settings trips (exit 1)"
+fi
+# porcelain shape is parseable by diagnose.sh
+if python3 "$AUDIT" --settings "$EFF/settings_bad.json" --porcelain 2>/dev/null | grep -q '^UNGUARDED:1:evil-eff.py'; then
+  ok "porcelain emits UNGUARDED:<n>:<hooks> for diagnose.sh"
+else
+  bad "porcelain shape" "expected UNGUARDED:1:evil-eff.py"
+fi
+# POSITIVE CONTROL: a clean effective set passes (exit 0)
+if python3 "$AUDIT" --settings "$EFF/settings_ok.json" >/dev/null 2>&1; then
+  ok "positive control --settings passes (exit 0)"
+else
+  bad "positive control --settings passes" "a bounded effective set was flagged"
+fi
+# FAIL-LOUD: a missing settings.json exits 2 (never silently 'clean')
+python3 "$AUDIT" --settings "$EFF/does-not-exist.json" >/dev/null 2>&1
+if [ "$?" -eq 2 ]; then
+  ok "fail-loud on missing settings.json (exit 2)"
+else
+  bad "fail-loud on missing settings.json" "expected exit 2"
+fi
+
 echo
 echo "=== summary: $PASS passed, $FAIL failed ==="
 [ "$FAIL" -eq 0 ]
