@@ -84,6 +84,9 @@ def find_vault_root(cwd: Path) -> Path | None:
 def _list_files(path: Path) -> list[Path]:
     files: list[Path] = []
     try:
+        # sessionstart-walk-bounded: rglob covers ONE orphaned worktree-snapshot
+        # dir (machinery sized by worktree count x divergent files), never a data
+        # corpus; main() caps output at 10 orphans. Not the cold-start freeze class.
         for entry in path.rglob("*"):
             if entry.is_file():
                 files.append(entry)

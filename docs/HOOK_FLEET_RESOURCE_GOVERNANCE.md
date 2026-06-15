@@ -91,12 +91,85 @@ freeze taught us to keep off the cold-start path):
 - `health-auto-sync.py` — network wearable sync. Opt-in power-user file; the
   default chain syncs once per day on `/journal` Stop, not per session.
 
+## Authoring a new SessionStart hook (the four guards, by construction)
+
+Most SessionStart hooks need none of this: read a marker, do one `iterdir`
+level, or run a bounded subprocess, and the hook is bounded by construction. The
+rule below applies only when a hook **recursive-walks** — `os.walk`, `rglob`,
+`glob('**')`, `find` without `-maxdepth 1`, `grep -r`.
+
+A recursive / corpus-scale walk on SessionStart MUST carry all three guards (this
+is the exact shape that froze a machine on 2026-06-05):
+
+1. **single-instance lock** — `fcntl.flock(..., LOCK_EX | LOCK_NB)`; a concurrent
+   session backs off instead of starting a second walk.
+2. **cooldown stamped AT START** — claim the cooldown marker BEFORE the walk, so a
+   session that starts mid-walk sees it and skips. Stamping it *after* the walk is
+   the precise 2026-06-05 bug.
+3. **wall-clock deadline** — break the loop on a `time.time()` budget (and
+   `os.nice(10)` so it never starves the foreground session).
+
+Skeleton — the reference implementation is `hooks/scan-prior-sessions-for-secrets.py`:
+
+```python
+import fcntl, os, time
+from pathlib import Path
+
+HOOK_DIR = Path(__file__).resolve().parent
+MARKER = HOOK_DIR / ".last-myhook"          # cooldown, stamped at START
+LOCK   = HOOK_DIR / ".myhook.lock"          # single-instance guard
+COOLDOWN, BUDGET = 6 * 3600, 60
+
+def main() -> int:
+    last = float(MARKER.read_text()) if MARKER.exists() else 0
+    if time.time() - last < COOLDOWN:
+        return 0                              # fast cooldown path
+    fh = LOCK.open("w")
+    try:
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return 0                              # another instance holds it; back off
+    MARKER.write_text(f"{time.time():.0f}")   # stamp BEFORE the walk
+    os.nice(10)
+    deadline = time.time() + BUDGET
+    for path in some_root.rglob("*"):
+        if time.time() > deadline:
+            break                             # wall-clock bound
+        ...
+    return 0
+```
+
+If the walked root is small **by construction** (one worktree-snapshot dir, a
+fixed machinery folder — not a data corpus), the three guards are not needed;
+declare it instead, co-located at the walk:
+
+```python
+# sessionstart-walk-bounded: <why this root is small / bounded — e.g. one
+# worktree-snapshot dir, output capped; not a data corpus>
+for entry in snap_dir.rglob("*"):
+    ...
+```
+
+The reason is required (a bare token does not exempt). Check a hook before wiring
+it, and audit the whole fleet:
+
+```bash
+python3 scripts/audit-sessionstart-boundedness.py --check hooks/<new-hook>.py
+python3 scripts/audit-sessionstart-boundedness.py --all   # CI gate; lists every exemption
+```
+
 ## How it's enforced (regression guards, all in `scripts/ci.sh`)
 
 - `tests/integration/test_sessionstart_freeze_class_excluded.sh` — asserts the
   canonical `hooks.json` SessionStart set **excludes** the corpus-walk scan and
   **includes** the reaper. Ships with negative controls that re-add the scan /
   drop the reaper and confirm the guard trips.
+- `tests/integration/test_sessionstart_boundedness.sh` — the **forward** guard
+  (via `scripts/audit-sessionstart-boundedness.py`): asserts that every
+  SessionStart-wired hook doing a recursive / corpus-scale walk carries all three
+  bounded-hook guards (flock + stamp-at-START + wall deadline) or a co-located
+  `# sessionstart-walk-bounded:` exemption. Mechanizes the **Bound** column above
+  so it cannot silently rot when hook #N+1 is added. Ships pos/neg controls.
 - `tests/integration/test_scan_prior_single_instance.sh` — a second concurrent
   scan run backs off (no pile-up), even if the scan is invoked directly.
 - `tests/integration/test_remediate_runaway_procs.sh` — the reaper's pos/neg
