@@ -71,7 +71,7 @@ Read `⚙️ Meta/rules/advisory-panel.md`. Convene 3-5 voices most relevant to 
 - Use only named panelists from the file (no archetypes, no invented experts)
 - Subject-match weighting (rule 10): the panelist whose expertise matches the actual subject carries more weight than headcount
 - Output-confidence filter (rule 11): flag any recommendation below 80% conviction as low-conviction (keep for texture, not for decisions)
-- Peer-review pass (rule 12): after the 3-5 voices speak, run one chairman pass naming where they converged, where they clashed, what they all missed
+- Peer-review pass (rule 9): after the 3-5 voices speak, run one chairman pass with the 5-bucket taxonomy — consensus (where they converged), contradictions (where they clashed), partial coverage (a dimension only one voice addressed), unique insights (a point only one voice raised), blind spots (what they all missed). The chairman analyzes, does not merge: surface the disagreement, never collapse it into a balanced-view paragraph
 - Effort-aware sizing (rule 15): if `${CLAUDE_EFFORT}` is set, scale the panel accordingly
 
 Deliver the panel's read with a clear lead sentence answering the triggering question. Don't bury the answer.
@@ -188,6 +188,8 @@ Open `🏠 Home/Panel Feedback Log.md`. Two updates:
 ...
 **Convergence (across all passes):** <high-confidence signals>
 **Clash:** <where panelists disagreed>
+**Partial coverage:** <a dimension only one voice addressed; others silent>
+**Unique insight:** <a point only one voice raised>
 **Subject-match weighting:** <which panelist's voice carries most weight>
 **Collective blind spot (chairman):** <what all panelists missed>
 **User's commitments:** <numbered list>
