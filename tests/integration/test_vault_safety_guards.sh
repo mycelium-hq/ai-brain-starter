@@ -8,9 +8,10 @@
 # failing on the thing it catches" durable instead of aspirational.
 #
 # Covers:
-#   - scripts/test-cloud-sync-guard.sh       (vault-in-cloud-sync detector, #159)
-#   - scripts/test-vault-backup-guard.sh     (no-off-machine-backup detector)
-#   - scripts/test-vault-backup-roundtrip.sh (one-command backup: real restore loop)
+#   - scripts/test-cloud-sync-guard.sh           (vault-in-cloud-sync detector, #159)
+#   - scripts/test-sync-folder-machinery-guard.sh (machinery-in-synced-folder + Drive Mirror roots, MYC-705)
+#   - scripts/test-vault-backup-guard.sh         (no-off-machine-backup detector)
+#   - scripts/test-vault-backup-roundtrip.sh     (one-command backup: real restore loop)
 #
 # CI-safe: every guard test is hermetic (temp dirs, isolated config via env),
 # needs no network, and the round-trip test skips its encrypted leg when neither
@@ -33,6 +34,7 @@ run_guard() { # <relative-script-path>
 }
 
 run_guard "scripts/test-cloud-sync-guard.sh"
+run_guard "scripts/test-sync-folder-machinery-guard.sh"
 run_guard "scripts/test-vault-backup-guard.sh"
 run_guard "scripts/test-vault-backup-roundtrip.sh"
 
