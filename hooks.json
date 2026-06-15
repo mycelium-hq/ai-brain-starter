@@ -217,6 +217,11 @@
             "type": "command",
             "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/remediate-runaway-procs.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Reaping orphaned runaway processes..."
+          },
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/context-budget-measure.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "statusMessage": "Measuring always-loaded context budget..."
           }
         ]
       }
