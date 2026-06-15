@@ -36,9 +36,11 @@ Usage:
 """
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 HOME = os.path.expanduser("~")
 
@@ -50,6 +52,14 @@ FILE_COUNT_THRESHOLD = 5000
 # Per-root safety budget so a streamed Google Drive can't hang the scan
 ROOT_TIME_BUDGET_S = 6.0
 MAX_DEPTH = 7
+# Google Drive for Desktop "Mirror" roots stay at an arbitrary NATIVE path
+# (e.g. ~/dev/<vault>) and never appear under ~/Library/CloudStorage, so a path
+# walk structurally cannot see them. The authoritative signal is the DriveFS
+# roots DB, where sync_type == 1 means Mirror (sync_type == 2 means Stream).
+DRIVEFS_DB = os.path.join(
+    HOME, "Library/Application Support/Google/DriveFS/root_preference_sqlite.db"
+)
+DRIVE_MIRROR_SYNC_TYPE = 1
 
 
 def _defaults_bool(domain, key):
@@ -59,6 +69,39 @@ def _defaults_bool(domain, key):
         return out.returncode == 0 and out.stdout.strip() == "1"
     except Exception:
         return False
+
+
+def drive_mirror_roots(db_path=DRIVEFS_DB):
+    """Native-path Google Drive 'Mirror' roots from the DriveFS roots DB.
+
+    Mirror roots (sync_type=1) live at an arbitrary local path and are invisible
+    to a ~/Library/CloudStorage walk, so they are the structural blind spot this
+    closes (MYC-705): a Mirror-synced git repo melts the sync daemon undetected.
+    Read FAIL-OPEN: a missing / locked / malformed DB returns [] and never
+    raises, keeping the guard advisory. `immutable=1` so a LIVE Drive holding a
+    write lock still reads (a plain `mode=ro` can return empty under the lock).
+    """
+    if not os.path.exists(db_path):
+        return []
+    roots = []
+    try:
+        uri = Path(db_path).as_uri() + "?immutable=1"
+        con = sqlite3.connect(uri, uri=True, timeout=2.0)
+        try:
+            cur = con.execute(
+                "SELECT last_seen_absolute_path, root_path FROM roots "
+                "WHERE sync_type = ?",
+                (DRIVE_MIRROR_SYNC_TYPE,),
+            )
+            for last_seen, root_path in cur.fetchall():
+                path = (last_seen or "").strip() or (root_path or "").strip()
+                if path:
+                    roots.append((path, "GoogleDrive-Mirror"))
+        finally:
+            con.close()
+    except Exception:
+        return []  # fail-open: a DB hiccup must never crash the advisory guard
+    return roots
 
 
 def synced_roots():
@@ -77,7 +120,21 @@ def synced_roots():
             if entry.startswith("GoogleDrive-") or entry.startswith("Dropbox") \
                or entry.startswith("OneDrive") or entry.startswith("Box"):
                 roots.append((os.path.join(cs, entry), entry.split("-")[0]))
-    return [(p, prov) for p, prov in roots if os.path.isdir(p)]
+    # Native-path Google Drive Mirror roots (sync_type=1) are invisible to the
+    # CloudStorage walk above; the DriveFS DB is the only signal (MYC-705).
+    roots.extend(drive_mirror_roots())
+    # Keep only real dirs, de-duped by realpath (a Mirror root can coincide with
+    # an iCloud D&D / CloudStorage root; scanning twice would double-report).
+    seen, out = set(), []
+    for p, prov in roots:
+        if not os.path.isdir(p):
+            continue
+        rp = os.path.realpath(p)
+        if rp in seen:
+            continue
+        seen.add(rp)
+        out.append((p, prov))
+    return out
 
 
 def scan_root(root, provider):
@@ -138,6 +195,57 @@ def self_test():
         print(f"[self-test] detects oversized synced dir:      {got_big}")
         print(f"[self-test] clean docs tree -> no findings:    {len(f2) == 0}")
         ok = got_marker and got_big and len(f2) == 0
+
+        # --- MYC-705: Drive Mirror-root (sync_type=1) DB detection ---
+        mdb = os.path.join(tmp, "root_preference_sqlite.db")
+        con = sqlite3.connect(mdb)
+        # exact real DriveFS schema so the query is proven against the true shape
+        con.execute(
+            "CREATE TABLE roots (root_id INTEGER PRIMARY KEY, metadata BLOB, "
+            "media_id TEXT NOT NULL, title TEXT NOT NULL, root_path TEXT NOT NULL, "
+            "account_token TEXT NOT NULL, sync_type INTEGER NOT NULL, "
+            "destination INTEGER NOT NULL, medium INTEGER NOT NULL, state INTEGER NOT NULL, "
+            "one_shot BOOL NOT NULL, is_my_drive BOOL NOT NULL, doc_id TEXT NOT NULL, "
+            "last_seen_absolute_path TEXT NOT NULL)"
+        )
+        mirror_git = os.path.join(tmp, "mirror_vault")      # Mirror + .git -> flag
+        os.makedirs(os.path.join(mirror_git, ".git"))
+        mirror_clean = os.path.join(tmp, "mirror_clean")    # Mirror, clean -> no finding
+        os.makedirs(mirror_clean)
+        open(os.path.join(mirror_clean, "notes.md"), "w").close()
+        stream_git = os.path.join(tmp, "stream_vault")      # sync_type=2 -> IGNORED
+        os.makedirs(os.path.join(stream_git, ".git"))
+
+        def _ins(path, sync_type):
+            con.execute(
+                "INSERT INTO roots (media_id,title,root_path,account_token,sync_type,"
+                "destination,medium,state,one_shot,is_my_drive,doc_id,last_seen_absolute_path)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                ("m", "t", path, "a", sync_type, 0, 0, 0, 0, 1, "d", path),
+            )
+        _ins(mirror_git, DRIVE_MIRROR_SYNC_TYPE)
+        _ins(mirror_clean, DRIVE_MIRROR_SYNC_TYPE)
+        _ins(stream_git, 2)
+        con.commit()
+        con.close()
+
+        mpaths = {os.path.realpath(p) for p, _ in drive_mirror_roots(db_path=mdb)}
+        got_mirror = os.path.realpath(mirror_git) in mpaths
+        ignored_stream = os.path.realpath(stream_git) not in mpaths
+        mirror_flagged = any(
+            x["reason"].startswith("machinery dir '.git'")
+            for x in scan_root(mirror_git, "GoogleDrive-Mirror")
+        )
+        clean_mirror_ok = len(scan_root(mirror_clean, "GoogleDrive-Mirror")) == 0
+        failopen = drive_mirror_roots(db_path=os.path.join(tmp, "nope.db")) == []
+
+        print(f"[self-test] DB: detects sync_type=1 Mirror root:  {got_mirror}")
+        print(f"[self-test] DB: ignores sync_type!=1 (stream):    {ignored_stream}")
+        print(f"[self-test] DB: .git in Mirror root flagged:      {mirror_flagged}")
+        print(f"[self-test] DB: clean Mirror tree -> no findings: {clean_mirror_ok}")
+        print(f"[self-test] DB: missing DB -> fail-open []:       {failopen}")
+        ok = ok and got_mirror and ignored_stream and mirror_flagged \
+            and clean_mirror_ok and failopen
     print("[self-test] PASS" if ok else "[self-test] FAIL")
     return 0 if ok else 1
 
