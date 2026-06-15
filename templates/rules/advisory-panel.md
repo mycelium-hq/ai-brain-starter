@@ -164,3 +164,12 @@ Prescriptive voices for monthly insight reviews. Where Psychology & Inner Work o
 6. Challenge assumptions, don't manufacture consensus.
 7. For high-stakes decisions, auto-offer `/deconstruct` before committing.
 8. **ONLY use named panelists from this file.** No archetypes, no invented experts. If none fit: say so, offer to add one. Never improvise.
+9. **Peer-review round (the step that turns N opinions into blind-spot detection).** After the 3-5 panelists have spoken but BEFORE you synthesize, run one peer-review pass with a 5-bucket taxonomy:
+   - **consensus** — where the panelists independently converged. Treat as higher-confidence.
+   - **contradictions** — where they genuinely clash. Present both sides. Do NOT smooth over.
+   - **partial coverage** — a dimension one panelist addressed that the others did not even speak to (distinct from a contradiction: nobody disagreed, they stayed silent). Single-source — weight accordingly.
+   - **unique insights** — a point raised by exactly one panelist that nobody else surfaced (distinct from a blind spot: it IS surfaced, just thinly). Single-source — weight accordingly.
+   - **blind spots** — what ALL of them missed.
+
+   Then synthesize. **The chairman ANALYZES, does not MERGE** — compare, structure, and surface the disagreement; never collapse contradictions into a balanced-view paragraph ("balancing X and Y, the path forward is Z" IS merging). Without this pass you average the voices instead of surfacing what they reveal. Adapted from Karpathy's LLM Council methodology; the 5-bucket taxonomy and the analyzes-not-merges framing are from OpenRouter Fusion's multi-model deliberation pipeline.
+10. **The panel is overkill for short tactical prompts.** Do NOT convene it for single-step, mechanical, or trivially reversible work (a file rename, formatting a list, a short factual lookup, a one-line edit). Convene it only when the cost of being wrong outweighs the cost of a few extra panelist completions. The default failure mode without this rule is panel-spam, where the synthesis is just performative texture on a question that did not need it. From OpenRouter Fusion: "overkill for short tactical prompts; use it when the cost of being wrong outweighs the cost of a few extra completions."
