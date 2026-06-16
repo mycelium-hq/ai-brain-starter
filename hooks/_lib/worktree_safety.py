@@ -41,6 +41,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import sqlite3
 import subprocess
 import time
 from pathlib import Path
@@ -468,13 +469,54 @@ def reclaim_orphan_dir(main_repo: Path, orphan: Path, idle_min: int = 60) -> tup
     return ("snapshot+removed" if snapped else "removed", snapped)
 
 
-def detect_cloud_sync(path: Path) -> str | None:
+DRIVEFS_ROOTS_DB = (
+    Path.home() / "Library/Application Support/Google/DriveFS/root_preference_sqlite.db"
+)
+
+
+def drive_mirror_root_paths(db_path: str | Path | None = None) -> list[str]:
+    """Native-path Google Drive "Mirror" roots (sync_type=1) from the DriveFS DB.
+
+    Mirror roots live at an arbitrary local path and never appear under
+    ~/Library/CloudStorage, so a path-marker check cannot see them. This is the
+    SINGLE source of that signal, shared by detect_cloud_sync (the install guard
+    + the SessionStart footprint signal) and the check-sync-folder-machinery
+    audit (MYC-1130) so they can never drift. Read FAIL-OPEN: a missing / locked
+    / malformed DB returns [] and never raises. `immutable=1` so a LIVE Drive
+    holding a write lock still reads (a plain `mode=ro` can return empty).
+    """
+    db = Path(db_path) if db_path is not None else DRIVEFS_ROOTS_DB
+    if not db.exists():
+        return []
+    roots: list[str] = []
+    try:
+        con = sqlite3.connect(db.as_uri() + "?immutable=1", uri=True, timeout=2.0)
+        try:
+            cur = con.execute(
+                "SELECT last_seen_absolute_path, root_path FROM roots "
+                "WHERE sync_type = 1"
+            )
+            for last_seen, root_path in cur.fetchall():
+                cand = (last_seen or "").strip() or (root_path or "").strip()
+                if cand:
+                    roots.append(cand)
+        finally:
+            con.close()
+    except Exception:
+        return []  # fail-open: a DB hiccup must never break the advisory guard
+    return roots
+
+
+def detect_cloud_sync(path: Path, *, _drivefs_db: str | Path | None = None) -> str | None:
     """Name of a consumer cloud-sync service whose scope contains `path`, else None.
 
     Cross-platform best-effort: a brain/vault under iCloud / OneDrive / Dropbox /
     Google Drive / Box is the exact combination that turns worktree churn into a
     machine-melting sync storm. The index belongs server-side; the local vault
     belongs on a real local disk, never in a consumer sync folder.
+
+    `_drivefs_db` overrides the DriveFS roots-DB path for hermetic tests; in
+    production it stays None and resolves to the real per-user location.
     """
     p = str(path.resolve())
     home = str(Path.home())
@@ -500,6 +542,17 @@ def detect_cloud_sync(path: Path) -> str | None:
             continue
         if (p == str(base) or p.startswith(str(base) + "/")) and (icloud / folder).exists():
             return f"iCloud Drive ({folder} sync)"
+    # Native-path Google Drive "Mirror" roots (sync_type=1) are invisible to the
+    # markers above; the DriveFS roots DB is the only signal (MYC-1130).
+    # WORKTREE_SAFETY_DRIVEFS_DB overrides the DB path for hermetic tests of the
+    # install-guard chain (check-cloud-sync.py has no _drivefs_db arg).
+    for root in drive_mirror_root_paths(_drivefs_db or os.environ.get("WORKTREE_SAFETY_DRIVEFS_DB")):
+        try:
+            rp = str(Path(root).resolve())
+        except OSError:
+            continue
+        if p == rp or p.startswith(rp + "/"):
+            return "Google Drive (Mirror)"
     return None
 
 

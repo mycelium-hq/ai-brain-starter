@@ -9,6 +9,7 @@
 #
 # Covers:
 #   - scripts/test-cloud-sync-guard.sh           (vault-in-cloud-sync detector, #159)
+#   - scripts/test-detect-cloud-sync-mirror.sh   (shared detect_cloud_sync + install guard: Drive Mirror roots, MYC-1130)
 #   - scripts/test-sync-folder-machinery-guard.sh (machinery-in-synced-folder + Drive Mirror roots, MYC-705)
 #   - scripts/test-vault-backup-guard.sh         (no-off-machine-backup detector)
 #   - scripts/test-vault-backup-roundtrip.sh     (one-command backup: real restore loop)
@@ -34,6 +35,7 @@ run_guard() { # <relative-script-path>
 }
 
 run_guard "scripts/test-cloud-sync-guard.sh"
+run_guard "scripts/test-detect-cloud-sync-mirror.sh"
 run_guard "scripts/test-sync-folder-machinery-guard.sh"
 run_guard "scripts/test-vault-backup-guard.sh"
 run_guard "scripts/test-vault-backup-roundtrip.sh"
