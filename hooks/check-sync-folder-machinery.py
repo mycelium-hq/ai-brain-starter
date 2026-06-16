@@ -40,7 +40,11 @@ import sqlite3
 import subprocess
 import sys
 import time
-from pathlib import Path
+
+# Single source for the DriveFS "Mirror" root read (MYC-1130) so this audit and
+# _lib.worktree_safety.detect_cloud_sync can never drift on the Mirror signal.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _lib.worktree_safety import drive_mirror_root_paths  # noqa: E402
 
 HOME = os.path.expanduser("~")
 
@@ -72,36 +76,13 @@ def _defaults_bool(domain, key):
 
 
 def drive_mirror_roots(db_path=DRIVEFS_DB):
-    """Native-path Google Drive 'Mirror' roots from the DriveFS roots DB.
+    """Native-path Google Drive 'Mirror' roots tagged for this scanner.
 
-    Mirror roots (sync_type=1) live at an arbitrary local path and are invisible
-    to a ~/Library/CloudStorage walk, so they are the structural blind spot this
-    closes (MYC-705): a Mirror-synced git repo melts the sync daemon undetected.
-    Read FAIL-OPEN: a missing / locked / malformed DB returns [] and never
-    raises, keeping the guard advisory. `immutable=1` so a LIVE Drive holding a
-    write lock still reads (a plain `mode=ro` can return empty under the lock).
+    Thin wrapper over the shared `_lib.worktree_safety.drive_mirror_root_paths`
+    (the single source of the DriveFS sync_type=1 read; MYC-1130) so this audit
+    and detect_cloud_sync can never drift on the Mirror-root signal.
     """
-    if not os.path.exists(db_path):
-        return []
-    roots = []
-    try:
-        uri = Path(db_path).as_uri() + "?immutable=1"
-        con = sqlite3.connect(uri, uri=True, timeout=2.0)
-        try:
-            cur = con.execute(
-                "SELECT last_seen_absolute_path, root_path FROM roots "
-                "WHERE sync_type = ?",
-                (DRIVE_MIRROR_SYNC_TYPE,),
-            )
-            for last_seen, root_path in cur.fetchall():
-                path = (last_seen or "").strip() or (root_path or "").strip()
-                if path:
-                    roots.append((path, "GoogleDrive-Mirror"))
-        finally:
-            con.close()
-    except Exception:
-        return []  # fail-open: a DB hiccup must never crash the advisory guard
-    return roots
+    return [(p, "GoogleDrive-Mirror") for p in drive_mirror_root_paths(db_path)]
 
 
 def synced_roots():
