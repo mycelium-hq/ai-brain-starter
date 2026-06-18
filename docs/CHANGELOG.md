@@ -9,6 +9,19 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-06-18: removed the vertical packs (legal, finance, healthcare, creator)
+
+If you installed `vertical-finance`, `vertical-healthcare`, `vertical-legal`, or `influencer-pack`, they are no longer part of this repo. They were per-industry packs (compliance retention rules, enterprise connector specs, audit-evidence templates) that belong to the paid runtime, not the free open-source substrate. Shipping them here crossed the open-core boundary documented in `docs/adr/0001-open-core-boundary.md`.
+
+What this means for you:
+- The substrate itself (journaling, knowledge graphs, memory, ingest, the pattern) is unchanged. Nothing you use day to day is affected.
+- If you were running one of those packs, it stays on the copy you already cloned, but it will not get updates here and new installs will not include it.
+- A CI guard now fails the build if any per-vertical pack, multi-tenant connector, or audit-analytics content is added back, so this cannot recur by accident.
+
+No action needed on a normal install.
+
+---
+
 ## 2026-06-13: the install now PROVES it read your doc — before you close, not "next session"
 
 **Who this affects:** everyone running a fresh install. The setup already asks you to bring in one real doc near the end (your first activation moment). Until now it ended on a promise — "next session I'll know about it" — and you closed the tab without ever seeing it work.

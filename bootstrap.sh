@@ -28,8 +28,6 @@
 #       tdd-substrate, seo-substrate, remotion-best-practices, ingest-github, ingest-gmail,
 #       ingest-health, ingest-linear, ingest-notion, ingest-slack, ingest-whatsapp,
 #       ingest-youtube
-#     - Verticals (vertical-finance / vertical-healthcare / vertical-legal /
-#       influencer-pack) live in the repo as opt-in installs; not auto-installed.
 #     - humanizer (de-AI writing) — cloned from its own fork repo
 #     - Granola + ChatPRD MCPs
 #     - Marketplaces: obsidian-skills (kepano), enabling obsidian/context7/playwright;
