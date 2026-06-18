@@ -311,6 +311,27 @@ Slow tests get skipped by tired engineers. Fast tests get run by tired engineers
 | Mock everything | Tests the mocks, not the code | Mock at the system boundary (HTTP, DB), not internal calls |
 | Test passes because of a bug that mirrors the bug in implementation | Test and implementation share an error | Verify the failure-reason in RED step is meaningful |
 | Coverage as the goal | High coverage with weak assertions is theater | Coverage is a side effect; assertion quality is the goal |
+| Snapshot a value expected to change (model list, `_config_version`, enum count) | "Change-detector" test: fails on routine data updates, zero behavioral coverage | Assert the relationship/invariant, not the literal (see below) |
+
+### No change-detector tests (adopted 2026-06-18 from NousResearch/hermes-agent AGENTS.md)
+
+Mirror of the suite-fails-if-deleted check — the opposite failure. That kills tests that PASS-regardless (fakes); this kills tests that FAIL-regardless (brittle).
+
+A test is a **change-detector** if it fails whenever data *expected to change* gets updated — a model catalog, a `_config_version` literal, an enumeration count, a hardcoded provider/model list, a frozen prompt snapshot. No behavioral coverage; it just guarantees routine source updates break CI and cost time to "fix."
+
+Rule: **if the test reads like a snapshot of current data, delete it. If it reads like a contract about how two pieces of data must relate, keep it.**
+
+```python
+# change-detector (DELETE) — breaks on every model release / schema bump
+assert MODELS == ["claude-opus-4-8", "claude-sonnet-4-6"]
+assert config["_config_version"] == 21
+
+# invariant (KEEP) — a relationship that survives data churn
+assert len(MODELS) >= 1 and all(m in CONTEXT_LENGTHS for m in MODELS)
+assert raw["_config_version"] == DEFAULT_CONFIG["_config_version"]  # migration bumps to latest
+```
+
+Reviewers reject new change-detector tests; authors convert to invariants before re-review.
 
 ## Output format
 
