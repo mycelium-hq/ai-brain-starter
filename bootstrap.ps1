@@ -857,17 +857,10 @@ if ((Test-Path $emailMarker) -and -not $DryRun) {
 if ($env:CLAUDE_CODE_ENTRYPOINT) {
     # Running inside Claude Code (the paste-flow from the README). Claude will
     # continue with the setup interview automatically; no user action needed.
-    Write-Host ("  " + (T "Tools are ready. Claude continues with the setup interview automatically" `
-                            "Las herramientas están listas. Claude continúa con la entrevista de setup automáticamente"))
-    Write-Host ("  " + (T "from here, no commands to type and no folders to open." `
-                            "desde acá, sin comandos que tipear y sin carpetas que abrir."))
-    Write-Host ""
-    Write-Host ("  " + (T "Image generation (Nano Banana via Gemini) is the one thing that can't" `
-                            "Generación de imágenes (Nano Banana vía Gemini) es lo único que no se puede"))
-    Write-Host ("  " + (T "auto-install here. Ask Claude to turn it on when you want image" `
-                            "auto-instalar acá. Pedile a Claude que la prenda cuando quieras generar"))
-    Write-Host ("  " + (T "generation. You don't need it for the core setup." `
-                            "imágenes. No la necesitás para el setup base."))
+    Write-Host ("  " + (T "Tools are ready. Your setup interview starts now: the first question" `
+                            "Las herramientas están listas. Tu entrevista de setup arranca ahora: la primera"))
+    Write-Host ("  " + (T "is the next thing you'll see, no commands to type and no folders to open." `
+                            "pregunta es lo próximo que vas a ver, sin comandos que tipear ni carpetas que abrir."))
     Write-Host ""
 } else {
     # Running standalone (irm-to-iex from PowerShell). Guide the user into the

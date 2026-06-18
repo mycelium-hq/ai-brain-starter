@@ -1,30 +1,32 @@
 #!/usr/bin/env bash
-# Regression test: onboarding install-handoff discipline (MYC-1187).
+# Regression test: onboarding install-handoff discipline (MYC-1187 + MYC-1190).
 #
-# Three onboarding warts a real install report (2026-06-18) surfaced, each
-# guarded here against silent regression:
+# Guards four onboarding warts real install reports surfaced, against silent
+# regression:
 #
-#   1. WRONG-SURFACE ESCAPE. When the installing assistant cannot run local
-#      commands (web chat / read-only / no shell+file tools) it must NOT
-#      improvise "leave this session, cd ~/.claude/skills/... && claude, then
-#      run /setup-brain". The canonical handoff is: continue Phase 1 in THIS
-#      session, or — if the surface truly cannot run it — route the user to the
-#      Claude Code desktop app + the README install prompt. The assistant guide
-#      (README) and SKILL.md must both carry this. (Promotes the MYC-419
-#      deferred "wrong-surface guidance" item; per agent-onboarding-doc-discipline.)
+#   1. WRONG-SURFACE ESCAPE (MYC-1187). When the installing assistant cannot run
+#      local commands (web chat / read-only / no shell+file tools) it must NOT
+#      improvise "leave this session, cd ... && claude, run /setup-brain". It
+#      continues Phase 1 in THIS session, or routes the user to the Claude Code
+#      desktop app + the README install prompt. README assistant guide + SKILL.md
+#      both carry the escape.
 #
-#   2. NO NANO-BANANA / GEMINI NUDGE in the bootstrap "Install complete"
-#      message. Image generation is an on-demand extra most installers never
-#      use; the proactive "set up a Gemini API key" nudge is noise at first
-#      run. The nano-banana SKILL stays synced + discoverable (so /nano-banana
-#      still works on request) — only the end-message nudge is removed.
+#   2. NO NANO-BANANA / GEMINI NUDGE (MYC-1187) in the bootstrap "Install complete"
+#      message, on BOTH bootstrap.sh AND bootstrap.ps1 (the Windows path was missed
+#      by the first fix). The nano-banana SKILL stays synced + discoverable; only
+#      the proactive end-message nudge is removed.
 #
-#   3. CORRECT claude-seo MARKETPLACE SLUG. Upstream marketplace.json declares
-#      name=agricidaniel-claude-seo; the stale slug agricidaniel-seo 404s for
-#      every installer (the "FAIL: 1" in the install summary).
+#   3. CORRECT claude-seo MARKETPLACE SLUG (MYC-1187): agricidaniel-claude-seo,
+#      never the stale agricidaniel-seo (which 404s for every installer).
 #
-# Ships with a built-in negative control (--selftest, also run unconditionally
-# at the end): mutated fixtures MUST trip the checks, else the guard is dead.
+#   4. INTERVIEW AUTO-RUNS AFTER INSTALL (MYC-1190). The install is step one of
+#      two; the assistant must flow straight into Phase 1 in the same turn, not
+#      stop at "install complete" and wait for the user to ask. The README Step-2
+#      paste prompt itself demands the interview; assistant-guide step 3 forces the
+#      same-turn continuation; SKILL.md bans the stop-after-install pattern.
+#
+# Ships with a built-in negative control: mutated fixtures MUST trip the checks,
+# else the guard is dead.
 #
 # Self-contained. Exit 0 = pass. Exit 1 = fail with details.
 
@@ -38,6 +40,7 @@ run_checks() {
   local README="$root/README.md"
   local SKILL="$root/SKILL.md"
   local BOOT="$root/bootstrap.sh"
+  local BOOTPS="$root/bootstrap.ps1"
   local POWER="$root/docs/POWER_TOOLS.md"
   CHECK_FAILS=0
 
@@ -59,14 +62,18 @@ run_checks() {
     "Continue the setup interview in THIS session"
   _has "$README" "README forbids the new-session bounce" \
     "start a new session and run"
-  _has "$SKILL" "SKILL.md banned-pattern row (continue here)" \
+  _has "$SKILL" "SKILL.md wrong-surface row (continue here)" \
     "Continue Phase 1 HERE"
 
-  # 2. Nano-banana / Gemini nudge gone from the bootstrap end-message (EN + ES)...
-  _lacks "$BOOT" "bootstrap EN nano-banana/gemini nudge" \
+  # 2. Nano-banana / Gemini nudge gone from BOTH installers' end-message (EN + ES)...
+  _lacks "$BOOT" "bootstrap.sh EN nano-banana/gemini nudge" \
     "Image generation (Nano Banana, via Gemini)"
-  _lacks "$BOOT" "bootstrap ES nano-banana/gemini nudge" \
+  _lacks "$BOOT" "bootstrap.sh ES nano-banana/gemini nudge" \
     "Generación de imágenes (Nano Banana"
+  _lacks "$BOOTPS" "bootstrap.ps1 EN nano-banana/gemini nudge" \
+    "Nano Banana via Gemini"
+  _lacks "$BOOTPS" "bootstrap.ps1 ES nano-banana/gemini nudge" \
+    "Nano Banana vía Gemini"
   #    ...but the nano-banana SKILL stays synced + discoverable.
   _has "$BOOT" "nano-banana skill still synced (discoverable)" \
     "nano-banana"
@@ -80,14 +87,26 @@ run_checks() {
     "claude-seo@agricidaniel-claude-seo"
   _lacks "$POWER" "POWER_TOOLS stale claude-seo slug" \
     "@agricidaniel-seo"
+
+  # 4. Interview AUTO-RUNS after install — the handoff forces same-turn continuation.
+  _has "$README" "README Step-2 prompt demands the interview (EN)" \
+    "run the full setup interview without stopping"
+  _has "$README" "README Step-2 prompt demands the interview (ES)" \
+    "corré la entrevista de setup completa sin parar"
+  _has "$README" "README step 3 forces continuation (step one of two)" \
+    "step one of two"
+  _has "$README" "README step 3 names the immediate next action" \
+    "your very next message to the user is the Phase 1 language question"
+  _has "$SKILL" "SKILL.md bans stop-after-install" \
+    "The install is step one; the interview is the rest"
 }
 
 # ── Real check against the repo ───────────────────────────────────────────────
-echo "==> onboarding handoff: wrong-surface escape + no nano-banana nudge + claude-seo slug"
+echo "==> onboarding handoff: wrong-surface escape + no nano-banana nudge + claude-seo slug + auto-run"
 run_checks "$REPO_ROOT"
 if [ "${CHECK_FAILS:-0}" -gt 0 ]; then
   echo "" >&2
-  echo "$CHECK_FAILS onboarding check(s) failed. See ⚙️ agent-onboarding-doc-discipline (MYC-1187)." >&2
+  echo "$CHECK_FAILS onboarding check(s) failed. See ⚙️ agent-onboarding-doc-discipline (MYC-1187 / MYC-1190)." >&2
   exit 1
 fi
 
@@ -97,16 +116,25 @@ fi
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/docs"
-# README: drop the in-session handoff directive line.
-grep -vF "Continue the setup interview in THIS session" "$REPO_ROOT/README.md" > "$TMP/README.md" || true
-# SKILL.md: drop the banned-pattern row.
-grep -vF "Continue Phase 1 HERE" "$REPO_ROOT/SKILL.md" > "$TMP/SKILL.md" || true
+# README: drop the wrong-surface directive, the auto-run forcing line, and the
+# strengthened Step-2 prompt line.
+grep -vF "Continue the setup interview in THIS session" "$REPO_ROOT/README.md" \
+  | grep -vF "step one of two" \
+  | grep -vF "run the full setup interview without stopping" > "$TMP/README.md" || true
+# SKILL.md: drop the wrong-surface row and the stop-after-install row.
+grep -vF "Continue Phase 1 HERE" "$REPO_ROOT/SKILL.md" \
+  | grep -vF "The install is step one; the interview is the rest" > "$TMP/SKILL.md" || true
 # bootstrap.sh: reintroduce the nano-banana nudge AND the stale claude-seo slug.
 {
   cat "$REPO_ROOT/bootstrap.sh"
   printf '\n  Image generation (Nano Banana, via Gemini) is the one thing that cannot auto-install.\n'
   printf 'install_plugin "AgriciDaniel/claude-seo" "claude-seo@agricidaniel-seo"\n'
 } > "$TMP/bootstrap.sh"
+# bootstrap.ps1: reintroduce the nano-banana nudge.
+{
+  cat "$REPO_ROOT/bootstrap.ps1"
+  printf '\nWrite-Host "Image generation (Nano Banana via Gemini) is the one thing."\n'
+} > "$TMP/bootstrap.ps1"
 # POWER_TOOLS unmutated (proves it is not a false-positive source).
 cp "$REPO_ROOT/docs/POWER_TOOLS.md" "$TMP/docs/POWER_TOOLS.md"
 
@@ -117,4 +145,4 @@ if [ "${CHECK_FAILS:-0}" -eq 0 ]; then
 fi
 echo "  negative control: mutated fixtures tripped $CHECK_FAILS check(s) — guard is live."
 
-echo "PASS: wrong-surface escape present (README + SKILL.md); nano-banana/Gemini nudge absent from the bootstrap end-message (EN + ES) while the nano-banana skill stays synced; claude-seo slug = agricidaniel-claude-seo (bootstrap.sh + POWER_TOOLS.md)."
+echo "PASS: wrong-surface escape (README + SKILL.md); nano-banana/Gemini nudge absent from bootstrap.sh AND bootstrap.ps1 (EN + ES) with the skill still synced; claude-seo slug = agricidaniel-claude-seo; interview auto-run forced (Step-2 prompt EN+ES, README step 3, SKILL.md stop-after-install ban)."

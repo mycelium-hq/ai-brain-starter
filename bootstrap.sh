@@ -1807,9 +1807,9 @@ if [[ -n "${CLAUDE_CODE_ENTRYPOINT:-}" ]]; then
 
 ━━━ Instalación completa ━━━
 
-  Las herramientas están listas. Claude continúa con la entrevista de setup
-  automáticamente desde acá. Sin comandos que tipear, sin carpetas que abrir,
-  sin terminal que tocar.
+  Las herramientas están listas. Tu entrevista de setup arranca ahora: la
+  primera pregunta es lo próximo que vas a ver. Sin comandos que tipear,
+  sin carpetas que abrir.
 
   ⌘↩ vs tipear: cuando veas un cuadro gris de aprobación de herramienta,
   presioná ⌘↩ (Mac) o Ctrl+Enter (Windows). Cuando Claude te haga una pregunta,
@@ -1828,8 +1828,8 @@ EOF
 
 ━━━ Install complete ━━━
 
-  Tools are ready. Claude continues with the setup interview automatically
-  from here. No commands to type, no folders to open, no terminal to touch.
+  Tools are ready. Your setup interview starts now: the first question is
+  the next thing you'll see. No commands to type, no folders to open.
 
   ⌘↩ vs typing: when you see a gray tool-approval box, press ⌘↩ (Mac) or
   Ctrl+Enter (Windows). When Claude asks you a question, just type your
