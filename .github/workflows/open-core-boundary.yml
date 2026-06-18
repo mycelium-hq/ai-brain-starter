@@ -1,0 +1,24 @@
+name: open-core-boundary
+#
+# Fails any PR/push that adds paid-runtime content (per-vertical packs, multi-tenant
+# connectors, audit analytics) to the public substrate. Enforces docs/adr/0001.
+#
+# Repo-native guard (NOT auto-managed by gh-harden-repos.sh). The logic lives in
+# scripts/check-open-core-boundary.sh so the identical check runs locally pre-push.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
+      - name: Check open-core boundary (ADR-0001)
+        run: bash scripts/check-open-core-boundary.sh

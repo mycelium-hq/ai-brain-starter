@@ -71,13 +71,9 @@ Each writes queryable markdown into the vault and is idempotent: re-running on t
 - **tdd-substrate** — test-driven development substrate for solo and small-team builds: iron-law red-green-refactor with dual-runtime examples.
 - **modern-python-substrate** — modern Python toolchain: uv, ruff, ty, pytest, a src layout, pyproject.toml as the single source of truth.
 
-## Teams and vertical packs
+## Teams
 
 - **for-my-team** — walks you through what changes when a personal vault becomes a team vault.
-- **vertical-finance** — pre-configured finance vertical pack: typed-memory categories for deals, retention defaults, connector configs.
-- **vertical-healthcare** — pre-configured healthcare vertical pack: typed-memory categories for patient-adjacent work, compliant retention defaults.
-- **vertical-legal** — pre-configured legal vertical pack: matter management, privilege handling, retention aligned to bar rules.
-- **influencer-pack** — pre-configured creator-economy vertical pack: audience, DMs, content, collabs, and creator-revenue categories.
 
 ## Consulting lead generation
 
