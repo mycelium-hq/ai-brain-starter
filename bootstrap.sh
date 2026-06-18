@@ -1405,7 +1405,7 @@ if [[ "${SKIP_VENDOR_SKILLS:-0}" != "1" ]]; then
   # local SEO, GA4, PDF reports. Heavier than seo-substrate (which is the lean
   # version cherry-picked from this bundle). Both can coexist; users pick which
   # invocation pattern fits their site.
-  install_plugin "AgriciDaniel/claude-seo" "claude-seo@agricidaniel-seo"
+  install_plugin "AgriciDaniel/claude-seo" "claude-seo@agricidaniel-claude-seo"
 
   # obra/superpowers (MIT, Jesse Vincent). Engineering-discipline skills:
   # TDD, worktrees, brainstorming, root-cause-tracing, systematic-debugging,
@@ -1822,11 +1822,6 @@ if [[ -n "${CLAUDE_CODE_ENTRYPOINT:-}" ]]; then
        "Optimizá esto para mi empresa."
        "¿Cómo se ve la versión de equipo?"
 
-  Generación de imágenes (Nano Banana, vía Gemini) es lo único que no se
-  puede auto-instalar acá. Necesita comandos /plugin dentro de Claude Code
-  y una API key de Gemini en https://ai.google.dev/. Pedile a Claude que la
-  prenda cuando quieras generar imágenes; no la necesitás para el setup base.
-
 EOF
   else
     cat <<'EOF'
@@ -1846,11 +1841,6 @@ EOF
        "How do I add my team to this without mixing in my personal stuff?"
        "Optimize this for my company."
        "What does the team version look like?"
-
-  Image generation (Nano Banana, via Gemini) is the one thing that can't
-  auto-install here. It needs /plugin commands inside Claude Code and a
-  Gemini API key from https://ai.google.dev/. Ask Claude to turn it on when
-  you actually want image generation; you don't need it for the core setup.
 
 EOF
   fi

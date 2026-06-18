@@ -218,7 +218,7 @@ The substrate ships memory, voice, vault, and session lifecycle. These vendor-pu
 
 **Why install:** 25 sub-skills + 18 sub-agents covering technical SEO, on-page analysis, content quality (E-E-A-T), content briefs, schema markup, image optimization, sitemap architecture, AI search optimization (GEO, the post-LLM successor to SEO), local SEO, semantic topic clustering, search experience optimization (SXO), SEO drift monitoring, e-commerce SEO, international SEO with cultural profiles, Google SEO APIs (Search Console, PageSpeed, CrUX, GA4), and PDF report generation. Required for any consulting practice or public site that needs to be findable.
 
-**Install:** automatic via `bootstrap.sh`. Manual: `claude plugin marketplace add AgriciDaniel/claude-seo && claude plugin install claude-seo@agricidaniel-seo`.
+**Install:** automatic via `bootstrap.sh`. Manual: `claude plugin marketplace add AgriciDaniel/claude-seo && claude plugin install claude-seo@agricidaniel-claude-seo`.
 
 ### yusufkaraaslan/Skill_Seekers — CLI tool that auto-converts docs sites into skills
 

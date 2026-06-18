@@ -105,6 +105,7 @@ INTEGRATION_TESTS=(
   test_stranded_session_artifacts_watchdog
   test_session_coordination_guards
   test_trust_prompt_preframing
+  test_onboarding_wrong_surface_and_nudge
   test_post_update_email_ask
   test_installer_retires_email_gate
   test_bootstrap_omits_vault_hooks
