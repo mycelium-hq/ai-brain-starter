@@ -48,6 +48,14 @@ Environment variables (all optional):
   CLOSING_SIGNAL_DEBUG — set to 1 for stderr trace
   ANTHROPIC_API_KEY — required only if CLOSING_SIGNAL_DETECTION=hybrid
 
+User config (CLAUDE.md at the resolved vault root, all optional):
+  closingSignals.custom: ["...", ...]   — ADD literal phrases that always fire
+                                          (highest-authority positive tier).
+  closingSignals.suppress: ["...", ...] — SUBTRACT literal phrases that never
+                                          fire, even if a pack matches.
+  closingSignals.customOnly: true       — fire ONLY on `custom`; skip the shared
+                                          packs entirely (deliberate-close-only).
+
 Output marker file:
   ~/.claude/.closing-signal-{session_id}.json
   Contains: timestamp, matched signal, language, confidence, pre-resolved paths
@@ -144,6 +152,26 @@ def load_language_packs(langs: list[str]) -> dict:
     return merged
 
 
+def _extract_quoted_phrases(raw: str) -> list[str]:
+    r"""Extract phrases from an inline array like ["a", "b's done", 'c'].
+
+    Handles BOTH double- and single-quoted entries and, crucially, allows an
+    apostrophe INSIDE a double-quoted entry ("i'm done", "that's all"). The
+    previous extractor (``[\"']([^\"']+)[\"']``) treated every quote char as a
+    delimiter, so it fragmented on an inner apostrophe — silently corrupting
+    any phrase containing one (e.g. "let's close this session" became the stray
+    token "let", which then matched "let me" everywhere, and "i'm done" became
+    "i", which matched the "i" in "this"). Returns each phrase re.escaped for
+    literal substring matching.
+    """
+    items: list[str] = []
+    for dq, sq in re.findall(r'"([^"]*)"|\'([^\']*)\'', raw):
+        phrase = (dq or sq).strip()
+        if phrase:
+            items.append(re.escape(phrase))
+    return items
+
+
 def load_user_custom_signals(vault_root: Path) -> list[str]:
     """Read user's CLAUDE.md for closingSignals.custom: [...]."""
     claude_md = vault_root / "CLAUDE.md"
@@ -161,11 +189,67 @@ def load_user_custom_signals(vault_root: Path) -> list[str]:
     )
     if not match:
         return []
-    raw = match.group(1)
-    items = []
-    for piece in re.findall(r"[\"']([^\"']+)[\"']", raw):
-        items.append(re.escape(piece.strip()))
-    return items
+    return _extract_quoted_phrases(match.group(1))
+
+
+def load_user_suppress_signals(vault_root: Path) -> list[str]:
+    """Read user's CLAUDE.md for closingSignals.suppress: [...].
+
+    SUBTRACTIVE counterpart to closingSignals.custom. Each entry is a literal
+    phrase that must NEVER fire a close for this user — even when a shared
+    language pack would otherwise match it. Checked right after strict_guards
+    (so it overrides both custom and the packs). This lets a user narrow the
+    shared default ("i'm done" / "good night" stop closing *for them*) without
+    weakening the public pack for everyone. Opt-in: an absent key yields an
+    empty list, so default behavior is byte-identical to before.
+    """
+    claude_md = vault_root / "CLAUDE.md"
+    if not claude_md.is_file():
+        return []
+    try:
+        text = claude_md.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    match = re.search(
+        r"closingSignals\.suppress\s*[:=]\s*\[([^\]]*)\]",
+        text,
+        re.IGNORECASE,
+    )
+    if not match:
+        return []
+    return _extract_quoted_phrases(match.group(1))
+
+
+def load_user_custom_only(vault_root: Path) -> bool:
+    """Read user's CLAUDE.md for closingSignals.customOnly: true|false.
+
+    When true, ONLY the user's closingSignals.custom patterns participate in
+    positive detection — the shared en/es/pt language-pack tiers are skipped
+    entirely. The always-on negative tiers (strict_guards, suppress) still
+    apply. This is the "deliberate close only" mode: natural sign-offs (bye /
+    good night / i'm done / ya está / thanks that's all) no longer fire for
+    this user; only their explicit custom phrases do. Opt-in: absent or false
+    leaves the shared packs participating exactly as before.
+
+    Footgun: customOnly true with an EMPTY closingSignals.custom list means
+    nothing fires at all (only-my-zero-phrases). Pair it with a populated
+    custom list.
+    """
+    claude_md = vault_root / "CLAUDE.md"
+    if not claude_md.is_file():
+        return False
+    try:
+        text = claude_md.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    match = re.search(
+        r"closingSignals\.customOnly\s*[:=]\s*(true|false|yes|no|on|off|1|0)",
+        text,
+        re.IGNORECASE,
+    )
+    if not match:
+        return False
+    return match.group(1).lower() in ("true", "yes", "on", "1")
 
 
 def is_false_positive(prompt: str, guards: list) -> bool:
@@ -186,10 +270,23 @@ def is_false_positive(prompt: str, guards: list) -> bool:
     return False
 
 
-def classify_signal(prompt: str, packs: dict, custom: list[str]) -> tuple[str | None, str | None]:
+def classify_signal(
+    prompt: str,
+    packs: dict,
+    custom: list[str],
+    suppress: list[str] | None = None,
+    custom_only: bool = False,
+) -> tuple[str | None, str | None]:
     """Return (confidence, matched_pattern) or (None, None) if no match.
 
     Confidence levels: explicit > high > ambiguous > emoji.
+
+    Negative tiers (both default off, so behavior is unchanged when unset):
+      suppress    — literal phrases that NEVER fire for this user; overrides
+                    custom + packs. From closingSignals.suppress in CLAUDE.md.
+      custom_only — when True, only `custom` participates as a positive tier;
+                    the shared en/es/pt pack tiers are skipped. From
+                    closingSignals.customOnly in CLAUDE.md.
     """
     if not prompt or not prompt.strip():
         return (None, None)
@@ -214,6 +311,14 @@ def classify_signal(prompt: str, packs: dict, custom: list[str]) -> tuple[str | 
         log_debug("strict guard matched, suppressing ALL tiers")
         return (None, None)
 
+    # SUPPRESS (personal, subtractive): phrases the user has declared are
+    # NEVER a close for them. Checked right after strict_guards — before
+    # custom and the shared packs — so it overrides every positive tier.
+    # Opt-in via closingSignals.suppress; empty by default (no-op).
+    if suppress and is_false_positive(text, suppress):
+        log_debug("user suppress phrase matched, suppressing ALL tiers")
+        return (None, None)
+
     # User custom patterns are highest authority — always win, FP guard skipped
     for pattern in custom:
         try:
@@ -221,6 +326,15 @@ def classify_signal(prompt: str, packs: dict, custom: list[str]) -> tuple[str | 
                 return ("explicit", pattern)
         except re.error:
             continue
+
+    # customOnly (personal): the user opted into deliberate-close-only mode.
+    # Do NOT fall through to the shared language-pack tiers — only their custom
+    # phrases (checked just above) plus the always-on negative tiers
+    # (strict_guards, suppress) participate. Natural sign-offs no longer fire.
+    # Opt-in via closingSignals.customOnly; default false (no-op).
+    if custom_only:
+        log_debug("customOnly set and no custom match — skipping shared pack tiers")
+        return (None, None)
 
     # Strong tiers (explicit, high_confidence) override FP guards
     for level in ("explicit", "high_confidence"):
@@ -788,8 +902,12 @@ def main() -> int:
         ]
         packs = load_language_packs(langs)
         custom = load_user_custom_signals(vault_root)
+        suppress = load_user_suppress_signals(vault_root)
+        custom_only = load_user_custom_only(vault_root)
 
-        confidence, matched = classify_signal(prompt, packs, custom)
+        confidence, matched = classify_signal(
+            prompt, packs, custom, suppress, custom_only
+        )
 
         # Hybrid: ambiguous matches OR no match get a Haiku second look
         if confidence in (None, "ambiguous"):
