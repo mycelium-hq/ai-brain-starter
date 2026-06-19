@@ -1,6 +1,6 @@
 {
   "language": "en",
-  "_comment": "English closing signals. Patterns are Python regex with case-insensitive matching. The hook compiles them with re.IGNORECASE | re.MULTILINE. Add to 'custom' in CLAUDE.md frontmatter to extend per-user.",
+  "_comment": "English closing signals. Patterns are Python regex with case-insensitive matching. The hook compiles them with re.IGNORECASE | re.MULTILINE. Per-user tuning in CLAUDE.md: 'closingSignals.custom' ADDS always-fire phrases; 'closingSignals.suppress' SUBTRACTS never-fire phrases (overrides packs); 'closingSignals.customOnly: true' fires ONLY on custom and skips these shared tiers (deliberate-close-only).",
 
   "explicit": [
     "^/(close|wrap-?up|bye|done|finish)\\b",
@@ -121,6 +121,22 @@
     {
       "_comment": "Prompt is clearly a question / request about closing behavior rather than a sign-off itself (auto archiv|keep firing|keep creating|keep writing).",
       "pattern": "\\b(auto[\\s-]?archiv|keep\\s+firing|keep\\s+creating|keep\\s+writing|over[\\s-]?firing|over[\\s-]?triggering|spurious|false[\\s-]?positive|extra\\s+stubs?|empty\\s+stubs?)\\b"
+    },
+    {
+      "_comment": "Meta-DEFINITION: a close-signal NOUN PHRASE ('session close', 'close signal', 'closing cascade') immediately tied to is/isn't/means/counts-as/should — the user is DEFINING what counts as a close, not issuing one ('session close isn't ...', 'the close signal means ...'). Codified 2026-06-19 (MYC-1266) after a definitional message containing the literal custom phrase fired the explicit tier. Tight noun+verb adjacency so a genuine imperative close ('lets close this session', 'start closing cascade') is NOT suppressed.",
+      "pattern": "\\b(session\\s+close|close\\s+signal|closing\\s+signal|closing\\s+cascade|close\\s+trigger|close\\s+phrase)\\b.{0,40}\\b(is\\s?n'?t|are\\s?n'?t|is\\s+not|means?|counts?\\s+as|should|shouldn'?t|do\\s?n'?t)\\b"
+    },
+    {
+      "_comment": "Meta-DEFINITION: 'isn't / is not / don't (count) ... a close|closing signal|trigger|phrase|command' — describing what is or isn't a close trigger. Requires the explicit 'close/closing <signal-word>' phrase so 'this isn't working, end the session' (a genuine close) is NOT caught.",
+      "pattern": "\\b(is\\s?n'?t|are\\s?n'?t|is\\s+not|are\\s+not|do\\s?n'?t|does\\s?n'?t)\\b.{0,40}\\b(a\\s+|the\\s+|my\\s+)?(close|closing|session[\\s-]?close)\\s*(signal|trigger|phrase|command|cascade|word)\\b"
+    },
+    {
+      "_comment": "Meta-ENUMERATION: 'anything other than ...' / 'the only close|closing|valid|way|phrase|trigger|thing ...' near a close/session/cascade word — listing the ONLY valid triggers, not issuing one ('anything other than \"close this session\"'). A genuine close never says 'anything other than'.",
+      "pattern": "\\b(anything\\s+other\\s+than|other\\s+than|the\\s+only\\s+(close|closing|valid|way|phrase|trigger|thing))\\b.{0,120}\\b(close|closing|cascade|session)\\b"
+    },
+    {
+      "_comment": "Meta-QUESTION about a close word — 'what does ttyl mean?', 'how do I say bye?', 'what's an example of a sign-off?'. Asking ABOUT a close phrase is referenced content, never a close itself. Promoted to strict because the weak-tier meta-question FP guard does NOT override a high_confidence match on the bare close word. MYC-1266 (same family as the definitional guards above).",
+      "pattern": "\\b(what|how|why|when|where|who|define|defines|explain|mean[s]?|spell[s]?|example\\s+of|stand[s]?\\s+for)\\b.{0,40}\\b(bye|ttyl|cya|gn|good\\s*night|wrapping|signing\\s+off|sign[\\s-]?off|close\\s+(this|the|out|up)\\s+session|closing\\s+cascade)\\b"
     }
   ]
 }

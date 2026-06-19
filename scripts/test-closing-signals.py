@@ -126,12 +126,78 @@ FIXTURES: list[tuple[str, str, str | None]] = [
     ("neg-ok-now", "ok now I want to refactor", None),
     ("neg-bueno-entonces", "bueno, entonces sigamos", None),
     ("neg-beleza-agora", "beleza, agora vamos para o próximo", None),
+
+    # === Meta-definition of close signals — MUST NOT fire (MYC-1266) ===
+    # The message DEFINES/lists close phrases and contains the literal phrase
+    # "lets close this session" as an EXAMPLE. Without the definitional
+    # strict_guard this matches high_confidence; with it, suppressed.
+    ("neg-definitional-convention",
+     "session close isn't i'm done or ya esta or anything other than "
+     "lets close this session or start closing cascade", None),
+    ("neg-isnt-a-close-signal", "'good night' isn't a close signal for me", None),
+    ("neg-only-these-trigger",
+     "the only phrases that close the session are 'close this session' "
+     "and 'start closing cascade'", None),
+    ("neg-other-than-close",
+     'anything other than "close this session" should not trigger it', None),
 ]
 
 
-def run_detector(prompt: str) -> dict:
-    """Pipe prompt through the detector hook, return parsed JSON."""
+# === Config-dependent fixtures (MYC-1266): (id, prompt, expected, claude_md) ===
+# Seed a CLAUDE.md with per-user closingSignals.* keys to exercise the
+# customOnly + suppress tiers. _CUSTOM_ONLY_MD = deliberate-close-only;
+# _SUPPRESS_MD = subtract a few phrases while the shared packs still fire.
+_CUSTOM_ONLY_MD = (
+    'closingSignals.custom: ["close this session", "lets close this session", '
+    '"start closing cascade"]\n'
+    "closingSignals.customOnly: true\n"
+)
+_SUPPRESS_MD = (
+    "closingSignals.suppress: [\"i'm done\", \"ya está\", \"good night\"]\n"
+)
+
+CONFIG_FIXTURES: list[tuple[str, str, str | None, str]] = [
+    # customOnly: only the explicit custom phrases fire; natural sign-offs off.
+    ("co-start-cascade", "start closing cascade", "explicit", _CUSTOM_ONLY_MD),
+    ("co-close-session", "close this session", "explicit", _CUSTOM_ONLY_MD),
+    ("co-lets-close", "lets close this session", "explicit", _CUSTOM_ONLY_MD),
+    ("co-bye-off", "bye", None, _CUSTOM_ONLY_MD),
+    ("co-good-night-off", "good night", None, _CUSTOM_ONLY_MD),
+    ("co-im-done-off", "i'm done", None, _CUSTOM_ONLY_MD),
+    ("co-thanks-off", "thanks, that's all", None, _CUSTOM_ONLY_MD),
+    ("co-ya-esta-off", "ya está", None, _CUSTOM_ONLY_MD),
+    ("co-ttyl-off", "ttyl", None, _CUSTOM_ONLY_MD),
+    # definitional message must NOT fire even though it contains the literal
+    # custom phrase "lets close this session" (strict_guard beats custom).
+    ("co-definitional-off",
+     "session close isn't i'm done or ya esta or anything other than "
+     "lets close this session or start closing cascade", None, _CUSTOM_ONLY_MD),
+
+    # suppress (customOnly off): named phrases never fire; others still do.
+    ("sup-im-done-off", "i'm done", None, _SUPPRESS_MD),
+    ("sup-ya-esta-off", "ya está", None, _SUPPRESS_MD),
+    ("sup-good-night-off", "good night", None, _SUPPRESS_MD),
+    ("sup-bye-still-fires", "bye", "high_confidence", _SUPPRESS_MD),
+    ("sup-close-session-still-fires", "close this session", "high_confidence", _SUPPRESS_MD),
+]
+
+
+def run_detector(prompt: str, claude_md: str | None = None) -> dict:
+    """Pipe prompt through the detector hook, return parsed JSON.
+
+    When claude_md is provided, it is written to a CLAUDE.md at the temp vault
+    root so the per-user keys (closingSignals.custom / .suppress / .customOnly)
+    are exercised. VAULT_ROOT is pinned to the temp dir so the test is hermetic
+    and never reads the developer's real vault CLAUDE.md.
+    """
     with tempfile.TemporaryDirectory() as tmp:
+        if claude_md is not None:
+            (Path(tmp) / "CLAUDE.md").write_text(claude_md, encoding="utf-8")
+        # The detector skips the cascade (passthrough) unless a Meta/ dir
+        # exists to write artifacts into (verify_meta_dir). Create one so the
+        # test is hermetic and self-contained — it must NOT depend on an
+        # inherited VAULT_ROOT pointing at a real vault (CI has none).
+        (Path(tmp) / "Meta").mkdir(exist_ok=True)
         hook_input = json.dumps({
             "prompt": prompt,
             "session_id": "test-harness",
@@ -139,6 +205,7 @@ def run_detector(prompt: str) -> dict:
         })
         env = {**os.environ}
         env["CLOSING_SIGNAL_DETECTION"] = "regex"  # never call Haiku in tests
+        env["VAULT_ROOT"] = tmp  # hermetic: read THIS tmp's CLAUDE.md, not the dev box's
         env.pop("ANTHROPIC_API_KEY", None)
         try:
             proc = subprocess.run(
@@ -183,10 +250,14 @@ def main() -> int:
         print(f"FAIL: detector not found at {DETECTOR}")
         return 1
 
-    fixtures = FIXTURES
+    # Unify default fixtures (no CLAUDE.md) with config-dependent fixtures.
+    all_fixtures: list[tuple[str, str, str | None, str | None]] = (
+        [(fid, prompt, expected, None) for fid, prompt, expected in FIXTURES]
+        + list(CONFIG_FIXTURES)
+    )
     if args.fixture:
-        fixtures = [f for f in FIXTURES if f[0] == args.fixture]
-        if not fixtures:
+        all_fixtures = [f for f in all_fixtures if f[0] == args.fixture]
+        if not all_fixtures:
             print(f"FAIL: fixture not found: {args.fixture}")
             return 1
 
@@ -194,8 +265,8 @@ def main() -> int:
     failed = 0
     failures = []
 
-    for fid, prompt, expected in fixtures:
-        result = run_detector(prompt)
+    for fid, prompt, expected, claude_md in all_fixtures:
+        result = run_detector(prompt, claude_md)
         actual = detected_confidence(result)
         ok = actual == expected
         if args.verbose or not ok:
