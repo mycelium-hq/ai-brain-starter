@@ -297,7 +297,7 @@ El bootstrap es idempotente — al re-correrlo después de un `git pull` instala
 
 Tu vault queda vivo apenas termina el instalador. La primera semana, lo que importa es el hábito: corré `/journal` cada noche, corré `/second-brain-mapping` cuando tus notas estén adentro, y preguntá "¿qué pensaría el panel?" antes de cualquier decisión importante. Para el día ocho vas a sentir para qué sirve el cerebro.
 
-El recorrido: [Tu primera semana con tu segundo cerebro](https://perspectivasblog.substack.com/p/tu-primera-semana-con-tu-segundo). Vale leerlo la noche que instalás.
+El recorrido: [Tu primera semana con tu segundo cerebro](https://perspectivasblog.substack.com/p/tu-primera-semana-con-tu-segundo?utm_source=ai-brain-starter&utm_medium=readme&utm_campaign=first-week). Vale leerlo la noche que instalás.
 
 ### Qué es gratis, y qué agrega Mycelium
 
@@ -311,7 +311,7 @@ Todo lo de arriba es gratis, MIT, y tuyo. El vault vive en tu disco y la intelig
 
 Your vault is live the moment the installer finishes. For the first week, the habit is what matters: run `/journal` each night, run `/second-brain-mapping` once your notes are in, and ask "what would the panel think?" before any real decision. By day eight you feel what the brain is for.
 
-The walkthrough: [Your First Week With Your Second Brain](https://adelaidadiazroa.substack.com/p/your-first-week-with-your-second). Worth reading the night you install.
+The walkthrough: [Your First Week With Your Second Brain](https://adelaidadiazroa.substack.com/p/your-first-week-with-your-second?utm_source=ai-brain-starter&utm_medium=readme&utm_campaign=first-week). Worth reading the night you install.
 
 ### Joining an existing team vault
 
