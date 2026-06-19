@@ -28,13 +28,24 @@ drifts. This is the same `ARTIFACT-WITHOUT-MEASUREMENT` class as token economics
 It is a measure-and-warn ratchet, not a framework: fail-open (never crash-blocks a
 session start), frequency-capped (warns at most once/day), silent when healthy.
 
+**Scope safety.** The floor must reflect a real project session, not whatever
+directory the command happened to run in. The discovery walks up from the cwd to
+find the project's `CLAUDE.md` / `MEMORY.md` / `CONTEXT.md`; run from a non-project
+directory (e.g. a bare home dir) it sees *only* the global kernel. To stop that from
+recording a global-only floor that masks real drift, a baseline is written **only
+from a project-anchored discovery**: `--accept` from a non-project directory refuses
+(nonzero exit), the SessionStart ratchet just skips, and the baseline records its
+file-*kind* set so a later, narrower discovery never silently ratchets the floor down.
+
 ## Using it
 
 ```bash
 # See the table any time:
 python3 ~/.claude/hooks/context-budget-measure.py --report
 
-# Acknowledge an intentional growth as the new baseline floor:
+# Acknowledge an intentional growth as the new baseline floor.
+# Run this from your PROJECT ROOT — from a non-project directory it refuses
+# (it would otherwise record a global-only floor and mask real drift).
 python3 ~/.claude/hooks/context-budget-measure.py --accept
 
 # Prove it fires/stays-silent correctly (positive + negative control):
