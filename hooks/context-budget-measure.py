@@ -81,6 +81,23 @@ HOME = Path.home()
 BASELINE_PATH = HOME / ".claude" / ".context-budget-baseline.json"
 LASTWARN_PATH = HOME / ".claude" / ".context-budget-last-warn"
 
+HOOK_NAME = "context-budget-measure"
+
+# Guard-fleet telemetry: emit ONE fire per run so fleet telemetry can tell this
+# guard is ALIVE, not silently dead. The drift/ratchet half of this very guard
+# was silently dead before the scope fix — and a guard whose healthy path is
+# silent reads as UNINSTRUMENTED ("cannot conclude dead"). Logging every run
+# (incl. the healthy ratchet) moves it to FIRING, so a future silent-death shows
+# up as a fire-count drop instead of going unnoticed. Fail-open: any install
+# without the telemetry lib (e.g. a public install) degrades to a no-op; the
+# emit must never raise or change the guard's behavior.
+try:
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "_lib"))
+    from guard_telemetry import log_fire
+except Exception:
+    def log_fire(*_a, **_k):
+        return
+
 
 def noop():
     print(json.dumps({"continue": True, "suppressOutput": True}))
@@ -334,6 +351,7 @@ def build_warning(items: list[dict], ev: dict) -> str | None:
 # --- modes ---------------------------------------------------------------------
 def hook_mode():
     if os.environ.get("CONTEXT_BUDGET_BYPASS") == "1":
+        log_fire(HOOK_NAME, status="bypassed")
         noop()
     cwd = os.getcwd()
     try:
@@ -346,6 +364,7 @@ def hook_mode():
 
     items = discover(cwd)
     if not items:
+        log_fire(HOOK_NAME, status="no-files")
         noop()
     baseline = load_baseline()
     ev = evaluate(items, baseline)
@@ -360,12 +379,24 @@ def hook_mode():
     # actionable, so hook mode stays quiet; --report / --accept carry the signal.
     if ev["ratchet_down"] and safe_to_record(items, ev):
         save_baseline(ev["total"], files_map, ev["cur_kinds"])
+        ratchet_status = "ratcheted"
+    elif ev["ratchet_down"]:
+        # wanted to ratchet but the scope guard blocked it (non-project / narrowed
+        # discovery) — the MYC-1243 fix firing; emit it so the guard is observable.
+        ratchet_status = "scope-skipped"
+    else:
+        ratchet_status = "above-floor"
 
     msg = build_warning(items, ev)
-    if msg is None or warned_today():
+    if msg is None:
+        log_fire(HOOK_NAME, status=ratchet_status)
+        noop()
+    if warned_today():
+        log_fire(HOOK_NAME, status="warn-capped", detail=ratchet_status)
         noop()
 
     mark_warned()
+    log_fire(HOOK_NAME, status="warned", detail=ratchet_status)
     total_kb = _kb(ev["total"])
     print(json.dumps({
         "systemMessage": f"📏 Always-loaded context {total_kb} — context-budget guard flagged growth/ceiling. See details.",
@@ -402,6 +433,7 @@ def accept_mode(cwd: str | None = None) -> int:
             f"project sessions. Re-run --accept from your project root.",
             file=sys.stderr,
         )
+        log_fire(HOOK_NAME, status="accept-refused", files=len(items))
         return 1
     total = sum(it["bytes"] for it in items)
     base = load_baseline()
@@ -416,6 +448,7 @@ def accept_mode(cwd: str | None = None) -> int:
                   [it["kind"] for it in items])
     kinds = ", ".join(it["kind"] for it in items)
     print(f"baseline floor set to {_kb(total)} ({total} B), {len(items)} files: {kinds}")
+    log_fire(HOOK_NAME, status="accepted", files=len(items))
     return 0
 
 
@@ -424,7 +457,7 @@ def self_test() -> int:
     + scope-safety (the GUARD-RECORDS-BASELINE-FROM-WRONG-SCOPE fix). Drives the
     pure evaluate()/predicates so no real home files are touched, plus end-to-end
     discover()/accept_mode() against a synthesized temp HOME."""
-    global HOME, BASELINE_PATH
+    global HOME, BASELINE_PATH, log_fire
     fails = []
 
     def mk(bytes_, kind, ceiling, defer=None):
@@ -518,6 +551,8 @@ def self_test() -> int:
     #    persists the kind set.
     old_home, old_base = HOME, BASELINE_PATH
     old_proj = os.environ.pop("CLAUDE_PROJECT_DIR", None)
+    saved_log_fire = log_fire
+    log_fire = lambda *_a, **_k: None  # accept_mode emits a fire; don't pollute real telemetry during the test  # noqa: E731
     try:
         with tempfile.TemporaryDirectory() as td:
             tdp = Path(td)
@@ -553,6 +588,7 @@ def self_test() -> int:
         fails.append(f"E2E-ACCEPT: raised {e}")
     finally:
         HOME, BASELINE_PATH = old_home, old_base
+        log_fire = saved_log_fire
         if old_proj is not None:
             os.environ["CLAUDE_PROJECT_DIR"] = old_proj
 
