@@ -76,6 +76,18 @@ As your vault grows:
 - **Machine-generated folders are already excluded** from Obsidian's index by the installer (`userIgnoreFilters` in `.obsidian/app.json` — session stubs, logs, worktree snapshots). That bounds machinery churn; it does not bound a plugin that indexes your real notes.
 - **graphify already covers explicit relationships**, and if you run the paid Mycelium runtime, that runtime is your semantic retrieval layer — so Smart Connections is redundant in that setup.
 
+### When the crash is churn, not note count (concurrent agents, auto-exports)
+
+The "keep Dataview, it opens fine at 13K notes" rule above assumes a human edit rate. Two patterns break that assumption and can crash a *Dataview-only* vault that is well under the note-count threshold — the same `EXC_BREAKPOINT (SIGTRAP)` renderer fatal, but the trigger is write-churn and CPU contention, not index size. Tell-tale sign: system RAM is **not** exhausted at the crash (it is the renderer's own bounded heap, not the machine's memory).
+
+- **Many AI-agent sessions on one vault at once.** Each session writes session/log/state files continuously, and several starting together pin the CPU. Every write fires Dataview's refresh-on-change, so it re-runs every open query every few seconds while the renderer is already starved.
+- **Auto-exported message archives.** Chat exporters (e.g. an `AI Chats/` folder fed by messaging integrations) rewrite large files on a timer; each rewrite is watcher churn that re-triggers indexing.
+
+Two knobs, both safe and reversible:
+
+1. **Throttle Dataview's refresh debounce.** In `<vault>/.obsidian/plugins/dataview/data.json`, raise `refreshInterval` from the default `2500` to `5000` or higher. It debounces re-querying under rapid writes; dashboards a human reads are unaffected. (`"refreshEnabled": false` disables auto-refresh entirely — choose it only if stale-until-reload queries are acceptable.)
+2. **Exclude high-churn *content*, not just machinery.** The installer already excludes session/log/snapshot folders. If you run the message exporters, also add the export root (e.g. `AI Chats/`) to `userIgnoreFilters` in `.obsidian/app.json` — it is a large, constantly-rewritten archive you rarely open in search or graph. Leave folders you actively search (notes, writing) indexed.
+
 ### Recover from a renderer crash (Obsidian won't open)
 
 1. Fully quit Obsidian.
