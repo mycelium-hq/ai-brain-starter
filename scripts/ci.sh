@@ -98,6 +98,7 @@ INTEGRATION_TESTS=(
   test_phase_doc_slash_commands_installed
   test_reconcile_ff_invariant
   test_detect_closing_signal_worktree
+  test_closing_claim_shared
   test_meta_resolver
   test_meta_resolution_guard
   test_split_meta

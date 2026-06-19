@@ -28,37 +28,22 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
+# Shared close-claim detector - single source of truth (_lib/closing_claim.py).
+# MENTION-vs-USE aware. Replaces this hook's previously-duplicated (and drifted)
+# CLOSING_PATTERNS / NEGATION_PATTERNS / _is_closing_claim. MYC-791.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    from _lib.closing_claim import is_closing_claim  # noqa: E402
+except Exception:  # fail-open: if the lib cannot load, never block a close
+    def is_closing_claim(_text: str) -> bool:  # type: ignore
+        return False
+
 VAULT_ROOT = Path(os.environ.get("VAULT_ROOT", str(Path.home() / "vault")))
 VERIFIER = VAULT_ROOT / "⚙️ Meta" / "scripts" / "discoverability-verifier.py"
 
-# Reuse the same closing-claim patterns as verify-session-close-cascade.py
-# so the two hooks fire on the same surface area.
-CLOSING_PATTERNS = [
-    r"\bclosing the session\b",
-    r"\bclosing this session\b",
-    r"\bsession closed\b",
-    r"\bsession is closed\b",
-    r"\bclosing now\b",
-    r"\bwrapping up\b",
-    r"\bwrapping the session\b",
-    r"\bgood ?night\b",
-    r"\bsigning off\b",
-    r"\bque (descanses|tengas|duermas)\b",
-    r"\bbuenas noches\b",
-    r"\bhasta (mañana|luego|pronto)\b",
-    r"^## .* — final summary",
-    r"^closing\.?$",
-]
-
-NEGATION_PATTERNS = [
-    r"don't (want to|need to) close",
-    r"not closing",
-    r"before closing",
-    r"discussing",
-    r"the rule",
-    r"why didn't",
-    r"the fix is",
-]
+# Closing-claim detection now lives in the shared _lib/closing_claim.py
+# imported above (de-drifted from verify-session-close-cascade.py, with
+# MENTION-vs-USE guards). MYC-791.
 
 
 def _get_last_assistant_text(transcript_path: str) -> str:
@@ -85,18 +70,6 @@ def _get_last_assistant_text(transcript_path: str) -> str:
         if text_parts:
             return "\n".join(text_parts)
     return ""
-
-
-def _is_closing_claim(text: str) -> bool:
-    if not text:
-        return False
-    for pat in NEGATION_PATTERNS:
-        if re.search(pat, text, re.IGNORECASE):
-            return False
-    for pat in CLOSING_PATTERNS:
-        if re.search(pat, text, re.IGNORECASE | re.MULTILINE):
-            return True
-    return False
 
 
 def _run_verifier() -> tuple[bool, str]:
@@ -147,7 +120,7 @@ def main() -> int:
 
     transcript_path = payload.get("transcript_path", "")
     last_text = _get_last_assistant_text(transcript_path)
-    if not _is_closing_claim(last_text):
+    if not is_closing_claim(last_text):
         return 0
 
     clean, gap_report = _run_verifier()

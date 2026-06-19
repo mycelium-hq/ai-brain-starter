@@ -53,6 +53,18 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Shared close-claim detector - single source of truth (_lib/closing_claim.py).
+# MENTION-vs-USE aware: a sign-off QUOTED as an example or DISCUSSED as meta is
+# not a close claim. Replaces this hook's previously-duplicated CLOSING_PATTERNS
+# / NEGATION_PATTERNS / is_closing_claim (which had drifted from the copy in
+# verify-discoverability-on-close.py). MYC-791.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    from _lib.closing_claim import is_closing_claim  # noqa: E402
+except Exception:  # fail-open: if the lib cannot load, never block a close
+    def is_closing_claim(_text: str) -> bool:  # type: ignore
+        return False
+
 VAULT_ROOT = Path(os.environ.get("VAULT_ROOT", str(Path.home() / "vault")))
 
 
@@ -101,62 +113,10 @@ def runner_installed() -> bool:
     """
     return RUNNER_SCRIPT.is_file()
 
-# High-confidence closing-claim patterns. Conservative — only matches when the
-# model is CLAIMING closure, not discussing the rule meta.
-#
-# Patterns extended 2026-05-11 after the gallant-kalam miss: the previous
-# regex set required literal "closing the session" / "closing this session",
-# but the model can claim closure via summary-style markdown headers
-# ("## Session ... — final summary") or one-word "Closing." replies. Both
-# slip past the old patterns. New patterns cover those forms.
-CLOSING_PATTERNS = [
-    # 2026-05-12 fix: dropped `\.?$` anchors. Previous version required the
-    # closing phrase to END a line; "Closing the session. Writing the artifact..."
-    # slipped through because "session." was mid-line. Now matches anywhere.
-    r"\bclosing the session\b",
-    r"\bclosing this session\b",
-    r"\bsession is closed\b",
-    r"\bsession[- ]end cascade hook should pick up\b",
-    r"\bsession[- ]end cascade will handle\b",
-    r"\bsafe to archive\b.*\bworktree\b",
-    r"\bcascade complete\b",
-    # 2026-05-11 additions — summary-style closure claims
-    r"^closing\.?\s*$",                     # bare "Closing." reply
-    r"^##\s+Session\s+.+—\s*final summary",  # ## Session ... — final summary
-    r"\bfinal summary\b.*\bsession\b",
-    r"\bsession (?:summary|wrap[- ]?up|recap)\b",
-    r"\bdogfood install (?:complete|done)\b.*\bsession\b",
-    # 2026-05-12 additions — late-night close phrasings the model uses
-    r"\bgood night\b",
-    r"\bwriting the session artifact\b",
-    r"\brunning the (?:close )?cascade\b",
-    # 2026-05-13 additions — Spanish closing phrasings (caught after the
-    # funny-golick-fe8400 miss where "Que descanses, Ade" slipped past the
-    # English-only patterns and 5 files almost got discarded at archive)
-    r"\bque descanses\b",
-    r"\bbuenas noches\b",
-    r"\bhasta mañana\b",
-    r"\bdulces sueños\b",
-    r"\bnos vemos mañana\b",
-    r"\bcerrando la sesión\b",
-    r"\bcierro la sesión\b",
-    r"\bsesión cerrada\b",
-    r"\bchao\b.*\b(ade|adelaida)\b",
-]
-
-# Negation contexts — phrases that mean the model is DISCUSSING closure, not
-# claiming it. If any of these appear, skip the check.
-NEGATION_PATTERNS = [
-    r"how do we make sure",
-    r"did you run",
-    r"didn't run",
-    r"did not run",
-    r"keeps not happening",
-    r"\bI should have\b",
-    r"how to ",
-    r"why didn't",
-    r"the fix is",
-]
+# Closing-claim detection (the pattern lists + the matcher) now lives in the
+# shared _lib/closing_claim.py imported at the top, so this hook and
+# verify-discoverability-on-close.py share ONE de-drifted source with the
+# MENTION-vs-USE guards. MYC-791.
 
 
 def get_last_assistant_text(transcript_path: str) -> str:
@@ -191,21 +151,6 @@ def extract_worktree_slug(cwd: str) -> str:
     """Extract the worktree slug from a cwd like .../worktrees/<slug>/..."""
     m = re.search(r"/worktrees/([^/]+)", cwd or "")
     return m.group(1) if m else ""
-
-
-def is_closing_claim(text: str) -> bool:
-    """True iff the text claims session closure (and isn't a discussion of it)."""
-    if not text:
-        return False
-    # Skip if any negation context appears — model is discussing, not claiming
-    for pat in NEGATION_PATTERNS:
-        if re.search(pat, text, re.IGNORECASE):
-            return False
-    # Look for a closing claim
-    for pat in CLOSING_PATTERNS:
-        if re.search(pat, text, re.IGNORECASE | re.MULTILINE):
-            return True
-    return False
 
 
 def session_file_exists_for_today(worktree_slug: str) -> bool:
