@@ -391,7 +391,7 @@ Tell the user in their PRIMARY_LANGUAGE only. Show one link, matching their lang
 >
 > Week 1 will feel quiet. If you do these three things, by day eight you'll feel what the brain is for. If you skip them, the vault sits in your Obsidian folder doing nothing.
 >
-> Longer walkthrough: https://adelaidadiazroa.substack.com/p/your-first-week-with-your-second
+> Longer walkthrough: https://adelaidadiazroa.substack.com/p/your-first-week-with-your-second?utm_source=ai-brain-starter&utm_medium=install&utm_campaign=first-week&utm_content=phase24
 >
 > Read it tonight. Stuck on anything? Just say so in any session."
 
@@ -407,7 +407,7 @@ Tell the user in their PRIMARY_LANGUAGE only. Show one link, matching their lang
 >
 > La primera semana se va a sentir callada. Si hacés estas tres cosas, para el día ocho vas a sentir para qué sirve el cerebro. Si te las saltás, el vault se queda en tu carpeta de Obsidian sin hacer nada.
 >
-> Recorrido más largo: https://perspectivasblog.substack.com/p/tu-primera-semana-con-tu-segundo
+> Recorrido más largo: https://perspectivasblog.substack.com/p/tu-primera-semana-con-tu-segundo?utm_source=ai-brain-starter&utm_medium=install&utm_campaign=first-week&utm_content=phase24
 >
 > Leelo esta noche. ¿Atascado en algo? Solo decilo en cualquier sesión."
 
