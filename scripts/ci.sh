@@ -102,6 +102,7 @@ INTEGRATION_TESTS=(
   test_meta_resolution_guard
   test_split_meta
   test_context_load_selftest
+  test_verify_cascade_failsafe
   test_stranded_session_artifacts_watchdog
   test_session_coordination_guards
   test_trust_prompt_preframing

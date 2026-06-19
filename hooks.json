@@ -86,6 +86,12 @@
             "type": "command",
             "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/coach-auto-prescribe-on-journal.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Coach auto-prescribe (post-journal, idempotent)..."
+          },
+          {
+            "_comment": "Hard-block gate, but FAIL-SAFE: enforcement is conditional on the session-close cascade being installed (<meta>/scripts/session-close-runner.sh). No runner -> advisory only, never blocks. Wired with an if/then/else (NOT '|| echo') so a real block (exit 2) propagates instead of being masked to 0; the [ -f ] guard passes cleanly if the script is missing on a divergent fork. Overrides: VERIFY_CASCADE_BYPASS=1 (skip), VERIFY_CASCADE_SOFT=1 (advisory).",
+            "type": "command",
+            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/verify-session-close-cascade.py ]; then python3 ~/.claude/skills/ai-brain-starter/hooks/verify-session-close-cascade.py; else echo '{\"continue\":true,\"suppressOutput\":true}'; fi",
+            "statusMessage": "Verifying session-close cascade (advisory unless the cascade is installed)..."
           }
         ]
       }
