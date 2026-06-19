@@ -236,6 +236,11 @@
             "type": "command",
             "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/context-budget-measure.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Measuring always-loaded context budget..."
+          },
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/surface-connector-liveness.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "statusMessage": "Checking connectors for the silent-empty (0-vs-0) gap..."
           }
         ]
       }

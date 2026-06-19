@@ -393,6 +393,31 @@ else
   warn "check-split-meta.py not found" "Cannot check for split Meta folders."
 fi
 
+# ----- 14b. Connector liveness (the silent-empty 0-vs-0 gap) -----
+section "14b. Connector liveness"
+CHECK_CONN=""
+for c in "$(cd "$(dirname "$0")" && pwd)/check-connector-liveness.py" \
+         "$HOME/.claude/skills/ai-brain-starter/scripts/check-connector-liveness.py"; do
+  [ -f "$c" ] && CHECK_CONN="$c" && break
+done
+if [ -n "$CHECK_CONN" ]; then
+  cverdict="$(python3 "$CHECK_CONN" --porcelain "$VAULT" 2>/dev/null)"
+  case "${cverdict%%$'\n'*}" in
+    OK_ALL_FRESH)
+      ok "All ingest connectors are producing data within their cadence" ;;
+    SKIP_NO_CONNECTORS)
+      ok "No ingest connectors have landed data yet (nothing to watch)" ;;
+    CONNECTOR_GAP:*)
+      connlist="$(printf '%s\n' "$cverdict" | grep '^CONNECTOR_GAP:' | cut -d: -f2,3 | paste -sd ',' -)"
+      warn "Connector(s) silently went empty (the 0-vs-0 gap): $connlist" \
+        "A connector can exit 0 while returning 0 items after a vendor changes a surface. Check each source's auth/permissions, re-run its ingest skill, and confirm it pulls >0 items. Detail: python3 scripts/check-connector-liveness.py \"$VAULT\"." ;;
+    *)
+      warn "Could not evaluate connector liveness" "check-connector-liveness.py returned: ${cverdict:-<empty>}" ;;
+  esac
+else
+  warn "check-connector-liveness.py not found" "Cannot check connectors for the silent-empty gap."
+fi
+
 # ----- 15. First-run context load (the wrong-cwd / generic-answer class) -----
 # The install's "ask me what you know about you" test only works if the vault's
 # personalized CLAUDE.md actually loads — which depends on launching from the
