@@ -210,3 +210,16 @@ For the 2 synthesizer skills, no existing implementation does the typed-memory w
 1. Does Linear's official remote MCP support the same one-shot `issue + comments + history` shape as `cosmix/linear-mcp`? If the official remote is sufficient, the skill's recommendation should default there (operational reliability, no community fork drift).
 2. The Notion official MCP's per-page connection model means a parent-tree walk only works if the parent is already connected to the integration. Surface this requirement in `skills/ingest-notion/SKILL.md` so operators do not hit an empty-walk silently.
 3. For Gmail, evaluate whether the personal-data scrub at the public-repo layer is sufficient OR whether the normalizer should additionally hash known personal tokens (vault-config-driven). Current PII guardrail is volume-only (500 char body cap).
+
+## Read-depth discipline: a verdict inherits the read behind it
+
+The audit above scored each source from a deep read of that source. The failure mode to guard against is a verdict that *looks* decisive but stands on a shallow read. Two symmetric versions:
+
+**1. Confident DROP from a shallow read (portfolio / profile audits).** When one pass covers many repos at once (a profile / `?tab=repositories` sweep), each repo's verdict inherits the *shallowest* read applied to that repo. A six-repo pass that only name-checks files gives each repo a name-check, not an audit — even though the memo as a whole may list plenty of candidates.
+
+- A DROP or "pass" from a README-only or filename-only read is **provisional**. Label it as such (e.g. `DROP-provisional (surface read)`), and do not let it claim capability-equivalence ("already in our stack", "1:1 maps to ours", "pattern covered"). Capability-equivalence is a confident claim; it requires reading the actual implementation file, which for many small repos is a root `*.md` / `program.md` / `spec.md`, not the README.
+- Worked example: a widely-starred research-loop repo (`karpathy/autoresearch`) was dropped from a profile sweep as "already covered" on a README-only read. A later deep read of its `program.md` — the actual loop spec — overturned the verdict to ADOPT (an objective-gated advance/revert hill-climb plus an append-only keep/discard/crash ledger). The README-only pass had hidden a real adoption for weeks.
+
+**2. Confident ADOPT from a shallow absence check (the mirror).** The DROP failure reads the *external* target too shallowly; the ADOPT failure verifies the *own-stack* absence premise too narrowly. When you adopt something because "we don't have this," verify that absence against the canonical version of your own code — your Git host's API, a Git-host MCP, or `git show origin/main:<path>` across each relevant repo — not a one- or two-location grep, and not a stale local checkout that may lag the canonical branch. A bare "we don't have it" backed only by a local grep is the same thin-read mistake as a confident DROP, pointed inward.
+
+The honest form of an absence claim *shows its evidence* ("grep returned nothing for X across these files"); the dangerous form is a bare premise plus only-local verification. Both directions reduce to one rule: **the strength of a verdict may not exceed the depth of the read behind it.**
