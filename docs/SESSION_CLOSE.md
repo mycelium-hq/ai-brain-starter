@@ -1,6 +1,6 @@
 # Session close — how the cascade works
 
-When you finish a Claude Code session, a multi-step capture cascade saves your decisions, journal seeds, to-dos, time tracking, and a rebuilt session/decision log. This doc explains what runs, when, and how to control it.
+When you finish a Claude Code session, a multi-step capture cascade saves what the session produced — your belief shifts, journal seeds, decisions, to-dos, learnings, and time tracking — to your vault, so the next session builds on it instead of starting cold. That capture is the whole point; everything below is the plumbing that makes it reliable and keeps it out of your way. You do not need to be a developer to use it — most people running it journal and plan, they don't code. This doc explains what runs, when, and how to control it.
 
 ## TL;DR
 
@@ -163,6 +163,25 @@ For verbose tracing during a session, set `CLOSING_SIGNAL_DEBUG=1` and watch std
 The prior architecture relied entirely on the model "noticing" closing signals and choosing to read the cascade rule file before responding. Three brittle steps (notice signal → read rule → execute the cascade), any one of which could fail silently. Reports came back of users saying "bye" and the cascade not firing — captures lost.
 
 This architecture moves detection to a deterministic hook (Layer 1), preserves all model-required creative work in Phase 1, and adds a Haiku backstop (Layer 3) that guarantees no silent loss even if the model bails. The full cascade — every capture from the prior 7-phase spec — is preserved.
+
+## Internals (maintainer reference)
+
+Most users never need this section. It documents the engineering that keeps the Layer 3 git snapshot safe on large or busy vaults — relocated here from the user-facing rule so the rule stays plain-language. The behavior lives in the shipped hooks/scripts and is exercised by CI on every PR; this is the prose that explains it.
+
+### Worktree invariant (issue #65)
+
+When the Stop hook runs from inside a git worktree's own checkout of `session-end-hook.sh`, the `VAULT` variable resolves against the MAIN vault path, not the worktree path. The commit lands on `master`, never on `claude/<slug>`. The companion `scripts/worktree-prune.sh` refuses to delete any `claude/*` branch carrying commits not reachable from master, and points to `scripts/recover-orphan-claude-branches.py` for recovery. Both layers must hold simultaneously; `tests/integration/test_worktree_session_close.sh` enforces this on every PR. If session files ever appear to vanish after a worktree archive, run the recovery script — branches with orphan commits remain in `git for-each-ref refs/heads/claude/*` until `worktree-prune.sh` runs.
+
+### Resource-aware close (mature vaults)
+
+On a mature vault (10k–60k+ tracked files), the close-time git snapshot is the one genuinely heavy operation on the interactive path: `git add` + `git commit` read and rewrite an index that is megabytes large. If the machine is already saturated (many parallel sessions, a sync client churning, a graph build running), piling that IO on at close can pin or crash the machine right as you wrap up. Two primitives — shared by the close hook and the daily-maintenance cron via `scripts/_session_close_guard.sh` — prevent it:
+
+- **Load gate.** Before the aggregators + git snapshot, the hook reads the 1-min load average per core. At or above `CLOSE_MAX_LOAD_PER_CORE` (default `3.0`, env-overridable) it **defers** that heavy work. The cheap path (turn-end timestamp + retention) always runs. The load read fails open: a platform whose load it cannot read never defers.
+- **Close-cascade mutex.** A `set -C` (noclobber) lock at `${TMPDIR:-/tmp}/abs-close-cascade.lock` serializes concurrent closes so two never hammer the git index at once. Stale locks (dead holder PID, or older than 600s) are reclaimed. `flock(1)` is absent on stock macOS, so the portable noclobber primitive is used instead.
+
+**Nothing is lost on a deferred close.** The captured session file is already on disk (the model or the Haiku fallback wrote it). The daily-maintenance cron re-runs the aggregators and commits any session / decision / captures files a deferred close left uncommitted, so the work is snapshotted within a day rather than right now.
+
+**Heavy hygiene lives in the daily cron, never on the close path.** The full-tree / git-log-walking scripts the substrate ships (`drift-detection.py`, `check-rule-conflicts.py --scan-all`, `passive-capture.py --scan-today`) are too heavy to run at every close. They run once a day via `scripts/vault-daily-maintenance.sh`, itself load-gated + mutex-serialized + at low CPU/IO priority. Install with `scripts/install-vault-daily-maintenance.sh <vault>` (macOS launchd) or the cron line in `templates/launchd/com.abs.vault-daily-maintenance.plist.template` (Linux). See [docs/MAINTENANCE.md](MAINTENANCE.md). The CI test `tests/integration/test_resource_aware_session_close.sh` enforces the gate + the catch-up on every PR.
 
 ## Schema reference
 
