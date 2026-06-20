@@ -54,6 +54,18 @@ type: meta
 - [anything not finished]
 ```
 
+### Link your memory into the vault (so your brain actually lives in your vault)
+
+Claude Code keeps its persistent memory (what it learns about you) in a hidden, per-machine tool folder at `~/.claude/projects/<your-vault>/memory/`. For a second brain, that is the wrong place: it is invisible in Obsidian, it is not in your vault's history, and it does not follow you to another machine or tool. This step makes that memory physically live inside your vault, at `⚙️ Meta/Agent Memory/`, so everything Claude remembers shows up in your notes.
+
+Run this once (idempotent and loss-free — any existing memory is migrated into the vault, the old folder is backed up, never deleted):
+
+```bash
+python3 ~/.claude/skills/ai-brain-starter/scripts/link-agent-memory.py --vault "[VAULT_PATH]"
+```
+
+Then tell the user plainly: "Done — from now on, everything I remember about you is saved inside your vault (you'll see it in `⚙️ Meta/Agent Memory/`), not hidden in a system folder." If the command prints a refusal (an existing symlink points somewhere else), surface that to the user rather than forcing it.
+
 ### Install the Session Protocol Hook
 
 "One more critical thing — I'm going to install a hook that makes sure I always read your files before responding. Without this, I might greet you before loading context. With it, every session starts with full context automatically."

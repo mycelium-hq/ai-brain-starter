@@ -91,9 +91,10 @@ def _resolve_memory_dir():
     ~/.claude/projects/<encoded-vault-path>/memory/. Encoded path: replace
     `/` and `.` with `-`, prepend `-`. Returns None if not present.
     """
-    encoded = "-" + str(VAULT_ROOT).replace("/", "-").replace(".", "-")
-    candidate = Path.home() / ".claude" / "projects" / encoded / "memory"
-    return candidate if candidate.is_dir() else None
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from _project_key import memory_dir_for
+    return memory_dir_for(VAULT_ROOT, must_exist=True)
 
 
 MEMORY_DIR = _resolve_memory_dir()

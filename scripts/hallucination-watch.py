@@ -29,23 +29,15 @@ from collections import Counter, defaultdict
 def _derive_memory_dir(vault: Path) -> Path:
     """Claude Code projects dir for a vault: ~/.claude/projects/<sanitized>/memory/
 
-    Sanitization mirrors Claude Code's: '/' → '-', leading '-' kept, spaces in path
-    preserved. Falls back to first matching glob if exact derivation differs.
+    Encoding via the shared _project_key resolver — single source of truth that
+    mirrors Claude Code's exact key (every non [A-Za-z0-9-] char -> '-') with a
+    glob fallback. Returns a possibly-nonexistent path; parse_memory_dir handles
+    missing.
     """
-    base = Path.home() / ".claude" / "projects"
-    sanitized = str(vault).replace("/", "-")
-    candidate = base / sanitized / "memory"
-    if candidate.exists():
-        return candidate
-    # Glob fallback — find any projects/* whose memory/ exists and whose name
-    # contains the vault basename.
-    needle = vault.name.replace(" ", "")
-    for project in base.glob("*"):
-        if project.is_dir() and needle.lower() in project.name.lower().replace("-", ""):
-            mem = project / "memory"
-            if mem.exists():
-                return mem
-    return candidate  # return non-existent path; parse_memory_dir handles missing
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from _project_key import project_dir_for
+    return project_dir_for(vault) / "memory"
 
 
 def _resolve_vault() -> Path:

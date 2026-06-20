@@ -133,6 +133,7 @@ INTEGRATION_TESTS=(
   test_context_budget_measure
   test_connector_liveness_watchdog
   test_connector_liveness_surface
+  test_agent_memory_link
 )
 echo "==> (b) Shell integration: ${#INTEGRATION_TESTS[@]} tests"
 for t in "${INTEGRATION_TESTS[@]}"; do

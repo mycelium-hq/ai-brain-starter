@@ -9,6 +9,19 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-06-20: your memory now actually lives in your vault
+
+The whole promise of this project is that your second brain lives in your vault. But Claude Code keeps its own memory (the things it learns about you) in a hidden system folder — `~/.claude/projects/.../memory/` — that never showed up in Obsidian and didn't follow you to another computer. The substrate assumed that folder had been linked into your vault, but nothing in the install ever did the linking. So for most people, memory was quietly accumulating in a place they couldn't see and couldn't back up.
+
+This fixes it:
+- **Setup now links Claude's memory into your vault**, at `⚙️ Meta/Agent Memory/`. From now on, what Claude remembers is a real file in your vault — visible in Obsidian, saved in your vault's history, and portable to another machine. The link is created loss-free: any memory you already had is migrated in, and the old folder is backed up, never deleted.
+- **Already installed before today?** No action needed — the daily maintenance run links it for you automatically the next time it runs (within a day), or you can do it now: `python3 ~/.claude/skills/ai-brain-starter/scripts/link-agent-memory.py --vault "/path/to/your/vault"`.
+- **Running Claude from a different project (a work repo)?** Personal and life content now routes to your brain vault and gets saved there, instead of landing in the work project's hidden memory folder.
+
+A test now proves, on every build, that memory written by Claude actually reaches your vault — so this can't silently regress.
+
+---
+
 ## 2026-06-18: removed the vertical packs (legal, finance, healthcare, creator)
 
 If you installed `vertical-finance`, `vertical-healthcare`, `vertical-legal`, or `influencer-pack`, they are no longer part of this repo. They were per-industry packs (compliance retention rules, enterprise connector specs, audit-evidence templates) that belong to the paid runtime, not the free open-source substrate. Shipping them here crossed the open-core boundary documented in `docs/adr/0001-open-core-boundary.md`.
