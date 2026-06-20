@@ -92,6 +92,7 @@ Most "Claude is broken" reports trace to one of:
 | 12 | Vault has an off-machine backup | Set one up: `bash scripts/vault-backup.sh setup` (docs/BACKUP.md) | Backup configured but no snapshot yet |
 | 13 | No repeated Obsidian renderer crashes (macOS; skips elsewhere) | - | Heavy indexer likely OOM-ing the renderer on a large vault: restricted mode -> Dataview only -> add others one at a time (see the obsidian-plugins rule, "Large-vault plugin posture") |
 | 14b | Ingest connectors still producing data (the silent-empty 0-vs-0 gap) | - | A connector exited 0 but returned 0 items (a vendor changed a surface): check its auth/permissions, re-run its ingest skill, confirm it pulls >0 items |
+| 17 | No git worktree living inside the Obsidian-watched vault tree | - | The Desktop per-session worktree checkbox dropped a checkout under `.claude/worktrees/` inside the vault -> renderer OOM/crash. Relocation is dead; the flag does NOT gate it. Relaunch the vault PLAIN with the worktree box UNCHECKED (`cd <vault> && claude`). See docs/VAULT_WORKTREE_MELT.md |
 
 ## When to suggest /diagnose proactively
 
@@ -101,6 +102,7 @@ Most "Claude is broken" reports trace to one of:
 - User says "my friend installed it but it's broken"
 - User says "Obsidian keeps crashing when I open it" / "Obsidian won't open" (likely a heavy-indexer renderer OOM on a large vault - check 13)
 - User says "my brain feels stale" / "I haven't seen any new Granola/WhatsApp/Slack/Gmail notes in a while" / "<source> stopped showing up" (likely a silently-empty connector - check 14b)
+- User says "Obsidian melted / pegged the CPU after I opened a Claude Desktop session" / "the vault doubled itself" / "there's a `.claude/worktrees` folder full of copies of my vault" (likely a worktree-on-vault checkout - check 17; relaunch PLAIN with the worktree box unchecked)
 - After every major upgrade prompt during /setup-brain
 
 Do NOT use /diagnose as an email-capture surface. If `~/.claude/.ai-brain-starter-email-on-file` is missing, that is fine and never a finding — the email is optional, and the only places it is ever asked are the setup interview (Phase 24.4) and the once-per-update post-pull nudge. Never tell the user to fetch or paste a token.
