@@ -80,6 +80,21 @@ log() { printf '%s\n' "$*"; printf '[%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" 
 LOAD_PER_CORE=$(close_load_per_core)
 log "=== vault-daily-maintenance @ $(date -u +%Y-%m-%dT%H:%M:%SZ) (load=${LOAD_PER_CORE}/core, force=$FORCE, reconcile_only=$RECONCILE_ONLY) ==="
 
+# --- ensure Claude Code memory lives in the vault (idempotent self-heal) ----
+# Installs created before the memory-symlink fix have their memory stranded in
+# ~/.claude/projects/<key>/memory/, invisible in Obsidian. Re-link it into the
+# vault so the brain accumulates where the user can see it. Near-free + safe to
+# run daily; runs BEFORE the load gate because it is trivially cheap and the
+# durability it restores matters more than the few stats it costs.
+LINK_MEM="$SCRIPT_DIR/link-agent-memory.py"
+if [ -f "$LINK_MEM" ]; then
+  if python3 "$LINK_MEM" --vault "$VAULT" --quiet >> "$LOG" 2>&1; then
+    log "agent-memory link verified -> vault"
+  else
+    log "WARNING: agent-memory link failed (memory may strand in ~/.claude/); see log above"
+  fi
+fi
+
 # --- load gate -------------------------------------------------------------
 if [ $FORCE -eq 0 ] && close_resource_high; then
   log "DEFERRED - high load (${LOAD_PER_CORE}/core >= ${CLOSE_MAX_LOAD_PER_CORE:-3.0}). Next daily run will catch up."

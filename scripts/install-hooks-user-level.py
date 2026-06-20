@@ -409,6 +409,38 @@ def write_settings_with_verify(settings_path: Path, settings: dict, backup: Path
         return False
 
 
+def link_agent_memory_into_vault(vault_path: str, quiet: bool) -> None:
+    """Symlink Claude Code's per-project memory dir into the vault so the
+    user's "brain" actually accumulates in their vault, not in a hidden
+    ~/.claude/ tool dir. Delegates to scripts/link-agent-memory.py (idempotent,
+    loss-free). A failure here is the brain-durability bug recurring, so it is
+    surfaced LOUDLY — but it never aborts the hook install.
+    """
+    import subprocess
+
+    linker = Path(__file__).resolve().parent / "link-agent-memory.py"
+    if not linker.is_file():
+        print(f"WARNING: {linker} missing — Claude Code memory will NOT be linked "
+              f"into the vault. Memory would strand in ~/.claude/.", file=sys.stderr)
+        return
+    cmd = [sys.executable, str(linker), "--vault", vault_path]
+    if quiet:
+        cmd.append("--quiet")
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    except Exception as e:  # noqa: BLE001 — never let this brick the install
+        print(f"WARNING: linking memory into the vault failed to run: {e}", file=sys.stderr)
+        return
+    if result.stdout and not quiet:
+        print(result.stdout, end="")
+    if result.returncode != 0:
+        print("WARNING: could NOT link Claude Code memory into the vault — memory "
+              "would strand in ~/.claude/ instead of your brain. Details below; "
+              f"re-run manually:\n  python3 {linker} --vault '{vault_path}'", file=sys.stderr)
+        if result.stderr:
+            print(result.stderr, file=sys.stderr)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
@@ -425,6 +457,14 @@ def main() -> int:
                     help="exit nonzero if any required hook script is missing on disk "
                          "(implies --verify; used by bootstrap.sh to escalate divergent-fork strands)")
     args = ap.parse_args()
+
+    # === make the vault the home of Claude Code's memory ===
+    # Independent of the hooks install and idempotent, so do it first whenever a
+    # vault path is known. This is the step that makes the "your brain lives in
+    # your vault" promise true: without it, Claude Code's memory strands in
+    # ~/.claude/projects/<key>/memory/, invisible in Obsidian.
+    if args.vault_path and not args.dry_run and not args.uninstall:
+        link_agent_memory_into_vault(args.vault_path, args.quiet)
 
     # === locate hooks template ===
     if args.hooks_source:
