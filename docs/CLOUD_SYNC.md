@@ -111,6 +111,15 @@ behind:
   session logs, snapshots) → relocated to the sidecar with a symlink back. The
   sync daemon follows the symlink (a few bytes), never the target's churn.
 
+> **This relocation fixes the *sync* daemon, not the Obsidian *renderer*.** A
+> cloud-sync daemon follows the symlink *file* and stays out of the churn — but
+> Obsidian's own file watcher follows the symlink *back in* and indexes the
+> target anyway. So the sidecar is the right move for sync, yet it does **not**
+> cure the separate worktree-on-vault renderer melt (a Desktop per-session
+> worktree checkout doubling the vault inside the watched tree). That one has no
+> relocation fix; the only cure is to launch the vault PLAIN with the worktree
+> box unchecked. See [VAULT_WORKTREE_MELT.md](VAULT_WORKTREE_MELT.md).
+
 One command sets it up. Run it with **all Claude sessions closed and no scratch
 worktrees live** — separating the git directory orphans live worktrees, so the
 script refuses unless the window is clean (`--force` to override):

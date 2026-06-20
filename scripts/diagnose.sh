@@ -483,6 +483,35 @@ else
   esac
 fi
 
+# ----- 17. Worktree-on-vault melt risk (the Desktop per-session checkout class) -----
+# A git worktree under .claude/worktrees/ is cheap+correct on a CODE repo, but on
+# an OBSIDIAN VAULT (repo-root == vault-root) it drops a full second checkout
+# INSIDE Obsidian's watched tree -> renderer OOM/crash (the 2026-06-06 melt), and
+# the worktree can be silently deleted mid-session. Relocation is dead (a symlink
+# out is followed back IN by Obsidian's watcher; a WorktreeCreate redirect is not
+# honored), and the flag does NOT gate Desktop worktree creation. The runtime hook
+# warn-vault-session-in-worktree.py is the live tripwire; this is the at-rest scan.
+section "17. Worktree-on-vault melt risk"
+CHECK_WT=""
+for c in "$(cd "$(dirname "$0")" && pwd)/check-worktree-on-vault.py" \
+         "$HOME/.claude/skills/ai-brain-starter/scripts/check-worktree-on-vault.py"; do
+  [ -f "$c" ] && CHECK_WT="$c" && break
+done
+if [ -n "$CHECK_WT" ]; then
+  wverdict="$(python3 "$CHECK_WT" --porcelain "$VAULT" 2>/dev/null)"
+  case "$wverdict" in
+    OK_NOT_VAULT|OK_NOT_GIT|OK_NO_WORKTREES)
+      ok "No git worktree inside the Obsidian-watched vault tree" ;;
+    WORKTREE_ON_VAULT:*)
+      warn "${wverdict#WORKTREE_ON_VAULT:} git worktree checkout(s) live INSIDE the vault (.claude/worktrees/)" \
+        "The Desktop per-session worktree checkbox dropped a full-vault checkout inside Obsidian's watched tree -> renderer OOM/crash, and it can be silently deleted mid-session. Relocation is DEAD (a symlink out is followed back in; a WorktreeCreate redirect is not honored) and the flag does NOT gate it. FIX: launch the vault PLAIN with the worktree box UNCHECKED: cd \"$VAULT\" && claude. See docs/VAULT_WORKTREE_MELT.md." ;;
+    *)
+      warn "Could not evaluate worktree-on-vault melt risk" "check-worktree-on-vault.py returned: ${wverdict:-<empty>}" ;;
+  esac
+else
+  warn "check-worktree-on-vault.py not found" "Cannot check whether a git worktree is melting the vault tree."
+fi
+
 # ----- summary -----
 echo
 echo "${B}Summary${N}"
