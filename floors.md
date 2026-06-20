@@ -4,6 +4,8 @@ The journal tags every entry with a Floor: the emotional consciousness level you
 
 This file is the reference. What the floors are, how they work, how to use them.
 
+Each floor also has its own note at [`floors/<Name>.md`](floors/) — graphify uses those so journal entries tagged `[[Fear]]` resolve to a node with body content, elevator-emotion edges, shadow-twin links, and a pointer to the writing series. Regenerate them from this table with `scripts/generate_floor_stubs.py` if you change the canonical list below.
+
 ---
 
 ## The framework, in one paragraph
