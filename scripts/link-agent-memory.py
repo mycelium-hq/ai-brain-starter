@@ -67,7 +67,10 @@ def _migrate_contents(src_dir: Path, dst_dir: Path, *, dry_run: bool, quiet: boo
     """Copy every file from src into dst without loss. Returns files migrated."""
     moved = 0
     for item in sorted(src_dir.rglob("*")):
-        if not item.is_file():
+        # Only migrate real files. Skip symlinks so a stray link in the source
+        # never copies its target's content into the vault (defense-in-depth —
+        # the source is Claude Code's own memory, but be strict anyway).
+        if item.is_symlink() or not item.is_file():
             continue
         rel = item.relative_to(src_dir)
         dest = dst_dir / rel
