@@ -1,0 +1,59 @@
+# free-tier-allowlist.txt
+#
+# Each line is a directory path (relative to repo root) that is DELIBERATELY
+# shipped in the public free substrate, plus a rationale tag explaining WHY.
+#
+# Rationale tags (one per line):
+#   teaching         — teaches the open-core pattern; single-user, no per-tenant concerns
+#   personal         — personal journaling / floor / coaching scaffolding; no paid feature
+#   lead-magnet      — self-labeled free lead magnet (see SKILL.md)
+#   template-MYC254  — intentional free template per MYC-254 (codified Done decision)
+#   ingest-exemplar  — single-user OAuth ingest showing the connector pattern (not multi-tenant)
+#   safety           — security hygiene that protects the user, not a paid feature gate
+#
+# GUARD BEHAVIOR: scripts/check-open-core-boundary.sh reads this file.
+# Any skill under skills/ or capability-pack-shaped top-level dir NOT in this list → CI FAIL.
+# Missing or empty file → CI FAIL (fail-closed by design).
+#
+# To add a new free-tier entry: append a line + rationale tag + update ADR-0001 if the
+# category is new. PR description must cite the codified free-decision (Done ticket /
+# self-label / boundary doc).
+
+# ── Top-level capability packs ──────────────────────────────────────────────
+agentic-os                                 # template-MYC254
+
+# ── skills/ directory entries (one per skill dir) ───────────────────────────
+skills/_shared                             # teaching
+skills/backfill-journal-body-context       # personal
+skills/coach                               # personal
+skills/coaching                            # personal
+skills/daily-journal                       # personal
+skills/deconstruct                         # teaching
+skills/diagnose                            # teaching
+skills/doubt-driven-development            # teaching
+skills/evolve                              # teaching
+skills/for-my-team                         # teaching
+skills/graphify                            # teaching
+skills/health-context                      # personal
+skills/health-doctor                       # personal
+skills/health-setup                        # personal
+skills/ingest-github                       # ingest-exemplar
+skills/ingest-health                       # ingest-exemplar
+skills/ingest-youtube                      # ingest-exemplar
+skills/insights                            # personal
+skills/instinct-export                     # teaching
+skills/instinct-import                     # teaching
+skills/interview-me                        # personal
+skills/longitudinal                        # personal
+skills/meeting-todos                       # teaching
+skills/nano-banana                         # teaching
+skills/note-todos                          # teaching
+skills/patterns                            # teaching
+skills/repurpose-talk                      # teaching
+skills/resolver-query                      # teaching
+skills/rise                                # personal
+skills/second-brain-mapping                # teaching
+skills/secret-warn                         # safety
+skills/security-snapshot                   # lead-magnet
+skills/setup-vault-types                   # teaching
+skills/sunday-review                       # teaching
