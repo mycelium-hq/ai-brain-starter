@@ -22,12 +22,9 @@
 #     - All bundled sub-skills: graphify, meeting-todos, patterns, insights,
 #       deconstruct, daily-journal, rise, repurpose-talk, nano-banana (skill docs only),
 #       second-brain-mapping, setup-vault-types, diagnose, note-todos, sunday-review,
-#       coach, coaching, backfill-journal-body-context, longitudinal, security-snapshot,
-#       synth-pr-to-sop, synth-thread-to-sop, resolver-query, extract-rules-from-vault,
-#       for-my-team, health-context, health-doctor, health-setup, modern-python-substrate,
-#       tdd-substrate, seo-substrate, remotion-best-practices, ingest-github, ingest-gmail,
-#       ingest-health, ingest-linear, ingest-notion, ingest-slack, ingest-whatsapp,
-#       ingest-youtube
+#       coach, coaching, backfill-journal-body-context, longitudinal, resolver-query,
+#       for-my-team, health-context, health-doctor, health-setup,
+#       ingest-github, ingest-health, ingest-youtube
 #     - humanizer (de-AI writing) — cloned from its own fork repo
 #     - Granola + ChatPRD MCPs
 #     - Marketplaces: obsidian-skills (kepano), enabling obsidian/context7/playwright;
@@ -1165,7 +1162,7 @@ SKILL_FORKS=()
 SKILL_SYMLINKS=()
 SKILLS_TO_SYNC=()
 
-for sub in graphify meeting-todos patterns insights deconstruct daily-journal rise repurpose-talk nano-banana second-brain-mapping setup-vault-types diagnose note-todos sunday-review coach coaching backfill-journal-body-context longitudinal security-snapshot synth-pr-to-sop synth-thread-to-sop resolver-query extract-rules-from-vault for-my-team health-context health-doctor health-setup modern-python-substrate tdd-substrate seo-substrate remotion-best-practices ingest-github ingest-gmail ingest-health ingest-linear ingest-notion ingest-slack ingest-whatsapp ingest-youtube; do
+for sub in graphify meeting-todos patterns insights deconstruct daily-journal rise repurpose-talk nano-banana second-brain-mapping setup-vault-types diagnose note-todos sunday-review coach coaching backfill-journal-body-context longitudinal resolver-query for-my-team health-context health-doctor health-setup ingest-github ingest-health ingest-youtube evolve instinct-export instinct-import interview-me longitudinal doubt-driven-development secret-warn; do
   dst="$HOME/.claude/skills/$sub"
 
   if [[ -L "$dst" ]]; then
@@ -1402,9 +1399,7 @@ if [[ "${SKIP_VENDOR_SKILLS:-0}" != "1" ]]; then
 
   # claude-seo (MIT, AgriciDaniel). 25 sub-skills + 18 sub-agents covering
   # technical SEO, on-page (E-E-A-T), schema, AI search optimization (GEO),
-  # local SEO, GA4, PDF reports. Heavier than seo-substrate (which is the lean
-  # version cherry-picked from this bundle). Both can coexist; users pick which
-  # invocation pattern fits their site.
+  # local SEO, GA4, PDF reports.
   install_plugin "AgriciDaniel/claude-seo" "claude-seo@agricidaniel-claude-seo"
 
   # obra/superpowers (MIT, Jesse Vincent). Engineering-discipline skills:
@@ -1622,7 +1617,7 @@ for check in "${CHECKS[@]}"; do
   fi
 done
 # Skill folders (full bundled set + humanizer + ai-brain-starter itself)
-for sub in graphify meeting-todos patterns insights deconstruct daily-journal rise repurpose-talk nano-banana humanizer ai-brain-starter diagnose second-brain-mapping setup-vault-types note-todos sunday-review coach coaching backfill-journal-body-context longitudinal security-snapshot synth-pr-to-sop synth-thread-to-sop resolver-query extract-rules-from-vault for-my-team health-context health-doctor health-setup modern-python-substrate tdd-substrate seo-substrate remotion-best-practices ingest-github ingest-gmail ingest-health ingest-linear ingest-notion ingest-slack ingest-whatsapp ingest-youtube; do
+for sub in graphify meeting-todos patterns insights deconstruct daily-journal rise repurpose-talk nano-banana humanizer ai-brain-starter diagnose second-brain-mapping setup-vault-types note-todos sunday-review coach coaching backfill-journal-body-context longitudinal resolver-query for-my-team health-context health-doctor health-setup ingest-github ingest-health ingest-youtube evolve instinct-export instinct-import interview-me doubt-driven-development secret-warn; do
   if [[ -d "$HOME/.claude/skills/$sub" ]]; then
     ok "skill: $sub"
   else

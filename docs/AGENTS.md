@@ -143,12 +143,12 @@ Three paths today.
     - Frontmatter that fails YAML parse blocked before the file lands.
    Hooks are Python checks against the actual write payload. Not LLM-judged. Agent-side enforcement of pillar 2.
 
-3. **Connectors.** [`skills/ingest-slack/`](../skills/ingest-slack/) is the proven pattern:
+3. **Connectors.** [`skills/ingest-github/`](../skills/ingest-github/) is the proven pattern:
     - Pull raw events from a source.
     - Normalize each event into a typed entry.
     - Populate cross-type contract fields on every write.
     - Write one file per row.
-   Adding Notion, Email, Jira, GDrive ingestion is a matter of writing a normalizer per source. The architecture does not change.
+   Adding further sources is a matter of writing a normalizer per source. The architecture does not change.
 
 Ingestion endpoints over HTTP are not exposed today. That decision is consulting-vs-SaaS strategy and is deferred.
 
@@ -241,8 +241,8 @@ We did not invent these primitives. The catalect "company brain" framing names t
 
 | Catalect primitive | Shipped today | File paths | Roadmap | Score / 10 |
 |---|---|---|---|---|
-| Zero-migration ingestion at scale | Five connectors with cross-source ID linking via `entity_ids` | `skills/ingest-slack/`, `skills/ingest-github/`, `skills/ingest-notion/`, `skills/ingest-linear/`, `skills/ingest-gmail/` | Webhook surface, real-time event stream, multi-tenant boundary | 6 |
-| Autonomous wiki synthesis | Two synthesizers + ground-truth maintainer, drafts go to `proposed` status | `skills/synth-pr-to-sop/`, `skills/synth-thread-to-sop/`, `scripts/ground-truth-wiki-maintain.py` | Confidence-weighted auto-promotion past `proposed`, named-entity disambiguation across sources | 5 |
+| Zero-migration ingestion at scale | Personal ingestion connectors with cross-source ID linking via `entity_ids` | `skills/ingest-github/`, `skills/ingest-youtube/`, `skills/ingest-health/` | Webhook surface, real-time event stream, multi-tenant boundary | 6 |
+| Autonomous memory synthesis | Pattern recognition + instinct capture | `skills/patterns/`, `skills/evolve/`, `skills/instinct-export/` | Confidence-weighted auto-promotion past `proposed`, named-entity disambiguation across sources | 5 |
 | Bi-temporal resolver | RESOLVER.md primitive + stale-rule check + proposed-update drafter | `templates/RESOLVER.md.template`, `templates/RESOLVER-README.md`, `scripts/stale-rule-check.py` | Validity-time conflict resolution heuristics, branch-merge for parallel decision threads | 6 |
 | Structured agentic execution | skill.json schema + frontmatter validator hook | `templates/schemas/skill.json`, `hooks/validate-skill-frontmatter.py` | Runtime enforcement of skill.json contract, capability-scoped sandboxing | 5 |
 | Closed-loop learning | post-tool-use learnings hook + episodic-to-procedural promotion | `hooks/post-tool-use-learnings.py`, `scripts/promote-episodic-to-procedural.py` | Cron-runnable consolidation, demotion path for stale procedural rules | 5 |
@@ -255,7 +255,7 @@ This build follows the codified standards in [`docs/BUILD_STANDARDS.md`](BUILD_S
 
 Applied during this build:
 
-- Shared utility surface across the four new ingestion connectors so adding a sixth source costs one normalizer file.
+- Shared utility surface across ingestion connectors so adding a new source costs one normalizer file.
 - Idempotent connectors. Same input twice produces the same files. No duplicate writes, no clobbered frontmatter.
 - Schema validation hooks for skill.json frontmatter and the cross-type contract on every write.
 - Personal-data scrub gate on every public-repo diff before merge, per the codified word-boundary regex rule.
@@ -279,7 +279,7 @@ Three concrete entry points. Each is a 2-hour task, not a project.
     - The HTTP path gives you an OpenAPI 3.1 surface any agent runtime can consume.
     - Both speak the same substrate. Curl the OpenAPI doc, generate a client, point any agent at it.
 
-2. **Write the memory.** Write a connector skill. Follow the [`skills/ingest-slack/`](../skills/ingest-slack/) pattern:
+2. **Write the memory.** Write a connector skill. Follow the [`skills/ingest-github/`](../skills/ingest-github/) pattern:
     - A `SKILL.md` describing the trigger.
     - An `ingest.py` that pulls events from the source API and normalizes each event into a typed entry.
     - Cross-type frontmatter (`provenance`, `confidence`, `freshness_days`, `last_verified`, `source_count`) populated on every write.

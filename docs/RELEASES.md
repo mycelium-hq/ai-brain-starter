@@ -76,7 +76,7 @@ Nothing is auto-applied. The output is a folder of drafts plus a `REVIEW.md` che
 
 Structured-signal-first: deterministic Python parser does the heavy lifting (channels, users, headings, paths, frequencies). The model only synthesizes the residual ambiguous cases. Drafts without provenance are a bug, not a feature.
 
-Run with `/extract-rules-from-vault <dump-path>`. See [`skills/extract-rules-from-vault/SKILL.md`](../skills/extract-rules-from-vault/SKILL.md) for full input shapes and output layout.
+Run with `/extract-rules-from-vault <dump-path>`. (This skill was removed in v1.5.0 as part of the open-core boundary enforcement.)
 
 **No action required** for existing installs. The skill is opt-in.
 

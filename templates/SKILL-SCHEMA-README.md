@@ -88,7 +88,7 @@ Existing skills shipped with descriptive frontmatter only (`name`, `description`
 5. Add `output_shape`. Document what the caller gets back: format (markdown, JSON, terminal-report) plus the fields or sections.
 6. Leave the body unchanged. Frontmatter is the contract; the body is the implementation guide.
 
-The three skills shipped in this repo as worked examples are `diagnose`, `security-snapshot`, and `setup-vault-types`. Read their frontmatter for the canonical pattern.
+The skills shipped in this repo as worked examples are `diagnose` and `setup-vault-types`. Read their frontmatter for the canonical pattern.
 
 ## Validator smoke test
 

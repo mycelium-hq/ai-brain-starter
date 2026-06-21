@@ -34,8 +34,7 @@ There is exactly one reliable remedy, and it is to never create the worktree:
 
 A plain (non-worktree) vault session has nothing to melt. Code isolation still
 belongs in a worktree — just on a **code** repo, in a sibling directory
-(`~/dev/<repo>-<slug>`), never inside the vault. See
-[dev-repo-worktrees](../skills/dev-repo-worktrees) for that pattern.
+(`~/dev/<repo>-<slug>`), never inside the vault.
 
 ## What does NOT work (so you don't waste a day on it)
 
