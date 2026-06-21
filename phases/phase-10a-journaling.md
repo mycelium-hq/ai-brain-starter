@@ -71,7 +71,7 @@ This rule isn't just for floors — apply it to every concept note you create fo
 
 Create a concept note for each of the 34 floors in their vault. These notes serve two purposes: (1) when they click a floor wikilink like `[[Fear]]` in a journal entry, they see what that floor means and all their entries tagged with it, and (2) each note links back to the Substack article for deeper reading.
 
-Save each floor note to `[VAULT_PATH]/Notes/` (or whatever their concept folder is called). Create all 34:
+Save each floor note to `[VAULT_PATH]/📝 Notes/Floors/` — the dedicated folder created in Phase 3. **NEVER save floor notes to the vault root, and never loose in `📝 Notes/`.** If `📝 Notes/Floors/` does not exist yet (e.g. an upgrade install), create it first (`mkdir -p`), then write into it. A floor note at the top level is the bug that fills a user's sidebar with `Amor`, `Culpa`, `Soledad`, `Pisos Bajos`. Create all 34:
 
 ```markdown
 ---
@@ -187,7 +187,7 @@ SORT creationDate DESC
 
 For other languages (French, Portuguese, German, etc.), generate the equivalents on the fly using the same pattern: the noun form, common adjective/verb forms, and any close synonyms. When in doubt, ask the user which variants they actually use.
 
-Also create three tier notes using this template (customize the description and floor list for each):
+Also create three tier notes using this template (customize the description and floor list for each). **Same rule: save all three to `[VAULT_PATH]/📝 Notes/Floors/`, never the vault root** — `Low Floors` / `Pisos Bajos` at the top level is the same sidebar-clutter bug.
 
 **Low Floors.md:**
 ```markdown
