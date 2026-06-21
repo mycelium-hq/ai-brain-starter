@@ -6,7 +6,7 @@ cumulative Slack export written by the slack MCP's `read_channel` tool.
 Type: `slack-export` (hyphenated; dispatcher normalizes to `slack_export`).
 
 Distinct from `type: external-input` + `source: slack` (which the
-ingest-slack skill writes per-day at `External Inputs/Slack/<channel>/<date>.md`).
+ingest pattern writes per-day at `External Inputs/Slack/<channel>/<date>.md`).
 This format is per-channel cumulative at `🤖 AI Chats/Slack/<workspace>/<channel>.md`,
 overwritten on every MCP read_channel call.
 

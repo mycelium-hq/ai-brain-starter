@@ -126,8 +126,6 @@ INTEGRATION_TESTS=(
   test_relocate_vault
   test_relocate_sweep
   test_renderer_crash_guard
-  test_agentic_os
-  test_dev_worktree_detached_gitdir
   test_install_api_canonical_base
   test_cd_worktree_inline_bypass
   test_sessionstart_hook_snapshot_guard

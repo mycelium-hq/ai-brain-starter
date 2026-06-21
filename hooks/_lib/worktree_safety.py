@@ -151,7 +151,7 @@ def is_scratch_worktree(wt: Path) -> bool:
     """True if `wt` is a throwaway scratch worktree under `.claude/worktrees/`.
 
     The cap + reclaim only AUTO-REMOVE scratch worktrees. A deliberate
-    `~/dev/<repo>-<slug>` sibling worktree (created by the dev-repo-worktrees
+    `~/dev/<repo>-<slug>` sibling worktree (created by a per-session worktree
     pattern, often on its own feature branch) is NEVER auto-removed even when
     idle and on a `claude/*` branch — its lifecycle belongs to that workflow,
     not to this cap. Location, not branch name, is the safe discriminator.

@@ -44,12 +44,8 @@ The everyday rituals — the surface you touch most.
 ## Ingestion — pull external sources into the vault
 
 - **ingest-github** — recent merged PRs, issues, and commits from a repository.
-- **ingest-gmail** — recent Gmail messages matching a label or query.
-- **ingest-linear** — recent Linear issues, comments, and status changes.
-- **ingest-notion** — recent pages or database entries from Notion.
-- **ingest-slack** — recent messages from a Slack channel.
-- **ingest-whatsapp** — recent messages from a WhatsApp chat.
 - **ingest-youtube** — a YouTube video transcript, or a channel's recent uploads.
+- **ingest-health** is listed above under Health and longevity.
 
 Each writes queryable markdown into the vault and is idempotent: re-running on the same day overwrites cleanly.
 
@@ -57,28 +53,26 @@ Each writes queryable markdown into the vault and is idempotent: re-running on t
 
 - **repurpose-talk** — turns one speaking engagement into 10 to 30 content pieces: LinkedIn posts, Substack notes, a video-clip plan.
 - **nano-banana** — image generation, editing, and composition via Google's Gemini 3 Pro Image model.
-- **remotion-best-practices** — best practices for building videos in React with Remotion.
-- **seo-substrate** — SEO and GEO substrate for solo founders and indie creators: technical SEO, schema, AI-search optimization, bilingual routing.
 
-## Turn finished work into durable memory
+## Coaching and interviews
 
-- **synth-pr-to-sop** — reads a merged PR and synthesizes a reusable workflow SOP.
-- **synth-thread-to-sop** — reads a resolved Slack thread and files a typed memory entry: a decision, an exception, or a procedure.
-- **extract-rules-from-vault** — walks a company's existing artifacts (a Slack export, a Notion export, a folder of documents) and emits draft rules, skills, and a starter CLAUDE.md so a new install does not begin empty.
+- **interview-me** — simulates a panel interview or podcast, then gives you a structured debrief.
 
-## Engineering substrates
+## Self-improvement and instincts
 
-- **tdd-substrate** — test-driven development substrate for solo and small-team builds: iron-law red-green-refactor with dual-runtime examples.
-- **modern-python-substrate** — modern Python toolchain: uv, ruff, ty, pytest, a src layout, pyproject.toml as the single source of truth.
+- **evolve** — clusters hardened instincts and proposes a new skill scaffold from observed patterns.
+- **instinct-export** — exports the Instinct Engine's learned patterns to a portable file.
+- **instinct-import** — imports a portable instinct pack into a fresh vault.
+- **doubt-driven-development** — adversarial self-reviewer. Applies structured doubt to a plan or decision before committing.
+
+## Vault safety
+
+- **secret-warn** — scans the vault and flags files that look like they contain secrets or credentials.
 
 ## Teams
 
 - **for-my-team** — walks you through what changes when a personal vault becomes a team vault.
 
-## Consulting lead generation
-
-- **security-snapshot** — generates a client-ready security hygiene snapshot for a prospect domain. A free lead magnet for a consulting practice.
-
 ---
 
-Forty-plus skills, and the set grows. Install registers each so Claude Code triggers it on the right cue; you do not memorize a command list. New to the system? Start with **rise** in the morning and **daily-journal** at night — the rest reveals itself as the work calls for it.
+Thirty-plus skills covering the daily practice, health, knowledge graph, capture, writing, and team surfaces. Install registers each so Claude Code triggers it on the right cue; you do not memorize a command list. New to the system? Start with **rise** in the morning and **daily-journal** at night — the rest reveals itself as the work calls for it.

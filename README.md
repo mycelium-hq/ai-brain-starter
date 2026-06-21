@@ -345,10 +345,6 @@ Everything above is free, MIT, and yours. The vault lives on your disk, the inte
 
 The full ladder and prices live at [myceliumai.co/#pricing](https://myceliumai.co/#pricing). If you would rather it was built around your stack than self-installed, that is [consulting](https://myceliumai.co/consulting).
 
-### For developers: a clean agent OS for any repo
-
-Separate from the personal vault, this repo also ships [`agentic-os/`](agentic-os/README.md), a one-command install pack for code repositories. It drops a small declarative kernel that orchestrates, pinned specialist agents whose tool surface is enforced by the harness (a read-only reviewer that literally cannot write to your repo), user-selectable posture modes (dev / review / research / security), and per-language quality rules that auto-apply by file glob with zero per-file config. Run `bash agentic-os/INSTALL.sh /path/to/repo`. The pattern is free and MIT; Mycelium's Client Agentic-OS Starter [consulting](https://myceliumai.co/consulting) install hardens it for your team's stack and wires the enforced boundary into your CI.
-
 ---
 
 ## How It Works

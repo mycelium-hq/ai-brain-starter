@@ -147,15 +147,13 @@ Each skill in `skills/<name>/` is auto-discovered by Claude Code. After cloning,
 | Step | Iron law | Skill |
 |---|---|---|
 | 1. Design before code | NO IMPLEMENTATION ACTION UNTIL DESIGN APPROVED | `obra:brainstorming` |
-| 2. Test before code | NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST | `obra:test-driven-development` (paired with `tdd-substrate` for dual-runtime Vitest+pytest projects) |
+| 2. Test before code | NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST | `obra:test-driven-development` |
 | 3. Root cause before fix | NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST | `obra:systematic-debugging` (paired with `obra:root-cause-tracing` on deep cascades) |
 | 4. Evidence before completion | NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE | `obra:verification-before-completion` |
 
 **Why it matters as a unit:** any one skill in isolation slips. Brainstorming without TDD produces designed-but-untested code. TDD without verification produces "tests pass, ship" claims that miss what the tests don't cover. Verification without root-cause produces fixes that suppress symptoms. The cycle locks in a sequence where each step gates the next.
 
 **How the substrate uses it:**
-- `tdd-substrate` (this repo) IS the test-before-code step for dual-runtime (Vitest + pytest) projects, with explicit cross-references to brainstorming, systematic-debugging, and verification-before-completion as the surrounding discipline.
-- `modern-python-substrate` (this repo) IS the toolchain (uv + ruff + ty + pytest) that hosts the pytest side of the TDD step. It also lists the four-step cycle in its `## Eng-discipline cycle (Python-specific cross-references)` section so a Python-only user gets the same map.
 - Substrate-level enforcement: PreToolUse hooks ensure no destructive git operation runs with an in-flight uncommitted module (the verification-before-completion step's safety net).
 
 **When to invoke each:**
@@ -336,44 +334,6 @@ Then open Claude Code and use any ChatPRD tool — it will prompt you to authent
 **Requires:** A ChatPRD account at [chatprd.ai](https://www.chatprd.ai/).
 
 **Source:** ChatPRD team. HTTP MCP — no server to run locally.
-
----
-
-### RescueTime — productivity data for weekly reviews
-
-**What it does:** [RescueTime](https://www.rescuetime.com/) tracks which apps and websites you use and for how long, categorizing time as productive, neutral, or distracting. The MCP integration (a custom FastMCP server included in this repo at `scripts/mcps/rescuetime-server.py`) lets Claude pull your productivity data live. Used primarily during `/weekly` reviews to merge app-level tracking ("I spent 3h in VS Code") with the session logs Claude writes at session end ("I spent 3h on the Onde investor deck").
-
-**Why it matters:** The session-end cascade (Lane 8) logs *purpose* (what you were working on). RescueTime logs *apps* (what tools you used). Combined during `/weekly`, they give a complete picture of where your hours actually went — not just what you meant to do.
-
-**Install:**
-
-1. Install dependencies: `pip install fastmcp httpx` (or `pipx install fastmcp`)
-2. Copy the server to a persistent location:
-   ```bash
-   mkdir -p ~/.claude/rescuetime-mcp
-   cp scripts/mcps/rescuetime-server.py ~/.claude/rescuetime-mcp/server.py
-   ```
-3. Get your API key from [rescuetime.com/anapi/manage](https://www.rescuetime.com/anapi/manage) (under "API Access Key")
-4. Add to your vault `.mcp.json`:
-   ```json
-   {
-     "mcpServers": {
-       "rescuetime": {
-         "type": "stdio",
-         "command": "fastmcp",
-         "args": ["run", "/YOUR/HOME/.claude/rescuetime-mcp/server.py"],
-         "env": {
-           "RESCUETIME_API_KEY": "your-api-key-here"
-         }
-       }
-     }
-   }
-   ```
-   Replace `/YOUR/HOME/` with your actual home path (e.g., `/Users/yourname/` on Mac).
-
-**Requires:** A RescueTime account (free tier works for basic tracking).
-
-**Source:** Custom server in this repo at `scripts/mcps/rescuetime-server.py`. Built with [FastMCP](https://github.com/jlowin/fastmcp) against the [RescueTime Analytic API](https://www.rescuetime.com/rtx/documentation#api-reference).
 
 ---
 

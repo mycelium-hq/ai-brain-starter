@@ -133,10 +133,10 @@ def _slack_workspace_from_path(filepath):
     """Detect workspace from path. Returns None if not embedded.
 
     Two known layouts:
-      - /ingest-slack:    External Inputs/Slack/<channel>/<date>.md     (NO workspace)
-      - slack MCP export: 🤖 AI Chats/Slack/<workspace>/<channel>.md    (workspace at index after Slack)
+      - slack ingest files: External Inputs/Slack/<channel>/<date>.md  (NO workspace)
+      - slack MCP export:   🤖 AI Chats/Slack/<workspace>/<channel>.md (workspace at index after Slack)
 
-    Only the AI-Chats pattern carries a workspace. /ingest-slack does not.
+    Only the AI-Chats pattern carries a workspace. The ingest-file pattern does not.
     """
     parts = filepath.split(os.sep)
     for i, p in enumerate(parts):
@@ -219,7 +219,7 @@ def _extract_linear(filepath, body, fm, context):
 
 
 def _extract_whatsapp_ingest(filepath, body, fm, context):
-    # /ingest-whatsapp output. Different shape from the bridge's per-contact
+    # WhatsApp ingest output. Different shape from the bridge's per-contact
     # files in 🤖 AI Chats/WhatsApp (which use type: whatsapp-chat).
     return None
 

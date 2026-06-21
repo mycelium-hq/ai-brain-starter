@@ -137,7 +137,7 @@ done
 
 # === 6. Bundled skills have SKILL.md ===
 hdr "Bundled skills"
-for s in daily-journal deconstruct diagnose for-my-team graphify humanizer insights meeting-todos nano-banana patterns repurpose-talk second-brain-mapping security-snapshot setup-vault-types; do
+for s in daily-journal deconstruct diagnose for-my-team graphify humanizer insights meeting-todos nano-banana patterns repurpose-talk second-brain-mapping setup-vault-types; do
   if [[ -f "$SKILL_DIR/skills/$s/SKILL.md" ]]; then
     ok "skills/$s/SKILL.md"
   else

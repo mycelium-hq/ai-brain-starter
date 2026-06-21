@@ -16,7 +16,7 @@ I/O only, no git — via a per-session cached lock path.
 
 WHY
 ---
-Worktree isolation (the dev-repo-worktrees skill) prevents the shared-HEAD
+Worktree isolation (the per-session worktree pattern) prevents the shared-HEAD
 collision structurally, but two sessions can still pick the SAME repo and
 clobber each other's in-flight work (the sibling-session parallel-commit
 collision class). This lock is the coordination layer: it tells session 2 that
