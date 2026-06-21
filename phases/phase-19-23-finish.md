@@ -72,7 +72,93 @@ Then close the loop in plain language:
 
 **Why this phase matters:** the install has been about scaffolding (folders, CLAUDE.md, templates, skills, hooks). Scaffolding is invisible to the user — they can't tell whether it works until real content lives in it. ONE imported document is the activation moment that proves the system to them — but only if they see it queried. A doc imported but never read back is still invisible; the live cited answer above is what turns "I dropped a file somewhere" into "it actually knows my thing." Without it, they close the session and the vault stays as empty scaffolding waiting for a "next session" that may never happen.
 
-**Bounded scope.** Resist the urge to push for more than one document. The user is tired. The point is proof, not bulk. If they say "I have a lot of stuff to bring in," answer: "Bring one now. The rest can come over the coming weeks — there's no rush. We just want one in tonight."
+**Proof first, then proactively bring more in — don't leave it as homework.** The one cited answer above is the floor and must happen. But do NOT stop the import there and tell them to bring the rest in "over the coming weeks" on their own — that is the passive someday-task that never happens, and the reason a friend finishes setup with an empty vault. The model drives the next step; the user should never have to know to ask for it. Once the proof lands, offer it directly:
+
+**EN:** "Want to bring in a few more while we're here? Tell me where your notes live — Apple Notes, Notion, Google Docs, a folder of files, whatever you've got — and I'll pull in the ones that matter and file each in the right place. Or we stop at one, totally your call."
+
+**ES:** "¿Querés traer algunas más ahora que estamos acá? Decime dónde viven tus notas — Apple Notes, Notion, Google Docs, una carpeta de archivos, lo que tengas — y traigo las que importan y organizo cada una donde va. O paramos en una, como prefieras."
+
+Then act on the answer: bring in what they point you at, file each into the correct folder as you go, confirm paths. **Guided, never a blind dump** — a handful of real, well-filed docs beats a thousand-file paste that buries the vault. If they'd rather stop at one, fine: the proof already happened. The point is that the system *offered and did it*, not that the user had to figure out how on their own later.
+
+## Phase 19.6 — Optional: stay in touch (MANDATORY to ask, the answer is optional)
+
+This is the **primary** email ask, and it rides the activation win you just created in Phase 19.5 — the user has watched the vault answer from their own document, the single highest-motivation moment of the install. Ask here, not at the tail: by Phase 24 the install is long and many sessions truncate before reaching it, so an ask parked at the end is an ask that mostly never fires. The marker written here turns Phase 24.4 into a silent backstop — it never double-asks. Do NOT pressure, do NOT imply anything is unfinished, do NOT re-ask after a decline.
+
+First, check whether they already signed up (web-form install, a re-run, or an earlier ask):
+
+```bash
+test -f "$HOME/.claude/.ai-brain-starter-email-on-file" && echo on-file || echo missing
+```
+
+If `on-file`, skip this phase — go to Phase 20. If `missing`, ask ONCE, in PRIMARY_LANGUAGE:
+
+**EN:** "That's your vault working, and it's yours to keep — nothing here changes that. One optional thing: I can send a short note when there's a meaningful update to the system, and there's a free workflow audit for founders, a small number each month. If you'd like either, what's the best email? Or just say skip — everything works exactly the same either way."
+
+**ES:** "Eso es tu vault funcionando, y es tuyo para siempre — nada de esto cambia eso. Una cosa opcional: te puedo mandar una nota corta cuando hay una actualización importante del sistema, y hay una auditoría gratuita de flujo de trabajo para founders, algunas cada mes. Si querés cualquiera de las dos, ¿cuál es tu mejor email? O simplemente decí saltar — todo funciona exactamente igual."
+
+**If they decline** (skip / no / move on): say one warm line ("Done — you're all set." / "Listo — todo en orden."), record the decline so nothing ever re-asks, then go to Phase 20. Never ask twice.
+
+```bash
+mkdir -p ~/.claude && printf 'declined\n' > ~/.claude/.ai-brain-starter-email-on-file && chmod 600 ~/.claude/.ai-brain-starter-email-on-file
+```
+
+**If they give an email**, record it. You already have their name (Phase 1) and PRIMARY_LANGUAGE. Substitute and run:
+
+```bash
+EMAIL="their@email.com" NAME="Their Name" QM_LANG="en" python3 - <<'PY'
+import json, os, urllib.request
+email, name = os.environ["EMAIL"], os.environ["NAME"]
+lang = os.environ.get("QM_LANG", "en")
+# Persist the address locally FIRST, before the network call. "Make sure we get
+# those emails": a captured address must survive a failed POST, an offline
+# install, or a server hiccup — otherwise the one moment the user opted in is
+# lost. The pending file is the durable record; a success below clears it, and
+# the Phase 24.4 backstop drains whatever is left.
+pend = os.path.expanduser("~/.claude/.ai-brain-starter-email-pending")
+try:
+    os.makedirs(os.path.dirname(pend), exist_ok=True)
+    with open(pend, "a") as f:
+        f.write(json.dumps({"email": email, "name": name, "lang": lang}) + "\n")
+    os.chmod(pend, 0o600)
+except Exception:
+    pass
+payload = json.dumps({"email": email, "name": name, "lang": lang, "stage": "post_install"}).encode()
+req = urllib.request.Request("https://www.mycelium-ai.co/api/install/quick-mint",
+    data=payload, headers={"content-type": "application/json"}, method="POST")
+try:
+    with urllib.request.urlopen(req, timeout=12) as r:
+        body = json.loads(r.read().decode() or "{}")
+    mp = os.path.expanduser("~/.claude/.ai-brain-starter-email-on-file")
+    with open(mp, "w") as f:
+        f.write((body.get("token") or "recorded") + "\n")
+    os.chmod(mp, 0o600)
+    try: os.remove(pend)   # POST landed — pending record no longer needed
+    except OSError: pass
+    print("ok")
+except Exception as e:
+    # Network/server failure: the address is SAFE in the pending file. Do NOT
+    # write the on-file marker — leaving it missing lets Phase 24.4 retry. Never
+    # alarm the user.
+    print(f"pending: {e}")
+PY
+```
+
+`QM_LANG` is `en` or `es`. `stage: "post_install"` records the lead without emailing an install link.
+
+- If it prints `ok`: "You're on the list. You'll get update notes and the free workflow audit details by email." / "Estás en la lista. Vas a recibir las novedades y los detalles de la auditoría gratuita por email."
+- If it prints `pending: ...`: do NOT alarm the user. Say one calm line — "Noted — that's saved." / "Anotado, quedó guardado." — and move on. The address is on disk and the backstop drains it; the install is complete regardless.
+
+Then go to Phase 20.
+
+**Why this phase exists:** the install used to gate on email — a wall before any value, which turned people away. The ask now rides the activation win (Phase 19.5), the highest-intent moment, instead of the fatigued tail where most installs never arrive. Capturing it here means the people on the list actually used the system and chose to stay in touch — a better signal than a coerced address, and no one is ever blocked. The local pending file plus the Phase 24.4 backstop are belt-and-suspenders so a captured address is never lost to a network hiccup.
+
+**Banned framings:**
+- "You need to give your email to finish." — false; the install is already done.
+- Asking twice, or re-asking after a decline.
+- "Sunk cost" / "you've come this far" / "after all that" framing — manipulative. Never.
+- Implying anything stops working, syncs less, or is limited without the email.
+
+---
 
 ## Phase 20: Team Vault (Optional)
 
@@ -413,19 +499,42 @@ Tell the user in their PRIMARY_LANGUAGE only. Show one link, matching their lang
 
 ---
 
-## Phase 24.4 — Optional: stay in touch (MANDATORY to ask, the answer is optional)
+## Phase 24.4 — Email backstop (only if Phase 19.6 didn't capture)
 
-The install is complete and the vault is fully the user's. This is the ONE place the setup asks for an email, and it is genuinely optional — the install never depended on it. Do NOT pressure, do NOT imply anything is unfinished without it, do NOT re-ask after a decline.
+The **primary** ask already happened at Phase 19.6, on the activation win. This phase is the backstop. It does two things and never double-asks (the marker guards it): (1) drains a pending address if the Phase 19.6 POST failed on a network hiccup, and (2) re-asks ONLY if no marker was ever written (19.6 was skipped or errored). Do NOT pressure, do NOT imply anything is unfinished, do NOT re-ask after a decline.
 
-First, check whether they already signed up (web-form installs, or a re-run):
+First, drain any pending address (a capture whose POST failed earlier), then read the marker:
 
 ```bash
-test -f "$HOME/.claude/.ai-brain-starter-email-on-file" && echo on-file || echo missing
+python3 - <<'PY'
+import json, os, urllib.request
+pend = os.path.expanduser("~/.claude/.ai-brain-starter-email-pending")
+mp = os.path.expanduser("~/.claude/.ai-brain-starter-email-on-file")
+if os.path.exists(pend):
+    remaining = []
+    for line in [l for l in open(pend).read().splitlines() if l.strip()]:
+        try:
+            rec = json.loads(line)
+            payload = json.dumps({**rec, "stage": "post_install"}).encode()
+            req = urllib.request.Request("https://www.mycelium-ai.co/api/install/quick-mint",
+                data=payload, headers={"content-type": "application/json"}, method="POST")
+            urllib.request.urlopen(req, timeout=12).read()
+        except Exception:
+            remaining.append(line)  # still couldn't deliver — keep for next time
+    if remaining:
+        open(pend, "w").write("\n".join(remaining) + "\n")
+    else:
+        try: os.remove(pend)
+        except OSError: pass
+        with open(mp, "w") as f: f.write("recorded\n")
+        os.chmod(mp, 0o600)
+print("on-file" if os.path.exists(mp) else "missing")
+PY
 ```
 
-If `on-file`, skip this phase entirely — they are already on the list. Go straight to Phase 24.5.
+If it prints `on-file`, the address is captured (or they declined earlier) — skip the rest and go to Phase 24.5. If `missing`, the primary ask never landed: run the **exact Phase 19.6 ask** now (its EN/ES wording, decline path, and email-capture snippet with local-persist), then continue. Never ask twice; never re-ask after a decline.
 
-If `missing`, make the ask ONCE, in PRIMARY_LANGUAGE:
+The Phase 24.5 walkthrough is next either way. For reference, the one-shot ask wording, if you need it here:
 
 **EN:** "Your vault is set up and yours to keep — nothing here changes that. One optional thing: I can send a short note when there's a meaningful update to the system, and there's a free workflow audit for founders, a small number each month. If you'd like either, what's the best email? Or just say skip — everything works exactly the same either way."
 
@@ -437,45 +546,11 @@ If `missing`, make the ask ONCE, in PRIMARY_LANGUAGE:
 mkdir -p ~/.claude && printf 'declined\n' > ~/.claude/.ai-brain-starter-email-on-file && chmod 600 ~/.claude/.ai-brain-starter-email-on-file
 ```
 
-**If they give an email**, record it. You already have their name (Phase 1) and PRIMARY_LANGUAGE. Substitute them and run:
-
-```bash
-EMAIL="their@email.com" NAME="Their Name" QM_LANG="en" python3 - <<'PY'
-import json, os, urllib.request
-payload = json.dumps({
-    "email": os.environ["EMAIL"],
-    "name": os.environ["NAME"],
-    "lang": os.environ.get("QM_LANG", "en"),
-    "stage": "post_install",
-}).encode()
-req = urllib.request.Request(
-    "https://www.mycelium-ai.co/api/install/quick-mint",
-    data=payload, headers={"content-type": "application/json"}, method="POST")
-try:
-    with urllib.request.urlopen(req, timeout=12) as r:
-        body = json.loads(r.read().decode() or "{}")
-    # Always settle the marker on a successful POST: the token if the server
-    # returned one, else "recorded". Its existence is what stops every runtime
-    # surface from re-asking — so it must be written even when no token comes
-    # back, not only `if tok`.
-    mp = os.path.expanduser("~/.claude/.ai-brain-starter-email-on-file")
-    with open(mp, "w") as f:
-        f.write((body.get("token") or "recorded") + "\n")
-    os.chmod(mp, 0o600)
-    print("ok")
-except Exception as e:
-    print(f"failed: {e}")
-PY
-```
-
-`QM_LANG` is `en` or `es`. The `stage: "post_install"` field tells the server to record the lead WITHOUT emailing an install link — the install already ran.
-
-- If it prints `ok`: tell the user warmly, in PRIMARY_LANGUAGE — "You're on the list. You'll get update notes and the free workflow audit details by email." / "Estás en la lista. Vas a recibir las novedades y los detalles de la auditoría gratuita por email."
-- If it prints `failed: ...`: do NOT alarm the user. Say one calm line — "Noted — I'll make sure that's saved." / "Anotado." — and move on. The install is complete regardless; a network hiccup here is not the user's problem.
+**If they give an email**, capture it with the **Phase 19.6 snippet** (the one with the local-persist fallback), not a second copy maintained here — one source so the two never drift. On `ok`, confirm warmly; on `pending`, say one calm line and move on, the address is saved.
 
 Then go to Phase 24.5.
 
-**Why this phase exists:** the install used to gate on email — a hard wall before any value, which turned people away. The email now lives here, at the end, after the value is delivered, as a genuine optional request tied to a real offer (update notes and the free workflow audit). Capturing it here means the people on the list actually used the system and chose to stay in touch — a better signal than a coerced address, and no one is ever blocked.
+**Why this is only a backstop:** the real ask and its full rationale live at Phase 19.6, on the activation win. This phase exists solely to catch the rare case where 19.6 left no marker, and to drain an address a network failure stranded in the pending file. It must never become a second ask in the normal flow — the marker guarantees one ask, total.
 
 **Banned framings:**
 - "You need to give your email to finish." — false; the install is already done.
@@ -504,10 +579,10 @@ Do NOT explain the layered architecture, the hooks, the language packs, the Haik
 After the close walkthrough, set the expectation for how the vault grows AS THEY USE IT — not as a deferred action they have to remember. The activation moment already happened in Phase 19.5 (their first imported doc). This phase is about pacing the rest of the import + when extra capabilities come online. Speak in their PRIMARY_LANGUAGE, one paragraph, conversational register.
 
 **EN:**
-> "One last thing about pacing. The doc you just brought in plus tonight's journal are the first two real things in your vault. Over the next couple of weeks, when you reach for a note in your old system (Apple Notes, Google Docs, Notion, paper, whatever), just bring it in here instead. You don't have to migrate everything at once — let it happen organically. When you have ten or so real notes in, ask me 'can the panel review how my files are organized?' and we'll clean it up together. The `/second-brain-mapping` skill keeps the index fresh as content accumulates — run it weekly per the first-week post. The vault gets smarter the more of your actual life lives in here."
+> "One last thing about pacing. What you brought in plus tonight's journal are the first real things in your vault — and you don't have to do the rest alone or remember a command. From here on, whenever you mention something from your old system (Apple Notes, Google Docs, Notion, paper, a file on your computer), I'll offer to pull it in and file it for you — you won't have to know how or ask. Just bring things up as they come; no big migration weekend. Once you've got ten or so real notes in, I'll suggest a quick cleanup pass myself. The `/second-brain-mapping` skill keeps the index fresh as content grows — run it weekly per the first-week post. The vault gets smarter the more of your actual life lives in here."
 
 **ES:**
-> "Una última cosa sobre el ritmo. El documento que acabás de traer más el diario de esta noche son las primeras dos cosas reales en tu vault. En las próximas semanas, cuando estés buscando una nota en tu sistema anterior (Apple Notes, Google Docs, Notion, papel, lo que sea), simplemente traela acá en vez. No tenés que migrar todo de una — dejalo pasar de forma orgánica. Cuando tengas unas diez notas reales adentro, preguntame '¿puede el panel revisar cómo están organizados mis archivos?' y la limpiamos juntos. El skill `/second-brain-mapping` mantiene el índice fresco a medida que se acumula contenido — corrélo semanalmente como dice el post de la primera semana. El vault se vuelve más inteligente mientras más de tu vida real viva acá adentro."
+> "Una última cosa sobre el ritmo. Lo que trajiste más el diario de esta noche son las primeras cosas reales en tu vault — y no tenés que hacer el resto solo ni acordarte de ningún comando. De acá en adelante, cada vez que menciones algo de tu sistema anterior (Apple Notes, Google Docs, Notion, papel, un archivo en tu computador), yo te voy a ofrecer traerlo y organizarlo por vos — no vas a tener que saber cómo ni pedirlo. Traé las cosas a medida que surjan; no hay que migrar todo en un fin de semana. Cuando tengas unas diez notas reales adentro, yo mismo te voy a sugerir una limpieza rápida. El skill `/second-brain-mapping` mantiene el índice fresco a medida que crece el contenido — corrélo semanalmente como dice el post de la primera semana. El vault se vuelve más inteligente mientras más de tu vida real viva acá adentro."
 
 Why this phase matters: install completion is the moment of highest motivation AND highest decision fatigue. The user already did the activation moment in Phase 19.5 (one doc imported). This phase tells them HOW the rest gets brought in — progressively, naturally, not as a homework assignment for a future session that may never happen.
 
@@ -573,13 +648,14 @@ Then truly stop.
 - **NEVER LET INFORMATION GO NOWHERE.** Anything personal the user reveals must land in `🏠 Home/About Me.md` (or the right structured destination: CLAUDE.md quick fields, a per-person CRM file, the Health folder, etc.) before the conversation moves on. Universal capture rule codified in Phase 3c. The failure mode this prevents: user says "I have ADHD" during the tools question, model nods and moves on, the fact never lands anywhere, six months later there's no context for "why am I forgetting things?" Capture must be lossless. Append, never overwrite. Do not pause to confirm — just write the bullet and continue.
 - GO SLOW. Wait for answers. Don't dump instructions.
 - **NEVER STOP MID-SETUP.** After completing each phase, ALWAYS continue to the next phase automatically. Do not wait for the user to ask "what's next?" — tell them what's coming and proceed. The only reasons to pause are: (1) the user explicitly says "let's stop here" or "I need a break," (2) a critical install failed and needs manual intervention, or (3) the user asks a question that needs answering before continuing. After the journal phase especially — there are 10+ more phases. Don't stop there.
-- **PHASES 3b, 11, 13, 19.5, 24, 24.4, 24.5, 24.6, AND 24.7 ARE MANDATORY.** Fire ALL NINE even if a prior phase already surfaced the topic, even if the user seemed disinterested, even if an optional phase (20 team vault, 22 patterns, 23 theme) was skipped, even if 23.5 errored mid-script. Each mandatory phase covers a distinct activation or capture moment the install cannot afford to skip:
+- **PHASES 3b, 11, 13, 19.5, 19.6, 24, 24.4, 24.5, 24.6, AND 24.7 ARE MANDATORY.** Fire ALL TEN even if a prior phase already surfaced the topic, even if the user seemed disinterested, even if an optional phase (20 team vault, 22 patterns, 23 theme) was skipped, even if 23.5 errored mid-script. Each mandatory phase covers a distinct activation or capture moment the install cannot afford to skip:
   - Phase 3b = create `🏠 Home/About Me.md` from the template. Without it, the universal capture rule has nowhere to write to. Phase 4 fills the first sections; subsequent sessions append.
   - Phase 11 = external-tool wiring. Most common skip: user mentioned Gmail in Phase 4 question 3, model treated that as "answered" and never installed `google-workspace-mcp`. Phase 11 must fire and ACT on the prior mention.
   - Phase 13 = health data import (devices AND labs). Two distinct halves; the labs question is its own mandatory ask, NOT subsumed by the wearables answer.
-  - Phase 19.5 = activation moment (user imports their first active doc IN THIS SESSION because we can't assume another session will happen) AND sees the proof — one cited answer pulled live from that doc, so the session ends on a demonstration, not on faith that "next session I'll know it."
+  - Phase 19.5 = activation moment (user imports their first active doc IN THIS SESSION because we can't assume another session will happen) AND sees the proof — one cited answer pulled live from that doc, so the session ends on a demonstration, not on faith that "next session I'll know it." After the proof, the model PROACTIVELY offers to bring more in, guided — the user must never have to know to ask for the import on their own.
+  - Phase 19.6 = primary email ask, riding the Phase 19.5 activation win (peak motivation, and a phase nearly every install reaches). Mandatory to ASK once; the answer is the user's free choice. Captures locally before the network call so an address is never lost.
   - Phase 24 = Substack first-week handoff with inline three-commands-and-one-habit orientation.
-  - Phase 24.4 = the optional email ask, at the value moment. Mandatory to ASK once; the user's answer is their free choice. It is the de-gated install's only signup touchpoint.
+  - Phase 24.4 = email backstop. Drains an address stranded by a failed POST, and re-asks ONLY if Phase 19.6 left no marker (skip/error). Marker-guarded; never a second ask in the normal flow.
   - Phase 24.5 = session-close walkthrough.
   - Phase 24.6 = progressive-use pointer.
   - Phase 24.7 = AUTO-FIRE session-close cascade (do NOT wait for the user to say "bye"). Without this, the install conversation never gets logged to a session file, the aggregators don't run, and the user's next session opens with no record of what got installed. Phase 24.7 is the difference between "install was saved" and "install evaporated when the user closed the window."

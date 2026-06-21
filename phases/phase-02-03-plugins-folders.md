@@ -105,6 +105,14 @@ if app_file.exists():
         app_settings = {}
 app_settings.setdefault("fileSortOrder", "byModifiedTime")
 
+# Default NEW notes (including ones Obsidian auto-creates when you click an
+# unresolved [[wikilink]]) to 📝 Notes/, never the vault root. Obsidian's
+# factory default is "root", which is why a clicked [[Amor]] / [[Pisos Bajos]]
+# link on a vault whose floor notes weren't pre-created lands a loose emotion
+# file at the top level. setdefault so we never override a user's own choice.
+app_settings.setdefault("newFileLocation", "folder")
+app_settings.setdefault("newFileFolderPath", "📝 Notes")
+
 # Exclude machine-generated folders from Obsidian's index. The brain's hooks
 # write thousands of files into these over a vault's lifetime — session stubs,
 # worktree snapshots, rotating logs. They are machinery, not notes. On a mature
@@ -213,9 +221,12 @@ Create these CORE folders in their vault (emojis are important — they make the
 🏠 Home/
 👤 CRM/
 📝 Notes/
+📝 Notes/Floors/
 ⚙️ Meta/
 ⚙️ Meta/scripts/
 ```
+
+**`📝 Notes/Floors/` is core, not optional.** The 34 floor concept notes and the three tier notes (Low / Middle / High Floors) created in Phase 10a live HERE, never at the vault root and never loose in `📝 Notes/`. Floors are the journaling spine, so this folder ships with every install. If you skip creating it, Phase 10a (or a later journal entry's wikilink) scatters `Disgust`, `Amor`, `Culpa`, `Soledad`, `Low Floors`, etc. across the top level — the single most common "why is my sidebar full of emotion files" complaint.
 
 **Conditional folders — only create if relevant based on what they told you in Phase 1. These are BLOCKING conditionals, not suggestions. If the user did not explicitly opt in, DO NOT create the folder, DO NOT add it to the vault map, DO NOT reference it in their CLAUDE.md or resolver files.**
 
