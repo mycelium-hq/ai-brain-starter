@@ -10,7 +10,7 @@
       "name": "ai-brain-starter",
       "source": "./",
       "description": "The operating system for Claude Code. Memory, accountability, journaling, knowledge graphs, pattern recognition, and first-principles analysis — one install, every session compounds.",
-      "version": "1.5.0"
+      "version": "1.5.1"
     }
   ]
 }
