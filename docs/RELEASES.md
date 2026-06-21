@@ -11,6 +11,23 @@ For full development history including internal refactors and bug fixes, see [`C
 
 ---
 
+## 2026-06-20 — v1.5.1: restore agentic-os + security-snapshot; harden open-core guard (MYC-1339)
+
+v1.5.0 over-pruned two intentional free assets that were misclassified as boundary violations.
+
+**Restored:**
+
+- **`agentic-os/`** — free multi-agent template (MYC-254, codified Done). The paid moat is the runtime enforcement, not this teaching template. Anyone who cloned before v1.5.0 already had it; it should never have been removed.
+- **`skills/security-snapshot`** — self-labeled "Free lead magnet for consulting practices" in its own SKILL.md. A passive SSL/HTTP-header hygiene scan — not an audit product.
+
+**Also hardened:**
+
+The open-core boundary guard (`scripts/check-open-core-boundary.sh`) is now **allowlist-based**: every `skills/` subdirectory and every capability-pack-shaped top-level directory must appear in `.github/free-tier-allowlist.txt` (with a rationale tag) or CI fails. Default = blocked. The prior v1 denylist ran green while both restored assets were present; the allowlist model closes that gap. A 4-case negative-control test (`tests/integration/test_open_core_boundary.sh`) proves the guard fails on an unlisted path.
+
+**No action required for existing installs.** If you were on v1.5.0 and want `agentic-os/` back, `git pull` to v1.5.1. If you are doing a fresh install, bootstrap picks it up automatically.
+
+---
+
 ## 2026-05-09 — v1.3.1: vertical-healthcare actually-complete
 
 v1.3.0 advertised "vertical-healthcare completion" but only landed 4 of the 9 files the pack needs. Without `README.md` and `SKILL.md`, skill discovery did not register the pack, so `/vertical-healthcare init` was inert. v1.3.1 lands the 5 missing files: README, SKILL, the Epic and Cerner FHIR connectors, and the typed-memory schema. The pack is now functionally installable.
@@ -76,7 +93,7 @@ Nothing is auto-applied. The output is a folder of drafts plus a `REVIEW.md` che
 
 Structured-signal-first: deterministic Python parser does the heavy lifting (channels, users, headings, paths, frequencies). The model only synthesizes the residual ambiguous cases. Drafts without provenance are a bug, not a feature.
 
-Run with `/extract-rules-from-vault <dump-path>`. (This skill was removed in v1.5.0 as part of the open-core boundary enforcement.)
+Run with `/extract-rules-from-vault <dump-path>`. (This skill was removed in v1.5.0 as a paid-tier capability; it is not part of the free substrate.)
 
 **No action required** for existing installs. The skill is opt-in.
 
