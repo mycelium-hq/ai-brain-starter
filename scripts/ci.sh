@@ -134,6 +134,7 @@ INTEGRATION_TESTS=(
   test_connector_liveness_surface
   test_agent_memory_link
   test_open_core_boundary
+  test_audited_content_injection_scan
 )
 echo "==> (b) Shell integration: ${#INTEGRATION_TESTS[@]} tests"
 for t in "${INTEGRATION_TESTS[@]}"; do

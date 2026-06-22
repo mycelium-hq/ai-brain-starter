@@ -1,7 +1,7 @@
 {
   "_meta": {
     "schema_version": "0.1",
-    "purpose": "Public substrate (MIT) pattern catalog. Subset of the Mycelium AI Vault Security Pack \u2014 drops the MCP-install audit and per-client personal-data scrub layers (Mycelium-only). Patterns base64-encoded so the registry doesn't trigger pattern-matching tools that scan it.",
+    "purpose": "Public substrate (MIT) pattern catalog. Subset of the Mycelium AI Vault Security Pack — drops the MCP-install audit and per-client personal-data scrub layers (Mycelium-only). Patterns base64-encoded so the registry doesn't trigger pattern-matching tools that scan it.",
     "license": "MIT",
     "upgrade_path": "https://myceliumai.co for the enterprise version with quarterly reports + MCP audit + per-client tuning"
   },
@@ -259,6 +259,61 @@
         "edit"
       ],
       "remediation": "Use SHA-256 or stronger for crypto."
+    },
+    {
+      "id": "prompt-injection-ignore-previous",
+      "category": "prompt-injection",
+      "description": "Audited content tells the agent to ignore/override prior instructions",
+      "severity": "warn",
+      "regex_b64": "KD9pKVxiKD86aWdub3JlfGRpc3JlZ2FyZHxmb3JnZXR8b3ZlcnJpZGUpXGJbXi5cbl17MCw0MH1cYig/OnByZXZpb3VzfHByaW9yfGFib3ZlfGVhcmxpZXJ8YWxsfHRoZSlcYlteLlxuXXswLDMwfVxiKD86aW5zdHJ1Y3Rpb258cHJvbXB0fHJ1bGV8ZGlyZWN0aW9ufGd1aWRlbGluZXxjb250ZXh0KXM/XGI=",
+      "applies_to": [
+        "audited-content"
+      ],
+      "false_positive_hint": "Security docs that QUOTE an attack ('an injection says \"ignore previous instructions\"') will flag — treat as specimen, not a block."
+    },
+    {
+      "id": "prompt-injection-new-instructions",
+      "category": "prompt-injection",
+      "description": "Audited content asserts a new role / jailbreak / developer mode",
+      "severity": "warn",
+      "regex_b64": "KD9pKVxiKD86eW91IGFyZSBub3d8ZnJvbSBub3cgb258bmV3IGluc3RydWN0aW9ucz9ccyo6fGFjdCBhc3xwcmV0ZW5kIHRvIGJlfGRldmVsb3BlciBtb2RlfGphaWxicmVha3x1bnJlc3RyaWN0ZWQgbW9kZSlcYnxcYkRBTlxi",
+      "applies_to": [
+        "audited-content"
+      ],
+      "false_positive_hint": "'\\bDAN\\b' can match a person named Dan in third-party prose — audited-content specimen flag, severity warn."
+    },
+    {
+      "id": "prompt-injection-system-impersonation",
+      "category": "prompt-injection",
+      "description": "Audited content impersonates a system/assistant turn or system prompt",
+      "severity": "warn",
+      "regex_b64": "KD9pKSg/Ol58XG4pXHMqKD86c3lzdGVtfGFzc2lzdGFudClccypbOj5dfFxic3lzdGVtIHByb21wdFxifDxcfD9ccypzeXN0ZW1ccypcfD8+",
+      "applies_to": [
+        "audited-content"
+      ],
+      "false_positive_hint": "Transcripts/chat logs legitimately contain 'System:' lines — flag as specimen when reading third-party content."
+    },
+    {
+      "id": "prompt-injection-exfiltration",
+      "category": "prompt-injection",
+      "description": "Audited content cues secret/credential exfiltration",
+      "severity": "warn",
+      "regex_b64": "KD9pKX4vXC5zc2h8XGJpZF9yc2FcYnwoPzwhW1x3Ll0pXC5lbnZcYnxwcml2YXRlW19ccy1dP2tleXxBV1NfU0VDUkVUfFxiZXhmaWx0cmF0XHcqfFxicHJpbnRcYlteLlxuXXswLDIwfVxiZW52KD86aXJvbm1lbnQpP1xifFxiY3VybFxiW158XG5dKlx8XHMqKD86c2h8YmFzaCl8XGIoPzpzZW5kfHVwbG9hZHxwb3N0fGxlYWspXGJbXi5cbl17MCwzMH1cYig/OnNlY3JldHx0b2tlbnxjcmVkZW50aWFsfGFwaVtfXHMtXT9rZXl8a2V5KXM/XGI=",
+      "applies_to": [
+        "audited-content"
+      ],
+      "false_positive_hint": "Docs about secret handling will mention .env / private key — audited-content specimen flag."
+    },
+    {
+      "id": "prompt-injection-paste-and-run",
+      "category": "prompt-injection",
+      "description": "Audited content tells the reader to paste/run it into an agent or shell",
+      "severity": "warn",
+      "regex_b64": "KD9pKVxiKD86cGFzdGV8Y29weSlcYlteLlxuXXswLDMwfVxiKD86aW50b3x0bylcYlteLlxuXXswLDIwfVxiKD86Y2xhdWRlfGN1cnNvcnx0ZXJtaW5hbHxzaGVsbHxhZ2VudHxjaGF0Z3B0fGNvZGV4fGNvcGlsb3QpXGJ8XGIoPzpydW58ZXhlY3V0ZSlcYlteLlxuXXswLDIwfVxiKD86dGhlIGZvbGxvd2luZ3x0aGlzIHNjcmlwdHx0aGlzIGNvbW1hbmR8dGhlIGNvbW1hbmQgYmVsb3cpXGI=",
+      "applies_to": [
+        "audited-content"
+      ],
+      "false_positive_hint": "Legit install docs say 'run the following' — audited-content specimen flag, not a block."
     }
   ],
   "allowlist": {
