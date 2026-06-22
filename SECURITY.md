@@ -80,6 +80,30 @@ What is **never** sent, under any path: journal text, note contents, file conten
 
 ---
 
+## 6. Corporate / hardened install profile
+
+If you are rolling this out across a team — or your security team needs to review and approve exactly what lands on a machine before install — use the corporate profile:
+
+```bash
+bash bootstrap.sh --profile corporate --dry-run   # review the manifest, change nothing
+bash bootstrap.sh --profile corporate             # install with hardened defaults
+```
+
+(On Windows: `.\bootstrap.ps1 -Profile corporate`. The env-var form `CORPORATE_PROFILE=1` is equivalent, for scripted/MDM rollout.)
+
+By default the corporate profile:
+
+- Installs a **minimal, named** plugin/skill set only — first-party skills plus `obsidian@obsidian-skills` and `context7`. It skips every third-party marketplace (Sentry, Stripe, Cloudflare, SEO, marketing skills, etc.).
+- **Excludes shell-execution-capable Obsidian community plugins** (e.g. "Shell Commands", "Hider") and recommends Obsidian Restricted Mode. Those plugins were the abuse vector in the REF6598 / PHANTOMPULSE RAT campaign (Elastic Security Labs, April 2026).
+- **Excludes external-egress components** by default: the `granola` and `chatprd` MCP servers and the `playwright` browser plugin.
+- **Turns telemetry off** and pins versions (disables the self-update hook and the Claude Code autoupdater).
+- **Skips every sudo step** (Homebrew, the `/usr/local/bin` symlink) and runs entirely in user space.
+- **Emits a reviewable component manifest** (exact components + versions + source URLs) to `~/.claude/.ai-brain-starter-corporate-manifest.md` and to stdout, so a security team can approve before install.
+
+Full spec, the canonical manifest, the update workflow, and a security-team review checklist live in **[docs/CORPORATE_PROFILE.md](docs/CORPORATE_PROFILE.md)**.
+
+---
+
 ## Non-goals: what this security model deliberately does NOT do
 
 A useful security model is also a fence around what it does not try to handle. Listing non-goals stops over-trust ("the vault must be doing X for me, since X is a security thing") and over-fear ("the vault is missing X, so it's insecure") simultaneously.

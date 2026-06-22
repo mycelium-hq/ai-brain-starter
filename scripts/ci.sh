@@ -113,6 +113,7 @@ INTEGRATION_TESTS=(
   test_bootstrap_omits_vault_hooks
   test_bootstrap_brew_terminal_step
   test_bootstrap_optional_packs_soft_fail
+  test_bootstrap_corporate_profile
   test_remediate_runaway_procs
   test_scan_prior_single_instance
   test_scan_prior_failclosed_scrub

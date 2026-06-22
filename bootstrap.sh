@@ -119,6 +119,16 @@ set -euo pipefail
 REPO_URL="https://github.com/adelaidasofia/ai-brain-starter.git"
 SKILL_DIR="$HOME/.claude/skills/ai-brain-starter"
 DRY_RUN=0
+# Corporate / hardened install profile (surfaced by an enterprise security
+# review). When 1, the installer: skips ALL third-party plugin marketplaces,
+# skips external-egress MCPs (granola/chatprd) + the playwright browser plugin,
+# enforces telemetry-off env in settings.json, pins versions (disables the
+# self-update hook + Claude Code autoupdater), skips every sudo step (Homebrew,
+# /usr/local/bin symlink) and runs in user space, and emits a reviewable
+# component manifest. Set via CORPORATE_PROFILE=1 OR `--profile corporate`.
+# Full spec + manifest: docs/CORPORATE_PROFILE.md.
+CORPORATE_PROFILE="${CORPORATE_PROFILE:-0}"
+_expect_profile=0  # set when the previous arg was a bare `--profile`
 # When SOFT_FAIL=1, the *_safe install helpers route a failure to warn() instead
 # of err() — i.e. it does NOT land in the red "checks failed" list. Scoped on
 # only around the OPTIONAL third-party vendor-pack block (skippable wholesale
@@ -152,6 +162,13 @@ fi
 for arg in "$@"; do
   case "$arg" in
     --dry-run|-n) DRY_RUN=1 ;;
+    --profile)
+      # value comes in the NEXT token (`--profile corporate`); flag it.
+      _expect_profile=1 ;;
+    --profile=corporate|--corporate)
+      CORPORATE_PROFILE=1 ;;
+    --profile=*)
+      echo "WARNING: unknown --profile '${arg#*=}' (expected: corporate). Ignoring." >&2 ;;
     --restore)
       # Closes adelaidasofia/ai-brain-starter#2 — auto-restore from .bak files
       RESTORE_SCRIPT="$SKILL_DIR/scripts/bootstrap-restore.sh"
@@ -220,6 +237,11 @@ Install or update the ai-brain-starter setup. Safe to re-run.
 
 Options:
   --dry-run, -n                 Show what would be installed without making changes
+  --profile corporate           Hardened/compliance install: minimal named plugin set,
+                                no external-egress MCPs, telemetry OFF, versions pinned,
+                                user-space only (no sudo). Emits a reviewable manifest.
+                                Pair with --dry-run to review before installing.
+                                Full spec: docs/CORPORATE_PROFILE.md
   --uninstall                   Remove everything bootstrap installed (with confirmation)
   --force                       Skip the uninstall confirmation prompt
   --restore                     Interactive restore from .bak files (closes #2)
@@ -234,19 +256,48 @@ Environment:
   EMAIL_GATE_BYPASS=1           Skip the email-gate (development)
   PREFLIGHT_BYPASS=1            Skip the preflight check (development)
   SKIP_VENDOR_SKILLS=1          Skip third-party plugin marketplaces (air-gapped)
+  CORPORATE_PROFILE=1           Same as --profile corporate (hardened/compliance install)
   REQUIRED_CLAUDE_VERSION       Override the minimum Claude Code version (default 2.1.133)
 
 Logs: every run is appended to ~/.claude/.bootstrap.log (closes #3).
 HELP
       exit 0 ;;
+    *)
+      # Consume the value token after a bare `--profile`.
+      if [[ $_expect_profile -eq 1 ]]; then
+        _expect_profile=0
+        case "$arg" in
+          corporate) CORPORATE_PROFILE=1 ;;
+          *) echo "WARNING: unknown --profile '$arg' (expected: corporate). Ignoring." >&2 ;;
+        esac
+      fi
+      ;;
   esac
 done
 UNINSTALL="${UNINSTALL:-0}"
 FORCE="${FORCE:-0}"
 
+# ── Corporate / hardened profile: compose the existing hardening primitives ──
+# Done BEFORE the email-gate + vendor-pack blocks below so the forced bypasses
+# take effect there. We only FORCE the three switches the profile is defined by;
+# everything else (skip-sudo, telemetry env, pin, manifest) is gated inline on
+# $CORPORATE_PROFILE at each relevant step.
+if [[ "$CORPORATE_PROFILE" == "1" ]]; then
+  export CORPORATE_PROFILE=1    # so the embedded python here-docs can read it
+  export SKIP_VENDOR_SKILLS=1   # skip ALL third-party plugin marketplaces
+  export EMAIL_GATE_BYPASS=1    # no email mint / no quick-mint network call
+  export MYCELIUM_NO_PING=1     # no install-ping to myceliumai.co (this run + children)
+fi
+
 # Tee subsequent output to the log (header + everything that follows)
 exec > >(tee -a "$BOOTSTRAP_LOG") 2>&1
 printf "\n=== bootstrap run %s (PID %d) ===\n" "$(date +%Y-%m-%dT%H:%M:%S)" "$$" >> "$BOOTSTRAP_LOG"
+
+if [[ "$CORPORATE_PROFILE" == "1" ]]; then
+  printf "\n\033[1;33m━━━ CORPORATE / HARDENED PROFILE ACTIVE ━━━\033[0m\n"
+  printf "  No third-party marketplaces · no external-egress MCPs · telemetry OFF · versions pinned · user-space only.\n"
+  printf "  Reviewable component manifest is emitted at the end. Full spec: docs/CORPORATE_PROFILE.md\n"
+fi
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -851,7 +902,13 @@ if is_mac && ! have brew; then
   done
 fi
 
-if is_mac && ! have brew; then
+if is_mac && ! have brew && [[ "$CORPORATE_PROFILE" == "1" ]]; then
+  # Corporate / user-space mode: do NOT run the sudo-gated Homebrew installer.
+  warn "$(t "Corporate profile: Homebrew is missing — skipping its install (no sudo, user-space only)." \
+            "Perfil corporativo: falta Homebrew — se omite su instalación (sin sudo, solo espacio de usuario).")"
+  warn "$(t "Install Homebrew via your IT-approved channel + re-run if you want brew-managed python/node. Continuing without it." \
+            "Instalá Homebrew por tu canal aprobado de IT + volvé a correr si querés python/node vía brew. Se continúa sin él.")"
+elif is_mac && ! have brew; then
   # Homebrew is genuinely missing. Its installer needs the Mac password at an
   # interactive sudo prompt. When stdin is NOT a TTY — the common case: the user
   # pasted the install prompt into Claude Code, which runs this in a
@@ -903,14 +960,21 @@ fi
 # ───────────────────────────────────────────────────────────────────────────────
 
 if ! python3 -c "import sys; assert sys.version_info >= (3,10)" 2>/dev/null; then
-  hdr "Installing Python 3.12"
-  if is_mac; then
-    brew install python@3.12 || err "python install failed"
+  if [[ "$CORPORATE_PROFILE" == "1" ]]; then
+    warn "$(t "Corporate profile: Python 3.10+ not found — NOT auto-installing (user-space, no sudo)." \
+              "Perfil corporativo: no se encontró Python 3.10+ — NO se instala automáticamente (espacio de usuario, sin sudo).")"
+    warn "$(t "Provision Python via your IT-approved channel, then re-run. Some steps that need python3 will be skipped." \
+              "Instalá Python por tu canal aprobado de IT y volvé a correr. Algunos pasos que necesitan python3 se omitirán.")"
   else
-    sudo apt-get update -qq && sudo apt-get install -y python3 python3-pip python3-venv 2>/dev/null \
-      || sudo dnf install -y python3 python3-pip 2>/dev/null \
-      || sudo pacman -S --noconfirm python python-pip 2>/dev/null \
-      || err "python install failed (couldn't find apt/dnf/pacman)"
+    hdr "Installing Python 3.12"
+    if is_mac; then
+      brew install python@3.12 || err "python install failed"
+    else
+      sudo apt-get update -qq && sudo apt-get install -y python3 python3-pip python3-venv 2>/dev/null \
+        || sudo dnf install -y python3 python3-pip 2>/dev/null \
+        || sudo pacman -S --noconfirm python python-pip 2>/dev/null \
+        || err "python install failed (couldn't find apt/dnf/pacman)"
+    fi
   fi
 fi
 have python3 && ok "python3 $(python3 --version | awk '{print $2}')"
@@ -920,14 +984,21 @@ have python3 && ok "python3 $(python3 --version | awk '{print $2}')"
 # ───────────────────────────────────────────────────────────────────────────────
 
 if ! have node; then
-  hdr "Installing Node.js"
-  if is_mac; then
-    brew install node || err "node install failed"
+  if [[ "$CORPORATE_PROFILE" == "1" ]]; then
+    warn "$(t "Corporate profile: Node.js not found — NOT auto-installing (user-space, no sudo)." \
+              "Perfil corporativo: no se encontró Node.js — NO se instala automáticamente (espacio de usuario, sin sudo).")"
+    warn "$(t "Provision Node.js via your IT-approved channel, then re-run. Some steps that need node will be skipped." \
+              "Instalá Node.js por tu canal aprobado de IT y volvé a correr. Algunos pasos que necesitan node se omitirán.")"
   else
-    sudo apt-get install -y nodejs npm 2>/dev/null \
-      || sudo dnf install -y nodejs npm 2>/dev/null \
-      || sudo pacman -S --noconfirm nodejs npm 2>/dev/null \
-      || err "node install failed"
+    hdr "Installing Node.js"
+    if is_mac; then
+      brew install node || err "node install failed"
+    else
+      sudo apt-get install -y nodejs npm 2>/dev/null \
+        || sudo dnf install -y nodejs npm 2>/dev/null \
+        || sudo pacman -S --noconfirm nodejs npm 2>/dev/null \
+        || err "node install failed"
+    fi
   fi
 fi
 have node && ok "node $(node --version)"
@@ -1500,6 +1571,15 @@ fi
 # ───────────────────────────────────────────────────────────────────────────────
 
 hdr "Registering MCPs (Granola + ChatPRD)"
+if [[ "$CORPORATE_PROFILE" == "1" ]]; then
+  # Corporate profile: skip external-egress MCPs by default. Both granola and
+  # chatprd are remote URL MCPs that receive conversation context off-machine —
+  # exactly what an enterprise security review flags. Opt in after approval.
+  warn "$(t "Corporate profile: skipping external-egress MCPs (granola → granola.ai, chatprd → chatprd.ai)." \
+            "Perfil corporativo: se omiten MCPs con egreso externo (granola → granola.ai, chatprd → chatprd.ai).")"
+  log "$(t "  Enable opt-in after security review — see docs/CORPORATE_PROFILE.md." \
+          "  Habilitalos opt-in tras revisión de seguridad — ver docs/CORPORATE_PROFILE.md.")"
+else
 # SAFETY: backup .mcp.json before editing. Existing MCP servers
 # (custom integrations, other URL or stdio MCPs the user wired themselves)
 # are preserved — setdefault() only adds entries that are missing.
@@ -1527,6 +1607,7 @@ print("added:", ", ".join(added) if added else "nothing new (already registered)
 PY
   ok "MCPs registered: granola, chatprd — .mcp.json backed up (existing entries preserved)"
 fi
+fi  # end corporate-profile MCP gate
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Marketplaces + enabled plugins (settings.json)
@@ -1536,12 +1617,20 @@ fi
 
 hdr "Registering marketplace + enabling plugins"
 backup_file "$HOME/.claude/settings.json"
+if [[ "$CORPORATE_PROFILE" == "1" ]]; then
+  _CORP_PLUGINS="obsidian, context7 (playwright EXCLUDED — browser automation, not a knowledge-worker need)"
+else
+  _CORP_PLUGINS="obsidian, context7, playwright"
+fi
 if [[ $DRY_RUN -eq 1 ]]; then
-  dry "would register obsidian-skills marketplace (kepano/obsidian-skills) and enable: obsidian, context7, playwright"
+  dry "would register obsidian-skills marketplace (kepano/obsidian-skills) and enable: $_CORP_PLUGINS"
+  [[ "$CORPORATE_PROFILE" == "1" ]] && \
+    dry "would ENFORCE telemetry-off + pin env in settings.json: DISABLE_TELEMETRY, DISABLE_ERROR_REPORTING, DISABLE_FEEDBACK_COMMAND, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, DISABLE_AUTOUPDATER, MYCELIUM_NO_PING"
 else
   python3 - <<'PY' || err "settings.json plugin registration failed"
 import json, os
 p = os.path.expanduser("~/.claude/settings.json")
+corporate = os.environ.get("CORPORATE_PROFILE") == "1"
 try:
     with open(p) as f: s = json.load(f)
 except FileNotFoundError:
@@ -1552,9 +1641,29 @@ if "obsidian-skills" not in s["extraKnownMarketplaces"]:
         "source": {"source": "github", "repo": "kepano/obsidian-skills"}
     }
 s.setdefault("enabledPlugins", {})
-for plug in ("obsidian@obsidian-skills", "context7", "playwright"):
+plugins = ["obsidian@obsidian-skills", "context7"]
+if not corporate:
+    plugins.append("playwright")  # browser automation — out of the hardened minimal set
+for plug in plugins:
     s["enabledPlugins"].setdefault(plug, True)
+if corporate:
+    # ENFORCE (overwrite) telemetry-off + version-pin env. settings.json is
+    # backed up above; enforcing these IS the corporate profile's job, so we
+    # intentionally overwrite rather than setdefault. CLAUDE_CODE_DISABLE_
+    # NONESSENTIAL_TRAFFIC also disables the Claude Code autoupdater + crash
+    # reporting; DISABLE_AUTOUPDATER pins the CLI version belt-and-suspenders.
+    env = s.setdefault("env", {})
+    for k, v in (
+        ("DISABLE_TELEMETRY", "1"),
+        ("DISABLE_ERROR_REPORTING", "1"),
+        ("DISABLE_FEEDBACK_COMMAND", "1"),
+        ("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1"),
+        ("DISABLE_AUTOUPDATER", "1"),
+        ("MYCELIUM_NO_PING", "1"),
+    ):
+        env[k] = v
 with open(p, "w") as f: json.dump(s, f, indent=2)
+print("corporate: telemetry-off + pin env enforced in settings.json" if corporate else "standard plugin set registered")
 PY
   ok "Marketplace + plugins registered (settings.json backed up)"
 fi
@@ -1567,7 +1676,10 @@ fi
 # Requires sudo for /usr/local/bin; we skip cleanly if the user declines.
 # ───────────────────────────────────────────────────────────────────────────────
 
-if is_mac; then
+if is_mac && [[ "$CORPORATE_PROFILE" == "1" ]]; then
+  log "$(t "Corporate profile: skipping the sudo /usr/local/bin Obsidian CLI symlink (user-space only)." \
+          "Perfil corporativo: se omite el symlink sudo de Obsidian CLI en /usr/local/bin (solo espacio de usuario).")"
+elif is_mac; then
   OBS_CLI="/Applications/Obsidian.app/Contents/MacOS/obsidian-cli"
   LINK="/usr/local/bin/obsidian"
   if [[ -f "$OBS_CLI" ]] && [[ ! -e "$LINK" || "$(readlink "$LINK" 2>/dev/null)" != "$OBS_CLI" ]]; then
@@ -1877,5 +1989,72 @@ EOF
   around your answers. You don't need to type any other commands.
 
 EOF
+  fi
+fi
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Corporate / hardened profile: version-pin sentinels + reviewable manifest
+# Emitted LAST so it is the final thing a security reviewer sees. Prints under
+# --dry-run too (so `--profile corporate --dry-run` is a no-change review).
+# ───────────────────────────────────────────────────────────────────────────────
+if [[ "$CORPORATE_PROFILE" == "1" ]]; then
+  ABS_REV="$(git -C "$SKILL_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+  ABS_DESC="$(git -C "$SKILL_DIR" describe --tags --always 2>/dev/null || echo "$ABS_REV")"
+  CC_VER="$(claude --version 2>/dev/null | awk '{print $1}' || echo not-detected)"
+  MANIFEST_PATH="$HOME/.claude/.ai-brain-starter-corporate-manifest.md"
+
+  if [[ $DRY_RUN -eq 0 ]]; then
+    # Pin: short-circuit the self-update hook + pre-create the no-ping sentinel.
+    : > "$HOME/.claude/.ai-brain-starter-pinned" 2>/dev/null || true
+    { mkdir -p "$HOME/.mycelium" && : > "$HOME/.mycelium/onboarded-ai-brain-starter"; } 2>/dev/null || true
+  fi
+
+  CORP_MANIFEST="$(cat <<MANIFEST
+# AI Brain Starter — Corporate Install Manifest
+Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ) · Profile: corporate (hardened) · Host: $(uname -sm 2>/dev/null)
+
+## Pinned versions (no auto-update)
+- ai-brain-starter skill : ${ABS_DESC} (rev ${ABS_REV}) — https://github.com/adelaidasofia/ai-brain-starter
+  Self-update hook DISABLED via sentinel ~/.claude/.ai-brain-starter-pinned (delete it to re-enable updates).
+- Claude Code CLI        : ${CC_VER} — autoupdater off (DISABLE_AUTOUPDATER=1 + CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1)
+- Obsidian               : pin to your IT-approved build + disable in-app auto-update (see docs/CORPORATE_PROFILE.md)
+
+## Installed Claude Code plugins (minimal named set)
+- obsidian@obsidian-skills — source: github kepano/obsidian-skills
+- context7                 — documentation lookup MCP
+
+## First-party skills
+- Bundled IN the pinned ai-brain-starter revision above (graphify, daily-journal, insights, patterns,
+  meeting-todos, second-brain-mapping, …). Ship in-repo — no per-skill network fetch.
+
+## EXCLUDED by this profile (reason)
+- Third-party marketplaces : sentry, stripe, cloudflare, claude-seo, superpowers, marketingskills (dev/marketing, not knowledge-worker)
+- playwright plugin        : browser automation — out of the hardened minimal set
+- granola / chatprd MCPs   : external URL MCPs that egress conversation context off-machine
+- Shell-execution Obsidian plugins (e.g. "Shell Commands", "Hider") : never installed/recommended —
+  the abuse vector in the REF6598 / PHANTOMPULSE RAT campaign (Elastic Security Labs, Apr 2026)
+
+## Telemetry / network (all OFF)
+- EMAIL_GATE_BYPASS=1 (no email mint) · MYCELIUM_NO_PING=1 (no install ping)
+- settings.json env enforced: DISABLE_TELEMETRY, DISABLE_ERROR_REPORTING, DISABLE_FEEDBACK_COMMAND,
+  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, DISABLE_AUTOUPDATER, MYCELIUM_NO_PING
+
+## Operator recommendations (manual — see docs/CORPORATE_PROFILE.md)
+- Keep the vault OUTSIDE any cloud-synced folder (OneDrive / iCloud / Dropbox / Google Drive).
+- Enable Obsidian Restricted Mode (no community plugins) for sensitive vaults.
+- Review + approve this manifest before rollout. Re-run with --profile corporate after each approved update.
+MANIFEST
+)"
+
+  hdr "Corporate component manifest"
+  printf "%s\n" "$CORP_MANIFEST"
+  if [[ $DRY_RUN -eq 0 ]]; then
+    if printf "%s\n" "$CORP_MANIFEST" > "$MANIFEST_PATH" 2>/dev/null; then
+      ok "manifest written: $MANIFEST_PATH"
+    else
+      warn "could not write manifest to $MANIFEST_PATH"
+    fi
+  else
+    dry "would write manifest to $MANIFEST_PATH"
   fi
 fi
