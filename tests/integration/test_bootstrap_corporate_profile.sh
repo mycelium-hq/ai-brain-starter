@@ -15,9 +15,12 @@
 #      registered, playwright enabled. (A guard earns trust by failing on the
 #      thing it catches: if corporate logic leaked into standard mode, this fails.)
 #
-# Self-contained. Same harness as test_bootstrap_dry_run.sh: HOME=tmpdir, the
-# repo symlinked into SKILL_DIR, email marker pre-staged. Writes nothing outside
-# its tmpdir.
+# Self-contained. EACH bootstrap invocation runs in its OWN fresh $HOME (a tmpdir
+# with the repo symlinked into SKILL_DIR + the email marker pre-staged), exactly
+# like test_bootstrap_dry_run. Isolating per-run is deliberate: the bootstrap
+# writes some state even under --dry-run (e.g. ~/.claude/commands, ~/.claude/
+# .bootstrap.log), and sharing one HOME across invocations couples the runs.
+# Writes nothing outside its tmpdirs.
 
 set -euo pipefail
 
@@ -29,52 +32,46 @@ if [ ! -f "$BOOTSTRAP" ]; then
   exit 1
 fi
 
-TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
-
-export HOME="$TMP"
-mkdir -p "$HOME/.claude/skills"
-ln -s "$REPO_ROOT" "$HOME/.claude/skills/ai-brain-starter"
-# Pre-stage the email marker so a standalone run never tries to mint a token.
-touch "$HOME/.claude/.ai-brain-starter-email-on-file"
+HOMES=()
+# return 0 so a failed `rm` (or empty-array iteration) never becomes the
+# script's exit status via the EXIT trap.
+cleanup() { local h; for h in "${HOMES[@]:-}"; do [ -n "$h" ] && rm -rf "$h"; done; return 0; }
+trap cleanup EXIT
 
 fail=0
 
-# run_bootstrap <out_file> <args...> -> echoes exit code, never aborts the test
+# run_bootstrap <out_file> <extra_env e.g. "CORPORATE_PROFILE=1" or ""> <args...>
+# Runs bootstrap in its OWN fresh $HOME (a subshell exports it). Sets $LAST_CODE.
+# NOTE: the tmpdir is created + appended to HOMES in THIS (parent) shell — doing
+# it inside a $(...) helper would lose the array append to the subshell.
+LAST_CODE=0
 run_bootstrap() {
   local out="$1"; shift
+  local extra_env="$1"; shift
+  local h; h="$(mktemp -d)"
+  HOMES+=("$h")
+  mkdir -p "$h/.claude/skills"
+  ln -s "$REPO_ROOT" "$h/.claude/skills/ai-brain-starter"
+  touch "$h/.claude/.ai-brain-starter-email-on-file"
   set +e
-  EMAIL="ci@example.com" NAME="CI Test" LANG_HINT="en" \
-    bash "$BOOTSTRAP" "$@" > "$out" 2>&1
-  local code=$?
+  ( export HOME="$h"
+    # shellcheck disable=SC2086
+    env $extra_env EMAIL="ci@example.com" NAME="CI Test" LANG_HINT="en" \
+      bash "$BOOTSTRAP" "$@" ) > "$out" 2>&1
+  LAST_CODE=$?
   set -e
-  return "$code"
 }
 
-assert_grep() {  # <file> <pattern> <human label>
-  if grep -qF "$2" "$1"; then
-    echo "PASS: $3"
-  else
-    echo "FAIL: $3 (pattern not found: $2)" >&2
-    fail=1
-  fi
-}
+assert_grep()   { if grep -qF "$2" "$1"; then echo "PASS: $3"; else echo "FAIL: $3 (pattern not found: $2)" >&2; fail=1; fi; }
+assert_absent() { if grep -qF "$2" "$1"; then echo "FAIL: $3 (pattern unexpectedly present: $2)" >&2; fail=1; else echo "PASS: $3"; fi; }
 
-assert_absent() {  # <file> <pattern> <human label>
-  if grep -qF "$2" "$1"; then
-    echo "FAIL: $3 (pattern unexpectedly present: $2)" >&2
-    fail=1
-  else
-    echo "PASS: $3"
-  fi
-}
-
-# ─── 1. Corporate via --profile corporate ──────────────────────────────────
-CORP_OUT="$TMP/corp.out"
-if run_bootstrap "$CORP_OUT" --profile corporate --dry-run; then
+# ─── 1. Corporate via --profile corporate (own fresh HOME) ─────────────────
+CORP_OUT="$(mktemp)"
+run_bootstrap "$CORP_OUT" "" --profile corporate --dry-run
+if [ "$LAST_CODE" -eq 0 ]; then
   echo "PASS: --profile corporate --dry-run exited 0"
 else
-  echo "FAIL: --profile corporate --dry-run exited nonzero" >&2
+  echo "FAIL: --profile corporate --dry-run exited $LAST_CODE" >&2
   tail -30 "$CORP_OUT" >&2
   fail=1
 fi
@@ -90,27 +87,26 @@ assert_grep   "$CORP_OUT" ".ai-brain-starter-pinned"           "version-pin sent
 assert_grep   "$CORP_OUT" "graphify"                           "minimal first-party skill set still present"
 assert_absent "$CORP_OUT" "would register granola + chatprd"   "no external MCP registration in corporate mode"
 
-# ─── 2. Corporate via CORPORATE_PROFILE=1 env var ──────────────────────────
-ENV_OUT="$TMP/env.out"
-set +e
-CORPORATE_PROFILE=1 EMAIL="ci@example.com" NAME="CI" LANG_HINT="en" \
-  bash "$BOOTSTRAP" --dry-run > "$ENV_OUT" 2>&1
-env_code=$?
-set -e
-if [ "$env_code" -eq 0 ]; then
+# ─── 2. Corporate via CORPORATE_PROFILE=1 env var (own fresh HOME) ─────────
+ENV_OUT="$(mktemp)"
+run_bootstrap "$ENV_OUT" "CORPORATE_PROFILE=1" --dry-run
+if [ "$LAST_CODE" -eq 0 ]; then
   echo "PASS: CORPORATE_PROFILE=1 --dry-run exited 0"
 else
-  echo "FAIL: CORPORATE_PROFILE=1 --dry-run exited $env_code" >&2
+  echo "FAIL: CORPORATE_PROFILE=1 --dry-run exited $LAST_CODE" >&2
+  tail -30 "$ENV_OUT" >&2
   fail=1
 fi
 assert_grep "$ENV_OUT" "CORPORATE / HARDENED PROFILE ACTIVE" "env-var form activates corporate profile"
 
-# ─── 3. NEGATIVE CONTROL: standard mode is unchanged ───────────────────────
-STD_OUT="$TMP/std.out"
-if run_bootstrap "$STD_OUT" --dry-run; then
+# ─── 3. NEGATIVE CONTROL: standard mode is unchanged (own fresh HOME) ──────
+STD_OUT="$(mktemp)"
+run_bootstrap "$STD_OUT" "" --dry-run
+if [ "$LAST_CODE" -eq 0 ]; then
   echo "PASS: standard --dry-run exited 0"
 else
-  echo "FAIL: standard --dry-run exited nonzero" >&2
+  echo "FAIL: standard --dry-run exited $LAST_CODE" >&2
+  tail -30 "$STD_OUT" >&2
   fail=1
 fi
 assert_absent "$STD_OUT" "CORPORATE / HARDENED PROFILE ACTIVE" "no corporate banner in standard mode"
