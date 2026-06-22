@@ -13,9 +13,11 @@ echo "[secret-warn] installing to $SKILL_DEST"
 
 mkdir -p "$SKILL_DEST"
 cp "$SKILL_SRC/hooks/secret_warn.py" "$SKILL_DEST/secret_warn.py"
+cp "$SKILL_SRC/hooks/audited_content_scan.py" "$SKILL_DEST/audited_content_scan.py"
 cp "$SKILL_SRC/hooks/pattern_registry.json" "$SKILL_DEST/pattern_registry.json"
 cp "$SKILL_SRC/hooks/hooks.json" "$SKILL_DEST/hooks.json"
 chmod +x "$SKILL_DEST/secret_warn.py"
+chmod +x "$SKILL_DEST/audited_content_scan.py"
 
 # Merge hook entries into ~/.claude/settings.json (non-destructive)
 python3 - <<PYMERGE
