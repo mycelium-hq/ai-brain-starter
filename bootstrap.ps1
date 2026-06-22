@@ -30,7 +30,7 @@
 #
 # Safe to re-run. Skips anything already installed.
 
-param([switch]$DryRun)
+param([switch]$DryRun, [string]$Profile = "")
 
 $ErrorActionPreference = "Stop"
 $RepoUrl = "https://github.com/adelaidasofia/ai-brain-starter.git"
@@ -70,6 +70,25 @@ function Detect-Lang {
 $script:LangCode = Detect-Lang
 function T([string]$en, [string]$es) {
     if ($script:LangCode -eq "es") { return $es } else { return $en }
+}
+
+# ─── Corporate / hardened install profile ─────────────────────────────────────
+# Mirrors bootstrap.sh --profile corporate. Enabled via `-Profile corporate` or
+# $env:CORPORATE_PROFILE = "1": minimal named plugin set, no external-egress MCPs,
+# telemetry OFF, versions pinned, user-space only. Full spec + manifest:
+# docs/CORPORATE_PROFILE.md.
+$CorporateProfile = ($Profile -eq "corporate") -or ($env:CORPORATE_PROFILE -eq "1")
+if ($Profile -and $Profile -ne "corporate") {
+    Warn "Unknown -Profile '$Profile' (expected: corporate). Ignoring."
+}
+if ($CorporateProfile) {
+    $env:CORPORATE_PROFILE = "1"   # so embedded `python -` children can read it
+    $env:EMAIL_GATE_BYPASS = "1"   # no email mint / no quick-mint network call
+    $env:MYCELIUM_NO_PING  = "1"   # no install-ping to myceliumai.co
+    Write-Host ""
+    Write-Host "=== CORPORATE / HARDENED PROFILE ACTIVE ===" -ForegroundColor Yellow
+    Write-Host "  No external-egress MCPs | telemetry OFF | versions pinned | user-space only." -ForegroundColor Yellow
+    Write-Host "  Reviewable component manifest emitted at the end. Full spec: docs/CORPORATE_PROFILE.md" -ForegroundColor Yellow
 }
 
 # ─── Optional signup (the install never blocks on it) ──────────────────────
@@ -312,7 +331,12 @@ try {
     $v = (python --version 2>&1) -replace 'Python ',''
     if ([version]$v -ge [version]"3.10") { $pythonOk = $true }
 } catch {}
-if (-not $pythonOk) {
+if (-not $pythonOk -and $CorporateProfile) {
+    Warn (T "Corporate profile: Python 3.10+ not found - NOT auto-installing (user-space, pinned-version policy)." `
+            "Perfil corporativo: no se encontro Python 3.10+ - NO se instala automaticamente (espacio de usuario, version fija).")
+    Warn (T "Provision Python via your IT-approved channel, then re-run. Steps that need python will be skipped." `
+            "Instala Python por tu canal aprobado de IT y volve a correr. Los pasos que necesitan python se omitiran.")
+} elseif (-not $pythonOk) {
     Hdr "Installing Python 3.12"
     if ($UseWinget) {
         winget install -e --id Python.Python.3.12 --accept-source-agreements --accept-package-agreements
@@ -332,7 +356,12 @@ if (-not $pythonOk) {
 if (Have python) { Ok "python $(python --version)" } else { Err "python install failed" }
 
 # ─── Node.js ──────────────────────────────────────────────────────────────────
-if (-not (Have node)) {
+if (-not (Have node) -and $CorporateProfile) {
+    Warn (T "Corporate profile: Node.js not found - NOT auto-installing (user-space, pinned-version policy)." `
+            "Perfil corporativo: no se encontro Node.js - NO se instala automaticamente (espacio de usuario, version fija).")
+    Warn (T "Provision Node.js via your IT-approved channel, then re-run. Steps that need node will be skipped." `
+            "Instala Node.js por tu canal aprobado de IT y volve a correr. Los pasos que necesitan node se omitiran.")
+} elseif (-not (Have node)) {
     Hdr "Installing Node.js"
     if ($UseWinget) {
         winget install -e --id OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements
@@ -439,7 +468,10 @@ foreach ($p in $ObsidianPaths) {
     if (Test-Path -LiteralPath $p) { $ObsidianInstalled = $true; break }
 }
 
-if (-not $ObsidianInstalled) {
+if (-not $ObsidianInstalled -and $CorporateProfile) {
+    Warn (T "Corporate profile: Obsidian not found - NOT auto-installing. Deploy your IT-approved, version-pinned build." `
+            "Perfil corporativo: no se encontro Obsidian - NO se instala. Desplega tu build aprobado y con version fija por IT.")
+} elseif (-not $ObsidianInstalled) {
     Hdr (T "Installing Obsidian" "Instalando Obsidian")
     Log (T "Obsidian is the note-taking app this whole setup writes into. Free, runs locally, no account." `
           "Obsidian es la app de notas en la que todo este setup escribe. Gratis, corre local, sin cuenta.")
@@ -637,6 +669,12 @@ Write-Host ""
 # integrations, other URL or stdio MCPs the user wired themselves) are
 # preserved, setdefault() only adds the granola entry if missing.
 Hdr "Registering MCPs (Granola + ChatPRD)"
+if ($CorporateProfile) {
+    Warn (T "Corporate profile: skipping external-egress MCPs (granola -> granola.ai, chatprd -> chatprd.ai)." `
+            "Perfil corporativo: se omiten MCPs con egreso externo (granola -> granola.ai, chatprd -> chatprd.ai).")
+    Log (T "  Enable opt-in after security review - see docs/CORPORATE_PROFILE.md." `
+          "  Habilitalos opt-in tras revision de seguridad - ver docs/CORPORATE_PROFILE.md.")
+} else {
 $mcpPath = "$env:USERPROFILE\.claude\.mcp.json"
 Backup-File $mcpPath
 
@@ -660,6 +698,7 @@ with open(p, 'w') as f: json.dump(m, f, indent=2)
     $pyMcp | python -
     if ($LASTEXITCODE -eq 0) { Ok "MCPs registered: granola, chatprd (Granola needs an account to use)" } else { Err "MCP registration failed" }
 }
+}  # end corporate-profile MCP gate
 
 # ─── Marketplaces + enabled plugins (settings.json) ──────────────────────────
 # SAFETY: backup settings.json first. setdefault() never clobbers existing
@@ -669,11 +708,17 @@ $settingsPath = "$env:USERPROFILE\.claude\settings.json"
 Backup-File $settingsPath
 
 if ($DryRun) {
-    Dry "would register obsidian-skills marketplace (kepano/obsidian-skills) and enable: obsidian, context7, playwright"
+    if ($CorporateProfile) {
+        Dry "would register obsidian-skills marketplace and enable: obsidian, context7 (playwright EXCLUDED - browser automation)"
+        Dry "would ENFORCE telemetry-off + pin env in settings.json (DISABLE_TELEMETRY, DISABLE_ERROR_REPORTING, DISABLE_FEEDBACK_COMMAND, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, DISABLE_AUTOUPDATER, MYCELIUM_NO_PING)"
+    } else {
+        Dry "would register obsidian-skills marketplace (kepano/obsidian-skills) and enable: obsidian, context7, playwright"
+    }
 } else {
     $pyPlugins = @"
 import json, os
 p = os.path.expanduser('~/.claude/settings.json')
+corporate = os.environ.get('CORPORATE_PROFILE') == '1'
 try:
     with open(p) as f: s = json.load(f)
 except FileNotFoundError:
@@ -684,8 +729,15 @@ if 'obsidian-skills' not in s['extraKnownMarketplaces']:
         'source': {'source': 'github', 'repo': 'kepano/obsidian-skills'}
     }
 s.setdefault('enabledPlugins', {})
-for plug in ('obsidian@obsidian-skills', 'context7', 'playwright'):
+plugins = ['obsidian@obsidian-skills', 'context7']
+if not corporate:
+    plugins.append('playwright')  # browser automation - out of the hardened minimal set
+for plug in plugins:
     s['enabledPlugins'].setdefault(plug, True)
+if corporate:
+    env = s.setdefault('env', {})
+    for k, v in (('DISABLE_TELEMETRY','1'),('DISABLE_ERROR_REPORTING','1'),('DISABLE_FEEDBACK_COMMAND','1'),('CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC','1'),('DISABLE_AUTOUPDATER','1'),('MYCELIUM_NO_PING','1')):
+        env[k] = v
 with open(p, 'w') as f: json.dump(s, f, indent=2)
 "@
     $pyPlugins | python -
@@ -819,7 +871,7 @@ Write-Host ("━━━ " + (T "Install complete" "Instalación completa") + " �
 Write-Host ""
 
 # ─── Report install completion to Mycelium (best-effort, fail-open) ──────────
-if ((Test-Path $emailMarker) -and -not $DryRun) {
+if ((Test-Path $emailMarker) -and -not $DryRun -and -not $CorporateProfile) {
     try {
         $recordedToken = (Get-Content -Path $emailMarker -TotalCount 1).Trim()
         # Only a real 32-char hex token is a funnel token. The marker may
@@ -895,4 +947,72 @@ if ($env:CLAUDE_CODE_ENTRYPOINT) {
     Write-Host ("  " + (T "around your answers. You don't need to type any other commands." `
                             "alrededor de tus respuestas. No necesitás tipear ningún otro comando."))
     Write-Host ""
+}
+
+# ─── Corporate / hardened profile: version-pin sentinels + reviewable manifest ──
+# Emitted LAST so it is the final thing a security reviewer sees. Prints under
+# -DryRun too (so `-Profile corporate -DryRun` is a no-change review).
+if ($CorporateProfile) {
+    try { $absRev = (git -C $SkillDir rev-parse --short HEAD 2>$null) } catch { $absRev = $null }
+    if (-not $absRev) { $absRev = "unknown" }
+    try { $ccVer = ((claude --version 2>$null) -split ' ')[0] } catch { $ccVer = $null }
+    if (-not $ccVer) { $ccVer = "not-detected" }
+    $manifestPath = "$env:USERPROFILE\.claude\.ai-brain-starter-corporate-manifest.md"
+
+    if (-not $DryRun) {
+        # Pin: short-circuit the self-update hook + pre-create the no-ping sentinel.
+        New-Item -ItemType File -Force -Path "$env:USERPROFILE\.claude\.ai-brain-starter-pinned" -ErrorAction SilentlyContinue | Out-Null
+        New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.mycelium" -ErrorAction SilentlyContinue | Out-Null
+        New-Item -ItemType File -Force -Path "$env:USERPROFILE\.mycelium\onboarded-ai-brain-starter" -ErrorAction SilentlyContinue | Out-Null
+    }
+
+    $stamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    $manifest = @"
+# AI Brain Starter - Corporate Install Manifest
+Generated: $stamp | Profile: corporate (hardened) | Host: Windows $([System.Environment]::OSVersion.Version) $env:PROCESSOR_ARCHITECTURE
+
+## Pinned versions (no auto-update)
+- ai-brain-starter skill : rev $absRev - https://github.com/adelaidasofia/ai-brain-starter
+  Self-update hook DISABLED via sentinel ~/.claude/.ai-brain-starter-pinned (delete it to re-enable updates).
+- Claude Code CLI        : $ccVer - autoupdater off (DISABLE_AUTOUPDATER=1 + CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1)
+- Obsidian               : pin to your IT-approved build + disable in-app auto-update (see docs/CORPORATE_PROFILE.md)
+
+## Installed Claude Code plugins (minimal named set)
+- obsidian@obsidian-skills - source: github kepano/obsidian-skills
+- context7                 - documentation lookup MCP
+
+## First-party skills
+- Bundled IN the pinned ai-brain-starter revision above (graphify, daily-journal, insights, patterns,
+  meeting-todos, second-brain-mapping, ...). Ship in-repo - no per-skill network fetch.
+
+## EXCLUDED by this profile (reason)
+- Third-party marketplaces : sentry, stripe, cloudflare, claude-seo, superpowers, marketingskills (dev/marketing)
+- playwright plugin        : browser automation - out of the hardened minimal set
+- granola / chatprd MCPs   : external URL MCPs that egress conversation context off-machine
+- Shell-execution Obsidian plugins (e.g. "Shell Commands", "Hider") : never installed/recommended -
+  the abuse vector in the REF6598 / PHANTOMPULSE RAT campaign (Elastic Security Labs, Apr 2026)
+
+## Telemetry / network (all OFF)
+- EMAIL_GATE_BYPASS=1 (no email mint) | MYCELIUM_NO_PING=1 (no install ping)
+- settings.json env enforced: DISABLE_TELEMETRY, DISABLE_ERROR_REPORTING, DISABLE_FEEDBACK_COMMAND,
+  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, DISABLE_AUTOUPDATER, MYCELIUM_NO_PING
+
+## Operator recommendations (manual - see docs/CORPORATE_PROFILE.md)
+- Keep the vault OUTSIDE any cloud-synced folder (OneDrive / iCloud / Dropbox / Google Drive).
+- Enable Obsidian Restricted Mode (no community plugins) for sensitive vaults.
+- Review + approve this manifest before rollout. Re-run with -Profile corporate after each approved update.
+"@
+
+    Hdr "Corporate component manifest"
+    Write-Host $manifest
+    if (-not $DryRun) {
+        try {
+            Set-Content -Path $manifestPath -Value $manifest -Encoding UTF8
+            Ok "manifest written: $manifestPath"
+        } catch {
+            Warn "could not write manifest to $manifestPath"
+        }
+    } else {
+        Dry "would write manifest to $manifestPath"
+    }
 }
