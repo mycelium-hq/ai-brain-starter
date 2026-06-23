@@ -110,6 +110,7 @@ INTEGRATION_TESTS=(
   test_onboarding_wrong_surface_and_nudge
   test_post_update_email_ask
   test_installer_retires_email_gate
+  test_memory_routing_guard
   test_bootstrap_omits_vault_hooks
   test_bootstrap_brew_terminal_step
   test_bootstrap_optional_packs_soft_fail
