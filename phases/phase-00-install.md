@@ -107,9 +107,10 @@ Ask:
 > "Do you use Granola for meeting notes?"
 
 **If YES:**
-1. "Granola syncs via its official Public API. Generate an API key in Granola (Settings > Connectors > API keys), save it to `~/.config/granola/api-key` (chmod 600), then run `python3 scripts/granola_sync.py --health` to verify the key and `python3 scripts/granola_sync.py --dry-run` to preview what would export."
-2. For auto-export every 2 hours, offer to install the LaunchAgent: "Set the script path + log path in `scripts/com.granola-export.plist`, copy it to `~/Library/LaunchAgents/`, then run `launchctl load ~/Library/LaunchAgents/com.granola-export.plist`."
-3. Store `GRANOLA=api` so the meeting workflow rule knows to Glob for `*- Transcript.md` files.
+1. **Check plan access first — Granola's API needs a paid Granola plan.** Have them open Granola → Settings → Connectors. If there is no **API keys** section, their plan does not include API access, so the script cannot sync. Route them to Google Meet + Gemini, Otter, or manual notes instead (same options as the "If NO" branch) and skip the rest of this step.
+2. If they have API access: "Generate an API key (Settings > Connectors > API keys), save it to `~/.config/granola/api-key` (chmod 600), then run `python3 scripts/granola_sync.py --health` to verify the key and `python3 scripts/granola_sync.py --dry-run` to preview what would export."
+3. For auto-export every 2 hours, offer to install the LaunchAgent: "Set the script path + log path in `scripts/com.granola-export.plist`, copy it to `~/Library/LaunchAgents/`, then run `launchctl load ~/Library/LaunchAgents/com.granola-export.plist`."
+4. Store `GRANOLA=api` so the meeting workflow rule knows to Glob for `*- Transcript.md` files.
 
 **If NO / "I don't use Granola":**
 - Store `NO_GRANOLA=true` so the meeting workflow rule installs in 'manual' mode.

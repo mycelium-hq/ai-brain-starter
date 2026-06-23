@@ -296,6 +296,8 @@ MCP (Model Context Protocol) servers extend Claude Code with structured tool acc
 
 **Why it matters:** without this, you spend 20 minutes after every meeting transcribing handwritten notes and updating CRM cards. With it, Claude reads the full transcript and does the cascade in one command.
 
+**Requires a Granola plan with API access.** Open Granola → Settings → Connectors. If there is no **API keys** section, your plan does not include the API — use Google Meet + Gemini, Otter, or manual notes instead.
+
 **Install:**
 1. Generate a Granola API key: Granola → Settings → Connectors → API keys. Save it to `~/.config/granola/api-key` (chmod 600), or export `GRANOLA_API_KEY`.
 2. Verify + preview: `python3 scripts/granola_sync.py --health`, then `python3 scripts/granola_sync.py --dry-run`.

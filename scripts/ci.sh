@@ -133,6 +133,7 @@ INTEGRATION_TESTS=(
   test_context_budget_measure
   test_connector_liveness_watchdog
   test_connector_liveness_surface
+  test_granola_sync_offline
   test_agent_memory_link
   test_open_core_boundary
   test_audited_content_injection_scan
