@@ -9,6 +9,20 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-06-22: Granola sync now uses Granola's official API
+
+If you connected Granola for meeting transcripts, the old sync read Granola's local cache file on your Mac. Granola encrypted and moved that cache in mid-May 2026, so the old script silently stopped finding anything — it exited cleanly and exported nothing, with no error to tell you it had broken.
+
+This switches Granola sync to Granola's official Public API, which keeps working across those local-storage changes:
+- **You now need a Granola API key.** Generate one in Granola (Settings → Connectors → API keys), then save it to `~/.config/granola/api-key`, or set `GRANOLA_API_KEY`.
+- **Check it's working:** `python3 scripts/granola_sync.py --health` confirms the key and connection; `--dry-run` previews what would export.
+- **Auto-export now runs every 2 hours** (the old version triggered off the cache file, which no longer exists). Re-copy `scripts/com.granola-export.plist` to `~/Library/LaunchAgents/` and reload it.
+- If the key is missing or invalid, the script now **fails loudly** instead of exiting quietly — and the connector-liveness check flags Granola if it ever goes silent again.
+
+Already using the old cache-based sync? Add an API key as above and reload the LaunchAgent; that's the whole migration.
+
+---
+
 ## 2026-06-20: your memory now actually lives in your vault
 
 The whole promise of this project is that your second brain lives in your vault. But Claude Code keeps its own memory (the things it learns about you) in a hidden system folder — `~/.claude/projects/.../memory/` — that never showed up in Obsidian and didn't follow you to another computer. The substrate assumed that folder had been linked into your vault, but nothing in the install ever did the linking. So for most people, memory was quietly accumulating in a place they couldn't see and couldn't back up.
