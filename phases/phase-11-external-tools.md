@@ -72,6 +72,7 @@ Store the answer as `MEETING_TOOLS` (a list — could be multiple). Then for eac
 
 #### 1. Granola
 
+- **Heads-up: Granola's API needs a paid Granola plan.** Have them check Granola → Settings → Connectors for an **API keys** section. If it is not there, their plan lacks API access — route them to Google Meet + Gemini, Otter, or manual notes (the options below) instead of this one.
 - **No MCP needed.** `scripts/granola_sync.py` pulls full transcripts from Granola's official Public API and writes them to the meeting notes folder.
 - **Tell them:** "Granola syncs via its Public API. Generate a key in Granola (Settings > Connectors > API keys), save it to `~/.config/granola/api-key`, then run `python3 scripts/granola_sync.py --health` to verify it and `--dry-run` to preview. For auto-export every 2 hours, install the LaunchAgent in `scripts/com.granola-export.plist` (set the script + log paths, then `launchctl load` it)."
 - **Discovery rule for the meeting workflow CLAUDE.md section:**
