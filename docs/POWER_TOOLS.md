@@ -287,7 +287,7 @@ MCP (Model Context Protocol) servers extend Claude Code with structured tool acc
 
 ### Granola — meeting transcript export
 
-**What it does:** [Granola](https://granola.ai/) records and transcribes Zoom/Meet/Teams calls with AI-generated summaries. `scripts/granola_sync.py` reads Granola's local cache directly and exports the full timestamped transcript to your vault's meeting notes folder — no API key, no network call, no MCP needed. The meeting workflow rule in CLAUDE.md (see SKILL.md Phase 4) uses this to auto-cascade meeting takeaways into:
+**What it does:** [Granola](https://granola.ai/) records and transcribes Zoom/Meet/Teams calls with AI-generated summaries. `scripts/granola_sync.py` pulls the full timestamped transcript from Granola's official Public API and writes it to your vault's meeting notes folder — no MCP needed (a Granola API key is required). The meeting workflow rule in CLAUDE.md (see SKILL.md Phase 4) uses this to auto-cascade meeting takeaways into:
 
 - The meeting note itself (enriched with decisions, action items, verbatim quotes)
 - The CRM contact files for every attendee (last_interaction updated, meeting note linked)
@@ -297,16 +297,16 @@ MCP (Model Context Protocol) servers extend Claude Code with structured tool acc
 **Why it matters:** without this, you spend 20 minutes after every meeting transcribing handwritten notes and updating CRM cards. With it, Claude reads the full transcript and does the cascade in one command.
 
 **Install:**
-1. Granola must be installed and have recorded at least one meeting.
-2. Run once manually to test: `python3 scripts/granola_sync.py --dry-run`
-3. For auto-export after every meeting, install the LaunchAgent:
+1. Generate a Granola API key: Granola → Settings → Connectors → API keys. Save it to `~/.config/granola/api-key` (chmod 600), or export `GRANOLA_API_KEY`.
+2. Verify + preview: `python3 scripts/granola_sync.py --health`, then `python3 scripts/granola_sync.py --dry-run`.
+3. For auto-export every 2 hours, install the LaunchAgent:
    - Copy `scripts/com.granola-export.plist` to `~/Library/LaunchAgents/`
-   - Edit the two placeholder paths inside it (script path + your username)
+   - Edit the script path + log path inside it
    - Run: `launchctl load ~/Library/LaunchAgents/com.granola-export.plist`
 
-**Note on speaker labels:** The local cache captures your microphone as `[You]` and remote audio as a single stream (no per-person diarization). The Granola-generated summary notes are also included in the exported file.
+**Note on speaker labels:** The API labels your microphone channel as **You** and the other side as **Speaker** (no per-person diarization). The Granola-generated summary is also included in the exported file.
 
-**Source:** Reverse-engineered from Granola's local cache format by the ai-brain-starter community.
+**Source:** Granola's official Public API (`public-api.granola.ai/v1`).
 
 ---
 
@@ -427,7 +427,7 @@ This is the full stack working in concert:
 1. **You write a daily journal** via `/journal` (a custom skill, not in this catalog — set up in `/setup-brain` Phase 10). Templater auto-fills the frontmatter.
 
 2. **You run a meeting** with Granola recording. Afterward you say *"I just had a meeting with Sara"*. The meeting workflow rule in CLAUDE.md fires:
-   - The Granola MCP fetches the transcript
+   - `granola_sync.py` has already exported the transcript to your meeting notes folder (via the LaunchAgent, or run it manually)
    - Claude reads it fully
    - Updates the meeting note with decisions + action items + verbatim quotes
    - Updates Sara's CRM contact card via the mentions block (Dataview)

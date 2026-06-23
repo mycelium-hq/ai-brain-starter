@@ -72,10 +72,10 @@ Store the answer as `MEETING_TOOLS` (a list — could be multiple). Then for eac
 
 #### 1. Granola
 
-- **No MCP needed.** `scripts/granola_sync.py` reads Granola's local cache directly and exports full transcripts to the meeting notes folder.
-- **Tell them:** "Granola is wired via a local script — no API key needed. Run `python3 scripts/granola_sync.py --dry-run` to test it. For auto-export after every meeting, install the LaunchAgent in `scripts/com.granola-export.plist` (edit the two placeholder paths, then `launchctl load` it)."
+- **No MCP needed.** `scripts/granola_sync.py` pulls full transcripts from Granola's official Public API and writes them to the meeting notes folder.
+- **Tell them:** "Granola syncs via its Public API. Generate a key in Granola (Settings > Connectors > API keys), save it to `~/.config/granola/api-key`, then run `python3 scripts/granola_sync.py --health` to verify it and `--dry-run` to preview. For auto-export every 2 hours, install the LaunchAgent in `scripts/com.granola-export.plist` (set the script + log paths, then `launchctl load` it)."
 - **Discovery rule for the meeting workflow CLAUDE.md section:**
-  > Glob the meeting-notes folder for files matching `*- Transcript.md` modified in the last 24 hours. The script auto-exports when Granola's cache changes. If missing, run `python3 scripts/granola_sync.py` manually. Read the file fully — it's the source of truth.
+  > Glob the meeting-notes folder for files matching `*- Transcript.md` modified in the last 24 hours. The LaunchAgent re-syncs every 2 hours; if a just-ended meeting is missing, run `python3 scripts/granola_sync.py` manually (Granola can take a few minutes to finalize a transcript). Read the file fully — it's the source of truth.
 
 #### 2. Google Meet + Gemini
 

@@ -233,9 +233,10 @@ discovery), so probe their tool stack at runtime.
    the rest:
    - **Granola** (macOS): run
      `python3 ~/.claude/skills/ai-brain-starter/scripts/granola_sync.py`
-     which reads the local cache and exports transcripts to the vault's
-     Meeting Notes folder. The script auto-detects paths — do not
-     hard-code anything. Read the most recent exported `*Transcript*.md`.
+     which pulls transcripts from Granola's Public API and exports them
+     to the vault's Meeting Notes folder (needs a Granola API key; the
+     script auto-detects paths — do not hard-code anything). Read the
+     most recent exported `*Transcript*.md`.
    - **Google Meet + Gemini**: if the google-workspace MCP is wired,
      search Drive for a Doc named `<title> - YYYY/MM/DD - Transcript`
      in the user's "Meet Recordings" folder (or whichever folder

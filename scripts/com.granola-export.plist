@@ -3,13 +3,19 @@
 <plist version="1.0">
 <!--
   Granola auto-export LaunchAgent
-  Fires granola_sync.py whenever Granola updates its local cache (i.e. after each meeting).
+
+  Runs granola_sync.py every 2 hours to pull new meeting transcripts from the
+  Granola Public API into your vault. (Granola no longer exposes a local cache
+  file to watch, so this polls on an interval instead of a WatchPaths trigger.)
 
   Install:
-    1. Edit ProgramArguments below — set the path to granola_sync.py in your vault.
-    2. Edit StandardOutPath / StandardErrorPath to point to your vault's log directory.
-    3. Copy this file to ~/Library/LaunchAgents/
-    4. Run: launchctl load ~/Library/LaunchAgents/com.granola-export.plist
+    1. Put your Granola API key at ~/.config/granola/api-key (chmod 600), or set
+       GRANOLA_API_KEY in this plist's EnvironmentVariables (commented below).
+       Generate the key in Granola: Settings > Connectors > API keys.
+    2. Edit ProgramArguments below — set the absolute path to granola_sync.py.
+    3. Edit StandardOutPath / StandardErrorPath to point to your vault's log directory.
+    4. Copy this file to ~/Library/LaunchAgents/
+    5. Run: launchctl load ~/Library/LaunchAgents/com.granola-export.plist
 -->
 <dict>
     <key>Label</key>
@@ -17,19 +23,25 @@
     <key>ProgramArguments</key>
     <array>
         <string>/usr/bin/python3</string>
-        <!-- Replace with the absolute path to granola_sync.py in your vault -->
+        <!-- Replace with the absolute path to granola_sync.py -->
         <string>/path/to/your/vault/scripts/granola_sync.py</string>
     </array>
-    <key>WatchPaths</key>
-    <array>
-        <string>/Users/YOUR_USERNAME/Library/Application Support/Granola/cache-v6.json</string>
-    </array>
+    <!-- Optional: provide the API key here instead of ~/.config/granola/api-key.
+         If you do, keep this plist OUT of any cloud-synced or shared folder.
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>GRANOLA_API_KEY</key>
+        <string>grn_REPLACE_ME</string>
+    </dict>
+    -->
+    <key>StartInterval</key>
+    <integer>7200</integer>
     <key>StandardOutPath</key>
     <!-- Replace with your vault's log directory -->
     <string>/path/to/your/vault/.granola_export.log</string>
     <key>StandardErrorPath</key>
     <string>/path/to/your/vault/.granola_export.log</string>
     <key>RunAtLoad</key>
-    <false/>
+    <true/>
 </dict>
 </plist>
