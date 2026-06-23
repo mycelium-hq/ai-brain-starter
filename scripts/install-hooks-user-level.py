@@ -87,6 +87,8 @@ ABS_FINGERPRINTS = [
     "ai-brain-starter/hooks/context-budget-measure.py",
     # Vault-in-worktree melt tripwire (3-channel detect; SessionStart + tool-time + dedup):
     "ai-brain-starter/hooks/warn-vault-session-in-worktree.py",
+    # Memory-routing nudge (team learning written to tool-private memory → shared brain):
+    "ai-brain-starter/hooks/warn-learning-to-tool-private-memory.py",
 ]
 
 # Path-divergence-robust matching: an ai-brain-starter hook may be wired at the
@@ -105,7 +107,7 @@ ABS_OWNED_BASENAMES = {
     "remove-ended-worktree.py", "enforce-worktree-cap.py",
     "worktree-footprint-signal.py", "remediate-runaway-procs.py",
     "block-secret-in-note.py", "context-budget-measure.py",
-    "warn-vault-session-in-worktree.py",
+    "warn-vault-session-in-worktree.py", "warn-learning-to-tool-private-memory.py",
 }
 
 # Hooks ai-brain-starter USED TO ship and has deliberately RETIRED. The

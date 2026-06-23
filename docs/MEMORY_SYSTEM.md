@@ -243,6 +243,25 @@ When saving a memory, ask: *"If this user opens the vault from a different Claud
 
 This matters most for users who work across multiple machines, accounts, or team setups. The vault travels with them; the memory directory does not.
 
+### The three homes: where a learning actually belongs
+
+"Back it up in a durable file" raises the real question: *which* durable home? There are three, with different reach. Picking the wrong one is how a reusable team lesson ends up stranded where only one machine can see it.
+
+| Home | Reach | Use it for |
+|---|---|---|
+| **Local agent memory** (`~/.claude/projects/<key>/memory/`, a real dir) | This machine + this Claude account ONLY. Not other accounts, not other tools (e.g. Codex), not CI, not teammates, not a retrieval runtime. | Who you are, your preferences, a quirk of THIS machine's tooling, a single repo's CI gotcha, current project state — genuinely-local facts. |
+| **The team shared brain** (a git-REMOTE-backed store every account/tool/teammate clones + pulls; ingested into your retrieval runtime if you run one) | Every AI account, every tool, every teammate, CI, the runtime. | A tool-agnostic engineering / operating PRINCIPLE any teammate or any AI account would follow (a security invariant, "fix the shared source not the first consumer", "a guard's scan scope is its blind spot"). |
+| **The substrate** (the repo that ships this memory system + the agent guards, activated by the installer) | Every install of the substrate — i.e. every person/tenant who runs it. | A MODEL-GENERAL agent guard (a fabrication check, a verification gate, a routing nudge) — a behavior that should hold for ANY agent, not just your team. |
+
+**The classifier, one line:** *tool-agnostic AND a teammate or another AI account would need it → shared brain; a model-general agent guard → substrate; else → local.*
+
+Two failure modes this prevents:
+
+- **Team lesson trapped in local memory.** You learn a reusable engineering principle, write it to `~/.claude/.../memory/`, and it never reaches another account, Codex, your teammate, CI, or the runtime — so it can't change how the team works. A write-time guard (`hooks/warn-learning-to-tool-private-memory.py`, installed at user level) NUDGES when a learning-shaped file lands in a *real* tool-private memory dir. It never blocks — local memory is still the right home for local facts.
+- **Model-general guard stuck in one person's `~/.claude`.** A guard that should protect every install lives only on the maintainer's machine. If it's model-general, it belongs in the substrate, activated by the installer and proven by a fresh-install smoke — not just `~/.claude`.
+
+One nuance on durability vs reach: if your `~/.claude/projects/<key>/memory` dir is a SYMLINK into your vault (the installer wires this), you've solved durability ACROSS TOOLS on this machine — but a *local-only-git* vault still doesn't reach another GitHub account, CI, or a teammate. Cross-account / teammate reach needs a git-remote-backed shared brain, not just a symlink.
+
 ---
 
 ## How to actually use this
