@@ -302,8 +302,43 @@ def case_surfacer_bounded():
         bad("surfacer boundedness", r.stdout + r.stderr)
 
 
+def case_single_instance_lock():
+    # The surfacer spawns --watch detached; several sessions starting at once must NOT
+    # stack N concurrent corpus walks (the MYC-570 freeze class). A held lock → skip.
+    try:
+        import fcntl
+    except ImportError:
+        ok("single-instance lock — skipped (no fcntl on this platform)")
+        return
+    t = _tmp()
+    try:
+        cfg = os.path.join(t, "cfg")
+        old = os.path.join(t, "old-vault")
+        new = os.path.join(t, "new-vault")
+        os.makedirs(cfg)
+        os.makedirs(new)
+        _write_manifest(cfg, old, new)
+        lock = open(os.path.join(cfg, ".relocate-watch.lock"), "w")
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)  # hold it
+        r = _watch(cfg, "--no-auto-discover")
+        if r.returncode == 0 and "skipping" in r.stdout:
+            ok("single-instance lock: a concurrent --watch skips (no stacked corpus walk)")
+        else:
+            bad("single-instance lock skip", f"rc={r.returncode} {r.stdout}")
+        fcntl.flock(lock, fcntl.LOCK_UN)
+        lock.close()
+        r2 = _watch(cfg, "--no-auto-discover")  # released → next run proceeds
+        if r2.returncode == 0 and "recorded moves watched" in r2.stdout and "skipping" not in r2.stdout:
+            ok("single-instance lock: released → the next --watch runs")
+        else:
+            bad("single-instance lock release", f"rc={r2.returncode} {r2.stdout}")
+    finally:
+        shutil.rmtree(t, ignore_errors=True)
+
+
 def main():
     case_engine_selftest()
+    case_single_instance_lock()
     case_no_manifest()
     case_relocate_roundtrip()
     case_recreated_alarms()
