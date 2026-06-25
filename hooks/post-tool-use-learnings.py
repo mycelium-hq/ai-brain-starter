@@ -227,6 +227,29 @@ def render_frontmatter(frontmatter: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+SINK_GITIGNORE = (
+    "# Closed-loop episodic sink — local-only machinery, never synced.\n"
+    "# Captures can carry failure excerpts, internal paths, and (on subagent\n"
+    "# failures) untrusted third-party content. They must never enter a vault's\n"
+    "# git history. This .gitignore self-scopes the sink so protection does not\n"
+    "# depend on the vault's root .gitignore or the operator's git habits.\n"
+    "*\n"
+    "!.gitignore\n"
+)
+
+
+def ensure_sink_gitignore(directory: Path) -> None:
+    """Drop a self-scoping .gitignore into a machinery sink dir (idempotent +
+    self-healing). Safe-by-construction: the sink never syncs, regardless of the
+    vault's root .gitignore or the operator's git habits."""
+    gi = directory / ".gitignore"
+    if not gi.exists():
+        try:
+            gi.write_text(SINK_GITIGNORE, encoding="utf-8")
+        except OSError:
+            pass
+
+
 def write_learning(
     vault_root: Path,
     captured_at: str,
@@ -243,6 +266,7 @@ def write_learning(
         learnings_dir.mkdir(parents=True, exist_ok=True)
     except OSError:
         return None
+    ensure_sink_gitignore(learnings_dir)
 
     date_part = captured_at[:10]
     target = learnings_dir / f"{date_part}-{sha8}.md"
