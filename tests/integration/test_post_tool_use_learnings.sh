@@ -91,6 +91,14 @@ if [ "$(count_md)" = "1" ]; then
   else
     bad "(d.3) redaction note missing"
   fi
+  # (e) sink self-protection: the episodic sink must carry a .gitignore that
+  # excludes everything, so captures never enter a vault's git history
+  # regardless of the vault's root .gitignore or the operator's git habits.
+  if [ -f "$LEARN/.gitignore" ] && grep -qx '\*' "$LEARN/.gitignore" && grep -qx '!.gitignore' "$LEARN/.gitignore"; then
+    pass "(e) sink self-protects with a .gitignore (machinery never syncs)"
+  else
+    bad "(e) sink .gitignore missing/incomplete — captures could be committed to a remote"
+  fi
 else
   bad "(c) genuine Agent isError failure was NOT captured ($(count_md) file(s)) — hook over-suppresses"
 fi

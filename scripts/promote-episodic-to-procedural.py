@@ -341,6 +341,28 @@ def build_candidate(
     return sha8, frontmatter, "\n".join(body_parts)
 
 
+SINK_GITIGNORE = (
+    "# Closed-loop machinery sink — local-only, never synced.\n"
+    "# Episodic captures and derived candidates can carry failure excerpts,\n"
+    "# internal paths, and untrusted third-party content. They must never enter\n"
+    "# a vault's git history. This .gitignore self-scopes the sink so protection\n"
+    "# does not depend on the vault's root .gitignore or the operator's habits.\n"
+    "*\n"
+    "!.gitignore\n"
+)
+
+
+def ensure_sink_gitignore(directory: Path) -> None:
+    """Drop a self-scoping .gitignore into a machinery sink dir (idempotent +
+    self-healing). Safe-by-construction: the sink never syncs."""
+    gi = directory / ".gitignore"
+    if not gi.exists():
+        try:
+            gi.write_text(SINK_GITIGNORE, encoding="utf-8")
+        except OSError:
+            pass
+
+
 def load_learnings(learnings_dir: Path) -> list[dict]:
     items: list[dict] = []
     if not learnings_dir.is_dir():
@@ -456,6 +478,11 @@ def main(argv: list[str] | None = None) -> int:
     candidates_dir = vault_root / "Meta" / "Promotion-Candidates"
     state_path = vault_root / STATE_FILENAME
 
+    # Re-assert sink self-protection every run (self-heals older installs whose
+    # hook predates the safe-by-construction .gitignore).
+    if learnings_dir.is_dir():
+        ensure_sink_gitignore(learnings_dir)
+
     state = load_state(state_path)
     learning_count = count_learnings(learnings_dir)
     last_count = state.get("last_learning_count", -1)
@@ -516,6 +543,7 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             try:
                 candidates_dir.mkdir(parents=True, exist_ok=True)
+                ensure_sink_gitignore(candidates_dir)
                 target.write_text(content, encoding="utf-8")
                 drafted_messages.append(
                     f"Wrote {target} ({len(cluster)} captures, tool={tool}, status={status})"
