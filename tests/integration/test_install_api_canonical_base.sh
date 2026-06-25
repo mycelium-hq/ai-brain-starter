@@ -2,13 +2,21 @@
 # Regression test: every install-API call targets the CANONICAL host and
 # shell callers follow redirects.
 #
-# Bug class (caught 2026-06-10, MYC-419): alternate domains 308-redirect to
-# the canonical host. curl does NOT follow redirects without -L, and
-# Python 3.9's urllib does not follow 308 at all — so every install-API
-# call against a non-canonical base died silently (the reporters are
-# deliberately fail-open). The funnel showed signups but consumed=0 /
-# completed=0 for weeks while real installs ran: the mid-funnel zeros were
-# measurement failure, not user drop-off.
+# Bug class (caught 2026-06-10, MYC-419; recurred mirror-image 2026-06-24,
+# MYC-1659): alternate domains 308-redirect to the canonical host. curl does
+# NOT follow redirects without -L, and Python 3.9/3.10's urllib does not
+# follow 308 at all — so every install-API call against a non-canonical base
+# dies silently (the reporters are deliberately fail-open). The funnel showed
+# signups but consumed=0 / completed=0 for weeks while real installs ran: the
+# mid-funnel zeros were measurement failure, not user drop-off.
+#
+# Canonical host = bare apex https://mycelium-ai.co (NO www). The 2026-06-22
+# Vercel primary flip (MYC-1539) made the apex canonical; www.mycelium-ai.co
+# AND the no-hyphen myceliumai.co now BOTH 308 to it. This test pins the apex
+# so the next flip (either direction) fails loud instead of bleeding the funnel.
+# Live probe for humans (not in CI — keeps the test offline-deterministic):
+#   curl -s -o /dev/null -w '%{http_code}\n' -X OPTIONS https://mycelium-ai.co/api/install/quick-mint
+#   expect 2xx (route live, no redirect); a 308 means the apex moved again.
 #
 # Asserts:
 #   1. bootstrap.sh INSTALL_API_BASE default is the canonical host.
@@ -24,7 +32,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_ROOT"
 
-CANON="https://www.mycelium-ai.co"
+CANON="https://mycelium-ai.co"
 FAILED=0
 
 fail() { echo "FAIL: $1" >&2; FAILED=$((FAILED + 1)); }
@@ -44,11 +52,13 @@ while IFS= read -r line; do
   fi
 done < <(grep -E 'curl .*\$INSTALL_API_BASE/api' bootstrap.sh)
 
-# 4. no non-canonical API calls in install-facing files
-#    (myceliumai.co — no hyphen — 308s; so does bare mycelium-ai.co without www)
-#    -I skips binary files: a stray __pycache__/*.pyc (the URL compiled into a
-#    bytecode string constant) is an untracked local artifact, not source to audit.
-if matches=$(grep -rnEI '(myceliumai\.co|[^.w]mycelium-ai\.co)/api' \
+# 4. no non-canonical API calls in install-facing files. After the 2026-06-22
+#    apex flip the non-canonical hosts are www.mycelium-ai.co (www 308s to apex)
+#    and myceliumai.co (no hyphen, also 308s). The bare apex mycelium-ai.co is
+#    canonical and must NOT match (the hyphen means "myceliumai.co" is not a
+#    substring of it). -I skips binary files: a stray __pycache__/*.pyc (the URL
+#    compiled into a bytecode string constant) is an untracked local artifact.
+if matches=$(grep -rnEI '(www\.mycelium-ai\.co|myceliumai\.co)/api' \
     bootstrap.sh bootstrap.ps1 phases/ scripts/ hooks/ skills/ SECURITY.md 2>/dev/null); then
   fail "non-canonical install-API base found:"
   echo "$matches" | head -5 | sed 's|^|  |' >&2

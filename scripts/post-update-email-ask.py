@@ -185,7 +185,7 @@ payload = json.dumps({
     "stage": "post_install",
 }).encode()
 req = urllib.request.Request(
-    "https://www.mycelium-ai.co/api/install/quick-mint",
+    "https://mycelium-ai.co/api/install/quick-mint",
     data=payload, headers={"content-type": "application/json"}, method="POST")
 mp = os.path.expanduser("~/.claude/.ai-brain-starter-email-on-file")
 try:
@@ -230,7 +230,7 @@ payload = json.dumps({
     "stage": "post_install",
 }).encode()
 req = urllib.request.Request(
-    "https://www.mycelium-ai.co/api/install/quick-mint",
+    "https://mycelium-ai.co/api/install/quick-mint",
     data=payload, headers={"content-type": "application/json"}, method="POST")
 mp = os.path.expanduser("~/.claude/.ai-brain-starter-email-on-file")
 try:

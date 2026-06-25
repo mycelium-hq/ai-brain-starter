@@ -123,7 +123,7 @@ try:
 except Exception:
     pass
 payload = json.dumps({"email": email, "name": name, "lang": lang, "stage": "post_install"}).encode()
-req = urllib.request.Request("https://www.mycelium-ai.co/api/install/quick-mint",
+req = urllib.request.Request("https://mycelium-ai.co/api/install/quick-mint",
     data=payload, headers={"content-type": "application/json"}, method="POST")
 try:
     with urllib.request.urlopen(req, timeout=12) as r:
@@ -516,7 +516,7 @@ if os.path.exists(pend):
         try:
             rec = json.loads(line)
             payload = json.dumps({**rec, "stage": "post_install"}).encode()
-            req = urllib.request.Request("https://www.mycelium-ai.co/api/install/quick-mint",
+            req = urllib.request.Request("https://mycelium-ai.co/api/install/quick-mint",
                 data=payload, headers={"content-type": "application/json"}, method="POST")
             urllib.request.urlopen(req, timeout=12).read()
         except Exception:
