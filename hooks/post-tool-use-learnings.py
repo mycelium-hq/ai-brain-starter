@@ -5,7 +5,10 @@ Learnings as episodic memory.
 
 Fires after every Bash, Edit, Write, or Agent tool call. Two trigger conditions:
 
-  1. Tool result indicates failure (non-zero exit, error string, exception).
+  1. Tool result indicates failure via an AUTHORITATIVE signal: a non-zero
+     Bash exitCode, or an isError flag. A subagent's (Agent/Task) free-form
+     product and a Write/Edit's file content are NEVER substring-scanned for
+     error keywords — that text is the tool's OUTPUT, not a failure signal.
   2. Tool result contains an explicit `<learning>...</learning>` annotation.
 
 When either fires, the hook appends one Learning file to:
@@ -143,7 +146,20 @@ def detect_failure(tool_response: dict, source_tool: str = "") -> tuple[bool, st
         if tool_response.get("filePath") or tool_response.get("file_path"):
             return False, ""
 
-    # Generic content scan (Bash, Agent, Task without exitCode/isError)
+    # Agent/Task success short-circuit. A subagent's return is its PRODUCT —
+    # free-form prose/code that routinely contains "error", "exception",
+    # "failed", "fatal" because it is DISCUSSING or AUDITING code, exactly like
+    # a Write's file content. The only sound failure signal for a subagent is an
+    # authoritative isError / non-zero exitCode, both checked above; if neither
+    # fired, the subagent SUCCEEDED. Substring-scanning the product was the
+    # false-positive bug that flooded Meta/Learnings/ with successful
+    # repo-evaluation transcripts — and leaked audited third-party content into
+    # error_excerpt — until 2026-06-25 (46 false captures across two vaults).
+    # Mirror the Write/Edit fix: never scan an agent's product for error tokens.
+    if source_tool in ("Agent", "Task"):
+        return False, ""
+
+    # Generic content scan (Bash without an explicit exitCode)
     content = tool_response.get("content") or tool_response.get("output") or ""
     if isinstance(content, list):
         joined = " ".join(str(c.get("text", c)) if isinstance(c, dict) else str(c) for c in content)
@@ -249,6 +265,14 @@ def write_learning(
     if error_excerpt:
         frontmatter["error_excerpt"] = error_excerpt[:500]
 
+    # Agent/Task captures reach here only on a genuine isError failure or an
+    # explicit <learning> annotation (detect_failure short-circuits successful
+    # subagent returns). Even then, do NOT persist the raw subagent
+    # input/output body: a subagent's prompt + product can carry UNTRUSTED
+    # THIRD-PARTY CONTENT (audited repos, fetched URLs). Keep only the bounded
+    # signal (error_excerpt / learning_text) already rendered above.
+    redact_subagent_body = source_tool in ("Agent", "Task")
+
     body_parts = ["---", render_frontmatter(frontmatter).rstrip(), "---", ""]
 
     if learning_text:
@@ -265,25 +289,35 @@ def write_learning(
         body_parts.append("```")
         body_parts.append("")
 
-    body_parts.append("## Tool input")
-    body_parts.append("")
-    body_parts.append("```json")
-    try:
-        body_parts.append(json.dumps(tool_input, indent=2, ensure_ascii=False)[:1500])
-    except (TypeError, ValueError):
-        body_parts.append(str(tool_input)[:1500])
-    body_parts.append("```")
-    body_parts.append("")
+    if redact_subagent_body:
+        body_parts.append("## Tool input + response")
+        body_parts.append("")
+        body_parts.append(
+            "_Omitted for Agent/Task captures: a subagent's prompt and product "
+            "can contain untrusted third-party content (audited repos, fetched "
+            "URLs). Only the bounded signal above is persisted._"
+        )
+        body_parts.append("")
+    else:
+        body_parts.append("## Tool input")
+        body_parts.append("")
+        body_parts.append("```json")
+        try:
+            body_parts.append(json.dumps(tool_input, indent=2, ensure_ascii=False)[:1500])
+        except (TypeError, ValueError):
+            body_parts.append(str(tool_input)[:1500])
+        body_parts.append("```")
+        body_parts.append("")
 
-    body_parts.append("## Tool response (excerpt)")
-    body_parts.append("")
-    body_parts.append("```")
-    try:
-        body_parts.append(json.dumps(tool_response, indent=2, ensure_ascii=False)[:1500])
-    except (TypeError, ValueError):
-        body_parts.append(str(tool_response)[:1500])
-    body_parts.append("```")
-    body_parts.append("")
+        body_parts.append("## Tool response (excerpt)")
+        body_parts.append("")
+        body_parts.append("```")
+        try:
+            body_parts.append(json.dumps(tool_response, indent=2, ensure_ascii=False)[:1500])
+        except (TypeError, ValueError):
+            body_parts.append(str(tool_response)[:1500])
+        body_parts.append("```")
+        body_parts.append("")
 
     try:
         target.write_text("\n".join(body_parts), encoding="utf-8")
@@ -368,8 +402,21 @@ def _self_test() -> int:
          {"type": "update", "filePath": "/tmp/d.py",
           "content": "auto-yes wikilink application is unsafe"},
          "Write", False),
-        ("Agent isError true → failure",
+        ("Agent isError true → failure (genuine subagent failure, positive control)",
          {"isError": True, "error": "agent crashed"}, "Agent", True),
+        ("Agent successful audit return mentioning error/exception/failed → not failure (regression-agent-fp1)",
+         {"status": "completed",
+          "content": "Here is the candidate list. The code handles errors via try/except, "
+                     "fails gracefully on exception, and logs fatal conditions."},
+         "Agent", False),
+        ("Task successful return, error vocabulary, no literal success token → not failure (regression-agent-fp2)",
+         {"content": "Pattern: a defensive guard wraps the call; on error it raises a typed exception."},
+         "Task", False),
+        ("Agent product is pure error-vocab with no authoritative signal → not failure (regression-agent-fp3)",
+         {"output": "error handling, exception safety, failure modes, fatal-path coverage"},
+         "Agent", False),
+        ("Task with non-zero exitCode is still authoritative → failure (positive control)",
+         {"exitCode": 2, "stderr": "boom"}, "Task", True),
         ("Bash with traceback in stdout → failure",
          {"content": "Traceback (most recent call last):\n  File 'x.py'"},
          "Bash", True),
