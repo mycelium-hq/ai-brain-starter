@@ -164,6 +164,12 @@ def main() -> int:
         "#!/usr/bin/env bash\n"
         'OLD="' + OLD + '"  # relocate-keep: migration source\n'
     )
+    # KEEP: an anti-recreator assertion (asserts the old path is ABSENT) is the
+    # OPPOSITE of a recreator — must not be flagged as executed.
+    (fsroot / "antiassert.py").write_text(
+        "def _default_root():\n    return '/somewhere/else'\n\n"
+        'assert "' + OLD + '" not in str(_default_root())\n'
+    )
 
     # ---------------------------------------------------------------------
     # Root 2: a git repo where origin/main CARRIES the ref but the checked-out
@@ -251,6 +257,8 @@ def main() -> int:
     # ---- CLASSIFY: KEEP --------------------------------------------------
     k = klass_of(obj, "keepme.sh")
     (pass_ if k == "keep" else fail)(f"KEEP: relocate-keep-marked line (keepme.sh) -> {k}")
+    ka = klass_of(obj, "antiassert.py")
+    (pass_ if ka == "keep" else fail)(f"KEEP: anti-recreator `assert ... not in` line (antiassert.py) -> {ka}")
     # The inert permissions matcher in .claude.json must be KEEP, not EXECUTED.
     # Match on the semantic `reason` field, NOT the snippet: a finding's snippet is
     # path-length-fragile (a compact one-line JSON or a long tmp path can push an

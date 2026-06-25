@@ -132,9 +132,13 @@ KEEP_BASENAMES = {"relocate-vault.sh", "relocate-sweep.py", "relocate-machinery-
                   "check-desktop-path-recreators.py"}
 KEEP_PATH_TOKENS = ("scrub-or-die", "gh-harden-repos", "personal-pii-scrub", "/docs/superpowers/")
 # A line carrying one of these is an intentional KEEP regardless of file type:
-#   relocate-keep  → explicit marker;  OLD=/NEW= → a migration source assignment;
-#   .exists()/-e   → a guarded ref that no-ops once the path is gone.
-KEEP_LINE_RE = re.compile(r"relocate-keep|^\s*(OLD|NEW)=|\.exists\(\)|os\.path\.exists|\[\s+-[ed]\s")
+#   relocate-keep    → explicit marker;  OLD=/NEW= → a migration source assignment;
+#   .exists()/-e     → a guarded ref that no-ops once the path is gone;
+#   assert … not in  → an ANTI-recreator: a test asserting the old path is ABSENT from a
+#                      default/config is the OPPOSITE of a recreator, so flagging it would
+#                      teach bypass. Narrow by construction — a real recreator line is an
+#                      assignment / mkdir, never an `assert … not in`.
+KEEP_LINE_RE = re.compile(r"relocate-keep|^\s*(OLD|NEW)=|\.exists\(\)|os\.path\.exists|\[\s+-[ed]\s|\bassert\b.*\bnot in\b")
 # JSON keys whose subtree is an inert string-MATCHER list, not executable config.
 INERT_JSON_KEYS = {"permissions"}
 
