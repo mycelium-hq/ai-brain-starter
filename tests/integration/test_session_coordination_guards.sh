@@ -143,10 +143,13 @@ case "$ERR" in *HEADS-UP*) ok "LOCK heads-up message is HEADS-UP" ;; *) bad "LOC
 # 4. same non-git again -> quiet (marker present).
 pt "ls -la"
 assert_rc "LOCK PreToolUse heads-up fires only once (exit 0)" 0
-# 5. cross-repo --git-dir/--work-tree commit -> NOT a home mutation -> allow.
-#    (if the resolver wrongly attributed the redirect to home this would BLOCK.)
-pt "git --git-dir=$OREPO/.git --work-tree=$OREPO commit -m x"
-assert_rc "LOCK PreToolUse no false-block on --git-dir/--work-tree cross-repo" 0
+# 5. cross-repo --git-dir commit -> the git-dir (collision surface) is elsewhere -> allow.
+pt "git --git-dir=$OREPO/.git commit -m x"
+assert_rc "LOCK PreToolUse no false-block on --git-dir cross-repo" 0
+# 5b. --work-tree=/other while the git-dir is still HOME -> still a home mutation -> BLOCK.
+#     (--work-tree relocates only the working tree; the home HEAD/index still get written.)
+pt "git --work-tree=$OREPO commit -m x"
+assert_rc "LOCK PreToolUse blocks --work-tree relocate with home git-dir" 2
 # 6. read-only git in home -> allow (marker present).
 pt "git status"
 assert_rc "LOCK PreToolUse allows read-only git in home" 0

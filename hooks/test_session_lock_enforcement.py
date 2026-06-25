@@ -6,9 +6,12 @@ Run: python3 hooks/test_session_lock_enforcement.py   (exit 0 = pass)
 Exercises ``_is_home_repo_git_mutation`` across the matrix the
 SIBLING-SESSION-FALSE-BLOCK ticket family hardened:
   * read-only vs mutating git subcommands (commit/push/reset vs status/log/diff)
-  * cross-repo redirects via ``-C`` / ``--work-tree`` / ``--git-dir`` (the single
-    effective-target resolver — a cross-repo redirect must NOT false-block the
-    home repo, and a home-pointing redirect MUST block)
+  * cross-repo attribution via ``-C`` and the git-dir (``--git-dir`` flag or
+    ``GIT_DIR=`` env) — the git-dir is the collision surface (HEAD/index/refs),
+    so a cross-repo git-dir must NOT false-block and a home git-dir MUST block.
+    ``--work-tree`` is deliberately NOT a redirect: a ``--work-tree=/other``
+    mutation still writes the home git-dir, so it must still block (false-ALLOW
+    avoidance)
   * in-command ``cd`` tracking (``cd /other && git commit`` is attributed to
     /other; a ``cd`` back into home re-attributes)
   * unresolved ``$VAR`` redirects + the unbalanced-quote coarse fallback that a
@@ -64,14 +67,18 @@ CASES = [
     ("-C cross-repo -> allow", "git -C /home/other commit -m x", HOME, HOME, False),
     ("-C within home -> block", "git -C /home/proj/sub commit -m x", HOME, HOME, True),
     ("-C unresolved $VAR -> allow", 'git -C "$VAR" commit', HOME, HOME, False),
-    # --- --work-tree / --git-dir redirect (the cross-repo redirect residual) ---
-    ("--git-dir+--work-tree cross-repo -> allow",
-     "git --git-dir=/home/other/.git --work-tree=/home/other commit -m x", HOME, HOME, False),
+    # --- git-dir IS the collision surface; --work-tree is NOT a redirect ---
+    ("--git-dir cross-repo -> allow", "git --git-dir=/home/other/.git commit -m x", HOME, HOME, False),
     ("--git-dir home -> block", "git --git-dir=/home/proj/.git commit -m x", HOME, HOME, True),
-    ("--work-tree cross-repo -> allow", "git --work-tree=/home/other commit", HOME, HOME, False),
-    ("--work-tree home -> block", "git --work-tree=/home/proj commit", HOME, HOME, True),
     ("--git-dir space-form cross-repo -> allow",
      "git --git-dir /home/other/.git commit -m x", HOME, HOME, False),
+    ("GIT_DIR= env cross-repo -> allow", "GIT_DIR=/home/other/.git git commit -m x", HOME, HOME, False),
+    ("GIT_DIR= env home -> block", "GIT_DIR=/home/proj/.git git commit -m x", HOME, HOME, True),
+    ("--work-tree=/other but home git-dir -> BLOCK (false-ALLOW avoided)",
+     "git --work-tree=/home/other commit", HOME, HOME, True),
+    ("--work-tree home -> block", "git --work-tree=/home/proj commit", HOME, HOME, True),
+    ("--git-dir cross + --work-tree home -> allow (git-dir wins)",
+     "git --git-dir=/home/other/.git --work-tree=/home/proj commit", HOME, HOME, False),
     # --- cd tracking across compound commands ---
     ("cd other && commit -> allow", "cd /home/other && git commit -m x", HOME, HOME, False),
     ("cd other then back home && commit -> block",
@@ -106,21 +113,21 @@ CASES = [
 for label, cmd, cwd, home, want in CASES:
     check(label, mut(cmd, cwd, home), want)
 
-# --- _git_mutation_target redirect-precedence unit checks ---
-check("gmt: -C beats --work-tree", mod._git_mutation_target(shlex.split(
-    "git -C /x --work-tree /y commit")), (True, "/x", False))
-check("gmt: --work-tree beats --git-dir", mod._git_mutation_target(shlex.split(
-    "git --work-tree /y --git-dir /z/.git commit")), (True, "/y", False))
-check("gmt: --git-dir only -> is_gitdir flag", mod._git_mutation_target(shlex.split(
-    "git --git-dir /z/.git commit")), (True, "/z/.git", True))
-check("gmt: no redirect -> None", mod._git_mutation_target(shlex.split(
-    "git commit -m x")), (True, None, False))
+# --- _git_mutation_target (cdir, gdir) unit checks ---
+check("gmt: -C captured as cdir, --work-tree ignored", mod._git_mutation_target(shlex.split(
+    "git -C /x --work-tree /y commit")), (True, "/x", None))
+check("gmt: --git-dir captured as gdir, --work-tree ignored", mod._git_mutation_target(shlex.split(
+    "git --work-tree /y --git-dir /z/.git commit")), (True, None, "/z/.git"))
+check("gmt: --git-dir= form -> gdir", mod._git_mutation_target(shlex.split(
+    "git --git-dir=/z/.git commit")), (True, None, "/z/.git"))
+check("gmt: GIT_DIR= env -> gdir", mod._git_mutation_target(shlex.split(
+    "GIT_DIR=/z/.git git commit")), (True, None, "/z/.git"))
+check("gmt: -C + --git-dir both captured", mod._git_mutation_target(shlex.split(
+    "git -C /x --git-dir /z/.git commit")), (True, "/x", "/z/.git"))
+check("gmt: no redirect -> (True,None,None)", mod._git_mutation_target(shlex.split(
+    "git commit -m x")), (True, None, None))
 check("gmt: read-only -> False", mod._git_mutation_target(shlex.split(
     "git status")), False)
-
-# --- _strip_git_dir ---
-check("strip_git_dir /repo/.git", mod._strip_git_dir("/repo/.git"), "/repo")
-check("strip_git_dir bare /x/repo.git kept", mod._strip_git_dir("/x/repo.git"), "/x/repo.git")
 
 print(f"\n=== {len(CASES) + 7} assertions, {len(fails)} failed ===")
 sys.exit(1 if fails else 0)

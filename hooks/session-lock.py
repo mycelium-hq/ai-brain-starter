@@ -115,12 +115,6 @@ ALWAYS_MUTATING = {
 }
 # git global options that consume the FOLLOWING token as their value.
 GIT_GLOBAL_VALUE_OPTS = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
-# The subset of global value-opts that REDIRECT the effective working tree / repo
-# (i.e. determine which repo a bare mutation actually hits). A single effective-
-# target resolver covers all three so the gate doesn't regrow the false-block
-# family one trigger at a time (the SIBLING-SESSION-FALSE-BLOCK class): `-C`,
-# `--work-tree`, and `--git-dir` each re-point the op, in that precedence.
-GIT_REDIRECT_OPTS = ("-C", "--work-tree", "--git-dir")
 
 
 def _emit(obj):
@@ -415,16 +409,6 @@ def _expand(path):
     return path
 
 
-def _strip_git_dir(path):
-    """A `--git-dir` points at the .git; map it to the working-tree root for the
-    home-repo check. `/repo/.git` -> `/repo`; a bare repo (`/x/repo.git`) has no
-    matching working tree so it is left as-is (and will not match home)."""
-    p = path.rstrip("/")
-    if os.path.basename(p) == ".git":
-        return os.path.dirname(p)
-    return p
-
-
 def _branch_is_mutating(rest):
     create_flags = {"-m", "-M", "-d", "-D", "-c", "-C", "--move", "--copy",
                     "--delete", "--force", "--edit-description"}
@@ -459,15 +443,24 @@ def _tag_is_mutating(rest):
 
 def _git_mutation_target(tokens):
     """Given shlex tokens of one segment, return False if it is not a git
-    mutation, else (True, redirect, redirect_is_gitdir) where `redirect` is the
-    effective working-tree/repo redirect (from `-C` / `--work-tree` / `--git-dir`,
-    in that precedence) or None when the op carries no redirect.
+    mutation, else (True, cdir_or_None, gdir_or_None): `cdir` is the `-C` value
+    and `gdir` is the explicit git-dir (`--git-dir` flag or `GIT_DIR=` env) if
+    present. The git-dir is the real collision surface (HEAD/index/refs live
+    there); `--work-tree`/`GIT_WORK_TREE` are deliberately NOT captured because
+    they relocate only the working tree, not the git-dir — so they do not move
+    the surface this lock guards, and attributing a mutation to a `--work-tree`
+    while its git-dir is still the home repo would be a false-ALLOW.
     """
     i = 0
-    # skip leading VAR=val env assignments + transparent wrappers (env/command/...)
+    cdir = gdir = None
+    # skip leading VAR=val env assignments + transparent wrappers (env/command/
+    # sudo/...). git honors GIT_DIR like `--git-dir`, so capture it here; an
+    # explicit `--git-dir` flag below overrides it (matching git's precedence).
     while i < len(tokens):
         t = tokens[i]
         if ENV_ASSIGN_RE.match(t) or t in WRAPPER_PREFIXES:
+            if t.startswith("GIT_DIR="):
+                gdir = t.split("=", 1)[1]
             i += 1
             continue
         break
@@ -479,23 +472,27 @@ def _git_mutation_target(tokens):
         return False
     i += 1
 
-    # Capture the FIRST occurrence of each redirect opt; resolve precedence after.
-    redir = {"-C": None, "--work-tree": None, "--git-dir": None}
     while i < len(tokens) and tokens[i].startswith("-"):
         tok = tokens[i]
-        if "=" in tok:  # value-form global opt: --git-dir=/x, --work-tree=/x, -c k=v
-            key, _, val = tok.partition("=")
-            if key in redir and redir[key] is None:
-                redir[key] = val
+        if tok == "-C":
+            if i + 1 < len(tokens):
+                cdir = tokens[i + 1]
+            i += 2
+            continue
+        if tok == "--git-dir":
+            if i + 1 < len(tokens):
+                gdir = tokens[i + 1]
+            i += 2
+            continue
+        if tok.startswith("--git-dir="):
+            gdir = tok.split("=", 1)[1]
             i += 1
             continue
-        if tok in redir:  # -C <path> / --work-tree <path> / --git-dir <path>
-            if i + 1 < len(tokens) and redir[tok] is None:
-                redir[tok] = tokens[i + 1]
+        if tok in GIT_GLOBAL_VALUE_OPTS:
             i += 2
             continue
-        if tok in GIT_GLOBAL_VALUE_OPTS:  # -c / --namespace / --exec-path (consume value)
-            i += 2
+        if "=" in tok and tok.split("=", 1)[0] in GIT_GLOBAL_VALUE_OPTS:
+            i += 1
             continue
         i += 1  # boolean global flag (--no-pager, --paginate, --bare, -p, ...)
 
@@ -517,14 +514,7 @@ def _git_mutation_target(tokens):
 
     if not mutating:
         return False
-
-    if redir["-C"] is not None:
-        return (True, redir["-C"], False)
-    if redir["--work-tree"] is not None:
-        return (True, redir["--work-tree"], False)
-    if redir["--git-dir"] is not None:
-        return (True, redir["--git-dir"], True)
-    return (True, None, False)
+    return (True, cdir, gdir)
 
 
 def _apply_cd(tokens, effective_cwd, cwd_known):
@@ -561,7 +551,7 @@ def _is_home_repo_git_mutation(command, cwd, main_root):
     the bare `git commit` against the session cwd because it carries no redirect
     (SIBLING-SESSION-FALSE-BLOCK-ON-CD-TO-OTHER-REPO — false-blocked repeatedly in
     one session, training reflexive SIBLING_SESSION_LOCK_BYPASS=1). An explicit
-    `git -C <path>` (or `--work-tree`/`--git-dir`) still wins over the tracked cwd."""
+    `git -C <path>` still wins over the tracked cwd."""
     if not command or "git" not in command:
         return False
     main_root = os.path.normpath(main_root)
@@ -600,8 +590,7 @@ def _is_home_repo_git_mutation(command, cwd, main_root):
             # produce an unbalanced-quote segment, and without this check the
             # coarse branch attributed `git -C /other-repo commit -m "<multi-
             # line>"` to the home cwd and false-blocked (SIBLING-SESSION-FALSE-BLOCK
-            # class). The coarse fallback covers -C only by design; the parsed path
-            # above is the single resolver that covers -C/--work-tree/--git-dir.
+            # class).
             mc = re.search(r"\bgit\s+(?:--?[\w-]+(?:=\S+)?\s+)*-C\s+(\S+)", seg)
             if mc:
                 cpath = _expand(mc.group(1).strip("\"'"))
@@ -617,6 +606,18 @@ def _is_home_repo_git_mutation(command, cwd, main_root):
                     continue
                 if os.path.isabs(cpath) and not _in_home(os.path.normpath(cpath)):
                     continue  # explicit -C at a different repo → not this lock's business
+            # Same posture for an explicit git-dir (`--git-dir`), which a multi-line
+            # `-m` likewise drops into this coarse branch. The git-dir is the
+            # collision surface; an absolute one outside home → let through, an
+            # unresolvable $VAR → fail open. (--work-tree is intentionally NOT matched
+            # here: it does not move the git-dir, so it must not relax the gate.)
+            mg = re.search(r"\bgit\s+(?:--?[\w-]+(?:=\S+)?\s+)*--git-dir(?:=|\s+)(\S+)", seg)
+            if mg:
+                gpath = _expand(mg.group(1).strip("\"'"))
+                if "$" in gpath:
+                    continue
+                if os.path.isabs(gpath) and not _in_home(os.path.normpath(gpath)):
+                    continue  # explicit git-dir at a different repo → not this lock's business
             if cwd_known and _in_home(effective_cwd) and re.search(r"\bgit\b", seg) and re.search(
                 r"\b(commit|push|checkout|switch|merge|rebase|reset|cherry-pick|"
                 r"revert|pull|am|apply)\b", seg
@@ -627,30 +628,44 @@ def _is_home_repo_git_mutation(command, cwd, main_root):
         res = _git_mutation_target(tokens)
         if not res:
             continue
-        _, redirect, redirect_is_gitdir = res
-        if redirect:
-            expanded = _expand(redirect)
-            if "$" in expanded:
-                # redirect points at an UNRESOLVED shell variable (e.g. `git -C
-                # "$MV"`): shlex doesn't expand shell vars and the hook can't see
-                # the command's env. An explicit redirect almost always targets a
-                # DIFFERENT dir, and the real collision pattern (a bare `git
-                # commit`) carries no redirect — so treat an unresolvable redirect
-                # as "not this repo" rather than false-blocking legitimate
-                # cross-repo ops. Bare-commit detection is unaffected.
+        _, cdir, gdir = res
+        # `-C` changes git's working dir BEFORE the rest of the command resolves,
+        # so apply it first to get the cwd this segment's git actually runs in.
+        seg_cwd, seg_cwd_known = effective_cwd, cwd_known
+        if cdir:
+            cexp = _expand(cdir)
+            if "$" in cexp:
+                # -C points at an UNRESOLVED shell variable (e.g. `git -C "$MV"`):
+                # shlex doesn't expand shell vars and the hook can't see the
+                # command's env. An explicit -C almost always targets a DIFFERENT
+                # dir, and the real collision pattern (a bare `git commit`) carries
+                # no -C — so treat an unresolvable -C as "not this repo" rather than
+                # false-blocking legitimate cross-repo ops. Bare-commit detection
+                # is unaffected.
                 continue
-            if redirect_is_gitdir:
-                expanded = _strip_git_dir(expanded)
-            if os.path.isabs(expanded):
-                target = os.path.normpath(expanded)
+            if os.path.isabs(cexp):
+                seg_cwd, seg_cwd_known = os.path.normpath(cexp), True
             elif cwd_known:
-                target = os.path.normpath(os.path.join(effective_cwd, expanded))
+                seg_cwd, seg_cwd_known = os.path.normpath(os.path.join(effective_cwd, cexp)), True
             else:
-                continue  # relative redirect on an unknown effective cwd → don't false-block
+                continue  # relative -C on an unknown effective cwd → don't false-block
+        if gdir:
+            # An explicit git-dir (`--git-dir`/`GIT_DIR=`) IS the collision surface
+            # (HEAD/index/refs live there), so it wins over -C-derived discovery.
+            # Unresolvable ($VAR) → fail open, same posture as -C above.
+            gexp = _expand(gdir)
+            if "$" in gexp:
+                continue
+            if os.path.isabs(gexp):
+                target = os.path.normpath(gexp)
+            elif seg_cwd_known:
+                target = os.path.normpath(os.path.join(seg_cwd, gexp))
+            else:
+                continue  # relative git-dir on an unknown cwd → don't false-block
         else:
-            if not cwd_known:
+            if not seg_cwd_known:
                 continue  # bare git in an unknown dir (post unresolvable cd) → let through
-            target = effective_cwd
+            target = seg_cwd
         if _in_home(target):
             return True
         # a git mutation pointed at a DIFFERENT repo is not a collision on this
