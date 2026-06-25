@@ -165,6 +165,44 @@ migrate_claude_state() {  # $1=old-abs  $2=new-abs
   fi
 }
 
+# ---- record the move in the relocation manifest (the watchdog's source of truth) ---
+# scripts/relocate-sweep.py --watch reads $CONFIG_DIR/relocations.json to learn which
+# (old,new) move(s) to watch for drift back to the old path — NEVER a hardcoded literal,
+# so a paying install passes its own move and this one passes ours. Upsert keyed on
+# `old`. Non-fatal by construction: a manifest hiccup must never fail a real relocation.
+record_relocation() {  # $1=old-abs  $2=new-abs  $3=symlink(0|1)
+  local old="$1" new="$2" symlink="$3"
+  local manifest="$CONFIG_DIR/relocations.json"
+  if [ "$DRYRUN" = 1 ]; then
+    say "  · would record the move in $manifest (the watchdog reads this)"
+    return 0
+  fi
+  mkdir -p "$CONFIG_DIR" 2>/dev/null || true
+  if python3 - "$manifest" "$old" "$new" "$symlink" <<'PY'
+import json, os, sys, tempfile, time
+manifest, old, new, symlink = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4] == "1"
+try:
+    data = json.load(open(manifest)) if os.path.isfile(manifest) else []
+    if not isinstance(data, list):
+        data = []
+except (OSError, ValueError):
+    data = []
+data = [e for e in data if not (isinstance(e, dict) and e.get("old") == old)]  # upsert by old
+data.append({"old": old, "new": new, "symlink": symlink,
+             "at": time.strftime("%Y-%m-%dT%H:%M:%S%z")})
+d = os.path.dirname(manifest) or "."
+fd, tmp = tempfile.mkstemp(dir=d, prefix=".relocations.")
+with os.fdopen(fd, "w") as f:
+    json.dump(data, f, indent=2)
+os.replace(tmp, manifest)
+PY
+  then
+    say "  · recorded the move in $manifest (scripts/relocate-sweep.py --watch reads this)"
+  else
+    warn "could not record the move in $manifest (the watchdog will not see it until recorded)"
+  fi
+}
+
 # =============================================================================
 # state-only mode: the vault is already at the new path; just fix Claude history
 # =============================================================================
@@ -177,6 +215,8 @@ if [ "$MIGRATE_ONLY" = 1 ]; then
   NEW_ABS="$(abspath "$NEW")"
   say "relocate-vault: migrating Claude Code state only ($OLD_ABS -> $NEW_ABS)"
   migrate_claude_state "$OLD_ABS" "$NEW_ABS"
+  SYM=0; if [ -L "$OLD_ABS" ]; then SYM=1; fi
+  record_relocation "$OLD_ABS" "$NEW_ABS" "$SYM"
   exit 0
 fi
 
@@ -219,6 +259,7 @@ if [ "$DROP" = 1 ]; then
     exit 0
   fi
   rm "$OLD"
+  record_relocation "$OLD" "$NEW" 0
   say "relocate-vault: retired the symlink '$OLD' — sweep returned GO (zero executed references)."
   exit 0
 fi
@@ -262,6 +303,8 @@ if [ "$DRYRUN" = 1 ]; then
   say "DRY  would: mv '$OLD_ABS' -> '$NEW_ABS'"
   [ "$NOSYMLINK" = 1 ] || say "DRY  would: ln -s '$NEW_ABS' '$OLD_ABS'"
   migrate_claude_state "$OLD_ABS" "$NEW_ABS"
+  SYM=1; if [ "$NOSYMLINK" = 1 ]; then SYM=0; fi
+  record_relocation "$OLD_ABS" "$NEW_ABS" "$SYM"
   say "DRY-RUN complete — no changes made."
   exit 0
 fi
@@ -282,6 +325,9 @@ fi
 
 say "relocate-vault: migrating Claude Code session history + agent memory ..."
 migrate_claude_state "$OLD_ABS" "$NEW_ABS"
+
+SYM=1; if [ "$NOSYMLINK" = 1 ]; then SYM=0; fi
+record_relocation "$OLD_ABS" "$NEW_ABS" "$SYM"
 
 say ""
 say "relocate-vault: DONE."

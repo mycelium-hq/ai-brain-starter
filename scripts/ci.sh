@@ -127,6 +127,7 @@ INTEGRATION_TESTS=(
   test_machinery_sidecar
   test_relocate_vault
   test_relocate_sweep
+  test_relocate_watch
   test_renderer_crash_guard
   test_install_api_canonical_base
   test_cd_worktree_inline_bypass

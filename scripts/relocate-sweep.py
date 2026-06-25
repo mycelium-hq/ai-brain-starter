@@ -43,20 +43,40 @@ This script NEVER edits anything. It classifies and reports. The repoint is your
 the symlink drop is `relocate-vault.sh --drop-symlink`, which runs this sweep and
 obeys its verdict.
 
+TWO MODES, ONE ENGINE
+---------------------
+  mode 1 (default, --old):  the one-shot SWEEP above — go/no-go on dropping a symlink.
+  mode 2 (--watch):         the ongoing WATCHDOG. Reads the install's OWN move(s) from
+                            the manifest relocate-vault.sh writes (never a hardcoded
+                            literal), reuses the SAME discovery + classification to ask
+                            "has anything drifted back to the old path?", and ALARMS
+                            (exit 1 + a verdict cache) on an executed residual, a
+                            recreated old directory, or a missing relocated vault root
+                            (fail-loud). The SessionStart surfacer + the daily-
+                            maintenance cron read its cache. Bug class:
+                            DESKTOP-PATH-RECREATOR (a hardcoded old path that mkdir's a
+                            phantom folder / breaks tooling every run).
+
 Usage:
-  relocate-sweep.py --old <old-vault-path> [--new <new-vault-path>] [options]
+  relocate-sweep.py --old <old-vault-path> [--new <new-vault-path>] [options]   # mode 1
+  relocate-sweep.py --watch [--config-dir <dir>] [scope options]                # mode 2
+  relocate-sweep.py --watch-selftest                                            # mode 2 controls
 
 Options:
   --root <dir>          add a scan root (repeatable). Combined with auto-discovery
                         unless --no-auto-discover.
   --dev-root <dir>      parent dir of code repos to auto-scan (default: ~/dev)
-  --config-dir <dir>    Claude Code config dir (default: $CLAUDE_CONFIG_DIR or ~/.claude)
+  --config-dir <dir>    Claude Code config dir (default: $CLAUDE_CONFIG_DIR or ~/.claude).
+                        Mode 2 reads relocations.json + writes relocate-watch-state.json here.
   --claude-json <file>  the big per-host config to characterize (default: ~/.claude.json)
   --no-auto-discover    scan only the explicit --root paths (+ --claude-json if given)
+  --watch               mode 2: watch the manifest's recorded move(s) for drift
+  --watch-selftest      mode 2 negative/positive controls (planted recreator/residual/
+                        missing-root must alarm; a clean tree must not), then exit
   --json                emit a machine-readable report on stdout
   -h, --help            this help
 
-Exit codes: 0 GO (no executed residuals) · 1 NO-GO (executed residuals remain) · 2 usage
+Exit codes: 0 GO / watch-clean · 1 NO-GO / watch-ALARM · 2 usage
 """
 from __future__ import annotations
 
@@ -69,9 +89,11 @@ import re
 import subprocess
 import sys
 import threading
+import time
 import tokenize
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from types import SimpleNamespace
 
 HOME = Path.home()
 
@@ -81,8 +103,11 @@ HOME = Path.home()
 READ_TIMEOUT = 5.0
 
 # File suffixes worth scanning on a filesystem walk. Everything else is skipped.
+# `.env`/`.envrc` are in scope: an `export VAULT=<oldpath>` or a `cd <oldpath>` in a
+# config-env file (e.g. an apprise.env) recreates/breaks tooling exactly like an
+# in-script default does (file-type parity with the watchdog's lessons).
 SCAN_EXTS = {".py", ".sh", ".bash", ".zsh", ".md", ".compressed", ".txt",
-             ".json", ".plist", ".yaml", ".yml", ".toml", ""}
+             ".json", ".plist", ".yaml", ".yml", ".toml", ".env", ".envrc", ""}
 # Path fragments that are never executable config (caches, vcs internals, logs).
 SKIP_SUB = ("/.git/", "/.venv/", "/node_modules/", "/.claude/worktrees/",
             ".jsonl", ".log", ".bak", ".pyc", "/.smart-env/", "/graphify-out/")
@@ -781,10 +806,215 @@ def print_human(rep):
         print("    relocate-vault.sh --drop-symlink " + abbrev(rep["old"]))
 
 
+# --------------------------------------------------------------------------- #
+# watch — mode 2 of the SAME engine (no second engine, no hand-kept root list)  #
+# --------------------------------------------------------------------------- #
+def manifest_path(config_dir):
+    return os.path.join(config_dir, "relocations.json")
+
+
+def watch_cache_path(config_dir):
+    return os.path.join(config_dir, "relocate-watch-state.json")
+
+
+def read_manifest(config_dir):
+    """The install's OWN relocation record, written by relocate-vault.sh: a list of
+    {old, new, symlink, at}. Missing → [] (a never-relocated install has nothing to
+    watch — clean no-op). Unparseable / wrong-shape → [] + a LOUD warning, never a
+    silent blind spot."""
+    path = manifest_path(config_dir)
+    if not os.path.isfile(path):
+        return []
+    try:
+        data = json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        WARNINGS.append("relocation manifest did not parse: " + abbrev(path)
+                        + " — the watchdog is blind until it is fixed or removed")
+        return []
+    if not isinstance(data, list):
+        WARNINGS.append("relocation manifest is not a JSON list: " + abbrev(path))
+        return []
+    return [e for e in data if isinstance(e, dict) and e.get("old") and e.get("new")]
+
+
+def old_path_recreated(old_abs):
+    """True when a REAL directory sits at the old path. Post-relocation the old path
+    is either the symlink relocate-vault.sh leaves (fine) or absent once the symlink
+    is dropped (fine). A real directory there means a tool that still hardcodes the
+    old path mkdir'd a phantom folder — the recreator bug, caught the instant it
+    happens with one stat (no walk)."""
+    return os.path.exists(old_abs) and not os.path.islink(old_abs) and os.path.isdir(old_abs)
+
+
+def _watch_args_for(base, old_abs, new_abs):
+    """A build_report() args object for ONE recorded move, inheriting the scan-scope
+    knobs (root / dev_root / no_auto_discover / config_dir / claude_json) from the CLI
+    so the watch auto-discovers in production yet is hermetically scopeable in tests."""
+    return SimpleNamespace(
+        old=old_abs, new=new_abs,
+        root=list(getattr(base, "root", []) or []),
+        dev_root=getattr(base, "dev_root", None) or str(HOME / "dev"),
+        config_dir=getattr(base, "config_dir", None) or str(HOME / ".claude"),
+        no_auto_discover=getattr(base, "no_auto_discover", False),
+        include_worktrees=getattr(base, "include_worktrees", False),
+        claude_json=getattr(base, "claude_json", None),
+    )
+
+
+def _dedupe(seq):
+    out, seen = [], set()
+    for x in seq:
+        if x not in seen:
+            seen.add(x)
+            out.append(x)
+    return out
+
+
+def _write_watch_cache(config_dir, payload):
+    """Atomically write the verdict the SessionStart surfacer + the cron read."""
+    try:
+        os.makedirs(config_dir, exist_ok=True)
+        path = watch_cache_path(config_dir)
+        tmp = path + ".tmp"
+        Path(tmp).write_text(json.dumps(payload, indent=2))
+        os.replace(tmp, path)
+    except OSError as ex:
+        WARNINGS.append("could not write watch cache: " + str(ex))
+
+
+def run_watch(args):
+    """Mode 2: scan the install's OWN recorded move(s) for drift back to an old path,
+    write a verdict cache, return the payload. ALARM (verdict='ALARM') when ANY move
+    has an executed residual reference, a recreated old directory, or a missing
+    new/vault root (fail-loud). Reuses build_report() — no second engine."""
+    config_dir = args.config_dir
+    entries = read_manifest(config_dir)
+    executed_findings, recreated, missing_roots = [], [], []
+
+    for e in entries:
+        old_abs = os.path.abspath(os.path.expanduser(e["old"]))
+        new_abs = os.path.abspath(os.path.expanduser(e["new"]))
+        # fail-loud: the relocated vault is supposed to live at `new`. If it does not,
+        # the move is broken (vault gone / moved again) — the watch must surface it.
+        if not os.path.exists(new_abs):
+            missing_roots.append(abbrev(new_abs))
+        if old_path_recreated(old_abs):
+            recreated.append(abbrev(old_abs))
+        # residual scan via the SAME engine (mode 1). new=None when absent so discovery
+        # never tries to walk a path that is not there.
+        rep = build_report(_watch_args_for(args, old_abs, new_abs if os.path.isdir(new_abs) else None))
+        for f in rep["findings"]:
+            if f["klass"] == "executed":
+                loc = f["path"] + ((":" + str(f["line"])) if f["line"] else "")
+                executed_findings.append(loc + ("  " + f["snippet"] if f["snippet"] else ""))
+
+    executed_findings = _dedupe(executed_findings)
+    alarm = bool(executed_findings or recreated or missing_roots)
+    payload = {
+        "ts": time.time(),
+        "verdict": "ALARM" if alarm else "OK",
+        "entries": len(entries),
+        "executed": len(executed_findings),
+        "findings": executed_findings[:50],
+        "recreated": _dedupe(recreated),
+        "missing_roots": _dedupe(missing_roots),
+        "warnings": _dedupe(list(WARNINGS)),
+    }
+    _write_watch_cache(config_dir, payload)
+    return payload
+
+
+def print_watch(payload):
+    print("relocate-watch")
+    print("  recorded moves watched: %d" % payload["entries"])
+    if payload["entries"] == 0:
+        print("  (no relocations recorded in the manifest — nothing to watch)")
+    for w in payload.get("warnings", []):
+        print("  WARN: " + w)
+    if payload["recreated"]:
+        print("\nRECREATED old path(s) — a real directory reappeared (a hardcoded old path mkdir'd it):")
+        for p in payload["recreated"]:
+            print("  - " + p)
+    if payload["missing_roots"]:
+        print("\nMISSING relocated vault root(s) — not where the manifest says (FAIL-LOUD):")
+        for p in payload["missing_roots"]:
+            print("  - " + p)
+    print("\nEXECUTED residual reference(s) to an old path (%d):" % payload["executed"])
+    if not payload["findings"]:
+        print("  (none)")
+    for loc in payload["findings"]:
+        print("  - " + loc)
+    print("\nVERDICT: " + payload["verdict"])
+    if payload["verdict"] == "ALARM":
+        print("  Drift detected. Repoint the executed references / remove the recreated folder, then re-run.")
+    else:
+        print("  No drift — every recorded move is clean.")
+
+
+def run_watch_selftest():
+    """Negative + positive controls for mode 2 (a guard earns trust only by failing on
+    the thing it catches): a planted recreated dir, a planted executed residual, and a
+    missing vault root MUST each alarm; a clean tree MUST NOT. Hermetic — temp dirs
+    only, fictional paths, no network, no real ~/dev."""
+    import shutil
+    import tempfile
+    global WARNINGS
+    failures = []
+
+    def _case(name, setup, expect_alarm):
+        tmp = tempfile.mkdtemp(prefix="relocate-watch-selftest-")
+        try:
+            cfg = os.path.join(tmp, "config")
+            scan = os.path.join(tmp, "scan")
+            old = os.path.join(tmp, "old-vault")
+            new = os.path.join(tmp, "new-vault")
+            os.makedirs(cfg)
+            os.makedirs(scan)
+            os.makedirs(new)
+            setup(old, new, scan)
+            manifest = [{"old": old, "new": new, "symlink": os.path.islink(old), "at": "selftest"}]
+            Path(os.path.join(cfg, "relocations.json")).write_text(json.dumps(manifest))
+            WARNINGS = []
+            args = SimpleNamespace(config_dir=cfg, root=[scan], dev_root=os.path.join(tmp, "nodev"),
+                                   no_auto_discover=True, include_worktrees=False, claude_json=None)
+            payload = run_watch(args)
+            got = payload["verdict"] == "ALARM"
+            ok = got == expect_alarm
+            print("  [%s] %s: alarm=%s expected=%s" % ("ok" if ok else "FAIL", name, got, expect_alarm))
+            if not ok:
+                failures.append(name)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def _recreate(old, new, scan):
+        os.makedirs(old)  # a real directory at the old path = a recreator ran
+
+    def _residual(old, new, scan):
+        Path(os.path.join(scan, "recreator.sh")).write_text('#!/bin/bash\nmkdir -p "%s/sub"\n' % old)
+
+    def _missing(old, new, scan):
+        shutil.rmtree(new)  # the relocated vault root is gone
+
+    _case("clean tree (must NOT alarm)", lambda old, new, scan: None, False)
+    _case("recreated old dir (MUST alarm)", _recreate, True)
+    _case("executed residual ref (MUST alarm)", _residual, True)
+    _case("missing vault root (MUST alarm, fail-loud)", _missing, True)
+
+    if failures:
+        print("WATCH SELF-TEST FAILED (%d): %s" % (len(failures), ", ".join(failures)))
+        return 1
+    print("WATCH SELF-TEST OK: alarms fire on recreator/residual/missing-root; clean tree stays green.")
+    return 0
+
+
 def main(argv=None):
-    ap = argparse.ArgumentParser(add_help=True, description="code-repo-aware vault-relocation residual sweep")
-    ap.add_argument("--old", required=True)
+    ap = argparse.ArgumentParser(add_help=True, description="code-repo-aware vault-relocation residual sweep + watchdog")
+    ap.add_argument("--old", default=None)
     ap.add_argument("--new", default=None)
+    ap.add_argument("--watch", action="store_true",
+                    help="mode 2: watch the manifest's recorded move(s) for drift; alarm + write a verdict cache")
+    ap.add_argument("--watch-selftest", action="store_true",
+                    help="run the mode-2 negative/positive controls (planted recreator/residual/missing-root), then exit")
     ap.add_argument("--root", action="append", default=[])
     ap.add_argument("--dev-root", default=str(HOME / "dev"))
     ap.add_argument("--config-dir", default=os.environ.get("CLAUDE_CONFIG_DIR", str(HOME / ".claude")))
@@ -800,6 +1030,20 @@ def main(argv=None):
     global READ_TIMEOUT
     READ_TIMEOUT = args.read_timeout
 
+    # mode 2: the ongoing watchdog (manifest-driven, no --old).
+    if args.watch_selftest:
+        return run_watch_selftest()
+    if args.watch:
+        payload = run_watch(args)
+        if args.json:
+            print(json.dumps(payload, indent=2))
+        else:
+            print_watch(payload)
+        return 1 if payload["verdict"] == "ALARM" else 0
+
+    # mode 1: the one-shot sweep.
+    if not args.old:
+        ap.error("--old is required for the sweep (or use --watch / --watch-selftest)")
     rep = build_report(args)
     if args.json:
         print(json.dumps(rep, indent=2))

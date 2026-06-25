@@ -170,6 +170,14 @@ RULECONF="$SCRIPT_DIR/check-rule-conflicts.py"
 PASSIVE="$SCRIPT_DIR/passive-capture.py"
 [ -f "$PASSIVE" ] && VAULT_ROOT="$VAULT" run "passive-capture" /usr/bin/env python3 "$PASSIVE" --scan-today
 
+# Vault-relocation watchdog (mode 2): scan the install's recorded move(s) for drift
+# back to an old path (executed residuals / recreated old dir / missing vault root).
+# Heavy (auto-discovers ~/dev + the vault at canonical ref) so it lives here, not on
+# SessionStart. Writes the verdict cache the SessionStart surfacer reads; a no-op when
+# no relocation was ever recorded. rc=1 (ALARM) is logged, never fatal (set +e + run).
+RELOCWATCH="$SCRIPT_DIR/relocate-sweep.py"
+[ -f "$RELOCWATCH" ] && run "relocate-watch" /usr/bin/env python3 "$RELOCWATCH" --watch
+
 close_mutex_release
 log "=== vault-daily-maintenance COMPLETE @ $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
 exit 0

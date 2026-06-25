@@ -252,6 +252,11 @@
             "type": "command",
             "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/surface-connector-liveness.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Checking connectors for the silent-empty (0-vs-0) gap..."
+          },
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/relocate-watch-surface.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "statusMessage": "Checking for vault-relocation drift (old-path recreators)..."
           }
         ]
       }
