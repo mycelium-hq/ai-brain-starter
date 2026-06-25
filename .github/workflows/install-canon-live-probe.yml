@@ -1,0 +1,28 @@
+name: install-api canonical live probe
+
+# Recurrence guard for the 308 canonical-flip class (MYC-419 -> MYC-1659, twice).
+# A FUTURE Vercel primary flip that makes the canonical install-API host
+# 308-redirect would silently break the urllib POST callers again; the offline
+# regression test cannot catch that. This probes the live host on a schedule and
+# fails (-> GitHub failure email) only when the host actually redirects.
+#
+# Scheduled + manual only. NEVER a merge gate (no pull_request trigger): a network
+# blip must not block a PR, and the probe's job is to catch infra drift, not code.
+# No untrusted input: the only run: step executes a static checked-in script with
+# no ${{ github.event.* }} interpolation (no command-injection surface).
+
+on:
+  schedule:
+    - cron: '0 13 * * *'   # daily 13:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      - name: Probe canonical install-API host serves 2xx (not a redirect)
+        run: bash tests/integration/probe_install_api_live.sh
