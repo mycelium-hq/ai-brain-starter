@@ -821,6 +821,31 @@ def watch_cache_path(config_dir):
     return os.path.join(config_dir, "relocate-watch-state.json")
 
 
+def acquire_watch_lock(config_dir):
+    """Single-instance lock for --watch. The SessionStart surfacer spawns --watch
+    detached when its cache is stale; several sessions starting at once (3 panes in
+    the morning) would otherwise launch N concurrent ~/dev+vault CORPUS WALKS — the
+    MYC-570 freeze class (4 concurrent walks pegged a Mac to load 36). The cooldown
+    stamp narrows the window but has a read-then-write race; this flock closes it at
+    the engine, covering EVERY caller (surfacer spawn + cron) at once.
+
+    Returns (handle, should_run): keep `handle` open for the process lifetime (the OS
+    releases it on exit). should_run False = another --watch already holds it → skip
+    cleanly. On a platform without fcntl (Windows) there is no lock — run anyway and
+    lean on the cooldown stamp, so the watch is never silently dead there."""
+    try:
+        import fcntl
+    except ImportError:
+        return None, True
+    try:
+        os.makedirs(config_dir, exist_ok=True)
+        fh = open(os.path.join(config_dir, ".relocate-watch.lock"), "w")
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return fh, True
+    except OSError:
+        return None, False
+
+
 def read_manifest(config_dir):
     """The install's OWN relocation record, written by relocate-vault.sh: a list of
     {old, new, symlink, at}. Missing → [] (a never-relocated install has nothing to
@@ -1038,6 +1063,12 @@ def main(argv=None):
     if args.watch_selftest:
         return run_watch_selftest()
     if args.watch:
+        _lock, should_run = acquire_watch_lock(args.config_dir)
+        if not should_run:
+            # Another --watch is already scanning — skip rather than stack a second
+            # concurrent corpus walk (the MYC-570 freeze class). Not an alarm; exit 0.
+            print("relocate-watch: another scan is already running — skipping this one.")
+            return 0
         payload = run_watch(args)
         if args.json:
             print(json.dumps(payload, indent=2))
