@@ -286,7 +286,7 @@ if [[ "$CORPORATE_PROFILE" == "1" ]]; then
   export CORPORATE_PROFILE=1    # so the embedded python here-docs can read it
   export SKIP_VENDOR_SKILLS=1   # skip ALL third-party plugin marketplaces
   export EMAIL_GATE_BYPASS=1    # no email mint / no quick-mint network call
-  export MYCELIUM_NO_PING=1     # no install-ping to myceliumai.co (this run + children)
+  export MYCELIUM_NO_PING=1     # no install-ping to mycelium-ai.co (this run + children)
 fi
 
 # Tee subsequent output to the log (header + everything that follows)
@@ -553,7 +553,7 @@ EMAIL_MARKER="$HOME/.claude/.ai-brain-starter-email-on-file"
 # non-canonical base silently died for weeks (consumed/completed stayed 0
 # in the funnel while real installs ran). Keep the canonical host AND -L
 # on every call below — defense in depth against the next domain change.
-INSTALL_API_BASE="${MYCELIUM_INSTALL_API:-https://www.mycelium-ai.co}"
+INSTALL_API_BASE="${MYCELIUM_INSTALL_API:-https://mycelium-ai.co}"
 
 # Optional signup. This block only runs when the user already provided an
 # email -- a web-form token (TOKEN=) or EMAIL=/NAME= env vars. With nothing

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-time install signal to myceliumai.co.
+"""One-time install signal to mycelium-ai.co.
 
 Idempotent (one sentinel per plugin per machine), silent, fire-and-forget.
 Sends ONLY plugin name + version. No PII, no IP storage post-dedup.
@@ -33,7 +33,7 @@ def main():
     try:
         data = json.dumps({"plugin": PLUGIN_NAME, "version": VERSION}).encode()
         req = urllib.request.Request(
-            "https://www.mycelium-ai.co/api/install",
+            "https://mycelium-ai.co/api/install",
             data=data,
             headers={"Content-Type": "application/json"},
         )
