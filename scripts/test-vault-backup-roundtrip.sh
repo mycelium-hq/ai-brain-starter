@@ -93,6 +93,25 @@ if command -v gpg >/dev/null 2>&1 || command -v openssl >/dev/null 2>&1; then
   if grep -qa "secret journal" "$enc" 2>/dev/null; then fail "plaintext leaked into encrypted archive"; else pass "ciphertext does not contain plaintext"; fi
   vout="$(bash "$BACKUP" verify --vault "$V2" 2>&1)"
   echo "$vout" | grep -q "Restore verified" && pass "encrypted backup restores" || fail "encrypted restore failed: $vout"
+
+  # ---- 7b. NEGATIVE CONTROL: setup --encrypt must FAIL LOUD when the passphrase
+  #          store cannot be written (the silent-success bug fixed in MYC-1804).
+  #          Point VAULT_BACKUP_PASS_DIR at a path whose parent is a regular file so
+  #          mkdir -p fails; setup must abort non-zero, produce NO archive, and name
+  #          the real cause — never echo a false "Passphrase stored".
+  V3="$ROOT/Brain3"; DEST3="$ROOT/dest3"
+  mkdir -p "$V3"; printf '# CLAUDE.md\n' > "$V3/CLAUDE.md"
+  : > "$ROOT/not-a-dir"
+  neg_out="$(printf 'pw\npw\n' | VAULT_BACKUP_PASS_DIR="$ROOT/not-a-dir/sub" \
+    bash "$BACKUP" setup --vault "$V3" --dest "$DEST3" --encrypt --schedule none 2>&1)"; neg_rc=$?
+  if [ "$neg_rc" -ne 0 ] && [ -z "$(ls -1 "$DEST3"/vault-backup-* 2>/dev/null)" ]; then
+    pass "setup --encrypt fails loud on an unwritable passphrase store (rc=$neg_rc, no archive)"
+  else
+    fail "setup --encrypt did NOT fail loud on an unwritable store (rc=$neg_rc): $neg_out"
+  fi
+  printf '%s\n' "$neg_out" | grep -q "could not store backup passphrase\|could not create passphrase store dir\|could not write passphrase file" \
+    && pass "the failure names the real cause (passphrase store)" \
+    || fail "fail-loud message did not name the passphrase store: $neg_out"
 else
   echo "SKIP  encrypted round-trip (no gpg/openssl)"
 fi
