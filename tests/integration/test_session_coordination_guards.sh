@@ -2,7 +2,8 @@
 # Regression test for the session-coordination guard hooks:
 #   hooks/check-cd-outside-worktree.py   (blocks cd into main from a worktree)
 #   hooks/check-py-import-precommit.py   (blocks committing F821 / missing imports)
-#   hooks/session-lock.py                (warns when two sessions share a repo)
+#   hooks/session-lock.py                (warns on SessionStart + PreToolUse-gates
+#                                         git-mutating ops when a sibling is live)
 #
 # Fails on revert: if any hook's logic, bypass env, or fail-open behavior
 # regresses, an assertion below flips and the script exits non-zero.
@@ -79,27 +80,87 @@ assert_rc "PY ignores non-commit command" 0
 run_hook "$PY_HOOK" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"git commit -m x\"},\"cwd\":\"$REPO\"}" PRECOMMIT_F821_BYPASS=1
 assert_rc "PY bypass env disables block" 0
 
-echo "=== session-lock.py ==="
+echo "=== session-lock.py (SessionStart + heartbeat) ==="
+# Isolate the per-session cache pointer (CACHE_DIR resolves under $HOME) so this
+# section never pollutes the real ~/.claude cache and the PreToolUse layer below
+# resolves the repo deterministically from the cached pointer.
+LHOME="$(mktemp -d)"; TMPDIRS+=("$LHOME")
 LREPO="$(newrepo)"
 LOCKFILE="$LREPO/.claude/.session-lock.json"
-run_hook "$LOCK_HOOK" "{\"hook_event_name\":\"SessionStart\",\"session_id\":\"sess-1\",\"cwd\":\"$LREPO\"}"
+run_hook "$LOCK_HOOK" "{\"hook_event_name\":\"SessionStart\",\"session_id\":\"sess-1\",\"cwd\":\"$LREPO\"}" HOME="$LHOME"
 assert_rc "LOCK SessionStart exits 0" 0
 printf '%s' "$OUT" | python3 -c 'import json,sys; json.loads(sys.stdin.read())' 2>/dev/null \
   && ok "LOCK SessionStart emits valid JSON" || bad "LOCK SessionStart emits valid JSON" "out=${OUT:0:80}"
 [ -f "$LOCKFILE" ] && ok "LOCK writes lock file" || bad "LOCK writes lock file" "absent"
-python3 -c "import json; assert json.load(open('$LOCKFILE'))['session_id']=='sess-1'" 2>/dev/null \
-  && ok "LOCK records session_id" || bad "LOCK records session_id" "mismatch"
-run_hook "$LOCK_HOOK" "{\"hook_event_name\":\"SessionStart\",\"session_id\":\"sess-2\",\"cwd\":\"$LREPO\"}"
+python3 -c "import json; d=json.load(open('$LOCKFILE')); assert d.get('version')==2 and 'sess-1' in d.get('sessions',{})" 2>/dev/null \
+  && ok "LOCK records session in v2 sessions map" || bad "LOCK records session in v2 sessions map" "shape"
+run_hook "$LOCK_HOOK" "{\"hook_event_name\":\"SessionStart\",\"session_id\":\"sess-2\",\"cwd\":\"$LREPO\"}" HOME="$LHOME"
 case "$OUT" in *session-lock*sess-1*) ok "LOCK second session warns about sess-1" ;; *) bad "LOCK second session warns about sess-1" "out=${OUT:0:100}" ;; esac
-run_hook "$LOCK_HOOK" "{\"hook_event_name\":\"SessionStart\",\"session_id\":\"sess-3\",\"cwd\":\"$LREPO\"}" SIBLING_SESSION_LOCK_BYPASS=1
+run_hook "$LOCK_HOOK" "{\"hook_event_name\":\"SessionStart\",\"session_id\":\"sess-3\",\"cwd\":\"$LREPO\"}" HOME="$LHOME" SIBLING_SESSION_LOCK_BYPASS=1
 case "$OUT" in *session-lock*) bad "LOCK bypass suppresses warn" "warned" ;; *) ok "LOCK bypass suppresses warn" ;; esac
 PLAIN="$(mktemp -d)"; TMPDIRS+=("$PLAIN")
-run_hook "$LOCK_HOOK" "{\"hook_event_name\":\"SessionStart\",\"session_id\":\"sx\",\"cwd\":\"$PLAIN\"}"
+run_hook "$LOCK_HOOK" "{\"hook_event_name\":\"SessionStart\",\"session_id\":\"sx\",\"cwd\":\"$PLAIN\"}" HOME="$LHOME"
 { [ ! -f "$PLAIN/.claude/.session-lock.json" ] && [ "$RC" = 0 ]; } \
   && ok "LOCK no lock in non-git cwd" || bad "LOCK no lock in non-git cwd" "rc=$RC"
-run_hook "$LOCK_HOOK" "}{not json"
+run_hook "$LOCK_HOOK" "}{not json" HOME="$LHOME"
 { [ "$RC" = 0 ] && case "$OUT" in *continue*) true;; *) false;; esac; } \
   && ok "LOCK fail-open on malformed json" || bad "LOCK fail-open on malformed json" "rc=$RC out=${OUT:0:60}"
+
+echo "=== session-lock.py PreToolUse enforcement ==="
+# The full resolver matrix (read-only vs mutating, -C/--work-tree/--git-dir
+# cross-repo redirects, cd-tracking, $VAR, coarse multi-line -m) lives in the
+# Python unit suite; run it here so CI gates it.
+if python3 "$HOOKS/test_session_lock_enforcement.py" >/tmp/_sl_unit.$$ 2>&1; then
+  ok "LOCK resolver unit suite (hooks/test_session_lock_enforcement.py)"
+else
+  bad "LOCK resolver unit suite" "$(tail -3 /tmp/_sl_unit.$$ | tr '\n' ' ')"
+fi
+rm -f /tmp/_sl_unit.$$
+
+# End-to-end exit codes with a LIVE sibling. PTHOME isolates the cache pointer.
+PTHOME="$(mktemp -d)"; TMPDIRS+=("$PTHOME")
+# Physical path: git rev-parse (which sets main_root via the cached pointer)
+# canonicalizes symlinked tmp paths (/var -> /private/var on macOS); the payload
+# cwd must match it so the home-repo check resolves (a no-op on real /Users repos).
+EREPO="$(newrepo)"; EREPO="$(cd "$EREPO" && pwd -P)"
+OREPO="$(mktemp -d)"; TMPDIRS+=("$OREPO")   # a DIFFERENT repo, for cross-repo redirects
+# sibling A + me B both register in EREPO (B's SessionStart caches its lock pointer).
+run_hook "$LOCK_HOOK" "{\"hook_event_name\":\"SessionStart\",\"session_id\":\"sib-A\",\"cwd\":\"$EREPO\"}" HOME="$PTHOME"
+run_hook "$LOCK_HOOK" "{\"hook_event_name\":\"SessionStart\",\"session_id\":\"me-B\",\"cwd\":\"$EREPO\"}" HOME="$PTHOME"
+# pt <command> [extra-env...] : me-B issues a PreToolUse(Bash) for <command>.
+pt() { run_hook "$LOCK_HOOK" "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"session_id\":\"me-B\",\"cwd\":\"$EREPO\",\"tool_input\":{\"command\":\"$1\"}}" HOME="$PTHOME" "${@:2}"; }
+# 1. git commit in home + live sibling -> BLOCK (every time).
+pt "git commit -m x"
+assert_rc "LOCK PreToolUse blocks home git commit (live sibling)" 2
+case "$ERR" in *BLOCKED*) ok "LOCK block message is BLOCKED" ;; *) bad "LOCK block message is BLOCKED" "err=${ERR:0:80}" ;; esac
+# 2. same commit + bypass -> allow.
+pt "git commit -m x" SIBLING_SESSION_LOCK_BYPASS=1
+assert_rc "LOCK PreToolUse bypass lets commit through" 0
+# 3. non-git command -> one-time HEADS-UP (exit 2), sets the warned marker.
+pt "ls -la"
+assert_rc "LOCK PreToolUse heads-up once on read-only (exit 2)" 2
+case "$ERR" in *HEADS-UP*) ok "LOCK heads-up message is HEADS-UP" ;; *) bad "LOCK heads-up message is HEADS-UP" "err=${ERR:0:80}" ;; esac
+# 4. same non-git again -> quiet (marker present).
+pt "ls -la"
+assert_rc "LOCK PreToolUse heads-up fires only once (exit 0)" 0
+# 5. cross-repo --git-dir commit -> the git-dir (collision surface) is elsewhere -> allow.
+pt "git --git-dir=$OREPO/.git commit -m x"
+assert_rc "LOCK PreToolUse no false-block on --git-dir cross-repo" 0
+# 5b. --work-tree=/other while the git-dir is still HOME -> still a home mutation -> BLOCK.
+#     (--work-tree relocates only the working tree; the home HEAD/index still get written.)
+pt "git --work-tree=$OREPO commit -m x"
+assert_rc "LOCK PreToolUse blocks --work-tree relocate with home git-dir" 2
+# 6. read-only git in home -> allow (marker present).
+pt "git status"
+assert_rc "LOCK PreToolUse allows read-only git in home" 0
+# 7. non-Bash tool -> ignored.
+run_hook "$LOCK_HOOK" "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Edit\",\"session_id\":\"me-B\",\"cwd\":\"$EREPO\",\"tool_input\":{\"file_path\":\"$EREPO/x\"}}" HOME="$PTHOME"
+assert_rc "LOCK PreToolUse ignores non-Bash tool" 0
+# 8. no live sibling -> git commit allowed.
+SREPO="$(newrepo)"; SREPO="$(cd "$SREPO" && pwd -P)"
+run_hook "$LOCK_HOOK" "{\"hook_event_name\":\"SessionStart\",\"session_id\":\"solo\",\"cwd\":\"$SREPO\"}" HOME="$PTHOME"
+run_hook "$LOCK_HOOK" "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Bash\",\"session_id\":\"solo\",\"cwd\":\"$SREPO\",\"tool_input\":{\"command\":\"git commit -m x\"}}" HOME="$PTHOME"
+assert_rc "LOCK PreToolUse allows commit with no live sibling" 0
 
 echo ""
 echo "=== SUMMARY: $PASS passed, $FAIL failed ==="

@@ -87,6 +87,56 @@ The hooks shipped by ai-brain-starter (per [`hooks.json`](../hooks.json) source-
 | `SessionStart` | `migrate-to-user-level.py` | Detects project-level installs and offers migration |
 | `PreCompact` | (inline systemMessage) | Reminds the model to preserve context before compaction |
 
+### Opt-in: sibling-session coordination lock
+
+`hooks/session-lock.py` is **not** auto-installed by `hooks.json` — it is opt-in, because it only matters once you run **multiple Claude Code sessions against the same git repo at once** (the "many concurrent sessions on one brain" workflow). When you do, two sessions can clobber each other's in-flight git state — the SIBLING-SESSION-PARALLEL-COMMIT-COLLISION class, where one session commits broken state and reverts, wiping the other's work.
+
+The lock runs in three modes off one shared file (`<repo>/.claude/.session-lock.json`, a multi-session map):
+
+- **SessionStart** — warns (informationally) if another session was active in this repo in the last 5 minutes.
+- **PreToolUse(Bash)** — the *enforcement* layer. While a sibling is live, a **git-mutating** command (commit / push / checkout / switch / branch-create / merge / rebase / reset / cherry-pick / revert / pull / am / apply) that targets *this* repo is warn-blocked every time (exit 2); any other command warns once, then stays quiet so read-only parallel work isn't nagged. A `cd` into another repo, or an explicit `-C` / `--work-tree` / `--git-dir` pointed elsewhere, is correctly attributed to that other repo and let through (no false-block).
+- **Stop / SessionEnd** — heartbeat + cleanup so the live-session count stays honest.
+
+It never *hard*-blocks: every block is bypassable, only same-repo siblings are ever gated, and different repos worked in parallel never interfere. It pairs with the worktree pattern (which prevents the shared-HEAD collision structurally); the lock covers the case where two sessions still pick the *same* checkout.
+
+To enable it, merge these four entries into `~/.claude/settings.json` (point the path at wherever you keep the hook — e.g. `~/.claude/hooks/session-lock.py`):
+
+```jsonc
+{
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "Bash", "hooks": [
+        { "type": "command", "command": "python3 ~/.claude/hooks/session-lock.py" } ] }
+    ],
+    "SessionStart": [
+      { "hooks": [
+        { "type": "command", "command": "python3 ~/.claude/hooks/session-lock.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'" } ] }
+    ],
+    "SessionEnd": [
+      { "hooks": [
+        { "type": "command", "command": "python3 ~/.claude/hooks/session-lock.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'" } ] }
+    ],
+    "Stop": [
+      { "hooks": [
+        { "type": "command", "command": "python3 ~/.claude/hooks/session-lock.py 2>/dev/null || true" } ] }
+    ]
+  }
+}
+```
+
+Then gitignore the lock's per-call sidecar files **globally** (they live inside the repos you work in, so a global ignore keeps them out of every repo's status):
+
+```bash
+git config --global core.excludesFile ~/.config/git/ignore   # if not already set
+cat >> ~/.config/git/ignore <<'EOF'
+.claude/.session-lock.json
+.claude/.session-lock.lock
+.claude/.session-lock.json.tmp.*
+EOF
+```
+
+Bypass for intentional parallel / collaborative work: set `SIBLING_SESSION_LOCK_BYPASS=1` in the session's environment.
+
 ### Fingerprinting
 
 The installer identifies "ai-brain-starter-owned" hooks by substring fingerprint, listed in `install-hooks-user-level.py` under `ABS_FINGERPRINTS`. Anything matching a fingerprint is replaced/updated/uninstalled by this tool. Anything not matching is left strictly alone.
@@ -130,6 +180,7 @@ For more granular control, use the per-hook env-var bypasses:
 - `VAULT_LINT_BYPASS=1` — disables vault frontmatter linter
 - `CLOSING_SIGNAL_DETECTION=off` — disables session-close detector
 - `SKILL_USAGE_TELEMETRY=0` — disables skill-usage logger (default off anyway)
+- `SIBLING_SESSION_LOCK_BYPASS=1` — disables the opt-in sibling-session coordination lock
 
 ### "I want to disable migration prompts"
 
