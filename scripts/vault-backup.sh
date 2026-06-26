@@ -167,29 +167,37 @@ make_archive() { # <vault> <out-base-no-ext> <encrypt 0|1> <slug> <store-kind> -
   # Always exclude any prior archives that happen to live under the vault.
   excl+=("--exclude=./*.tar.gz" "--exclude=./*.tar.gz.gpg" "--exclude=./*.tar.gz.enc")
 
+  # Capture the encryption tool's stderr to a temp file so a failure surfaces the
+  # REAL error (gpg/openssl/tar) instead of dying with a bare "encryption failed".
+  # This is a BACKUP tool: a silent failure here is the difference between "I have
+  # backups" and data loss, so the failure path must be diagnosable for a real user,
+  # not just in the self-test. The passphrase is never written to stderr. (MYC-1804)
+  local errf; errf="$(mktemp)"
+  err_tail() { tr '\n' ' ' < "$errf" 2>/dev/null | sed 's/  */ /g; s/ *$//'; rm -f "$errf"; }
+
   if [ "$enc" = "1" ]; then
     local pass; pass="$(get_passphrase "$acct" "$kind")"
-    [ -n "$pass" ] || die "could not read backup passphrase from $kind"
+    [ -n "$pass" ] || { rm -f "$errf"; die "could not read backup passphrase from $kind"; }
     if command -v gpg >/dev/null 2>&1; then
       local out="$outbase.tar.gz.gpg"
       tar -cz "${excl[@]}" -C "$vault" . 2>/dev/null \
         | gpg --batch --yes --pinentry-mode loopback --passphrase "$pass" \
-              -c --cipher-algo AES256 -o "$out" 2>/dev/null \
-        && { echo "$out"; return 0; }
-      die "gpg encryption failed"
+              -c --cipher-algo AES256 -o "$out" 2>"$errf" \
+        && { rm -f "$errf"; echo "$out"; return 0; }
+      die "gpg encryption failed: $(err_tail)"
     elif command -v openssl >/dev/null 2>&1; then
       local out="$outbase.tar.gz.enc"
       tar -cz "${excl[@]}" -C "$vault" . 2>/dev/null \
-        | openssl enc -aes-256-cbc -pbkdf2 -salt -pass "pass:$pass" -out "$out" 2>/dev/null \
-        && { echo "$out"; return 0; }
-      die "openssl encryption failed"
+        | openssl enc -aes-256-cbc -pbkdf2 -salt -pass "pass:$pass" -out "$out" 2>"$errf" \
+        && { rm -f "$errf"; echo "$out"; return 0; }
+      die "openssl encryption failed: $(err_tail)"
     else
-      die "--encrypt needs gpg or openssl; neither found"
+      rm -f "$errf"; die "--encrypt needs gpg or openssl; neither found"
     fi
   else
     local out="$outbase.tar.gz"
-    tar -czf "$out" "${excl[@]}" -C "$vault" . 2>/dev/null && { echo "$out"; return 0; }
-    die "tar failed"
+    tar -czf "$out" "${excl[@]}" -C "$vault" . 2>"$errf" && { rm -f "$errf"; echo "$out"; return 0; }
+    die "tar failed: $(err_tail)"
   fi
 }
 
