@@ -618,6 +618,22 @@ def _is_home_repo_git_mutation(command, cwd, main_root):
                     continue
                 if os.path.isabs(gpath) and not _in_home(os.path.normpath(gpath)):
                     continue  # explicit git-dir at a different repo → not this lock's business
+            # GIT_DIR= env form lands here too under a multi-line -m. ANCHOR it to the
+            # leading env-assignment block BEFORE `git` (env vars must precede the
+            # command) so a GIT_DIR= appearing only INSIDE the message can't
+            # false-ALLOW a real home commit — the worst failure for this gate.
+            mge = re.search(
+                r"^\s*(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*GIT_DIR=(\S+)"
+                r"(?:\s+[A-Za-z_][A-Za-z0-9_]*=\S+)*\s+"
+                r"(?:env\s+|command\s+|sudo\s+|exec\s+|nohup\s+|builtin\s+)*git\b",
+                seg,
+            )
+            if mge:
+                gpath = _expand(mge.group(1).strip("\"'"))
+                if "$" in gpath:
+                    continue  # unresolvable GIT_DIR ($VAR) → fail open
+                if os.path.isabs(gpath) and not _in_home(os.path.normpath(gpath)):
+                    continue  # GIT_DIR at a different repo → not this lock's business
             if cwd_known and _in_home(effective_cwd) and re.search(r"\bgit\b", seg) and re.search(
                 r"\b(commit|push|checkout|switch|merge|rebase|reset|cherry-pick|"
                 r"revert|pull|am|apply)\b", seg
