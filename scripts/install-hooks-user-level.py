@@ -224,10 +224,13 @@ def normalize_path_substitutions(template: dict, vault_path: str | None) -> dict
                 # the now-empty event rather than leave a bare "Event": [].
                 del pruned["hooks"][event]
         s = json.dumps(pruned, ensure_ascii=False)
-        s = s.replace("[VAULT_PATH]", str(Path.home()))
+        # JSON-escape the substitution so Windows backslashes (C:\Users\...)
+        # don't break json.loads with invalid \U / \a escape sequences. (local fix)
+        s = s.replace("[VAULT_PATH]", json.dumps(str(Path.home()))[1:-1])
         return json.loads(s)
     s = json.dumps(template, ensure_ascii=False)
-    s = s.replace("[VAULT_PATH]", str(Path(vault_path).resolve()))
+    # JSON-escape the substitution so Windows backslashes don't break parsing. (local fix)
+    s = s.replace("[VAULT_PATH]", json.dumps(str(Path(vault_path).resolve()))[1:-1])
     return json.loads(s)
 
 
