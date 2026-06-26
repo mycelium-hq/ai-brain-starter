@@ -1,0 +1,33 @@
+name: template-purity
+#
+# Fails any PR/push that lands POPULATED personal data (a real floor / deal /
+# counterparty / amount / tenant-id) in a public-bound skill file. The STRUCTURAL
+# isolation plane (MYC-1765 — Jackie's 2nd veto plane), complementary to
+# personal-pii-scrub.yml: that workflow catches NAMES + vault paths; this one
+# catches populated typed-category SHAPES that carry no name.
+#
+# Repo-native guard (NOT auto-managed by gh-harden-repos.sh). The logic lives in
+# scripts/check-template-purity.py + hooks/_lib/template_purity.py so the identical
+# check runs locally pre-push, in the write-time hook, and here in CI — one source
+# of truth (the open-core-boundary.yml pattern). No untrusted input is referenced
+# in any run: command.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  purity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6
+        with:
+          python-version: "3.9"
+      - name: Check public-template-purity (MYC-1765)
+        run: python3 scripts/check-template-purity.py --skills
