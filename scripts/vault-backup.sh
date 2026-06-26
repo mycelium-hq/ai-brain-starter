@@ -29,6 +29,9 @@
 #
 # Config:  ~/.claude/.vault-backup.conf  (JSON, keyed by resolved vault path)
 # Marker:  ~/.claude/.vault-backup-last  (ISO8601 of the last successful run)
+# Pass dir: VAULT_BACKUP_PASS_DIR overrides where the 0600 passphrase-fallback file
+#           lives AND bypasses the OS keychain. Used by the round-trip self-test to
+#           stay hermetic and not depend on ~/.claude existing. Defaults to ~/.claude.
 set -uo pipefail
 
 CONF="${VAULT_BACKUP_CONF:-$HOME/.claude/.vault-backup.conf}"
@@ -115,20 +118,33 @@ resolve_vault() { # echoes resolved vault path; dies if not a dir
 }
 
 # ---------- passphrase (keychain-backed) ----------
-store_passphrase() { # <slug> <passphrase>
+store_passphrase() { # <slug> <passphrase>  -> store-kind on stdout; non-zero on failure
   local acct="$1" pass="$2"
-  if command -v security >/dev/null 2>&1; then        # macOS Keychain
-    security add-generic-password -a "$acct" -s "$KEYCHAIN_SERVICE" -w "$pass" -U >/dev/null 2>&1 \
-      && { echo "keychain"; return 0; }
+  # VAULT_BACKUP_PASS_DIR set => use a 0600 file in that dir and bypass the OS
+  # keychain entirely. Keeps the round-trip self-test hermetic (no real keychain
+  # write, no dependence on ~/.claude pre-existing) and exercises the same
+  # file-store path CI uses on Linux. (MYC-1804)
+  if [ -z "${VAULT_BACKUP_PASS_DIR:-}" ]; then
+    if command -v security >/dev/null 2>&1; then        # macOS Keychain
+      security add-generic-password -a "$acct" -s "$KEYCHAIN_SERVICE" -w "$pass" -U >/dev/null 2>&1 \
+        && { echo "keychain"; return 0; }
+    fi
+    if command -v secret-tool >/dev/null 2>&1; then      # Linux libsecret
+      printf '%s' "$pass" | secret-tool store --label="$KEYCHAIN_SERVICE" \
+        service "$KEYCHAIN_SERVICE" account "$acct" >/dev/null 2>&1 \
+        && { echo "secret-tool"; return 0; }
+    fi
   fi
-  if command -v secret-tool >/dev/null 2>&1; then      # Linux libsecret
-    printf '%s' "$pass" | secret-tool store --label="$KEYCHAIN_SERVICE" \
-      service "$KEYCHAIN_SERVICE" account "$acct" >/dev/null 2>&1 \
-      && { echo "secret-tool"; return 0; }
-  fi
-  # Fallback: 0600 file. Loud about it — this is weaker than a keychain.
-  local pf="$HOME/.claude/.vault-backup-pass-$acct"
-  ( umask 077; printf '%s' "$pass" > "$pf" )
+  # Fallback: 0600 file. Loud about it — this is weaker than a keychain. Ensure the
+  # parent dir exists and FAIL LOUD if the write does not land. Silently reporting
+  # success here (the old bug) made `setup --encrypt` produce no archive on a fresh
+  # box with no ~/.claude, and the real error got swallowed downstream. (MYC-1804)
+  local store_dir="${VAULT_BACKUP_PASS_DIR:-$HOME/.claude}"
+  local pf="$store_dir/.vault-backup-pass-$acct"
+  mkdir -p "$store_dir" 2>/dev/null \
+    || { warn "could not create passphrase store dir: $store_dir" >&2; return 1; }
+  ( umask 077; printf '%s' "$pass" > "$pf" ) \
+    || { warn "could not write passphrase file: $pf" >&2; return 1; }
   warn "No OS keychain found; passphrase stored in $pf (chmod 600). A keychain is safer." >&2
   echo "file:$pf"
 }
@@ -248,7 +264,9 @@ cmd_setup() {
     read -rs p2; echo
     [ -n "$p1" ] || die "empty passphrase"
     [ "$p1" = "$p2" ] || die "passphrases do not match"
-    store_kind="$(store_passphrase "$slug" "$p1")"
+    store_kind="$(store_passphrase "$slug" "$p1")" \
+      || die "could not store backup passphrase (see error above)"
+    [ -n "$store_kind" ] || die "could not store backup passphrase (empty store kind)"
     ok "Passphrase stored ($store_kind). Daily runs read it from there, no prompt."
   fi
 
