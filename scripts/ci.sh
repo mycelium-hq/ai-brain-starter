@@ -139,6 +139,7 @@ INTEGRATION_TESTS=(
   test_granola_core_shared
   test_agent_memory_link
   test_open_core_boundary
+  test_template_purity
   test_audited_content_injection_scan
   test_post_tool_use_learnings
 )
