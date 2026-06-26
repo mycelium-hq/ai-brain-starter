@@ -73,12 +73,21 @@ left=$(ls -1 "$DEST"/vault-backup-* 2>/dev/null | wc -l | tr -d ' ')
 if command -v gpg >/dev/null 2>&1 || command -v openssl >/dev/null 2>&1; then
   V2="$ROOT/Brain2"; DEST2="$ROOT/dest2"
   mkdir -p "$V2"; printf '# CLAUDE.md\n' > "$V2/CLAUDE.md"; printf 'secret journal\n' > "$V2/secret.md"
+  # Hermetic passphrase store: bypass the real OS keychain and keep the 0600 fallback
+  # file inside $ROOT, so the encrypted leg does not depend on a keychain service or
+  # on ~/.claude existing — the env-correlated flake fixed in MYC-1804.
+  export VAULT_BACKUP_PASS_DIR="$ROOT/passdir"; mkdir -p "$VAULT_BACKUP_PASS_DIR"
+  # Capture setup output: on failure, surface the REAL encryption error instead of an
+  # empty archive path (it used to be swallowed by >/dev/null 2>&1, undiagnosable in CI).
+  setup_log="$ROOT/encrypt-setup.log"
   # Feed the passphrase twice on stdin (setup reads it with read -rs).
-  printf 'pw-correct-horse\npw-correct-horse\n' | bash "$BACKUP" setup --vault "$V2" --dest "$DEST2" --encrypt --schedule none >/dev/null 2>&1
+  printf 'pw-correct-horse\npw-correct-horse\n' | bash "$BACKUP" setup --vault "$V2" --dest "$DEST2" --encrypt --schedule none >"$setup_log" 2>&1
   enc="$(ls -1 "$DEST2"/vault-backup-* 2>/dev/null | head -1)"
   case "$enc" in
     *.tar.gz.gpg|*.tar.gz.enc) pass "encrypted archive written ($(basename "$enc"))" ;;
-    *) fail "encrypted archive not produced: $enc" ;;
+    *) fail "encrypted archive not produced: $enc"
+       echo "      --- setup --encrypt output (the real error) ---"
+       sed 's/^/      /' "$setup_log" ;;
   esac
   # The encrypted blob must NOT contain the plaintext.
   if grep -qa "secret journal" "$enc" 2>/dev/null; then fail "plaintext leaked into encrypted archive"; else pass "ciphertext does not contain plaintext"; fi
