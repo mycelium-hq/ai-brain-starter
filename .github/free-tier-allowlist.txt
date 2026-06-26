@@ -56,4 +56,5 @@ skills/second-brain-mapping                # teaching
 skills/secret-warn                         # safety
 skills/security-snapshot                   # lead-magnet
 skills/setup-vault-types                   # teaching
+skills/skillify-meta-loop                  # teaching
 skills/sunday-review                       # teaching
