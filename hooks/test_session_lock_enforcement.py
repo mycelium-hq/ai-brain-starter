@@ -108,6 +108,15 @@ CASES = [
     ("multi-line -m commit in home -> block (coarse)", ML, HOME, HOME, True),
     ("multi-line -m + -C cross-repo -> allow (coarse -C escape)", ML_C, HOME, HOME, False),
     ("multi-line -m + $VAR -C -> allow (coarse $VAR escape)", ML_VAR_C, HOME, HOME, False),
+    # --- GIT_DIR= env form in the coarse multi-line -m branch ---
+    ("GIT_DIR= env + multi-line, cross-repo -> allow (coarse mge)",
+     'GIT_DIR=/home/other/.git git commit -m "l1\nl2"', HOME, HOME, False),
+    ("GIT_DIR= env + multi-line, home -> block (coarse)",
+     'GIT_DIR=/home/proj/.git git commit -m "l1\nl2"', HOME, HOME, True),
+    ("FOO=bar GIT_DIR= prefix + multi-line, cross-repo -> allow",
+     'FOO=bar GIT_DIR=/home/other/.git git commit -m "l1\nl2"', HOME, HOME, False),
+    ("GIT_DIR= only INSIDE the message -> still blocks home commit (no false-ALLOW)",
+     'git commit -m "ref GIT_DIR=/home/other/.git here\nl2"', HOME, HOME, True),
 ]
 
 for label, cmd, cwd, home, want in CASES:
