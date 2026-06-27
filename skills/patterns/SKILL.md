@@ -30,6 +30,23 @@ Save preferences. Don't ask again.
 
 ---
 
+## Pre-flight: institutional-knowledge check
+
+**Use BEFORE starting a non-trivial feature, bug-diagnosis, or refactor — not after.** This is the proactive sibling of the reactive auto-detection below. Pattern source: `EveryInc/compound-engineering-plugin` `ce-learnings-researcher` (MIT, reimplemented clean).
+
+**Trigger surface:** any session that opens with verbs like "fix", "debug", "diagnose", "implement", "build", "refactor", "extract", "consolidate" plus a named surface (a service, an MCP server, a runbook, a hook) — work where a similar problem might already have been solved.
+
+**What to do (silently, before the user's first task):**
+1. Search the prior-work sources from your prefs — the decision log, any `feedback_*` / memory files, prior `/patterns` captures, and a failure-inventory note if one exists (last ~60 days) — for keywords matching the surface the user just named.
+2. If 1+ match: surface a single 1-2 line nudge before the user starts — *"There's prior work on [X]: [link or path]. Worth reading before you start?"*
+3. If nothing found: stay silent. Pre-flight is value when it surfaces something, dead weight when it doesn't.
+
+**Why this matters:** the reactive auto-detection (below) catches drift AFTER the work is done. The pre-flight check catches it BEFORE you re-solve a problem you already solved — so you don't spend Tuesday rediscovering what you codified on Thursday.
+
+**Anti-pattern:** dumping a 5-link wall of "you might want to read these." ONE link, ONE sentence, the closest match. The user can ask for more.
+
+---
+
 ## Auto-Detection (session-end triggers)
 
 At the end of every session (before the session-close checklist), Claude should silently evaluate whether the current session hit any of these four triggers. If one or more fires, surface it as a suggestion before closing.
@@ -118,7 +135,7 @@ After the user confirms, execute all approved captures in one pass:
 - **CLAUDE.md rule** → add to the relevant section, sync to any other CLAUDE.md files
 - **Concept note** → create in the concept folder, add wikilinks
 - **Skill improvement** → note it clearly: "This should be baked into [skill name] — flag for next update"
-- **Confidence update (self-improving memory)** → when this run confirms an existing instinct held (it fired again, uncorrected), run `python3 ~/.claude/skills/ai-brain-starter/scripts/instinct.py reinforce <slug>`. When the user corrected one, run `... correct <slug>`. That bidirectional update is what makes the library self-improving instead of append-only. See `docs/instinct-engine.md`.
+- **Confidence update (self-improving memory)** → when this run confirms an existing instinct held (it fired again, uncorrected), run `python3 ~/.claude/skills/ai-brain-starter/scripts/instinct.py reinforce <slug>`. When the user corrected one, run `... correct <slug>`. That bidirectional update is what makes the library self-improving instead of append-only. See `docs/instinct-engine.md`. When a domain accumulates many high-confidence instincts, run `/evolve` to propose promoting the cluster into a dedicated skill.
 
 ---
 

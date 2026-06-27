@@ -32,6 +32,23 @@ Pull out:
 - **Audience questions** that came up (each question is a content seed)
 - **The main thesis** of the talk in one sentence
 
+### Phase 1.5: Score clip candidates against the virality framework
+
+For each candidate moment (one-liner, story beat, question, insight), tag which virality category it hits. Cherry-picked from SamurAIGPT/Generative-Media-Skills `ai-clipping` SKILL.md (MIT) — 8 categories that explain WHY short-form clips travel:
+
+- **Hook moments** — strong opening line that stops the scroll
+- **Emotional peaks** — laughter, anger, vulnerability, awe
+- **Opinion bombs** — spicy, contrarian, debate-bait takes
+- **Revelation moments** — "wait, what?" reframes
+- **Conflict** — disagreement, tension, callouts
+- **Quotable lines** — tight, screenshot-worthy phrasing
+- **Story peaks** — climax of a narrative arc
+- **Practical value** — actionable insight a viewer will save
+
+A clip that hits 2+ categories is a stronger pick than one that hits 1. A clip that hits 0 isn't worth packaging — drop it.
+
+The taxonomy is FOR RANKING + EXPLAINING, not for inventing content. Every clip still has to come from the actual talk; never confabulate a "spicy take" the speaker didn't make.
+
 ### Phase 2: Generate Content Package
 
 Create all of the following:
