@@ -392,7 +392,13 @@ if (-not (Have claude)) {
           "Es diferente de claude.ai (el sitio de chat); este vive en tu")
     Log (T "terminal and can read and write files in your vault. Installing via npm." `
           "terminal y puede leer y escribir archivos en tu vault. Instalando vía npm.")
+    # EAP guard: npm routinely writes warnings to stderr, which PowerShell 5.1
+    # turns into a terminating error under Stop even with 2>$null (verified).
+    # Relax it just here so the $LASTEXITCODE check below decides success, not a
+    # stray warning line. $LASTEXITCODE survives the restore (it's a var assign).
+    $eapSaved = $ErrorActionPreference; $ErrorActionPreference = "SilentlyContinue"
     npm install -g @anthropic-ai/claude-code 2>$null
+    $ErrorActionPreference = $eapSaved
     if ($LASTEXITCODE -ne 0) {
         Err (T "Claude Code install failed, install manually with: npm install -g @anthropic-ai/claude-code" `
               "Falló la instalación de Claude Code. Instalalo manual con: npm install -g @anthropic-ai/claude-code")
@@ -415,7 +421,12 @@ if (Have pipx) { Ok "pipx" } else { Err "pipx install failed" }
 # wiring custom connectors (CRM bridges, vault sync, investor relations, etc.)
 if (-not (Have fastmcp)) {
     Hdr "Installing fastmcp"
+    # EAP guard: pipx writes progress/warnings to stderr -> terminating error
+    # under Stop in PS 5.1 even with 2>$null. Relaxed here; the Have-check below
+    # is what decides success.
+    $eapSaved = $ErrorActionPreference; $ErrorActionPreference = "SilentlyContinue"
     pipx install fastmcp 2>$null
+    $ErrorActionPreference = $eapSaved
 }
 if (Have fastmcp) { Ok "fastmcp" } else { Warn "fastmcp not installed (non-blocking, install later with: pipx install fastmcp)" }
 
@@ -489,6 +500,7 @@ if (Have gh) {
 # how to install a desktop app on Windows.
 $ObsidianInstalled = $false
 $ObsidianPaths = @(
+    "$env:LOCALAPPDATA\Programs\obsidian\Obsidian.exe",
     "$env:LOCALAPPDATA\Obsidian\Obsidian.exe",
     "$env:ProgramFiles\Obsidian\Obsidian.exe",
     "${env:ProgramFiles(x86)}\Obsidian\Obsidian.exe"
@@ -558,6 +570,12 @@ New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude\skills" | Ou
 if (Test-Path "$SkillDir\.git") {
     Log "Already installed - checking for updates..."
     Push-Location $SkillDir
+    # EAP guard for this self-update section: git writes progress/notices to
+    # stderr, which PowerShell 5.1 turns into a terminating error under Stop
+    # (even with 2>$null). Relax it here; the $LASTEXITCODE checks below (e.g.
+    # git diff --quiet) are unaffected. Restored right after Pop-Location.
+    $eapSelfUpdate = $ErrorActionPreference
+    $ErrorActionPreference = "SilentlyContinue"
 
     if ($DryRun) { Dry "would: git fetch --quiet origin" }
     else { git fetch --quiet origin 2>$null }
@@ -597,6 +615,7 @@ if (Test-Path "$SkillDir\.git") {
         Log "ai-brain-starter clone is up to date"
     }
     Pop-Location
+    $ErrorActionPreference = $eapSelfUpdate
 } else {
     if ($DryRun) { Dry "would: git clone $RepoUrl -> $SkillDir" }
     else { git clone --quiet $RepoUrl $SkillDir }

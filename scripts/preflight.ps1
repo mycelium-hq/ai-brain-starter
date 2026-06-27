@@ -250,6 +250,7 @@ if (Have python) {
 }
 
 $obsidianPaths = @(
+    "$env:LOCALAPPDATA\Programs\obsidian\Obsidian.exe",
     "$env:LOCALAPPDATA\Obsidian\Obsidian.exe",
     "$env:ProgramFiles\Obsidian\Obsidian.exe",
     "${env:ProgramFiles(x86)}\Obsidian\Obsidian.exe"
