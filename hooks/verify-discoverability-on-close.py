@@ -1,19 +1,48 @@
 #!/usr/bin/env python3
-"""Stop hook: blocks session close if any artifact committed in this session
+"""Stop hook: blocks session close if any artifact THIS SESSION authored
 lacks a same-session discoverability companion.
 
-Per the same-session discoverability-enforcement rule
-(codified 2026-05-13 after the gbrain-build wiring gap).
+Per the same-session discoverability-enforcement rule (codified 2026-05-13
+after the gbrain-build wiring gap).
 
 Bug class blocked: ARTIFACT-WITHOUT-DISCOVERABILITY.
 
 Mechanism:
-1. Detect closing-claim in the model's last assistant message (reuse the same
-   patterns as verify-session-close-cascade.py).
-2. If closing claim detected, run discoverability-verifier.py --strict on
-   the last 24h of commits.
-3. If verifier reports gaps AND no Handoff file acknowledges them, BLOCK
-   the close with the gap list + remediation suggestions.
+1. Detect closing-claim in the model's last assistant message (the shared
+   MENTION-vs-USE-aware detector in _lib/closing_claim.py — the same one the
+   session-close-cascade hook uses, so both Stop hooks fire on one surface).
+2. If closing claim detected, run discoverability-verifier.py --json on
+   the last 24h of commits + recently-modified Agent Memory audit memos.
+3. Partition the verifier's gap list into:
+     - SESSION-AUTHORED: the gap's artifact file was written/edited by THIS
+       session's transcript (Write/Edit/MultiEdit file_path, or a Bash command
+       naming the file). These are OUR gaps — HARD-BLOCK the close.
+     - SIBLING / PRE-EXISTING: the artifact was not touched by this session.
+       In a many-concurrent-session workflow these belong to a sibling session
+       (or predate this session). Emit a SOFT informational note only — never
+       block. The closing session cannot fix another session's audit memo
+       without fabricating cherry-pick analysis for repos it never audited
+       (a zero-hallucination violation), so blocking on them only teaches the
+       bypass env var, which then masks THIS session's real gaps
+       (the over-strict-verification-teaches-bypass failure mode).
+
+Scoping signal: the session transcript (`transcript_path` on stdin) is a JSONL
+of this session's tool calls. The set of file paths this session wrote is the
+authority for "ours". An artifact flagged by the verifier that does NOT appear
+as a write target in this transcript = not-ours = soft note only.
+
+MYC-766 (2026-06-10): before this change the hook hard-blocked on ANY gap the
+verifier returned, including sibling sessions' incomplete audit memos surfaced
+by the verifier's mtime-based Agent-Memory scan. That false-blocked unrelated
+sessions' closes.
+
+VAULT_ROOT: resolved from the VAULT_ROOT env var (default ~/vault), so the hook
+is portable across installs — the deploying vault supplies its own root (e.g.
+via the Claude settings `env` block). MYC-1270 (cross-repo de-dup: one canonical
+copy, the consumer vendors it byte-identical).
+
+Fail-open: a crash in this non-blocking nudge must never crash-block a close.
+Any exception → exit 0.
 
 Bypass: DISCOVERABILITY_VERIFIER_BYPASS=1.
 """
@@ -25,12 +54,11 @@ import os
 import re
 import subprocess
 import sys
-from datetime import datetime, timedelta
 from pathlib import Path
 
-# Shared close-claim detector - single source of truth (_lib/closing_claim.py).
-# MENTION-vs-USE aware. Replaces this hook's previously-duplicated (and drifted)
-# CLOSING_PATTERNS / NEGATION_PATTERNS / _is_closing_claim. MYC-791.
+# MYC-791: close-claim detection lives in the shared, de-drifted detector
+# (_lib/closing_claim.py), MENTION-vs-USE aware — a sign-off QUOTED as an
+# example or DISCUSSED as meta is not a close claim.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 try:
     from _lib.closing_claim import is_closing_claim  # noqa: E402
@@ -39,11 +67,44 @@ except Exception:  # fail-open: if the lib cannot load, never block a close
         return False
 
 VAULT_ROOT = Path(os.environ.get("VAULT_ROOT", str(Path.home() / "vault")))
-VERIFIER = VAULT_ROOT / "⚙️ Meta" / "scripts" / "discoverability-verifier.py"
+DEV_ROOT = Path.home() / "dev"
+MEMORY_ROOT = VAULT_ROOT / "⚙️ Meta" / "Agent Memory"
+# Test seam: DISCOVERABILITY_VERIFIER_PATH overrides the verifier the hook
+# shells out to, so tests can inject a deterministic stub verifier and stay
+# independent of the live (concurrent-session) Agent Memory state. Unset in
+# production → the canonical vault verifier is used (no behavior change).
+VERIFIER = Path(
+    os.environ.get(
+        "DISCOVERABILITY_VERIFIER_PATH",
+        str(VAULT_ROOT / "⚙️ Meta" / "scripts" / "discoverability-verifier.py"),
+    )
+)
 
-# Closing-claim detection now lives in the shared _lib/closing_claim.py
-# imported above (de-drifted from verify-session-close-cascade.py, with
-# MENTION-vs-USE guards). MYC-791.
+# Tool calls that author/modify a file by an explicit file_path argument.
+# These are the primary "this session wrote X" signal.
+FILE_WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
+
+# A Bash command only joins the "ours" fallback blob when it actually WRITES a
+# file (heredoc / redirect / tee / *.write_text()). A pure read that merely
+# NAMES an artifact — `git log -- discovery_foo_audited.md`, `rg foo MEMORY.md`,
+# `cat sibling.md` — must NOT mark that artifact as ours; doing so re-introduces
+# the exact false-block MYC-766 fixes. Safe direction: under-match (a write we
+# miss falls back to the reliable FILE_WRITE_TOOLS path-set) over over-match.
+_BASH_WRITE_HINT = re.compile(r"(?:\btee\b|write_text\s*\(|\.write\s*\(|>>|>\s|<<)")
+
+
+def _norm(p: str | Path) -> str:
+    """Canonical comparison key for a filesystem path: realpath + normcase.
+
+    realpath resolves symlinks (the Agent Memory dir is reached via a symlinked
+    `~/.claude/projects/.../memory` on some surfaces) so a transcript that wrote
+    via one alias still matches a gap resolved via another. normcase handles
+    the case-insensitive macOS filesystem.
+    """
+    try:
+        return os.path.normcase(os.path.realpath(os.fspath(p)))
+    except Exception:
+        return os.path.normcase(str(p))
 
 
 def _get_last_assistant_text(transcript_path: str) -> str:
@@ -72,42 +133,153 @@ def _get_last_assistant_text(transcript_path: str) -> str:
     return ""
 
 
-def _run_verifier() -> tuple[bool, str]:
-    """Returns (clean, output_text)."""
+def _session_written_paths(transcript_path: str) -> tuple[set[str], str]:
+    """Scan this session's transcript for files it authored/modified.
+
+    Returns (normalized_path_set, bash_command_blob_lowercased).
+
+    The path set is the primary "ours" signal: every `file_path` argument to a
+    Write/Edit/MultiEdit/NotebookEdit tool_use, normalized via _norm. The Bash
+    command blob is a secondary fallback so a memo authored by a heredoc / `tee`
+    (rare, but possible) still counts as ours when matched by bare filename —
+    failing toward hard-blocking OUR OWN work, the safe direction.
+
+    Fails soft: an unreadable / malformed transcript yields an EMPTY set, which
+    means "block nothing as ours" — the conservative direction for a
+    non-blocking nudge (we'd rather under-block on a parse failure than
+    false-block a sibling). The caller treats an empty set + present gaps as
+    "all gaps are sibling/pre-existing → soft note only".
+    """
+    written: set[str] = set()
+    bash_blob_parts: list[str] = []
+    if not transcript_path or not os.path.exists(transcript_path):
+        return (written, "")
+    try:
+        with open(transcript_path) as f:
+            lines = f.readlines()
+    except Exception:
+        return (written, "")
+    for line in lines:
+        try:
+            rec = json.loads(line)
+        except Exception:
+            continue
+        content = rec.get("message", {}).get("content", [])
+        if not isinstance(content, list):
+            continue
+        for c in content:
+            if not isinstance(c, dict) or c.get("type") != "tool_use":
+                continue
+            name = c.get("name", "")
+            inp = c.get("input", {})
+            if not isinstance(inp, dict):
+                continue
+            if name in FILE_WRITE_TOOLS:
+                fp = inp.get("file_path") or inp.get("notebook_path")
+                if isinstance(fp, str) and fp.strip():
+                    written.add(_norm(fp))
+            elif name == "Bash":
+                cmd = inp.get("command", "")
+                # Only WRITE-style Bash joins the fallback blob — a read that
+                # names an artifact must not claim it as ours (MYC-766 false-block).
+                if isinstance(cmd, str) and cmd and _BASH_WRITE_HINT.search(cmd):
+                    bash_blob_parts.append(cmd)
+    return (written, "\n".join(bash_blob_parts).lower())
+
+
+def _gap_abspath(gap: dict) -> str | None:
+    """Resolve a verifier gap dict to the absolute on-disk path of its artifact.
+
+    The verifier emits artifact = {repo, path, kind, commit, name}.
+      - repo == "memory"      → MEMORY_ROOT / path   (path is the bare filename)
+      - repo == "vault"       → VAULT_ROOT / path
+      - repo == "dev/<name>"  → DEV_ROOT / <name> / path
+    Returns None if the shape is unrecognized.
+    """
+    art = gap.get("artifact", {})
+    if not isinstance(art, dict):
+        return None
+    repo = art.get("repo", "")
+    rel = art.get("path", "")
+    if not isinstance(repo, str) or not isinstance(rel, str) or not rel:
+        return None
+    if repo == "memory":
+        return str(MEMORY_ROOT / rel)
+    if repo == "vault":
+        return str(VAULT_ROOT / rel)
+    if repo.startswith("dev/"):
+        return str(DEV_ROOT / repo[len("dev/"):] / rel)
+    return None
+
+
+def _run_verifier() -> list[dict]:
+    """Return the verifier's raw gap list (each a dict), or [] on any failure.
+
+    Failure to run the verifier never blocks the close — the hook is a nudge.
+    """
     if not VERIFIER.exists():
-        return (True, "")
+        return []
     try:
         result = subprocess.run(
             ["python3", str(VERIFIER), "--hours", "24", "--json"],
             capture_output=True, text=True, timeout=30,
         )
-    except Exception as exc:
-        # Verifier failed to run — don't block on tooling failure
-        return (True, f"discoverability-verifier could not run: {exc}")
-
+    except Exception:
+        return []
     try:
         payload = json.loads(result.stdout)
     except Exception:
-        # Malformed output — don't block
-        return (True, "discoverability-verifier returned malformed JSON")
-
+        return []
     gaps = payload.get("gaps", [])
-    if not gaps:
-        return (True, "")
+    return gaps if isinstance(gaps, list) else []
 
-    lines = [
-        f"  • {len(gaps)} artifact(s) without discoverability wiring:",
-    ]
-    for gap in gaps[:8]:
-        artifact = gap["artifact"]
-        lines.append(
-            f"      - {artifact['repo']} :: {artifact['path']}"
-        )
-        lines.append(f"          kind: {artifact['kind']}")
-        lines.append(f"          fix: {gap['suggestion']}")
-    if len(gaps) > 8:
-        lines.append(f"      ... and {len(gaps) - 8} more")
-    return (False, "\n".join(lines))
+
+def _partition_gaps(
+    gaps: list[dict], written: set[str], bash_blob: str
+) -> tuple[list[dict], list[dict]]:
+    """Split gaps into (ours, theirs).
+
+    A gap is OURS when its artifact path was written by this session — either
+    the normalized abspath is in `written`, OR the artifact's bare filename
+    appears in this session's Bash command blob (heredoc/tee fallback).
+    Everything else is a sibling's or pre-existing artifact → theirs.
+    """
+    ours: list[dict] = []
+    theirs: list[dict] = []
+    for gap in gaps:
+        if not isinstance(gap, dict):
+            continue
+        abspath = _gap_abspath(gap)
+        is_ours = False
+        if abspath is not None and _norm(abspath) in written:
+            is_ours = True
+        else:
+            # Heredoc / tee fallback: did a Bash command name this file?
+            base = ""
+            art = gap.get("artifact", {})
+            if isinstance(art, dict):
+                rel = art.get("path", "")
+                if isinstance(rel, str) and rel:
+                    base = os.path.basename(rel).lower()
+            if base and bash_blob and base in bash_blob:
+                is_ours = True
+        (ours if is_ours else theirs).append(gap)
+    return (ours, theirs)
+
+
+def _format_gap_lines(gaps: list[dict], limit: int = 8) -> str:
+    lines: list[str] = []
+    for gap in gaps[:limit]:
+        art = gap.get("artifact", {})
+        repo = art.get("repo", "?") if isinstance(art, dict) else "?"
+        path = art.get("path", "?") if isinstance(art, dict) else "?"
+        kind = art.get("kind", "?") if isinstance(art, dict) else "?"
+        lines.append(f"      - {repo} :: {path}")
+        lines.append(f"          kind: {kind}")
+        lines.append(f"          fix: {gap.get('suggestion', '(none)')}")
+    if len(gaps) > limit:
+        lines.append(f"      ... and {len(gaps) - limit} more")
+    return "\n".join(lines)
 
 
 def main() -> int:
@@ -123,8 +295,26 @@ def main() -> int:
     if not is_closing_claim(last_text):
         return 0
 
-    clean, gap_report = _run_verifier()
-    if clean:
+    gaps = _run_verifier()
+    if not gaps:
+        return 0
+
+    written, bash_blob = _session_written_paths(transcript_path)
+    ours, theirs = _partition_gaps(gaps, written, bash_blob)
+
+    # Soft note for sibling / pre-existing gaps — informational, never blocks.
+    if theirs:
+        soft = (
+            "[verify-discoverability-on-close] note (non-blocking): "
+            f"{len(theirs)} discoverability gap(s) exist on artifact(s) this "
+            "session did NOT author (sibling session or pre-existing). Not "
+            "blocking this close — the owning session must wire them.\n"
+            + _format_gap_lines(theirs)
+        )
+        print(soft, file=sys.stderr)
+
+    # Hard-block ONLY on gaps THIS session authored.
+    if not ours:
         return 0
 
     msg = (
@@ -133,14 +323,17 @@ def main() -> int:
         f"(codified 2026-05-13): every artifact ships discoverability wiring\n"
         f"in the same session as the artifact itself.\n\n"
         f"Bug class: ARTIFACT-WITHOUT-DISCOVERABILITY.\n\n"
-        f"{gap_report}\n\n"
+        f"  • {len(ours)} artifact(s) THIS SESSION authored lack "
+        f"discoverability wiring:\n"
+        f"{_format_gap_lines(ours)}\n\n"
         f"Two ways to clear this block:\n"
         f"  (a) Wire the discoverability for each artifact NOW (preferred).\n"
         f"      For SKILL.md: ln -sfn <skill-dir> ~/.claude/skills/<name>\n"
         f"      For rules:    write .claude/hookify.<rule-name>.local.md\n"
         f"      For scripts:  add to sunday-review SKILL.md OR a hook OR cron\n"
+        f"      For audit memos: extend the memo per the suggestion above\n"
         f"      For workflows: add 'on:' trigger block\n\n"
-        f"  (b) File a handoff at ⚙️ Meta/Handoffs/<date>-<slug>.md mentioning\n"
+        f"  (b) File a handoff at <meta>/Handoffs/<date>-<slug>.md mentioning\n"
         f"      the artifact name + the word 'discoverability' + a re-evaluate\n"
         f"      date. The verifier treats explicit handoff acknowledgment as\n"
         f"      a valid dismissal.\n\n"
@@ -151,4 +344,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Exception:
+        # Fail-open: a non-blocking nudge must never crash-block a close.
+        sys.exit(0)
