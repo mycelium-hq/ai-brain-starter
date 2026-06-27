@@ -392,7 +392,13 @@ if (-not (Have claude)) {
           "Es diferente de claude.ai (el sitio de chat); este vive en tu")
     Log (T "terminal and can read and write files in your vault. Installing via npm." `
           "terminal y puede leer y escribir archivos en tu vault. Instalando vía npm.")
+    # EAP guard: npm routinely writes warnings to stderr, which PowerShell 5.1
+    # turns into a terminating error under Stop even with 2>$null (verified).
+    # Relax it just here so the $LASTEXITCODE check below decides success, not a
+    # stray warning line. $LASTEXITCODE survives the restore (it's a var assign).
+    $eapSaved = $ErrorActionPreference; $ErrorActionPreference = "SilentlyContinue"
     npm install -g @anthropic-ai/claude-code 2>$null
+    $ErrorActionPreference = $eapSaved
     if ($LASTEXITCODE -ne 0) {
         Err (T "Claude Code install failed, install manually with: npm install -g @anthropic-ai/claude-code" `
               "Falló la instalación de Claude Code. Instalalo manual con: npm install -g @anthropic-ai/claude-code")
@@ -415,7 +421,12 @@ if (Have pipx) { Ok "pipx" } else { Err "pipx install failed" }
 # wiring custom connectors (CRM bridges, vault sync, investor relations, etc.)
 if (-not (Have fastmcp)) {
     Hdr "Installing fastmcp"
+    # EAP guard: pipx writes progress/warnings to stderr -> terminating error
+    # under Stop in PS 5.1 even with 2>$null. Relaxed here; the Have-check below
+    # is what decides success.
+    $eapSaved = $ErrorActionPreference; $ErrorActionPreference = "SilentlyContinue"
     pipx install fastmcp 2>$null
+    $ErrorActionPreference = $eapSaved
 }
 if (Have fastmcp) { Ok "fastmcp" } else { Warn "fastmcp not installed (non-blocking, install later with: pipx install fastmcp)" }
 
@@ -432,26 +443,55 @@ if (Have gh) { Ok "gh installed" } else { Warn "gh not installed, install manual
 # improvement ideas as GitHub issues automatically. Walk the user through it
 # the first time only.
 if (Have gh) {
-    gh auth status 2>$null | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        Hdr "GitHub login (OPTIONAL, skip with Ctrl+C)"
-        Write-Host "  This step is OPTIONAL. You only need it if you want your AI brain to"
-        Write-Host "  automatically file improvement ideas as GitHub issues for the maintainer."
-        Write-Host ""
-        Write-Host "  Do you have a GitHub account?"
-        Write-Host "     YES      -> press Enter, a browser window opens, log in, done."
-        Write-Host "     NO       -> press Ctrl+C right now to skip. Everything else still works."
-        Write-Host "     NOT SURE -> press Ctrl+C to skip. You can come back later with: gh auth login"
-        Write-Host ""
-        Write-Host "  (If you press Enter, you'll see options like 'GitHub.com -> HTTPS ->"
-        Write-Host "   Login with web browser.' Just pick those defaults, they're fine.)"
-        Write-Host ""
-        Read-Host "  Press Enter to log in, or Ctrl+C to skip"
-        gh auth login
-        if ($LASTEXITCODE -ne 0) { Warn "gh auth skipped or failed, run 'gh auth login' later if you want issue filing" }
+    # Detect gh auth WITHOUT crashing. Under $ErrorActionPreference='Stop',
+    # PowerShell 5.1 turns a native command's stderr into a terminating
+    # NativeCommandError -- even with 2>$null -- so an unauthenticated
+    # `gh auth status` (it writes "not logged in" to stderr and exits non-zero)
+    # would kill the whole bootstrap on any fresh machine, interactive or not.
+    # Guard every gh call with SilentlyContinue and read $LASTEXITCODE instead.
+    $eapSaved = $ErrorActionPreference
+    $ErrorActionPreference = "SilentlyContinue"
+    gh auth status 1>$null 2>$null
+    $ghAuthed = ($LASTEXITCODE -eq 0)
+    $ErrorActionPreference = $eapSaved
+
+    if (-not $ghAuthed) {
+        # The browser login below needs a real terminal. Read-Host throws or
+        # blocks when stdin isn't interactive (piped install, CI, or when Claude
+        # Code runs this bootstrap as a subprocess), so only prompt when we can.
+        if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
+            Hdr "GitHub login (OPTIONAL, skip with Ctrl+C)"
+            Write-Host "  This step is OPTIONAL. You only need it if you want your AI brain to"
+            Write-Host "  automatically file improvement ideas as GitHub issues for the maintainer."
+            Write-Host ""
+            Write-Host "  Do you have a GitHub account?"
+            Write-Host "     YES      -> press Enter, a browser window opens, log in, done."
+            Write-Host "     NO       -> press Ctrl+C right now to skip. Everything else still works."
+            Write-Host "     NOT SURE -> press Ctrl+C to skip. You can come back later with: gh auth login"
+            Write-Host ""
+            Write-Host "  (If you press Enter, you'll see options like 'GitHub.com -> HTTPS ->"
+            Write-Host "   Login with web browser.' Just pick those defaults, they're fine.)"
+            Write-Host ""
+            [void](Read-Host "  Press Enter to log in, or Ctrl+C to skip")
+            $eapSaved = $ErrorActionPreference
+            $ErrorActionPreference = "SilentlyContinue"
+            gh auth login
+            $ErrorActionPreference = $eapSaved
+            if ($LASTEXITCODE -ne 0) { Warn "gh auth skipped or failed, run 'gh auth login' later if you want issue filing" }
+        } else {
+            Warn "Non-interactive shell: skipping optional GitHub login (run 'gh auth login' later to enable issue filing)"
+        }
+
+        # Re-check after a possible login attempt (still crash-guarded).
+        $eapSaved = $ErrorActionPreference
+        $ErrorActionPreference = "SilentlyContinue"
+        gh auth status 1>$null 2>$null
+        $ghAuthed = ($LASTEXITCODE -eq 0)
+        $ErrorActionPreference = $eapSaved
     }
-    gh auth status 2>$null | Out-Null
-    if ($LASTEXITCODE -eq 0) { Ok "gh authenticated" } else { Warn "gh not authenticated (issue filing disabled until you run: gh auth login)" }
+
+    if ($ghAuthed) { Ok "gh authenticated" }
+    else { Warn "gh not authenticated (issue filing disabled until you run: gh auth login)" }
 }
 
 # ─── Obsidian, REQUIRED, the entire setup writes notes into an Obsidian vault.
@@ -460,6 +500,7 @@ if (Have gh) {
 # how to install a desktop app on Windows.
 $ObsidianInstalled = $false
 $ObsidianPaths = @(
+    "$env:LOCALAPPDATA\Programs\obsidian\Obsidian.exe",
     "$env:LOCALAPPDATA\Obsidian\Obsidian.exe",
     "$env:ProgramFiles\Obsidian\Obsidian.exe",
     "${env:ProgramFiles(x86)}\Obsidian\Obsidian.exe"
@@ -529,6 +570,12 @@ New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude\skills" | Ou
 if (Test-Path "$SkillDir\.git") {
     Log "Already installed - checking for updates..."
     Push-Location $SkillDir
+    # EAP guard for this self-update section: git writes progress/notices to
+    # stderr, which PowerShell 5.1 turns into a terminating error under Stop
+    # (even with 2>$null). Relax it here; the $LASTEXITCODE checks below (e.g.
+    # git diff --quiet) are unaffected. Restored right after Pop-Location.
+    $eapSelfUpdate = $ErrorActionPreference
+    $ErrorActionPreference = "SilentlyContinue"
 
     if ($DryRun) { Dry "would: git fetch --quiet origin" }
     else { git fetch --quiet origin 2>$null }
@@ -568,6 +615,7 @@ if (Test-Path "$SkillDir\.git") {
         Log "ai-brain-starter clone is up to date"
     }
     Pop-Location
+    $ErrorActionPreference = $eapSelfUpdate
 } else {
     if ($DryRun) { Dry "would: git clone $RepoUrl -> $SkillDir" }
     else { git clone --quiet $RepoUrl $SkillDir }
