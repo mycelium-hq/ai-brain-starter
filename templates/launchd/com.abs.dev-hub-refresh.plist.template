@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  com.abs.dev-hub-refresh.plist.template
+
+  macOS launchd template for ai-brain-starter's bare-~/dev-hub freshness pass —
+  the PREVENTION half of STALE-BARE-CHECKOUT-READ (pairs with the read-time guard
+  hooks/warn-stale-dev-checkout.py, which DETECTS a stale bare hub).
+
+  Runs scripts/dev-hub-refresh.py --apply every 6h (and once at load): FETCH-FIRST,
+  then fast-forward any hub that is CLEAN, on its default branch, behind, with no
+  local commits (a GUARANTEED fast-forward, reflog-reversible), and SURFACE the rest
+  (dirty / feature-branch / detached / diverged) into
+  ~/.claude/.dev-hub-refresh-state.json for the SessionStart surfacer. It NEVER
+  auto-switches branches, cleans a dirty tree, or forces anything; it skips
+  worktrees and any repo with a live .session-lock.
+
+  scripts/install-dev-hub-refresh-daemon.sh does substitution + load in one step.
+
+  Placeholders:
+    {{REPO_ROOT}}   absolute path to the ai-brain-starter clone
+    {{LOG_DIR}}     absolute directory for stdout/stderr logs
+
+  After the file lands at ~/Library/LaunchAgents/, run:
+    launchctl load ~/Library/LaunchAgents/com.abs.dev-hub-refresh.plist
+  Stop with:
+    launchctl unload ~/Library/LaunchAgents/com.abs.dev-hub-refresh.plist
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.abs.dev-hub-refresh</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>{{REPO_ROOT}}/scripts/dev-hub-refresh.py</string>
+        <string>--apply</string>
+        <string>--quiet</string>
+    </array>
+
+    <key>StartInterval</key>
+    <integer>21600</integer>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>{{LOG_DIR}}/dev-hub-refresh.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>{{LOG_DIR}}/dev-hub-refresh.err.log</string>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>LowPriorityIO</key>
+    <true/>
+</dict>
+</plist>

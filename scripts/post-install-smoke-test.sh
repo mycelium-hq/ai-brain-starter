@@ -35,10 +35,12 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-SKILL_DIR="$HOME/.claude/skills/ai-brain-starter"
-if [[ ! -d "$SKILL_DIR" ]]; then
-  # fallback to the maintainer location
-  SKILL_DIR="$HOME/Desktop/ai-brain-starter"
+# Honor an explicit SKILL_DIR (lets a maintainer smoke a checkout/worktree
+# pre-merge); otherwise auto-detect the installed clone, then the maintainer dir.
+SKILL_DIR="${SKILL_DIR:-}"
+if [[ -z "$SKILL_DIR" ]]; then
+  SKILL_DIR="$HOME/.claude/skills/ai-brain-starter"
+  [[ -d "$SKILL_DIR" ]] || SKILL_DIR="$HOME/Desktop/ai-brain-starter"
 fi
 
 PASS=0
@@ -120,6 +122,35 @@ if [[ -f "$LINTER" ]]; then
   else
     fail "lint-vault-frontmatter.py wrong response for Read tool"
   fi
+fi
+
+# === 4b. dev-hub-refresh guard + surfacer (MYC-1893) ===
+hdr "dev-hub-refresh (bare ~/dev hub-rot guard)"
+WARN_STALE="$SKILL_DIR/hooks/warn-stale-dev-checkout.py"
+if [[ -f "$WARN_STALE" ]]; then
+  resp=$(echo '{"tool_name":"Read","session_id":"smoke","tool_input":{"file_path":"/tmp/not-a-dev-repo"}}' | python3 "$WARN_STALE" 2>/dev/null)
+  if echo "$resp" | python3 -c "import json,sys; s=sys.stdin.read(); json.loads(s) if s.strip() else None" 2>/dev/null; then
+    ok "warn-stale-dev-checkout.py runs + emits valid JSON (silent on a non-~/dev path)"
+  else
+    fail "warn-stale-dev-checkout.py produced invalid output"
+  fi
+else
+  warn "warn-stale-dev-checkout.py not present"
+fi
+
+SURFACER="$SKILL_DIR/hooks/dev-hub-refresh-on-session-start.py"
+if [[ -f "$SURFACER" ]]; then
+  STATE_F=$(mktemp)
+  printf '%s' '{"summary":{"ff":0,"surfaced":1,"skipped":0,"max_behind":360,"offenders":[["studio","surface:off-default",360]]}}' > "$STATE_F"
+  resp=$(echo '{}' | DEV_HUB_REFRESH_STATE="$STATE_F" python3 "$SURFACER" 2>/dev/null)
+  if echo "$resp" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); assert 'studio' in d.get('hookSpecificOutput',{}).get('additionalContext','')" 2>/dev/null; then
+    ok "dev-hub-refresh surfacer emits a surface line from its state file"
+  else
+    fail "dev-hub-refresh surfacer did not surface the off-default hub"
+  fi
+  rm -f "$STATE_F"
+else
+  warn "dev-hub-refresh-on-session-start.py not present"
 fi
 
 # === 5. Aggregator smoke ===

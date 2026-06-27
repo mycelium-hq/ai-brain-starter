@@ -1,8 +1,6 @@
 {
   "_comment": "AI Brain Starter — Hook Templates. Run /setup-brain to install these, or apply manually via: claude config edit --add hooks <paste contents here>. After git pull, re-run setup or re-apply to get updated hooks.",
-
   "_paths_note": "The [VAULT_PATH] placeholder gets substituted with the user's actual vault path by /setup-brain. All Meta references use '⚙️ Meta/' with the emoji prefix, matching Phase 3's canonical folder structure. Do NOT remove the emoji — the bash scripts and hook contexts look for that exact folder name.",
-
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -68,7 +66,6 @@
         ]
       }
     ],
-
     "Stop": [
       {
         "hooks": [
@@ -96,7 +93,6 @@
         ]
       }
     ],
-
     "PreCompact": [
       {
         "hooks": [
@@ -108,7 +104,6 @@
         ]
       }
     ],
-
     "PreToolUse": [
       {
         "matcher": "Bash",
@@ -177,9 +172,17 @@
             "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/observe-tool-calls.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'"
           }
         ]
+      },
+      {
+        "matcher": "Read|Edit|Write|MultiEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/warn-stale-dev-checkout.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'"
+          }
+        ]
       }
     ],
-
     "SessionStart": [
       {
         "hooks": [
@@ -262,11 +265,14 @@
             "type": "command",
             "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/relocate-watch-surface.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Checking for vault-relocation drift (old-path recreators)..."
+          },
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/dev-hub-refresh-on-session-start.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'"
           }
         ]
       }
     ],
-
     "SessionEnd": [
       {
         "hooks": [
@@ -278,7 +284,6 @@
         ]
       }
     ],
-
     "PostToolUse": [
       {
         "matcher": "Write",
@@ -301,6 +306,5 @@
       }
     ]
   },
-
   "_how_to_update": "After running git pull on this repo, the auto-update hook (first UserPromptSubmit entry) automatically invokes scripts/sync-skills.sh (skill content backup + overwrite) and then prompts Claude to run scripts/install-hooks-user-level.py to rewire ~/.claude/settings.json. If the hook auto-update path is bypassed (network failure, hook disabled), re-run scripts/install-hooks-user-level.py manually or re-run bootstrap.sh — both call the installer with --fail-on-missing so divergent-fork strands surface loudly instead of silently."
 }
