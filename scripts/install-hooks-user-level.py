@@ -91,6 +91,9 @@ ABS_FINGERPRINTS = [
     "ai-brain-starter/hooks/warn-vault-session-in-worktree.py",
     # Memory-routing nudge (team learning written to tool-private memory → shared brain):
     "ai-brain-starter/hooks/warn-learning-to-tool-private-memory.py",
+    # Bare ~/dev hub-rot guard (read-time detection) + surfacer (MYC-1893):
+    "ai-brain-starter/hooks/warn-stale-dev-checkout.py",
+    "ai-brain-starter/hooks/dev-hub-refresh-on-session-start.py",
 ]
 
 # Path-divergence-robust matching: an ai-brain-starter hook may be wired at the
@@ -111,6 +114,7 @@ ABS_OWNED_BASENAMES = {
     "block-secret-in-note.py", "context-budget-measure.py",
     "block-populated-public-skill.py",
     "warn-vault-session-in-worktree.py", "warn-learning-to-tool-private-memory.py",
+    "warn-stale-dev-checkout.py", "dev-hub-refresh-on-session-start.py",
 }
 
 # Hooks ai-brain-starter USED TO ship and has deliberately RETIRED. The
