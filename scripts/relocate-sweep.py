@@ -128,8 +128,7 @@ def _under_cloud_sync(path):
 # Files whose OLD-path references are intentional — the relocate tooling itself
 # (migration sources, fixtures) and personal-data scrub token lists.
 KEEP_BASENAMES = {"relocate-vault.sh", "relocate-sweep.py", "relocate-machinery-sidecar.sh",
-                  "test-relocate-vault.sh", "test-relocate-sweep.py",
-                  "check-desktop-path-recreators.py"}
+                  "test-relocate-vault.sh", "test-relocate-sweep.py"}
 KEEP_PATH_TOKENS = ("scrub-or-die", "gh-harden-repos", "personal-pii-scrub", "/docs/superpowers/")
 # A line carrying one of these is an intentional KEEP regardless of file type:
 #   relocate-keep    → explicit marker;  OLD=/NEW= → a migration source assignment;
