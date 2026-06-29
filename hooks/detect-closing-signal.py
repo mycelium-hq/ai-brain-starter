@@ -806,6 +806,43 @@ your job before goodbye.
 Phases 0c/0d/0e and the Phase 3 audit are MODEL-SIDE. The post-Stop hook
 does NOT run them.
 
+PHASE 1.8 — TEAM BROADCAST (per workspace, MODEL-SIDE, OPT-IN; physically
+here in run order because broadcasts must follow Phase 2 writes — the
+"1.8" name matches the canonical reference in chief-of-staff/SKILL.md):
+SKIP this phase entirely unless the OPTIONAL companion skill is installed:
+  ~/.claude/skills/team-broadcast/scripts/auto-send.py
+If absent (the common case for solo / personal-vault users): do nothing,
+do not narrate, move on to Phase 3. The companion skill is install-it-
+yourself; ai-brain-starter does NOT auto-install it.
+
+If installed AND this session shipped, decided, or unblocked anything
+the team should know about, broadcast via:
+
+  python ~/.claude/skills/team-broadcast/scripts/auto-send.py \\
+    {{onde|mycelium}} --trigger session-close --body-file <file>
+
+Use --body-file with the plain 5th-grader recap THIS conversation already
+showed the user (do NOT re-derive or re-scan; --allow-rescan is an escape
+hatch, not the default). Body lives in scratchpad; the script consumes
++ removes it after posting.
+
+Per-workspace rule: post to EACH workspace where the work is materially
+relevant. A typical product-ticket ship -> that product's workspace only.
+A change to a shared substrate (an *-mcp, a public skill) -> the
+substrate's workspace. Cross-umbrella work -> both.
+
+SKIP conditions (broadcast nothing):
+  - Tiny / housekeeping session (close cascade alone, no substantive ship)
+  - Personal-only work (journaling, coaching, calendar, finance)
+  - Already broadcast earlier this session
+
+Dry-run first (--dry-run) when uncertain about content or audience; go
+live once the dry-run output reads clean. Audit log is automatic.
+
+If a workspace's Slack creds are missing, the script fails loud — do NOT
+silently swallow. Report the failure in Phase 4 + add a to-do to fix the
+creds.
+
 PHASE 3 — Functional audit (conditional, MODEL-SIDE):
 If this session shipped code or docs to a PUBLIC REPO that users download
 (ai-brain-starter, humanizer, mycelium-site, any *-mcp, etc.), run the
@@ -832,7 +869,8 @@ misleading copy, or unreferenced files. The audit catches what CI can't.
 
 PHASE 4 — Final summary (one line, after audit if Phase 3 fired):
 "Filed X seeds, Y to-dos (yours: A, delegations: B), Z decisions, checked
-off M items. Anything I missed?"
+off M items[, broadcast to <workspaces> if Phase 1.8 fired]. Anything I
+missed?"
 
 Then say goodbye in the user's primary language, warm, no machinery
 narration."""
