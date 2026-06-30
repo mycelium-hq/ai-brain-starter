@@ -20,13 +20,15 @@ sync your brain." The rule is:
 
 > **The vault may be synced. The machinery never is.**
 
-That gives you two supported shapes, both first-class. Pick by whether you want
-your notes on your phone. The footprint signal at session start will warn you if
-it sees machinery inside a sync folder; here is how to set up either shape.
+That gives you three supported shapes, all first-class. Shapes A and B are for
+your own single-user brain — pick by whether you want your notes on your phone.
+Shape C is for a team sharing one vault. The footprint signal at session start
+will warn you if it sees machinery inside a sync folder; here is how to set up
+each shape.
 
 ---
 
-## Two supported shapes
+## Three supported shapes
 
 ### Shape A — vault fully local (simplest)
 
@@ -157,6 +159,54 @@ yourself: run a `git gc` plus a full session and watch Activity Monitor —
 > ⚙️ Meta/Worktree Snapshots/
 > ⚙️ Meta/logs/
 > ```
+
+### Shape C — one vault shared across a team (notes only, no machinery anywhere)
+
+Shapes A and B are single-user: one person, one brain. Shape C is the team case
+— several people (often mixed Mac/Windows, often non-technical) collaborating in
+**one** vault through a shared cloud folder: a Google Drive *shared folder*, a
+Shared Drive, a shared Dropbox. Here the cloud folder is not a convenience bolted
+onto a git vault; it **is** the sync, the collaboration, and the version history.
+So the move is not "relocate the machinery" — it is "have no machinery in the
+folder at all."
+
+> **A shared team vault holds notes only. No `.git`, no per-session worktrees, no
+> snapshot/commit automation pointed at it — ever.** The cloud folder is the
+> version layer. Git on top earns both failures at once: the high-churn melt *and*
+> repo corruption when two machines write `.git` at the same instant. The notes
+> sync fine; nothing else belongs there.
+
+Concretely, for a shared team vault:
+
+- **Never run the brain's git-snapshot / session-close machinery against it.**
+  Those tools assume a *local git* vault. Pointed at a cloud-mirror folder they
+  find no `.git`, fail mid-run, and litter a stray log into the synced tree. Keep
+  each person's machinery on *their own local* brain (Shape A or B), never on the
+  shared one.
+- **Expect — and ignore — editor-config conflict copies.** When two people have
+  the vault open, the cloud daemon writes a `… 2` duplicate of whatever
+  editor-config file both machines touched (`app 2.json`, `workspace 2.json`,
+  `graph 2.json`). They are cosmetic — they never touch your actual notes. Delete
+  them when they pile up. To minimize: one person "owns" the editor config
+  (plugins, theme), everyone else leaves it alone, and close the editor when not
+  actively in it.
+- **Each teammate still gets a personal brain for deep work.** The shared vault is
+  for shared *notes*. Real code, repos, and agent-driven dev work live in each
+  person's *local* repos and *local* brain — never in the shared folder. Shape C
+  is additive: run Shape A or B for your own brain and join the shared one too.
+
+> **Google Drive gotcha — a shared folder is not on disk until you shortcut it.**
+> When someone shares a folder with you it appears under *Shared with me* in the
+> web UI but **not** as a folder the desktop app syncs to disk. Open Drive on the
+> web, *Shared with me* → the folder → **Add shortcut to Drive** → place it in
+> *My Drive*. Only then does the desktop app materialize it at
+> `…/My Drive/<folder>` for local editing. (Dropbox and Box are similar: a share
+> must be added to your own tree before the daemon syncs it.)
+
+A cloud folder is *sync*, not backup — and a shared one that any member can
+mass-delete is a single point of failure for the whole team. The folder's owner
+should keep a versioned export or off-folder backup, exactly as in the section
+below.
 
 ---
 
@@ -294,6 +344,7 @@ then `bash scripts/vault-backup.sh verify` to prove the restore. Full guide,
 including the restic option for an offsite tier: `docs/BACKUP.md`.
 
 A brain that melts the machine it runs on isn't a brain you'll keep. Whichever
-shape you pick — fully local, or synced with the machinery in a sidecar — the
-invariant is the same: notes can sync, machinery never does, the index lives
-server-side, and the backup is encrypted-and-verified. That's the whole policy.
+shape you pick — fully local, synced with the machinery in a sidecar, or shared
+across a team with no machinery at all — the invariant is the same: notes can
+sync, machinery never does, the index lives server-side, and the backup is
+encrypted-and-verified. That's the whole policy.
