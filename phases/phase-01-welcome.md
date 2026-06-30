@@ -261,17 +261,16 @@ python3 ~/.claude/skills/ai-brain-starter/scripts/check-cloud-sync.py --porcelai
 ```
 
 - Output starts with `OK_LOCAL` → good, continue.
-- Output starts with `CLOUD_SYNC_RISK:` → the path is inside `<service>`. This is **supported, but only with the machinery out of the synced tree** — never proceed with a raw synced vault (that is the freeze class). Offer BOTH supported shapes and pick by the user's answer to "do you want these notes on your iPhone?":
-
-  - **Shape A — move it local (simplest; default if they don't need phone sync):** *"That folder is inside <service>. The simplest fix is a local path like `~/Brain`. Paste a new path and I'll re-check."* Re-run the check until it returns `OK_LOCAL`, then continue. (Large vault already there → `docs/CLOUD_SYNC.md` for how to move it out safely.)
-  - **Shape B — keep it synced, notes on every device:** *"I'll keep the vault in <service> and move just the machinery (git + caches) to a local sidecar so the notes sync to your iPhone without the storm."* With all other Claude sessions closed (separating the git dir orphans live worktrees — the script refuses otherwise), run:
+- Output starts with `CLOUD_SYNC_RISK:` → the path is inside `<service>`. **Do NOT make them choose between options or explain the internals, and do NOT ask "do you want these notes on your iPhone?"** — a non-technical user won't know what to answer. Apply the one safe default yourself: keep their notes exactly where they are (still synced, still on their phone) and move only the churning machinery (git + caches) out to a local sidecar. With all other Claude sessions closed (separating the git dir orphans live worktrees — the script refuses otherwise), run:
 
     ```bash
     bash ~/.claude/skills/ai-brain-starter/scripts/relocate-machinery-sidecar.sh "<VAULT_PATH>" --dry-run   # preview
     bash ~/.claude/skills/ai-brain-starter/scripts/relocate-machinery-sidecar.sh "<VAULT_PATH>"             # apply
     ```
 
-    Then confirm `<VAULT_PATH>/.git` is now a one-line pointer file (`cat "<VAULT_PATH>/.git"` shows `gitdir: ...`) and continue. The helper is **idempotent and safe to re-run** — run it once more after your first working session to sweep any caches (`.smart-env`, `.codegraph`) that get created later. Fully reversible with `--rollback`. Details: `docs/CLOUD_SYNC.md` Shape B.
+  Say it simply, in their language: *"That folder syncs to the cloud, which can freeze your computer. I'm moving the noisy hidden part out so it's safe — your notes don't move and nothing gets deleted."* Then confirm `<VAULT_PATH>/.git` is now a one-line pointer (`cat "<VAULT_PATH>/.git"` shows `gitdir: ...`) and continue. Idempotent + safe to re-run (sweep new caches after the first session), fully reversible with `--rollback`. Details: `docs/CLOUD_SYNC.md` Shape B.
+
+  - **Fallback — ONLY if the user explicitly says they don't want the vault in `<service>` at all:** move it fully local instead. *"No problem — paste a local path like `~/Brain` and I'll re-check."* Re-run the check until it returns `OK_LOCAL`, then continue. (Large vault already there → `docs/CLOUD_SYNC.md` for how to move it out safely.)
 
 ### Step 8.6 — Establish an off-machine backup (or explicitly defer, with a warning) — BEFORE declaring setup complete
 
