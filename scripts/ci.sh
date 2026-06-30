@@ -126,6 +126,7 @@ INTEGRATION_TESTS=(
   test_vault_safety_guards
   test_resource_aware_session_close
   test_cloud_sync_guard
+  test_cloud_sync_offer
   test_worktree_on_vault_guard
   test_machinery_sidecar
   test_relocate_vault

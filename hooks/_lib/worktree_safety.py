@@ -556,6 +556,67 @@ def detect_cloud_sync(path: Path, *, _drivefs_db: str | Path | None = None) -> s
     return None
 
 
+def _obsidian_config_path(explicit: str | Path | None = None) -> Path | None:
+    """Locate Obsidian's obsidian.json: explicit arg > $OBSIDIAN_CONFIG > per-OS
+    default. Returns the explicit/env path verbatim (caller guards is_file); for
+    the defaults, the first that exists, else None."""
+    if explicit is not None:
+        return Path(explicit)
+    env = os.environ.get("OBSIDIAN_CONFIG")
+    if env:
+        return Path(env)
+    home = Path.home()
+    candidates = [
+        home / "Library/Application Support/obsidian/obsidian.json",  # macOS
+        home / ".config/obsidian/obsidian.json",                      # Linux
+    ]
+    appdata = os.environ.get("APPDATA")
+    if appdata:
+        candidates.append(Path(appdata) / "obsidian" / "obsidian.json")  # Windows
+    candidates.append(home / "AppData/Roaming/obsidian/obsidian.json")
+    for c in candidates:
+        try:
+            if c.is_file():
+                return c
+        except OSError:
+            continue
+    return None
+
+
+def obsidian_vault_paths(config_path: str | Path | None = None) -> list[Path]:
+    """Absolute paths of every vault Obsidian has registered, from obsidian.json.
+
+    Lets the cloud-sync offer find a pre-existing Obsidian vault that was never
+    pasted into guided setup — the "user already had an iCloud vault (Obsidian's
+    common default)" case the SessionStart footprint signal otherwise misses (it
+    only sees the vault you are cwd'd inside). Bounded + fail-open by construction:
+    one small JSON read, never a filesystem walk, and [] on any missing /
+    malformed / unreadable config — a registry hiccup must never break a hook.
+
+    Schema: {"vaults": {"<id>": {"path": "<abs>", "open": bool, ...}, ...}}.
+    """
+    cfg = _obsidian_config_path(config_path)
+    if cfg is None or not cfg.is_file():
+        return []
+    try:
+        data = json.loads(cfg.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    vaults = data.get("vaults") if isinstance(data, dict) else None
+    if not isinstance(vaults, dict):
+        return []
+    out: list[Path] = []
+    seen: set[str] = set()
+    for entry in vaults.values():
+        if not isinstance(entry, dict):
+            continue
+        p = entry.get("path")
+        if isinstance(p, str) and p and p not in seen:
+            seen.add(p)
+            out.append(Path(p))
+    return out
+
+
 # Optional session-liveness file written by session-lock.py (a sibling hook).
 # Reading it lets the cap reaper distinguish "this scratch worktree belongs to a
 # session that is still running" from "its session is gone" — so a crashed
