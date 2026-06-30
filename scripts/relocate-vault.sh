@@ -281,6 +281,7 @@ NEW_ABS="$(abspath "$NEW")"
 if [ -e "$NEW_ABS" ]; then die "target '$NEW_ABS' already exists (will not overwrite)"; fi
 
 # Soft gates — skippable with --force.
+BACKUP_TOKEN=""
 if [ "$FORCE" != 1 ]; then
   if command -v pgrep >/dev/null 2>&1 && pgrep -x Obsidian >/dev/null 2>&1; then
     die "Obsidian is running — quit it first (moving an open vault is unsafe), or pass --force"
@@ -291,12 +292,37 @@ if [ "$FORCE" != 1 ]; then
       die "an active Claude session is writing under .claude/worktrees (touched <10 min) — close it, or pass --force"
     fi
   fi
+  # Backup-first ENFORCEMENT (MYC-2382). A vault is often the one irreplaceable
+  # asset; moving it with no off-machine backup is the one move you cannot undo
+  # if the disk dies mid-flight. Route through the SINGLE source of truth
+  # (check-vault-backup.py) and REFUSE on NO_BACKUP. The whole block is skipped
+  # under --force, so --force IS the documented escape hatch — by construction.
+  backup_guard="$SCRIPT_DIR/check-vault-backup.py"
+  if [ -f "$backup_guard" ]; then
+    set +e
+    BACKUP_TOKEN="$(python3 "$backup_guard" --porcelain "$OLD_ABS" 2>/dev/null)"
+    brc=$?
+    set -e
+    if [ "$brc" != 0 ]; then
+      die "no verified off-machine backup of '$OLD_ABS' (${BACKUP_TOKEN:-backup check failed}).
+  Moving a vault with no backup is the one move you cannot undo if the disk dies mid-flight.
+  Stand up + verify a backup first (one command), then re-run:
+    bash \"$SCRIPT_DIR/vault-backup.sh\" setup && bash \"$SCRIPT_DIR/vault-backup.sh\" verify
+  Or move anyway, accepting the risk: re-run with --force."
+    fi
+  else
+    die "cannot verify a backup — the guard is missing ($backup_guard). Restore it, or re-run with --force to move without the check."
+  fi
 fi
 
 say ""
-say "relocate-vault: BACK UP FIRST. A vault is often your one irreplaceable asset."
-say "  Stand up + VERIFY an off-machine backup before moving:"
-say "    bash scripts/vault-backup.sh setup && bash scripts/vault-backup.sh verify"
+if [ "$FORCE" = 1 ]; then
+  warn "relocate-vault: --force — skipping the backup check. A vault is often your one"
+  warn "  irreplaceable asset; stand up + verify an off-machine backup as soon as the move lands:"
+  warn "    bash \"$SCRIPT_DIR/vault-backup.sh\" setup && bash \"$SCRIPT_DIR/vault-backup.sh\" verify"
+else
+  say "relocate-vault: verified off-machine backup present (${BACKUP_TOKEN}) — proceeding."
+fi
 say ""
 
 if [ "$DRYRUN" = 1 ]; then
