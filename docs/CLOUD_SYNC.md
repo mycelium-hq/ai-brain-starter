@@ -50,7 +50,8 @@ re-homes that Claude state (copying it, so the old location stays a backup):
 ```bash
 # preview first (changes nothing)
 bash scripts/relocate-vault.sh ~/Desktop/MyVault ~/MyVault --dry-run
-# do it (quit Obsidian + close Claude sessions first; --force overrides the soft gates)
+# do it (quit Obsidian + close Claude sessions + have a verified off-machine backup first;
+# it REFUSES to move a backup-less vault. --force overrides the soft gates.)
 bash scripts/relocate-vault.sh ~/Desktop/MyVault ~/MyVault
 ```
 

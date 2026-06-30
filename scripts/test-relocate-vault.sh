@@ -13,6 +13,9 @@
 #     is already a symlink (both fatal even under --force).
 #   - HAPPY PATH: a full move relocates the dir, leaves the symlink, migrates
 #     history; --no-symlink omits the symlink.
+#   - BACKUP GATE (MYC-2382): a backup-less full relocate REFUSES (vault not
+#     moved, remedy named); a verified off-machine backup lets it PROCEED;
+#     --force overrides the gate on the same no-backup condition.
 # Hermetic: a temp HOME-like sandbox + an isolated --config-dir; the real
 # ~/.claude is never touched.
 # Run: bash scripts/test-relocate-vault.sh
@@ -101,6 +104,47 @@ hh="$(jsonl_count "$PROJ/$NK")"
 nsv="$TMP/Desktop/NoSym Vault" ; nsn="$TMP/nosym-brain" ; mkdir -p "$nsv"
 CLAUDE_CONFIG_DIR="$CFG" bash "$SCRIPT" "$nsv" "$nsn" --force --no-symlink >/dev/null 2>&1
 { [ -d "$nsn" ] && [ ! -e "$nsv" ]; } && pass "--no-symlink leaves nothing at the old path" || fail "--no-symlink left something at old path"
+
+# --- 7. BACKUP-FIRST GATE (MYC-2382): refuse a backup-less full relocate -------
+# Moving a vault — often the one irreplaceable asset — with no off-machine backup
+# is the nightmare failure. The full-relocate path must REFUSE unless a backup is
+# verified (check-vault-backup.py) OR --force is passed. The no-backup signal is
+# made hermetic with an empty backup-conf + the Time Machine probe skipped, so
+# "no backup" is deterministic even on a dev Mac that has Time Machine set up.
+NOBK_CONF="$TMP/no-backup-conf.json" ; echo '{}' > "$NOBK_CONF"
+
+# 7a REFUSE: no backup, no --force -> refuses (rc!=0), vault NOT moved, names remedy.
+gb_src="$TMP/gate-src" ; gb_dst="$TMP/gate-dst" ; mkdir -p "$gb_src" ; echo n > "$gb_src/n.md"
+out="$(CLAUDE_CONFIG_DIR="$CFG" VAULT_BACKUP_CONF="$NOBK_CONF" VAULT_BACKUP_SKIP_TIMEMACHINE=1 \
+       bash "$SCRIPT" "$gb_src" "$gb_dst" 2>&1)" ; rc=$?
+[ "$rc" != 0 ] && pass "backup gate: refuses a backup-less move (rc=$rc)" \
+               || fail "backup gate: expected a refusal, moved with rc=$rc"
+{ [ -d "$gb_src" ] && [ ! -e "$gb_dst" ]; } && pass "backup gate: vault NOT moved on refusal" \
+               || fail "backup gate: vault was moved despite the refusal"
+echo "$out" | grep -qi 'backup' && pass "backup gate: refusal names the backup remedy" \
+               || fail "backup gate: refusal output lacked a backup remedy: $out"
+
+# 7b PROCEED: a verified vault-backup archive present, no --force -> moves.
+ok_src="$TMP/gate-ok-src" ; ok_dst="$TMP/gate-ok-dst" ; mkdir -p "$ok_src" ; echo n > "$ok_src/n.md"
+OK_RES="$(cd "$ok_src" && pwd -P)"   # the physical path relocate-vault.sh hands the guard
+OK_DEST="$TMP/gate-backups" ; mkdir -p "$OK_DEST" ; touch "$OK_DEST/vault-backup-now.tar.gz"
+OK_CONF="$TMP/ok-backup-conf.json"
+printf '{"vaults": {"%s": {"dest": "%s", "archive_stem": "vault-backup"}}}\n' "$OK_RES" "$OK_DEST" > "$OK_CONF"
+CLAUDE_CONFIG_DIR="$CFG" VAULT_BACKUP_CONF="$OK_CONF" VAULT_BACKUP_SKIP_TIMEMACHINE=1 \
+  bash "$SCRIPT" "$ok_src" "$ok_dst" >/dev/null 2>&1 ; rc=$?
+[ "$rc" = 0 ] && pass "backup gate: proceeds with a verified backup (rc=0)" \
+             || fail "backup gate: a verified backup was still refused (rc=$rc)"
+{ [ -d "$ok_dst" ] && [ -L "$ok_src" ]; } && pass "backup gate: verified backup -> moved + symlink left" \
+             || fail "backup gate: verified backup did not relocate the vault"
+
+# 7c FORCE OVERRIDE: no backup but --force -> moves (same no-backup condition as 7a).
+fb_src="$TMP/gate-force-src" ; fb_dst="$TMP/gate-force-dst" ; mkdir -p "$fb_src" ; echo n > "$fb_src/n.md"
+CLAUDE_CONFIG_DIR="$CFG" VAULT_BACKUP_CONF="$NOBK_CONF" VAULT_BACKUP_SKIP_TIMEMACHINE=1 \
+  bash "$SCRIPT" "$fb_src" "$fb_dst" --force >/dev/null 2>&1 ; rc=$?
+[ "$rc" = 0 ] && pass "backup gate: --force overrides the gate (rc=0)" \
+             || fail "backup gate: --force did not override the gate (rc=$rc)"
+[ -d "$fb_dst" ] && pass "backup gate: --force -> vault moved despite no backup" \
+             || fail "backup gate: --force did not move the vault"
 
 echo
 if [ "$fails" -gt 0 ]; then echo "FAILED: $fails"; exit 1; fi
