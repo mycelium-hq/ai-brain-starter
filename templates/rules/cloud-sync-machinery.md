@@ -12,6 +12,7 @@ Consumer cloud-sync folders (iCloud Drive, iCloud "Desktop & Documents", OneDriv
 - Cloud sync is NOT a backup. Back up with a versioned git remote + an encrypted backup whose restore you have ACTUALLY tested. A backup you have never restored is a hope, not a backup.
 - Already on a sync path? Move it out, leave a symlink behind (the daemon follows the few-byte symlink, not the contents). Back up and verify the restore BEFORE relocating.
 - Don't put a `.git/` inside a cloud mirror. Mirror documents only; keep the repo's `.git` at the local home-root path.
+- A team sharing ONE vault via a cloud folder (Google Drive shared folder, Shared Drive, shared Dropbox): notes only — NO `.git`, no worktrees, no snapshot/commit automation in the shared folder. The cloud folder IS the version layer; git on top melts AND corrupts on simultaneous multi-machine writes. Each member keeps their own machinery on their own LOCAL brain. See `docs/CLOUD_SYNC.md` Shape C.
 
 ## Detect
 
