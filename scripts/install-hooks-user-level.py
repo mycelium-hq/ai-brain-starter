@@ -70,7 +70,12 @@ ABS_FINGERPRINTS = [
     "ai-brain-starter/scripts/email-gate-hook.py",
     "ai-brain-starter/scripts/post-update-email-ask.py",
     "ai-brain-starter/⚙️ Meta/scripts/graph-context-hook.sh",
-    # Legacy session-start context loaders shipped via ai-brain-starter:
+    # Session-start context loaders (MYC-2359: moved UserPromptSubmit -> SessionStart;
+    # must be OWNED so the installer relocates the stale old-event copy, else a moved
+    # hook fires on BOTH events on every existing install):
+    "ai-brain-starter/hooks/session-start-context.py",
+    "ai-brain-starter/hooks/inject-instinct-context.py",
+    # Legacy inline session-start loader (pre-script echo form):
     "SESSION START: CLAUDE.md is already auto-loaded",
     ".ai-brain-starter-last-update",
     # Worktree-lifecycle hooks (cleanup + footprint observability):
@@ -115,6 +120,8 @@ ABS_OWNED_BASENAMES = {
     "block-populated-public-skill.py",
     "warn-vault-session-in-worktree.py", "warn-learning-to-tool-private-memory.py",
     "warn-stale-dev-checkout.py", "dev-hub-refresh-on-session-start.py",
+    # Session-start context loaders (MYC-2359 UPS -> SessionStart relocation):
+    "session-start-context.py", "inject-instinct-context.py",
 }
 
 # Hooks ai-brain-starter USED TO ship and has deliberately RETIRED. The
@@ -385,6 +392,63 @@ def retire_stale_hooks(existing: dict) -> tuple[dict, int]:
     return cleaned, removed
 
 
+def _template_owned_events(template: dict) -> dict:
+    """basename -> set(events) for every ABS-owned command in the template — the
+    authority on WHERE an owned hook belongs."""
+    out: dict[str, set[str]] = {}
+    for event, groups in (template.get("hooks") or {}).items():
+        for g in (groups or []):
+            for h in (g.get("hooks") or []):
+                for bn in _owned_basenames(h.get("command", "")):
+                    out.setdefault(bn, set()).add(event)
+    return out
+
+
+def relocate_moved_hooks(existing: dict, template: dict) -> tuple[dict, int]:
+    """Remove an owned hook from an event when the template still ships that hook
+    but on DIFFERENT event(s) — i.e. it MOVED. merge_hooks() adds the hook to its
+    new event, but it scopes its search per-event, so it never sees (or removes)
+    the stale copy on the OLD event. Without this step a hook that moved events
+    (e.g. UserPromptSubmit -> SessionStart, MYC-2359) stays wired on BOTH and keeps
+    firing on the old one — neutering a move on every EXISTING install.
+
+    Distinct from retire_stale_hooks: that un-wires hooks GONE from the template
+    (un-nag); this relocates hooks STILL in the template. A hook absent from the
+    template (`tev` empty) is left untouched here. Groups emptied are dropped.
+    Returns (cleaned, count_removed)."""
+    owned_events = _template_owned_events(template)
+    cleaned = json.loads(json.dumps(existing))
+    removed = 0
+    if "hooks" not in cleaned:
+        return cleaned, 0
+    for event, groups in list(cleaned["hooks"].items()):
+        new_groups = []
+        for g in groups:
+            hooks = g.get("hooks", [])
+            kept = []
+            for h in hooks:
+                bns = _owned_basenames(h.get("command", ""))
+                tev: set[str] = set().union(*(owned_events.get(b, set()) for b in bns)) if bns else set()
+                # Stale moved copy iff the hook is STILL shipped somewhere in the
+                # template (tev non-empty) AND this event is not one of its
+                # template events. Removed-from-template hooks (tev empty) are left
+                # to retire_stale_hooks; the user's own hooks (bns empty) are never
+                # touched.
+                if tev and event not in tev:
+                    removed += 1
+                    continue
+                kept.append(h)
+            if kept:
+                ng = dict(g)
+                ng["hooks"] = kept
+                new_groups.append(ng)
+        if new_groups:
+            cleaned["hooks"][event] = new_groups
+        else:
+            del cleaned["hooks"][event]
+    return cleaned, removed
+
+
 def backup_settings(settings_path: Path) -> Path | None:
     if not settings_path.is_file():
         return None
@@ -532,6 +596,10 @@ def main() -> int:
     # Retire hooks deleted from the template but still wired in this user's
     # settings.json (merge never deletes). This un-wires removed hooks.
     merged, retired_count = retire_stale_hooks(merged)
+    # Relocate hooks that MOVED events in the template (merge added the new-event
+    # copy but never removed the stale old-event one). Without this a moved hook
+    # fires on BOTH events on every existing install (MYC-2359).
+    merged, moved_count = relocate_moved_hooks(merged, template)
 
     if not args.quiet:
         print(f"Merging into: {settings_path}")
@@ -540,6 +608,7 @@ def main() -> int:
         print(f"Added:        {len(summary['added'])} hook(s)")
         print(f"Updated:      {len(summary['updated'])} hook(s)")
         print(f"Retired:      {retired_count} stale hook(s) removed")
+        print(f"Relocated:    {moved_count} moved-event stale copy(ies) removed")
         print(f"Preserved:    {len(set(summary['kept']))} non-ABS hook(s) untouched")
 
     if args.dry_run:
@@ -551,9 +620,12 @@ def main() -> int:
                 print(f"  ~ {entry}")
             if retired_count:
                 print(f"  - retire {retired_count} stale hook(s)")
+            if moved_count:
+                print(f"  - relocate {moved_count} moved-event stale copy(ies)")
         return 0
 
-    if not summary["added"] and not summary["updated"] and not retired_count:
+    if not summary["added"] and not summary["updated"] and not retired_count \
+            and not moved_count:
         if not args.quiet:
             print("\nAlready in sync. Nothing to write.")
         return 0

@@ -1,12 +1,20 @@
 #!/usr/bin/env python3
 """
-inject-instinct-context.py — UserPromptSubmit (once-per-session) hook.
+inject-instinct-context.py — SessionStart hook (once per session-segment).
 
 Realizes the project-scoping half of the Instinct Engine: at session start,
 load the high-confidence instincts whose `project_id` is the CURRENT project
 OR `global`, and EXCLUDE instincts scoped to other projects. That exclusion is
 the isolation feature — a repo-specific convention does not bleed into
 unrelated work.
+
+Wired on SessionStart, NOT UserPromptSubmit: the selection is prompt-INDEPENDENT
+(stdin is discarded below), so it is session-stable and must be injected ONCE,
+not per message. `once: true` is ignored in settings.json (the installer's merge
+target), so a UPS `once` hook silently re-fires every message — this block was
+measured re-injecting 14x in one session (MYC-2359). SessionStart fires once per
+session-segment (startup / resume / post-compact), landing the block in the
+cached prefix → served as cache-reads thereafter, not fresh tokens every turn.
 
 Silent if the engine isn't installed or nothing clears the confidence floor.
 Fail-open: any error -> neutral passthrough, never blocks the prompt.
@@ -72,7 +80,7 @@ def main() -> None:
             tag = "" if pid == il.PROJECT_GLOBAL else f" [{pid}]"
             lines.append(f"- ({eff:.2f}) {name}{tag}")
         print(json.dumps({"hookSpecificOutput": {
-            "hookEventName": "UserPromptSubmit",
+            "hookEventName": "SessionStart",
             "additionalContext": "\n".join(lines),
         }}))
     except Exception:

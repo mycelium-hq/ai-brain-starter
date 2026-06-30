@@ -18,6 +18,11 @@
 #      default-on daemon trips it. Proves the gate BITES, not just passes.
 #   4. POSITIVE CONTROL: a within-budget synthetic fleet passes (exit 0).
 #   5. FAIL-LOUD: a missing budgets file / hooks.json exits 2 (never a silent green).
+#   6. CACHE POSITIONING (MYC-2359): the stable per-session injectors
+#      (session-start-context.py, inject-instinct-context.py) are wired on
+#      SessionStart (once per session-segment -> cached prefix), NOT UserPromptSubmit
+#      (every message -> fresh tokens), and hooks.json carries no dead `once: true`
+#      (ignored in settings.json -> a "once" UPS hook silently re-fires every turn).
 #
 # Stdlib python3 + bash only. No network, no git, no hook execution. Tmpdirs
 # removed on exit.
@@ -120,6 +125,33 @@ python3 "$GATE" --gate --hooks-json "$NEG/does-not-exist.json" --hooks-dir "$NEG
    >/dev/null 2>&1
 if [ "$?" -eq 2 ]; then ok "fail-loud on missing hooks.json (exit 2)"
 else bad "fail-loud on missing hooks.json" "expected exit 2"; fi
+
+echo "=== 6. CACHE POSITIONING (MYC-2359): stable injectors on SessionStart, not UPS ==="
+if CP_OUT="$(python3 - "$REPO_ROOT" <<'PY'
+import json, sys, pathlib
+repo = pathlib.Path(sys.argv[1])
+hooks = json.loads((repo / "hooks.json").read_text())["hooks"]
+def events_of(basename):
+    return [ev for ev, blocks in hooks.items() for blk in blocks
+            for e in blk.get("hooks", []) if basename in e.get("command", "")]
+fails = []
+for bn in ("session-start-context.py", "inject-instinct-context.py"):
+    evs = events_of(bn)
+    if evs != ["SessionStart"]:
+        fails.append(f"{bn} wired on {evs or 'nothing'}, want ['SessionStart'] "
+                     f"(UPS re-injects every message; once:true is dead in settings.json)")
+    src = (repo / "hooks" / bn).read_text()
+    if '"hookEventName": "SessionStart"' not in src:
+        fails.append(f"{bn} does not emit hookEventName SessionStart")
+once = sum(1 for ev in hooks for blk in hooks[ev]
+          for e in blk.get("hooks", []) if e.get("once"))
+if once:
+    fails.append(f"{once} once:true entr(y/ies) in hooks.json - DEAD in settings.json (MYC-2359)")
+print(" | ".join(fails))
+sys.exit(1 if fails else 0)
+PY
+)"; then ok "stable injectors on SessionStart; no dead once:true"
+else bad "cache positioning (MYC-2359)" "$CP_OUT"; fi
 
 echo
 echo "=== summary: $PASS passed, $FAIL failed ==="
