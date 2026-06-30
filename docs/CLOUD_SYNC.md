@@ -54,6 +54,20 @@ bash scripts/relocate-vault.sh ~/Desktop/MyVault ~/MyVault --dry-run
 bash scripts/relocate-vault.sh ~/Desktop/MyVault ~/MyVault
 ```
 
+**On Windows (PowerShell)** use the `.ps1` parity script — same behavior, same
+Claude-history migration, but it leaves a **junction** at the old path (needs no
+admin or Developer Mode, and OneDrive does not sync through it):
+
+```powershell
+# preview first (changes nothing)
+powershell -ExecutionPolicy Bypass -File scripts\relocate-vault.ps1 "$env:USERPROFILE\OneDrive\MyVault" "$env:USERPROFILE\MyVault" -DryRun
+# do it (quit Obsidian + close Claude sessions first; -Force overrides the soft gates)
+powershell -ExecutionPolicy Bypass -File scripts\relocate-vault.ps1 "$env:USERPROFILE\OneDrive\MyVault" "$env:USERPROFILE\MyVault"
+```
+
+The SessionStart cloud-sync offer auto-detects your OS and prints whichever of
+these you can actually run, so you usually do not type this by hand.
+
 Already moved it with a plain `mv` and lost your session picker? Re-home just the
 Claude Code state, no second move:
 
@@ -134,6 +148,20 @@ bash scripts/relocate-machinery-sidecar.sh "/path/to/vault"
 # fully reversible — restores a normal local repo
 bash scripts/relocate-machinery-sidecar.sh "/path/to/vault" --rollback
 ```
+
+**On Windows (PowerShell)** the `.ps1` parity script does the same — `.git` via
+`git init --separate-git-dir` (a static pointer file) and each cache/worktree dir
+as a **junction** to the sidecar:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\relocate-machinery-sidecar.ps1 "C:\path\to\vault" -DryRun
+powershell -ExecutionPolicy Bypass -File scripts\relocate-machinery-sidecar.ps1 "C:\path\to\vault"
+powershell -ExecutionPolicy Bypass -File scripts\relocate-machinery-sidecar.ps1 "C:\path\to\vault" -Rollback
+```
+
+(The bash `--nosync` flag is intentionally not ported: the `.nosync` suffix is an
+iCloud-only convention OneDrive ignores, so on Windows the sidecar relocation is
+the supported path.)
 
 Then turn on iCloud Drive (or Desktop & Documents) for that folder. The docs
 sync to every device; the machinery never leaves your Mac. Verify the calm

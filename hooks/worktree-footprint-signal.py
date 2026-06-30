@@ -200,7 +200,41 @@ def _suggest_local_dest(vault: Path) -> Path:
     return cand
 
 
+def _offer_os() -> str:
+    """Command flavor to print: 'windows' (PowerShell .ps1) or 'posix' (bash .sh).
+
+    Keys on the running OS so a Windows/OneDrive user gets commands they can
+    actually run (MYC-2383: the bash scripts are not natively runnable on
+    Windows). WORKTREE_FOOTPRINT_OS={nt|posix} forces the branch so both can be
+    covered on a single-OS CI runner; it changes ONLY which command strings
+    render, never whether the offer fires.
+    """
+    forced = os.environ.get("WORKTREE_FOOTPRINT_OS", "").strip().lower()
+    if forced in ("nt", "win", "windows"):
+        return "windows"
+    if forced in ("posix", "unix", "mac", "linux"):
+        return "posix"
+    return "windows" if os.name == "nt" else "posix"
+
+
 def _offer_block(vault: Path, service: str, dest: Path) -> str:
+    if _offer_os() == "windows":
+        # Windows PowerShell 5.1 is always present; -ExecutionPolicy Bypass lets
+        # an unsigned local script run. The .ps1 leaves a junction (no admin /
+        # Developer Mode needed), which OneDrive does not sync through.
+        move_cmd = (
+            f'powershell -ExecutionPolicy Bypass -File '
+            f'"{SKILL_SCRIPTS}/relocate-vault.ps1" "{vault}" "{dest}"'
+        )
+        sidecar_cmd = (
+            f'powershell -ExecutionPolicy Bypass -File '
+            f'"{SKILL_SCRIPTS}/relocate-machinery-sidecar.ps1" "{vault}"'
+        )
+        rb = "-Rollback"
+    else:
+        move_cmd = f'bash {SKILL_SCRIPTS}/relocate-vault.sh "{vault}" "{dest}"'
+        sidecar_cmd = f'bash {SKILL_SCRIPTS}/relocate-machinery-sidecar.sh "{vault}"'
+        rb = "--rollback"
     return (
         f"🟡 [cloud-sync] The user's brain `{vault}` is inside **{service}** — the "
         f"#1 cause of the \"whole machine froze\" failure (the sync daemon chokes on "
@@ -212,11 +246,11 @@ def _offer_block(vault: Path, service: str, dest: Path) -> str:
         f"  DEFAULT FIX — run THIS one. It leaves their notes exactly where they are "
         f"(still synced, still on their phone) and just moves the noisy hidden "
         f"machinery (`.git`, worktrees, caches) out of the sync folder so the computer "
-        f"stops choking. Reversible (`--rollback`), deletes nothing:\n"
-        f"      bash {SKILL_SCRIPTS}/relocate-machinery-sidecar.sh \"{vault}\"\n"
+        f"stops choking. Reversible (`{rb}`), deletes nothing:\n"
+        f"      {sidecar_cmd}\n"
         f"  Fallback — ONLY if they explicitly say they don't want {service} at all: "
-        f"move the whole vault to a local disk (leaves a symlink so nothing breaks):\n"
-        f"      bash {SKILL_SCRIPTS}/relocate-vault.sh \"{vault}\" \"{dest}\"\n"
+        f"move the whole vault to a local disk (leaves a link so nothing breaks):\n"
+        f"      {move_cmd}\n"
         f"Say it to them roughly like: \"Your notes are in {service}, and that combo "
         f"can freeze your computer. I can fix it safely in the background — your notes "
         f"don't move and nothing gets deleted. Want me to?\" Don't list both commands "

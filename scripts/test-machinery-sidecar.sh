@@ -150,6 +150,24 @@ rc=$?
 gitq "$VC" status && pass "D git functional after rollback" || fail "D git broke after rollback"
 
 # ---------------------------------------------------------------------------
+# D2. ROLLBACK SURVIVES AN IDEMPOTENT RE-RUN (manifest-clobber regression):
+#     relocate -> re-run (records zero new moves) -> rollback must STILL restore
+#     the repo. A re-run that overwrites the manifest with moves:[] silently
+#     breaks --rollback. This is the negative control for that fix (MYC-2383).
+# ---------------------------------------------------------------------------
+VG="$ROOT/G"
+make_vault "$VG"
+bash "$HELPER" "$VG" --sidecar "$SIDE" --quiet
+bash "$HELPER" "$VG" --sidecar "$SIDE" --quiet            # idempotent re-run
+bash "$HELPER" "$VG" --sidecar "$SIDE" --rollback --quiet
+rc=$?
+[ "$rc" = 0 ] && pass "D2 rollback after re-run exit 0" || fail "D2 rollback after re-run exit=$rc"
+[ -d "$VG/.git" ] && pass "D2 .git restored to a dir after re-run+rollback" \
+                  || fail "D2 .git NOT restored (manifest clobbered by re-run)"
+[ -d "$VG/.smart-env" ] && [ ! -L "$VG/.smart-env" ] && pass "D2 .smart-env restored after re-run+rollback" \
+                                                      || fail "D2 .smart-env NOT restored after re-run"
+
+# ---------------------------------------------------------------------------
 # E. LIVE-WORKTREE GUARD: refuse (exit 1) when a linked worktree exists
 # ---------------------------------------------------------------------------
 VD="$ROOT/D"
