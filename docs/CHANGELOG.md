@@ -9,6 +9,16 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-06-30: faster session startup on big vaults
+
+One of the startup checks counts how many leftover `claude/*` work branches are sitting around (so it can remind you to clean them up). The old version asked git about each branch one at a time. On a small vault that's instant, but on a large vault with a hundred-plus branches it meant a hundred-plus separate git calls every time you opened a session — several seconds of lag before you could do anything, and it got slower the more branches piled up.
+
+It now does the same count in two git calls total, no matter how many branches you have. The reminder is identical; it just arrives instantly. A new test locks this in, so the slow per-branch version can't sneak back.
+
+You don't need to do anything — this applies automatically on update.
+
+---
+
 ## 2026-06-22: Granola sync now uses Granola's official API
 
 If you connected Granola for meeting transcripts, the old sync read Granola's local cache file on your Mac. Granola encrypted and moved that cache in mid-May 2026, so the old script silently stopped finding anything — it exited cleanly and exported nothing, with no error to tell you it had broken.

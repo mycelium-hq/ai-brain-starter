@@ -121,6 +121,7 @@ INTEGRATION_TESTS=(
   test_scan_prior_failclosed_scrub
   test_sessionstart_freeze_class_excluded
   test_sessionstart_boundedness
+  test_orphan_branch_bounded_git
   test_vault_safety_guards
   test_resource_aware_session_close
   test_cloud_sync_guard
