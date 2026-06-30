@@ -9,6 +9,16 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-06-30: Windows installs are now tested for real on every change
+
+If you install on Windows, the setup script (`bootstrap.ps1`) now runs end to end on a clean Windows machine in our automated checks, on every proposed change to this repo. Before, the checks only confirmed the script's syntax was valid; they never actually ran it on Windows. That gap let a real break slip through on 2026-06-27, where a fresh Windows install crashed before any tools, skills, or hooks were set up (the script aborted on an unauthenticated `gh`, and a Windows path broke the hook installer).
+
+The new check starts from a clean slate (no GitHub login, a fresh Python), runs the whole installer under Windows PowerShell 5.1, and then confirms three things actually happened: the install finished without crashing, your prompt hooks got wired into `settings.json`, and the connectors registered. If a future change reintroduces that kind of break, the check turns red and it cannot ship.
+
+You do not need to do anything. This only affects how changes to this repo are tested.
+
+---
+
 ## 2026-06-30: faster session startup on big vaults
 
 One of the startup checks counts how many leftover `claude/*` work branches are sitting around (so it can remind you to clean them up). The old version asked git about each branch one at a time. On a small vault that's instant, but on a large vault with a hundred-plus branches it meant a hundred-plus separate git calls every time you opened a session — several seconds of lag before you could do anything, and it got slower the more branches piled up.
