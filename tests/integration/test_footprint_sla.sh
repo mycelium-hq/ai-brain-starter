@@ -153,6 +153,71 @@ PY
 )"; then ok "stable injectors on SessionStart; no dead once:true"
 else bad "cache positioning (MYC-2359)" "$CP_OUT"; fi
 
+echo "=== 7. LIVE settings.json measurement (MYC-2396): --measure-live ==="
+# Axis D-live measures an install's ACTUAL ~/.claude/settings.json (owned + unowned +
+# non-.py + per-tool injectors the template-only axis D skips) by executing the literal
+# wired command. Advisory; never gates. This locks the wiring at integration level: a
+# regression to template-only behavior would drop the non-.py / per-tool asserts below.
+LIVE="$(mktemp -d)"
+TMPDIRS+=("$LIVE")
+cat > "$LIVE/uncond.py" <<'PY'
+import json
+print(json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
+                                          "additionalContext": "U" * 4000}}))
+PY
+cat > "$LIVE/pre.py" <<'PY'
+import json
+print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
+                                          "additionalContext": "P" * 2000}}))
+PY
+# A synthetic settings.json: an unconditional .py UPS injector, a non-.py inline-bash
+# UPS injector, a JSON no-op, and a per-tool PreToolUse injector.
+python3 - "$LIVE" > "$LIVE/settings.json" <<'PY'
+import json, os, sys
+d = sys.argv[1]
+bash_inj = ("echo '{\"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\", "
+            "\"additionalContext\": \"" + "B" * 1200 + "\"}}'")
+print(json.dumps({"hooks": {
+    "UserPromptSubmit": [{"hooks": [
+        {"type": "command", "command": f"python3 {os.path.join(d, 'uncond.py')}"},
+        {"type": "command", "command": bash_inj},
+        {"type": "command", "command": "echo '{\"continue\": true, \"suppressOutput\": true}'"},
+    ]}],
+    "PreToolUse": [{"matcher": "Write|Edit", "hooks": [
+        {"type": "command", "command": f"python3 {os.path.join(d, 'pre.py')}"},
+    ]}],
+}}))
+PY
+OUT="$(python3 "$GATE" --measure-live --execute --settings "$LIVE/settings.json" --event all 2>&1)"
+if echo "$OUT" | grep -q "Move it to SessionStart"; then
+  ok "measure-live flags an unconditional UPS injector with a relocate-to-SessionStart hint"
+else bad "measure-live relocate hint" "expected a SessionStart hint; got: $OUT"; fi
+if echo "$OUT" | grep -q "PreToolUse - injected tokens"; then
+  ok "measure-live covers per-tool (PreToolUse) injectors"
+else bad "measure-live per-tool coverage" "expected a PreToolUse line; got: $OUT"; fi
+# non-.py coverage: a settings.json whose ONLY UPS injector is the inline-bash form
+# must still yield a nonzero headline (the template axis D would score it 0).
+python3 - "$LIVE" > "$LIVE/settings-bashonly.json" <<'PY'
+import json, sys
+bash_inj = ("echo '{\"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\", "
+            "\"additionalContext\": \"" + "B" * 1200 + "\"}}'")
+print(json.dumps({"hooks": {"UserPromptSubmit": [{"hooks": [
+    {"type": "command", "command": bash_inj}]}]}}))
+PY
+OUT_BASH="$(python3 "$GATE" --measure-live --execute --settings "$LIVE/settings-bashonly.json" --event UserPromptSubmit 2>&1)"
+if echo "$OUT_BASH" | grep -q "Headline: ~0 tokens"; then
+  bad "measure-live non-.py coverage" "an inline-bash injector measured 0 (template axis D blind spot not closed): $OUT_BASH"
+else ok "measure-live covers non-.py (inline-bash) injectors"; fi
+# structural-only mode (no --execute) must NOT execute (no Headline line).
+OUT2="$(python3 "$GATE" --measure-live --settings "$LIVE/settings.json" 2>&1)"
+if echo "$OUT2" | grep -qi "Structural inventory only" && ! echo "$OUT2" | grep -q "Headline:"; then
+  ok "measure-live without --execute is structural-only (no execution)"
+else bad "measure-live structural-only" "expected structural-only, no Headline; got: $OUT2"; fi
+# missing settings.json -> graceful exit 0 (advisory never blocks).
+if python3 "$GATE" --measure-live --execute --settings "$LIVE/nope.json" >/dev/null 2>&1; then
+  ok "measure-live on a missing settings.json exits 0 (advisory)"
+else bad "measure-live missing settings" "advisory mode should exit 0 on a missing settings.json"; fi
+
 echo
 echo "=== summary: $PASS passed, $FAIL failed ==="
 [ "$FAIL" -eq 0 ]
