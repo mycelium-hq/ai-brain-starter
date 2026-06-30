@@ -1,10 +1,10 @@
 {
-  "_doc": "Footprint SLA budgets for the ai-brain-starter hook fleet. HARD axes (block merge): per-event/per-tool substrate cold-start fan-out + default-on daemon count. Advisory axes (timing, injected bytes) are reported by --measure, never gated. See docs/adr/0004-footprint-sla-gate.md.",
+  "_doc": "Footprint SLA budgets for the ai-brain-starter hook fleet. HARD axes (block merge): per-event/per-tool substrate cold-start fan-out + default-on daemon count + DEAD once:true flags (a once flag is ignored in settings.json -> a 'once' hook re-fires every event; move it to SessionStart). Advisory: per-hook timing + per-message injected tokens (axis D, injected_tokens_per_message ceiling) are reported by --measure --execute, gated in CI only via --selftest controls. See docs/adr/0004-footprint-sla-gate.md.",
   "_headroom": 2,
   "_baseline_measured": {
     "per_event": {
-      "SessionStart": 14,
-      "UserPromptSubmit": 6,
+      "SessionStart": 16,
+      "UserPromptSubmit": 7,
       "Stop": 3,
       "PreCompact": 1,
       "SessionEnd": 1
@@ -35,8 +35,8 @@
     "daemons": 0
   },
   "fanout_per_event": {
-    "SessionStart": 16,
-    "UserPromptSubmit": 8,
+    "SessionStart": 18,
+    "UserPromptSubmit": 9,
     "Stop": 5,
     "PreCompact": 3,
     "SessionEnd": 3
@@ -64,5 +64,6 @@
       "Agent": 3
     }
   },
-  "default_on_daemons": 0
+  "default_on_daemons": 0,
+  "injected_tokens_per_message": 100
 }

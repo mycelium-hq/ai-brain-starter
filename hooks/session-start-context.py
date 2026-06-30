@@ -9,7 +9,14 @@ shell-runner contexts, blocking every UserPromptSubmit. Moving the JSON
 into a Python script with json.dumps removes the shell-quoting surface
 entirely.
 
-Fires once per session via the `once: true` UserPromptSubmit hook.
+Wired on SessionStart (NOT UserPromptSubmit): this is session-start guidance,
+needed once. `once: true` is IGNORED in settings.json — the installer merges
+this hooks.json into ~/.claude/settings.json, where a UPS `once` hook silently
+re-fires EVERY message. Measured: this block + the instinct block re-injected
+17x / 14x in one real session (MYC-2359). SessionStart fires once per
+session-segment (startup / resume / post-compact), so the block lands in the
+cached prefix and is served as cache-reads thereafter, not re-billed as fresh
+tokens every turn.
 """
 import json
 import sys
@@ -49,7 +56,7 @@ CONTEXT = (
 def main() -> int:
     payload = {
         "hookSpecificOutput": {
-            "hookEventName": "UserPromptSubmit",
+            "hookEventName": "SessionStart",
             "additionalContext": CONTEXT,
         }
     }

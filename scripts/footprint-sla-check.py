@@ -22,20 +22,32 @@ DETERMINISTIC axes that parse committed source - no timing, no execution:
   HARD (block merge):
     A. per-event substrate cold-start FAN-OUT count vs budget. This is the
        CPU/battery axis (N cold `python3` spawns) AND a reliability axis (one
-       slow hook stalls the whole event to its timeout). Per-message events
-       exclude `once: true` entries (they fire once per session, not per turn -
-       so UPS steady = the recurring cost). PreToolUse / PostToolUse are
-       matcher-gated, so fan-out is computed PER TOOL (Write / Edit / Bash / ...).
+       slow hook stalls the whole event to its timeout). ALL substrate-python
+       entries count: `once: true` is IGNORED in settings.json (this hooks.json's
+       merge target), so a `once` hook fires every event, not once - it is counted,
+       and separately FLAGGED as a dead-flag breach (MYC-2359). PreToolUse /
+       PostToolUse are matcher-gated, so fan-out is computed PER TOOL.
     B. default-on background daemon count (idle-CPU axis) - a coarse structural
        tripwire: the default install path (bootstrap.sh) must wire 0 launchd/cron
        daemons (daemons are opt-in). Trips if a change makes one default-on.
+    E. DEAD once:true flags. Any `once: true` in this (settings-merged) hooks.json
+       is a no-op that silently makes a "once-per-session" hook re-fire every event
+       - the recurring-injection bug class (MYC-2359). A hard breach: move the hook
+       to SessionStart (fires once per session-segment -> cached prefix) or drop
+       the flag. Static, no execution. Negative control in --selftest.
 
   ADVISORY (printed by --measure --execute, NEVER blocks CI):
     C. per-hook cold-start TIME (median vs the bare `python3 -c pass` floor) and
        the per-event felt = MAX(hook). Flaky on shared runners -> reported only.
-    D. per-message injected BYTES from the UserPromptSubmit context-injectors -
-       the recurring-token axis (MYC-2359). Install-specific (a clean CI box has
-       no vault) -> reported only.
+    D. per-message injected TOKENS from the UserPromptSubmit context-injectors -
+       the recurring-token axis (MYC-2359). Executes each UPS substrate hook with a
+       NEUTRAL prompt in a sandboxed HOME and sums emitted additionalContext
+       (tokens ~= bytes/4) vs an advisory budget. A well-behaved conditional hook
+       emits nothing on a neutral prompt (-> 0); an UNCONDITIONAL stable injector
+       shows its full block - which is why such injectors belong on SessionStart
+       (once, cached), not UPS (every message, fresh tokens). Real-fleet number is
+       install-dependent -> advisory; the LOGIC is gated deterministically by the
+       --selftest pos/neg synthetic controls.
 
 SessionStart *boundedness* (the corpus-walk freeze class) is a SEPARATE, already
 -wired gate (scripts/audit-sessionstart-boundedness.py + test_sessionstart_boundedness.sh).
@@ -205,13 +217,19 @@ def _matcher_matches(matcher: str | None, tool: str) -> bool:
 
 def event_fanout(fleet: dict, event: str) -> dict:
     """Fan-out for a NON-matcher event. Returns counts by class + the budgeted
-    metric (substrate-python entries that are NOT once:true = the recurring cost),
-    plus the once-only first-message extra and any substrate basenames missing in
-    the repo (a wiring-drift integrity note)."""
+    metric (ALL substrate-python entries = the recurring cold-start cost) and any
+    substrate basenames missing in the repo (a wiring-drift integrity note).
+
+    `once: true` does NOT reduce the count: this hooks.json is merged into
+    ~/.claude/settings.json by install-hooks-user-level.py, and `once` is IGNORED
+    in settings files (only honored in skill frontmatter). A `once` UPS hook
+    therefore fires EVERY message, not once per session (MYC-2359). `dead_once`
+    counts those misleading flags so the gate can flag them; it never discounts
+    the fan-out."""
     counts = {"substrate-python": 0, "userlevel-guarded": 0, "vault-script": 0,
               "inline-bash": 0}
-    budgeted = 0          # substrate-python AND not once:true (recurring)
-    once_only = 0         # substrate-python AND once:true (first-message extra)
+    budgeted = 0          # ALL substrate-python (once is dead in settings.json -> recurring)
+    dead_once = 0         # substrate-python entries carrying a (dead, ignored) once:true
     basenames: list[str] = []
     for block in fleet.get(event, []):
         for e in block["entries"]:
@@ -219,18 +237,20 @@ def event_fanout(fleet: dict, event: str) -> dict:
             counts[klass] += 1
             if klass == "substrate-python":
                 basenames.append(bn) if bn else None
+                budgeted += 1
                 if e["once"]:
-                    once_only += 1
-                else:
-                    budgeted += 1
-    return {"counts": counts, "budgeted": budgeted, "once_only": once_only,
+                    dead_once += 1
+    return {"counts": counts, "budgeted": budgeted, "dead_once": dead_once,
             "entries": sum(counts.values()), "basenames": basenames}
 
 
 def tool_fanout(fleet: dict, event: str, tool: str) -> dict:
-    """Fan-out for a matcher-gated event, for one tool. Budgeted = substrate-python
-    blocks whose matcher fires for this tool (excluding once:true)."""
+    """Fan-out for a matcher-gated event, for one tool. Budgeted = ALL
+    substrate-python blocks whose matcher fires for this tool. `once` is NOT
+    discounted (it is ignored in settings.json; see event_fanout); a once flag on
+    such an entry is counted in dead_once."""
     budgeted = 0
+    dead_once = 0
     basenames: list[str] = []
     classes = {"substrate-python": 0, "userlevel-guarded": 0, "vault-script": 0,
                "inline-bash": 0}
@@ -240,11 +260,14 @@ def tool_fanout(fleet: dict, event: str, tool: str) -> dict:
         for e in block["entries"]:
             klass, bn = classify_command(e["command"])
             classes[klass] += 1
-            if klass == "substrate-python" and not e["once"]:
+            if klass == "substrate-python":
                 budgeted += 1
+                if e["once"]:
+                    dead_once += 1
                 if bn:
                     basenames.append(bn)
-    return {"budgeted": budgeted, "classes": classes, "basenames": basenames}
+    return {"budgeted": budgeted, "dead_once": dead_once, "classes": classes,
+            "basenames": basenames}
 
 
 def daemon_count(bootstrap: Path) -> int:
@@ -270,6 +293,28 @@ def missing_in_repo(fleet: dict, hooks_dir: Path, scripts_dir: Path) -> list[str
     return sorted(missing)
 
 
+def dead_once_flags(fleet: dict) -> list[str]:
+    """Entries carrying `once: true`. This hooks.json is merged into
+    ~/.claude/settings.json by install-hooks-user-level.py, and `once` is IGNORED
+    in settings files (only honored in skill frontmatter) - so the flag is DEAD:
+    the hook fires at its event's FULL cadence (every message on UserPromptSubmit),
+    not once per session. A stable per-session injector that relies on it therefore
+    re-injects every turn instead of landing once in the cached prefix - the exact
+    recurring-token waste MYC-2359 fixes (instinct + session-start-context were
+    measured re-injecting 14x / 17x in one session). Returns "event:basename"
+    labels; empty = clean. A hard gate breach: move the hook to SessionStart (fires
+    once per session-segment) or drop the no-op flag."""
+    out: list[str] = []
+    for event, blocks in fleet.items():
+        for block in blocks:
+            for e in block["entries"]:
+                if not e.get("once"):
+                    continue
+                _, bn = classify_command(e["command"])
+                out.append(f"{event}:{bn or '<inline/non-substrate>'}")
+    return sorted(out)
+
+
 # ---- current footprint snapshot ----------------------------------------------
 def snapshot(fleet: dict, bootstrap: Path) -> dict:
     """The deterministic current footprint: budgeted fan-out per event + per tool
@@ -288,10 +333,13 @@ def load_budgets(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def build_budgets(snap: dict, headroom: int) -> dict:
+def build_budgets(snap: dict, headroom: int, injected_tokens_ceiling: int = 100) -> dict:
     """Budgets = current measured + headroom (per-tool budgets only for tools with
     a nonzero fan-out, plus the mcp class). Records the measured baseline for
-    transparency."""
+    transparency. `injected_tokens_per_message` is a FIXED advisory ceiling (not a
+    measured ratchet - axis D execution is install/runner-dependent, so a ceiling is
+    more honest than ratcheting on a flaky measurement); it is preserved across
+    --update-budgets."""
     per_event = {ev: n + headroom for ev, n in snap["per_event"].items()}
     per_tool: dict[str, dict[str, int]] = {}
     for ev, tools in snap["per_tool"].items():
@@ -299,9 +347,12 @@ def build_budgets(snap: dict, headroom: int) -> dict:
     return {
         "_doc": "Footprint SLA budgets for the ai-brain-starter hook fleet. "
                 "HARD axes (block merge): per-event/per-tool substrate cold-start "
-                "fan-out + default-on daemon count. Advisory axes (timing, "
-                "injected bytes) are reported by --measure, never gated. "
-                "See docs/adr/0004-footprint-sla-gate.md.",
+                "fan-out + default-on daemon count + DEAD once:true flags (a once "
+                "flag is ignored in settings.json -> a 'once' hook re-fires every "
+                "event; move it to SessionStart). Advisory: per-hook timing + "
+                "per-message injected tokens (axis D, injected_tokens_per_message "
+                "ceiling) are reported by --measure --execute, gated in CI only via "
+                "--selftest controls. See docs/adr/0004-footprint-sla-gate.md.",
         "_headroom": headroom,
         "_baseline_measured": {"per_event": snap["per_event"],
                                "per_tool": {ev: {t: n for t, n in tools.items() if n > 0}
@@ -310,6 +361,7 @@ def build_budgets(snap: dict, headroom: int) -> dict:
         "fanout_per_event": per_event,
         "fanout_per_tool": per_tool,
         "default_on_daemons": snap["daemons"],
+        "injected_tokens_per_message": injected_tokens_ceiling,
     }
 
 
@@ -361,17 +413,19 @@ def cmd_gate(hooks_json: Path, hooks_dir: Path, scripts_dir: Path,
     snap = snapshot(fleet, bootstrap)
     breaches = evaluate(snap, budgets)
     drift = missing_in_repo(fleet, hooks_dir, scripts_dir)
+    dead = dead_once_flags(fleet)
 
     if as_json:
         print(json.dumps({"snapshot": snap, "breaches": breaches,
-                          "missing_in_repo": drift}, indent=2))
-        return 1 if breaches else 0
+                          "missing_in_repo": drift, "dead_once_flags": dead}, indent=2))
+        return 1 if (breaches or dead) else 0
 
     print("=" * 78)
     print("Footprint SLA gate (MYC-2358) - hook fan-out + default-on daemons")
     print("=" * 78)
     print(f"hooks.json: {hooks_json}\nbudgets:    {budgets_path}\n")
-    print("Per-event substrate cold-start fan-out (recurring; excludes once:true):")
+    print("Per-event substrate cold-start fan-out (recurring; once:true is a DEAD "
+          "flag in settings.json - counted, not excluded):")
     bpe = budgets.get("fanout_per_event", {})
     for ev in NON_MATCHER_EVENTS:
         m = snap["per_event"][ev]
@@ -395,6 +449,13 @@ def cmd_gate(hooks_json: Path, hooks_dir: Path, scripts_dir: Path,
     if drift:
         print(f"\n  note: {len(drift)} substrate hook(s) wired but missing in repo "
               f"(hooks/+scripts/): {', '.join(drift)}")
+    if dead:
+        print("\nDEAD once:true FLAG(S) - ignored in settings.json (only honored in "
+              "skill frontmatter), so the hook fires EVERY event, not once per session:")
+        for label in dead:
+            print(f"  - {label}: re-fires every {label.split(':')[0]}. Move it to "
+                  f"SessionStart (fires once per session-segment -> cached prefix) or "
+                  f"drop the no-op flag. (MYC-2359)")
     if breaches:
         print("\nFOOTPRINT BUDGET EXCEEDED:")
         for br in breaches:
@@ -406,6 +467,7 @@ def cmd_gate(hooks_json: Path, hooks_dir: Path, scripts_dir: Path,
                       f"{br['budget']}. Optimize the fan-out (Stage 2: precise "
                       f"triggers / async / dispatcher) or, if intentional, raise "
                       f"the budget with a one-line rationale.")
+    if breaches or dead:
         return 1
     print("\nAll footprint axes within budget. OK.")
     return 0
@@ -432,15 +494,70 @@ def _time_script(path: Path, runs: int, env_home: str) -> float | None:
     return samples[len(samples) // 2]
 
 
+def _estimate_tokens(text: str) -> int:
+    """Cheap token estimate (~4 chars/token; stdlib-only, no tokenizer dep)."""
+    return (len(text) + 3) // 4
+
+
+def measure_injected_tokens(fleet: dict, hooks_dir: Path, scripts_dir: Path,
+                            env_home: str, prompt: str = "ping") -> dict:
+    """Axis D (MYC-2359): the per-MESSAGE recurring injected-token cost. Executes
+    each UserPromptSubmit substrate hook with a NEUTRAL prompt payload in a
+    sandboxed HOME, parses hookSpecificOutput.additionalContext, and sums tokens
+    (~bytes/4). A well-behaved CONDITIONAL hook (love-language / meeting-workflow)
+    emits nothing on a neutral prompt -> 0. An UNCONDITIONAL stable injector emits
+    its full block every message -> counted: that block belongs on SessionStart
+    (once, cached prefix), not UPS (every message, fresh tokens). SessionStart
+    hooks are intentionally NOT measured here - they fire once per session-segment,
+    not per message, so they cost ~0 per message. Returns {total_tokens, per_hook:
+    [(basename, tokens)]}. Executes hooks -> advisory only, never the static gate."""
+    import os
+    env = dict(os.environ)
+    env["HOME"] = env_home
+    payload = json.dumps({"prompt": prompt,
+                          "hook_event_name": "UserPromptSubmit"}).encode()
+    per_hook: list[tuple[str, int]] = []
+    seen: set[str] = set()
+    for block in fleet.get("UserPromptSubmit", []):
+        for e in block["entries"]:
+            klass, bn = classify_command(e["command"])
+            # Only execute .py injectors: a .sh basename (e.g. an inline-bash entry
+            # that merely references a shell helper) is not a python additionalContext
+            # injector, and running it via python3 would just error to 0.
+            if klass != "substrate-python" or not bn or not bn.endswith(".py") or bn in seen:
+                continue
+            seen.add(bn)
+            p = resolve_substrate(bn, hooks_dir, scripts_dir)
+            if p is None:
+                continue
+            try:
+                r = subprocess.run([sys.executable, str(p)], input=payload,
+                                   capture_output=True, timeout=20, env=env)
+                out = r.stdout.decode("utf-8", "ignore")
+            except Exception:
+                continue
+            tokens = 0
+            try:
+                ac = (json.loads(out).get("hookSpecificOutput") or {}).get("additionalContext")
+                if isinstance(ac, str):
+                    tokens = _estimate_tokens(ac)
+                elif isinstance(ac, list):
+                    tokens = _estimate_tokens("".join(str(x) for x in ac))
+            except Exception:
+                tokens = 0
+            per_hook.append((bn, tokens))
+    return {"total_tokens": sum(t for _, t in per_hook), "per_hook": per_hook}
+
+
 def cmd_measure(hooks_json: Path, hooks_dir: Path, scripts_dir: Path,
-                bootstrap: Path, execute: bool) -> int:
+                bootstrap: Path, execute: bool, budgets_path: Path) -> int:
     fleet = load_fleet(hooks_json)
     snap = snapshot(fleet, bootstrap)
     print("Footprint measurement (advisory - no pass/fail)\n")
     print("Per-event recurring substrate cold-start fan-out:")
     for ev in NON_MATCHER_EVENTS:
         fo = event_fanout(fleet, ev)
-        extra = f"  (+{fo['once_only']} once:true first-message)" if fo["once_only"] else ""
+        extra = f"  (!{fo['dead_once']} DEAD once:true - fires every event)" if fo["dead_once"] else ""
         print(f"    {ev:<18} budgeted={fo['budgeted']:>3}  entries={fo['entries']:>3}  "
               f"classes={fo['counts']}{extra}")
     print("\nPer-tool matcher-gated fan-out:")
@@ -497,9 +614,30 @@ def cmd_measure(hooks_json: Path, hooks_dir: Path, scripts_dir: Path,
                     print(f"    {ev:<18} felt=MAX {felt_max:6.1f} ms over "
                           f"{len(times)} hook(s); slowest "
                           f"{max(times, key=lambda x: x[1])[0]}")
-    print("\n(Per-message injected-byte measurement (axis D, MYC-2359) needs a "
-          "populated vault; on a clean box it is ~0. Run on a real install to "
-          "size the recurring-token cost.)")
+    # --- advisory D: per-message injected tokens from UPS injectors (MYC-2359) ---
+    itb = None
+    try:
+        itb = load_budgets(budgets_path).get("injected_tokens_per_message")
+    except Exception:
+        pass
+    with tempfile.TemporaryDirectory() as home2:
+        inj = measure_injected_tokens(fleet, hooks_dir, scripts_dir, home2)
+    over = itb is not None and inj["total_tokens"] > itb
+    print(f"\nPer-message injected tokens from UPS context-injectors "
+          f"(axis D, MYC-2359; neutral prompt, sandboxed HOME):")
+    print(f"    total = {inj['total_tokens']} tokens / "
+          f"{('-' if itb is None else itb)} budget{'  OVER' if over else ''}")
+    nonzero = [(bn, t) for bn, t in inj["per_hook"] if t > 0]
+    if nonzero:
+        for bn, t in nonzero:
+            print(f"      {bn}: {t} tokens - UNCONDITIONAL on a neutral prompt; this "
+                  f"stable block belongs on SessionStart (once, cached), not UPS.")
+    else:
+        print("      (every UPS substrate hook emits nothing on a neutral prompt - "
+              "stable injectors live on SessionStart, served as cache-reads.)")
+    print("\n(Axis C timing + axis D tokens are ADVISORY - install / runner "
+          "dependent. CI gates the LOGIC via --selftest pos/neg controls, not these "
+          "raw numbers.)")
     return 0
 
 
@@ -508,12 +646,22 @@ def cmd_update_budgets(hooks_json: Path, bootstrap: Path, budgets_path: Path,
                        headroom: int) -> int:
     fleet = load_fleet(hooks_json)
     snap = snapshot(fleet, bootstrap)
-    budgets = build_budgets(snap, headroom)
+    # Preserve the existing injected-token ceiling (a fixed advisory value, not a
+    # ratchet) so a fan-out regen never silently resets it.
+    ceiling = 100
+    try:
+        existing = load_budgets(budgets_path).get("injected_tokens_per_message")
+        if isinstance(existing, int):
+            ceiling = existing
+    except Exception:
+        pass
+    budgets = build_budgets(snap, headroom, ceiling)
     budgets_path.write_text(json.dumps(budgets, indent=2) + "\n", encoding="utf-8")
     print(f"Wrote {budgets_path} (headroom={headroom}).")
     print(f"  per-event budgets: {budgets['fanout_per_event']}")
     print(f"  per-tool budgets:  {budgets['fanout_per_tool']}")
     print(f"  default_on_daemons: {budgets['default_on_daemons']}")
+    print(f"  injected_tokens_per_message: {budgets['injected_tokens_per_message']}")
     return 0
 
 
@@ -624,14 +772,85 @@ def cmd_selftest() -> int:
         if rc != 1:
             fails.append(f"NO-BUDGET: ungoverned Write fan-out should exit 1, got {rc}")
 
+        # 7. DEAD-ONCE NEGATIVE CONTROL (MYC-2359): a once:true substrate hook on
+        #    UserPromptSubmit is a DEAD flag in settings.json -> --gate BITES.
+        #    Uses a dedicated clean (0-daemon) bootstrap so the ONLY breach is the
+        #    dead-once flag (the synthetic bootstraps above share one path).
+        bs_clean = d / "bootstrap-clean.sh"
+        bs_clean.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+        budgets_ok = {"fanout_per_event": {ev: 50 for ev in NON_MATCHER_EVENTS},
+                      "fanout_per_tool": {"PreToolUse": {}, "PostToolUse": {}},
+                      "default_on_daemons": 0}
+        bp3 = d / "budgets-ok.json"
+        bp3.write_text(json.dumps(budgets_ok), encoding="utf-8")
+        ups_cmd = "python3 ~/.claude/skills/ai-brain-starter/hooks/inj.py 2>/dev/null || echo '{}'"
+        hj_once = d / "hooks-once.json"
+        hj_once.write_text(json.dumps({"hooks": {"UserPromptSubmit": [
+            {"hooks": [{"type": "command", "command": ups_cmd, "once": True}]}]}}),
+            encoding="utf-8")
+        rc = cmd_gate(hj_once, hooks_dir, scripts_dir, bp3, bs_clean, as_json=True)
+        if rc != 1:
+            fails.append(f"DEAD-ONCE-NEG: once:true UPS hook should exit 1, got {rc}")
+
+        # 7b. DEAD-ONCE POSITIVE CONTROL: the SAME hook without once -> clean (the
+        #     once flag, not the hook, is what trips the breach).
+        hj_noonce = d / "hooks-noonce.json"
+        hj_noonce.write_text(json.dumps({"hooks": {"UserPromptSubmit": [
+            {"hooks": [{"type": "command", "command": ups_cmd}]}]}}), encoding="utf-8")
+        rc = cmd_gate(hj_noonce, hooks_dir, scripts_dir, bp3, bs_clean, as_json=True)
+        if rc != 0:
+            fails.append(f"DEAD-ONCE-POS: non-once UPS hook within budget should exit 0, got {rc}")
+
+        # 8. AXIS D (MYC-2359) pos/neg: measure_injected_tokens scores an
+        #    UNCONDITIONAL UPS injector at its full block, a CONDITIONAL one at 0 on
+        #    a neutral prompt (it belongs on UPS; the unconditional one belongs on
+        #    SessionStart, cached).
+        (hooks_dir / "uncond.py").write_text(
+            "import json\n"
+            "print(json.dumps({'hookSpecificOutput': {'hookEventName': "
+            "'UserPromptSubmit', 'additionalContext': 'X' * 4000}}))\n",
+            encoding="utf-8")
+        (hooks_dir / "cond.py").write_text(
+            "import sys, json\n"
+            "try:\n"
+            "    pr = json.loads(sys.stdin.read()).get('prompt', '')\n"
+            "except Exception:\n"
+            "    pr = ''\n"
+            "if 'magic-trigger' in pr:\n"
+            "    print(json.dumps({'hookSpecificOutput': {'hookEventName': "
+            "'UserPromptSubmit', 'additionalContext': 'Y' * 4000}}))\n"
+            "else:\n"
+            "    print(json.dumps({'continue': True, 'suppressOutput': True}))\n",
+            encoding="utf-8")
+        hj_inj = d / "hooks-inj.json"
+        hj_inj.write_text(json.dumps({"hooks": {"UserPromptSubmit": [{"hooks": [
+            {"type": "command", "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/uncond.py"},
+            {"type": "command", "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/cond.py"},
+        ]}]}}), encoding="utf-8")
+        with tempfile.TemporaryDirectory() as home_inj:
+            inj = measure_injected_tokens(load_fleet(hj_inj), hooks_dir, scripts_dir,
+                                          home_inj, prompt="ping")
+        upm = dict(inj["per_hook"])
+        if upm.get("uncond.py", 0) < 500:
+            fails.append(f"AXIS-D-NEG: unconditional injector should measure >500 tokens, "
+                         f"got {upm.get('uncond.py')}")
+        if upm.get("cond.py", -1) != 0:
+            fails.append(f"AXIS-D-POS: conditional injector should measure 0 on a neutral "
+                         f"prompt, got {upm.get('cond.py')}")
+        if inj["total_tokens"] <= 100:
+            fails.append(f"AXIS-D: an unconditional block should exceed the 100-token "
+                         f"ceiling, got total {inj['total_tokens']}")
+
     if fails:
         print("SELFTEST FAIL:")
         for f in fails:
             print("  - " + f)
         return 1
     print("SELFTEST PASS: gate bites over-budget fan-out + default-on daemons + "
-          "ungoverned surfaces, passes within-budget, fails loud on missing "
-          "hooks.json/budgets; classification + matcher logic correct.")
+          "ungoverned surfaces + DEAD once:true flags (MYC-2359), passes "
+          "within-budget, fails loud on missing hooks.json/budgets; axis-D "
+          "injected-token measurement scores an unconditional UPS injector high and "
+          "a conditional one at 0; classification + matcher logic correct.")
     return 0
 
 
@@ -664,7 +883,8 @@ def main() -> int:
                                       Path(a.budgets), a.headroom)
         if a.measure:
             return cmd_measure(Path(a.hooks_json), Path(a.hooks_dir),
-                               Path(a.scripts_dir), Path(a.bootstrap), a.execute)
+                               Path(a.scripts_dir), Path(a.bootstrap), a.execute,
+                               Path(a.budgets))
         if a.gate:
             return cmd_gate(Path(a.hooks_json), Path(a.hooks_dir), Path(a.scripts_dir),
                             Path(a.budgets), Path(a.bootstrap), a.json)

@@ -9,6 +9,35 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-06-30: stop re-sending session context on every message (cheaper, leaner)
+
+Two startup hooks load standing context for the session: the session-start guidance
+block (which files to read, always-active rules) and your project-scoped instincts.
+Both were meant to run **once per session**. They didn't.
+
+They relied on a `once` flag that Claude Code only honors for hooks declared inside a
+skill — and **ignores** when the hook lives in your `settings.json`, which is exactly
+where the installer puts them. So instead of loading once, both blocks were being
+re-injected on **every single message**. In one real session we measured the
+instinct block re-sent 14 times and the session-start block 17 times — the same text,
+paid for as fresh tokens each turn, and piling up duplicate copies that eat into the
+context window. It compounds the longer you work.
+
+The fix moves both hooks to run at session start, where the text lands in the part of
+the prompt Claude Code caches — so it's loaded once and re-used as a cheap cache-read
+for the rest of the session (and re-loaded automatically after a compaction). Claude
+still sees the same guidance on every turn; you just stop paying to re-send it. After
+the change, the per-message injected-token cost from these hooks measures **zero**.
+
+The footprint gate now catches this whole class of mistake: a `once` flag in
+`settings.json` is flagged as a hard error (it's a no-op there), and a new check
+measures how many tokens your prompt hooks inject on a neutral message, so a
+stable block that re-sends every turn can't slip back in.
+
+You don't need to do anything — this applies automatically on update.
+
+---
+
 ## 2026-06-30: Windows installs are now tested for real on every change
 
 If you install on Windows, the setup script (`bootstrap.ps1`) now runs end to end on a clean Windows machine in our automated checks, on every proposed change to this repo. Before, the checks only confirmed the script's syntax was valid; they never actually ran it on Windows. That gap let a real break slip through on 2026-06-27, where a fresh Windows install crashed before any tools, skills, or hooks were set up (the script aborted on an unauthenticated `gh`, and a Windows path broke the hook installer).

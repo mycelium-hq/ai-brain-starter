@@ -197,10 +197,16 @@ concurrently, so felt latency is `MAX`, not `SUM`, and a wall-clock gate would
 flake on CI and teach bypass):
 
 - **per-event / per-tool substrate cold-start fan-out** vs `footprint-budgets.json`
-  (per-message events exclude `once: true`; `PreToolUse`/`PostToolUse` are
+  (ALL substrate-python entries count — `once: true` is IGNORED in settings.json,
+  so a `once` hook re-fires every event, not once; `PreToolUse`/`PostToolUse` are
   per-tool; `[ -f ~/.claude/hooks/… ]`-guarded maintainer hooks no-op on a fresh
   install and are excluded);
-- **default-on daemon count** — the default install (`bootstrap.sh`) wires 0.
+- **default-on daemon count** — the default install (`bootstrap.sh`) wires 0;
+- **dead `once: true` flags** — any `once` in this settings-merged `hooks.json` is a
+  no-op that silently makes a "once-per-session" hook re-fire every event (the
+  recurring-injection bug class, MYC-2359). A hard breach: move the hook to
+  SessionStart (fires once per session-segment → lands in the cached prefix) or drop
+  the flag. See [adr/0005-cache-position-injected-context.md](adr/0005-cache-position-injected-context.md).
 
 Budgets are `measured + headroom`, so the gate ships green and bites on growth;
 `_baseline_measured` records the snapshot. Tighten with `--update-budgets` as the
