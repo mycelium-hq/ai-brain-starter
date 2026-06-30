@@ -170,12 +170,49 @@ python3 scripts/audit-sessionstart-boundedness.py --all   # CI gate; lists every
   bounded-hook guards (flock + stamp-at-START + wall deadline) or a co-located
   `# sessionstart-walk-bounded:` exemption. Mechanizes the **Bound** column above
   so it cannot silently rot when hook #N+1 is added. Ships pos/neg controls.
+- `tests/integration/test_footprint_sla.sh` — the **fan-out** guard (via
+  `scripts/footprint-sla-check.py --gate`): asserts the fleet's per-event /
+  per-tool cold-start fan-out and the default-on daemon count stay within
+  `footprint-budgets.json`. The boundedness guard above governs each hook's
+  *work shape*; this one governs the *fleet's footprint* (how many cold starts a
+  hot event pays). See [adr/0004-footprint-sla-gate.md](adr/0004-footprint-sla-gate.md).
+  Ships pos/neg controls.
 - `tests/integration/test_scan_prior_single_instance.sh` — a second concurrent
   scan run backs off (no pile-up), even if the scan is invoked directly.
 - `tests/integration/test_remediate_runaway_procs.sh` — the reaper's pos/neg
   controls (reaps a wedged hook proc; never reaps self or a non-python proc).
 - `services/health-mcp/tests/test_v05_hooks.py` — asserts `health-auto-sync.py`
   stays out of the default SessionStart block.
+
+## Footprint SLA (fan-out + daemon budget)
+
+The boundedness invariant above keeps any single hook from doing unbounded work.
+A second, orthogonal failure is the fleet getting *wider*: each wired hook is a
+cold `python3` start, so a hot event costs interpreter-startup × fan-out, and
+that count silently re-grows as hooks are added (SLOW-INSTALL-FROM-LAZY-PLUMBING).
+
+`scripts/footprint-sla-check.py` is the budget gate for that width. It keys only
+on **deterministic** axes (no timing, no hook execution — hooks for one event run
+concurrently, so felt latency is `MAX`, not `SUM`, and a wall-clock gate would
+flake on CI and teach bypass):
+
+- **per-event / per-tool substrate cold-start fan-out** vs `footprint-budgets.json`
+  (per-message events exclude `once: true`; `PreToolUse`/`PostToolUse` are
+  per-tool; `[ -f ~/.claude/hooks/… ]`-guarded maintainer hooks no-op on a fresh
+  install and are excluded);
+- **default-on daemon count** — the default install (`bootstrap.sh`) wires 0.
+
+Budgets are `measured + headroom`, so the gate ships green and bites on growth;
+`_baseline_measured` records the snapshot. Tighten with `--update-budgets` as the
+fan-out drops. Per-hook timing and per-message injected bytes are **advisory**
+(`--measure --execute`) — measured and reported with the correct `MAX` semantics,
+never gated. Full rationale: [adr/0004-footprint-sla-gate.md](adr/0004-footprint-sla-gate.md).
+
+```bash
+python3 scripts/footprint-sla-check.py --gate       # CI gate; exit 1 over budget, 2 on internal error
+python3 scripts/footprint-sla-check.py --measure     # human report (add --execute for advisory timing)
+python3 scripts/footprint-sla-check.py --selftest    # built-in pos/neg controls
+```
 
 ## Verify on a fresh install
 

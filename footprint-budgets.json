@@ -1,0 +1,68 @@
+{
+  "_doc": "Footprint SLA budgets for the ai-brain-starter hook fleet. HARD axes (block merge): per-event/per-tool substrate cold-start fan-out + default-on daemon count. Advisory axes (timing, injected bytes) are reported by --measure, never gated. See docs/adr/0004-footprint-sla-gate.md.",
+  "_headroom": 2,
+  "_baseline_measured": {
+    "per_event": {
+      "SessionStart": 14,
+      "UserPromptSubmit": 6,
+      "Stop": 3,
+      "PreCompact": 1,
+      "SessionEnd": 1
+    },
+    "per_tool": {
+      "PreToolUse": {
+        "Write": 7,
+        "Edit": 7,
+        "MultiEdit": 7,
+        "Bash": 3,
+        "Read": 2,
+        "Glob": 1,
+        "Grep": 1,
+        "Task": 1,
+        "Agent": 1,
+        "Skill": 1,
+        "NotebookEdit": 1,
+        "mcp__server__tool": 1
+      },
+      "PostToolUse": {
+        "Write": 1,
+        "Edit": 1,
+        "Bash": 1,
+        "Task": 1,
+        "Agent": 1
+      }
+    },
+    "daemons": 0
+  },
+  "fanout_per_event": {
+    "SessionStart": 16,
+    "UserPromptSubmit": 8,
+    "Stop": 5,
+    "PreCompact": 3,
+    "SessionEnd": 3
+  },
+  "fanout_per_tool": {
+    "PreToolUse": {
+      "Write": 9,
+      "Edit": 9,
+      "MultiEdit": 9,
+      "Bash": 5,
+      "Read": 4,
+      "Glob": 3,
+      "Grep": 3,
+      "Task": 3,
+      "Agent": 3,
+      "Skill": 3,
+      "NotebookEdit": 3,
+      "mcp__server__tool": 3
+    },
+    "PostToolUse": {
+      "Write": 3,
+      "Edit": 3,
+      "Bash": 3,
+      "Task": 3,
+      "Agent": 3
+    }
+  },
+  "default_on_daemons": 0
+}
