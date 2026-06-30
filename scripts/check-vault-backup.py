@@ -29,6 +29,9 @@ gate all route through it so the surfaces never drift.
 Usage:
   check-vault-backup.py <vault-path>          # human-readable verdict + remedy
   check-vault-backup.py --porcelain <path>    # one machine-readable line
+  check-vault-backup.py --ignore-cloud <path> # don't count a cloud-sync copy as
+                                              # a backup (for callers about to
+                                              # REMOVE it, e.g. relocate-vault.sh)
 
 Exit codes:
   0  BACKED UP  — at least one off-machine copy/strategy detected
@@ -186,13 +189,24 @@ def check_git_remote_pushed(vault: Path) -> bool:
         return False
 
 
-def detect(vault: Path, conf_keys: list[str] | None = None) -> tuple[str, str]:
+def detect(vault: Path, conf_keys: list[str] | None = None,
+           ignore_cloud: bool = False) -> tuple[str, str]:
     """Return (porcelain_token, human_remedy). Cheapest checks first.
 
     conf_keys: candidate path strings to look up in the config (the as-given and
     the resolved form). Matching on both makes the lookup robust when the vault
     path contains a symlink (e.g. macOS /var -> /private/var), so the detector
     and vault-backup.sh agree on the key regardless of which form was stored.
+
+    ignore_cloud: when True, a vault that lives inside a cloud-sync root does NOT
+    count as backed up. Used by callers that are about to REMOVE the cloud copy
+    (relocate-vault.sh moves the vault out and leaves a symlink — the sync daemon
+    then follows a few-byte symlink, not the tree, so the cloud copy is gone post
+    -move). For those callers the only backups that count are the ones that
+    survive the move (a vault-backup archive, Time Machine, or a pushed git
+    remote). Default False so the SessionStart/diagnose/onboarding consumers,
+    which are NOT removing the cloud copy, still treat it as a real off-machine
+    copy.
     """
     conf = _read_conf()
     vaults = conf.get("vaults") or {}
@@ -208,11 +222,12 @@ def detect(vault: Path, conf_keys: list[str] | None = None) -> tuple[str, str]:
         return ("BACKED_UP:timemachine",
                 "Time Machine destination configured.")
 
-    service = detect_cloud_sync(vault)
-    if service:
-        return (f"BACKED_UP:cloud:{service}",
-                f"vault is inside {service} (an off-machine cloud copy — churny "
-                f"but real; see docs/CLOUD_SYNC.md for the safer single-file pattern).")
+    if not ignore_cloud:
+        service = detect_cloud_sync(vault)
+        if service:
+            return (f"BACKED_UP:cloud:{service}",
+                    f"vault is inside {service} (an off-machine cloud copy — churny "
+                    f"but real; see docs/CLOUD_SYNC.md for the safer single-file pattern).")
 
     if check_git_remote_pushed(vault):
         return ("BACKED_UP:git-remote",
@@ -229,9 +244,11 @@ def detect(vault: Path, conf_keys: list[str] | None = None) -> tuple[str, str]:
 
 def main(argv: list[str]) -> int:
     porcelain = "--porcelain" in argv
-    args = [a for a in argv if a != "--porcelain"]
+    ignore_cloud = "--ignore-cloud" in argv
+    args = [a for a in argv if a not in ("--porcelain", "--ignore-cloud")]
     if len(args) != 1:
-        print("usage: check-vault-backup.py [--porcelain] <vault-path>", file=sys.stderr)
+        print("usage: check-vault-backup.py [--porcelain] [--ignore-cloud] <vault-path>",
+              file=sys.stderr)
         return 2
 
     raw = Path(args[0]).expanduser()
@@ -242,7 +259,7 @@ def main(argv: list[str]) -> int:
 
     # Look up the conf by both the as-given and resolved path (symlink-robust).
     conf_keys = list(dict.fromkeys([str(vault), str(raw)]))
-    token, remedy = detect(vault, conf_keys)
+    token, remedy = detect(vault, conf_keys, ignore_cloud=ignore_cloud)
     backed_up = token.startswith("BACKED_UP")
 
     if porcelain:
