@@ -134,6 +134,25 @@ BAD="$TMP/bad-obsidian.json"; printf 'not json{{' > "$BAD"
 ctx="$(run_hook "$NEUTRAL" OBSIDIAN_CONFIG="$BAD")"
 want_silent "malformed obsidian.json: fail-open, no crash" "$ctx"
 
+# ── 9. OS-AWARE COMMAND SURFACE (MYC-2383) ──────────────────────────────────
+#       A Windows/OneDrive user must get .ps1 commands they can actually run,
+#       NOT the bash scripts (which do not run natively on Windows). The offer
+#       branches on the running OS; WORKTREE_FOOTPRINT_OS forces each branch so
+#       both are coverable on this Linux CI runner. Paired negative control: the
+#       Windows offer must never leak a bash .sh command.
+ctx_posix="$(run_hook "$NEUTRAL" OBSIDIAN_CONFIG="$CONF1" WORKTREE_FOOTPRINT_OS=posix)"
+want_contains "posix branch: bash invocation"        "bash "                          "$ctx_posix"
+want_contains "posix branch: .sh relocate script"    "relocate-vault.sh"              "$ctx_posix"
+
+ctx_win="$(run_hook "$NEUTRAL" OBSIDIAN_CONFIG="$CONF1" WORKTREE_FOOTPRINT_OS=nt)"
+want_contains "windows branch: .ps1 relocate script" "relocate-vault.ps1"             "$ctx_win"
+want_contains "windows branch: .ps1 sidecar script"  "relocate-machinery-sidecar.ps1" "$ctx_win"
+want_contains "windows branch: powershell invocation" "powershell"                    "$ctx_win"
+case "$ctx_win" in
+  *"relocate-vault.sh"*) echo "FAIL  windows branch: leaked a bash .sh command"; fails=$((fails+1));;
+  *) echo "PASS  windows branch: no bash .sh command leaked (neg control)";;
+esac
+
 echo
 if [ "$fails" -gt 0 ]; then echo "FAILED: $fails"; exit 1; fi
 echo "ALL TESTS PASSED"

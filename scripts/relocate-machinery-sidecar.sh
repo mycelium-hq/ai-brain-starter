@@ -118,6 +118,14 @@ record() { printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" >> "$_manifest_records"
 
 write_manifest() {
   [ "$DRYRUN" = 1 ] && return 0
+  # An idempotent re-run (everything already relocated) records ZERO new moves.
+  # Do NOT clobber a prior valid manifest with an empty one - that silently
+  # breaks --rollback. Only write when there is something to record, or when no
+  # manifest exists yet. (Parity with relocate-machinery-sidecar.ps1, MYC-2383.)
+  if [ ! -s "$_manifest_records" ] && [ -f "$MANIFEST" ]; then
+    say "  · no new moves; keeping existing manifest $MANIFEST"
+    return 0
+  fi
   mkdir -p "$(dirname "$MANIFEST")"
   VAULT="$VAULT" SIDECAR="$SIDECAR" SLUG="$SLUG" NOSYNC="$NOSYNC" \
   REC="$_manifest_records" MAN="$MANIFEST" "$PYBIN" - <<'PY'
