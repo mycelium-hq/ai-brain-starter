@@ -1,0 +1,231 @@
+name: windows-install
+
+# WHY THIS EXISTS (MYC-2125)
+# --------------------------
+# The `powershell` job in lint.yml only PARSES every .ps1
+# ([Parser]::ParseFile) - it never EXECUTES bootstrap.ps1 on Windows. The
+# 2026-06-27 install outage (fixed in PR #254) was two bugs that ONLY manifest
+# at run time on a fresh Windows box, and were masked on team machines because
+# `gh` was already authenticated there:
+#
+#   Bug 1 - `gh auth status` under $ErrorActionPreference='Stop' makes Windows
+#           PowerShell 5.1 wrap the native stderr ("not logged in") as a
+#           TERMINATING NativeCommandError, killing bootstrap BEFORE skills,
+#           MCP servers, and hooks install.
+#   Bug 2 - the user-level hook installer spliced a Windows backslash path
+#           (C:\Users\...) into a JSON string and re-parsed it, throwing
+#           JSONDecodeError, so every UserPromptSubmit hook silently failed.
+#
+# This job runs the REAL installer on a clean windows-latest runner so a
+# reintroduced crash or hook-install failure turns the job red.
+#
+# Design decisions that make the gate actually catch the regressions:
+#   * shell: powershell  -> Windows PowerShell 5.1, NOT pwsh 7. The
+#     NativeCommandError-under-Stop crash (Bug 1) is a 5.1 behavior; pwsh 7
+#     would not reproduce it.
+#   * gh is left UNauthenticated and a canary step asserts that BEFORE the run
+#     (verify the premise before arming the leg) - otherwise the Bug 1 path is
+#     vacuous and the gate gives false assurance.
+#   * ~/.claude/skills/ai-brain-starter is pre-seeded with THIS checkout, so the
+#     hook installer that runs is the PR's scripts/install-hooks-user-level.py
+#     (Bug 2's file) - not a fresh clone of published main. Without this, a
+#     reintroduced Bug 2 in a future PR would not be caught.
+#   * Bug 1 is a crash, so it fails the bootstrap step directly. Bug 2 is caught
+#     and logged inside bootstrap (try/catch) and bootstrap still exits 0, so it
+#     is caught by the explicit post-assertion on settings.json hooks.
+#
+# No GitHub event data is interpolated into any run: block (no event-context
+# expressions anywhere in this workflow).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same PR; never cancel a push-to-main run.
+concurrency:
+  group: windows-install-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  windows-execute:
+    name: bootstrap.ps1 end-to-end (clean Windows runner)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
+
+      # A clean, known Python interpreter. The user-level hook installer is a
+      # Python script, so SOME python must be present for the hook-install
+      # assertion to mean anything; Bug 2 is a path-ENCODING bug, independent of
+      # how Python got there. Pinning 3.12 also avoids bootstrap's winget
+      # Python-install branch (a third-party installer, not this gate's surface).
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
+        with:
+          python-version: "3.12"
+
+      # Verify the premise before arming the leg: Bug 1 only manifests when gh
+      # is present AND NOT authenticated. If gh were authed on the runner, the
+      # Bug 1 path would be vacuous and this job would pass without testing it.
+      # Fail loudly if the masking condition is present.
+      - name: canary - gh present and UNauthenticated (Bug 1 precondition)
+        shell: powershell
+        run: |
+          $env:GH_TOKEN = $null
+          $env:GITHUB_TOKEN = $null
+          if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+            Write-Host "::error::gh CLI not found on the runner - cannot exercise the Bug 1 (gh-auth-under-Stop) path."
+            exit 1
+          }
+          $ErrorActionPreference = "SilentlyContinue"
+          gh auth status 1>$null 2>$null
+          $code = $LASTEXITCODE
+          $ErrorActionPreference = "Stop"
+          if ($code -eq 0) {
+            Write-Host "::error::gh is AUTHENTICATED on this runner - the Bug 1 masking condition is present, so this job cannot catch a reintroduced gh-auth crash. Ensure no GH_TOKEN/GITHUB_TOKEN reaches this job."
+            exit 1
+          }
+          Write-Host "gh present and unauthenticated (gh auth status exit=$code) - Bug 1 precondition holds."
+          exit 0
+
+      # Seed the skill dir with THIS checkout so bootstrap's 'already installed'
+      # path uses the PR's components (hook installer + hooks.json + skills)
+      # instead of cloning published main. Unsetting the upstream guarantees
+      # bootstrap's self-update can't fast-forward the PR code away: with no
+      # upstream, `git rev-list @{u}..HEAD` is empty -> ahead/behind both 0 ->
+      # bootstrap takes the 'up to date, leave as-is' branch.
+      # pwsh (not 5.1) here so a best-effort git call writing to stderr doesn't
+      # become a NativeCommandError; the real 5.1 run is the bootstrap step.
+      - name: seed skill dir with this checkout (so the PR's installer is what runs)
+        shell: pwsh
+        run: |
+          $abs = Join-Path $env:USERPROFILE ".claude/skills/ai-brain-starter"
+          New-Item -ItemType Directory -Force -Path (Split-Path -Parent $abs) | Out-Null
+          Copy-Item -Recurse -Force -LiteralPath $env:GITHUB_WORKSPACE -Destination $abs
+          git -C $abs branch --unset-upstream 2>$null
+          $global:LASTEXITCODE = 0
+          if (-not (Test-Path -LiteralPath (Join-Path $abs ".git"))) {
+            Write-Host "::error::seed failed - $abs has no .git; bootstrap would then git-clone over a non-empty dir and crash. (Copy-Item did not carry .git.)"
+            exit 1
+          }
+          $installer = Join-Path $abs "scripts/install-hooks-user-level.py"
+          if (-not (Test-Path -LiteralPath $installer)) {
+            Write-Host "::error::seed failed - PR hook installer not present at $installer"
+            exit 1
+          }
+          Write-Host "Seeded $abs from the PR checkout (installer present)."
+          exit 0
+
+      # Skip the heavy third-party Obsidian winget download (not the regression
+      # surface; the PR-#254 Obsidian change was a detection-path addition,
+      # already parse-checked in lint.yml). bootstrap.ps1 detects Obsidian via
+      # Test-Path, so a 0-byte stub at the canonical per-user path short-circuits
+      # the install cleanly.
+      - name: stub Obsidian so bootstrap skips the winget download
+        shell: pwsh
+        run: |
+          $obs = Join-Path $env:LOCALAPPDATA "Programs/obsidian/Obsidian.exe"
+          New-Item -ItemType Directory -Force -Path (Split-Path -Parent $obs) | Out-Null
+          New-Item -ItemType File -Force -Path $obs | Out-Null
+          Write-Host "Stubbed $obs"
+          exit 0
+
+      # THE REAL TEST: run the PR's bootstrap.ps1 end-to-end under Windows
+      # PowerShell 5.1 on a clean runner with gh unauthenticated. A reintroduced
+      # stderr-under-Stop crash (Bug 1) raises a terminating error and fails this
+      # step. PREFLIGHT_BYPASS=1 because preflight RED-aborts when the Claude Code
+      # desktop app is absent (always true on a CI runner); preflight is not where
+      # the regressions live and preflight.ps1 is already parse-checked in lint.yml.
+      # EMAIL_GATE_BYPASS=1 keeps the optional signup path inert (no env token is
+      # set, so it is skipped anyway).
+      - name: run bootstrap.ps1 (Windows PowerShell 5.1, gh unauthenticated)
+        shell: powershell
+        env:
+          PREFLIGHT_BYPASS: "1"
+          EMAIL_GATE_BYPASS: "1"
+        run: |
+          $env:GH_TOKEN = $null
+          $env:GITHUB_TOKEN = $null
+          Write-Host "PowerShell edition: $($PSVersionTable.PSEdition) $($PSVersionTable.PSVersion)"
+          if ($PSVersionTable.PSEdition -ne "Desktop") {
+            Write-Host "::error::Expected Windows PowerShell 5.1 (Desktop edition) to reproduce the Bug 1 crash class; got $($PSVersionTable.PSEdition) $($PSVersionTable.PSVersion)."
+            exit 1
+          }
+          try {
+            & "$env:GITHUB_WORKSPACE\bootstrap.ps1"
+          } catch {
+            Write-Host "::error::bootstrap.ps1 threw a terminating error (this is the Bug 1 crash class if it is a NativeCommandError): $_"
+            exit 1
+          }
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::bootstrap.ps1 exited $LASTEXITCODE"
+            exit $LASTEXITCODE
+          }
+          Write-Host "bootstrap.ps1 completed without a terminating error."
+          exit 0
+
+      # Bug 2 is caught HERE, not by the bootstrap exit code: the hook installer
+      # is wrapped in try/catch inside bootstrap, so a JSONDecodeError crash is
+      # logged but bootstrap still exits 0. Assert the OUTCOME instead:
+      #   - settings.json parses as JSON (the corruption class), and
+      #   - the ai-brain-starter UserPromptSubmit hooks were actually wired.
+      # Bug 2 yields ZERO UserPromptSubmit hooks, so the ticket's '>= 7' floor
+      # (7 = the PR-#254-era count; the template currently ships more, and grows)
+      # cleanly separates a healthy install from the regression. Also assert MCP
+      # registration (.mcp.json parses and the default-profile servers are present).
+      - name: assert install outcome (settings.json hooks + .mcp.json servers)
+        shell: pwsh
+        run: |
+          $fail = @()
+          $userHome = $env:USERPROFILE
+
+          $settings = Join-Path $userHome ".claude/settings.json"
+          if (-not (Test-Path -LiteralPath $settings)) {
+            $fail += "settings.json missing at $settings"
+          } else {
+            $s = $null
+            try { $s = Get-Content -Raw -LiteralPath $settings | ConvertFrom-Json }
+            catch { $fail += "settings.json is not valid JSON: $_" }
+            if ($s) {
+              $n = 0
+              foreach ($g in @($s.hooks.UserPromptSubmit)) {
+                if ($g.hooks) { $n += @($g.hooks).Count }
+              }
+              Write-Host "UserPromptSubmit hooks wired in settings.json: $n"
+              if ($n -lt 7) {
+                $fail += "expected >= 7 UserPromptSubmit hooks, found $n (the hook installer likely crashed - Bug 2)"
+              }
+            }
+          }
+
+          $mcp = Join-Path $userHome ".claude/.mcp.json"
+          if (-not (Test-Path -LiteralPath $mcp)) {
+            $fail += ".mcp.json missing at $mcp"
+          } else {
+            $m = $null
+            try { $m = Get-Content -Raw -LiteralPath $mcp | ConvertFrom-Json }
+            catch { $fail += ".mcp.json is not valid JSON: $_" }
+            if ($m) {
+              $names = @()
+              if ($m.mcpServers) { $names = @($m.mcpServers.PSObject.Properties.Name) }
+              Write-Host "MCP servers registered: $($names -join ', ')"
+              foreach ($want in @("granola", "chatprd")) {
+                if ($names -notcontains $want) { $fail += "MCP server '$want' not registered in .mcp.json" }
+              }
+            }
+          }
+
+          if ($fail.Count -gt 0) {
+            Write-Host ""
+            Write-Host "WINDOWS INSTALL GATE FAILED:"
+            foreach ($f in $fail) { Write-Host "::error::$f" }
+            exit 1
+          }
+          Write-Host ""
+          Write-Host "Windows install gate passed: bootstrap completed, UserPromptSubmit hooks wired, MCP servers registered."
+          exit 0
