@@ -17,7 +17,9 @@ six months later when something else breaks."
 Output: silent if no orphans. Single-line systemMessage if any exist,
 pointing at `scripts/recover-orphan-claude-branches.py` for recovery.
 
-Performance: <100ms even with hundreds of branches.
+Performance: TWO git calls total, independent of branch count (MYC-2361).
+Reintroducing a per-branch git loop is the SLOW-INSTALL-FROM-LAZY-PLUMBING
+regression that tests/integration/test_orphan_branch_bounded_git.sh locks out.
 
 Bypass: ORPHAN_SURFACE_BYPASS=1 in env.
 """
@@ -70,30 +72,49 @@ def detect_base_branch(vault: Path) -> str | None:
 
 
 def count_orphans(vault: Path, base: str) -> tuple[int, int]:
-    """Return (branch_count, total_unmerged_commit_count)."""
+    """Return (branch_count, total_unmerged_commit_count).
+
+    Bounded git fan-out: TWO git calls, independent of branch count.
+
+    `for-each-ref --no-merged <base>` returns, in ONE call, exactly the claude/*
+    branches that carry at least one commit not reachable from <base> (equivalent
+    to the old per-branch ``rev-list --count <base>..<branch> > 0`` test — a branch
+    is "not merged" into base iff base lacks its tip). A single
+    ``rev-list --count <branches...> ^<base>`` then counts the DISTINCT unmerged
+    commits across them.
+
+    The previous implementation ran one ``rev-list`` per branch — O(branches)
+    subprocesses. On a large vault (~150 claude/* branches against a 60K-file
+    index) that cost ~2.7s at EVERY SessionStart; the per-branch git fan-out, not
+    a filesystem walk, was the cost. Two calls makes the docstring's "<100ms even
+    with hundreds of branches" actually true. See MYC-2348 / MYC-2361.
+
+    Note: total_commits is now the count of DISTINCT unmerged commits (union). The
+    old loop summed per-branch counts, double-counting a commit shared by two
+    orphan branches; for the typical case (each branch owns its commits) the two
+    are identical, and the distinct count is the truer recovery workload.
+    """
     out = subprocess.run(
-        ["git", "-C", str(vault), "for-each-ref", "--format=%(refname:short)", "refs/heads/claude/"],
+        ["git", "-C", str(vault), "for-each-ref", "--no-merged", base,
+         "--format=%(refname:short)", "refs/heads/claude/"],
         capture_output=True,
         text=True,
     )
     if out.returncode != 0:
         return (0, 0)
     branches = [b.strip() for b in out.stdout.split() if b.strip()]
-    n_branches = 0
-    total_commits = 0
-    for b in branches:
-        r = subprocess.run(
-            ["git", "-C", str(vault), "rev-list", "--count", f"{base}..{b}"],
-            capture_output=True,
-            text=True,
-        )
-        try:
-            c = int(r.stdout.strip())
-        except (ValueError, AttributeError):
-            c = 0
-        if c > 0:
-            n_branches += 1
-            total_commits += c
+    n_branches = len(branches)
+    if n_branches == 0:
+        return (0, 0)
+    r = subprocess.run(
+        ["git", "-C", str(vault), "rev-list", "--count", *branches, f"^{base}"],
+        capture_output=True,
+        text=True,
+    )
+    try:
+        total_commits = int(r.stdout.strip())
+    except (ValueError, AttributeError):
+        total_commits = 0
     return (n_branches, total_commits)
 
 
