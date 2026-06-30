@@ -234,7 +234,7 @@ def normalize_path_substitutions(template: dict, vault_path: str | None) -> dict
         # JSON-escape the substituted path: on Windows it contains backslashes
         # (C:\Users\...) which are invalid JSON escapes when the string is
         # re-parsed by json.loads below, raising JSONDecodeError mid-install.
-        s = s.replace("[VAULT_PATH]", json.dumps(str(Path.home()), ensure_ascii=False)[1:-1])
+        s = s.replace("[VAULT_PATH]", str(Path.home()))  # NEGATIVE-CONTROL: reintroduced Bug 2 (raw backslash) - DO NOT MERGE
         return json.loads(s)
     s = json.dumps(template, ensure_ascii=False)
     s = s.replace("[VAULT_PATH]", json.dumps(str(Path(vault_path).resolve()), ensure_ascii=False)[1:-1])
