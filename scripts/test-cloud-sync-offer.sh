@@ -67,6 +67,10 @@ want_silent() {  # label  haystack
   if [ -z "$2" ]; then echo "PASS  $1 (silent)"
   else echo "FAIL  $1  expected silent, got: ${2:0:90}"; fails=$((fails+1)); fi
 }
+want_absent() {  # label  needle  haystack  (negative: needle must NOT appear)
+  case "$3" in *"$2"*) echo "FAIL  $1  (should be absent: $2)"; fails=$((fails+1));;
+    *) echo "PASS  $1";; esac
+}
 
 # ── 1. THE CORE GAP: registry discovery, cwd NOT in the vault ────────────────
 V1="$TMP/$ICLOUD/MyBrain"; mkdir -p "$V1"; : > "$V1/CLAUDE.md"
@@ -76,6 +80,11 @@ want_contains "registry: offers move-local shape"   "relocate-vault.sh"         
 want_contains "registry: offers sidecar shape"       "relocate-machinery-sidecar.sh" "$ctx"
 want_contains "registry: names the vault path"       "$V1"                          "$ctx"
 want_contains "registry: names the cloud service"    "iCloud"                       "$ctx"
+# Simplification (offer-one-action follow-up): recommend ONE safe default
+# (keep notes, move machinery), never a two-option menu the user must answer.
+want_contains "registry: leads with ONE default fix"          "DEFAULT FIX"          "$ctx"
+want_contains "registry: tells Claude not to dump a menu"     "Do NOT make them choose" "$ctx"
+want_absent   "registry: no old two-option menu phrasing"     "Tell me which"        "$ctx"
 
 # ── 2. cwd IS the git vault; empty registry (proves find_main_repo path) ─────
 V2="$TMP/$ICLOUD/GitBrain"; mkdir -p "$V2"; : > "$V2/CLAUDE.md"; git -C "$V2" init -q

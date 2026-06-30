@@ -16,8 +16,10 @@ Surfaces (only when something warrants attention — silent when healthy):
     there is what melts the sync daemon. Detected for ANY such vault — the one
     cwd is in, $CLAUDE_PROJECT_DIR, OR any vault in Obsidian's registry, so a
     pre-existing iCloud vault is caught even outside guided onboarding — and the
-    auto-capable relocate is OFFERED in plain language (move-local OR machinery-
-    sidecar), self-silencing once relocated. (MYC-2360)
+    auto-capable relocate is OFFERED as ONE recommended safe action (keep the
+    notes where they are, move only the churning machinery out) — never a
+    two-option menu a non-technical user can't answer — self-silencing once
+    relocated. (MYC-2360 + offer-simplification follow-up)
 
 Bypass: WORKTREE_FOOTPRINT_BYPASS=1.
 
@@ -200,21 +202,25 @@ def _suggest_local_dest(vault: Path) -> Path:
 
 def _offer_block(vault: Path, service: str, dest: Path) -> str:
     return (
-        f"🟡 [cloud-sync] Your vault `{vault}` is inside **{service}**. A git-backed "
-        f"AI brain in a consumer cloud-sync folder is the #1 cause of the "
-        f"\"whole machine froze\" failure: the sync daemon tries to upload millions "
-        f"of `.git`/index file-events and pegs the CPU. I can move it out for you — "
-        f"safely, backup-first, reversible, idempotent (each script previews with "
-        f"`--dry-run` and leaves a symlink so nothing breaks). Tell me which and "
-        f"I'll run it (I'll stand up a verified backup first):\n"
-        f"  • Simplest (recommended) — move the vault to a local disk, keep a symlink, "
-        f"migrate your Claude history:\n"
-        f"      bash {SKILL_SCRIPTS}/relocate-vault.sh \"{vault}\" \"{dest}\"\n"
-        f"  • Keep it on your iPhone — leave the notes in {service}, move only the "
-        f"churning machinery (`.git`, worktrees, caches) to a local sidecar:\n"
+        f"🟡 [cloud-sync] The user's brain `{vault}` is inside **{service}** — the "
+        f"#1 cause of the \"whole machine froze\" failure (the sync daemon chokes on "
+        f"constant `.git`/index churn and pegs the CPU). FIX IT FOR THEM. Do NOT make "
+        f"them choose between options or understand the internals — a non-technical "
+        f"user will be overwhelmed and won't know what to answer. Recommend ONE thing, "
+        f"explain it in a single plain sentence, ask a simple yes, then run it (stand "
+        f"up a backup first).\n"
+        f"  DEFAULT FIX — run THIS one. It leaves their notes exactly where they are "
+        f"(still synced, still on their phone) and just moves the noisy hidden "
+        f"machinery (`.git`, worktrees, caches) out of the sync folder so the computer "
+        f"stops choking. Reversible (`--rollback`), deletes nothing:\n"
         f"      bash {SKILL_SCRIPTS}/relocate-machinery-sidecar.sh \"{vault}\"\n"
-        f"This repeats each session until the vault is out of the sync path. "
-        f"Details: docs/CLOUD_SYNC.md."
+        f"  Fallback — ONLY if they explicitly say they don't want {service} at all: "
+        f"move the whole vault to a local disk (leaves a symlink so nothing breaks):\n"
+        f"      bash {SKILL_SCRIPTS}/relocate-vault.sh \"{vault}\" \"{dest}\"\n"
+        f"Say it to them roughly like: \"Your notes are in {service}, and that combo "
+        f"can freeze your computer. I can fix it safely in the background — your notes "
+        f"don't move and nothing gets deleted. Want me to?\" Don't list both commands "
+        f"to them; don't explain machinery-vs-notes. Repeats each session until fixed."
     )
 
 
