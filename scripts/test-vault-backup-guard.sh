@@ -76,6 +76,29 @@ mkdir -p "$CLOUD"
 assert_token "cloud-sync vault -> BACKED_UP:cloud"  "BACKED_UP:cloud"  "$CLOUD"
 assert_rc    "cloud-sync exits 0"                   0                  "$CLOUD"
 
+# ---- --ignore-cloud (MYC-2401): a cloud-only copy does NOT count for a caller
+# about to REMOVE it (relocate-vault.sh moves the vault out + leaves a symlink,
+# so the cloud copy is gone post-move). The default still counts cloud (above);
+# only --ignore-cloud flips it. A guard that approved a move citing the very copy
+# the move destroys would leave the user with zero backup. ----
+echo '{}' > "$CONF"
+ic="$(VAULT_BACKUP_CONF="$CONF" python3 "$CHECK" --porcelain --ignore-cloud "$CLOUD" 2>/dev/null)"
+case "$ic" in
+  NO_BACKUP*) echo "PASS  --ignore-cloud: cloud-only vault -> $ic";;
+  *)          echo "FAIL  --ignore-cloud: want NO_BACKUP got $ic"; fails=$((fails+1));;
+esac
+# --ignore-cloud must NOT suppress a REAL surviving backup (an archive present).
+ICDEST="$TMP/ic-backups" ; mkdir -p "$ICDEST" ; touch "$ICDEST/vault-backup-$(date +%Y%m%d).tar.gz"
+ICRES="$(cd "$CLOUD" && pwd -P)"
+cat > "$CONF" <<EOF
+{"vaults": {"$ICRES": {"dest": "$ICDEST", "archive_stem": "vault-backup"}}}
+EOF
+ic2="$(VAULT_BACKUP_CONF="$CONF" python3 "$CHECK" --porcelain --ignore-cloud "$CLOUD" 2>/dev/null)"
+case "$ic2" in
+  BACKED_UP:vault-backup*) echo "PASS  --ignore-cloud keeps a surviving archive -> $ic2";;
+  *)                       echo "FAIL  --ignore-cloud suppressed a real archive: got $ic2"; fails=$((fails+1));;
+esac
+
 echo
 if [ "$fails" -gt 0 ]; then echo "FAILED: $fails"; exit 1; fi
 echo "ALL TESTS PASSED"

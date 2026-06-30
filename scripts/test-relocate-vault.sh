@@ -16,6 +16,10 @@
 #   - BACKUP GATE (MYC-2382): a backup-less full relocate REFUSES (vault not
 #     moved, remedy named); a verified off-machine backup lets it PROCEED;
 #     --force overrides the gate on the same no-backup condition.
+#   - CLOUD MOVE-OUT (MYC-2401): a vault whose only off-machine copy is the
+#     cloud-sync it's being moved OUT of REFUSES (that copy doesn't survive the
+#     move); a cloud vault with a surviving backup (archive/TM/git-remote) still
+#     PROCEEDS.
 # Hermetic: a temp HOME-like sandbox + an isolated --config-dir; the real
 # ~/.claude is never touched.
 # Run: bash scripts/test-relocate-vault.sh
@@ -145,6 +149,37 @@ CLAUDE_CONFIG_DIR="$CFG" VAULT_BACKUP_CONF="$NOBK_CONF" VAULT_BACKUP_SKIP_TIMEMA
              || fail "backup gate: --force did not override the gate (rc=$rc)"
 [ -d "$fb_dst" ] && pass "backup gate: --force -> vault moved despite no backup" \
              || fail "backup gate: --force did not move the vault"
+
+# --- 8. BACKUP GATE x CLOUD (MYC-2401): a cloud copy doesn't count for a move-OUT
+# relocate moves the vault OUT of the cloud root and leaves a symlink, so the cloud
+# copy is gone post-move. The gate passes --ignore-cloud, so a vault whose ONLY
+# off-machine copy is the cloud it's fleeing must REFUSE (else we green-light the
+# move citing the very backup the move destroys). A SURVIVING backup still proceeds.
+# 8a a vault inside a cloud root with NO surviving backup -> REFUSE.
+cl_src="$TMP/OneDrive/Cloud Vault" ; cl_dst="$TMP/cloud-local"
+mkdir -p "$cl_src" ; echo n > "$cl_src/n.md"
+out="$(CLAUDE_CONFIG_DIR="$CFG" VAULT_BACKUP_CONF="$NOBK_CONF" VAULT_BACKUP_SKIP_TIMEMACHINE=1 \
+       bash "$SCRIPT" "$cl_src" "$cl_dst" 2>&1)" ; rc=$?
+[ "$rc" != 0 ] && pass "cloud move-out, no surviving backup -> refuses (rc=$rc)" \
+               || fail "cloud move-out should refuse (cloud copy doesn't survive), got rc=$rc"
+{ [ -d "$cl_src" ] && [ ! -e "$cl_dst" ]; } && pass "cloud move-out refusal: vault NOT moved" \
+               || fail "cloud move-out: vault moved despite no surviving backup"
+echo "$out" | grep -qi 'cloud' && pass "cloud move-out refusal: explains the cloud copy won't survive" \
+               || fail "cloud move-out refusal should mention the cloud copy: $out"
+
+# 8b same cloud vault but WITH a surviving vault-backup archive -> proceeds.
+cl2_src="$TMP/OneDrive/Cloud Vault 2" ; cl2_dst="$TMP/cloud-local-2"
+mkdir -p "$cl2_src" ; echo n > "$cl2_src/n.md"
+CL2_RES="$(cd "$cl2_src" && pwd -P)"
+CL2_DEST="$TMP/cloud2-backups" ; mkdir -p "$CL2_DEST" ; touch "$CL2_DEST/vault-backup-now.tar.gz"
+CL2_CONF="$TMP/cloud2-conf.json"
+printf '{"vaults": {"%s": {"dest": "%s", "archive_stem": "vault-backup"}}}\n' "$CL2_RES" "$CL2_DEST" > "$CL2_CONF"
+CLAUDE_CONFIG_DIR="$CFG" VAULT_BACKUP_CONF="$CL2_CONF" VAULT_BACKUP_SKIP_TIMEMACHINE=1 \
+  bash "$SCRIPT" "$cl2_src" "$cl2_dst" >/dev/null 2>&1 ; rc=$?
+[ "$rc" = 0 ] && pass "cloud vault WITH a surviving archive -> proceeds (rc=0)" \
+             || fail "cloud vault with a surviving archive should proceed, got rc=$rc"
+{ [ -d "$cl2_dst" ] && [ -L "$cl2_src" ]; } && pass "cloud+archive move-out: moved + symlink left" \
+             || fail "cloud+archive: did not relocate"
 
 echo
 if [ "$fails" -gt 0 ]; then echo "FAILED: $fails"; exit 1; fi

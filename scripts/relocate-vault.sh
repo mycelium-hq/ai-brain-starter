@@ -297,15 +297,24 @@ if [ "$FORCE" != 1 ]; then
   # if the disk dies mid-flight. Route through the SINGLE source of truth
   # (check-vault-backup.py) and REFUSE on NO_BACKUP. The whole block is skipped
   # under --force, so --force IS the documented escape hatch — by construction.
+  #
+  # --ignore-cloud (MYC-2401): this move REMOVES the source's cloud-sync copy —
+  # we mv the vault OUT and leave a symlink, so the sync daemon then follows a
+  # few-byte symlink, not the tree. A cloud copy therefore does NOT survive the
+  # move and must NOT satisfy the gate (else we'd green-light the move citing the
+  # very backup the move destroys, leaving the user with nothing). Only backups
+  # that survive — a vault-backup archive, Time Machine, a pushed git remote —
+  # count here.
   backup_guard="$SCRIPT_DIR/check-vault-backup.py"
   if [ -f "$backup_guard" ]; then
     set +e
-    BACKUP_TOKEN="$(python3 "$backup_guard" --porcelain "$OLD_ABS" 2>/dev/null)"
+    BACKUP_TOKEN="$(python3 "$backup_guard" --porcelain --ignore-cloud "$OLD_ABS" 2>/dev/null)"
     brc=$?
     set -e
     if [ "$brc" != 0 ]; then
-      die "no verified off-machine backup of '$OLD_ABS' (${BACKUP_TOKEN:-backup check failed}).
+      die "no verified off-machine backup of '$OLD_ABS' that survives this move (${BACKUP_TOKEN:-backup check failed}).
   Moving a vault with no backup is the one move you cannot undo if the disk dies mid-flight.
+  A cloud-sync copy does NOT count here — this move takes the vault OUT of the sync folder, so that copy goes away too.
   Stand up + verify a backup first (one command), then re-run:
     bash \"$SCRIPT_DIR/vault-backup.sh\" setup && bash \"$SCRIPT_DIR/vault-backup.sh\" verify
   Or move anyway, accepting the risk: re-run with --force."
