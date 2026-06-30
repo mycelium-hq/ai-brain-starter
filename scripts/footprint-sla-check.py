@@ -78,7 +78,20 @@ Modes:
                         unparseable hooks.json or budgets - fail LOUD, never a
                         silent green).
   --measure [--execute] Human report of the current fan-out (+ advisory timing /
-                        injected-bytes when --execute). No pass/fail.
+                        injected-bytes when --execute). No pass/fail. Measures the
+                        SHIPPED hooks.json template.
+  --measure-live [--execute] [--settings P] [--event E]
+                        (MYC-2359 -> MYC-2396) Axis D against the LIVE
+                        ~/.claude/settings.json instead of the template: the
+                        per-message injected-token cost an install ACTUALLY pays,
+                        including the user's OWN + customized injectors and the
+                        non-.py (vault-script / inline-bash) + per-tool (PreToolUse /
+                        PostToolUse) hooks the template-only axis D skips. Runs each
+                        wired injector once with a neutral payload in a sandboxed HOME
+                        (only with --execute; without it, a no-execution structural
+                        inventory). Flags any stable every-message injector with a
+                        "belongs on SessionStart (cached prefix)" hint. Advisory,
+                        install-specific, never blocks; LOGIC gated by --selftest.
   --selftest            Positive + negative controls: a synthetic over-budget
                         fleet trips --gate; a within-budget one passes; a missing
                         budgets file fails loud (exit 2); a default-on daemon
@@ -549,6 +562,251 @@ def measure_injected_tokens(fleet: dict, hooks_dir: Path, scripts_dir: Path,
     return {"total_tokens": sum(t for _, t in per_hook), "per_hook": per_hook}
 
 
+# ---- live settings.json measurement (axis D-live, MYC-2396) -------------------
+# measure_injected_tokens (above) measures the SHIPPED hooks.json - repo-resolved
+# .py substrate hooks. But the per-message injection an install ACTUALLY pays lives
+# in its ~/.claude/settings.json: the installer merges hooks.json INTO it, and it
+# ALSO holds the user's OWN + customized injectors (a CONTEXT.md auto-loader, a
+# per-message version check, ...). A stable every-message injector wired there is
+# invisible to the template-only axis D - so an install can carry the exact
+# recurring-token waste MYC-2359 just fixed, uncaught. The functions below execute
+# each wired injector EXACTLY as Claude Code does - the literal command string via
+# the shell, the event payload on stdin, in a sandboxed HOME - which is what makes
+# UNOWNED, non-.py (vault-script / inline-bash), and per-tool (PreToolUse /
+# PostToolUse) injectors measurable uniformly (the resolve-a-repo-file path skips
+# all three). Advisory + install-specific + execution-based per ADR 0006; the LOGIC
+# is gated by the --selftest synthetic pos/neg controls, never the raw numbers.
+
+# Injector-capable, RECURRING events (per message / per tool call). SessionStart is
+# deliberately excluded: it is the relocate TARGET (fires once per session-segment ->
+# cached prefix), not a per-message cost, and executing its fleet (skill sync, backups,
+# git) would be heavy + side-effectful. The whole point is to move stable blocks HERE.
+LIVE_EVENTS = ["UserPromptSubmit", "PreToolUse", "PostToolUse"]
+
+
+def _neutral_payload(event: str, tool: str = "Write", cwd: str = "/tmp") -> bytes:
+    """A benign, prompt/tool-INDEPENDENT hook payload for `event`. A well-behaved
+    CONDITIONAL injector emits nothing on it (-> 0 tokens); an UNCONDITIONAL stable
+    injector emits its full block regardless (-> counted - the signal it belongs on
+    SessionStart). `cwd` is the realistic working dir so a cwd/scope-conditional
+    injector (e.g. a per-repo CONTEXT.md loader) is measured for that repo, not read
+    as 0 from an empty /tmp. tool_input carries a file_path/content AND a benign
+    command so a Write-, Edit-, or Bash-consuming hook all find a benign field."""
+    base = {"hook_event_name": event, "session_id": "footprint-measure",
+            "cwd": cwd, "transcript_path": "/tmp/footprint-none.jsonl"}
+    if event == "UserPromptSubmit":
+        base["prompt"] = "ping"
+    elif event in ("PreToolUse", "PostToolUse"):
+        base["tool_name"] = tool
+        base["tool_input"] = {"file_path": "/tmp/footprint-probe.txt",
+                              "content": "x", "command": "true"}
+        if event == "PostToolUse":
+            base["tool_response"] = {"success": True}
+    return json.dumps(base).encode()
+
+
+def _injected_text(stdout: str, event: str) -> str:
+    """The context a hook's stdout would inject. Primary: hookSpecificOutput.
+    additionalContext (str or list) - the canonical field (ADR 0005 axis D). A valid
+    JSON no-op ({"continue":true,"suppressOutput":true}) injects nothing -> ''. For
+    UserPromptSubmit, raw NON-JSON stdout is ALSO added to context by the harness, so
+    count it there (other events do not inject raw stdout)."""
+    s = stdout.strip()
+    if not s:
+        return ""
+    parsed = None
+    try:
+        parsed = json.loads(s)
+    except Exception:
+        # some hooks print human noise then a JSON line; take the last JSON line.
+        for line in reversed(s.splitlines()):
+            t = line.strip()
+            if not t:
+                continue
+            try:
+                parsed = json.loads(t)
+                break
+            except Exception:
+                continue
+    if isinstance(parsed, dict):
+        ac = (parsed.get("hookSpecificOutput") or {}).get("additionalContext")
+        if isinstance(ac, str):
+            return ac
+        if isinstance(ac, list):
+            return "".join(str(x) for x in ac)
+        return ""  # valid JSON, no additionalContext -> a no-op
+    return s if event == "UserPromptSubmit" else ""
+
+
+def _run_command_capture(command: str, payload: bytes, env_home: str,
+                         probe_cwd: str, timeout: int = 15) -> str | None:
+    """Execute the LITERAL wired command via the shell with `payload` on stdin, with
+    HOME redirected to a throwaway sandbox dir (so a hook's ~/-relative WRITES - logs,
+    markers - land there, not in the real home) but the WORKING DIR set to `probe_cwd`
+    (the real repo being audited, so cwd/scope-conditional reads resolve realistically;
+    that is how a cwd-conditional injector becomes visible rather than reading 0).
+    Returns stdout, or None on failure/timeout. This mirrors how Claude Code invokes a
+    hook (a shell command string + JSON stdin), so it measures non-.py / guarded /
+    unowned forms uniformly. EXECUTION -> advisory only, never the static gate: the
+    maintainer opts in (--measure-live --execute), and these are their OWN wired hooks,
+    run once each with a neutral payload (strictly less than one normal turn)."""
+    import os
+    env = dict(os.environ)
+    env["HOME"] = env_home
+    env["CLAUDE_PROJECT_DIR"] = probe_cwd
+    try:
+        r = subprocess.run(["/bin/bash", "-c", command], input=payload, cwd=probe_cwd,
+                           capture_output=True, timeout=timeout, env=env)
+        return r.stdout.decode("utf-8", "ignore")
+    except Exception:
+        return None
+
+
+def _load_owned_checker():
+    """Return (is_owned_fn, source_label). ONE source of truth: import is_abs_owned
+    from install-hooks-user-level.py (the installer IS the ownership authority - same
+    ABS_FINGERPRINTS / ABS_OWNED_BASENAMES that decide what the installer may relocate).
+    Falls back to a path heuristic if that module can't be loaded, and reports which was
+    used (a fail-loud-ish breadcrumb, never a silent wrong tag)."""
+    here = Path(__file__).resolve().parent
+    inst = here / "install-hooks-user-level.py"
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("_abs_installer_ownership", inst)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)  # type: ignore[union-attr]
+        return mod.is_abs_owned, "installer"
+    except Exception:
+        return (lambda cmd: "skills/ai-brain-starter/" in cmd), "path-heuristic"
+
+
+def _basename_of(command: str) -> str:
+    """Display label: the last .py/.sh script basename in the command (the hook), else
+    the first shell token (an inline-bash injector like `echo '{...}'`)."""
+    import os
+    m = re.findall(r"([\w.\-]+\.(?:py|sh))", command)
+    if m:
+        return os.path.basename(m[-1])
+    toks = command.strip().split()
+    return toks[0] if toks else "<empty>"
+
+
+def measure_live_injection(fleet: dict, events: list[str], env_home: str,
+                           is_owned, timeout: int = 15, probe_cwd: str | None = None) -> dict:
+    """Axis D-live (MYC-2396). For each event in `events`, execute every wired hook
+    (deduped by literal command) with a neutral payload and sum injected tokens.
+    Returns {event: {total_tokens, hooks: [{command, basename, owned, tokens}]}}.
+    Covers owned + unowned + non-.py + per-tool because it runs the LITERAL command
+    via the shell, not a resolved repo file. `probe_cwd` (default: the current working
+    dir) is the realistic working dir hooks run in, so cwd/scope-conditional injectors
+    are measured for that repo. For a matcher-gated event, each block is probed with the
+    first representative tool its matcher accepts (a block whose matcher fires for no
+    representative tool is skipped)."""
+    import os
+    if probe_cwd is None:
+        probe_cwd = os.getcwd()
+    out: dict[str, dict] = {}
+    for event in events:
+        seen: set[str] = set()
+        hooks_res: list[dict] = []
+        for block in fleet.get(event, []):
+            tool = "Write"
+            matcher = block.get("matcher")
+            if matcher is not None:
+                tool = next((t for t in REPRESENTATIVE_TOOLS
+                             if _matcher_matches(matcher, t)), None)
+                if tool is None:
+                    continue
+            payload = _neutral_payload(event, tool, probe_cwd)
+            for e in block["entries"]:
+                cmd = e["command"]
+                if cmd in seen:
+                    continue
+                seen.add(cmd)
+                stdout = _run_command_capture(cmd, payload, env_home, probe_cwd, timeout)
+                tokens = _estimate_tokens(_injected_text(stdout or "", event))
+                hooks_res.append({"command": cmd, "basename": _basename_of(cmd),
+                                  "owned": bool(is_owned(cmd)), "tokens": tokens})
+        out[event] = {"total_tokens": sum(h["tokens"] for h in hooks_res),
+                      "hooks": hooks_res}
+    return out
+
+
+def cmd_measure_live(settings_path: Path, events: list[str], execute: bool,
+                     timeout: int) -> int:
+    """--measure-live (MYC-2396): the per-message injected-token cost of an install's
+    ACTUAL ~/.claude/settings.json (owned + unowned), with relocate-to-SessionStart
+    hints. Advisory; never blocks. Missing settings.json -> graceful note + exit 0
+    (a clean CI box has none); an unparseable one raises -> main() exits 2 (loud)."""
+    if not settings_path.exists():
+        print(f"No settings file at {settings_path} - nothing to measure.\n"
+              f"(--measure-live audits an INSTALL's live ~/.claude/settings.json, where "
+              f"the installer merges hooks.json and the user's own injectors live. A "
+              f"clean CI box has none; run this on a real install.)")
+        return 0
+    import os
+    probe_cwd = os.getcwd()
+    fleet = load_fleet(settings_path)  # settings.json shares the {"hooks": {...}} shape
+    is_owned, owned_src = _load_owned_checker()
+
+    print("Live settings.json injection footprint (axis D-live, MYC-2396; ADVISORY)")
+    print(f"settings:         {settings_path}")
+    print(f"probe cwd:        {probe_cwd}  (cwd-conditional injectors measured for THIS repo)")
+    print(f"ownership source: {owned_src}\n")
+    print("Injector-capable hooks wired per recurring event (owned = ai-brain-starter "
+          "substrate; unowned = your own / customized):")
+    for event in events:
+        n_owned = sum(1 for block in fleet.get(event, []) for e in block["entries"]
+                      if is_owned(e["command"]))
+        n_total = sum(len(block["entries"]) for block in fleet.get(event, []))
+        print(f"    {event:<18} {n_total:>3} hook(s)  ({n_owned} owned, "
+              f"{n_total - n_owned} unowned)")
+
+    if not execute:
+        print("\nStructural inventory only. Re-run with --execute to run each wired "
+              "hook ONCE with a neutral payload in a sandboxed HOME and measure the "
+              "per-message / per-tool injected tokens.\n(--execute runs your real wired "
+              "hooks; they are the same hooks that already fire every turn - one neutral "
+              "run each, HOME redirected to a throwaway dir.)")
+        return 0
+
+    with tempfile.TemporaryDirectory() as home:
+        res = measure_live_injection(fleet, events, home, is_owned, timeout, probe_cwd)
+
+    per_message_total = 0
+    for event in events:
+        data = res.get(event, {"total_tokens": 0, "hooks": []})
+        per_msg = event == "UserPromptSubmit"
+        cadence = "EVERY MESSAGE" if per_msg else f"every matching {event} call"
+        if per_msg:
+            per_message_total += data["total_tokens"]
+        print(f"\n{event} - injected tokens ({cadence}): {data['total_tokens']}")
+        nonzero = sorted((h for h in data["hooks"] if h["tokens"] > 0),
+                         key=lambda h: -h["tokens"])
+        if not nonzero:
+            print("    (every wired hook emits nothing on a neutral payload - no stable "
+                  "block re-injected. Clean.)")
+            continue
+        for h in nonzero:
+            tag = "owned/substrate" if h["owned"] else "UNOWNED (your hook)"
+            print(f"    {h['basename']}: {h['tokens']} tokens  [{tag}]")
+            if per_msg:
+                print("      -> stable block injected EVERY MESSAGE. Move it to "
+                      "SessionStart (fires once per session-segment -> cached prefix, "
+                      "served as cache-reads), not UserPromptSubmit (fresh tokens every "
+                      "turn). (MYC-2359 / ADR 0005)")
+            else:
+                print(f"      -> stable block injected on every {event}. If it is "
+                      "prompt/tool-independent, move the stable part to SessionStart; "
+                      "if it varies by input, gate it to emit only when relevant.")
+    print(f"\nHeadline: ~{per_message_total} tokens injected EVERY MESSAGE by "
+          f"UserPromptSubmit hooks (paid fresh per turn, and per turn x scale). 0 is the "
+          f"goal - stable content belongs in the SessionStart cached prefix.")
+    print("\n(Advisory: execution-based + install/runner-dependent per ADR 0006. CI "
+          "gates the LOGIC via --selftest pos/neg controls, not these raw numbers.)")
+    return 0
+
+
 def cmd_measure(hooks_json: Path, hooks_dir: Path, scripts_dir: Path,
                 bootstrap: Path, execute: bool, budgets_path: Path) -> int:
     fleet = load_fleet(hooks_json)
@@ -638,6 +896,10 @@ def cmd_measure(hooks_json: Path, hooks_dir: Path, scripts_dir: Path,
     print("\n(Axis C timing + axis D tokens are ADVISORY - install / runner "
           "dependent. CI gates the LOGIC via --selftest pos/neg controls, not these "
           "raw numbers.)")
+    print("\nThis measured the SHIPPED hooks.json template. To measure your ACTUAL "
+          "~/.claude/settings.json - including your OWN + customized injectors and "
+          "non-.py / per-tool hooks the template gate never sees - run:\n"
+          "    footprint-sla-check.py --measure-live --execute   (MYC-2396)")
     return 0
 
 
@@ -841,6 +1103,90 @@ def cmd_selftest() -> int:
             fails.append(f"AXIS-D: an unconditional block should exceed the 100-token "
                          f"ceiling, got total {inj['total_tokens']}")
 
+        # 9. AXIS D-LIVE (MYC-2396) pos/neg: measure the LIVE settings.json path, which
+        #    executes the LITERAL wired command via the shell. Proves coverage the
+        #    template-only axis D lacks: UNOWNED hooks, non-.py (inline-bash) injectors,
+        #    and per-tool (PreToolUse) injectors are all measured; a conditional hook and
+        #    a JSON no-op score 0; the ownership tag loads from its single source of truth.
+        is_owned_fn, owned_src = _load_owned_checker()
+        # 9a. ownership: single source of truth (the installer) loads, and tags owned vs
+        #     unowned correctly. A silent fallback to the heuristic is itself a failure.
+        if owned_src != "installer":
+            fails.append(f"AXIS-D-LIVE ownership: expected the installer as the single "
+                         f"source of truth, got '{owned_src}' (install-hooks-user-level.py "
+                         f"not importable / is_abs_owned renamed?)")
+        if not is_owned_fn("python3 ~/.claude/skills/ai-brain-starter/hooks/log-skill-usage.py"):
+            fails.append("AXIS-D-LIVE ownership: a substrate hook should tag as owned")
+        if is_owned_fn("python3 ~/.claude/hooks/my-own-injector.py 2>/dev/null"):
+            fails.append("AXIS-D-LIVE ownership: a user's own hook should tag as UNOWNED")
+        # 9b. measurement: a synthetic live settings.json with one of each injector form.
+        (d / "live_uncond.py").write_text(
+            "import json\n"
+            "print(json.dumps({'hookSpecificOutput': {'hookEventName': "
+            "'UserPromptSubmit', 'additionalContext': 'U' * 4000}}))\n", encoding="utf-8")
+        (d / "live_cond.py").write_text(
+            "import sys, json\n"
+            "try:\n    pr = json.loads(sys.stdin.read()).get('prompt', '')\n"
+            "except Exception:\n    pr = ''\n"
+            "if 'magic-trigger' in pr:\n"
+            "    print(json.dumps({'hookSpecificOutput': {'hookEventName': "
+            "'UserPromptSubmit', 'additionalContext': 'Y' * 4000}}))\n"
+            "else:\n    print(json.dumps({'continue': True, 'suppressOutput': True}))\n",
+            encoding="utf-8")
+        (d / "live_pre.py").write_text(
+            "import json\n"
+            "print(json.dumps({'hookSpecificOutput': {'hookEventName': "
+            "'PreToolUse', 'additionalContext': 'P' * 2000}}))\n", encoding="utf-8")
+        uncond_cmd = f"python3 {d / 'live_uncond.py'}"          # owned? no -> UNOWNED
+        cond_cmd = f"python3 {d / 'live_cond.py'} 2>/dev/null"  # conditional -> 0
+        # a non-.py inline-bash injector: the exact form (vault-script / inline echo) the
+        # template axis D skips (klass != substrate-python). It MUST still be measured.
+        bash_inj_cmd = ("echo '{\"hookSpecificOutput\": {\"hookEventName\": "
+                        "\"UserPromptSubmit\", \"additionalContext\": \"" + "B" * 1200 + "\"}}'")
+        noop_cmd = "echo '{\"continue\": true, \"suppressOutput\": true}'"
+        pre_cmd = f"python3 {d / 'live_pre.py'}"
+        live_settings = d / "live-settings.json"
+        live_settings.write_text(json.dumps({"hooks": {
+            "UserPromptSubmit": [{"hooks": [
+                {"type": "command", "command": uncond_cmd},
+                {"type": "command", "command": cond_cmd},
+                {"type": "command", "command": bash_inj_cmd},
+                {"type": "command", "command": noop_cmd},
+            ]}],
+            "PreToolUse": [{"matcher": "Write|Edit", "hooks": [
+                {"type": "command", "command": pre_cmd},
+            ]}],
+        }}), encoding="utf-8")
+        with tempfile.TemporaryDirectory() as home_live:
+            live = measure_live_injection(load_fleet(live_settings),
+                                          ["UserPromptSubmit", "PreToolUse"],
+                                          home_live, is_owned_fn)
+        ups = {h["command"]: h for h in live["UserPromptSubmit"]["hooks"]}
+        pre = {h["command"]: h for h in live["PreToolUse"]["hooks"]}
+        if ups.get(uncond_cmd, {}).get("tokens", 0) < 500:
+            fails.append(f"AXIS-D-LIVE-NEG: unconditional UPS injector should measure "
+                         f">500 tokens, got {ups.get(uncond_cmd, {}).get('tokens')}")
+        if ups.get(cond_cmd, {}).get("tokens", -1) != 0:
+            fails.append(f"AXIS-D-LIVE-POS: conditional UPS injector should measure 0 on a "
+                         f"neutral prompt, got {ups.get(cond_cmd, {}).get('tokens')}")
+        if ups.get(bash_inj_cmd, {}).get("tokens", 0) < 200:
+            fails.append(f"AXIS-D-LIVE non-.py: an inline-bash injector should be measured "
+                         f"(>200 tokens), got {ups.get(bash_inj_cmd, {}).get('tokens')} - the "
+                         f"template axis D skips this form")
+        if ups.get(noop_cmd, {}).get("tokens", -1) != 0:
+            fails.append(f"AXIS-D-LIVE: a JSON no-op should measure 0, got "
+                         f"{ups.get(noop_cmd, {}).get('tokens')}")
+        if pre.get(pre_cmd, {}).get("tokens", 0) < 200:
+            fails.append(f"AXIS-D-LIVE per-tool: a PreToolUse injector should be measured "
+                         f"(>200 tokens), got {pre.get(pre_cmd, {}).get('tokens')} - the "
+                         f"template axis D only covers UserPromptSubmit")
+        # unowned coverage: the synthetic hooks contain no substrate path -> UNOWNED, yet
+        # they are measured. (The template axis D would never reach an unowned hook.)
+        if not any(h["tokens"] > 0 and not h["owned"]
+                   for h in live["UserPromptSubmit"]["hooks"]):
+            fails.append("AXIS-D-LIVE unowned: an UNOWNED injector should be measured "
+                         "(measurement must not filter by ownership)")
+
     if fails:
         print("SELFTEST FAIL:")
         for f in fails:
@@ -850,7 +1196,10 @@ def cmd_selftest() -> int:
           "ungoverned surfaces + DEAD once:true flags (MYC-2359), passes "
           "within-budget, fails loud on missing hooks.json/budgets; axis-D "
           "injected-token measurement scores an unconditional UPS injector high and "
-          "a conditional one at 0; classification + matcher logic correct.")
+          "a conditional one at 0; axis-D-LIVE (MYC-2396) measures unowned + non-.py "
+          "(inline-bash) + per-tool injectors and scores a no-op/conditional at 0, "
+          "ownership tag from its single source of truth; classification + matcher "
+          "logic correct.")
     return 0
 
 
@@ -861,7 +1210,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Footprint SLA gate for the hook fleet (MYC-2358).")
     ap.add_argument("--gate", action="store_true", help="CI gate: fan-out + daemons vs budgets")
     ap.add_argument("--measure", action="store_true", help="advisory report (no pass/fail)")
-    ap.add_argument("--execute", action="store_true", help="(with --measure) time hooks + felt=MAX")
+    ap.add_argument("--measure-live", dest="measure_live", action="store_true",
+                    help="(MYC-2396) advisory: per-message injected tokens of the LIVE "
+                         "~/.claude/settings.json (owned + unowned + non-.py + per-tool)")
+    ap.add_argument("--execute", action="store_true",
+                    help="(with --measure) time hooks; (with --measure-live) run each "
+                         "wired hook once with a neutral payload to measure injected tokens")
     ap.add_argument("--selftest", action="store_true", help="positive + negative controls")
     ap.add_argument("--update-budgets", action="store_true", help="(maintainer) rewrite budgets")
     ap.add_argument("--json", action="store_true")
@@ -871,7 +1225,25 @@ def main() -> int:
     ap.add_argument("--scripts-dir", default=str(repo / "scripts"))
     ap.add_argument("--bootstrap", default=str(repo / "bootstrap.sh"))
     ap.add_argument("--budgets", default=str(repo / "footprint-budgets.json"))
+    ap.add_argument("--settings", default=str(Path.home() / ".claude" / "settings.json"),
+                    help="(--measure-live) the live settings.json to audit")
+    ap.add_argument("--event", default="all",
+                    help="(--measure-live) 'all' or a comma list of "
+                         f"{'/'.join(LIVE_EVENTS)} (default: all)")
+    ap.add_argument("--timeout", type=int, default=15,
+                    help="(--measure-live --execute) per-hook execution timeout, seconds")
     a = ap.parse_args()
+
+    # --measure-live event selection (validated against the injector-capable set).
+    if a.event.strip().lower() == "all":
+        live_events = list(LIVE_EVENTS)
+    else:
+        live_events = [e.strip() for e in a.event.split(",") if e.strip()]
+        bad = [e for e in live_events if e not in LIVE_EVENTS]
+        if bad:
+            print(f"[footprint-sla] --event: unknown event(s) {bad}; "
+                  f"valid: {LIVE_EVENTS} or 'all'", file=sys.stderr)
+            return 2
 
     # --gate / --selftest / --update-budgets are gates: fail LOUD (exit 2) on any
     # internal error so a broken gate can never silently pass CI.
@@ -881,6 +1253,8 @@ def main() -> int:
         if a.update_budgets:
             return cmd_update_budgets(Path(a.hooks_json), Path(a.bootstrap),
                                       Path(a.budgets), a.headroom)
+        if a.measure_live:
+            return cmd_measure_live(Path(a.settings), live_events, a.execute, a.timeout)
         if a.measure:
             return cmd_measure(Path(a.hooks_json), Path(a.hooks_dir),
                                Path(a.scripts_dir), Path(a.bootstrap), a.execute,

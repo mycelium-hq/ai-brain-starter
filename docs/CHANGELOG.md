@@ -9,6 +9,36 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-06-30: see what *your* setup injects into every message
+
+The previous update stopped the *substrate's* startup hooks from re-sending their text
+on every message. But the real per-message cost is in **your** `settings.json` — the file
+that holds not just our hooks but every hook you (or a teammate) wired yourself: a context
+loader, a version check, a reminder that fires on each prompt. A stable block wired there
+re-sends its full text every single message, and the previous check couldn't see it — it
+only looked at the hooks we ship, only the Python ones, and only the prompt event.
+
+There's now a command that measures **your actual setup**:
+
+```
+footprint-sla-check.py --measure-live --execute
+```
+
+It runs each of your wired hooks once with a blank, throwaway prompt (in a sandboxed copy
+of your home folder, so nothing real is touched) and shows how many tokens each one
+injects on **every message** — including your own hooks, hooks written in bash instead of
+Python, and hooks that fire on tool calls (not just on your prompt). Anything that keeps
+re-sending a stable block gets flagged with the fix: move it to session-start, where the
+text is loaded once and re-used for free the rest of the session, instead of being paid for
+fresh every turn. Run it without `--execute` first for a safe, no-run inventory of what's
+wired.
+
+This is a report you run when you want it — it never blocks anything and nothing runs
+automatically. It's for spotting an expensive habit before it quietly compounds. (Full
+reasoning: `docs/adr/0006-measure-live-settings-injection.md`.)
+
+---
+
 ## 2026-06-30: stop re-sending session context on every message (cheaper, leaner)
 
 Two startup hooks load standing context for the session: the session-start guidance
