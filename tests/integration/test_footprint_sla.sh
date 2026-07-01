@@ -218,6 +218,21 @@ if python3 "$GATE" --measure-live --execute --settings "$LIVE/nope.json" >/dev/n
   ok "measure-live on a missing settings.json exits 0 (advisory)"
 else bad "measure-live missing settings" "advisory mode should exit 0 on a missing settings.json"; fi
 
+echo "=== 8. SAFE DEFAULTS (MYC-2409): UPS-only default + write-hook opt-in warning ==="
+# Default (no --event) must probe ONLY UserPromptSubmit - the safe per-message headline -
+# NOT the tool-WRITE events. The synthetic settings has a PreToolUse injector; by default
+# it must NOT be probed (no "PreToolUse - injected tokens" line).
+OUT_DEF="$(python3 "$GATE" --measure-live --execute --settings "$LIVE/settings.json" 2>&1)"
+if echo "$OUT_DEF" | grep -q "UserPromptSubmit - injected tokens" \
+   && ! echo "$OUT_DEF" | grep -q "PreToolUse - injected tokens"; then
+  ok "default --measure-live --execute probes UserPromptSubmit only (safe default)"
+else bad "measure-live safe default" "default should probe UPS only, not tool events; got: $OUT_DEF"; fi
+# Opting into tool events must print the WRITE-hook / throwaway-dir safety disclosure.
+OUT_ALL="$(python3 "$GATE" --measure-live --execute --settings "$LIVE/settings.json" --event all 2>&1)"
+if echo "$OUT_ALL" | grep -qi "THROWAWAY working dir"; then
+  ok "opting into tool events discloses write-hooks run in a throwaway dir"
+else bad "measure-live tool-event disclosure" "expected a throwaway-dir write-hook warning; got: $OUT_ALL"; fi
+
 echo
 echo "=== summary: $PASS passed, $FAIL failed ==="
 [ "$FAIL" -eq 0 ]

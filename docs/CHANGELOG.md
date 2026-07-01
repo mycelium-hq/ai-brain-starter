@@ -9,6 +9,20 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-06-30: the "what your setup injects" meter is now honest and safe
+
+The meter from the previous entry got a hardening pass after an adversarial review found three sharp edges. All fixed:
+
+1. **It no longer lies on Windows.** The meter needs a Unix-style shell (bash) to run your hooks. On a Windows machine it couldn't — but instead of admitting that, it cheerfully reported *"all clear, zero waste."* A meter that says "all good" while it's actually blindfolded is worse than no meter. Now, if it can't run your hooks, it says so plainly (**"CANNOT MEASURE — UNMEASURED"**) and shows only the safe inventory. Same honesty if a specific hook times out or crashes: it's marked "unmeasured," never quietly counted as clean.
+
+2. **It won't touch your real work.** To measure honestly it runs your hooks in your current project. Some hooks *write* (auto-commit, stash, save a file). The first version could have let one of those run against your uncommitted work. Now only the harmless "before you type" hooks run in your real project; the ones that fire on *actions* run in a throwaway scratch folder, so nothing can touch your repo.
+
+3. **Safer by default.** Plain `--measure-live --execute` now checks only the per-message hooks (the headline, and the safe ones). If you want the fuller sweep that also pokes the action-hooks, you ask for it explicitly (`--event all`) and it tells you those run in the scratch folder first.
+
+Bottom line: it's now safe for anyone — including a paid Mycelium install — to run in their working folder, and it will never hand you a falsely reassuring "clean." (Reasoning: `docs/adr/0006-measure-live-settings-injection.md`.)
+
+---
+
 ## 2026-06-30: see what *your* setup injects into every message
 
 The previous update stopped the *substrate's* startup hooks from re-sending their text

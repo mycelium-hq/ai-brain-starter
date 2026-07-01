@@ -87,10 +87,37 @@ new always-on hook ships; the always-on footprint stays at zero new cold starts.
 
 ### Why executing the user's own hooks is acceptable here
 
-`--execute` runs the install's real wired hooks - but they are the *same* hooks that
-already fire on every turn, run **once each** with a **neutral** payload in a **sandboxed
-HOME**, strictly less than one normal turn of activity. The maintainer opts in. A
-well-behaved conditional hook short-circuits on the neutral payload and does nothing.
+`--execute` runs the install's real wired hooks - the *same* hooks that already fire on
+every turn, run **once each** with a **neutral** payload. The maintainer opts in, and a
+well-behaved conditional hook short-circuits on the neutral payload and does nothing. But
+"sandboxed HOME" alone is **not** enough (the hardening below): a hook can write to the
+*working directory*, not just `~/`. See the MYC-2409 cwd boundary.
+
+## Hardening (MYC-2409, from adversarial review)
+
+An independent silent-failure + sharp-edges review of the first implementation found three
+real defects; they are fixed and locked by `--selftest` / `test_footprint_sla.sh`:
+
+1. **Fail loud on non-POSIX, never a silent "Clean".** The first version ran hooks via a
+   hardcoded `/bin/bash`. On Windows (officially supported: `bootstrap.ps1` + a Windows CI
+   runner) `subprocess` raises, the error is swallowed to `None`, `None` coerces to `0`
+   tokens, and the tool prints *"every hook emits nothing - Clean. ~0 tokens."* A meter that
+   reports all-clear while blindfolded is worse than no meter. Fix: resolve the shell
+   (`bash` on PATH, else `/bin/bash`); if none, `--execute` prints **"CANNOT MEASURE …
+   UNMEASURED"** and the structural inventory only - never "Clean". The `None` (could-not-run)
+   vs `""` (ran, injected nothing) distinction is now load-bearing and surfaced as an
+   `unmeasured` count per event; an unmeasured hook is never counted as a clean 0.
+2. **cwd is a write boundary, not just HOME.** The prober set the working dir *and*
+   `CLAUDE_PROJECT_DIR` *and* the payload `cwd` to the user's real repo (needed so a
+   cwd-conditional CONTEXT.md loader is measured). But that also points real **write** hooks
+   (auto-commit, `git stash`, file writers) at the user's uncommitted work. Fix: only
+   **UserPromptSubmit** hooks (read-only injectors) run in the real repo; **PreToolUse /
+   PostToolUse** hooks run in a **throwaway dir**, so a write/git hook hits the sandbox, not
+   the repo.
+3. **Safe default scope.** `--execute` now defaults to `--event UserPromptSubmit` (the only
+   per-*message* injector and the safe one); the tool-WRITE events are explicit opt-in
+   (`--event all`) behind a printed disclosure that they run in a throwaway dir. A read-only
+   representative tool (`Read`/`Glob`) is preferred when probing a matcher-gated block.
 
 ## Consequences
 
