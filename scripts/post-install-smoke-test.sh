@@ -95,23 +95,32 @@ done
 }
 
 # === 4. Hook smoke test (sample stdin) ===
+# Hermetic fixture: a throwaway vault with a Meta/ dir and NO CLAUDE.md, with
+# VAULT_ROOT pinned to it. This isolates the detector from the operator's own
+# closingSignals config and any ambient VAULT_ROOT. Without it, a machine whose
+# real vault sets `closingSignals.customOnly: true` (which makes the detector
+# fire ONLY on the user's custom phrases and skip the shared pack) sees the
+# shared-pack "bye" correctly suppressed — and this check false-FAILs even though
+# the detector is behaving as configured (MYC-1988). CLOSING_SIGNAL_DETECTION is
+# unset so the check never reaches the optional Haiku/API path.
 hdr "Hook smoke tests"
 DETECTOR="$SKILL_DIR/hooks/detect-closing-signal.py"
 if [[ -f "$DETECTOR" ]]; then
-  TMPDIR_HOOK=$(mktemp -d)
-  resp=$(echo '{"prompt":"hello world","session_id":"smoke","cwd":"'"$TMPDIR_HOOK"'"}' | python3 "$DETECTOR" 2>/dev/null)
+  FIXTURE_VAULT=$(mktemp -d)
+  mkdir -p "$FIXTURE_VAULT/Meta/Sessions"
+  resp=$(echo '{"prompt":"hello world","session_id":"smoke","cwd":"'"$FIXTURE_VAULT"'"}' | env -u CLOSING_SIGNAL_DETECTION VAULT_ROOT="$FIXTURE_VAULT" python3 "$DETECTOR" 2>/dev/null)
   if echo "$resp" | python3 -c "import json,sys; json.loads(sys.stdin.read())" 2>/dev/null; then
     ok "detect-closing-signal.py returns valid JSON for non-close input"
   else
     fail "detect-closing-signal.py returned invalid JSON"
   fi
-  resp=$(echo '{"prompt":"bye","session_id":"smoke","cwd":"'"$TMPDIR_HOOK"'"}' | python3 "$DETECTOR" 2>/dev/null)
+  resp=$(echo '{"prompt":"bye","session_id":"smoke","cwd":"'"$FIXTURE_VAULT"'"}' | env -u CLOSING_SIGNAL_DETECTION VAULT_ROOT="$FIXTURE_VAULT" python3 "$DETECTOR" 2>/dev/null)
   if echo "$resp" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); assert 'hookSpecificOutput' in d" 2>/dev/null; then
-    ok "detect-closing-signal.py injects context on 'bye'"
+    ok "detect-closing-signal.py injects context on 'bye' (hermetic shared-pack fixture)"
   else
     fail "detect-closing-signal.py did not inject context on 'bye'"
   fi
-  rm -rf "$TMPDIR_HOOK"
+  rm -rf "$FIXTURE_VAULT"
 fi
 
 LINTER="$SKILL_DIR/hooks/lint-vault-frontmatter.py"
