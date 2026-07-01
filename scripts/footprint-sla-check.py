@@ -81,17 +81,21 @@ Modes:
                         injected-bytes when --execute). No pass/fail. Measures the
                         SHIPPED hooks.json template.
   --measure-live [--execute] [--settings P] [--event E]
-                        (MYC-2359 -> MYC-2396) Axis D against the LIVE
-                        ~/.claude/settings.json instead of the template: the
-                        per-message injected-token cost an install ACTUALLY pays,
-                        including the user's OWN + customized injectors and the
-                        non-.py (vault-script / inline-bash) + per-tool (PreToolUse /
-                        PostToolUse) hooks the template-only axis D skips. Runs each
-                        wired injector once with a neutral payload in a sandboxed HOME
-                        (only with --execute; without it, a no-execution structural
-                        inventory). Flags any stable every-message injector with a
-                        "belongs on SessionStart (cached prefix)" hint. Advisory,
-                        install-specific, never blocks; LOGIC gated by --selftest.
+                        (MYC-2359 -> MYC-2396, hardened MYC-2409) Axis D against the LIVE
+                        ~/.claude/settings.json instead of the template: the per-message
+                        injected-token cost an install ACTUALLY pays, including the user's
+                        OWN + customized injectors and the non-.py (vault-script /
+                        inline-bash) + per-tool (PreToolUse / PostToolUse) hooks the
+                        template-only axis D skips. Flags any stable every-message injector
+                        with a "belongs on SessionStart (cached prefix)" hint. Defaults to
+                        --event UserPromptSubmit (the safe per-message headline; UPS hooks
+                        run in the REAL repo so a cwd-conditional CONTEXT.md loader is
+                        measured). --event all also probes the tool-WRITE events, which run
+                        in a THROWAWAY dir so a write/git hook can't touch the real repo.
+                        With --execute and NO shell (Windows / non-POSIX) it FAILS LOUD -
+                        structural inventory + "UNMEASURED", never a misleading "Clean"
+                        (MYC-2409). Advisory, install-specific, never blocks; LOGIC (incl.
+                        the fail-loud no-shell control) gated by --selftest.
   --selftest            Positive + negative controls: a synthetic over-budget
                         fleet trips --gate; a within-budget one passes; a missing
                         budgets file fails loud (exit 2); a default-on daemon
@@ -638,24 +642,35 @@ def _injected_text(stdout: str, event: str) -> str:
     return s if event == "UserPromptSubmit" else ""
 
 
-def _run_command_capture(command: str, payload: bytes, env_home: str,
-                         probe_cwd: str, timeout: int = 15) -> str | None:
-    """Execute the LITERAL wired command via the shell with `payload` on stdin, with
-    HOME redirected to a throwaway sandbox dir (so a hook's ~/-relative WRITES - logs,
-    markers - land there, not in the real home) but the WORKING DIR set to `probe_cwd`
-    (the real repo being audited, so cwd/scope-conditional reads resolve realistically;
-    that is how a cwd-conditional injector becomes visible rather than reading 0).
-    Returns stdout, or None on failure/timeout. This mirrors how Claude Code invokes a
-    hook (a shell command string + JSON stdin), so it measures non-.py / guarded /
-    unowned forms uniformly. EXECUTION -> advisory only, never the static gate: the
-    maintainer opts in (--measure-live --execute), and these are their OWN wired hooks,
-    run once each with a neutral payload (strictly less than one normal turn)."""
+def _resolve_shell() -> str | None:
+    """The POSIX shell `--measure-live --execute` runs hooks through. `bash` on PATH,
+    else /bin/bash if present, else None. None means this platform cannot execute the
+    hooks (e.g. Windows with no bash) - cmd_measure_live FAILS LOUD on that rather than
+    running every hook to a swallowed error and reporting a misleading 'Clean' (the
+    silent-false-negative MYC-2409 fixes)."""
     import os
+    import shutil
+    return shutil.which("bash") or ("/bin/bash" if os.path.exists("/bin/bash") else None)
+
+
+def _run_command_capture(command: str, payload: bytes, env_home: str, probe_cwd: str,
+                         shell: str, timeout: int = 10) -> str | None:
+    """Execute the LITERAL wired command via `shell -c` with `payload` on stdin, HOME
+    redirected to a throwaway sandbox dir (so ~/-relative WRITES land there, not in the
+    real home) and the working dir set to `probe_cwd`. Returns stdout on success, or
+    None when the hook COULD NOT BE RUN (shell missing, spawn error, timeout, crash).
+    The None vs '' distinction is load-bearing: None = unmeasured (the caller must NOT
+    report it as a clean 0); '' / JSON-no-op = ran and injected nothing (a real clean 0).
+    Mirrors how Claude Code invokes a hook (shell command string + JSON stdin), so it
+    measures non-.py / guarded / unowned forms uniformly. EXECUTION -> advisory only."""
+    import os
+    if not shell:
+        return None
     env = dict(os.environ)
     env["HOME"] = env_home
     env["CLAUDE_PROJECT_DIR"] = probe_cwd
     try:
-        r = subprocess.run(["/bin/bash", "-c", command], input=payload, cwd=probe_cwd,
+        r = subprocess.run([shell, "-c", command], input=payload, cwd=probe_cwd,
                            capture_output=True, timeout=timeout, env=env)
         return r.stdout.decode("utf-8", "ignore")
     except Exception:
@@ -691,53 +706,77 @@ def _basename_of(command: str) -> str:
     return toks[0] if toks else "<empty>"
 
 
-def measure_live_injection(fleet: dict, events: list[str], env_home: str,
-                           is_owned, timeout: int = 15, probe_cwd: str | None = None) -> dict:
-    """Axis D-live (MYC-2396). For each event in `events`, execute every wired hook
-    (deduped by literal command) with a neutral payload and sum injected tokens.
-    Returns {event: {total_tokens, hooks: [{command, basename, owned, tokens}]}}.
-    Covers owned + unowned + non-.py + per-tool because it runs the LITERAL command
-    via the shell, not a resolved repo file. `probe_cwd` (default: the current working
-    dir) is the realistic working dir hooks run in, so cwd/scope-conditional injectors
-    are measured for that repo. For a matcher-gated event, each block is probed with the
-    first representative tool its matcher accepts (a block whose matcher fires for no
-    representative tool is skipped)."""
+# Read-mostly representative tools, preferred when probing a matcher-gated block so a
+# WRITE-gated hook is fired with a non-mutating tool where its matcher allows it (defense
+# in depth on top of the tool-event cwd sandbox below).
+READONLY_TOOLS = ["Read", "Glob", "Grep"]
+
+
+def measure_live_injection(fleet: dict, events: list[str], env_home: str, is_owned,
+                           timeout: int = 10, real_cwd: str | None = None,
+                           tool_cwd: str | None = None, shell: str | None = None,
+                           on_progress=None) -> dict:
+    """Axis D-live (MYC-2396, hardened MYC-2409). For each event in `events`, execute
+    every wired hook (deduped by literal command) with a neutral payload and sum injected
+    tokens. Returns {event: {total_tokens, unmeasured, hooks: [{command, basename, owned,
+    tokens, ran}]}}. Covers owned + unowned + non-.py + per-tool because it runs the
+    LITERAL command via the shell, not a resolved repo file.
+
+    cwd policy (the safety boundary): UserPromptSubmit hooks are read-only injectors that
+    need the REAL repo cwd so a cwd-conditional injector (a per-repo CONTEXT.md loader) is
+    measured, not read as 0. PreToolUse / PostToolUse hooks may WRITE (auto-commit, git
+    stash, file writers), so they run in a THROWAWAY `tool_cwd` (default: the sandbox HOME
+    dir) - a hook that stages/commits/writes hits the sandbox, never the user's real repo.
+
+    `ran` records whether the hook actually executed (stdout was not None). An unmeasured
+    hook (shell missing, timeout, crash) is NOT counted as a clean 0 - the caller surfaces
+    it. `shell` is the resolved bash; None -> every hook is unmeasured (caller fails loud)."""
     import os
-    if probe_cwd is None:
-        probe_cwd = os.getcwd()
+    if real_cwd is None:
+        real_cwd = os.getcwd()
+    if tool_cwd is None:
+        tool_cwd = env_home  # throwaway: write-hooks can't reach the real repo
     out: dict[str, dict] = {}
     for event in events:
+        cwd = real_cwd if event == "UserPromptSubmit" else tool_cwd
         seen: set[str] = set()
         hooks_res: list[dict] = []
         for block in fleet.get(event, []):
             tool = "Write"
             matcher = block.get("matcher")
             if matcher is not None:
-                tool = next((t for t in REPRESENTATIVE_TOOLS
-                             if _matcher_matches(matcher, t)), None)
+                tool = (next((t for t in READONLY_TOOLS if _matcher_matches(matcher, t)), None)
+                        or next((t for t in REPRESENTATIVE_TOOLS if _matcher_matches(matcher, t)), None))
                 if tool is None:
                     continue
-            payload = _neutral_payload(event, tool, probe_cwd)
+            payload = _neutral_payload(event, tool, cwd)
             for e in block["entries"]:
                 cmd = e["command"]
                 if cmd in seen:
                     continue
                 seen.add(cmd)
-                stdout = _run_command_capture(cmd, payload, env_home, probe_cwd, timeout)
-                tokens = _estimate_tokens(_injected_text(stdout or "", event))
-                hooks_res.append({"command": cmd, "basename": _basename_of(cmd),
-                                  "owned": bool(is_owned(cmd)), "tokens": tokens})
+                stdout = _run_command_capture(cmd, payload, env_home, cwd, shell, timeout)
+                ran = stdout is not None
+                tokens = _estimate_tokens(_injected_text(stdout or "", event)) if ran else 0
+                bn = _basename_of(cmd)
+                hooks_res.append({"command": cmd, "basename": bn,
+                                  "owned": bool(is_owned(cmd)), "tokens": tokens, "ran": ran})
+                if on_progress:
+                    on_progress(event, bn, ran, tokens)
         out[event] = {"total_tokens": sum(h["tokens"] for h in hooks_res),
+                      "unmeasured": sum(1 for h in hooks_res if not h["ran"]),
                       "hooks": hooks_res}
     return out
 
 
 def cmd_measure_live(settings_path: Path, events: list[str], execute: bool,
                      timeout: int) -> int:
-    """--measure-live (MYC-2396): the per-message injected-token cost of an install's
-    ACTUAL ~/.claude/settings.json (owned + unowned), with relocate-to-SessionStart
-    hints. Advisory; never blocks. Missing settings.json -> graceful note + exit 0
-    (a clean CI box has none); an unparseable one raises -> main() exits 2 (loud)."""
+    """--measure-live (MYC-2396, hardened MYC-2409): the per-message injected-token cost
+    of an install's ACTUAL ~/.claude/settings.json (owned + unowned), with
+    relocate-to-SessionStart hints. Advisory; never blocks. Missing settings.json ->
+    graceful note + exit 0; an unparseable one raises -> main() exits 2 (loud). When
+    --execute cannot run the hooks (no bash / non-POSIX), it FAILS LOUD with structural
+    inventory only - never a misleading 'Clean' (MYC-2409)."""
     if not settings_path.exists():
         print(f"No settings file at {settings_path} - nothing to measure.\n"
               f"(--measure-live audits an INSTALL's live ~/.claude/settings.json, where "
@@ -745,13 +784,13 @@ def cmd_measure_live(settings_path: Path, events: list[str], execute: bool,
               f"clean CI box has none; run this on a real install.)")
         return 0
     import os
-    probe_cwd = os.getcwd()
+    real_cwd = os.getcwd()
     fleet = load_fleet(settings_path)  # settings.json shares the {"hooks": {...}} shape
     is_owned, owned_src = _load_owned_checker()
+    tool_events = [e for e in events if e in ("PreToolUse", "PostToolUse")]
 
     print("Live settings.json injection footprint (axis D-live, MYC-2396; ADVISORY)")
     print(f"settings:         {settings_path}")
-    print(f"probe cwd:        {probe_cwd}  (cwd-conditional injectors measured for THIS repo)")
     print(f"ownership source: {owned_src}\n")
     print("Injector-capable hooks wired per recurring event (owned = ai-brain-starter "
           "substrate; unowned = your own / customized):")
@@ -763,30 +802,55 @@ def cmd_measure_live(settings_path: Path, events: list[str], execute: bool,
               f"{n_total - n_owned} unowned)")
 
     if not execute:
-        print("\nStructural inventory only. Re-run with --execute to run each wired "
-              "hook ONCE with a neutral payload in a sandboxed HOME and measure the "
-              "per-message / per-tool injected tokens.\n(--execute runs your real wired "
-              "hooks; they are the same hooks that already fire every turn - one neutral "
-              "run each, HOME redirected to a throwaway dir.)")
+        print("\nStructural inventory only. Re-run with --execute to run each wired hook "
+              "ONCE with a neutral payload and measure the per-message injected tokens.")
         return 0
 
+    # FAIL LOUD, never a misleading 'Clean': if there is no shell to run the hooks
+    # (Windows / non-POSIX with no bash), we cannot measure - say so plainly (MYC-2409).
+    shell = _resolve_shell()
+    if shell is None:
+        print("\n!! CANNOT MEASURE: --execute needs a POSIX shell (bash) to run the wired "
+              "hooks, and none was found on this platform (e.g. Windows without bash).\n"
+              "   This is NOT a clean result - the per-message injection is UNMEASURED. "
+              "The structural inventory above is all this platform can report.")
+        return 0
+
+    # Honest scope + side-effect disclosure (MYC-2409): UPS runs in your REAL repo (its
+    # hooks are read-only injectors); tool-events run in a THROWAWAY dir so any write/git
+    # hook can't touch your repo. HOME is sandboxed for all of them.
+    print(f"\nProbing with `{shell}`. UserPromptSubmit hooks run in your real repo "
+          f"({real_cwd}) so a cwd-conditional injector (CONTEXT.md loader) is measured; "
+          f"HOME is redirected to a throwaway dir.")
+    if tool_events:
+        print(f"  Note: you opted into {tool_events} via --event. Those may include WRITE "
+              f"hooks (auto-commit, git stash, file writers) - they run in a THROWAWAY "
+              f"working dir (not your repo) so they cannot mutate your work.")
+
+    def _progress(event, bn, ran, tokens):
+        mark = f"{tokens}t" if ran else "UNMEASURED(could not run)"
+        print(f"  [probe] {event}:{bn} -> {mark}", file=sys.stderr)
+
     with tempfile.TemporaryDirectory() as home:
-        res = measure_live_injection(fleet, events, home, is_owned, timeout, probe_cwd)
+        # tool-event sandbox cwd lives under the throwaway HOME (auto-cleaned).
+        tool_cwd = home
+        res = measure_live_injection(fleet, events, home, is_owned, timeout,
+                                     real_cwd=real_cwd, tool_cwd=tool_cwd, shell=shell,
+                                     on_progress=_progress)
 
     per_message_total = 0
+    total_unmeasured = 0
     for event in events:
-        data = res.get(event, {"total_tokens": 0, "hooks": []})
+        data = res.get(event, {"total_tokens": 0, "hooks": [], "unmeasured": 0})
         per_msg = event == "UserPromptSubmit"
         cadence = "EVERY MESSAGE" if per_msg else f"every matching {event} call"
+        unmeasured = data.get("unmeasured", 0)
+        total_unmeasured += unmeasured
         if per_msg:
             per_message_total += data["total_tokens"]
         print(f"\n{event} - injected tokens ({cadence}): {data['total_tokens']}")
         nonzero = sorted((h for h in data["hooks"] if h["tokens"] > 0),
                          key=lambda h: -h["tokens"])
-        if not nonzero:
-            print("    (every wired hook emits nothing on a neutral payload - no stable "
-                  "block re-injected. Clean.)")
-            continue
         for h in nonzero:
             tag = "owned/substrate" if h["owned"] else "UNOWNED (your hook)"
             print(f"    {h['basename']}: {h['tokens']} tokens  [{tag}]")
@@ -799,9 +863,19 @@ def cmd_measure_live(settings_path: Path, events: list[str], execute: bool,
                 print(f"      -> stable block injected on every {event}. If it is "
                       "prompt/tool-independent, move the stable part to SessionStart; "
                       "if it varies by input, gate it to emit only when relevant.")
+        if unmeasured:
+            print(f"    !! {unmeasured} hook(s) could not be executed (timeout/crash) - "
+                  f"UNMEASURED, not counted as clean.")
+        elif not nonzero:
+            print("    (every wired hook ran and emitted nothing on a neutral payload - "
+                  "no stable block re-injected. Clean.)")
     print(f"\nHeadline: ~{per_message_total} tokens injected EVERY MESSAGE by "
           f"UserPromptSubmit hooks (paid fresh per turn, and per turn x scale). 0 is the "
           f"goal - stable content belongs in the SessionStart cached prefix.")
+    if total_unmeasured:
+        print(f"WARNING: {total_unmeasured} hook(s) across all events could not be run - "
+              f"the numbers above UNDER-count. Investigate (a slow hook hitting the "
+              f"{timeout}s timeout, or a broken command) before trusting 'clean'.")
     print("\n(Advisory: execution-based + install/runner-dependent per ADR 0006. CI "
           "gates the LOGIC via --selftest pos/neg controls, not these raw numbers.)")
     return 0
@@ -1157,10 +1231,11 @@ def cmd_selftest() -> int:
                 {"type": "command", "command": pre_cmd},
             ]}],
         }}), encoding="utf-8")
+        live_shell = _resolve_shell()
         with tempfile.TemporaryDirectory() as home_live:
             live = measure_live_injection(load_fleet(live_settings),
                                           ["UserPromptSubmit", "PreToolUse"],
-                                          home_live, is_owned_fn)
+                                          home_live, is_owned_fn, shell=live_shell)
         ups = {h["command"]: h for h in live["UserPromptSubmit"]["hooks"]}
         pre = {h["command"]: h for h in live["PreToolUse"]["hooks"]}
         if ups.get(uncond_cmd, {}).get("tokens", 0) < 500:
@@ -1186,6 +1261,27 @@ def cmd_selftest() -> int:
                    for h in live["UserPromptSubmit"]["hooks"]):
             fails.append("AXIS-D-LIVE unowned: an UNOWNED injector should be measured "
                          "(measurement must not filter by ownership)")
+        # 9c. FAIL-LOUD NEGATIVE CONTROL (MYC-2409): when the shell is missing (the
+        #     Windows / non-POSIX case), EVERY hook must come back ran=False / UNMEASURED -
+        #     NOT a clean 0. This is the guard that proves the silent-false-negative is
+        #     closed: a bogus shell path makes _run_command_capture return None for the
+        #     SAME unconditional injector that scored high above.
+        with tempfile.TemporaryDirectory() as home_noshell:
+            noshell = measure_live_injection(load_fleet(live_settings), ["UserPromptSubmit"],
+                                             home_noshell, is_owned_fn,
+                                             shell="/nonexistent/bash-not-here")
+        ns = noshell["UserPromptSubmit"]
+        if ns.get("unmeasured", 0) != len(ns["hooks"]) or any(h["ran"] for h in ns["hooks"]):
+            fails.append(f"AXIS-D-LIVE-FAILLOUD: with no shell, every hook must be "
+                         f"UNMEASURED (ran=False); got unmeasured={ns.get('unmeasured')} of "
+                         f"{len(ns['hooks'])}, any-ran={any(h['ran'] for h in ns['hooks'])}")
+        if ns["total_tokens"] != 0 or any(h["tokens"] for h in ns["hooks"]):
+            fails.append("AXIS-D-LIVE-FAILLOUD: an unmeasured hook must contribute 0 tokens "
+                         "AND be flagged unmeasured (never a silent clean 0)")
+        # _resolve_shell finds bash on this POSIX CI box (so the happy path above ran).
+        if live_shell is None:
+            fails.append("AXIS-D-LIVE: _resolve_shell found no bash on this box - the "
+                         "measurement happy path could not run (selftest environment issue)")
 
     if fails:
         print("SELFTEST FAIL:")
@@ -1198,8 +1294,9 @@ def cmd_selftest() -> int:
           "injected-token measurement scores an unconditional UPS injector high and "
           "a conditional one at 0; axis-D-LIVE (MYC-2396) measures unowned + non-.py "
           "(inline-bash) + per-tool injectors and scores a no-op/conditional at 0, "
-          "ownership tag from its single source of truth; classification + matcher "
-          "logic correct.")
+          "ownership tag from its single source of truth; axis-D-LIVE FAILS LOUD with no "
+          "shell (every hook UNMEASURED, never a silent clean 0 - MYC-2409); "
+          "classification + matcher logic correct.")
     return 0
 
 
@@ -1227,10 +1324,12 @@ def main() -> int:
     ap.add_argument("--budgets", default=str(repo / "footprint-budgets.json"))
     ap.add_argument("--settings", default=str(Path.home() / ".claude" / "settings.json"),
                     help="(--measure-live) the live settings.json to audit")
-    ap.add_argument("--event", default="all",
+    ap.add_argument("--event", default="UserPromptSubmit",
                     help="(--measure-live) 'all' or a comma list of "
-                         f"{'/'.join(LIVE_EVENTS)} (default: all)")
-    ap.add_argument("--timeout", type=int, default=15,
+                         f"{'/'.join(LIVE_EVENTS)} (default: UserPromptSubmit - the safe "
+                         f"per-message headline; 'all' also probes the tool-WRITE events, "
+                         f"which run in a throwaway dir)")
+    ap.add_argument("--timeout", type=int, default=10,
                     help="(--measure-live --execute) per-hook execution timeout, seconds")
     a = ap.parse_args()
 
