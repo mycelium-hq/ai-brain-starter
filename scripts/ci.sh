@@ -98,12 +98,14 @@ INTEGRATION_TESTS=(
   test_phase_doc_slash_commands_installed
   test_reconcile_ff_invariant
   test_detect_closing_signal_worktree
+  test_detect_closing_signal_repo_aware_vault
   test_closing_claim_shared
   test_meta_resolver
   test_meta_resolution_guard
   test_split_meta
   test_context_load_selftest
   test_verify_cascade_failsafe
+  test_verify_cascade_repo_aware_vault
   test_discoverability_partition
   test_stranded_session_artifacts_watchdog
   test_session_coordination_guards
