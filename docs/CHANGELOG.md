@@ -9,6 +9,24 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-06-30: session-close now writes to the vault you're actually working in, not just your default one
+
+**Who this affects:** anyone who works across more than one vault or repo that each has its own CLAUDE.md and its own Sessions/Decisions setup — for example, a personal vault plus one or more separate team or client repos.
+
+**The bug:** the session-close cascade resolves a "vault root" to decide where your session file, decisions, and captures get written. That resolution checked an environment variable (`VAULT_ROOT`) first and only fell back to your current folder if it was unset. Most installs set `VAULT_ROOT` once, globally, as a convenience default — which meant the fallback never ran, for any session, ever. A session spent entirely inside a separate repo with its own session-close setup still had every path resolved against the unrelated default vault. Notes didn't error or warn; they just landed in the wrong place. Bug class: **WRONG-VAULT-ROOT-FROM-GLOBAL-DEFAULT**.
+
+**What's new:** closing a session now checks first whether the folder you're actually in (or one of its parent folders, up to your home directory) has its own CLAUDE.md declaring a "Session End" or "Session Close" setup with a real Sessions folder already in place. If it finds one, that's where your session goes — even if a different vault is configured as the default. If it doesn't find one (a scratch folder, a one-off script, or your actual default vault itself), everything falls back exactly like before. Single-vault setups see no change at all.
+
+The safety-net hooks that double-check a session actually got saved before letting you close (`verify-session-close-cascade.py`, `verify-discoverability-on-close.py`) now use the SAME resolution, for the same reason the writing hook does — otherwise a session correctly saved to its own repo could get hard-blocked at close because the safety check was still looking for it in the unrelated default vault.
+
+**New:** `hooks/_lib/vault_root.py` — the shared resolver all three hooks now import, so this can't drift out of sync the way three independent copies eventually would have.
+
+**New tests:** `tests/integration/test_detect_closing_signal_repo_aware_vault.sh` and `tests/integration/test_verify_cascade_repo_aware_vault.sh` — both include a negative control that fails against the old behavior and passes against the fix.
+
+**What you should do:** nothing. The SessionStart auto-update flow picks this up on your next session (or `git pull` manually in `~/.claude/skills/ai-brain-starter/` to grab it immediately).
+
+---
+
 ## 2026-06-30: the "what your setup injects" meter is now honest and safe
 
 The meter from the previous entry got a hardening pass after an adversarial review found three sharp edges. All fixed:

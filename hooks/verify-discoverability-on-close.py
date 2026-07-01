@@ -66,8 +66,26 @@ except Exception:  # fail-open: if the lib cannot load, never block a close
     def is_closing_claim(_text: str) -> bool:  # type: ignore
         return False
 
-VAULT_ROOT = Path(os.environ.get("VAULT_ROOT", str(Path.home() / "vault")))
+# Shared vault-root resolver - single source of truth (_lib/vault_root.py).
+# Repo-aware, mirroring detect-closing-signal.py and
+# verify-session-close-cascade.py: a session working inside its own
+# vault-shaped repo resolves gaps against that repo, not an unrelated
+# global VAULT_ROOT default (which would otherwise scan a DIFFERENT vault's
+# git history / Agent Memory for "did this session wire discoverability" —
+# a scope leak as well as a correctness bug).
+try:
+    from _lib.vault_root import resolve_vault_root  # noqa: E402
+except Exception:  # fail-open: if the lib cannot load, fall back to env/home
+    def resolve_vault_root(cwd: Path, env_vault_root: str | None) -> Path:  # type: ignore
+        return Path(env_vault_root) if env_vault_root else (cwd or Path.home() / "vault")
+
 DEV_ROOT = Path.home() / "dev"
+
+# Import-time placeholders so the module stays importable without a hook
+# payload. main() calls _resolve_vault_context(cwd) right after confirming
+# there's a closing claim worth acting on, rebinding these to the SAME
+# repo-aware vault detect-closing-signal.py resolved for this session.
+VAULT_ROOT = Path(os.environ.get("VAULT_ROOT", str(Path.home() / "vault")))
 MEMORY_ROOT = VAULT_ROOT / "⚙️ Meta" / "Agent Memory"
 # Test seam: DISCOVERABILITY_VERIFIER_PATH overrides the verifier the hook
 # shells out to, so tests can inject a deterministic stub verifier and stay
@@ -79,6 +97,24 @@ VERIFIER = Path(
         str(VAULT_ROOT / "⚙️ Meta" / "scripts" / "discoverability-verifier.py"),
     )
 )
+
+
+def _resolve_vault_context(cwd: str) -> None:
+    """Recompute VAULT_ROOT/MEMORY_ROOT/VERIFIER for THIS invocation's cwd,
+    repo-aware. DISCOVERABILITY_VERIFIER_PATH still wins outright when set
+    (test seam, unchanged). Every helper below reads these as module
+    globals, so rebinding here (called once, early in main()) is enough to
+    put the whole hook in lockstep with the cwd it was invoked with.
+    """
+    global VAULT_ROOT, MEMORY_ROOT, VERIFIER
+    VAULT_ROOT = resolve_vault_root(Path(cwd) if cwd else Path.cwd(), os.environ.get("VAULT_ROOT"))
+    MEMORY_ROOT = VAULT_ROOT / "⚙️ Meta" / "Agent Memory"
+    VERIFIER = Path(
+        os.environ.get(
+            "DISCOVERABILITY_VERIFIER_PATH",
+            str(VAULT_ROOT / "⚙️ Meta" / "scripts" / "discoverability-verifier.py"),
+        )
+    )
 
 # Tool calls that author/modify a file by an explicit file_path argument.
 # These are the primary "this session wrote X" signal.
@@ -294,6 +330,11 @@ def main() -> int:
     last_text = _get_last_assistant_text(transcript_path)
     if not is_closing_claim(last_text):
         return 0
+
+    # Repo-aware vault resolution, now that we know this is worth the work:
+    # put this hook in lockstep with whichever vault
+    # detect-closing-signal.py resolved for THIS cwd (see _lib/vault_root.py).
+    _resolve_vault_context(payload.get("cwd", ""))
 
     gaps = _run_verifier()
     if not gaps:
