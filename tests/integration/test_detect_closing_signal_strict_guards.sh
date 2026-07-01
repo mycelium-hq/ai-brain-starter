@@ -27,6 +27,15 @@
 #    11. "wrap it up"
 #    12. "thanks that's all"
 #    13. "okay let's close this session" (2026-05-12 regression case)
+#   INTERROGATIVE meta-questions ABOUT a close (should NOT fire — added
+#   2026-06-30 after "did you close this session?" fired the full cascade):
+#    14. "did you close this session?"   (the reported false-positive)
+#    15. "have you closed the session?"
+#    16. "is the session closed?"
+#   MODAL-REQUEST close phrased as a question (should STILL fire — the
+#   negative control proving the interrogative guard discriminates a
+#   question ABOUT closing from a request TO close):
+#    17. "can you close this session?"
 #
 # Self-contained: tmpdir fake vault, HOME redirected. Exit 0 = pass, 1 = fail.
 
@@ -105,6 +114,9 @@ for p in \
   "let me close out the database session" \
   "sessions keep getting auto-archived" \
   "sessions keep firing the cascade" \
+  "did you close this session?" \
+  "have you closed the session?" \
+  "is the session closed?" \
 ; do
   assert_no_fire "$p" || failed=$((failed+1))
 done
@@ -117,6 +129,7 @@ for p in \
   "wrap it up" \
   "thanks that's all" \
   "okay let's close this session" \
+  "can you close this session?" \
 ; do
   assert_fires "$p" || failed=$((failed+1))
 done
