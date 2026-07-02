@@ -9,6 +9,22 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-07-01: your machine now tells you if an auto-update half-landed
+
+**Who this affects:** everyone. This is the safety net for the auto-update in the entry just below.
+
+**The bug:** the previous entry made the auto-update install its own hooks the moment you pull them. But that install step is allowed to fail without stopping your session (that's on purpose — a stuck installer must never wedge your prompt). When it *does* fail, it prints one warning for that one turn and moves on. A few days later the auto-update looks, sees your checkout is already current, and does nothing — so the warning is gone for good and the hooks it never finished wiring just stay off. The result is a quieter version of the exact problem the auto-update was built to kill: your copy of the starter is up to date, but the hooks Claude actually runs are behind it, and nothing tells you. The daily "are you up to date?" check only compares your *download* to the latest — it never checks whether the download was actually *wired in*.
+
+**What's new:** every session now does a quick, local check that the hooks you've downloaded are actually the hooks that are turned on. If a background install half-landed, the next session says so in one line and gives you the single command to finish it. If everything's wired correctly (the normal case) you never hear a word. It's a plain file comparison — no network, no waiting, and it can never crash your session (any hiccup just makes it stay quiet).
+
+**Under the hood:** the check reuses the installer's own definition of which hooks belong to the starter, rather than keeping its own copy of that list — so it can't fall out of step the next time a hook is added (which would have been the same class of silent drift all over again). It deliberately ignores the handful of hooks that only turn on once you've set up a vault, since those are wired by a different step and were never part of what a background update touches.
+
+**New tests:** `tests/integration/test_deployed_hooks_behind.sh` — proves it stays silent on a real, correct install, fires (and names the culprit) when a hook is missing or a retired one is still wired, and never falsely flags a vault-only hook. Includes negative controls in both directions.
+
+**What you should do:** nothing. If your last update half-landed, your next session will tell you the one command to run.
+
+---
+
 ## 2026-07-01: updates now install themselves the moment you pull them
 
 **Who this affects:** everyone. This is about how the starter keeps itself up to date.

@@ -103,6 +103,9 @@ ABS_FINGERPRINTS = [
     # Bare ~/dev hub-rot guard (read-time detection) + surfacer (MYC-1893):
     "ai-brain-starter/hooks/warn-stale-dev-checkout.py",
     "ai-brain-starter/hooks/dev-hub-refresh-on-session-start.py",
+    # Client-side deployed==committed drift detector (MYC-2507): surfaces when this
+    # deploy step itself failed silently and settings.json fell behind hooks.json.
+    "ai-brain-starter/hooks/surface-deployed-hooks-behind.py",
 ]
 
 # Path-divergence-robust matching: an ai-brain-starter hook may be wired at the
@@ -126,6 +129,8 @@ ABS_OWNED_BASENAMES = {
     "warn-stale-dev-checkout.py", "dev-hub-refresh-on-session-start.py",
     # Session-start context loaders (MYC-2359 UPS -> SessionStart relocation):
     "session-start-context.py", "inject-instinct-context.py",
+    # Client-side deployed==committed drift detector (MYC-2507):
+    "surface-deployed-hooks-behind.py",
 }
 
 # Hooks ai-brain-starter USED TO ship and has deliberately RETIRED. The

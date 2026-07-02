@@ -266,6 +266,11 @@
           {
             "type": "command",
             "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/dev-hub-refresh-on-session-start.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'"
+          },
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/surface-deployed-hooks-behind.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "statusMessage": "Checking deployed hooks match what was pulled (deploy-fails-open drift)..."
           }
         ]
       }
