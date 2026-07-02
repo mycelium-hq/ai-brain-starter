@@ -101,6 +101,7 @@ INTEGRATION_TESTS=(
   test_ai_brain_auto_update
   test_installer_replaces_auto_update
   test_verify_fallback_chain_optional
+  test_verify_real_hooksjson_healthy_install
   test_detect_closing_signal_worktree
   test_detect_closing_signal_repo_aware_vault
   test_closing_claim_shared
