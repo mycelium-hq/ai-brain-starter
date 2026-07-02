@@ -10,7 +10,7 @@
 #
 # Usage (clone the repo first, then run the local script; do not curl-pipe).
 # Run from PowerShell, NOT cmd.exe:
-#     git clone https://github.com/adelaidasofia/ai-brain-starter "$env:USERPROFILE\.claude\skills\ai-brain-starter"
+#     git clone https://github.com/mycelium-hq/ai-brain-starter "$env:USERPROFILE\.claude\skills\ai-brain-starter"
 #     & "$env:USERPROFILE\.claude\skills\ai-brain-starter\bootstrap.ps1"
 #
 # Dry run (preview changes without making them):
@@ -33,7 +33,7 @@
 param([switch]$DryRun, [string]$Profile = "")
 
 $ErrorActionPreference = "Stop"
-$RepoUrl = "https://github.com/adelaidasofia/ai-brain-starter.git"
+$RepoUrl = "https://github.com/mycelium-hq/ai-brain-starter.git"
 $SkillDir = "$env:USERPROFILE\.claude\skills\ai-brain-starter"
 $Failed    = @()
 $Installed = @()
@@ -1067,7 +1067,7 @@ if ($CorporateProfile) {
 Generated: $stamp | Profile: corporate (hardened) | Host: Windows $([System.Environment]::OSVersion.Version) $env:PROCESSOR_ARCHITECTURE
 
 ## Pinned versions (no auto-update)
-- ai-brain-starter skill : rev $absRev - https://github.com/adelaidasofia/ai-brain-starter
+- ai-brain-starter skill : rev $absRev - https://github.com/mycelium-hq/ai-brain-starter
   Self-update hook DISABLED via sentinel ~/.claude/.ai-brain-starter-pinned (delete it to re-enable updates).
 - Claude Code CLI        : $ccVer - autoupdater off (DISABLE_AUTOUPDATER=1 + CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1)
 - Obsidian               : pin to your IT-approved build + disable in-app auto-update (see docs/CORPORATE_PROFILE.md)

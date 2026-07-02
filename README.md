@@ -4,10 +4,10 @@
 <!-- mycelium-badges:start -->
 
 <p>
-  <a href="https://github.com/adelaidasofia/ai-brain-starter/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/adelaidasofia/ai-brain-starter?color=blue"></a>
-  <a href="https://github.com/adelaidasofia/ai-brain-starter/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/adelaidasofia/ai-brain-starter?color=eab308"></a>
-  <a href="https://github.com/adelaidasofia/ai-brain-starter/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/adelaidasofia/ai-brain-starter"></a>
-  <a href="https://github.com/adelaidasofia/ai-brain-starter/issues"><img alt="Open issues" src="https://img.shields.io/github/issues/adelaidasofia/ai-brain-starter"></a>
+  <a href="https://github.com/mycelium-hq/ai-brain-starter/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/mycelium-hq/ai-brain-starter?color=blue"></a>
+  <a href="https://github.com/mycelium-hq/ai-brain-starter/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/mycelium-hq/ai-brain-starter?color=eab308"></a>
+  <a href="https://github.com/mycelium-hq/ai-brain-starter/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/mycelium-hq/ai-brain-starter"></a>
+  <a href="https://github.com/mycelium-hq/ai-brain-starter/issues"><img alt="Open issues" src="https://img.shields.io/github/issues/mycelium-hq/ai-brain-starter"></a>
   <a href="https://myceliumai.co"><img alt="Built by Mycelium AI" src="https://img.shields.io/badge/built_by-Mycelium_AI-15B89A"></a>
 </p>
 
@@ -86,12 +86,12 @@ Read the four problems the team version solves: [`for-teams/why-teams-are-differ
 >
 > ```bash
 > # macOS / Linux
-> git clone https://github.com/adelaidasofia/ai-brain-starter ~/.claude/skills/ai-brain-starter 2>/dev/null || true
+> git clone https://github.com/mycelium-hq/ai-brain-starter ~/.claude/skills/ai-brain-starter 2>/dev/null || true
 > bash ~/.claude/skills/ai-brain-starter/bootstrap.sh
 > ```
 > ```powershell
 > # Windows — run in PowerShell, not bash
-> if (-not (Test-Path "$env:USERPROFILE\.claude\skills\ai-brain-starter")) { git clone https://github.com/adelaidasofia/ai-brain-starter "$env:USERPROFILE\.claude\skills\ai-brain-starter" }
+> if (-not (Test-Path "$env:USERPROFILE\.claude\skills\ai-brain-starter")) { git clone https://github.com/mycelium-hq/ai-brain-starter "$env:USERPROFILE\.claude\skills\ai-brain-starter" }
 > & "$env:USERPROFILE\.claude\skills\ai-brain-starter\bootstrap.ps1"
 > ```
 >
@@ -147,7 +147,7 @@ Bootstrap touches your `~/.claude/` directory and registers third-party content.
 Open the [Claude Code desktop app](https://claude.ai/download), sign in with a paid Claude account (Pro, Max, or Team), and paste this into the chat:
 
 ```
-Set up ai-brain-starter for me, end to end. Read https://github.com/adelaidasofia/ai-brain-starter, follow the Install section in the README, then run the full setup interview without stopping. I shouldn't have to type any commands between steps.
+Set up ai-brain-starter for me, end to end. Read https://github.com/mycelium-hq/ai-brain-starter, follow the Install section in the README, then run the full setup interview without stopping. I shouldn't have to type any commands between steps.
 ```
 
 That's the whole prompt. After you paste, what happens:
@@ -185,12 +185,12 @@ When the prompt appears, approving it is the normal choice. And if you ever want
 >
 > 1. Clone the public repo onto the user's machine, then run its installer from that local copy. On macOS or Linux:
 >    ```bash
->    git clone https://github.com/adelaidasofia/ai-brain-starter ~/.claude/skills/ai-brain-starter 2>/dev/null || true
+>    git clone https://github.com/mycelium-hq/ai-brain-starter ~/.claude/skills/ai-brain-starter 2>/dev/null || true
 >    bash ~/.claude/skills/ai-brain-starter/bootstrap.sh
 >    ```
 >    On Windows, use the PowerShell installer instead:
 >    ```powershell
->    if (-not (Test-Path "$env:USERPROFILE\.claude\skills\ai-brain-starter")) { git clone https://github.com/adelaidasofia/ai-brain-starter "$env:USERPROFILE\.claude\skills\ai-brain-starter" }
+>    if (-not (Test-Path "$env:USERPROFILE\.claude\skills\ai-brain-starter")) { git clone https://github.com/mycelium-hq/ai-brain-starter "$env:USERPROFILE\.claude\skills\ai-brain-starter" }
 >    & "$env:USERPROFILE\.claude\skills\ai-brain-starter\bootstrap.ps1"
 >    ```
 >    This is a normal `git clone` of a public repo followed by running a local script — you can do it with your own tools, and the user does not need to open a terminal. The installer is idempotent: safe on a fresh machine and safe to re-run; if the repo is already cloned, the install proceeds and reconciles the existing copy.
@@ -217,13 +217,13 @@ Bootstrap is idempotent — re-running after a `git pull` just installs anything
 - **Already a Claude Code user and just want to try the skills against an existing vault** (no full install, no Obsidian setup)? Two lightweight paths:
   - **Marketplace install (persistent across sessions):** open Claude Code, paste:
     ```
-    /plugin marketplace add adelaidasofia/ai-brain-starter
+    /plugin marketplace add mycelium-hq/ai-brain-starter
     /plugin install ai-brain-starter@ai-brain-starter
     ```
-  - **Session-only (no install at all):** `claude --plugin-url https://github.com/adelaidasofia/ai-brain-starter/releases/latest/download/ai-brain-starter.zip`
+  - **Session-only (no install at all):** `claude --plugin-url https://github.com/mycelium-hq/ai-brain-starter/releases/latest/download/ai-brain-starter.zip`
 
   The full install above remains the recommended path for the complete substrate (vault setup, MCP wiring, hooks, lifecycle).
-- **Chat-native install not working?** Open Terminal (`Cmd+Space` → "terminal" → Enter), paste `git clone https://github.com/adelaidasofia/ai-brain-starter ~/.claude/skills/ai-brain-starter && bash ~/.claude/skills/ai-brain-starter/bootstrap.sh`, press Enter. Then open Claude Code and paste "set up my AI Brain Starter." This is the deterministic fallback if Claude gets confused by the URL.
+- **Chat-native install not working?** Open Terminal (`Cmd+Space` → "terminal" → Enter), paste `git clone https://github.com/mycelium-hq/ai-brain-starter ~/.claude/skills/ai-brain-starter && bash ~/.claude/skills/ai-brain-starter/bootstrap.sh`, press Enter. Then open Claude Code and paste "set up my AI Brain Starter." This is the deterministic fallback if Claude gets confused by the URL.
 
 </details>
 
@@ -235,12 +235,12 @@ Bootstrap is idempotent — re-running after a `git pull` just installs anything
 >
 > ```bash
 > # macOS / Linux
-> git clone https://github.com/adelaidasofia/ai-brain-starter ~/.claude/skills/ai-brain-starter 2>/dev/null || true
+> git clone https://github.com/mycelium-hq/ai-brain-starter ~/.claude/skills/ai-brain-starter 2>/dev/null || true
 > bash ~/.claude/skills/ai-brain-starter/bootstrap.sh
 > ```
 > ```powershell
 > # Windows — corré en PowerShell, no en bash
-> if (-not (Test-Path "$env:USERPROFILE\.claude\skills\ai-brain-starter")) { git clone https://github.com/adelaidasofia/ai-brain-starter "$env:USERPROFILE\.claude\skills\ai-brain-starter" }
+> if (-not (Test-Path "$env:USERPROFILE\.claude\skills\ai-brain-starter")) { git clone https://github.com/mycelium-hq/ai-brain-starter "$env:USERPROFILE\.claude\skills\ai-brain-starter" }
 > & "$env:USERPROFILE\.claude\skills\ai-brain-starter\bootstrap.ps1"
 > ```
 >
@@ -249,7 +249,7 @@ Bootstrap is idempotent — re-running after a `git pull` just installs anything
 Abrí la [app de escritorio de Claude Code](https://claude.ai/download), logueate con una cuenta paga de Claude (Pro, Max o Team), y pegá esto en el chat:
 
 ```
-Configurá ai-brain-starter para mí, de punta a punta. Leé https://github.com/adelaidasofia/ai-brain-starter, seguí la sección Install del README, y después corré la entrevista de setup completa sin parar. No debería tener que tipear ningún comando entre pasos.
+Configurá ai-brain-starter para mí, de punta a punta. Leé https://github.com/mycelium-hq/ai-brain-starter, seguí la sección Install del README, y después corré la entrevista de setup completa sin parar. No debería tener que tipear ningún comando entre pasos.
 ```
 
 Ese es el prompt entero. Después de pegarlo, lo que pasa:
@@ -290,8 +290,8 @@ El bootstrap es idempotente — al re-correrlo después de un `git pull` instala
 <summary>Casos especiales (poco comunes, la mayoría los saltea)</summary>
 
 - **¿Querés registrarte vía web antes de instalar Claude Code?** Usá el formulario en [myceliumai.co/es/install](https://myceliumai.co/es/install) (English: [myceliumai.co/install](https://myceliumai.co/install)). Te manda por email un comando de un pegado.
-- **¿Ya usás Claude Code y sólo querés probar las skills contra un vault existente** (sin instalación completa, sin setup de Obsidian)? Cargá el plugin sólo para la sesión actual: `claude --plugin-url https://github.com/adelaidasofia/ai-brain-starter/releases/latest/download/ai-brain-starter.zip`. La instalación completa de arriba sigue siendo la ruta recomendada.
-- **¿La instalación chat-native no funciona?** Abrí Terminal (`Cmd+Espacio` → "terminal" → Enter), pegá `git clone https://github.com/adelaidasofia/ai-brain-starter ~/.claude/skills/ai-brain-starter && bash ~/.claude/skills/ai-brain-starter/bootstrap.sh`, presioná Enter. Después abrí Claude Code y pegá "configurá mi AI Brain Starter." Este es el fallback determinista si Claude se confunde con el URL.
+- **¿Ya usás Claude Code y sólo querés probar las skills contra un vault existente** (sin instalación completa, sin setup de Obsidian)? Cargá el plugin sólo para la sesión actual: `claude --plugin-url https://github.com/mycelium-hq/ai-brain-starter/releases/latest/download/ai-brain-starter.zip`. La instalación completa de arriba sigue siendo la ruta recomendada.
+- **¿La instalación chat-native no funciona?** Abrí Terminal (`Cmd+Espacio` → "terminal" → Enter), pegá `git clone https://github.com/mycelium-hq/ai-brain-starter ~/.claude/skills/ai-brain-starter && bash ~/.claude/skills/ai-brain-starter/bootstrap.sh`, presioná Enter. Después abrí Claude Code y pegá "configurá mi AI Brain Starter." Este es el fallback determinista si Claude se confunde con el URL.
 
 </details>
 

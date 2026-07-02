@@ -2,7 +2,7 @@ name: release
 
 # Builds a clean ai-brain-starter.zip + tar.gz release artifact when a v* tag is pushed.
 # The zip is consumable via Claude Code 2.1.129+'s `--plugin-url` flag:
-#   claude --plugin-url https://github.com/adelaidasofia/ai-brain-starter/releases/latest/download/ai-brain-starter.zip
+#   claude --plugin-url https://github.com/mycelium-hq/ai-brain-starter/releases/latest/download/ai-brain-starter.zip
 #
 # Triggers:
 #   - tag push matching v*

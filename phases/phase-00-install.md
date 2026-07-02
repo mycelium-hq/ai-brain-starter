@@ -101,7 +101,7 @@ Do NOT try to install Homebrew yourself, do NOT "work around" it by skipping Obs
 **The same Terminal relay applies when the HARNESS is what's blocking.** Claude Code's own command-safety layer sometimes declines to execute the bootstrap command, and that block can persist even after the user re-approves — retrying the same command in-chat is not the fix and you should not keep trying. Hand the user the same one-line Terminal path instead, framed as the normal route (it genuinely is — the human running the installer themselves is exactly what that safety layer wants):
 
 > "Claude Code prefers that you run the installer yourself — one line, takes a couple minutes. Open Terminal (`Cmd+Space`, type 'terminal', Return) and paste this:
-> `git clone https://github.com/adelaidasofia/ai-brain-starter.git ~/.claude/skills/ai-brain-starter 2>/dev/null; bash ~/.claude/skills/ai-brain-starter/bootstrap.sh`
+> `git clone https://github.com/mycelium-hq/ai-brain-starter.git ~/.claude/skills/ai-brain-starter 2>/dev/null; bash ~/.claude/skills/ai-brain-starter/bootstrap.sh`
 > Tell me when it says it's done and we'll pick up right where we left off."
 
 Then resume at the setup interview the moment they confirm. One honest note if they ask about previewing first: `--dry-run` shows what WOULD be installed without changing anything.

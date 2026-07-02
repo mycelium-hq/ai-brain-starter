@@ -11,7 +11,7 @@
 #     Code and paste the setup prompt. Detection is via $CLAUDE_CODE_ENTRYPOINT.
 #
 # Usage (clone the repo first, then run the local script; do not curl-pipe):
-#     git clone https://github.com/adelaidasofia/ai-brain-starter ~/.claude/skills/ai-brain-starter
+#     git clone https://github.com/mycelium-hq/ai-brain-starter ~/.claude/skills/ai-brain-starter
 #     bash ~/.claude/skills/ai-brain-starter/bootstrap.sh
 #
 # What it installs:
@@ -116,7 +116,7 @@
 
 set -euo pipefail
 
-REPO_URL="https://github.com/adelaidasofia/ai-brain-starter.git"
+REPO_URL="https://github.com/mycelium-hq/ai-brain-starter.git"
 SKILL_DIR="$HOME/.claude/skills/ai-brain-starter"
 DRY_RUN=0
 # Corporate / hardened install profile (surfaced by an enterprise security
@@ -144,7 +144,7 @@ BACKUPS=()
 CLEANED=()
 
 # === Forensics: persistent log file ===
-# Closes adelaidasofia/ai-brain-starter#3 — every bootstrap run writes a
+# Closes mycelium-hq/ai-brain-starter#3 — every bootstrap run writes a
 # timestamped log to ~/.claude/.bootstrap.log (rotated when >5MB). When something
 # breaks weeks later, the log is the forensic source of truth.
 BOOTSTRAP_LOG="$HOME/.claude/.bootstrap.log"
@@ -170,7 +170,7 @@ for arg in "$@"; do
     --profile=*)
       echo "WARNING: unknown --profile '${arg#*=}' (expected: corporate). Ignoring." >&2 ;;
     --restore)
-      # Closes adelaidasofia/ai-brain-starter#2 — auto-restore from .bak files
+      # Closes mycelium-hq/ai-brain-starter#2 — auto-restore from .bak files
       RESTORE_SCRIPT="$SKILL_DIR/scripts/bootstrap-restore.sh"
       if [[ ! -f "$RESTORE_SCRIPT" ]]; then
         # Fallback: maintainer location
@@ -210,7 +210,7 @@ for arg in "$@"; do
         exit 2
       fi ;;
     --install-hooks-user-level)
-      # Closes adelaidasofia/ai-brain-starter#6 — install hooks at user level
+      # Closes mycelium-hq/ai-brain-starter#6 — install hooks at user level
       # so they fire universally, including inside .claude/worktrees/<name>/.
       INSTALLER="$SKILL_DIR/scripts/install-hooks-user-level.py"
       [[ ! -f "$INSTALLER" ]] && [[ -f "$HOME/Desktop/ai-brain-starter/scripts/install-hooks-user-level.py" ]] && \
@@ -2082,7 +2082,7 @@ if [[ "$CORPORATE_PROFILE" == "1" ]]; then
 Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ) · Profile: corporate (hardened) · Host: $(uname -sm 2>/dev/null)
 
 ## Pinned versions (no auto-update)
-- ai-brain-starter skill : ${ABS_DESC} (rev ${ABS_REV}) — https://github.com/adelaidasofia/ai-brain-starter
+- ai-brain-starter skill : ${ABS_DESC} (rev ${ABS_REV}) — https://github.com/mycelium-hq/ai-brain-starter
   Self-update hook DISABLED via sentinel ~/.claude/.ai-brain-starter-pinned (delete it to re-enable updates).
 - Claude Code CLI        : ${CC_VER} — autoupdater off (DISABLE_AUTOUPDATER=1 + CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1)
 - Obsidian               : pin to your IT-approved build + disable in-app auto-update (see docs/CORPORATE_PROFILE.md)
