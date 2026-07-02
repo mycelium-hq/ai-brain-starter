@@ -3,17 +3,20 @@
 # swap (MYC-720) leaves EXACTLY ONE auto-update entry on an EXISTING install, not
 # two firing at once.
 #
-# The new hooks.json runs an extracted script (scripts/ai-brain-auto-update.sh),
-# which shares NO fingerprint with the old inline blob. merge_hooks() alone would
-# ADD the new entry and leave the old one -> the auto-updater would fire TWICE on
-# every machine that already had it. The fix retires the old blob (unique substring
-# ".ai-brain-starter-last-update") so merge-then-retire yields a single entry.
+# The current hooks.json runs the cross-platform script (scripts/ai-brain-auto-
+# update.py), which shares NO fingerprint with the old inline blob NOR the
+# interim bash script form. merge_hooks() alone would ADD the new entry and
+# leave the old one -> the auto-updater would fire TWICE on every machine that
+# already had it. The fix retires the old forms (unique substring
+# ".ai-brain-starter-last-update" for the blob; the scripts/ai-brain-auto-
+# update.sh path for the bash era) so merge-then-retire yields a single entry.
 # This gate is the negative control for that fix.
 #
-# Two prior variants are exercised, both real:
-#   A. pre-pin deployed blob   (no ".ai-brain-starter-pinned" — this dev machine's
-#      actual state; the HARDEST case: shares nothing with the new command).
+# Three prior variants are exercised, all real:
+#   A. pre-pin deployed blob   (no ".ai-brain-starter-pinned" — the HARDEST
+#      case: shares nothing with the new command).
 #   B. pinned committed blob   (has ".ai-brain-starter-pinned").
+#   D. bash script-call era    (bash .../ai-brain-auto-update.sh || echo ...).
 # Plus C: idempotent re-run stays at one entry.
 #
 # Run: bash tests/integration/test_installer_replaces_auto_update.sh  (0=pass,1=fail)
@@ -70,7 +73,7 @@ mkdir -p "$TMPROOT/home/.claude"
 
 # ---- A. pre-pin deployed blob -> replaced by exactly one script-call entry ----
 S="$TMPROOT/a.json"; seed_settings "$S" "$OLD_PREPIN"; install "$S"
-new_n=$(count_cmds "$S" "ai-brain-auto-update.sh"); old_n=$(count_cmds "$S" ".ai-brain-starter-last-update"); user_n=$(count_cmds "$S" "user-owned-unrelated-hook")
+new_n=$(count_cmds "$S" "ai-brain-auto-update.py"); old_n=$(count_cmds "$S" ".ai-brain-starter-last-update"); user_n=$(count_cmds "$S" "user-owned-unrelated-hook")
 if [ "$new_n" = "1" ] && [ "$old_n" = "0" ] && [ "$user_n" = "1" ]; then
   ok "A: pre-pin blob -> exactly 1 new entry, 0 old, user hook preserved"
 else
@@ -79,7 +82,7 @@ fi
 
 # ---- B. pinned committed blob -> same clean single entry ----------------------
 S="$TMPROOT/b.json"; seed_settings "$S" "$OLD_PINNED"; install "$S"
-new_n=$(count_cmds "$S" "ai-brain-auto-update.sh"); old_n=$(count_cmds "$S" ".ai-brain-starter-last-update")
+new_n=$(count_cmds "$S" "ai-brain-auto-update.py"); old_n=$(count_cmds "$S" ".ai-brain-starter-last-update")
 if [ "$new_n" = "1" ] && [ "$old_n" = "0" ]; then
   ok "B: pinned blob -> exactly 1 new entry, 0 old"
 else
@@ -88,11 +91,21 @@ fi
 
 # ---- C. idempotent re-run -> still exactly one -------------------------------
 install "$S"   # second run over the already-migrated settings
-new_n=$(count_cmds "$S" "ai-brain-auto-update.sh"); old_n=$(count_cmds "$S" ".ai-brain-starter-last-update")
+new_n=$(count_cmds "$S" "ai-brain-auto-update.py"); old_n=$(count_cmds "$S" ".ai-brain-starter-last-update")
 if [ "$new_n" = "1" ] && [ "$old_n" = "0" ]; then
   ok "C: idempotent re-install stays at exactly 1 entry"
 else
   no "C: re-run drifted to new=$new_n old=$old_n"
+fi
+
+# ---- D. bash script-call era -> migrated to exactly one .py entry ------------
+OLD_SH='if [ -f ~/.claude/.ai-brain-starter-pinned ]; then echo "{}"; exit 0; fi; bash ~/.claude/skills/ai-brain-starter/scripts/ai-brain-auto-update.sh || echo "{}"'
+S="$TMPROOT/d.json"; seed_settings "$S" "$OLD_SH"; install "$S"
+py_n=$(count_cmds "$S" "ai-brain-auto-update.py"); sh_n=$(count_cmds "$S" "ai-brain-auto-update.sh"); user_n=$(count_cmds "$S" "user-owned-unrelated-hook")
+if [ "$py_n" = "1" ] && [ "$sh_n" = "0" ] && [ "$user_n" = "1" ]; then
+  ok "D: bash-era script call -> exactly 1 .py entry, 0 .sh, user hook preserved"
+else
+  no "D: expected py=1 sh=0 user=1, got py=$py_n sh=$sh_n user=$user_n"
 fi
 
 echo

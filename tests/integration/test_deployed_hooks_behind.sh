@@ -81,7 +81,7 @@ cp "$H1/.claude/settings.json" "$TMP/stale.json"
 strip_hook "$TMP/stale.json" "dev-hub-refresh-on-session-start.py"
 run_hook "$REPO_ROOT" "$TMP/stale.json"
 if fired && mentions 'dev-hub-refresh-on-session-start.py'; then ok "fired + named the missing hook"; else bad "missing hook not surfaced" "$(printf '%s' "$OUT" | head -c 300)"; fi
-if mentions 'deployed-hooks-behind'; then ok "carries the drift headline tag"; else bad "missing headline tag"; fi
+if mentions 'ai-brain-starter update check'; then ok "carries the drift headline tag"; else bad "missing headline tag"; fi
 if mentions 'install-hooks-user-level.py'; then ok "carries the one-command fix"; else bad "missing fix command"; fi
 
 echo "=== 3. RETIRED: a retired hook still wired -> FIRES ==="
@@ -89,7 +89,7 @@ cp "$H1/.claude/settings.json" "$TMP/retired.json"
 inject_hook "$TMP/retired.json" "UserPromptSubmit" \
   "python3 ~/.claude/skills/ai-brain-starter/scripts/email-gate-hook.py 2>/dev/null || true"
 run_hook "$REPO_ROOT" "$TMP/retired.json"
-if fired && mentions 'email-gate-hook.py' && mentions 'Retired'; then ok "fired + named the retired hook"; else bad "retired hook not surfaced" "$(printf '%s' "$OUT" | head -c 300)"; fi
+if fired && mentions 'email-gate-hook.py' && mentions 'No longer shipped'; then ok "fired + named the retired hook"; else bad "retired hook not surfaced" "$(printf '%s' "$OUT" | head -c 300)"; fi
 
 echo "=== 4. FAIL-OPEN: missing settings.json / missing hooks.json -> silent ==="
 run_hook "$REPO_ROOT" "$TMP/does-not-exist.json"

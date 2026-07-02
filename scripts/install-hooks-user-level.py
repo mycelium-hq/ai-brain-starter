@@ -81,7 +81,10 @@ ABS_FINGERPRINTS = [
     # that path. The OLD inline auto-update blob (unique substring
     # ".ai-brain-starter-last-update") is RETIRED below, so a re-install removes it
     # and installs this fresh — merge alone would leave BOTH wired (double-fire).
+    # The bash form (.sh) is itself RETIRED below in favor of the cross-platform
+    # .py; it stays in this list so uninstall still recognizes it.
     "ai-brain-starter/scripts/ai-brain-auto-update.sh",
+    "ai-brain-starter/scripts/ai-brain-auto-update.py",
     # Worktree-lifecycle hooks (cleanup + footprint observability):
     "ai-brain-starter/hooks/snapshot-pending-work-on-stop.py",
     "ai-brain-starter/hooks/surface-orphan-worktree-snapshots.py",
@@ -119,7 +122,7 @@ ABS_OWNED_BASENAMES = {
     "first-week-checkin.py", "migrate-to-user-level.py",
     "inject-love-language-context.py", "inject-meeting-workflow-on-trigger.py",
     "session-end-hook.sh", "email-gate-hook.py", "graph-context-hook.sh",
-    "post-update-email-ask.py", "ai-brain-auto-update.sh",
+    "post-update-email-ask.py", "ai-brain-auto-update.sh", "ai-brain-auto-update.py",
     "snapshot-pending-work-on-stop.py", "surface-orphan-worktree-snapshots.py",
     "remove-ended-worktree.py", "enforce-worktree-cap.py",
     "worktree-footprint-signal.py", "remediate-runaway-procs.py",
@@ -156,9 +159,16 @@ ABS_RETIRED_FINGERPRINTS = [
     # retiring this substring removes the old blob and leaves the new hook — the
     # merge-then-retire order (main) then yields exactly one auto-update entry.
     ".ai-brain-starter-last-update",
+    # Retired 2026-07-02: the BASH auto-update could not run on native Windows
+    # (no bash / timeout / nice / find -mtime), leaving Windows installs
+    # permanently stale. Replaced by the cross-platform ai-brain-auto-update.py;
+    # the .sh file on disk survives as a thin delegator so a not-yet-migrated
+    # settings.json entry keeps working until this retirement removes it.
+    "ai-brain-starter/scripts/ai-brain-auto-update.sh",
 ]
 ABS_RETIRED_BASENAMES = {
     "email-gate-hook.py",
+    "ai-brain-auto-update.sh",
 }
 
 _SCRIPT_RE = re.compile(r"([\w.-]+\.(?:py|sh))")
@@ -263,6 +273,125 @@ def normalize_path_substitutions(template: dict, vault_path: str | None) -> dict
     s = json.dumps(template, ensure_ascii=False)
     s = s.replace("[VAULT_PATH]", json.dumps(str(Path(vault_path).resolve()), ensure_ascii=False)[1:-1])
     return json.loads(s)
+
+
+def _is_windows() -> bool:
+    """ABS_FORCE_WINDOWS=1 lets POSIX CI exercise the Windows path hermetically."""
+    return os.environ.get("ABS_FORCE_WINDOWS") == "1" or os.name == "nt"
+
+
+def _windows_launcher() -> list[str] | None:
+    """Resolve a Python launcher that parses as a bare command in EVERY shell
+    Claude Code may use for hooks on Windows (PowerShell 5.1 / 7, cmd.exe, Git
+    Bash). Only an UNQUOTED first token parses in all of them, so the launcher
+    must be a bare PATH name — each candidate is validated by actually running
+    it, which also filters out the Microsoft Store's fake `python` alias stub.
+    Overridable for tests via ABS_WIN_LAUNCHER (space-separated tokens)."""
+    import shutil
+    import subprocess
+
+    env_override = os.environ.get("ABS_WIN_LAUNCHER")
+    if env_override:
+        return env_override.split()
+    for candidate, argv in (("py", ["py", "-3"]),
+                            ("python", ["python"]),
+                            ("python3", ["python3"])):
+        if not shutil.which(candidate):
+            continue
+        try:
+            probe = subprocess.run([*argv, "-c", "import sys"],
+                                   capture_output=True, timeout=15)
+            if probe.returncode == 0:
+                return argv
+        except Exception:  # noqa: BLE001 — a broken candidate is just skipped
+            continue
+    exe = sys.executable or ""
+    if exe and " " not in exe:
+        return [exe]  # unquoted absolute path parses everywhere iff space-free
+    return None
+
+
+# Extracts .py script paths from a POSIX hook command. Paths are unquoted or
+# quoted; unquoted paths never contain spaces in our template.
+_WIN_PY_PATH_RE = re.compile(r"(~?[^\s'\"|&;]+\.py)\b")
+
+
+def platformize_template_for_windows(template: dict) -> tuple[dict, list[str]]:
+    """Rewrite the (already vault-substituted) template's POSIX shell commands
+    into a form native Windows can execute.
+
+    Why: hooks.json commands use `python3 X 2>/dev/null || echo JSON` and
+    `[ -f X ] && ... || true`. Depending on Claude Code version + settings,
+    Windows runs hook commands under PowerShell 5.1 (no `||`), PowerShell 7,
+    cmd.exe (no `[ -f ]`, no /dev/null), or Git Bash — no one-liner survives
+    all four, so before this rewrite every hook errored visibly on every
+    prompt for Windows users. The one shape they all parse identically is a
+    bare PATH command with quoted arguments:
+
+        py -3 "<abs>/scripts/hook_runner.py" --fallback silent "<abs>/<hook>.py"
+
+    hook_runner.py reproduces the masking semantics of the shell forms (see
+    its docstring): missing script -> fallback JSON; exit 2 -> real block
+    propagates; any other failure -> fallback JSON.
+
+    Rules per command:
+      - references a .sh script  -> OMIT (bash-only; reported to the caller)
+      - references .py script(s) -> rewrite to the runner form. In fallback
+        chains (`python3 vault-copy || python3 home-copy`) the LAST path wins:
+        it is the ~/.claude home copy, the one guaranteed space-free and
+        present on every install.
+      - fallback flavor: `allow` when the original masked to a PreToolUse
+        permissionDecision, else `silent`.
+
+    Returns (rewritten_template, skipped_labels). If no launcher can be
+    resolved, returns the template unchanged with a loud warning — failing
+    toward the status quo rather than silently unwiring everything."""
+    launcher = _windows_launcher()
+    skipped: list[str] = []
+    if launcher is None:
+        print("WARNING: no Python launcher found on PATH (tried py, python, "
+              "python3). Hook commands were left in POSIX form and will not "
+              "run until Python is installed and this installer is re-run.",
+              file=sys.stderr)
+        return template, skipped
+
+    runner = str(Path(__file__).resolve().parent / "hook_runner.py")
+    out = json.loads(json.dumps(template, ensure_ascii=False))  # deep copy
+    home = str(Path.home())
+
+    for event in list((out.get("hooks") or {}).keys()):
+        surviving_groups = []
+        for group in out["hooks"][event]:
+            new_hooks = []
+            for h in group.get("hooks", []):
+                cmd = h.get("command", "")
+                if not cmd:
+                    continue
+                if ".sh" in cmd and not _WIN_PY_PATH_RE.search(cmd):
+                    skipped.append(f"{event}: {cmd[:70]}")
+                    continue
+                paths = _WIN_PY_PATH_RE.findall(cmd)
+                if not paths:
+                    skipped.append(f"{event}: {cmd[:70]}")
+                    continue
+                target = paths[-1]
+                if target.startswith("~"):
+                    target = home + target[1:]
+                target = str(Path(target))
+                fb = "allow" if "permissionDecision" in cmd else "silent"
+                h = dict(h)
+                h["command"] = " ".join(
+                    [*launcher, f'"{runner}"', "--fallback", fb, f'"{target}"'])
+                new_hooks.append(h)
+            if new_hooks:
+                g = dict(group)
+                g["hooks"] = new_hooks
+                surviving_groups.append(g)
+        if surviving_groups:
+            out["hooks"][event] = surviving_groups
+        else:
+            del out["hooks"][event]
+    return out, skipped
 
 
 def merge_hooks(existing: dict, new_template: dict) -> tuple[dict, dict]:
@@ -576,6 +705,13 @@ def main() -> int:
     template = load_hooks_template(hooks_template_path)
     template = normalize_path_substitutions(template, args.vault_path)
 
+    # On native Windows, POSIX one-liners (`||`, `[ -f ]`, 2>/dev/null) fail in
+    # every shell Claude Code might use for hooks. Rewrite to the portable
+    # hook_runner form BEFORE merging, so what lands in settings.json runs.
+    win_skipped: list[str] = []
+    if _is_windows():
+        template, win_skipped = platformize_template_for_windows(template)
+
     settings_path = Path(args.settings).expanduser()
 
     # === load existing ===
@@ -627,6 +763,11 @@ def main() -> int:
         print(f"Retired:      {retired_count} stale hook(s) removed")
         print(f"Relocated:    {moved_count} moved-event stale copy(ies) removed")
         print(f"Preserved:    {len(set(summary['kept']))} non-ABS hook(s) untouched")
+        if win_skipped:
+            print(f"Skipped:      {len(win_skipped)} POSIX-only (bash) hook(s) not "
+                  "wired on Windows:")
+            for entry in win_skipped:
+                print(f"  s {entry}")
 
     if args.dry_run:
         if not args.quiet:
@@ -693,9 +834,13 @@ def verify_paths_on_disk(settings: dict) -> tuple[list[tuple[str, str, str]], li
     import re
     missing_required: list[tuple[str, str, str]] = []
     missing_optional: list[tuple[str, str, str]] = []
-    # Match `python3 <path>` or `bash <path>` with optional quotes and ~ prefix.
-    # Non-greedy stops at whitespace, quote, pipe, ampersand, semicolon.
-    path_re = re.compile(r"(?:python3|bash)\s+['\"]?(~?[^\s'\"|&;]+)['\"]?")
+    # Two shapes to cover:
+    #   POSIX: `python3 <path>` / `bash <path>`, path optionally quoted.
+    #   Windows runner form: every path is a QUOTED argument. The quoted
+    #   pattern also fixes a false "missing" on POSIX vault paths containing
+    #   spaces, which the unquoted pattern used to truncate at the space.
+    quoted_re = re.compile(r"['\"]((?:~|/|[A-Za-z]:)[^'\"]+\.(?:py|sh))['\"]")
+    bare_re = re.compile(r"(?:python3|bash)\s+(~?[^\s'\"|&;]+)")
 
     for event, groups in (settings.get("hooks") or {}).items():
         for g in groups:
@@ -705,8 +850,10 @@ def verify_paths_on_disk(settings: dict) -> tuple[list[tuple[str, str, str]], li
                     continue
                 # Find every script path the command references — a single
                 # hook may chain `python3 a.py && bash b.sh`.
-                for m in path_re.finditer(cmd):
-                    raw = m.group(1)
+                candidates = quoted_re.findall(cmd)
+                unquoted = re.sub(r"['\"][^'\"]*['\"]", " ", cmd)
+                candidates += bare_re.findall(unquoted)
+                for raw in dict.fromkeys(candidates):
                     p = Path(os.path.expanduser(raw))
                     if p.is_file():
                         continue
@@ -748,11 +895,12 @@ def run_verification(settings: dict, fail_on_missing: bool = False) -> int:
             print(f"             command: {short}")
         print()
         print("  Likely cause: ai-brain-starter clone is on a DIVERGENT FORK and")
-        print("  bootstrap.sh skipped the pull, but the installer wrote new")
+        print("  bootstrap skipped the pull, but the installer wrote new")
         print("  hook entries that reference files only present on origin/main.")
         print("  Recover:")
         print("    cd ~/.claude/skills/ai-brain-starter && git pull --rebase origin main")
-        print("    python3 ~/.claude/skills/ai-brain-starter/scripts/install-hooks-user-level.py")
+        py = "py -3" if os.name == "nt" else "python3"
+        print(f"    {py} ~/.claude/skills/ai-brain-starter/scripts/install-hooks-user-level.py")
         if fail_on_missing:
             return 1
     return 0

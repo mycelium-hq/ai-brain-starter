@@ -66,8 +66,9 @@ import sys
 from pathlib import Path
 
 MAX_LISTED = 12
+_PY = "py -3" if os.name == "nt" else "python3"
 FIX_CMD = (
-    "python3 ~/.claude/skills/ai-brain-starter/scripts/"
+    f"{_PY} ~/.claude/skills/ai-brain-starter/scripts/"
     "install-hooks-user-level.py --quiet --fail-on-missing"
 )
 
@@ -200,19 +201,25 @@ def _build_message(missing: dict[str, set[str]], retired: list[str]) -> str | No
     n = len(missing_bns) + len(retired)
     plural = "s" if n != 1 else ""
     lines = [
-        "[deployed-hooks-behind]",
+        "[ai-brain-starter update check]",
         "",
         (
-            f"{n} ai-brain-starter hook{plural} you pulled {'are' if n != 1 else 'is'} "
-            f"NOT correctly wired in ~/.claude/settings.json — the auto-update's deploy "
-            f"step (install-hooks-user-level.py) failed silently on this machine, so the "
-            f"checkout is current but the deployed hooks are stale (bug class "
-            f"DEPLOY-FAILS-OPEN-SILENTLY-ON-CLIENT). Re-run the deploy:"
+            f"Housekeeping, nothing is broken: {n} background helper{plural} "
+            f"from the latest AI Brain Starter update {'are' if n != 1 else 'is'} "
+            f"not active yet on this machine (the automatic setup step didn't "
+            f"finish last time). Everything else works normally. To finish the "
+            f"update, run this one command:"
         ),
         "",
-        "```bash",
+        "```",
         FIX_CMD,
         "```",
+        "",
+        (
+            "Explain this to the user in one friendly sentence and offer to run "
+            "the command for them — do not alarm them; this is routine "
+            "maintenance, not an error."
+        ),
     ]
 
     if missing_bns:
@@ -220,7 +227,7 @@ def _build_message(missing: dict[str, set[str]], retired: list[str]) -> str | No
         plural_m = "s" if m != 1 else ""
         lines += [
             "",
-            f"Pulled but not deployed ({m} hook{plural_m}):",
+            f"Updated but not yet active ({m} helper{plural_m}):",
         ]
         for bn in missing_bns[:MAX_LISTED]:
             evs = ", ".join(sorted(set(events_by_bn[bn])))
@@ -233,7 +240,8 @@ def _build_message(missing: dict[str, set[str]], retired: list[str]) -> str | No
         plural_r = "s" if r != 1 else ""
         lines += [
             "",
-            f"Retired but still wired ({r} hook{plural_r} — the deploy should have removed {'them' if r != 1 else 'it'}):",
+            f"No longer shipped but still active ({r} helper{plural_r} — the "
+            f"command above also removes {'them' if r != 1 else 'it'}):",
         ]
         for label in retired[:MAX_LISTED]:
             lines.append(f"- `{label}`")
@@ -264,7 +272,7 @@ def _drift_message() -> str | None:
     )
 
     # Honor the escape hatch the auto-update machinery advertises: a pinned user
-    # has disabled auto-update (ai-brain-auto-update.sh no-ops on this file), so
+    # has disabled auto-update (ai-brain-auto-update.py no-ops on this file), so
     # they manage deploys by hand and the fail-open auto-deploy this hook watches
     # can't even run for them. Nagging them would contradict the opt-out (operating
     # rule: A Gate Must Honor the Escape Hatch It Advertises). Pin lives next to
