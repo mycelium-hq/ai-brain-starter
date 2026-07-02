@@ -97,6 +97,8 @@ INTEGRATION_TESTS=(
   test_bootstrap_dry_run
   test_phase_doc_slash_commands_installed
   test_reconcile_ff_invariant
+  test_ai_brain_auto_update
+  test_installer_replaces_auto_update
   test_detect_closing_signal_worktree
   test_detect_closing_signal_repo_aware_vault
   test_closing_claim_shared
