@@ -95,6 +95,7 @@ echo "    OK - $count file(s) compiled clean"
 INTEGRATION_TESTS=(
   test_worktree_session_close
   test_bootstrap_dry_run
+  test_dry_run_purity
   test_phase_doc_slash_commands_installed
   test_reconcile_ff_invariant
   test_ai_brain_auto_update
@@ -118,6 +119,7 @@ INTEGRATION_TESTS=(
   test_installer_retires_email_gate
   test_installer_relocates_moved_hooks
   test_deployed_hooks_behind
+  test_windows_platformize
   test_memory_routing_guard
   test_bootstrap_omits_vault_hooks
   test_bootstrap_brew_terminal_step

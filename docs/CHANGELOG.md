@@ -9,6 +9,26 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-07-02: previews never install, hiccups fix themselves, and no more red ✗ for things that are fine
+
+**Who this affects:** everyone installing — especially workshop rooms full of first-time users.
+
+**Three bugs, all found on real machines:**
+
+1. **"Preview" mode actually installed things.** `--dry-run` is supposed to show what WOULD be installed without touching anything. Instead it really installed Homebrew, Node, gh, pipx, and graphify on a user's machine — one branch of the script literally said "or dry-run: install for real." Now a dry run prints its plan and changes nothing, and a new test runs the real installer in a sealed sandbox that records any attempt to install something — zero attempts allowed, forever.
+
+2. **One Wi-Fi blip looked like a broken product.** On a workshop machine, graphify showed a red ✗ "install failed" under a line saying most of the setup depends on it — scary, and wrong twice over. First, the error hid a plumbing bug: the installer sometimes couldn't SEE a tool it had just installed successfully (the folder it lands in wasn't on the session's path when pipx was already present). Second, all the diagnostic output went to `/dev/null`, so nobody could tell what actually happened. Now: the path is set unconditionally, every install's full output lands in `~/.claude/.bootstrap.log`, installs retry automatically (thirty machines on one workshop network hitting the package server together WILL have blips), and there's a fallback install method behind the first.
+
+3. **When something still doesn't land, the assistant fixes it — not you.** If a component genuinely can't install right then, the bootstrap no longer shows a failure. It notes the gap in a small file, tells you the interview will finish it, and the setup interview (and the first-week check-in after it) quietly completes it. A person who has never opened a terminal never sees a dead end.
+
+**Also:** the Windows installer's preview mode had the same real-install holes (now gated the same way), and there's now a documented one-line Terminal path for when Claude Code's own safety layer prefers that you run the installer yourself — pasted by you, resumed by the assistant, no dead end.
+
+**New tests:** `tests/integration/test_dry_run_purity.sh` — runs the real installer's dry-run in a sandbox with recording stubs (zero mutations allowed) plus a structural check that every install command sits behind a dry-run guard; verified to fail against the old installer (10 unguarded sites) and pass against this one.
+
+**What you should do:** nothing. If your last install showed a graphify ✗, run the update and tell Claude "finish my install gaps" — or just start the setup interview, which does it for you.
+
+---
+
 ## 2026-07-02: the setup now treats every approval as genuinely yours
 
 **Who this affects:** everyone who installs or re-runs the setup, and especially anyone whose assistant refused to run it.
