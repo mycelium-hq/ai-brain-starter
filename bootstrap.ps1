@@ -311,7 +311,9 @@ Start-Sleep -Seconds 1
 # missing, auto-install App Installer (which provides winget) before doing
 # anything else. Never abort with "go install something from the Microsoft
 # Store yourself", that defeats the one-command promise.
-if (-not (Have winget)) {
+if (-not (Have winget) -and $DryRun) {
+    Dry "would: install winget (App Installer) from the Microsoft Store package"
+} elseif (-not (Have winget)) {
     Hdr (T "Installing winget (App Installer)" "Instalando winget (App Installer)")
     Log (T "winget is the Windows package manager we use to install everything else." `
           "winget es el gestor de paquetes de Windows que usamos para instalar todo lo demás.")
@@ -360,6 +362,8 @@ if (-not $pythonOk -and $CorporateProfile) {
             "Perfil corporativo: no se encontro Python 3.10+ - NO se instala automaticamente (espacio de usuario, version fija).")
     Warn (T "Provision Python via your IT-approved channel, then re-run. Steps that need python will be skipped." `
             "Instala Python por tu canal aprobado de IT y volve a correr. Los pasos que necesitan python se omitiran.")
+} elseif (-not $pythonOk -and $DryRun) {
+    Dry "would: winget install Python.Python.3.12 (or direct download fallback)"
 } elseif (-not $pythonOk) {
     Hdr "Installing Python 3.12"
     if ($UseWinget) {
@@ -387,6 +391,8 @@ if (-not (Have node) -and $CorporateProfile) {
             "Instala Node.js por tu canal aprobado de IT y volve a correr. Los pasos que necesitan node se omitiran.")
     Warn (T "The exact command for IT to approve/run: winget install -e --id OpenJS.NodeJS.LTS" `
             "El comando exacto para que IT apruebe/corra: winget install -e --id OpenJS.NodeJS.LTS")
+} elseif (-not (Have node) -and $DryRun) {
+    Dry "would: winget install OpenJS.NodeJS.LTS (or direct download fallback)"
 } elseif (-not (Have node)) {
     Hdr "Installing Node.js"
     if ($UseWinget) {
@@ -410,7 +416,9 @@ if (Have node) { Ok "node $(node --version)" } else { Err "node install failed" 
 # Without this, the user has no way to actually run /setup-brain after the
 # bootstrap finishes. Distributed via npm so the install path is identical
 # across Mac, Linux, and Windows once Node is present.
-if (-not (Have claude)) {
+if (-not (Have claude) -and $DryRun) {
+    Dry "would: npm install -g @anthropic-ai/claude-code"
+} elseif (-not (Have claude)) {
     Hdr (T "Installing Claude Code" "Instalando Claude Code")
     Log (T "Claude Code is Anthropic's developer tool that runs the AI brain skill." `
           "Claude Code es la herramienta de Anthropic para developers que corre la skill del AI brain.")
@@ -434,7 +442,9 @@ if (-not (Have claude)) {
 if (Have claude) { Ok (T "Claude Code installed" "Claude Code instalado") }
 
 # ─── pipx ─────────────────────────────────────────────────────────────────────
-if (-not (Have pipx)) {
+if (-not (Have pipx) -and $DryRun) {
+    Dry "would: python -m pip install --user pipx"
+} elseif (-not (Have pipx)) {
     Hdr "Installing pipx"
     # Run-Native: pip's routine "scripts not on PATH" stderr warning aborted a
     # real install here under EAP=Stop. Exit code decides success, not stderr.
@@ -447,7 +457,9 @@ if (Have pipx) { Ok "pipx" } else { Err "pipx install failed" }
 # ─── fastmcp ──────────────────────────────────────────────────────────────────
 # Framework for building custom MCP servers in minimal Python. Needed when
 # wiring custom connectors (CRM bridges, vault sync, investor relations, etc.)
-if (-not (Have fastmcp)) {
+if (-not (Have fastmcp) -and $DryRun) {
+    Dry "would: pipx install fastmcp"
+} elseif (-not (Have fastmcp)) {
     Hdr "Installing fastmcp"
     # EAP guard: pipx writes progress/warnings to stderr -> terminating error
     # under Stop in PS 5.1 even with 2>$null. Relaxed here; the Have-check below
@@ -459,7 +471,9 @@ if (-not (Have fastmcp)) {
 if (Have fastmcp) { Ok "fastmcp" } else { Warn "fastmcp not installed (non-blocking, install later with: pipx install fastmcp)" }
 
 # ─── gh (GitHub CLI) ──────────────────────────────────────────────────────────
-if (-not (Have gh)) {
+if (-not (Have gh) -and $DryRun) {
+    Dry "would: winget install GitHub.cli"
+} elseif (-not (Have gh)) {
     Hdr "Installing gh (GitHub CLI)"
     Log "gh lets the session-end capture cascade file improvement ideas as GitHub issues automatically."
     winget install -e --id GitHub.cli --accept-source-agreements --accept-package-agreements
@@ -581,7 +595,9 @@ if (-not $ObsidianInstalled -and $CorporateProfile) {
 if ($ObsidianInstalled) { Ok "Obsidian installed" }
 
 # ─── graphify ─────────────────────────────────────────────────────────────────
-if (-not (Have graphify)) {
+if (-not (Have graphify) -and $DryRun) {
+    Dry "would: pipx install graphifyy + graphify install --platform windows"
+} elseif (-not (Have graphify)) {
     Hdr "Installing graphify (knowledge graph builder)"
     # Run-Native: pipx writes progress + PATH notes to stderr (EAP=Stop hazard).
     if (-not (Run-Native { pipx install graphifyy })) { Err "pipx install graphifyy failed" }
@@ -726,7 +742,9 @@ foreach ($sub in @("graphify", "meeting-todos", "patterns", "insights", "deconst
 
 # ─── Humanizer ────────────────────────────────────────────────────────────────
 $humDir = "$env:USERPROFILE\.claude\skills\humanizer"
-if (-not (Test-Path $humDir)) {
+if (-not (Test-Path $humDir) -and $DryRun) {
+    Dry "would: git clone humanizer -> $humDir"
+} elseif (-not (Test-Path $humDir)) {
     Hdr "Installing humanizer"
     [void](Run-Native { git clone --quiet https://github.com/adelaidasofia/humanizer.git $humDir })
 }

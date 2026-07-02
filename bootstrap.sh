@@ -325,6 +325,30 @@ is_linux() { [[ "$(uname -s)" == "Linux" ]]; }
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# quiet_retry CMD... — run with FULL output captured to $BOOTSTRAP_LOG (never
+# /dev/null: a silent failure used to be undiagnosable), retrying once after
+# 5s. Workshop rooms put 30 machines on one Wi-Fi hitting PyPI at the same
+# minute — transient fetch failures are the NORM there, and a retry converts
+# most of them into clean installs instead of red ✗ lines.
+quiet_retry() {
+  "$@" >>"$BOOTSTRAP_LOG" 2>&1 && return 0
+  sleep 5
+  "$@" >>"$BOOTSTRAP_LOG" 2>&1
+}
+
+# note_gap COMPONENT REPAIR_CMD — a component didn't land after retries.
+# For a non-technical user this must NOT look like breakage: record the gap
+# machine-readably so the setup interview (phase-00 Step 0.7) repairs it
+# automatically, and tell the user — calmly — that nothing is needed from them.
+GAPS_FILE="$HOME/.claude/.ai-brain-starter-install-gaps.jsonl"
+note_gap() {
+  mkdir -p "$HOME/.claude" 2>/dev/null || true
+  printf '{"ts":"%s","component":"%s","repair":"%s"}\n' \
+    "$(date +%Y-%m-%dT%H:%M:%S)" "$1" "$2" >> "$GAPS_FILE" 2>/dev/null || true
+  log "$(t "$1 will finish setting up during the interview — nothing for you to do." \
+           "$1 se termina de configurar durante la entrevista — no tenés que hacer nada.")"
+}
+
 # run_with_timeout SECS CMD [ARGS...] — portable timeout wrapper.
 # Prefers GNU `timeout` (Linux + Mac with coreutils) or `gtimeout` (brew),
 # falls back to a pure-shell background+wait+kill so it works on a clean Mac.
@@ -929,7 +953,15 @@ elif is_mac && ! have brew; then
     exit 0
   fi
 
-  # Interactive terminal (or dry-run): install Homebrew for real — the password
+  if [[ $DRY_RUN -eq 1 ]]; then
+    # A dry run must NEVER mutate the machine. This branch used to fall
+    # through to the real installer ("or dry-run: install for real") — a live
+    # user discovered Homebrew/Node/gh/pipx/graphify actually installed during
+    # their "safe preview" and lost trust in the flag entirely.
+    dry "would: install Homebrew (interactive — its installer asks for the Mac password)"
+  else
+
+  # Interactive terminal: install Homebrew for real — the password
   # prompt below can actually be answered here.
   hdr "$(t "Installing Homebrew" "Instalando Homebrew")"
   log "$(t \
@@ -953,6 +985,8 @@ elif is_mac && ! have brew; then
   elif [[ -x /usr/local/bin/brew ]]; then
     eval "$(/usr/local/bin/brew shellenv)"
   fi
+
+  fi  # end DRY_RUN guard
 fi
 
 # ───────────────────────────────────────────────────────────────────────────────
@@ -965,6 +999,8 @@ if ! python3 -c "import sys; assert sys.version_info >= (3,10)" 2>/dev/null; the
               "Perfil corporativo: no se encontró Python 3.10+ — NO se instala automáticamente (espacio de usuario, sin sudo).")"
     warn "$(t "Provision Python via your IT-approved channel, then re-run. Some steps that need python3 will be skipped." \
               "Instalá Python por tu canal aprobado de IT y volvé a correr. Algunos pasos que necesitan python3 se omitirán.")"
+  elif [[ $DRY_RUN -eq 1 ]]; then
+    dry "would: install Python 3.12 (brew on Mac; apt/dnf/pacman on Linux)"
   else
     hdr "Installing Python 3.12"
     if is_mac; then
@@ -989,6 +1025,8 @@ if ! have node; then
               "Perfil corporativo: no se encontró Node.js — NO se instala automáticamente (espacio de usuario, sin sudo).")"
     warn "$(t "Provision Node.js via your IT-approved channel, then re-run. Some steps that need node will be skipped." \
               "Instalá Node.js por tu canal aprobado de IT y volvé a correr. Algunos pasos que necesitan node se omitirán.")"
+  elif [[ $DRY_RUN -eq 1 ]]; then
+    dry "would: install Node.js (brew on Mac; apt/dnf/pacman on Linux)"
   else
     hdr "Installing Node.js"
     if is_mac; then
@@ -1011,7 +1049,9 @@ have npm  && ok "npm $(npm --version)"
 # once Node is present.
 # ───────────────────────────────────────────────────────────────────────────────
 
-if ! have claude; then
+if ! have claude && [[ $DRY_RUN -eq 1 ]]; then
+  dry "would: npm install -g @anthropic-ai/claude-code"
+elif ! have claude; then
   hdr "$(t "Installing Claude Code" "Instalando Claude Code")"
   log "$(t \
     "Claude Code is Anthropic's developer tool that runs the AI brain skill." \
@@ -1032,16 +1072,22 @@ have claude && ok "claude $(claude --version 2>/dev/null | head -1 || echo insta
 # pipx (Python app installer)
 # ───────────────────────────────────────────────────────────────────────────────
 
-if ! have pipx; then
+if ! have pipx && [[ $DRY_RUN -eq 1 ]]; then
+  dry "would: install pipx (brew on Mac; pip --user on Linux)"
+elif ! have pipx; then
   hdr "Installing pipx"
   if is_mac; then
     brew install pipx && pipx ensurepath || err "pipx install failed"
   else
     python3 -m pip install --user pipx && python3 -m pipx ensurepath || err "pipx install failed"
   fi
-  # pipx ensurepath updates ~/.zshrc but doesn't affect this session
-  export PATH="$HOME/.local/bin:$PATH"
 fi
+# pipx installs console scripts into ~/.local/bin, and `pipx ensurepath` only
+# edits rc files (no effect on THIS shell). Export unconditionally — when pipx
+# was already present (brew), nothing ever added ~/.local/bin here, so tools
+# pipx installs below (graphify, fastmcp) looked like they "failed" even when
+# the install succeeded. That was the workshop machine's red ✗.
+export PATH="$HOME/.local/bin:$PATH"
 have pipx && ok "pipx $(pipx --version 2>/dev/null || echo installed)"
 
 # ───────────────────────────────────────────────────────────────────────────────
@@ -1050,7 +1096,9 @@ have pipx && ok "pipx $(pipx --version 2>/dev/null || echo installed)"
 # later (for issue filing), they can run: gh auth login
 # ───────────────────────────────────────────────────────────────────────────────
 
-if ! have gh; then
+if ! have gh && [[ $DRY_RUN -eq 1 ]]; then
+  dry "would: install gh, the GitHub CLI (brew on Mac; apt/dnf/pacman on Linux)"
+elif ! have gh; then
   hdr "Installing gh (GitHub CLI)"
   if is_mac; then
     brew install gh || warn "gh install failed — non-blocking, continue"
@@ -1072,7 +1120,9 @@ have gh && ok "gh $(gh --version 2>/dev/null | head -1 | awk '{print $3}')" || t
 # ───────────────────────────────────────────────────────────────────────────────
 
 if is_mac; then
-  if [[ ! -d "/Applications/Obsidian.app" ]]; then
+  if [[ ! -d "/Applications/Obsidian.app" ]] && [[ $DRY_RUN -eq 1 ]]; then
+    dry "would: brew install --cask obsidian"
+  elif [[ ! -d "/Applications/Obsidian.app" ]]; then
     hdr "$(t "Installing Obsidian" "Instalando Obsidian")"
     log "$(t \
       "Obsidian is the note-taking app this whole setup writes into. Free, runs locally, no account." \
@@ -1099,7 +1149,9 @@ else
       || [[ -f "$HOME/.local/share/flatpak/exports/bin/md.obsidian.Obsidian" ]] \
       || [[ -x "$HOME/.local/bin/obsidian" ]]
   }
-  if ! obsidian_installed; then
+  if ! obsidian_installed && [[ $DRY_RUN -eq 1 ]]; then
+    dry "would: install Obsidian (snap, then flatpak, then AppImage download)"
+  elif ! obsidian_installed; then
     hdr "Installing Obsidian"
     log "Obsidian is the note-taking app this whole setup writes into. Free, runs locally, no account."
 
@@ -1138,11 +1190,25 @@ fi
 # graphify CLI + Python package
 # ───────────────────────────────────────────────────────────────────────────────
 
-if ! have graphify; then
+if ! have graphify && [[ $DRY_RUN -eq 1 ]]; then
+  dry "would: pipx install graphifyy && graphify install"
+elif ! have graphify; then
   hdr "Installing graphify (knowledge graph builder)"
-  log "graphify reduces token usage by ~70% on vault queries. Most of this setup depends on it."
-  pipx install graphifyy >/dev/null 2>&1 || err "graphifyy install failed"
-  graphify install >/dev/null 2>&1 || err "graphify install failed"
+  log "$(t "graphify makes big vault questions fast (it builds the knowledge graph)." \
+           "graphify hace rápidas las preguntas grandes del vault (construye el grafo de conocimiento).")"
+  # Full output goes to $BOOTSTRAP_LOG (never /dev/null — a red ✗ with zero
+  # diagnostics was undiagnosable on a real workshop machine). pip --user is
+  # the fallback when pipx itself misbehaves; both land in ~/.local/bin,
+  # which is already exported above.
+  quiet_retry pipx install graphifyy \
+    || quiet_retry python3 -m pip install --user graphifyy \
+    || true
+  hash -r 2>/dev/null || true
+  if have graphify; then
+    quiet_retry graphify install || note_gap "graphify" "graphify install"
+  else
+    note_gap "graphify" "pipx install graphifyy && graphify install"
+  fi
 fi
 have graphify && ok "graphify $(graphify --version 2>/dev/null | head -1 || echo installed)"
 
@@ -1152,10 +1218,12 @@ have graphify && ok "graphify $(graphify --version 2>/dev/null | head -1 || echo
 # project-specific MCP the user (or their team) builds on top of this stack.
 # ───────────────────────────────────────────────────────────────────────────────
 
-if ! have fastmcp; then
+if ! have fastmcp && [[ $DRY_RUN -eq 1 ]]; then
+  dry "would: pipx install fastmcp"
+elif ! have fastmcp; then
   hdr "Installing fastmcp"
   log "fastmcp lets you build custom MCP servers in a few lines of Python."
-  pipx install fastmcp >/dev/null 2>&1 || warn "fastmcp install failed (non-blocking — install later with: pipx install fastmcp)"
+  quiet_retry pipx install fastmcp || note_gap "fastmcp" "pipx install fastmcp"
 fi
 have fastmcp && ok "fastmcp $(fastmcp --version 2>/dev/null | head -1 || echo installed)"
 
