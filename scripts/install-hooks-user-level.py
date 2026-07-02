@@ -822,8 +822,10 @@ def verify_paths_on_disk(settings: dict) -> tuple[list[tuple[str, str, str]], li
 
       - REQUIRED: command runs the script directly (`python3 <path> ...`).
         Script missing = silent hook failure at runtime.
-      - OPTIONAL: command wraps in `[ -f <path> ] && ...`. Missing is fine;
-        the guard suppresses the call.
+      - OPTIONAL: command wraps in `[ -f <path> ] && ...` (the guard suppresses
+        the call), OR the missing path has a present same-basename sibling in
+        the SAME command — a `||` fallback chain (`python3 <vault-copy> ||
+        python3 <home-copy>`) is satisfied as long as one copy exists (MYC-2558).
 
     Returns (missing_required, missing_optional), each a list of
     (event, script_path, full_command_short).
@@ -839,8 +841,13 @@ def verify_paths_on_disk(settings: dict) -> tuple[list[tuple[str, str, str]], li
     #   Windows runner form: every path is a QUOTED argument. The quoted
     #   pattern also fixes a false "missing" on POSIX vault paths containing
     #   spaces, which the unquoted pattern used to truncate at the space.
+    # Both patterns REQUIRE a .py/.sh extension (matching _SCRIPT_RE). Without
+    # it, a fallback chain whose first path is quoted — `python3 '<vault>' ...`
+    # — leaves `python3  2>/dev/null` after the quoted path is stripped for the
+    # bare pass, and the bare pattern would capture `2>/dev/null` as a bogus
+    # "missing required path" (MYC-2558). A shell redirection is not a script.
     quoted_re = re.compile(r"['\"]((?:~|/|[A-Za-z]:)[^'\"]+\.(?:py|sh))['\"]")
-    bare_re = re.compile(r"(?:python3|bash)\s+(~?[^\s'\"|&;]+)")
+    bare_re = re.compile(r"(?:python3|bash)\s+(~?[^\s'\"|&;]+\.(?:py|sh))\b")
 
     for event, groups in (settings.get("hooks") or {}).items():
         for g in groups:
@@ -853,13 +860,27 @@ def verify_paths_on_disk(settings: dict) -> tuple[list[tuple[str, str, str]], li
                 candidates = quoted_re.findall(cmd)
                 unquoted = re.sub(r"['\"][^'\"]*['\"]", " ", cmd)
                 candidates += bare_re.findall(unquoted)
-                for raw in dict.fromkeys(candidates):
-                    p = Path(os.path.expanduser(raw))
-                    if p.is_file():
+                paths = list(dict.fromkeys(candidates))
+                exists = {r: Path(os.path.expanduser(r)).is_file() for r in paths}
+                # A `||` fallback chain names the same script by more than one
+                # path (vault copy || ~/.claude home copy || echo). On a vault
+                # install only the home copy exists, which still satisfies the
+                # chain at runtime. So a missing path whose basename ALSO has a
+                # present same-basename sibling IN THIS COMMAND is optional, not
+                # required. Scoped to one command — never across commands — so a
+                # genuinely-missing single required script (no present sibling)
+                # stays required (MYC-2558).
+                satisfied_basenames = {
+                    os.path.basename(r) for r in paths if exists[r]
+                }
+                for raw in paths:
+                    if exists[raw]:
                         continue
+                    p = Path(os.path.expanduser(raw))
                     short = cmd[:80] + ("…" if len(cmd) > 80 else "")
                     entry = (event, str(p), short)
-                    if _is_gated_command(cmd, raw):
+                    if _is_gated_command(cmd, raw) or \
+                            os.path.basename(raw) in satisfied_basenames:
                         missing_optional.append(entry)
                     else:
                         missing_required.append(entry)
@@ -885,7 +906,7 @@ def run_verification(settings: dict, fail_on_missing: bool = False) -> int:
     ok_count -= len(missing_required) + len(missing_optional)
     print(f"  OK     {ok_count} hook(s) — referenced scripts exist on disk")
     if missing_optional:
-        print(f"  SKIP   {len(missing_optional)} hook(s) — optional (gated by [ -f ... ] guard):")
+        print(f"  SKIP   {len(missing_optional)} hook(s) — optional ([ -f ] guard, or a same-basename fallback sibling exists):")
         for event, p, _short in missing_optional:
             print(f"           {event}: {p}")
     if missing_required:
