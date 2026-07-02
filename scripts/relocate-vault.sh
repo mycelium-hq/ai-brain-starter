@@ -253,6 +253,17 @@ ensure_backup_standup() {  # uses $OLD_ABS $BACKUP_DEST $BACKUP_SCHEDULE $DRYRUN
     die "backup stand-up FAILED at 'verify' — the snapshot did not restore, so it is not a trustworthy backup. NOT moving the vault (fail-closed; your vault is untouched).
   Re-run once the backup verifies, or re-run with --force to move without a verified backup." 1
   fi
+  # The auto stand-up produces an UNENCRYPTED archive (setup ran without --encrypt,
+  # which needs an interactive passphrase and would break the one-step flow). Say so
+  # LOUDLY: this path only runs when there is no Time Machine / pushed git-remote, so
+  # the archive is the only backup, and its default home is often a synced cloud
+  # folder — and a vault may hold private notes. Do not silently drop a plaintext
+  # copy of someone's brain into their cloud.
+  warn "relocate-vault: the stand-up backup is NOT encrypted — it may contain private notes,"
+  warn "  and now lives in: $dest (often a synced cloud folder)."
+  warn "  To encrypt it, re-run the backup with --encrypt and RECORD the passphrase OFF this"
+  warn "  machine (a password manager) — a keychain-only passphrase dies with the disk:"
+  warn "    bash \"$backup_cmd\" setup --vault \"$OLD_ABS\" --dest \"$dest\" --encrypt"
   say "relocate-vault: backup stood up + verified — proceeding with the move."
 }
 
@@ -401,6 +412,7 @@ if [ "$FORCE" = 1 ]; then
   warn "relocate-vault: --force — skipping the backup check. A vault is often your one"
   warn "  irreplaceable asset; stand up + verify an off-machine backup as soon as the move lands:"
   warn "    bash \"$SCRIPT_DIR/vault-backup.sh\" setup && bash \"$SCRIPT_DIR/vault-backup.sh\" verify"
+  warn "  (or drop --force and add --ensure-backup to stand one up automatically BEFORE the move.)"
 elif [ "$brc" = 0 ]; then
   say "relocate-vault: verified off-machine backup present (${BACKUP_TOKEN}) — proceeding."
 else

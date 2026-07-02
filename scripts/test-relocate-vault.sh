@@ -261,6 +261,11 @@ out="$(CLAUDE_CONFIG_DIR="$CFG" VAULT_BACKUP_CONF="$EB3_CONF" VAULT_BACKUP_MARKE
 ls "$EB3_DEST"/vault-backup-*.tar.gz >/dev/null 2>&1 \
   && pass "ensure-backup P1: a real verified archive was stood up BEFORE the move" \
   || fail "ensure-backup P1: no archive found in $EB3_DEST"
+# The auto stand-up is UNENCRYPTED — the move must say so loudly (privacy: a vault may
+# hold private notes and the archive often lands in a cloud folder). MYC-2512 phase 1.
+echo "$out" | grep -qiE 'not encrypted' \
+  && pass "ensure-backup P1: warns loudly that the stood-up backup is unencrypted" \
+  || fail "ensure-backup P1: missing the unencrypted-backup warning: $out"
 
 # 9d POSITIVE (idempotent): a pre-existing surviving backup skips the stand-up.
 # VAULT_BACKUP_CMD points at the FAIL stub — if the stand-up were (wrongly) invoked
