@@ -67,7 +67,8 @@ def collapse_worktree(path: Path) -> Path:
     exactly the bug find_repo_vault_root must not reintroduce. Always
     collapse before searching.
     """
-    text = str(path)
+    # Normalize separators so the marker matches Windows paths too.
+    text = str(path).replace("\\", "/")
     if _WORKTREE_MARKER in text:
         return Path(text.split(_WORKTREE_MARKER, 1)[0])
     return path

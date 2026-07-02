@@ -971,9 +971,9 @@ def format_hub_surface_line(
     parts += [
         "",
         (
-            "Resolve in a worktree (`claude-dev-worktree start <repo> <slug>`) or run "
-            "`dev-hub-refresh.py` (dry-run) then `--apply`. "
-            "Bug class: STALE-BARE-CHECKOUT-READ (MYC-1893)."
+            "Resolve each in its repo (commit or stash local work, then "
+            "`git pull --ff-only`), or run `dev-hub-refresh.py` (dry-run) "
+            "then `--apply` to handle the clean ones in bulk."
         ),
     ]
     return "\n".join(parts)

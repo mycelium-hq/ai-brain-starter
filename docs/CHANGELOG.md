@@ -9,6 +9,24 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-07-02: Windows actually works now — no more error notices every session
+
+**Who this affects:** everyone on Windows, in a big way. macOS/Linux users keep working exactly as before (same behavior, now with more tests around it).
+
+**The bug:** the background helpers ("hooks") that make the brain work were written in the language of Mac/Linux terminals. Windows speaks several different terminal dialects depending on your setup, and none of them understood those commands. So on a Windows machine, most helpers failed on every single message — you'd see error notices that looked like something was badly broken, the auto-updater could never run, and the "your update didn't finish" checker then warned you every session about a problem you had no way to fix. None of it was your fault, and your notes were never in danger — but it looked scary, and the helpers genuinely weren't running.
+
+**What's new:** on Windows, the installer now writes every helper in a form all Windows terminals understand, routed through a small runner that keeps a misbehaving helper invisible instead of surfacing an error notice. The auto-updater and the skill-sync were rewritten in Python (which runs the same everywhere), so Windows machines now get updates, self-heal, and stay current just like Macs. Helpers that only make sense on Mac/Linux (like the one that cleans up runaway Mac processes) now stay quietly off on Windows instead of erroring. And the handful of warnings you *should* see (like "your vault has no backup") now show Windows commands that actually work when you paste them.
+
+**Also in this release:** several warning messages lost their internal engineering jargon ("bug class DEPLOY-FAILS-OPEN-SILENTLY-ON-CLIENT" is now a plain sentence that says nothing is broken and gives you the one command to run), fix-it suggestions no longer reference tools that were never shipped with the starter, and the Windows bootstrap validates that the `python` it found is real (Windows ships a fake one that opens the Microsoft Store) and double-checks that every hook it wires actually exists on disk.
+
+**Under the hood:** `install-hooks-user-level.py` rewrites hook commands per-platform at install time (`hooks.json` stays the single source of truth); `scripts/hook_runner.py` reproduces the old shell-level failure-masking in portable Python, including letting intentional blocks through; `scripts/ai-brain-auto-update.py` and `scripts/sync-skills.py` replace the bash versions (the `.sh` files remain as thin pass-throughs so older installs migrate seamlessly); path checks in the worktree/vault helpers now understand Windows path separators; and `scripts/PORTABILITY.md` gained the Windows rules so new hooks stay portable.
+
+**New tests:** `tests/integration/test_windows_platformize.sh` — proves a Windows install contains zero commands Windows can't parse, that an existing broken install migrates in place without duplicates, that the update checker stays silent on a healthy Windows install (the false-alarm loop this kills), and pins the runner's exact failure behavior. The existing auto-update and installer suites all still pass against the Python rewrites.
+
+**What you should do:** on Windows, run the update once — tell Claude "update the ai-brain-starter skill" or run `git pull` in `%USERPROFILE%\.claude\skills\ai-brain-starter`, then `py -3 "%USERPROFILE%\.claude\skills\ai-brain-starter\scripts\install-hooks-user-level.py"`. After that one command, updates take care of themselves. On Mac/Linux: nothing.
+
+---
+
 ## 2026-07-01: your machine now tells you if an auto-update half-landed
 
 **Who this affects:** everyone. This is the safety net for the auto-update in the entry just below.

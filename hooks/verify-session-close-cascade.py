@@ -141,7 +141,17 @@ def _resolve_vault_context(cwd: str) -> None:
     RUNNER_SCRIPT = META_DIR / "scripts" / "session-close-runner.sh"
 # Default is the exact path session-close-runner.sh writes; the env override is
 # for hermetic tests (and any setup where both sides agree to relocate it).
-RUNNER_REPORT = Path(os.environ.get("ABS_RUNNER_REPORT", "/tmp/abs-session-close-runner.report"))
+# The literal /tmp (NOT tempfile.gettempdir()) is deliberate on POSIX: the bash
+# runner writes literally to /tmp, and macOS GUI processes see TMPDIR as
+# /var/folders/... — gettempdir() there would look in the wrong place and
+# false-block every close. Windows has no /tmp, so use the real temp dir there
+# (the bash runner can't run on Windows anyway; this hook stays advisory).
+import tempfile
+_DEFAULT_RUNNER_REPORT = (
+    str(Path(tempfile.gettempdir()) / "abs-session-close-runner.report")
+    if os.name == "nt" else "/tmp/abs-session-close-runner.report"
+)
+RUNNER_REPORT = Path(os.environ.get("ABS_RUNNER_REPORT", _DEFAULT_RUNNER_REPORT))
 RUNNER_FRESH_SECONDS = 1800  # 30 minutes
 
 

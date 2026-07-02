@@ -47,7 +47,7 @@
           },
           {
             "type": "command",
-            "command": "if [ -f ~/.claude/.ai-brain-starter-pinned ]; then echo '{\"continue\":true,\"suppressOutput\":true}'; exit 0; fi; bash ~/.claude/skills/ai-brain-starter/scripts/ai-brain-auto-update.sh || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "python3 ~/.claude/skills/ai-brain-starter/scripts/ai-brain-auto-update.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Checking for skill updates..."
           }
         ]
@@ -308,5 +308,5 @@
       }
     ]
   },
-  "_how_to_update": "After git pull on this repo (or automatically, every ~6 days, via the auto-update UserPromptSubmit hook), scripts/ai-brain-auto-update.sh fast-forwards ~/.claude/skills/ai-brain-starter, runs scripts/sync-skills.sh (skill content backup + overwrite), and then runs scripts/install-hooks-user-level.py ITSELF (bounded) to rewire ~/.claude/settings.json — the deploy no longer waits on Claude to run it, so a merged PR reaches the machine the same session (MYC-720). The pull is ff-only: a divergent or dirty checkout is refused and surfaced for manual merge, never given a surprise merge commit. If the auto path is bypassed (pinned via ~/.claude/.ai-brain-starter-pinned, network down, hook disabled), re-run scripts/install-hooks-user-level.py or bootstrap.sh manually — both call the installer with --fail-on-missing so divergent-fork strands surface loudly."
+  "_how_to_update": "After git pull on this repo (or automatically, every ~6 days, via the auto-update UserPromptSubmit hook), scripts/ai-brain-auto-update.py (cross-platform; the .sh is a thin delegator for old wirings) fast-forwards ~/.claude/skills/ai-brain-starter, runs scripts/sync-skills.py (skill content backup + overwrite), and then runs scripts/install-hooks-user-level.py ITSELF (bounded) to rewire ~/.claude/settings.json — the deploy no longer waits on Claude to run it, so a merged PR reaches the machine the same session (MYC-720). On Windows the installer rewrites these POSIX commands into the portable hook_runner form (see scripts/PORTABILITY.md section 5). The pull is ff-only: a divergent or dirty checkout is refused and surfaced for manual merge, never given a surprise merge commit. If the auto path is bypassed (pinned via ~/.claude/.ai-brain-starter-pinned, network down, hook disabled), re-run scripts/install-hooks-user-level.py or the bootstrap manually — both call the installer with --fail-on-missing so divergent-fork strands surface loudly."
 }

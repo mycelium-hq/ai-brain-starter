@@ -52,9 +52,17 @@ CONF_PATH = Path(os.environ.get(
 DEFAULT_STALE_DAYS = 3.0
 VERIFY_STALE_DAYS = 30.0
 
-SETUP_CMD = "bash ~/.claude/skills/ai-brain-starter/scripts/vault-backup.sh setup"
-RUN_CMD = "bash ~/.claude/skills/ai-brain-starter/scripts/vault-backup.sh run"
-VERIFY_CMD = "bash ~/.claude/skills/ai-brain-starter/scripts/vault-backup.sh verify"
+# Platform-appropriate commands — on Windows the bash form is a dead end, so
+# point at vault-backup.ps1 (same setup/run/verify subcommands) by absolute
+# path (no ~ / $HOME / %USERPROFILE%: none expands in every Windows shell).
+if os.name == "nt":
+    _PS1 = Path.home() / ".claude" / "skills" / "ai-brain-starter" / "scripts" / "vault-backup.ps1"
+    _BACKUP_PREFIX = f'powershell -ExecutionPolicy Bypass -File "{_PS1}"'
+else:
+    _BACKUP_PREFIX = "bash ~/.claude/skills/ai-brain-starter/scripts/vault-backup.sh"
+SETUP_CMD = f"{_BACKUP_PREFIX} setup"
+RUN_CMD = f"{_BACKUP_PREFIX} run"
+VERIFY_CMD = f"{_BACKUP_PREFIX} verify"
 
 
 def _emit(ctx: str | None) -> int:

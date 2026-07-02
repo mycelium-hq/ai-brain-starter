@@ -79,9 +79,10 @@ try:
 except Exception:  # fail-open: if the lib cannot load, behave as before
     def resolve_vault_root(cwd: Path, env_vault_root: str | None) -> Path:  # type: ignore
         text = str(Path(env_vault_root) if env_vault_root else cwd)
+        norm = text.replace("\\", "/")  # marker must match Windows paths too
         marker = "/.claude/worktrees/"
-        if marker in text:
-            return Path(text.split(marker, 1)[0])
+        if marker in norm:
+            return Path(norm.split(marker, 1)[0])
         return Path(text)
 
 

@@ -875,10 +875,15 @@ if ((Test-Path $userHookInstaller) -and -not $DryRun) {
     Write-Host ("━━━ " + (T "Installing hooks at user level (so they fire inside worktrees)" `
                               "Instalando hooks a nivel de usuario (para que disparen dentro de worktrees)") + " ━━━") -ForegroundColor Cyan
 
+    # py first: the launcher is always real. A bare `python3`/`python` on PATH
+    # can be the Microsoft Store alias STUB (opens the Store instead of running),
+    # so every candidate is validated by actually executing it.
     $pythonCmd = $null
-    foreach ($candidate in @("python3", "python", "py")) {
+    foreach ($candidate in @("py", "python", "python3")) {
         $resolved = Get-Command $candidate -ErrorAction SilentlyContinue
-        if ($resolved) { $pythonCmd = $resolved.Source; break }
+        if (-not $resolved) { continue }
+        & $resolved.Source -c "import sys" 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) { $pythonCmd = $resolved.Source; break }
     }
 
     if (-not $pythonCmd) {
@@ -889,7 +894,9 @@ if ((Test-Path $userHookInstaller) -and -not $DryRun) {
         $Failed += "user-level hook install (missing python3) - meeting trigger + 6 other hooks WILL NOT FIRE until resolved"
     } else {
         try {
-            & $pythonCmd $userHookInstaller --quiet
+            # --fail-on-missing (parity with bootstrap.sh): verifies every wired
+            # hook script exists on disk and escalates divergent-fork strands.
+            & $pythonCmd $userHookInstaller --quiet --fail-on-missing
             if ($LASTEXITCODE -eq 0) {
                 Write-Host ("  OK " + (T "User-level hooks installed (~/.claude/settings.json)" `
                                           "Hooks a nivel de usuario instalados (~/.claude/settings.json)")) -ForegroundColor Green
@@ -898,8 +905,8 @@ if ((Test-Path $userHookInstaller) -and -not $DryRun) {
                                          "La instalación de hooks a nivel de usuario FALLÓ (exit $LASTEXITCODE).")) -ForegroundColor Red
                 Write-Host ("  X " + (T "The meeting trigger + 6 other UserPromptSubmit hooks will not fire." `
                                          "El trigger de meetings + 6 hooks UserPromptSubmit no van a disparar.")) -ForegroundColor Red
-                Write-Host ("  X " + (T "Re-run manually: python3 $userHookInstaller" `
-                                         "Volvé a correr manualmente: python3 $userHookInstaller")) -ForegroundColor Red
+                Write-Host ("  X " + (T "Re-run manually: & `"$pythonCmd`" `"$userHookInstaller`" --fail-on-missing" `
+                                         "Volvé a correr manualmente: & `"$pythonCmd`" `"$userHookInstaller`" --fail-on-missing")) -ForegroundColor Red
                 $Failed += "user-level hook install (exit $LASTEXITCODE) - meeting trigger + 6 other hooks WILL NOT FIRE"
             }
         } catch {
@@ -910,7 +917,7 @@ if ((Test-Path $userHookInstaller) -and -not $DryRun) {
     }
     Write-Host ""
 } elseif ($DryRun) {
-    Write-Host ("  > [dry-run] would run: python3 $userHookInstaller --quiet  " + `
+    Write-Host ("  > [dry-run] would run: python $userHookInstaller --quiet --fail-on-missing  " + `
                   "# wires 7 UserPromptSubmit hooks incl. meeting-workflow trigger") -ForegroundColor DarkGray
 }
 
