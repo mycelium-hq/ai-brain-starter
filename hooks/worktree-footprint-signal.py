@@ -231,10 +231,27 @@ def _offer_block(vault: Path, service: str, dest: Path) -> str:
             f'"{SKILL_SCRIPTS}/relocate-machinery-sidecar.ps1" "{vault}"'
         )
         rb = "-Rollback"
+        # The .ps1 does not yet stand up a backup itself (MYC-2383 tracks Windows
+        # parity for --ensure-backup), so keep asking the assistant to stand one up
+        # first for Windows/OneDrive users.
+        move_note = (
+            "move the whole vault to a local disk (leaves a link so nothing "
+            "breaks). Stand up a verified off-machine backup FIRST"
+        )
     else:
-        move_cmd = f'bash {SKILL_SCRIPTS}/relocate-vault.sh "{vault}" "{dest}"'
+        # --ensure-backup makes THIS the one approved step: it stands up + verifies
+        # an off-machine backup before moving, and refuses if that can't be verified
+        # — so a non-technical user never has to know --force or run a backup by hand
+        # (MYC-2404 — fulfills this offer's "stand up a backup first" promise in the
+        # mechanism instead of relying on the assistant to remember).
+        move_cmd = f'bash {SKILL_SCRIPTS}/relocate-vault.sh --ensure-backup "{vault}" "{dest}"'
         sidecar_cmd = f'bash {SKILL_SCRIPTS}/relocate-machinery-sidecar.sh "{vault}"'
         rb = "--rollback"
+        move_note = (
+            "move the whole vault to a local disk. This ONE command stands up + "
+            "verifies an off-machine backup FIRST, then moves (leaves a link so "
+            "nothing breaks), and refuses to move if the backup can't be verified"
+        )
     return (
         f"🟡 [cloud-sync] The user's brain `{vault}` is inside **{service}** — the "
         f"#1 cause of the \"whole machine froze\" failure (the sync daemon chokes on "
@@ -249,7 +266,7 @@ def _offer_block(vault: Path, service: str, dest: Path) -> str:
         f"stops choking. Reversible (`{rb}`), deletes nothing:\n"
         f"      {sidecar_cmd}\n"
         f"  Fallback — ONLY if they explicitly say they don't want {service} at all: "
-        f"move the whole vault to a local disk (leaves a link so nothing breaks):\n"
+        f"{move_note}:\n"
         f"      {move_cmd}\n"
         f"Say it to them roughly like: \"Your notes are in {service}, and that combo "
         f"can freeze your computer. I can fix it safely in the background — your notes "
