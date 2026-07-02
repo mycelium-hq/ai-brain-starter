@@ -156,7 +156,41 @@ INTEGRATION_TESTS=(
   test_template_purity
   test_audited_content_injection_scan
   test_post_tool_use_learnings
+  # Wired 2026-07-02 — found dormant by the gate-coverage invariant below.
+  # These existed on disk, passed locally, and never ran in CI.
+  test_detect_closing_signal_strict_guards
+  test_inject_meeting_workflow_truncation_flag
+  test_install_path_verification
+  test_meeting_todos_step0_create_if_absent
+  test_meeting_workflow_trigger_hook
+  test_personal_brain_not_optional
+  test_phase11_writes_to_vault_rule_file
+  test_post_commit_ff_worktrees
+  test_write_hook_meeting_folder_i18n
 )
+# ---- Gate-coverage invariant -------------------------------------------------
+# The list above is an explicit allow-list, and allow-lists rot: a new
+# tests/integration/test_*.sh that never gets listed passes locally forever and
+# never runs in CI (caught live 2026-07-02: nine suites were dormant, one of
+# them hiding a hermeticity bug). Every test_*.sh file must be IN the list, or
+# named here with a one-line reason. A test that shouldn't gate merges still
+# gets a row here — silence is the only banned state.
+GATE_EXEMPT=(
+)
+missing_from_gate=()
+for f in tests/integration/test_*.sh; do
+  name="$(basename "$f" .sh)"
+  found=0
+  for t in "${INTEGRATION_TESTS[@]}" ${GATE_EXEMPT[@]+"${GATE_EXEMPT[@]}"}; do
+    if [ "$t" = "$name" ]; then found=1; break; fi
+  done
+  if [ "$found" -eq 0 ]; then missing_from_gate+=("$name"); fi
+done
+if [ "${#missing_from_gate[@]}" -gt 0 ]; then
+  echo "::error::integration test file(s) not wired into the gate — add each to INTEGRATION_TESTS (or GATE_EXEMPT with a reason): ${missing_from_gate[*]}"
+  exit 1
+fi
+
 echo "==> (b) Shell integration: ${#INTEGRATION_TESTS[@]} tests"
 for t in "${INTEGRATION_TESTS[@]}"; do
   script="tests/integration/$t.sh"
