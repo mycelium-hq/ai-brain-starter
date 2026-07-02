@@ -108,6 +108,7 @@ INTEGRATION_TESTS=(
   test_context_load_selftest
   test_verify_cascade_failsafe
   test_verify_cascade_repo_aware_vault
+  test_aggregator_vault_root_guard
   test_discoverability_partition
   test_stranded_session_artifacts_watchdog
   test_session_coordination_guards
