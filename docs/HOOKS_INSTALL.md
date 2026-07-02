@@ -6,7 +6,7 @@ Where ai-brain-starter installs its hooks, why, and how to migrate from older in
 
 - **Hooks install at USER level by default** (`~/.claude/settings.json`).
 - **Why:** project-level hooks (`<project>/.claude/settings.json`) silently don't fire when Claude Code runs from inside a git worktree (`<project>/.claude/worktrees/<name>/`). User-level hooks fire universally.
-- **Closes [#6](https://github.com/adelaidasofia/ai-brain-starter/issues/6).**
+- **Closes [#6](https://github.com/mycelium-hq/ai-brain-starter/issues/6).**
 - **Idempotent:** re-running the installer detects already-installed hooks via fingerprint and skips them. Custom user hooks are NEVER touched.
 - **Reversible:** `--uninstall` removes only ai-brain-starter entries, leaves everything else intact.
 

@@ -65,7 +65,7 @@ every corporate run and writes it to `~/.claude/.ai-brain-starter-corporate-mani
 
 | Component | Version / pin | Source | Why it's in the minimal set |
 |---|---|---|---|
-| ai-brain-starter skill (+ bundled first-party skills: graphify, daily-journal, insights, patterns, meeting-todos, second-brain-mapping, …) | Pinned to the git revision you install; self-update disabled | `https://github.com/adelaidasofia/ai-brain-starter` | The vault workflow itself. Ships in-repo — no per-skill network fetch. |
+| ai-brain-starter skill (+ bundled first-party skills: graphify, daily-journal, insights, patterns, meeting-todos, second-brain-mapping, …) | Pinned to the git revision you install; self-update disabled | `https://github.com/mycelium-hq/ai-brain-starter` | The vault workflow itself. Ships in-repo — no per-skill network fetch. |
 | `obsidian@obsidian-skills` | Marketplace pin | `github: kepano/obsidian-skills` | Obsidian/vault authoring skills — core knowledge-worker need. |
 | `context7` | Claude Code plugin | Anthropic plugin registry | Documentation lookup. Read-only, no data egress. |
 | Python 3.10+, Node.js, pipx, GitHub CLI, graphify | **Not installed by this profile** | Your IT-approved channel | Runtime prerequisites. Provision + pin them yourself so versions stay under your control. |

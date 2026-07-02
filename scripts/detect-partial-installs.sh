@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # detect-partial-installs.sh — scan for half-installed components.
 #
-# Closes adelaidasofia/ai-brain-starter#4 — bootstrap: detect partially-installed
+# Closes mycelium-hq/ai-brain-starter#4 — bootstrap: detect partially-installed
 # graphify (missing scripts/ subfolder) and offer to refresh.
 #
 # Generalizes to any of the bundled skills + key infrastructure:
@@ -133,7 +133,7 @@ check_vault_aggregators() {
 check_ai_brain_starter() {
   local skill_dir="$HOME/.claude/skills/ai-brain-starter"
   if [[ ! -d "$skill_dir" ]]; then
-    add_issue "warn" "ai-brain-starter" "ai-brain-starter skill not installed at $skill_dir" "git clone https://github.com/adelaidasofia/ai-brain-starter.git '$skill_dir'"
+    add_issue "warn" "ai-brain-starter" "ai-brain-starter skill not installed at $skill_dir" "git clone https://github.com/mycelium-hq/ai-brain-starter.git '$skill_dir'"
     return
   fi
   if [[ ! -f "$skill_dir/SKILL.md" ]]; then

@@ -2,7 +2,7 @@
 """
 install-hooks-user-level.py — install ai-brain-starter hooks at USER level.
 
-Closes adelaidasofia/ai-brain-starter#6 — UserPromptSubmit hooks silently fail
+Closes mycelium-hq/ai-brain-starter#6 — UserPromptSubmit hooks silently fail
 in worktrees when installed at project level. User-level hooks
 (~/.claude/settings.json) fire universally regardless of worktree.
 

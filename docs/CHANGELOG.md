@@ -689,7 +689,7 @@ PR #66 fixed this same bug class for the Stop hook (`session-end-hook.sh`). It w
 
 | PR | What | Impact |
 |---|---|---|
-| #66 | 5-layer fix for the worktree session-loss bug class. `session-end-hook.sh` `resolve_main_vault()` strips `.claude/worktrees/<slug>/` from path resolution. `worktree-prune.sh` refuses to delete branches with unmerged commits. New CI test enforces the invariant. New `recover-orphan-claude-branches.py` recovery script. | Closes [#65](https://github.com/adelaidasofia/ai-brain-starter/issues/65) (reported by a user who lost a full debrief session). Existing orphan commits surface via the new SessionStart hook. |
+| #66 | 5-layer fix for the worktree session-loss bug class. `session-end-hook.sh` `resolve_main_vault()` strips `.claude/worktrees/<slug>/` from path resolution. `worktree-prune.sh` refuses to delete branches with unmerged commits. New CI test enforces the invariant. New `recover-orphan-claude-branches.py` recovery script. | Closes [#65](https://github.com/mycelium-hq/ai-brain-starter/issues/65) (reported by a user who lost a full debrief session). Existing orphan commits surface via the new SessionStart hook. |
 | #67 | Phase 0 install guidance: don't wrap bootstrap output in the Monitor tool. It rendered every stdout line as a "Human:" turn and leaked `<task-notification>` XML to the chat. | Quieter install, no more wall of bare "Human:" labels. |
 | #68 | reconcile-worktree-shared.py now does `git merge --ff-only master` first instead of always committing on the worktree branch. Cuts orphan-commit accumulation from ~1 per session-end to zero in the normal case. Plus install fixes: killed the "2-3 hours / 30 min for basic" time-gate line; wired key-people interview to also create per-person CRM files. | Cleaner branch history. Install asks for full name + nickname per person. |
 | #69 | CI test for the reconcile FF invariant (companion to PR #66's test). New SessionStart hook surfaces orphan-branch count when nonzero. Em-dash warning added to the public-repo scrub gate. | Drift prevention. The 78f4a37 → #65 → #68 chain (same defect recurring one week later because no CI test caught it) is now closed at every layer. |
@@ -1205,7 +1205,7 @@ Both packs use the `/vertical-finance` / `/vertical-legal` triggers with `init |
 
 ### What shipped
 
-- **`.github/workflows/release.yml` — tag-triggered release builder.** Fires on `v*` tag push (or manual `workflow_dispatch` with a tag input). Validates `.claude-plugin/plugin.json` + `marketplace.json` parse as JSON, builds a clean `ai-brain-starter.zip` + `ai-brain-starter.tar.gz` (excluding `.git`, `.github`, secrets, build artifacts, local settings), generates SHA256 sums, and creates the GitHub release with auto-generated release notes. The release URL is stable: `https://github.com/adelaidasofia/ai-brain-starter/releases/latest/download/ai-brain-starter.zip`.
+- **`.github/workflows/release.yml` — tag-triggered release builder.** Fires on `v*` tag push (or manual `workflow_dispatch` with a tag input). Validates `.claude-plugin/plugin.json` + `marketplace.json` parse as JSON, builds a clean `ai-brain-starter.zip` + `ai-brain-starter.tar.gz` (excluding `.git`, `.github`, secrets, build artifacts, local settings), generates SHA256 sums, and creates the GitHub release with auto-generated release notes. The release URL is stable: `https://github.com/mycelium-hq/ai-brain-starter/releases/latest/download/ai-brain-starter.zip`.
 - **`.github/workflows/lint.yml` — new `privacy` job, PR-diff-scoped.** Mirrors the maintainer's write-time hookify guard so external contributors cannot introduce tokens the repo treats as private context. Scoped to files changed in the PR (pre-existing committed content already passed hookify on prior writes). Pushes to main skip this job — the maintainer's local hookify catches direct pushes. Pattern matches `hookify.no-personal-in-starter.local.md` exactly.
 - **README quick-try section.** A new "Quick-try (existing Claude Code users)" subsection inside the install block documents the `--plugin-url` invocation. Frames the path as session-scoped evaluation, not a replacement for the full bootstrap (which still sets up the Obsidian vault + hooks + resolver). Existing email-gated install remains the primary path.
 
@@ -1355,7 +1355,7 @@ All existing skills, hooks, schemas, scripts, the session-close cascade, the boo
 Two alternative fixes considered and rejected:
 
 1. *"Detect worktrees and install hooks at the worktree level too."* Project-level config inside `.claude/worktrees/<name>/.claude/settings.json` would still be brittle and require reinstalling on every new worktree. User-level wins on simplicity.
-2. *"File a Claude Code bug and wait for an upstream fix."* Issue is open ([#6](https://github.com/adelaidasofia/ai-brain-starter/issues/6)) but waiting blocks every user. The user-level install is a structural workaround that's actually cleaner — global hooks belong at global scope.
+2. *"File a Claude Code bug and wait for an upstream fix."* Issue is open ([#6](https://github.com/mycelium-hq/ai-brain-starter/issues/6)) but waiting blocks every user. The user-level install is a structural workaround that's actually cleaner — global hooks belong at global scope.
 
 ### What's preserved
 
@@ -1369,7 +1369,7 @@ The full session-close cascade, all 14 bundled skills, all the Phase 5 setup, ev
 - **Verification:** `bash ~/.claude/skills/ai-brain-starter/scripts/test-hooks-in-worktree.sh` (6/6 expected).
 - **Uninstall:** `python3 ~/.claude/skills/ai-brain-starter/scripts/install-hooks-user-level.py --uninstall` removes ONLY ai-brain-starter entries, preserves everything else.
 
-**Closes [adelaidasofia/ai-brain-starter#6](https://github.com/adelaidasofia/ai-brain-starter/issues/6).**
+**Closes [mycelium-hq/ai-brain-starter#6](https://github.com/mycelium-hq/ai-brain-starter/issues/6).**
 
 ---
 
@@ -1382,7 +1382,7 @@ The full session-close cascade, all 14 bundled skills, all the Phase 5 setup, ev
 ### Layer 1 — Reliability foundations
 
 - **Vault schema linter.** Same permanent-fix pattern that saved settings.json. New `hooks/lint-vault-frontmatter.py` is a PreToolUse hook that catches malformed YAML in Decisions/, Sessions/, and journal frontmatter before it lands. New `scripts/vault-schema-validator.py` is a standalone validator with 9-fixture self-test, runnable in CI or on-demand. Per-type schemas at `templates/schemas/{decision,session,journal}.json`. Closes the same class of bug that nuked a real CRM record 2026-04-27 (silent YAML parse error → empty re-marshal over real content).
-- **Bootstrap reliability bundle (closes [#2](https://github.com/adelaidasofia/ai-brain-starter/issues/2), [#3](https://github.com/adelaidasofia/ai-brain-starter/issues/3), [#4](https://github.com/adelaidasofia/ai-brain-starter/issues/4) at once).** New flags: `--restore` for interactive recovery from .bak files, `--smoke-test` for end-to-end install verification, `--detect-partial` for finding half-installed components. Persistent log at `~/.claude/.bootstrap.log` with size-based rotation. Three new scripts: `bootstrap-restore.sh`, `detect-partial-installs.sh`, `post-install-smoke-test.sh`. The smoke test runs Python syntax, bash syntax, JSON validity, hook smoke tests, aggregator smoke tests, schema validator self-test, and the closing-signal fixture harness — 130+ checks in one command.
+- **Bootstrap reliability bundle (closes [#2](https://github.com/mycelium-hq/ai-brain-starter/issues/2), [#3](https://github.com/mycelium-hq/ai-brain-starter/issues/3), [#4](https://github.com/mycelium-hq/ai-brain-starter/issues/4) at once).** New flags: `--restore` for interactive recovery from .bak files, `--smoke-test` for end-to-end install verification, `--detect-partial` for finding half-installed components. Persistent log at `~/.claude/.bootstrap.log` with size-based rotation. Three new scripts: `bootstrap-restore.sh`, `detect-partial-installs.sh`, `post-install-smoke-test.sh`. The smoke test runs Python syntax, bash syntax, JSON validity, hook smoke tests, aggregator smoke tests, schema validator self-test, and the closing-signal fixture harness — 130+ checks in one command.
 
 ### Layer 2 — Telemetry foundation
 
@@ -1428,9 +1428,9 @@ The next auto-update sync wires every new hook into `hooks.json` and pulls in th
 
 ### Issues closed
 
-- [#2](https://github.com/adelaidasofia/ai-brain-starter/issues/2) bootstrap: --restore mode (shipped as `bootstrap.sh --restore` + `scripts/bootstrap-restore.sh`)
-- [#3](https://github.com/adelaidasofia/ai-brain-starter/issues/3) bootstrap: persistent log file (shipped as `~/.claude/.bootstrap.log` with size-rotation)
-- [#4](https://github.com/adelaidasofia/ai-brain-starter/issues/4) bootstrap: detect partially-installed graphify (shipped as `bootstrap.sh --detect-partial` + `scripts/detect-partial-installs.sh`)
+- [#2](https://github.com/mycelium-hq/ai-brain-starter/issues/2) bootstrap: --restore mode (shipped as `bootstrap.sh --restore` + `scripts/bootstrap-restore.sh`)
+- [#3](https://github.com/mycelium-hq/ai-brain-starter/issues/3) bootstrap: persistent log file (shipped as `~/.claude/.bootstrap.log` with size-rotation)
+- [#4](https://github.com/mycelium-hq/ai-brain-starter/issues/4) bootstrap: detect partially-installed graphify (shipped as `bootstrap.sh --detect-partial` + `scripts/detect-partial-installs.sh`)
 
 ---
 
@@ -2722,7 +2722,7 @@ If you run multiple Claude Code sessions at the same time in different worktrees
 
 This isn't a bug in any one session. It's a structural race condition in the cascade rule itself. If you've been using this setup with parallel worktrees for any length of time, some of your session summaries and decisions have quietly disappeared without you knowing.
 
-I caught it live on 2026-04-11 — four concurrent worktrees wrote to the meta files in one evening; at least two decisions and one session summary were overwritten before the fix shipped. Reported and tracked in [#5](https://github.com/adelaidasofia/ai-brain-starter/issues/5).
+I caught it live on 2026-04-11 — four concurrent worktrees wrote to the meta files in one evening; at least two decisions and one session summary were overwritten before the fix shipped. Reported and tracked in [#5](https://github.com/mycelium-hq/ai-brain-starter/issues/5).
 
 ### What changed
 
@@ -2865,7 +2865,7 @@ bash bootstrap.sh --dry-run
 ```
 
 ```powershell
-iex "& { $(irm https://raw.githubusercontent.com/adelaidasofia/ai-brain-starter/main/bootstrap.ps1) } -DryRun"
+iex "& { $(irm https://raw.githubusercontent.com/mycelium-hq/ai-brain-starter/main/bootstrap.ps1) } -DryRun"
 ```
 
 The output looks like:
