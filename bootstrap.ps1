@@ -50,6 +50,30 @@ function Err($msg)  { Write-Host "  X $msg" -ForegroundColor Red; $script:Failed
 function Dry($msg)  { Write-Host "  [dry-run] $msg" -ForegroundColor Magenta }
 function Have($cmd) { return [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }
 
+# Run a native command without letting benign stderr kill the install.
+# Under $ErrorActionPreference = "Stop", a native command that writes ANY
+# warning to stderr (pip's routine "not on PATH" note, npm progress, git
+# hints) can surface as a terminating NativeCommandError even though the
+# command SUCCEEDED - a real Windows install died mid-run on exactly that,
+# at `pip install pipx`. Success is the exit code, never stderr.
+# Returns $true when the command exited 0.
+function Run-Native([scriptblock]$Block) {
+    $eapSaved = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $global:LASTEXITCODE = 0
+    try {
+        & $Block 2>&1 | ForEach-Object { Write-Host "    $_" }
+    } catch {
+        # e.g. CommandNotFound: the native command never ran, so LASTEXITCODE
+        # would still hold the initial 0 - force failure so callers see it.
+        Write-Host "    $_" -ForegroundColor Yellow
+        $global:LASTEXITCODE = 1
+    } finally {
+        $ErrorActionPreference = $eapSaved
+    }
+    return ($LASTEXITCODE -eq 0)
+}
+
 function Backup-File($path) {
     if (-not (Test-Path $path)) { return }
     $bak = "$path.bak-$(Get-Date -Format 'yyyy-MM-dd-HHmm')"
@@ -361,6 +385,8 @@ if (-not (Have node) -and $CorporateProfile) {
             "Perfil corporativo: no se encontro Node.js - NO se instala automaticamente (espacio de usuario, version fija).")
     Warn (T "Provision Node.js via your IT-approved channel, then re-run. Steps that need node will be skipped." `
             "Instala Node.js por tu canal aprobado de IT y volve a correr. Los pasos que necesitan node se omitiran.")
+    Warn (T "The exact command for IT to approve/run: winget install -e --id OpenJS.NodeJS.LTS" `
+            "El comando exacto para que IT apruebe/corra: winget install -e --id OpenJS.NodeJS.LTS")
 } elseif (-not (Have node)) {
     Hdr "Installing Node.js"
     if ($UseWinget) {
@@ -410,8 +436,10 @@ if (Have claude) { Ok (T "Claude Code installed" "Claude Code instalado") }
 # ─── pipx ─────────────────────────────────────────────────────────────────────
 if (-not (Have pipx)) {
     Hdr "Installing pipx"
-    python -m pip install --user pipx
-    python -m pipx ensurepath
+    # Run-Native: pip's routine "scripts not on PATH" stderr warning aborted a
+    # real install here under EAP=Stop. Exit code decides success, not stderr.
+    if (-not (Run-Native { python -m pip install --user pipx })) { Err "pip install pipx failed" }
+    [void](Run-Native { python -m pipx ensurepath })
     $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
 }
 if (Have pipx) { Ok "pipx" } else { Err "pipx install failed" }
@@ -555,8 +583,9 @@ if ($ObsidianInstalled) { Ok "Obsidian installed" }
 # ─── graphify ─────────────────────────────────────────────────────────────────
 if (-not (Have graphify)) {
     Hdr "Installing graphify (knowledge graph builder)"
-    pipx install graphifyy
-    graphify install --platform windows
+    # Run-Native: pipx writes progress + PATH notes to stderr (EAP=Stop hazard).
+    if (-not (Run-Native { pipx install graphifyy })) { Err "pipx install graphifyy failed" }
+    if (Have graphify) { [void](Run-Native { graphify install --platform windows }) }
 }
 if (Have graphify) { Ok "graphify" } else { Err "graphify install failed" }
 
@@ -618,7 +647,7 @@ if (Test-Path "$SkillDir\.git") {
     $ErrorActionPreference = $eapSelfUpdate
 } else {
     if ($DryRun) { Dry "would: git clone $RepoUrl -> $SkillDir" }
-    else { git clone --quiet $RepoUrl $SkillDir }
+    elseif (-not (Run-Native { git clone --quiet $RepoUrl $SkillDir })) { Err "ai-brain-starter clone failed (git exit $LASTEXITCODE)" }
     $script:Installed += "ai-brain-starter clone"
 }
 if ((Test-Path "$SkillDir\SKILL.md") -or $DryRun) { Ok "ai-brain-starter at $SkillDir" } else { Err "ai-brain-starter clone failed" }
@@ -699,7 +728,7 @@ foreach ($sub in @("graphify", "meeting-todos", "patterns", "insights", "deconst
 $humDir = "$env:USERPROFILE\.claude\skills\humanizer"
 if (-not (Test-Path $humDir)) {
     Hdr "Installing humanizer"
-    git clone --quiet https://github.com/adelaidasofia/humanizer.git $humDir
+    [void](Run-Native { git clone --quiet https://github.com/adelaidasofia/humanizer.git $humDir })
 }
 if (Test-Path $humDir) { Ok "humanizer skill installed" } else { Err "humanizer clone failed" }
 
@@ -709,7 +738,7 @@ if (Test-Path $humDir) { Ok "humanizer skill installed" } else { Err "humanizer 
 Write-Host ""
 Write-Host ("  " + (T "HEADS UP: Claude Code may pause to ask you to approve these tools." "AVISO: Claude Code puede frenar en un momento para pedirte que apruebes estas herramientas."))
 Write-Host ("  " + (T "That prompt is its normal safety check for anything not from Anthropic." "Ese aviso es su chequeo de seguridad normal para cualquier cosa que no viene de Anthropic."))
-Write-Host ("  " + (T "It is expected and safe to approve. The README explains what gets added." "Es esperado, y aprobarlo es lo normal. El README explica todo lo que se esta agregando."))
+Write-Host ("  " + (T "It is expected for third-party tools. What gets added is itemized in the README - the choice is yours." "Es esperado con herramientas de terceros. El README detalla todo lo que se agrega - la decision es tuya."))
 Write-Host ""
 
 # ─── Granola MCP ─────────────────────────────────────────────────────────────
