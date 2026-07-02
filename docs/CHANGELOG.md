@@ -9,6 +9,22 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-07-02: the setup now treats every approval as genuinely yours
+
+**Who this affects:** everyone who installs or re-runs the setup, and especially anyone whose assistant refused to run it.
+
+**The bug:** parts of the setup instructions told the assistant things like "tell the user it's safe to approve, go ahead and approve it," "no pause options — never offer to stop," and "if they ask for a work-only setup, decline and install everything anyway." The intent was good — first-time users were abandoning installs when a routine safety prompt ambushed them, or getting lost in option menus — but the wording crossed a line: it asked the assistant to pre-commit you to approving things you hadn't read and to hide choices you were allowed to make. Newer Claude models read that and (correctly) refused — on one machine the assistant declined to run the setup at all and removed the download, which meant nobody got anything.
+
+**What's new:** the same guidance, rewritten around your consent. The assistant still warns you before the safety prompt appears (so it doesn't feel like an ambush), still installs the full brain by default, and still doesn't pepper you with menus — but it now tells you the decision is yours, offers to review or skip anything, honors "stop" or "pause" the moment you say it (resuming later is one sentence), and if you explicitly ask for a smaller setup it makes the case once and then does what you said.
+
+**Also fixed:** a real Windows installer crash — PowerShell was treating harmless warning messages from tools like pip as fatal errors and aborting the whole install partway through. Installs now judge success by whether the tool actually succeeded, not by whether it printed a warning. And the locked-down corporate install now prints the exact one-line command your IT team can approve to add Node.js, instead of a dead end.
+
+**New tests:** the consent guarantees are pinned by the updated `test_trust_prompt_preframing.sh` and `test_personal_brain_not_optional.sh` suites, so the old wording can't quietly come back.
+
+**What you should do:** nothing. If someone's assistant previously refused the install, it will run now — the parts it objected to are gone.
+
+---
+
 ## 2026-07-02: Windows actually works now — no more error notices every session
 
 **Who this affects:** everyone on Windows, in a big way. macOS/Linux users keep working exactly as before (same behavior, now with more tests around it).

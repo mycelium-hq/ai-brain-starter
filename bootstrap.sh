@@ -1424,8 +1424,8 @@ if [[ "${SKIP_VENDOR_SKILLS:-0}" != "1" ]]; then
                   "AVISO: Claude Code puede frenar en un momento para pedirte que apruebes estas herramientas.")"
   log "  ℹ️  $(t "That prompt is its normal safety check for anything not from Anthropic." \
                   "Ese aviso es su chequeo de seguridad normal para cualquier cosa que no viene de Anthropic.")"
-  log "  ℹ️  $(t "It is expected and safe to approve. The README explains what gets added." \
-                  "Es esperado, y aprobarlo es lo normal. El README explica todo lo que se está agregando.")"
+  log "  ℹ️  $(t "It is expected for third-party tools. What gets added is itemized in the README - the choice is yours." \
+                  "Es esperado con herramientas de terceros. El README detalla todo lo que se agrega - la decisión es tuya.")"
   log ""
 
   # Register a marketplace + install a plugin (idempotent + DRY_RUN-safe).
