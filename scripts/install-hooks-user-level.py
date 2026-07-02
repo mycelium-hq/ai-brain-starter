@@ -77,7 +77,11 @@ ABS_FINGERPRINTS = [
     "ai-brain-starter/hooks/inject-instinct-context.py",
     # Legacy inline session-start loader (pre-script echo form):
     "SESSION START: CLAUDE.md is already auto-loaded",
-    ".ai-brain-starter-last-update",
+    # Auto-update (MYC-720): the hook now runs an EXTRACTED script; identify it by
+    # that path. The OLD inline auto-update blob (unique substring
+    # ".ai-brain-starter-last-update") is RETIRED below, so a re-install removes it
+    # and installs this fresh — merge alone would leave BOTH wired (double-fire).
+    "ai-brain-starter/scripts/ai-brain-auto-update.sh",
     # Worktree-lifecycle hooks (cleanup + footprint observability):
     "ai-brain-starter/hooks/snapshot-pending-work-on-stop.py",
     "ai-brain-starter/hooks/surface-orphan-worktree-snapshots.py",
@@ -112,7 +116,7 @@ ABS_OWNED_BASENAMES = {
     "first-week-checkin.py", "migrate-to-user-level.py",
     "inject-love-language-context.py", "inject-meeting-workflow-on-trigger.py",
     "session-end-hook.sh", "email-gate-hook.py", "graph-context-hook.sh",
-    "post-update-email-ask.py",
+    "post-update-email-ask.py", "ai-brain-auto-update.sh",
     "snapshot-pending-work-on-stop.py", "surface-orphan-worktree-snapshots.py",
     "remove-ended-worktree.py", "enforce-worktree-cap.py",
     "worktree-footprint-signal.py", "remediate-runaway-procs.py",
@@ -139,6 +143,14 @@ ABS_RETIRED_FINGERPRINTS = [
     # docs/adr/0002-no-email-gate.md. Replaced by post-update-email-ask.py
     # (asks at most once, only after a git pull, when no email is on file).
     "ai-brain-starter/scripts/email-gate-hook.py",
+    # Retired 2026-07-01 (MYC-720): the inline auto-update blob pulled but
+    # DELEGATED the install step to the model, so a merged PR silently did not
+    # deploy (the 40->131-behind recurrence). Replaced by scripts/ai-brain-auto-
+    # update.sh, which deploys itself. EVERY prior inline variant contains
+    # ".ai-brain-starter-last-update" and the new script-call command does NOT, so
+    # retiring this substring removes the old blob and leaves the new hook — the
+    # merge-then-retire order (main) then yields exactly one auto-update entry.
+    ".ai-brain-starter-last-update",
 ]
 ABS_RETIRED_BASENAMES = {
     "email-gate-hook.py",

@@ -9,6 +9,20 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-07-01: updates now install themselves the moment you pull them
+
+**Who this affects:** everyone. This is about how the starter keeps itself up to date.
+
+**The bug:** the auto-update ran a `git pull` in the background every few days, but the step that actually *wires the new hooks into Claude* was left as an instruction for the assistant to run afterward. If the assistant didn't get to it — the session ended, you asked about something else, the note scrolled past — the pull landed but the new hooks never turned on. Over time the installed copy drifted further and further behind what had actually shipped, silently, because nothing was checking. On one machine it reached 131 versions behind before anyone noticed.
+
+**What's new:** the auto-update now installs the hooks itself, in the same step as the pull, so a shipped change reaches your machine the same session with nothing left to remember. It also pulls more safely: if you've edited the starter files locally, or your copy has diverged into a fork, it refuses to overwrite your work and tells you how to merge by hand instead of forcing a merge. It can still be paused (create a `~/.claude/.ai-brain-starter-pinned` file), it still only runs every few days, and it never runs twice at once.
+
+**Under the hood:** the update logic moved out of a hard-to-read one-line hook and into `scripts/ai-brain-auto-update.sh`, so it can be tested. The installer now retires the old inline version and installs the new one cleanly, so a machine that already had the old one doesn't end up running both.
+
+**New tests:** `tests/integration/test_ai_brain_auto_update.sh` (the pull-and-deploy path plus five things it must NOT touch — pinned, already current, rate-limited, dirty, diverged) and `tests/integration/test_installer_replaces_auto_update.sh` (proves an existing install ends up with exactly one updater, not two). Both include negative controls that fail against the old behavior.
+
+---
+
 ## 2026-06-30: session-close now writes to the vault you're actually working in, not just your default one
 
 **Who this affects:** anyone who works across more than one vault or repo that each has its own CLAUDE.md and its own Sessions/Decisions setup — for example, a personal vault plus one or more separate team or client repos.
