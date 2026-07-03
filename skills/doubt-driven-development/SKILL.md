@@ -223,7 +223,6 @@ If 3 cycles is "obviously insufficient" because the artifact is large: the artif
 ## Interaction with Other Skills
 
 - **code-review-and-quality / post-PR review**: complementary. Final review is post-hoc PR verdict; doubt-driven is in-flight per-decision. Use both.
-- **source-driven-development**: SDD verifies *facts about frameworks* against official docs. Doubt-driven verifies *your reasoning about the artifact*. SDD checks the API exists; doubt-driven checks you used it correctly under the contract.
 - **test-driven-development**: TDD's RED step is doubt made concrete — a failing test is a disproof attempt. When TDD applies, that failing test *is* the doubt step for behavioral claims.
 - **debugging-and-error-recovery**: when the reviewer surfaces a real failure mode, drop into the debugging skill to localize and fix.
 

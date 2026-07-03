@@ -24,7 +24,7 @@ This is the SUBSTRATE layer. It maintains what every other skill uses.
 | Typed-file metadata extraction (books, meetings, people, articles, goals) | `second-brain-mapping` |
 | Vault self-check (CLAUDE.md / Meta folder / skills / hooks / MCPs / journal index) | `diagnose` |
 | Files edited many times in a short window (drift hotspot) | a drift-detection pass → a Drift Audit note |
-| Recurring corruption pattern needs codification | `extract-rules-from-vault` → new rule file |
+| Recurring corruption pattern needs codification | codify it into a new rule file in your rules dir |
 | Journals missing body / frontmatter context | `backfill-journal-body-context` |
 | Vault types not yet set up (new vault or refresh) | `setup-vault-types` |
 | Memory index getting long (truncation cliff) | `consolidate-memory` |
@@ -58,7 +58,7 @@ If unclear → ask ONE question. Don't guess.
 - Drift detection (files edited many times in 30d) → a drift-detection pass → a Drift Audit note
 
 ### Rule extraction + memory
-- Extract recurring patterns into a CLAUDE.md rule / rules file → `extract-rules-from-vault`
+- Extract recurring patterns into a CLAUDE.md rule / rules file → codify manually into a new rule file
 - Consolidate memory files (merge duplicates, prune the index) → `consolidate-memory`
 
 ### Journal hygiene
