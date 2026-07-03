@@ -7,7 +7,7 @@ description: Pulls a YouTube video transcript (or a channel's recent uploads) in
 
 Ingests YouTube transcripts into the vault as markdown the graphify pipeline can read and the rest of the AI Brain Starter substrate (decision log, session-close cascade, hooks) can act on.
 
-Same pattern as `ingest-slack`, `ingest-whatsapp`, `ingest-notion`, `ingest-linear`, `ingest-github`, `ingest-gmail`. Adding YouTube means a new normalizer, not a new architecture.
+Same connector pattern as `ingest-github`: adding a new source means a new normalizer, not a new architecture.
 
 ## When to use
 
@@ -105,7 +105,6 @@ Whisper fallback is OFF by default for cost reasons. Enable per-call with `--whi
 
 ## Cross-references
 
-- For ingesting a Slack discussion of the video → `ingest-slack` separately
 - For turning the transcript into LinkedIn/Substack content → `repurpose-talk` after ingest
 - For pulling action items out of the transcript → `note-todos` after ingest
 - For knowledge-graph extraction across many transcripts → `graphify` on `External Inputs/YouTube/` directly

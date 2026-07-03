@@ -26,7 +26,7 @@ Stop / any other invocation
 
 WHY
 ---
-Worktree isolation (the dev-repo-worktrees pattern) prevents the shared-HEAD
+Worktree isolation (per-session git worktrees) prevents the shared-HEAD
 collision structurally, but two sessions can still pick the SAME repo and
 clobber each other's in-flight work (SIBLING-SESSION-PARALLEL-COMMIT-COLLISION:
 a sibling commits broken state + reverts, wiping in-flight work). The
