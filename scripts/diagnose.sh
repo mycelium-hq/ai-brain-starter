@@ -15,6 +15,21 @@
 
 set -u
 
+# --- ai-brain-starter: shim-safe PATH (strip refuse-shims) ----------------
+# Some machines carry a python3/python PATH shim (e.g. trailofbits
+# modern-python) that exit-1s on bare invocation and would turn every bare
+# python call below into a silent no-op. Drop any */hooks/shims dir from PATH
+# so bare python calls here (and, via export, in children) hit a real python.
+if [ "${PATH#*/hooks/shims}" != "$PATH" ]; then
+  _abs_new=""; _abs_oifs=$IFS; IFS=:
+  for _abs_d in $PATH; do
+    case $_abs_d in */hooks/shims|*/hooks/shims/) ;; *) _abs_new=${_abs_new:+$_abs_new:}$_abs_d ;; esac
+  done
+  IFS=$_abs_oifs; PATH=$_abs_new; export PATH
+  unset _abs_new _abs_d _abs_oifs
+fi
+# --------------------------------------------------------------------------
+
 # ----- color helpers (no-op if not a tty) -----
 if [ -t 1 ]; then
   G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; B=$'\033[1m'; N=$'\033[0m'

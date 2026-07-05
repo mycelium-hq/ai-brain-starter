@@ -119,7 +119,7 @@ Bootstrap touches your `~/.claude/` directory and registers third-party content.
 | Marketplace | Plugins enabled | License |
 |---|---|---|
 | `getsentry/sentry-skills` | sentry-skills (28+ SDK + AI monitoring sub-skills) | Apache 2.0 |
-| `trailofbits/skills` | modern-python, insecure-defaults, sharp-edges, property-based-testing, static-analysis, testing-handbook-skills, differential-review, ask-questions-if-underspecified | CC-BY-SA-4.0 |
+| `trailofbits/skills` | insecure-defaults, sharp-edges, property-based-testing, static-analysis, testing-handbook-skills, differential-review, ask-questions-if-underspecified (`modern-python` excluded by default: its `python3` PATH shim silently breaks vault hooks; opt-in for Python devs via `claude plugin install modern-python@trailofbits`) | CC-BY-SA-4.0 |
 | `stripe/agent-toolkit` | stripe (best-practices, upgrade-stripe) | MIT |
 | `cloudflare/skills` | cloudflare (workers, durable-objects, agents-sdk, web-perf, wrangler, sandbox-sdk) | Apache 2.0 |
 | `AgriciDaniel/claude-seo` | claude-seo (25 sub-skills + 18 sub-agents) | MIT |

@@ -48,6 +48,11 @@ os.environ["HOME"] = str(HOME)  # module-level expanduser during enumeration
 
 tmpl = json.load(open(repo + "/hooks.json"))
 norm = ih.normalize_path_substitutions(tmpl, str(VAULT))
+# Mirror the installer pipeline: [PYTHON] resolves to an absolute interpreter
+# BEFORE merge/verify. Enumeration must run over the same substituted commands
+# the real installer verifies, else the trailing-`python3` path extraction (and
+# thus the stub set) diverges and a required path shows up spuriously missing.
+norm = ih.substitute_python_interpreter(norm)
 merged, _ = ih.merge_hooks({}, norm)
 
 # Empty sandbox -> the verifier reports every referenced path as missing, which
