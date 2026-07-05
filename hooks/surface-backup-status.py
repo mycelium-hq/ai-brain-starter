@@ -99,7 +99,13 @@ def _porcelain(repo: Path) -> str | None:
 def _verify_age_days(repo: Path) -> float | None:
     """Days since the last verified restore for this vault, or None if never."""
     try:
-        conf = json.loads(CONF_PATH.read_text())
+        # utf-8-sig: tolerate a UTF-8 BOM. vault-backup.ps1 writes this config
+        # via Windows PowerShell 5.1 Set-Content -Encoding UTF8, which prepends
+        # one; plain read_text() raises "Unexpected UTF-8 BOM" (a ValueError),
+        # zeroing verify-age so a verified backup reads as never-verified. The
+        # sibling reader (check-vault-backup.py _read_conf) was fixed in #301;
+        # this direct reader is the same file's second consumer.
+        conf = json.loads(CONF_PATH.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         return None
     entry = (conf.get("vaults") or {}).get(str(repo))
