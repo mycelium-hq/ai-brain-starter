@@ -167,6 +167,15 @@ Partway through the install, Claude Code shows you one approval prompt. It lists
 
 **This is expected.** Claude Code shows that prompt for *any* tool that did not come from Anthropic itself, so it appears on ordinary installs like this one. It is not a sign that anything is wrong, and you can read exactly what's being added before you approve.
 
+A compact approval receipt for this install:
+
+- **Source:** this public GitHub repo, cloned to `~/.claude/skills/ai-brain-starter`.
+- **Commands:** one `git clone` and one local bootstrap script (`bootstrap.sh` on macOS/Linux, `bootstrap.ps1` on Windows).
+- **Local paths touched:** Claude Code skills/plugins/settings under `~/.claude/`, MCP config, and the vault setup files the installer creates.
+- **Third-party components:** the skill packs, plugin marketplaces, and MCP servers listed in the tables above.
+- **Rollback:** settings are backed up before edits, and `bash bootstrap.sh --uninstall` removes the installed system components while preserving your vault/customizations.
+- **Still your decision:** the receipt summarizes the boundary; it does not replace reading the approval prompt Claude Code shows you.
+
 Here is what you are approving:
 
 - **The ai-brain-starter plugin.** This project. MIT licensed, public, every file readable on GitHub.
