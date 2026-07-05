@@ -120,6 +120,7 @@ INTEGRATION_TESTS=(
   test_post_update_email_ask
   test_installer_retires_email_gate
   test_installer_relocates_moved_hooks
+  test_installer_shim_safe_interpreter
   test_deployed_hooks_behind
   test_windows_platformize
   test_memory_routing_guard

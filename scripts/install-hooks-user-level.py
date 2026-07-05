@@ -311,6 +311,70 @@ def _windows_launcher() -> list[str] | None:
     return None
 
 
+def _posix_python() -> str:
+    """Resolve an ABSOLUTE, real python3 that BYPASSES refuse-shims.
+
+    The trailofbits `modern-python` plugin prepends a PATH shim for
+    `python3`/`python` (SessionStart, via CLAUDE_ENV_FILE) that prints
+    "ERROR: use uv run python3" and exit-1s on every bare invocation. Baking the
+    resolved absolute path into hook commands as [PYTHON] makes them skip PATH
+    resolution entirely, so neither that shim nor any pyenv/asdf/conda wrapper
+    can turn a hook into a silent no-op. Degrades to bare `python3`.
+
+    Only space-free paths qualify: the template invokes the interpreter
+    unquoted, so a path with a space would break the command. Overridable for
+    tests via ABS_POSIX_PYTHON.
+    """
+    override = os.environ.get("ABS_POSIX_PYTHON")
+    if override:
+        return override
+    import subprocess
+
+    for name in ("python3", "python"):
+        for d in os.environ.get("PATH", "").split(os.pathsep):
+            if not d:
+                continue
+            cand = os.path.join(d, name)
+            if " " in cand:
+                continue  # unusable unquoted in the template
+            if not (os.path.isfile(cand) and os.access(cand, os.X_OK)):
+                continue
+            # Cheap pre-filter: known refuse-shim locations.
+            rp = os.path.realpath(cand)
+            if "/hooks/shims/" in rp or "modern-python" in rp:
+                continue
+            # Robust: a real interpreter runs `-c` with rc 0; a refuse-shim
+            # exit-1s. Bounded so a hung candidate can't stall the install.
+            try:
+                if subprocess.run([cand, "-c", "import sys"],
+                                  capture_output=True, timeout=15).returncode == 0:
+                    return cand
+            except Exception:  # noqa: BLE001 — a broken candidate is just skipped
+                continue
+    # This installer is itself running under a real python (a refuse-shim would
+    # have blocked this very process), so sys.executable is a safe absolute
+    # fallback when PATH resolution came up empty.
+    exe = sys.executable or ""
+    if exe and " " not in exe and os.path.isfile(exe):
+        return exe
+    return "python3"
+
+
+def substitute_python_interpreter(template: dict) -> dict:
+    """Replace the [PYTHON] token in hook commands with a shim-safe interpreter.
+
+    POSIX: an absolute real python3 (see _posix_python) so the modern-python
+    PATH shim can't turn every hook into a silent no-op. Windows: a bare
+    `python3` — platformize_template_for_windows() rewrites every .py command
+    through the hook_runner launcher regardless, so the token value there is
+    overwritten and never reaches settings.json.
+    """
+    py = "python3" if _is_windows() else _posix_python()
+    s = json.dumps(template, ensure_ascii=False)
+    s = s.replace("[PYTHON]", py)
+    return json.loads(s)
+
+
 # Extracts .py script paths from a POSIX hook command. Paths are unquoted or
 # quoted; unquoted paths never contain spaces in our template.
 _WIN_PY_PATH_RE = re.compile(r"(~?[^\s'\"|&;]+\.py)\b")
@@ -704,6 +768,9 @@ def main() -> int:
 
     template = load_hooks_template(hooks_template_path)
     template = normalize_path_substitutions(template, args.vault_path)
+    # Bake a shim-safe interpreter into [PYTHON] so the modern-python PATH shim
+    # (or any pyenv/conda wrapper) can't turn every hook into a silent no-op.
+    template = substitute_python_interpreter(template)
 
     # On native Windows, POSIX one-liners (`||`, `[ -f ]`, 2>/dev/null) fail in
     # every shell Claude Code might use for hooks. Rewrite to the portable

@@ -1517,11 +1517,22 @@ if [[ "${SKIP_VENDOR_SKILLS:-0}" != "1" ]]; then
   install_plugin "getsentry/sentry-skills" "sentry-skills@sentry-skills"
 
   # Trail of Bits skills (CC-BY-SA-4.0, security firm).
-  # Marketplace bundle. We install the relevant 8 plugins (Python toolchain +
-  # security-defaults + property-based testing + diff review + clarification).
+  # Marketplace bundle. We install the relevant 7 plugins (security-defaults +
+  # property-based testing + diff review + clarification).
   # Skipped: blockchain/smart-contract specifics, Burp Suite, DWARF, etc.
+  #
+  # DELIBERATELY EXCLUDED: modern-python. Its SessionStart hook prepends a PATH
+  # shim for `python3`/`python` that prints "ERROR: use uv run python3" and
+  # exit-1s on every bare invocation. ai-brain-starter's own hook fleet calls
+  # bare `python3` (with `|| true` / `2>/dev/null`), so with the shim active the
+  # entire hook layer — session close, the write-time secret guard, context
+  # loaders, aggregators — silently no-ops. It is Python-dev tooling irrelevant
+  # to a knowledge-worker vault and a footgun for non-developers. The substrate
+  # is ALSO hardened against any such refuse-shim ([PYTHON] token + PATH-strip),
+  # so a user who wants the uv/ruff toolchain can safely re-add it manually:
+  #   claude plugin install modern-python@trailofbits
   claude_marketplace_safe "trailofbits/skills"
-  for plugin in modern-python insecure-defaults sharp-edges property-based-testing static-analysis testing-handbook-skills differential-review ask-questions-if-underspecified; do
+  for plugin in insecure-defaults sharp-edges property-based-testing static-analysis testing-handbook-skills differential-review ask-questions-if-underspecified; do
     claude_install_safe "$plugin@trailofbits"
   done
   if [[ $DRY_RUN -eq 0 ]]; then ok "trailofbits plugins ready"; fi

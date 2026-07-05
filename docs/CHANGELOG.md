@@ -9,6 +9,24 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-07-05: your vault's hooks no longer silently die when a Python plugin is present
+
+**Who this affects:** everyone installing — especially workshop rooms. Found on a test install the day before a workshop.
+
+**The bug:** one of the Trail of Bits plugins the installer used to add, `modern-python`, installs a "shim" that intercepts the plain `python3` command and refuses to run it — it prints "use `uv run python3`" and stops. That is a reasonable nudge for a Python developer. But the AI Brain Starter runs all of its own automation through plain `python3` — session close, the write-time secret guard, the context loaders, backups, the aggregators — and almost all of it is written to fail quietly (`|| true`, `2>/dev/null`) so a hiccup never blocks you. Put those two facts together and the result is the worst kind of bug: with that plugin present, the **entire** automation layer went dark with **no error message at all**. It looked like everything installed fine. One developer machine hid the problem entirely because it had a hand-patched copy of the shim that no fresh install has.
+
+**The fix, in three layers:**
+
+1. **The default install no longer adds `modern-python`.** It is Python-developer tooling, not note-taking tooling, and a footgun for non-developers. The seven Trail of Bits *security* skills still install. If you do Python work and want the `uv`/`ruff` toolchain, you can add it back yourself — it is now safe to have installed (see layer 2).
+2. **The substrate is immune to the shim regardless.** Hook commands now resolve a real Python interpreter by absolute path at install time, and the shell scripts strip any `*/hooks/shims` directory off their PATH. So even if you already have `modern-python` (or a pyenv/conda setup), every hook runs.
+3. **A guard so it can never come back silently.** A new CI test installs the real hooks with a fake refuse-shim first on the PATH and fails the build if any hook command would still be intercepted. `/diagnose` runs a real interpreter through the same stripped PATH, so a broken machine surfaces loudly instead of going quiet.
+
+**New test:** `tests/integration/test_installer_shim_safe_interpreter.sh` (wired into `scripts/ci.sh`, the canonical gate).
+
+**What you should do:** nothing. Update and re-run setup. If you specifically want the `uv`/`ruff` Python toolchain: `claude plugin install modern-python@trailofbits`.
+
+---
+
 ## 2026-07-02: previews never install, hiccups fix themselves, and no more red ✗ for things that are fine
 
 **Who this affects:** everyone installing — especially workshop rooms full of first-time users.

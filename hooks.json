@@ -7,17 +7,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 '[VAULT_PATH]/.claude/skills/ai-brain-starter/hooks/detect-closing-signal.py' 2>/dev/null || python3 ~/.claude/skills/ai-brain-starter/hooks/detect-closing-signal.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "[PYTHON] '[VAULT_PATH]/.claude/skills/ai-brain-starter/hooks/detect-closing-signal.py' 2>/dev/null || [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/detect-closing-signal.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Checking for session close..."
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/warn-vault-session-in-worktree.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/warn-vault-session-in-worktree.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Vault-in-worktree tripwire (per-turn catch)..."
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/log-skill-usage.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/log-skill-usage.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Logging skill usage (opt-in)..."
           },
           {
@@ -27,27 +27,27 @@
           },
           {
             "type": "command",
-            "command": "[ -f ~/.claude/hooks/vault-context.py ] && python3 ~/.claude/hooks/vault-context.py || true",
+            "command": "[ -f ~/.claude/hooks/vault-context.py ] && [PYTHON] ~/.claude/hooks/vault-context.py || true",
             "statusMessage": "Loading vault context..."
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/inject-love-language-context.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/inject-love-language-context.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Checking CRM for love language context..."
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/inject-meeting-workflow-on-trigger.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/inject-meeting-workflow-on-trigger.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Checking for 'I just had a meeting' trigger..."
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/scripts/post-update-email-ask.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/scripts/post-update-email-ask.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Checking for post-update email ask..."
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/scripts/ai-brain-auto-update.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/scripts/ai-brain-auto-update.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Checking for skill updates..."
           }
         ]
@@ -58,7 +58,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/snapshot-pending-work-on-stop.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/snapshot-pending-work-on-stop.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Snapshotting worktree pending work (recovery safety net)..."
           },
           {
@@ -68,13 +68,13 @@
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/coach-auto-prescribe-on-journal.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/coach-auto-prescribe-on-journal.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Coach auto-prescribe (post-journal, idempotent)..."
           },
           {
             "_comment": "Hard-block gate, but FAIL-SAFE: enforcement is conditional on the session-close cascade being installed (<meta>/scripts/session-close-runner.sh). No runner -> advisory only, never blocks. Wired with an if/then/else (NOT '|| echo') so a real block (exit 2) propagates instead of being masked to 0; the [ -f ] guard passes cleanly if the script is missing on a divergent fork. Overrides: VERIFY_CASCADE_BYPASS=1 (skip), VERIFY_CASCADE_SOFT=1 (advisory).",
             "type": "command",
-            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/verify-session-close-cascade.py ]; then python3 ~/.claude/skills/ai-brain-starter/hooks/verify-session-close-cascade.py; else echo '{\"continue\":true,\"suppressOutput\":true}'; fi",
+            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/verify-session-close-cascade.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/verify-session-close-cascade.py; else echo '{\"continue\":true,\"suppressOutput\":true}'; fi",
             "statusMessage": "Verifying session-close cascade (advisory unless the cascade is installed)..."
           }
         ]
@@ -85,7 +85,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/pre-compact-context.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/pre-compact-context.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Preserving session context before compaction..."
           }
         ]
@@ -97,11 +97,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "[ -f ~/.claude/hooks/retry-budget.py ] && python3 ~/.claude/hooks/retry-budget.py || true"
+            "command": "[ -f ~/.claude/hooks/retry-budget.py ] && [PYTHON] ~/.claude/hooks/retry-budget.py || true"
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/warn-vault-session-in-worktree.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'"
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/warn-vault-session-in-worktree.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'"
           }
         ]
       },
@@ -110,34 +110,34 @@
         "hooks": [
           {
             "type": "command",
-            "command": "[ -f ~/.claude/hooks/validate-mcp-json.py ] && python3 ~/.claude/hooks/validate-mcp-json.py || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'"
+            "command": "[ -f ~/.claude/hooks/validate-mcp-json.py ] && [PYTHON] ~/.claude/hooks/validate-mcp-json.py || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'"
           },
           {
             "type": "command",
-            "command": "[ -f ~/.claude/hooks/pre-write-settings-lint.py ] && python3 ~/.claude/hooks/pre-write-settings-lint.py || true"
+            "command": "[ -f ~/.claude/hooks/pre-write-settings-lint.py ] && [PYTHON] ~/.claude/hooks/pre-write-settings-lint.py || true"
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/lint-vault-frontmatter.py 2>/dev/null || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'"
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/lint-vault-frontmatter.py 2>/dev/null || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'"
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/validate-skill-frontmatter.py 2>/dev/null || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/validate-skill-frontmatter.py 2>/dev/null || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'",
             "statusMessage": "Validating skill frontmatter (skill.json schema)..."
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/block-secret-in-note.py 2>/dev/null || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/block-secret-in-note.py 2>/dev/null || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'",
             "statusMessage": "Checking for live secrets in note writes..."
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/block-populated-public-skill.py 2>/dev/null || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/block-populated-public-skill.py 2>/dev/null || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'",
             "statusMessage": "Checking template purity (populated data in a public skill)..."
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/warn-learning-to-tool-private-memory.py 2>/dev/null || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/warn-learning-to-tool-private-memory.py 2>/dev/null || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'",
             "statusMessage": "Checking memory routing (team learning vs tool-private)..."
           }
         ]
@@ -147,7 +147,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/observe-tool-calls.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'"
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/observe-tool-calls.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'"
           }
         ]
       },
@@ -156,7 +156,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/observe-tool-calls.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'"
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/observe-tool-calls.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'"
           }
         ]
       },
@@ -165,7 +165,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/warn-stale-dev-checkout.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'"
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/warn-stale-dev-checkout.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'"
           }
         ]
       }
@@ -175,22 +175,22 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/session-start-context.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/session-start-context.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Loading session context (once per session-segment; cached prefix)..."
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/inject-instinct-context.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/inject-instinct-context.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Loading project-scoped instincts (once per session-segment; cached prefix)..."
           },
           {
             "type": "command",
-            "command": "[ -f ~/.claude/hooks/lint-claude-settings.py ] && python3 ~/.claude/hooks/lint-claude-settings.py || true",
+            "command": "[ -f ~/.claude/hooks/lint-claude-settings.py ] && [PYTHON] ~/.claude/hooks/lint-claude-settings.py || true",
             "statusMessage": "Linting Claude Code settings..."
           },
           {
             "type": "command",
-            "command": "[ -f ~/.claude/hooks/lint-claude-settings.py ] && python3 ~/.claude/hooks/lint-claude-settings.py --test || true",
+            "command": "[ -f ~/.claude/hooks/lint-claude-settings.py ] && [PYTHON] ~/.claude/hooks/lint-claude-settings.py --test || true",
             "statusMessage": "Self-testing settings linter..."
           },
           {
@@ -200,76 +200,76 @@
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/first-week-checkin.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/first-week-checkin.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "First-week check-in (day 3 / 7 / 14)..."
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/migrate-to-user-level.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/migrate-to-user-level.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Checking for project-level hook migration..."
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/surface-orphan-claude-branches.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/surface-orphan-claude-branches.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Checking for orphan claude/* branches..."
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/surface-stranded-session-artifacts.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/surface-stranded-session-artifacts.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Checking worktrees for stranded session artifacts..."
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/surface-orphan-worktree-snapshots.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/surface-orphan-worktree-snapshots.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Surfacing recoverable worktree snapshots..."
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/worktree-footprint-signal.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/worktree-footprint-signal.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Checking worktree + disk footprint..."
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/warn-vault-session-in-worktree.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/warn-vault-session-in-worktree.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Vault-in-worktree tripwire (loud abort-and-relaunch)..."
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/surface-backup-status.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/surface-backup-status.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Checking off-machine backup..."
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/enforce-worktree-cap.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/enforce-worktree-cap.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Enforcing worktree cap (reclaim-then-allow)..."
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/remediate-runaway-procs.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/remediate-runaway-procs.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Reaping orphaned runaway processes..."
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/context-budget-measure.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/context-budget-measure.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Measuring always-loaded context budget..."
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/surface-connector-liveness.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/surface-connector-liveness.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Checking connectors for the silent-empty (0-vs-0) gap..."
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/relocate-watch-surface.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/relocate-watch-surface.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Checking for vault-relocation drift (old-path recreators)..."
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/dev-hub-refresh-on-session-start.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'"
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/dev-hub-refresh-on-session-start.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'"
           },
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/surface-deployed-hooks-behind.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/surface-deployed-hooks-behind.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Checking deployed hooks match what was pulled (deploy-fails-open drift)..."
           }
         ]
@@ -280,7 +280,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/remove-ended-worktree.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/remove-ended-worktree.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Removing ended session worktree (committed + unsaved work preserved)..."
           }
         ]
@@ -302,7 +302,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ~/.claude/skills/ai-brain-starter/hooks/post-tool-use-learnings.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'"
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/post-tool-use-learnings.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'"
           }
         ]
       }
