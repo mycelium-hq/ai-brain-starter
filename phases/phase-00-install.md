@@ -59,8 +59,10 @@ bash "$HOME/.claude/skills/ai-brain-starter/bootstrap.sh"
 #### Windows
 
 ```powershell
-& "$env:USERPROFILE\.claude\skills\ai-brain-starter\bootstrap.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\skills\ai-brain-starter\bootstrap.ps1"
 ```
+
+Use this exact form, NOT `& "…bootstrap.ps1"`. A stock Windows machine (Windows 11 Home) ships PowerShell ExecutionPolicy `Restricted`, under which the call operator dies with *"running scripts is disabled on this system"* and the install never starts. `-ExecutionPolicy Bypass -File` is the codified launch (see `scripts/PORTABILITY.md` §5.4) and runs a local, cloned bootstrap on any policy. If the user is on Windows PowerShell 5.1 (the default) this is also the shell version the installer is hardened for.
 
 If the user reached /setup-brain WITHOUT running bootstrap first (rare), the repo was cloned another way (ai-brain-starter skill folder exists but bootstrap hasn't run). Invoking the local bootstrap above still does the full install. The clone-and-run commands in the bootstrap's own header comment are only for users who set things up BEFORE opening Claude Code.
 

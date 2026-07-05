@@ -239,7 +239,7 @@ bash ~/.claude/skills/ai-brain-starter/bootstrap.sh
 
 ```powershell
 # Windows
-pwsh ~/.claude/skills/ai-brain-starter/bootstrap.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\skills\ai-brain-starter\bootstrap.ps1"
 ```
 
 Then say: *"I just installed Obsidian for you. Let's create your vault now."*

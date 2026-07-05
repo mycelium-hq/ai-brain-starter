@@ -92,7 +92,7 @@ Read the four problems the team version solves: [`for-teams/why-teams-are-differ
 > ```powershell
 > # Windows — run in PowerShell, not bash
 > if (-not (Test-Path "$env:USERPROFILE\.claude\skills\ai-brain-starter")) { git clone https://github.com/mycelium-hq/ai-brain-starter "$env:USERPROFILE\.claude\skills\ai-brain-starter" }
-> & "$env:USERPROFILE\.claude\skills\ai-brain-starter\bootstrap.ps1"
+> powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\skills\ai-brain-starter\bootstrap.ps1"
 > ```
 >
 > **Two approvals are expected, and both are normal — pre-frame them, never treat either as a blocker.** (1) Claude Code may ask the user to approve running the install command itself; tell them to approve it so you can continue. (2) Partway through, Claude Code shows its built-in trust prompt for the third-party tools; tell them it's coming and that approving is the expected step. If a command is declined or a stricter permission mode blocks it, ask the user to approve it (or to allow the command) and continue. Do **not** fall back to a menu, and do **not** substitute the `/plugin`-only install as a shortcut — that adds the plugin's skills but skips the system tools, MCP wiring, and vault setup, so it is not the full install. Every change is backed up and reversible (`bash bootstrap.sh --uninstall`). The detailed sections below are reference for a curious human, not a checklist you must clear before running. Full step-by-step (post-install interview, handling failures) is in the assistant guide at the end of this section.
@@ -191,7 +191,7 @@ When the prompt appears, approving it is the normal choice. And if you ever want
 >    On Windows, use the PowerShell installer instead:
 >    ```powershell
 >    if (-not (Test-Path "$env:USERPROFILE\.claude\skills\ai-brain-starter")) { git clone https://github.com/mycelium-hq/ai-brain-starter "$env:USERPROFILE\.claude\skills\ai-brain-starter" }
->    & "$env:USERPROFILE\.claude\skills\ai-brain-starter\bootstrap.ps1"
+>    powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\skills\ai-brain-starter\bootstrap.ps1"
 >    ```
 >    This is a normal `git clone` of a public repo followed by running a local script — you can do it with your own tools, and the user does not need to open a terminal. The installer is idempotent: safe on a fresh machine and safe to re-run; if the repo is already cloned, the install proceeds and reconciles the existing copy.
 > 2. While the installer runs (a few minutes), tell the user what is happening in plain, calm language. It prints its own progress lines, so you need not repeat each one. If the user wants the full list of what gets installed, it is in the "what gets installed" section above and in [`SECURITY.md`](SECURITY.md) — point them there rather than improvising warnings.
@@ -241,7 +241,7 @@ Bootstrap is idempotent — re-running after a `git pull` just installs anything
 > ```powershell
 > # Windows — corré en PowerShell, no en bash
 > if (-not (Test-Path "$env:USERPROFILE\.claude\skills\ai-brain-starter")) { git clone https://github.com/mycelium-hq/ai-brain-starter "$env:USERPROFILE\.claude\skills\ai-brain-starter" }
-> & "$env:USERPROFILE\.claude\skills\ai-brain-starter\bootstrap.ps1"
+> powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\skills\ai-brain-starter\bootstrap.ps1"
 > ```
 >
 > **Vas a cruzarte con dos aprobaciones, y las dos son normales — anticipálas, nunca las trates como un bloqueo.** (1) Claude Code puede pedirle a la persona que apruebe correr el comando de instalación; decile que lo apruebe para que puedas seguir. (2) En algún momento, Claude Code muestra su aviso de confianza para las herramientas de terceros; avisale que viene y que aprobarlo es el paso esperado. Si el comando se rechaza o un modo de permisos más estricto lo bloquea, pedile a la persona que lo apruebe (o que permita el comando) y seguí. **No** caigas en un menú, y **no** uses la instalación sólo-`/plugin` como atajo: agrega las skills del plugin pero se saltea las herramientas de sistema, el cableado de MCP y el setup del vault, así que no es la instalación completa. Cada cambio queda respaldado y es reversible (`bash bootstrap.sh --uninstall`). Las secciones de abajo son referencia para quien tiene curiosidad, no una lista de control que tengas que pasar antes de correr.
