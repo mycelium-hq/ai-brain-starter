@@ -32,6 +32,7 @@ from __future__ import annotations
 import filecmp
 import os
 import shutil
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -165,6 +166,27 @@ def main() -> int:
             fh.write(summary + "\n")
     except OSError:
         pass
+
+    # --- Also refresh the vault's own <meta>/scripts/ (the skill->vault half) ---
+    # sync-skills syncs skill -> ~/.claude/skills; sync-vault-scripts.sh is the
+    # other half that previously went stale because <meta>/scripts/ was only ever
+    # populated at setup. It self-resolves the vault (--vault / $VAULT_ROOT /
+    # settings.json) and is a non-fatal no-op when none is set up. Best-effort by
+    # design: a vault-side hiccup (or no bash, e.g. native Windows) must NEVER
+    # flip this script's exit code, so failures are swallowed.
+    vault_sync = starter / "scripts" / "sync-vault-scripts.sh"
+    if vault_sync.is_file():
+        try:
+            proc = subprocess.run(
+                ["bash", str(vault_sync), "--quiet"],
+                capture_output=True,
+                text=True,
+            )
+            for line in (proc.stdout or "").splitlines():
+                print(f"[vault-scripts] {line}")
+        except (OSError, subprocess.SubprocessError):
+            pass  # bash missing (Windows) or spawn failure — non-fatal by design
+
     return 2 if r.errors else 0
 
 
