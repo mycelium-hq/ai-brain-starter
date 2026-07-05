@@ -92,7 +92,11 @@ def _now() -> float:
 
 def _read_conf() -> dict:
     try:
-        return json.loads(CONF_PATH.read_text())
+        # utf-8-sig: tolerate a UTF-8 BOM. Windows PowerShell 5.1's
+        # Set-Content -Encoding UTF8 (used by vault-backup.ps1) prepends one;
+        # plain read_text() would raise "Unexpected UTF-8 BOM" (a ValueError),
+        # silently zeroing the config and mis-reporting a real backup as absent.
+        return json.loads(CONF_PATH.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         return {}
 
