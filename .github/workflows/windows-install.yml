@@ -157,7 +157,14 @@ jobs:
             exit 1
           }
           try {
-            & "$env:GITHUB_WORKSPACE\bootstrap.ps1"
+            # Launch via the codified `-ExecutionPolicy Bypass -File` form
+            # (phase-00-install.md / PORTABILITY.md section 5) so this gate ALSO proves the exact
+            # command the install docs tell the assistant to run works on real Windows 5.1 -
+            # a stock Windows 11 Home ships ExecutionPolicy Restricted, under which the bare `&`
+            # call operator dies with "running scripts is disabled". A reintroduced Bug 1
+            # (terminating NativeCommandError inside bootstrap) makes the child powershell exit
+            # non-zero and is caught by the $LASTEXITCODE check below.
+            powershell -NoProfile -ExecutionPolicy Bypass -File "$env:GITHUB_WORKSPACE\bootstrap.ps1"
           } catch {
             Write-Host "::error::bootstrap.ps1 threw a terminating error (this is the Bug 1 crash class if it is a NativeCommandError): $_"
             exit 1

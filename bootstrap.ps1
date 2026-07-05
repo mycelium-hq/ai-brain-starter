@@ -11,10 +11,10 @@
 # Usage (clone the repo first, then run the local script; do not curl-pipe).
 # Run from PowerShell, NOT cmd.exe:
 #     git clone https://github.com/mycelium-hq/ai-brain-starter "$env:USERPROFILE\.claude\skills\ai-brain-starter"
-#     & "$env:USERPROFILE\.claude\skills\ai-brain-starter\bootstrap.ps1"
+#     powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\skills\ai-brain-starter\bootstrap.ps1"
 #
 # Dry run (preview changes without making them):
-#     & "$env:USERPROFILE\.claude\skills\ai-brain-starter\bootstrap.ps1" -DryRun
+#     powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\skills\ai-brain-starter\bootstrap.ps1" -DryRun
 #
 # SAFETY GUARANTEES, same as bootstrap.sh:
 #   - Existing settings.json/.mcp.json keys preserved (setdefault never overwrites)
