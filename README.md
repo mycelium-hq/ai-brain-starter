@@ -142,7 +142,7 @@ Bootstrap touches your `~/.claude/` directory and registers third-party content.
 
 **Don't want all of it?** Set `SKIP_VENDOR_SKILLS=1` to skip third-party plugin marketplaces. The core ai-brain-starter substrate still installs. Removing later: `bash bootstrap.sh --uninstall` (asks for confirmation, then removes everything bootstrap installed; preserves your vault and your customizations).
 
-**Rolling out to a company / need a security review?** Use the hardened install profile: `bash bootstrap.sh --profile corporate` (Windows: `.\bootstrap.ps1 -Profile corporate`). It installs a minimal named plugin set, excludes external-egress MCPs and shell-execution-capable Obsidian plugins, turns telemetry off, pins versions, runs entirely in user space (no sudo), and emits a reviewable component manifest. Add `--dry-run` to review the manifest before installing. Full spec + security-team checklist: [`docs/CORPORATE_PROFILE.md`](docs/CORPORATE_PROFILE.md).
+**Rolling out to a company / need a security review?** Use the hardened install profile: `bash bootstrap.sh --profile corporate` (Windows: `powershell -NoProfile -ExecutionPolicy Bypass -File .\bootstrap.ps1 -Profile corporate`). It installs a minimal named plugin set, excludes external-egress MCPs and shell-execution-capable Obsidian plugins, turns telemetry off, pins versions, runs entirely in user space (no sudo), and emits a reviewable component manifest. Add `--dry-run` to review the manifest before installing. Full spec + security-team checklist: [`docs/CORPORATE_PROFILE.md`](docs/CORPORATE_PROFILE.md).
 
 Open the [Claude Code desktop app](https://claude.ai/download), sign in with a paid Claude account (Pro, Max, or Team), and paste this into the chat:
 

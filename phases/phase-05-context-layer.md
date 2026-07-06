@@ -2,6 +2,18 @@
 
 "Now I'm creating three small notes that let me orient myself in 10 seconds every session."
 
+> **Platform note — read before running any shell command in this phase.** The
+> file and folder operations below are written as Mac/Linux bash (`cp`, `mkdir -p`,
+> `chmod`). **On Windows those error** — `cp`/`chmod` don't exist and `mkdir -p`
+> isn't valid — and the vault silently ends up missing `⚙️ Meta/scripts`,
+> `⚙️ Meta/Sessions`, `⚙️ Meta/Decisions`, and the hook scripts. So on Windows,
+> perform the SAME operations with your native file tools instead: create each
+> folder, and write/copy each file, directly (no bash). The `.sh` scripts are
+> still written to disk — they run under Git Bash/WSL if present — and `chmod +x`
+> is a Mac/Linux-only no-op you skip on Windows. The end state must be identical
+> on every OS: the folders exist and every file is in place. Verify with a
+> directory listing before moving on.
+
 Create these files in the Meta/ folder:
 
 **00 Start Here.md:**
