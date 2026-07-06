@@ -22,8 +22,8 @@ bash bootstrap.sh --profile corporate
 
 ```powershell
 # Windows (PowerShell):
-.\bootstrap.ps1 -Profile corporate -DryRun   # review
-.\bootstrap.ps1 -Profile corporate           # install
+powershell -NoProfile -ExecutionPolicy Bypass -File .\bootstrap.ps1 -Profile corporate -DryRun   # review
+powershell -NoProfile -ExecutionPolicy Bypass -File .\bootstrap.ps1 -Profile corporate           # install
 ```
 
 The environment-variable form is equivalent (useful for MDM / scripted rollout):
@@ -32,7 +32,7 @@ The environment-variable form is equivalent (useful for MDM / scripted rollout):
 CORPORATE_PROFILE=1 bash bootstrap.sh
 ```
 ```powershell
-$env:CORPORATE_PROFILE = "1"; .\bootstrap.ps1
+$env:CORPORATE_PROFILE = "1"; powershell -NoProfile -ExecutionPolicy Bypass -File .\bootstrap.ps1
 ```
 
 After the run, the exact manifest is written to
