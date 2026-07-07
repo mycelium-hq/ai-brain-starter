@@ -1,6 +1,6 @@
 ---
 name: second-brain-mapping
-description: Unified vault-mapping pipeline. Extracts structured metadata from every typed file in your vault (books, meetings, people, articles, goals, etc.), optionally runs knowledge-graph extraction, applies wikilinks, and surfaces cross-type insights you can't see from any single file. Zero LLM cost per run for metadata + insights. Use whenever you want to "map your second brain", refresh your vault's queryable index, or discover cross-doc patterns.
+description: 'Use when the user wants to map or remap their second brain, refresh the vault''s queryable metadata index, extract structured frontmatter from typed notes (books, meetings, people, journals, goals), fill wikilink gaps, or surface cross-type insights and patterns no single file shows. Triggers: /second-brain-mapping, "map my second brain", "make my vault queryable", "refresh vault metadata", stale or sparse Dataview fields. Not for single-file reads or querying an existing graph (use graphify).'
 trigger: /second-brain-mapping
 argument-hint: "[--metadata-only | --insights-only | --dry-run | --sample [N] | --force | --type <name>]"
 ---

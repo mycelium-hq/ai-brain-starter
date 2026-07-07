@@ -1,6 +1,6 @@
 ---
 name: daily-journal
-description: Daily journal interview and entry creator. Use this when the user wants to journal, do a daily check-in, or says /journal. Interviews the user conversationally, identifies their High-Rise floor, and saves the entry as an Obsidian note. Do NOT use for meeting notes (use meeting-todos), weekly/monthly reviews (use insights), or pattern analysis (use patterns).
+description: Use when the user wants to journal, do a daily or end-of-day check-in, reflect on or vent about their day, brain-dump feelings, log what happened today, or says /journal. Also fires for quick one-line captures and a second session the same day (resumes that day's entry). Not for meeting notes (use meeting-todos), morning priorities (use rise), weekly/monthly reviews (use insights), or cross-entry pattern analysis (use patterns).
 ---
 
 # Daily Journal — Interview & Log

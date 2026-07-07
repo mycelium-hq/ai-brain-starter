@@ -1,6 +1,6 @@
 ---
 name: instinct-import
-description: Import a portable YAML instinct pack into this vault with confidence-gated merge — a higher-confidence import updates the local instinct, an equal-or-lower one is skipped, and a brand-new one lands in inherited/. Part of the Instinct Engine. Do NOT use to author memories by hand (just write the file).
+description: 'Use when bringing a teammate''s, another machine''s, or another harness''s instincts into this vault: the user runs /instinct-import, shares a portable YAML instinct pack (PACK.yaml), or asks to merge, adopt, sync, or inherit shared instincts. Confidence-gated so local instincts are never clobbered. Part of the Instinct Engine; pairs with instinct-export. Do NOT use to author memories by hand (just write the file).'
 trigger: /instinct-import
 ---
 

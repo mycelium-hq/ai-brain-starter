@@ -1,6 +1,6 @@
 ---
 name: evolve
-description: Cluster hardened instincts (high-confidence feedback_*/discovery_* memories) into a proposed higher-level structure — a Command, Skill, or Agent. Run when many related instincts have accumulated in one domain. Part of the Instinct Engine. Do NOT use for one-off pattern capture (use /patterns) or daily journaling.
+description: Use when many related hardened instincts (high-confidence feedback_*/discovery_* memories) have piled up in one domain, when the user runs /evolve or asks to promote, cluster, graduate, or consolidate accumulated instincts into a Command, Skill, or Agent, or when files in Instinct Proposals need review. Part of the Instinct Engine. Not for one-off pattern capture (use patterns), daily journaling, or sharing instinct packs (use instinct-export / instinct-import).
 trigger: /evolve
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: vault-system
-description: Use for VAULT META-MAINTENANCE — the second brain itself as a system. Knowledge-graph build + query, second-brain metadata mapping, vault self-diagnose, drift detection, rule extraction, journal backfill, vault type setup, memory consolidation, Obsidian tooling (CLI / Bases / Markdown / JSON Canvas). Triggers include "rebuild the knowledge graph", "second-brain map", "diagnose the vault", "vault audit", "drift detection", "extract rules from vault", "backfill journals", "setup vault types", "consolidate memory", "obsidian cli", "vault hygiene". For QUERYING the vault to answer a question, use the graph-query tools directly. For daily journaling / coaching / pattern detection, use those skills, not this one.
+description: 'Use when maintaining the vault ITSELF as a system, not its content: knowledge-graph build/rebuild/query (graphify), second-brain mapping, vault diagnose/audit/hygiene, drift detection, extract rules from vault, backfill journals, setup vault types, consolidate memory (index over cap), Obsidian tooling (CLI/Bases/Markdown/JSON Canvas), vault bloat or Obsidian slow. Answering questions FROM the graph, use graph-query tools; daily journal/coaching/pattern detection, use those skills.'
 trigger: /vault-system
 ---
 

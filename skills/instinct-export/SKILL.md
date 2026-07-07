@@ -1,6 +1,6 @@
 ---
 name: instinct-export
-description: Export this project's instinct library (confidence-weighted feedback_*/discovery_* memories) to a portable YAML pack that another harness or teammate can import. Part of the Instinct Engine. Use to share or back up a curated instinct set. Do NOT use to read existing memories (that is /patterns).
+description: Use when the user runs /instinct-export or wants to share, back up, hand off, or publish learned instincts to another machine, harness, or teammate — 'export my instincts', 'make an instinct pack', 'build a house/team instinct library', 'send my rules to a teammate', 'move instincts to my new laptop'. Part of the Instinct Engine. NOT for reading or reviewing memories (use /patterns) and NOT for importing a pack (use /instinct-import).
 trigger: /instinct-export
 ---
 

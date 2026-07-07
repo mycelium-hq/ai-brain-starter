@@ -1,7 +1,7 @@
 ---
 type: skill
 name: diagnose
-description: Run a self-check against an installed AI Brain Starter vault. Verifies CLAUDE.md, Meta folder, skills, hooks, journal index, MCPs, .ps1 BOM/em-dash hazards, and ai-brain-starter freshness. Prints a green/yellow/red report. Run any time something feels off, or after a git pull, or when onboarding someone else's vault.
+description: 'Use when an AI Brain vault needs a health check or something feels off: Claude ignores CLAUDE.md, journal entries missing from /weekly, hooks not firing, something broke after a git pull, a friend''s install misbehaves, Obsidian crashes or pegs the CPU, a .claude/worktrees folder appeared, Granola/WhatsApp/Slack/Gmail notes stopped arriving, or Windows .ps1 scripts error. Also after major /setup-brain upgrades. Not for debugging code; audits the vault install only.'
 trigger: /diagnose
 argument-hint: "[vault path, defaults to $VAULT_PATH or current directory]"
 tool_access:

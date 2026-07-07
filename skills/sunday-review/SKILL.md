@@ -1,6 +1,6 @@
 ---
 name: sunday-review
-description: Weekly meta-review that orchestrates /weekly + /patterns + vault-hygiene + claude-md-drift + decision-retrospective in one flow. Use when the user wants a comprehensive Sunday wrap-up of the week, or says /sunday, /sunday-review, or "let's do the weekly review."
+description: 'Use when the user asks for the weekly meta-review or Sunday wrap-up of their week and vault: says /sunday, /sunday-review, ''let''s do the weekly review,'' ''Sunday review,'' ''review my week,'' ''weekly retro,'' ''week in review,'' ''end-of-week review,'' or wants journals, patterns, vault health, and stale decisions reviewed together at week''s end. Not for a journal-pattern read alone (use /weekly) or mid-week single checks.'
 ---
 
 # /sunday-review — weekly meta-orchestrator

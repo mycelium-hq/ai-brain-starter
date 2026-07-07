@@ -1,6 +1,6 @@
 ---
 name: insights
-description: Weekly and monthly journal insights -- pattern recognition, floor trends, life coach pushback, therapist observations, and advisory panel thoughts. Use /weekly for the current calendar week, /monthly for the current calendar month. Do NOT use for daily journal entries (use daily-journal), cross-session pattern extraction (use patterns), or operational reviews.
+description: Use when the user types /weekly or /monthly, asks for a weekly or monthly journal review or retrospective, asks 'how was my week' or 'how was my month', or wants trends, anomalies, or patterns across recent journal entries. Also fires when regenerating an insight report for a past week or month. NOT for writing today's entry (use daily-journal), cross-session pattern extraction (use patterns), or operational/team reviews.
 argument-hint: "[week or month -- e.g. 'this week', 'last month', or leave blank for default]"
 ---
 
