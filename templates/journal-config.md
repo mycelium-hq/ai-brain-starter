@@ -14,6 +14,8 @@ data_sources:
   imessage_24h: off           # iMessage threads with traffic in last 24h — opt-in (sees private conversations)
   whatsapp_24h: off           # WhatsApp threads with traffic in last 24h — opt-in (sees private conversations)
   body_health: off            # Step 0h: sleep/HRV/RHR/steps/workouts/recovery/cycle from health-mcp DuckDB — opt-in (most sensitive; local-only, never leaves your machine)
+  email: off                  # email triage digest (Email Needs You.md) + a fresh gmail_search — opt-in (sees private mail)
+  slack: off                  # on-disk Slack export + a fresh slack search — opt-in (sees private messages)
 # Per-source filters (only consulted when the source is "on")
 imessage_filters:
   exclude_chats: []           # phone numbers, emails, or contact names to skip on every pull
@@ -23,6 +25,10 @@ whatsapp_filters:
   only_unread: false
 calendar_filters:
   include_calendars: []       # leave empty to pull all calendars; or list calendar IDs to whitelist
+# Contacts surfaced FIRST in the message digest (⭐) so family/partner threads are never
+# buried under work chatter. Matched case-insensitively against the thread/contact name.
+# Generic family terms are always included; add YOUR close people's names here.
+relational_priority: []       # e.g. [Alex, Sam, mom, dad, sister] — your family + partner (use their real names)
 ---
 
 # Daily Journal Config

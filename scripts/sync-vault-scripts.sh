@@ -76,6 +76,7 @@ VAULT_SCRIPTS=(
   "write-hook.sh"              # PostToolUse(Write)-hook body
   "graph-context-hook.sh"      # UserPromptSubmit graph-routing hook body
   "build-journal-index.py"     # insights: journal index builder
+  "journal-preflight.py"       # daily-journal Step 0: pulls every context source (stdlib-only; message/rescuetime fetchers optional, degrades honestly)
   "check-rule-conflicts.py"    # rule maintenance
   "drift-detection.py"         # rule / CLAUDE.md drift detection
   "passive-capture.py"         # instinct-engine passive capture (opt-in)

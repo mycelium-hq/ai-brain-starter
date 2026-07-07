@@ -102,6 +102,10 @@
           {
             "type": "command",
             "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/warn-vault-session-in-worktree.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'"
+          },
+          {
+            "type": "command",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/warn-journal-saved-without-context.py 2>/dev/null || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'"
           }
         ]
       },
@@ -139,6 +143,10 @@
             "type": "command",
             "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/warn-learning-to-tool-private-memory.py 2>/dev/null || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'",
             "statusMessage": "Checking memory routing (team learning vs tool-private)..."
+          },
+          {
+            "type": "command",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/warn-journal-saved-without-context.py 2>/dev/null || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'"
           }
         ]
       },
