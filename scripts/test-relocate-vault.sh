@@ -39,6 +39,16 @@ fails=0
 pass() { echo "PASS  $1"; }
 fail() { echo "FAIL  $1"; fails=$((fails + 1)); }
 
+# HERMETICITY: Obsidian-running is a SOFT gate in relocate-vault.sh, skippable
+# with --force. Its real probe (pgrep -x Obsidian) reads AMBIENT host state, so a
+# developer with Obsidian OPEN — the normal state when developing an Obsidian-vault
+# tool — would see every full-relocate case below that omits --force die at that
+# gate instead of exercising the backup/cloud/ensure-backup gate it targets (15
+# such failures on a dev Mac). Pin the probe to "absent" for the whole suite so
+# those OTHER gates are what get tested; Section 10 flips it to "running" per-call
+# to cover the Obsidian refusal itself, deterministically, with no real Obsidian.
+export RELOCATE_VAULT_OBSIDIAN=absent
+
 # Mirror the script's projkey EXACTLY (resolve ancestry, keep leaf literal) so
 # fixtures land at the same key the script computes, even where $TMPDIR resolves
 # /var -> /private/var on macOS.
@@ -299,6 +309,40 @@ out="$(CLAUDE_CONFIG_DIR="$CFG" VAULT_BACKUP_CONF="$NOBK_CONF" VAULT_BACKUP_SKIP
 echo "$out" | grep -qi 'would' \
   && pass "ensure-backup 9e: --dry-run names the stand-up it would run" \
   || fail "ensure-backup 9e: --dry-run did not preview the stand-up: $out"
+
+# --- 10. OBSIDIAN SOFT GATE: the refusal fires when Obsidian IS detected --------
+# The whole suite pins RELOCATE_VAULT_OBSIDIAN=absent so the other gates are
+# testable on any host; here we flip it to "running" to prove the Obsidian gate
+# itself STILL refuses (and stays escapable with --force), deterministically and
+# with no real Obsidian process. This is the dedicated coverage the seam must keep:
+# a soft gate that silently stopped firing would otherwise pass every test.
+ob_src="$TMP/obsidian-src" ; ob_dst="$TMP/obsidian-dst" ; mkdir -p "$ob_src" ; echo n > "$ob_src/n.md"
+
+# 10a REFUSE: Obsidian "running", no --force -> refuses at the Obsidian gate FIRST
+# (before the backup gate), names Obsidian + the --force remedy, vault NOT moved.
+out="$(CLAUDE_CONFIG_DIR="$CFG" RELOCATE_VAULT_OBSIDIAN=running \
+       bash "$SCRIPT" "$ob_src" "$ob_dst" 2>&1)" ; rc=$?
+[ "$rc" = 1 ] && pass "obsidian gate: refuses a move while Obsidian runs (rc=1)" \
+             || fail "obsidian gate: expected rc=1, got $rc"
+{ [ -d "$ob_src" ] && [ ! -L "$ob_src" ] && [ ! -e "$ob_dst" ]; } \
+  && pass "obsidian gate: vault NOT moved on refusal" \
+  || fail "obsidian gate: vault was moved despite the refusal"
+echo "$out" | grep -qi 'obsidian' \
+  && pass "obsidian gate: refusal names Obsidian (fired before the backup gate)" \
+  || fail "obsidian gate: refusal did not mention Obsidian: $out"
+echo "$out" | grep -qi -- '--force' \
+  && pass "obsidian gate: refusal names the --force escape hatch" \
+  || fail "obsidian gate: refusal did not name --force: $out"
+
+# 10b ESCAPE HATCH: Obsidian "running" + --force -> gate skipped, move proceeds
+# (the refusal's own promise; also proves the seam does not leak past --force).
+CLAUDE_CONFIG_DIR="$CFG" RELOCATE_VAULT_OBSIDIAN=running \
+  bash "$SCRIPT" "$ob_src" "$ob_dst" --force >/dev/null 2>&1 ; rc=$?
+[ "$rc" = 0 ] && pass "obsidian gate: --force overrides it even while Obsidian runs (rc=0)" \
+             || fail "obsidian gate: --force did not override the Obsidian gate (rc=$rc)"
+{ [ -d "$ob_dst" ] && [ -L "$ob_src" ]; } \
+  && pass "obsidian gate: --force -> vault moved + symlink left despite Obsidian running" \
+  || fail "obsidian gate: --force did not relocate with Obsidian running"
 
 echo
 if [ "$fails" -gt 0 ]; then echo "FAILED: $fails"; exit 1; fi
