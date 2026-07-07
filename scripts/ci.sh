@@ -122,6 +122,7 @@ INTEGRATION_TESTS=(
   test_aggregator_vault_root_guard
   test_discoverability_partition
   test_stranded_session_artifacts_watchdog
+  test_offmain_strand_guard
   test_session_coordination_guards
   test_trust_prompt_preframing
   test_onboarding_wrong_surface_and_nudge
