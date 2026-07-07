@@ -1,6 +1,6 @@
 ---
 name: ingest-github
-description: Pulls recent activity (merged PRs, issues, commits) from a GitHub repository into the vault as queryable markdown. Use when the user says /ingest-github <owner/repo> [--days N], or asks to ingest, capture, sync, or pull a GitHub repo into the vault. Writes one file per repo per day to External Inputs/GitHub/<owner-repo>/<date>.md. Idempotent: re-running on the same day overwrites cleanly. Do NOT use for opening PRs, creating issues, or non-GitHub sources.
+description: Use when the user says /ingest-github <owner/repo> [--days N], or asks to ingest, capture, sync, pull, mirror, or import a GitHub repo's recent activity (merged PRs, issues, commits) into the vault, second brain, or knowledge graph, or wants repo history queryable by graphify or External Inputs refreshed. Not for opening PRs, creating issues, one-off PR diff reads, or non-GitHub sources (Slack, Notion, email have their own ingest-* connectors).
 argument-hint: "<owner/repo> [--days N]"
 ---
 

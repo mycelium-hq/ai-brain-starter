@@ -1,6 +1,6 @@
 ---
 name: graphify
-description: any input (code, docs, papers, images) → knowledge graph → clustered communities → HTML + JSON + audit report. Do NOT use for simple file reads, vault edits, or searching existing graph data (use /graphify query for lookups on an existing graph).
+description: 'Use when the user invokes /graphify or asks to build, update, or query a knowledge graph from a folder of files (code, docs, papers, notes, images). Triggers: ''map this codebase'', ''graph my notes'', ''what is connected across these files'', ''community detection'', ''GraphRAG'', incremental graph update, Neo4j/SVG/GraphML export, graph lookups (query, shortest path, explain a node). Not for simple file reads, vault edits, or plain text search.'
 trigger: /graphify
 argument-hint: "[subfolder path to process, e.g. Notes/ or Journals/ — for very large vaults (1000+ files) subset instead of running on the full vault]"
 ---

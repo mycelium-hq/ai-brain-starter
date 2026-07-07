@@ -1,7 +1,7 @@
 ---
 type: skill
 name: setup-vault-types
-description: Interactive wizard to configure which document types your vault uses. Asks the user what kinds of notes they take (journals, books, meetings, clients, podcasts, etc.), enables the matching extractors, and scaffolds extractors for custom types. Run once after installing ai-brain-starter, and again whenever you add a new kind of doc. Do NOT use this to run extraction. Use /second-brain-mapping for that.
+description: 'Use when configuring which document types a vault tracks: after installing ai-brain-starter, when a new kind of note appears (journals, books, meetings, clients, podcasts, travel, WhatsApp/Slack/iMessage exports), when extraction skips files because no extractor matches their type, or to add, list, or remove a custom type. Triggers: /setup-vault-types, "set up vault types", "add a note type", "enable an extractor". NOT for running extraction (use /second-brain-mapping).'
 trigger: /setup-vault-types
 argument-hint: "[--add <typename> | --list | --remove <typename>]"
 tool_access:

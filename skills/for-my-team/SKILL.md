@@ -1,6 +1,6 @@
 ---
 name: for-my-team
-description: Walk a user through what changes when they take ai-brain-starter from a personal vault to a team vault. Reads the for-teams/ folder aloud in conversation, asks three diagnostic questions, and closes with the path to having it built for them. Trigger when the user asks any variant of "how do I add my team to this," "optimize this for my company," "what does the team version look like," or anything else that signals they want the multi-person version of the brain.
+description: Use when a user wants the team or company version of ai-brain-starter — any variant of 'how do I add my team to this,' 'can my team use this,' 'optimize this for my company,' 'what does the team version look like,' 'install this for my whole company,' 'how does this work with multiple people,' or worries about mixing personal notes into a shared team vault. Also triggers on /for-my-team.
 trigger: /for-my-team
 argument-hint: "[no arguments — fully conversational]"
 ---

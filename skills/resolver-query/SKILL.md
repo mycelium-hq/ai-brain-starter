@@ -1,7 +1,7 @@
 ---
 type: skill
 name: resolver-query
-description: Read Meta/RESOLVER.md, parse rules and statuses, and answer a natural-language question by surfacing the matching rule(s). Trigger /resolver-query <natural-language-question>. Use when an operator wants to look up which rule applies to a query without reading the full RESOLVER.md by hand. Do NOT use for writing rules (this skill is read-only) or for rebuilding RESOLVER.md (that is resolver-build.py).
+description: 'Use when an operator asks which rule or policy governs a question — pricing exceptions, deploys, refunds, hiring — or wants to look up the matching rule in Meta/RESOLVER.md without reading the whole index by hand. Triggers: /resolver-query <question>, "which rule applies", "what''s our policy on X", "does a rule cover this". Not for writing or editing rules (read-only) and not for rebuilding RESOLVER.md (use resolver-build.py).'
 argument-hint: "<natural-language-question> [--vault-root PATH] [--limit N]"
 tool_access:
   - Read

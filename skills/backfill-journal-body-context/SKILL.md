@@ -1,6 +1,6 @@
 ---
 name: backfill-journal-body-context
-description: Walks every daily journal entry in a date range (default this year) and appends a "Body track" section BELOW the original verbatim content. Pulls health-mcp data for each date (HRV, RHR, sleep, cycle phase, lab status, recovery/sleep/strain scores) and weaves a Floor-paired interpretation. Idempotent (skips entries that already have the section). Use when user says /backfill-journal-body-context, asks to enrich journals with body data, says "backfill my journals with health" or wants existing journal entries paired with their Apple Health / Oura / Fitbit data retroactively.
+description: Use when the user says /backfill-journal-body-context, wants existing daily journal entries enriched with body data retroactively (HRV, sleep, recovery, cycle phase, labs), says 'backfill my journals with health', wants Apple Health / Oura / Fitbit / Whoop history paired with past journals, or just ran /health-setup with a historical import. Not for brand-new entries (daily-journal covers those) or for editing journal text.
 ---
 
 # backfill-journal-body-context

@@ -1,7 +1,7 @@
 ---
 type: skill
 name: security-snapshot
-description: Generate a client-ready security hygiene snapshot for a prospect domain. Free lead magnet for consulting practices. Outputs a markdown report covering SSL/TLS grade, HTTP security headers, email authentication (SPF/DMARC), and server fingerprint leaks. Use when the user says /security-snapshot, /snapshot [domain], "run a security check on X", or "generate a security report for [company]". Do NOT use for penetration testing, internal infrastructure audits, or application-layer vulnerability assessment. This is a passive, unauthenticated scan for conversation-starter value, not a full audit.
+description: 'Use when the user says /security-snapshot, /snapshot <domain>, "run a security check on X", "generate a security report for [company]", or wants a security hygiene snapshot or free lead-magnet report on a prospect''s public domain: SSL/TLS grade, HTTP security headers, SPF/DMARC email authentication, server fingerprint leaks. Passive, unauthenticated scans only. NOT for penetration testing, internal infrastructure audits, or application-layer vulnerability assessment.'
 argument-hint: "<domain> [--company 'Display Name']"
 tool_access:
   - Bash

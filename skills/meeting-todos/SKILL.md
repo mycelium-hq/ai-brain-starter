@@ -1,6 +1,6 @@
 ---
 name: meeting-todos
-description: Extract action items from a meeting note and add them to the to-do list. Separates your tasks from others' tasks. Use when the user says /meeting-todos, "the meeting is done", "I just had a meeting", or otherwise wants action items pulled from a recent meeting note. Do NOT use for general task management, journaling, or pulling full meeting transcripts (use the meeting workflow for that).
+description: Use when the user says /meeting-todos, "the meeting is done", "I just had a meeting", "pull the action items", "what did I commit to", or otherwise wants action items from a recent meeting note captured on their to-do list. Also when a meeting note or transcript needs its tasks pulled out. NOT for general task management, journaling, non-meeting notes (use note-todos), or pulling full meeting transcripts.
 argument-hint: "[date like 2026-04-09, or meeting title keyword — omit for most recent]"
 ---
 

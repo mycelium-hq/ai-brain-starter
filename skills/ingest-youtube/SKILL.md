@@ -1,6 +1,6 @@
 ---
 name: ingest-youtube
-description: Pulls a YouTube video transcript (or a channel's recent uploads) into the vault as queryable markdown. Use when the user says /ingest-youtube <url-or-channel> [--days N], or asks to ingest, capture, sync, transcribe, or pull a YouTube video or channel into the vault. Writes one file per video to External Inputs/YouTube/<channel-slug>/<YYYY-MM-DD>-<video-slug>.md. Idempotent: re-ingesting the same video overwrites cleanly. Do NOT use for downloading the video itself, for live streams, or for non-YouTube sources.
+description: Use when the user says /ingest-youtube <url-or-channel> [--days N], pastes a YouTube URL (youtube.com or youtu.be) wanting a transcript or summary in the vault, asks to ingest, capture, sync, transcribe, or pull a YouTube video, channel, talk, podcast, or keynote into the vault, or wants a video's captions or content available to the knowledge graph. Not for downloading video files, live streams, or non-YouTube sources (Vimeo, Twitch).
 ---
 
 # ingest-youtube — YouTube-to-vault connector
