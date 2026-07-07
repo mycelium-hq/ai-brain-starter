@@ -149,27 +149,87 @@ def _fetcher(name):
     return p if os.path.exists(p) else None
 
 
-def surface_relational_first(messages_md, names):
-    """Reorder the messages digest so threads whose contact matches a relational name
-    come FIRST under a ⭐ banner. Split on '### <Contact>' blocks; keep the preamble."""
+# Cheap HEAVY-emotion heuristic (EN+ES) — no LLM, zero model tokens. Deliberately NARROW:
+# only genuinely heavy words, and a thread must hit >=2 to flag (so "love it"/"happy to"
+# pleasantries don't trip it). A flagged thread becomes a PROBE CANDIDATE.
+EMOTION_RE = re.compile(
+    r"\b(worr(?:y|ied)|upset|overwhelm|fight|pelea|discut|scared|afraid|miedo|"
+    r"cry(?:ing)?|llor|stress(?:ed)?|anxious|ansios|hurt|dolor|herid|broke ?up|breakup|"
+    r"divorc|sick|enferm|hospital|died|death|murió|funeral|frustrat|angry|enoj|rabia|"
+    r"pregnant|embaraz)\b|miss you|te extrañ|can'?t sleep|no puedo dormir",
+    re.I,
+)
+MAX_THREAD_LINES = 22          # cap kept threads; raw stays on disk
+MAX_EMOTIONAL_FULL = 5         # only the heaviest few kept in full
+
+
+def _cap_block(block, n=MAX_THREAD_LINES):
+    lines = block.splitlines()
+    if len(lines) <= n + 2:
+        return block if block.endswith("\n") else block + "\n"
+    return "\n".join([lines[0], "_…(older messages trimmed; raw on disk)_"] + lines[-n:]) + "\n"
+
+
+def compress_surface_probe(messages_md, names):
+    """Compress the raw messages digest to a TOKEN-CHEAP one: family/partner + genuinely
+    heavy threads keep their recent lines (capped); everyone else collapses to ONE line.
+    Returns a PROBE list so the interview can say 'you haven't mentioned X' without
+    re-reading the raw (raw stays on disk). -> (digest, rel_names, probe)."""
     parts = re.split(r"(?m)^(?=### )", messages_md)
     if len(parts) <= 1:
-        return messages_md, []
-    preamble, blocks = parts[0], parts[1:]
-    rel, other = [], []
+        return messages_md, [], []
+    _, blocks = parts[0], parts[1:]      # drop the fetch preamble (header/spam)
+    rel_full, emo, one_liners, rel_names, probe = [], [], [], [], []
     for b in blocks:
-        head = b.splitlines()[0] if b.strip() else ""
-        contact = re.sub(r"^###\s*", "", head).split("  _(")[0].strip().lower()
-        (rel if any(n in contact for n in names) else other).append(b)
-    surfaced = [re.sub(r"^###\s*", "### ⭐ ", b, count=1) for b in rel]
-    rel_names = [re.sub(r"^###\s*", "", b.splitlines()[0]).split("  _(")[0].strip() for b in rel]
-    body = preamble
-    if surfaced:
-        body += "\n\n— ⭐ RELATIONAL / FAMILY / PARTNER (surfaced first) —\n\n" + "".join(surfaced)
-        body += "\n— everything else —\n\n" + "".join(other)
-    else:
-        body += "".join(other)
-    return body, rel_names
+        lines = b.splitlines()
+        head = lines[0] if lines else ""
+        contact = re.sub(r"^###\s*", "", head).split("  _(")[0].strip()
+        is_rel = any(n in contact.lower() for n in names)
+        hits = len(EMOTION_RE.findall(b))
+        msg_lines = [ln for ln in lines[1:] if ln.strip() and not ln.startswith("**")]
+        last = re.sub(r"\s+", " ", next((ln for ln in reversed(msg_lines) if ln.strip()), "").strip())[:110]
+        if is_rel:
+            rel_full.append(_cap_block(re.sub(r"^###\s*", "### ⭐ ", b, count=1)))
+            rel_names.append(contact)
+            probe.append(f"{contact} (family/partner)")
+        elif hits >= 2:
+            emo.append((hits, contact, _cap_block(re.sub(r"^###\s*", "### ⚠ ", b, count=1))))
+        else:
+            one_liners.append(f"- {contact} — {last}")
+    emo.sort(key=lambda t: t[0], reverse=True)
+    emo = emo[:MAX_EMOTIONAL_FULL]
+    for _, contact, _blk in emo:
+        probe.append(f"{contact} (emotional signal)")
+    body = ""
+    if rel_full:
+        body += "— ⭐ FAMILY / PARTNER (full detail) —\n\n" + "".join(rel_full) + "\n"
+    if emo:
+        body += "— ⚠ HEAVY-EMOTION threads (full detail) —\n\n" + "".join(blk for _, _, blk in emo) + "\n"
+    if one_liners:
+        body += f"— everything else ({len(one_liners)} threads, one line each; raw on disk) —\n" + "\n".join(one_liners) + "\n"
+    return body, rel_names, probe[:10]
+
+
+def filter_personal_seeds(txt):
+    """Drop dev/CI/ticket close-cascade seeds; keep only personal + brainstorming/belief/
+    writing seeds. She doesn't want dev things in the journal unless it was brainstorming."""
+    DEV = re.compile(r"\b(MYC-|OND-|PR #|CI\b|eval-gate|endpoint|commit|merge|squash|"
+                     r"typecheck|pytest|regression|hook|schema|deploy|runtime|repo|"
+                     r"branch|workflow|lint|pipeline|API\b|SDK\b)", re.I)
+    KEEP = re.compile(r"\[emotional\]|belief|substack seed|writing seed|writing-note|"
+                      r"brainstorm|universal observation|customer-empathy|belief shift", re.I)
+    out, keeping_header = [], None
+    for line in txt.splitlines():
+        if line.startswith("## "):        # date/section header — hold until a kept bullet lands under it
+            keeping_header = line
+            continue
+        if line.strip().startswith("- ") or line.strip().startswith("*"):
+            if KEEP.search(line) and not (DEV.search(line) and not re.search(r"\[emotional\]", line, re.I)):
+                if keeping_header:
+                    out.append("\n" + keeping_header)
+                    keeping_header = None
+                out.append(line)
+    return "\n".join(out).strip() or "[no personal/brainstorming seeds in the window — recent sessions were dev-only]"
 
 
 def _age_note(path):
@@ -202,16 +262,16 @@ def main():
         since = since_d.isoformat()
 
     toggles, relational = read_config()
-    pulled, failed, pending_mcp, skipped_off, rel_surfaced = [], [], [], [], []
+    pulled, failed, pending_mcp, skipped_off, rel_surfaced, probe = [], [], [], [], [], []
     sections = []
 
-    # ---- Messages (WhatsApp direct+groups + iMessage), relational-first ----
+    # ---- Messages (WhatsApp direct+groups + iMessage), compressed + relational-first ----
     if toggles.get("whatsapp_24h") or toggles.get("imessage_24h"):
         fp = _fetcher("journal-messages-fetch.py")
         if fp:
             body, ok = _run(["python3", fp, "--since", since, "--until", until_d.isoformat()])
-            body, rel_surfaced = surface_relational_first(body, relational)
-            sections.append(("MESSAGES — WhatsApp (direct + groups) + iMessage, relational-first", body))
+            body, rel_surfaced, probe = compress_surface_probe(body, relational)
+            sections.append(("MESSAGES — family/partner + emotional threads in full; rest one-line (raw on disk)", body))
             (pulled if ok and body else failed).append("messages")
         else:
             sections.append(("MESSAGES", "[preflight] journal-messages-fetch.py not installed — skipping."))
@@ -242,8 +302,8 @@ def main():
     if toggles.get("session_captures"):
         try:
             txt = open(CAPTURES, encoding="utf-8", errors="replace").read()
-            head = "\n".join(txt.splitlines()[:140])
-            sections.append(("CLOSE-CASCADE JOURNAL SEEDS (Session Captures.md — [emotional] = personal)", head or "[empty]"))
+            personal = filter_personal_seeds(txt)
+            sections.append(("PERSONAL / BRAINSTORM SEEDS (dev/CI/ticket seeds filtered out)", personal))
             pulled.append("session_captures")
         except OSError:
             sections.append(("CLOSE-CASCADE JOURNAL SEEDS", "[preflight] Session Captures.md not found — skipping."))
@@ -315,6 +375,7 @@ def main():
         "sources_pending_mcp": sorted(set(pending_mcp)),
         "sources_skipped_off": sorted(set(skipped_off)),
         "relational_surfaced": rel_surfaced,
+        "probe_candidates": probe,
     }
     marker_path = os.path.join(MARKER_DIR, f"{until_d.isoformat()}.json")
     with open(marker_path, "w", encoding="utf-8") as f:
@@ -330,6 +391,10 @@ def main():
           f" | MCP-pending: {', '.join(marker['sources_pending_mcp']) or 'none'}_")
     if rel_surfaced:
         print(f"_⭐ relational threads surfaced: {', '.join(rel_surfaced)}_")
+    if probe:
+        print("\n★ PROBE THESE IN THE INTERVIEW (things she may not bring up herself — ask 'you haven't mentioned…'):")
+        for p in probe:
+            print(f"  - {p}")
     for title, body in sections:
         print(f"\n{'='*72}\n## {title}\n{'='*72}")
         print(body if body else "[empty]")
