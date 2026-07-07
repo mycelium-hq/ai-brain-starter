@@ -102,6 +102,7 @@ def read_config():
     """Return (toggles dict, relational_names list). Fail-open: unknown/missing => all
     sources ON (a silently-off source is the bug we're killing)."""
     toggles = {k: True for k in SOURCE_FETCHERS}
+    toggles["live_refresh"] = True   # drain WhatsApp/iMessage exports before reading (live, not saved)
     relational = list(RELATIONAL_DEFAULTS)
     try:
         txt = open(CONFIG, encoding="utf-8").read()
@@ -147,6 +148,31 @@ def _run(cmd, timeout=150):
 def _fetcher(name):
     p = os.path.join(SCRIPT_DIR, name)
     return p if os.path.exists(p) else None
+
+
+def refresh_message_exports(timeout=25, fresh_min=15):
+    """LIVE layer: drain WhatsApp/iMessage exports BEFORE reading, so the journal sees
+    near-real-time messages instead of the 4h-cron snapshot ('look at live, not saved').
+    FRESHNESS-AWARE: skip a channel already refreshed within `fresh_min` — so the common
+    case adds NO pause (video-smooth) and only a genuinely stale channel triggers a
+    (bounded) drain. On timeout/error, proceed with the on-disk copy. Returns refreshed."""
+    done = []
+    for w, ch in (("whatsapp-export-vault.sh", "WhatsApp"), ("imessage-export-vault.sh", "iMessage")):
+        wp = os.path.expanduser(f"~/.local/bin/{w}")
+        if not os.path.exists(wp):
+            continue
+        files = glob.glob(os.path.join(AICHATS, ch, "*.md"))
+        if files:
+            age_min = (datetime.datetime.now().timestamp() - max(os.path.getmtime(f) for f in files)) / 60
+            if age_min < fresh_min:
+                continue  # already fresh -> no pause
+        try:
+            r = subprocess.run(["bash", wp], capture_output=True, text=True, timeout=timeout)
+            if r.returncode == 0:
+                done.append(ch.lower())
+        except Exception:  # noqa: BLE001 — timeout or error -> use on-disk copy
+            pass
+    return done
 
 
 # Cheap HEAVY-emotion heuristic (EN+ES) — no LLM, zero model tokens. Deliberately NARROW:
@@ -265,8 +291,11 @@ def main():
     pulled, failed, pending_mcp, skipped_off, rel_surfaced, probe = [], [], [], [], [], []
     sections = []
 
-    # ---- Messages (WhatsApp direct+groups + iMessage), compressed + relational-first ----
+    # ---- Messages (WhatsApp direct+groups + iMessage), LIVE-refreshed, compressed ----
+    refreshed = []
     if toggles.get("whatsapp_24h") or toggles.get("imessage_24h"):
+        if toggles.get("live_refresh", True):
+            refreshed = refresh_message_exports()
         fp = _fetcher("journal-messages-fetch.py")
         if fp:
             body, ok = _run(["python3", fp, "--since", since, "--until", until_d.isoformat()])
@@ -279,17 +308,17 @@ def main():
     else:
         skipped_off.append("messages")
 
-    # ---- RescueTime, per-day ----
+    # ---- RescueTime, per-day (PARALLEL — independent API calls; ~2.3s total not ~20s) ----
     if toggles.get("rescuetime"):
         fp = _fetcher("rescuetime-fetch.py")
         if fp:
-            lines, any_ok = [], False
-            for k in range(min((until_d - since_d).days + 1, MAX_GAP_DAYS)):
-                d = (until_d - datetime.timedelta(days=k)).isoformat()
-                b, ok = _run(["python3", fp, d], timeout=40)
-                if b:
-                    lines.append(b)
-                    any_ok = any_ok or ok
+            from concurrent.futures import ThreadPoolExecutor
+            days = [(until_d - datetime.timedelta(days=k)).isoformat()
+                    for k in range(min((until_d - since_d).days + 1, MAX_GAP_DAYS))]
+            with ThreadPoolExecutor(max_workers=8) as ex:
+                results = list(ex.map(lambda d: _run([sys.executable, fp, d], timeout=40), days))
+            lines = [b for b, _ in results if b]
+            any_ok = any(ok for _, ok in results)
             sections.append(("RESCUETIME (per day, newest first)", "\n\n".join(lines) or "[none]"))
             (pulled if any_ok else failed).append("rescuetime")
         else:
@@ -376,6 +405,7 @@ def main():
         "sources_skipped_off": sorted(set(skipped_off)),
         "relational_surfaced": rel_surfaced,
         "probe_candidates": probe,
+        "live_refreshed": refreshed,
     }
     marker_path = os.path.join(MARKER_DIR, f"{until_d.isoformat()}.json")
     with open(marker_path, "w", encoding="utf-8") as f:
