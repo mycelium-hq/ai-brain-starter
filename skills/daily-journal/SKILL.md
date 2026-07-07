@@ -149,12 +149,16 @@ One calendar day = ONE journal entry that grows across sessions (an afternoon ch
 python3 "⚙️ Meta/scripts/journal-preflight.py"
 ```
 
-(or `Meta/scripts/journal-preflight.py` if the vault doesn't use emoji-prefixed Meta.) It auto-spans since the last entry, pulls every SCRIPT source into ONE digest — messages (WhatsApp + iMessage, whole gap), RescueTime (per day), Session Captures, today's activity — and writes a marker at `⚙️ Meta/.journal-context/<date>.json`. It cannot call MCP, so it prints the two pulls you MUST make yourself right after:
+(or `Meta/scripts/journal-preflight.py` if the vault doesn't use emoji-prefixed Meta.) It auto-spans since the last entry, pulls every SCRIPT source into ONE digest — messages (WhatsApp direct + groups + iMessage, whole gap, FAMILY/PARTNER threads surfaced first with ⭐), RescueTime (per day), close-cascade journal seeds (Session Captures), today's activity, the email triage digest, and the on-disk Slack export — and writes a marker at `⚙️ Meta/.journal-context/<date>.json`. It cannot call MCP, so it prints the exact MCP pulls you MUST make yourself right after — make EVERY one it lists:
 
-1. **Calendar** — `cal_list_events(time_min, time_max)` for the same window (the preflight prints the exact call). Fold meetings + attendees into `## Today`.
-2. **Health** (only if `body_health: on`) — latest `🏠 Home/Health Pattern Report *.md` + yesterday's `## Body track`; or run `regenerate-health-pattern-report.py` if the phone synced.
+1. **Calendar** — `cal_list_events(time_min, time_max)` for the window; fold meetings + attendees into `## Today`.
+2. **Email (fresh, relational)** — `gmail_search` each account since the last entry; surface FAMILY / friends / commitments, not just the (often stale) triage digest the preflight already read.
+3. **Slack (fresh)** — `slack` search/read recent DMs + #daily-updates since the last entry.
+4. **Health** (only if `body_health: on`) — latest `🏠 Home/Health Pattern Report *.md` + yesterday's `## Body track`; or run `regenerate-health-pattern-report.py` if the phone synced.
 
-Do NOT ask the opener until the preflight ran AND both MCP pulls are done. A contextless journal — no calendar, no messages, no activity — is the exact failure this kills (2026-07-07 incident: the model skipped Step 0 and the user had to ask "why didn't you pull everything?"). If a fetcher isn't installed on this vault, the preflight says so and you proceed honestly with what it got — but you STILL run it. At save time the entry frontmatter MUST carry a `context_sources:` block naming every source folded in; `warn-journal-saved-without-context.py` fires if a journal is written for a day whose preflight marker is missing.
+Read the ⭐ FAMILY / PARTNER threads BEFORE the work chatter — that is the part most worth journaling (2026-07-07: the model buried the user's sister flying in under dev messages).
+
+Do NOT ask the opener until the preflight ran AND every MCP pull it listed is done. A contextless journal — no calendar, no messages, no activity — is the exact failure this kills (2026-07-07 incident: the model skipped Step 0 and the user had to ask "why didn't you pull everything?"). If a fetcher isn't installed on this vault, the preflight says so and you proceed honestly with what it got — but you STILL run it. At save time the entry frontmatter MUST carry a `context_sources:` block naming every source folded in; `warn-journal-saved-without-context.py` fires if a journal is written for a day whose preflight marker is missing.
 
 **0-pre. Read the journal config (mandatory).** Look for `⚙️ Meta/journal-config.md` (or `Meta/journal-config.md` if the vault doesn't use emoji-prefixed Meta). Parse the `data_sources:` frontmatter block.
 
