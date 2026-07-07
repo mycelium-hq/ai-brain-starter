@@ -87,6 +87,24 @@ say()  { printf '%s\n' "$*"; }
 warn() { printf 'WARN  %s\n' "$*" >&2; }
 die()  { printf 'relocate-vault: REFUSE — %s\n' "$1" >&2; exit "${2:-1}"; }
 
+# Obsidian-running probe, with a test seam so the negative-control suite can drive
+# BOTH outcomes deterministically on any host. RELOCATE_VAULT_OBSIDIAN:
+#   unset / auto -> real `pgrep -x Obsidian` probe — the production default;
+#                   behavior is IDENTICAL to before this seam existed.
+#   running      -> report Obsidian as running    (drives the refusal assertion).
+#   absent       -> report Obsidian as not running (lets the tests exercise the
+#                   OTHER soft gates on a dev box that has Obsidian open — the
+#                   normal state when developing an Obsidian-vault tool).
+# Mirrors the VAULT_BACKUP_SKIP_TIMEMACHINE / VAULT_BACKUP_CMD test seams already
+# used below: the default path runs the real check, so real safety is unchanged.
+obsidian_running() {
+  case "${RELOCATE_VAULT_OBSIDIAN:-auto}" in
+    running) return 0 ;;
+    absent)  return 1 ;;
+    *) command -v pgrep >/dev/null 2>&1 && pgrep -x Obsidian >/dev/null 2>&1 ;;
+  esac
+}
+
 # abspath/pathkey via python3 so the key transform matches Claude Code's JS
 # `cwd.replace(/[^a-zA-Z0-9]/g, "-")` for spaces, dots, slashes, and the ⚙️
 # variation-selector exactly. A byte-wise `sed` would mis-key multibyte paths.
@@ -347,7 +365,7 @@ if [ -e "$NEW_ABS" ]; then die "target '$NEW_ABS' already exists (will not overw
 # Soft gates — skippable with --force.
 BACKUP_TOKEN=""
 if [ "$FORCE" != 1 ]; then
-  if command -v pgrep >/dev/null 2>&1 && pgrep -x Obsidian >/dev/null 2>&1; then
+  if obsidian_running; then
     die "Obsidian is running — quit it first (moving an open vault is unsafe), or pass --force"
   fi
   if [ -d "$OLD_ABS/.claude/worktrees" ]; then

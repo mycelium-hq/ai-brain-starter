@@ -315,3 +315,27 @@ jobs:
         run: pipx install ruff || python3 -m pip install --user ruff || true
       - name: run the canonical CI gate
         run: bash scripts/ci.sh
+
+  phase-python:
+    name: phase-doc Python (no undefined names / F821)
+    runs-on: ubuntu-latest
+    # The Phase 2 plugin installer and the Phase 10a graph-config block are
+    # `python3` heredocs / ```python fences INSIDE Markdown. The `ci` job's
+    # py_compile only lints tracked *.py, and py_compile cannot catch an undefined
+    # name (a runtime NameError) anyway - so a bare `VAULT_DIR` typo shipped and
+    # crashed the installer on every platform (2026-07-07). windows-install.yml
+    # runs bootstrap.ps1 end-to-end but stubs Obsidian and never executes these
+    # blocks, so it did not catch it either. This job extracts every Python block
+    # from phases/*.md and runs the undefined-name check (ruff F821) over each.
+    # ruff is installed WITHOUT a `|| true` fallback: if it cannot install, the
+    # job fails closed (a silent skip would make the gate vacuous exactly when the
+    # linter is missing). No untrusted user input is referenced in any run: command.
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
+        with:
+          python-version: "3.12"
+      - name: install ruff (the undefined-name linter this gate needs)
+        run: pipx install ruff || python3 -m pip install --user ruff
+      - name: lint phase-doc Python for undefined names (F821)
+        run: python3 scripts/check-phase-python.py
