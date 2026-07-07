@@ -1,0 +1,143 @@
+﻿# sync-vault-scripts.ps1 - Windows port of sync-vault-scripts.sh.
+#
+# Propagates updated vault-side scripts from the ai-brain-starter repo into the
+# user's vault <meta>/scripts/ directory, so an EXISTING install gets new/fixed
+# vault scripts (e.g. journal-preflight.py) that setup only copied once.
+#
+# ZERO-DRIFT MANIFEST: this reads the SAME allow-list as the bash version by
+# parsing the VAULT_SCRIPTS=( ... ) block out of sync-vault-scripts.sh. There is
+# no second hardcoded list to drift out of sync (the self-test parses the .sh
+# array too, so both platforms and the test share one source of truth).
+#
+# CONTRACT (mirrors the .sh): idempotent (identical dest = no-op); non-destructive
+# (a dest that DIFFERS is backed up to <file>.bak-YYYY-MM-DD-HHMM before overwrite);
+# source-absent is non-fatal; no vault resolvable = non-fatal no-op (exit 0).
+#
+# VAULT RESOLUTION (zero-arg friendly, for the update flow):
+#   1. -Vault PATH   2. $env:VAULT_ROOT   3. parse ~/.claude/settings.json hooks.
+#
+# USAGE:  pwsh scripts/sync-vault-scripts.ps1 [-Vault PATH] [-DryRun] [-Quiet]
+# EXIT:   0 = clean / nothing to do / vault not resolvable; 2 = a copy/backup error.
+#
+# Compatible with Windows PowerShell 5.1 and PowerShell 7+ (no PS7-only syntax).
+
+param(
+    [string]$Vault = "",
+    [switch]$DryRun,
+    [switch]$Quiet
+)
+
+$ErrorActionPreference = "Stop"
+$Stamp = Get-Date -Format "yyyy-MM-dd-HHmm"
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$StarterDir = if ($env:STARTER_DIR) { $env:STARTER_DIR } else { Split-Path -Parent $ScriptDir }
+
+function Note($m) { if (-not $Quiet) { Write-Output $m } }
+
+# --- pick a python interpreter (for the shared meta resolver) -----------------
+$Py = $null
+foreach ($c in @("python3", "python", "py")) {
+    if (Get-Command $c -ErrorAction SilentlyContinue) { $Py = $c; break }
+}
+
+# --- resolve the vault root ---------------------------------------------------
+if (-not $Vault) { $Vault = $env:VAULT_ROOT }
+if (-not $Vault) {
+    $settings = Join-Path $HOME ".claude/settings.json"
+    if ((Test-Path $settings) -and $Py) {
+        # Reuse the exact regex the .sh uses: the installed hook commands embed
+        # "<vault>/⚙️ Meta/scripts/..." - grab that prefix.
+        $pyCode = @'
+import json, re, sys
+try:
+    data = json.load(open(sys.argv[1], encoding="utf-8"))
+except Exception:
+    sys.exit(1)
+for _ev, groups in (data.get("hooks") or {}).items():
+    for g in groups:
+        for h in g.get("hooks", []):
+            m = re.search(r"(/[^'\"]+?)/(?:⚙️ Meta|Meta)/scripts/", h.get("command",""))
+            if m:
+                print(m.group(1)); sys.exit(0)
+sys.exit(1)
+'@
+        try { $Vault = (& $Py -c $pyCode $settings 2>$null | Select-Object -First 1) } catch { $Vault = "" }
+    }
+}
+if ((-not $Vault) -or (-not (Test-Path $Vault -PathType Container))) {
+    Note "sync-vault-scripts: no vault resolved (-Vault / `$env:VAULT_ROOT / settings.json all empty) - skipping (non-fatal)."
+    exit 0
+}
+
+# --- resolve the vault meta dir via the SHARED python resolver ----------------
+$Meta = ""
+if ($Py) {
+    $resolver = Join-Path $ScriptDir "_meta_resolver.py"
+    if (Test-Path $resolver) {
+        try { $Meta = (& $Py $resolver $Vault scripts Decisions Sessions 2>$null | Select-Object -First 1) } catch { $Meta = "" }
+    }
+}
+if (-not $Meta) {
+    Note "sync-vault-scripts: no Meta folder in $Vault - skipping (non-fatal)."
+    exit 0
+}
+$DestDir = Join-Path $Meta "scripts"
+
+# --- parse the manifest out of the .sh (single source of truth) ---------------
+$ShFile = Join-Path $ScriptDir "sync-vault-scripts.sh"
+if (-not (Test-Path $ShFile)) {
+    Note "sync-vault-scripts: manifest source $ShFile missing - skipping (non-fatal)."
+    exit 0
+}
+$scripts = @()
+$inArray = $false
+foreach ($line in (Get-Content -LiteralPath $ShFile)) {
+    if ($line -match 'VAULT_SCRIPTS=\(') { $inArray = $true; continue }
+    if ($inArray) {
+        if ($line -match '^\s*\)') { break }
+        $m = [regex]::Match($line, '"([^"]+\.(?:py|sh))"')
+        if ($m.Success) { $scripts += $m.Groups[1].Value }
+    }
+}
+if ($scripts.Count -eq 0) {
+    Note "sync-vault-scripts: parsed 0 scripts from manifest - skipping (non-fatal)."
+    exit 0
+}
+
+if (-not $DryRun) { New-Item -ItemType Directory -Force -Path $DestDir | Out-Null }
+
+$Created = @(); $Updated = @(); $BackedUp = @(); $Absent = @(); $Errors = @()
+
+foreach ($name in $scripts) {
+    $src = Join-Path (Join-Path $StarterDir "scripts") $name
+    $dest = Join-Path $DestDir $name
+    if (-not (Test-Path $src)) { $Absent += $name; continue }
+    if (Test-Path $dest) {
+        $same = $false
+        try { $same = ((Get-FileHash $src).Hash -eq (Get-FileHash $dest).Hash) } catch { $same = $false }
+        if ($same) { continue }
+        if ($DryRun) { $Updated += "$name (would update)"; continue }
+        try {
+            Copy-Item -LiteralPath $dest -Destination "$dest.bak-$Stamp" -Force
+            $BackedUp += "$dest.bak-$Stamp"
+            Copy-Item -LiteralPath $src -Destination $dest -Force
+            $Updated += $name
+        } catch { $Errors += "could not update $dest" }
+    } else {
+        if ($DryRun) { $Created += "$name (would create)"; continue }
+        try { Copy-Item -LiteralPath $src -Destination $dest -Force; $Created += $name }
+        catch { $Errors += "could not create $dest" }
+    }
+}
+
+Note "=== sync-vault-scripts.ps1 @ $Stamp ==="
+Note "vault: $Vault"
+Note "meta:  $Meta"
+Note ("Created:   {0}" -f $Created.Count);   foreach ($f in $Created)  { Note "  + $f" }
+Note ("Updated:   {0}" -f $Updated.Count);   foreach ($f in $Updated)  { Note "  ~ $f" }
+Note ("Backed up: {0}" -f $BackedUp.Count);  foreach ($f in $BackedUp) { Note "  b $f" }
+Note ("Absent:    {0}" -f $Absent.Count)
+Note ("Errors:    {0}" -f $Errors.Count);    foreach ($f in $Errors)   { Note "  ! $f" }
+
+if ($Errors.Count -gt 0) { exit 2 }
+exit 0

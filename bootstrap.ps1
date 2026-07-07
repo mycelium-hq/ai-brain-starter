@@ -968,6 +968,20 @@ if ((Test-Path $userHookInstaller) -and -not $DryRun) {
                   "# wires 7 UserPromptSubmit hooks incl. meeting-workflow trigger") -ForegroundColor DarkGray
 }
 
+# Deploy vault-side scripts (journal-preflight.py, aggregators, etc.) into the
+# vault's Meta/scripts. Windows parity with the Mac update flow
+# (sync-skills.py -> sync-vault-scripts.sh). Self-resolves the vault from the
+# settings.json hooks just installed. Non-fatal: never blocks the install.
+if (-not $DryRun) {
+    try {
+        $vaultSync = Join-Path $PSScriptRoot "scripts/sync-vault-scripts.ps1"
+        if (Test-Path $vaultSync) { & $vaultSync -Quiet }
+    } catch {
+        Write-Host ("  ! " + (T "vault-script sync skipped: $_" `
+                                 "sincronizacion de scripts del vault omitida: $_")) -ForegroundColor DarkYellow
+    }
+}
+
 Write-Host ""
 Write-Host ("━━━ " + (T "Install complete" "Instalación completa") + " ━━━") -ForegroundColor Cyan
 Write-Host ""
