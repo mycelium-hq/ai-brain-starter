@@ -20,6 +20,14 @@
 #                           when running inside GitHub Actions (the dedicated job
 #                           already covers it); locally it is warn-and-skipped
 #                           when the shellcheck binary is absent (CI enforces it).
+#   (d) Phase-doc Python  - scripts/check-phase-python.py extracts every Python
+#                           block from phases/*.md and runs the undefined-name
+#                           check (ruff F821). Catches a bare-identifier typo in
+#                           an install heredoc - a runtime NameError that (a)'s
+#                           py_compile cannot see (it lints tracked *.py only, and
+#                           py_compile does not catch undefined names). A dedicated
+#                           lint.yml job enforces this in CI (as the shellcheck job
+#                           does); here it is best-effort, skipped without a linter.
 #
 # It does NOT run the OTHER pure-lint jobs (bash -n, pwsh ParseFile, BOM, em-dash,
 # JSON, privacy, references, no-remote-pipe-install). Those stay as their own
@@ -229,5 +237,26 @@ else
   echo "    install: brew install shellcheck  (macOS)  /  sudo apt-get install -y shellcheck  (Debian/Ubuntu)"
 fi
 
+# ---- (d) Phase-doc Python undefined-name gate ------------------------------
+# The Phase 2 plugin installer and Phase 10a graph-config block are python3
+# heredocs / ```python fences inside Markdown, so gate (a) py_compile never sees
+# them - and py_compile cannot catch an undefined name (a runtime NameError)
+# anyway. A bare `VAULT_DIR` typo shipped and crashed the installer on every
+# platform (2026-07-07). Mirrors the shellcheck arrangement: a dedicated lint.yml
+# 'phase-python' job is authoritative in CI (installs ruff, fails closed); here it
+# is local best-effort, warn-skipped when no linter is installed (CI enforces it).
+if [ -n "${GITHUB_ACTIONS:-}" ]; then
+  phasepy_note="skipped in CI (dedicated lint.yml 'phase-python' job runs scripts/check-phase-python.py)"
+  echo "==> (d) phase-doc python: $phasepy_note"
+elif command -v ruff >/dev/null 2>&1 || "$PY" -c 'import pyflakes' >/dev/null 2>&1; then
+  echo "==> (d) phase-doc python: $PY scripts/check-phase-python.py"
+  "$PY" scripts/check-phase-python.py
+  phasepy_note="passed"
+else
+  phasepy_note="skipped (no ruff/pyflakes locally; CI enforces it)"
+  echo "==> (d) phase-doc python: $phasepy_note"
+  echo "    install: pip install ruff"
+fi
+
 echo
-echo "All gates passed: py_compile ($count file(s)) + ${#INTEGRATION_TESTS[@]} integration tests + shellcheck [$shellcheck_note]."
+echo "All gates passed: py_compile ($count file(s)) + ${#INTEGRATION_TESTS[@]} integration tests + shellcheck [$shellcheck_note] + phase-doc python [$phasepy_note]."
