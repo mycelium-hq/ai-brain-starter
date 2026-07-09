@@ -34,10 +34,35 @@ $StarterDir = if ($env:STARTER_DIR) { $env:STARTER_DIR } else { Split-Path -Pare
 
 function Note($m) { if (-not $Quiet) { Write-Output $m } }
 
-# --- pick a python interpreter (for the shared meta resolver) -----------------
+# --- pick a REAL python interpreter (for the shared meta resolver) ------------
+# 'py' first: the Windows launcher is always a real Python. A bare 'python3' on
+# PATH is often the Microsoft Store app-execution shim, which resolves via
+# Get-Command but prints nothing and pops the Store, so the resolver call comes
+# back empty and the sync misreads it as "no Meta folder". Probe each candidate
+# and only trust one that actually reports Python 3 (mirrors relocate-vault.ps1).
 $Py = $null
-foreach ($c in @("python3", "python", "py")) {
-    if (Get-Command $c -ErrorAction SilentlyContinue) { $Py = $c; break }
+foreach ($c in @("py", "python", "python3")) {
+    $cmd = Get-Command $c -ErrorAction SilentlyContinue
+    if (-not $cmd) { continue }
+    try {
+        $probe = (& $cmd.Source -c "import sys; print(sys.version_info[0])" 2>$null | Select-Object -First 1)
+        if ("$probe".Trim() -eq "3") { $Py = $cmd.Source; break }
+    } catch { }
+}
+
+# Read one line of native-python stdout as UTF-8. The resolver emits the meta
+# path as UTF-8 (it can contain the settings emoji); Windows PowerShell would
+# otherwise decode native output with the OEM code page and mangle the path.
+# Save and restore the console encoding so this cannot leak to the parent shell.
+function Invoke-PyLine {
+    param([string]$PyExe, [object[]]$PyArgs)
+    $prevEnc = [Console]::OutputEncoding
+    try {
+        try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false } catch { }
+        return (& $PyExe @PyArgs 2>$null | Select-Object -First 1)
+    } finally {
+        try { [Console]::OutputEncoding = $prevEnc } catch { }
+    }
 }
 
 # --- resolve the vault root ---------------------------------------------------
@@ -61,7 +86,7 @@ for _ev, groups in (data.get("hooks") or {}).items():
                 print(m.group(1)); sys.exit(0)
 sys.exit(1)
 '@
-        try { $Vault = (& $Py -c $pyCode $settings 2>$null | Select-Object -First 1) } catch { $Vault = "" }
+        try { $Vault = (Invoke-PyLine $Py @("-c", $pyCode, $settings)) } catch { $Vault = "" }
     }
 }
 if ((-not $Vault) -or (-not (Test-Path $Vault -PathType Container))) {
@@ -74,7 +99,7 @@ $Meta = ""
 if ($Py) {
     $resolver = Join-Path $ScriptDir "_meta_resolver.py"
     if (Test-Path $resolver) {
-        try { $Meta = (& $Py $resolver $Vault scripts Decisions Sessions 2>$null | Select-Object -First 1) } catch { $Meta = "" }
+        try { $Meta = (Invoke-PyLine $Py @($resolver, $Vault, "scripts", "Decisions", "Sessions")) } catch { $Meta = "" }
     }
 }
 if (-not $Meta) {
