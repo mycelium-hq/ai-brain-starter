@@ -18,8 +18,8 @@ Sources:
     - slack      : on-disk Slack export (recent)
   MCP (preflight prints the exact call; the skill makes it — pure Python can't):
     - calendar   : cal_list_events for the window
-    - email_live : gmail_search since last journal (the digest is often stale)
-    - slack_live : slack search/read recent (on-disk export is sparse)
+    - email_live : your email MCP (gmail_search / outlook_search) since last journal (digest often stale)
+    - slack_live : your chat MCP (e.g. slack) search/read recent (on-disk export is sparse)
     - health     : latest Health Pattern Report + yesterday's Body track
 
 Writes a marker at `<vault>/⚙️ Meta/.journal-context/<date>.json`; the save-time guard
@@ -270,6 +270,14 @@ def _age_note(path):
 
 
 def main():
+    # Windows cp1252-console safety: this digest print()s the "⚙️ Meta" emoji and
+    # em dashes, which raise UnicodeEncodeError on a non-UTF-8 console. Force UTF-8
+    # on our own streams so the preflight always renders instead of crashing.
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8")  # Python 3.7+
+        except (AttributeError, ValueError):
+            pass
     args = sys.argv[1:]
     json_only = "--json" in args
     since = until = None
@@ -435,10 +443,12 @@ def main():
         if "calendar" in pending_mcp:
             print(f"- CALENDAR: cal_list_events({cal}, verbose=true) — meetings + attendees into ## Today.")
         if "email_live" in pending_mcp:
-            print(f"- EMAIL (fresh, relational): gmail_search each account, e.g. "
+            print(f"- EMAIL (fresh, relational): search your connected email MCP each account "
+                  f"(gmail_search on Gmail, outlook_search on Microsoft 365), e.g. "
                   f"`after:{since.replace('-','/')}` — surface FAMILY / friends / commitments, not just the stale triage above.")
         if "slack_live" in pending_mcp:
-            print("- SLACK (fresh): slack search_messages / read recent DMs + #daily-updates since the last entry.")
+            print("- CHAT (fresh): search your connected chat MCP (e.g. slack search_messages) — "
+                  "recent DMs + daily-updates since the last entry.")
         if "body_health" in pending_mcp:
             print("- HEALTH: latest 🏠 Home/Health Pattern Report + yesterday's ## Body track (or regenerate-health-pattern-report.py).")
         print("\nAfter these land, the entry frontmatter MUST carry `context_sources:` naming every "

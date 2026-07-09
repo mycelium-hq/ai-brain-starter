@@ -43,3 +43,9 @@ secrets.json
 hooks/.last-secret-scan
 hooks/.last-secret-scan-full
 hooks/.secret-scan.lock
+
+# Stray vault "Meta" folders left by local sync / resolver runs against a real
+# vault (e.g. a script writing "⚙️ Meta/logs/"). Never ship a user's vault
+# folder into this public substrate repo.
+/⚙️ Meta/
+/Meta/
