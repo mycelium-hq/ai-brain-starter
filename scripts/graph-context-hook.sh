@@ -98,7 +98,17 @@ freshness_note() {
   local path="$1"
   local label="$2"
   if [ ! -f "$path" ]; then
-    printf "missing (run /graphify on %s to build it)" "$label"
+    # Distinguish a NEVER-BUILT graph from one that was built and then LOST.
+    # graphify-out/ is gitignored, so a lost graph leaves NO trace while the
+    # second-brain-mapping state file still records that graphify ran. That
+    # silent gap is exactly how a graph can vanish for weeks unnoticed — a bare
+    # "missing" note reads identically whether it was never built or just lost.
+    local _state="$VAULT_ROOT/⚙️ Meta/.second-brain-mapping-state.json"
+    if [ -f "$_state" ] && python3 -c "import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get('phase_2_graphify') else 1)" "$_state" 2>/dev/null; then
+      printf "⚠ LOST — this graph was built before but is GONE now (gitignored + untracked, no git trace). Your SOURCE is intact; rebuild it: /graphify --update on %s" "$label"
+    else
+      printf "missing (run /graphify on %s to build it)" "$label"
+    fi
     return
   fi
   local mtime now days
