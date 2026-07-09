@@ -339,3 +339,22 @@ jobs:
         run: pipx install ruff || python3 -m pip install --user ruff
       - name: lint phase-doc Python for undefined names (F821)
         run: python3 scripts/check-phase-python.py
+
+  utf8-console-guard:
+    name: UTF-8 console guard (no cp1252 print crash)
+    runs-on: ubuntu-latest
+    # A vault script that print()s non-ASCII (the "gear Meta" emoji, an em dash, an
+    # accented name) from a runnable CLI crashes on a Windows cp1252 console with
+    # UnicodeEncodeError; the caller captures the empty output and misreads it as
+    # failure (ai-brain-starter#313: sync-vault-scripts.ps1 read it as "no Meta
+    # folder" and fell back to a manual copy). PR #313 fixed the two files that had
+    # already broken; scripts/check-utf8-stdout.py fails ANY runnable vault CLI that
+    # writes non-ASCII to the console without the 5-line stdout/stderr UTF-8
+    # reconfigure guard, so the class cannot recur. scripts/ci.sh runs the SAME
+    # checker locally (the `ci-test` pre-push gate), so CI and the laptop gate cannot
+    # drift. Pure stdlib, no linter to install. No untrusted user input is referenced
+    # in any run: command.
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - name: run the UTF-8 console guard over tracked vault scripts
+        run: python3 scripts/check-utf8-stdout.py

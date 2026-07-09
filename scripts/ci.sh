@@ -28,12 +28,21 @@
 #                           py_compile does not catch undefined names). A dedicated
 #                           lint.yml job enforces this in CI (as the shellcheck job
 #                           does); here it is best-effort, skipped without a linter.
+#   (e) UTF-8 console guard - scripts/check-utf8-stdout.py fails a runnable vault
+#                           CLI that print()s non-ASCII (the "gear Meta" emoji, an
+#                           em dash, an accented name) without reconfiguring
+#                           stdout/stderr to UTF-8. On a Windows cp1252 console
+#                           that print() raises UnicodeEncodeError and the caller
+#                           reads the empty output as failure (ai-brain-starter#313).
+#                           A dedicated lint.yml 'utf8-console-guard' job is
+#                           authoritative in CI; here it runs locally (pure stdlib).
 #
 # It does NOT run the OTHER pure-lint jobs (bash -n, pwsh ParseFile, BOM, em-dash,
 # JSON, privacy, references, no-remote-pipe-install). Those stay as their own
-# lint.yml jobs - they are lint, not the unit/type gate. shellcheck is the one
-# exception: it is the cross-platform CORRECTNESS gate (it catches the GNU-vs-BSD
-# `stat` mtime class), so it is worth enforcing pre-push, not only in CI.
+# lint.yml jobs - they are lint, not the unit/type gate. Two are exceptions,
+# enforced pre-push because they are cross-platform CORRECTNESS gates, not style:
+# the shell static-analysis gate (the GNU-vs-BSD `stat` mtime class) and the UTF-8
+# console guard (the Windows cp1252 print-crash class).
 #
 # Environment the integration tests need (lint.yml provides these in the `ci`
 # job; this script adds a non-invasive fallback so a fresh `bash scripts/ci.sh`
@@ -181,6 +190,10 @@ INTEGRATION_TESTS=(
   test_post_commit_ff_worktrees
   test_write_hook_meeting_folder_i18n
   test_vault_script_sync
+  # UTF-8 console guard (ai-brain-starter#313 follow-up): negative controls prove the
+  # lint FAILS an unguarded non-ASCII-printing CLI and that the guard is load-bearing
+  # under a real cp1252 console; also asserts the real scripts/ tree is clean.
+  test_utf8_console_guard
 )
 # ---- Gate-coverage invariant -------------------------------------------------
 # The list above is an explicit allow-list, and allow-lists rot: a new
@@ -259,5 +272,24 @@ else
   echo "    install: pip install ruff"
 fi
 
+# ---- (e) UTF-8 console guard -----------------------------------------------
+# scripts/check-utf8-stdout.py fails a runnable vault CLI that print()s non-ASCII
+# without the UTF-8 stdout/stderr reconfigure guard - the Windows cp1252 crash
+# class (ai-brain-starter#313: a non-ASCII print raised UnicodeEncodeError, the
+# caller captured an empty string, and read it as "no Meta folder"). Mirrors how
+# the shell static-analysis gate is wired: a dedicated lint.yml 'utf8-console-guard'
+# job is authoritative in CI; here it runs locally so the pre-push gate catches the crash
+# class before a Windows console does. Pure stdlib - no external linter to skip on,
+# so unlike (c)/(d) it always runs locally (and is skipped in CI where the
+# dedicated job owns it, to keep failure attribution clean).
+if [ -n "${GITHUB_ACTIONS:-}" ]; then
+  utf8_note="skipped in CI (dedicated lint.yml 'utf8-console-guard' job runs scripts/check-utf8-stdout.py)"
+  echo "==> (e) utf8 console guard: $utf8_note"
+else
+  echo "==> (e) utf8 console guard: $PY scripts/check-utf8-stdout.py"
+  "$PY" scripts/check-utf8-stdout.py
+  utf8_note="passed"
+fi
+
 echo
-echo "All gates passed: py_compile ($count file(s)) + ${#INTEGRATION_TESTS[@]} integration tests + shellcheck [$shellcheck_note] + phase-doc python [$phasepy_note]."
+echo "All gates passed: py_compile ($count file(s)) + ${#INTEGRATION_TESTS[@]} integration tests + shellcheck [$shellcheck_note] + phase-doc python [$phasepy_note] + utf8 console guard [$utf8_note]."

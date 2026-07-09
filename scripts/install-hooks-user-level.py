@@ -995,4 +995,10 @@ def run_verification(settings: dict, fail_on_missing: bool = False) -> int:
 
 
 if __name__ == "__main__":
+    # Windows cp1252-console safety (#313): force UTF-8 so a non-ASCII print can't crash.
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8")  # Python 3.7+
+        except (AttributeError, ValueError):
+            pass
     sys.exit(main())
