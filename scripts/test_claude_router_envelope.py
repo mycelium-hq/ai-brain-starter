@@ -158,6 +158,86 @@ class EnvelopeGate(unittest.TestCase):
         with self.assertRaises(RouterUnavailable):
             self._run_cli("", returncode=1)
 
+    # --- footprint guard: pure-generation calls load ZERO MCP servers --------
+    def test_cmd_includes_strict_mcp_config_and_json_format(self):
+        # Router calls never invoke MCP tools; --strict-mcp-config (with no
+        # --mcp-config) prevents cold-loading the whole .mcp.json fleet on every
+        # call. Pin it so the footprint fix cannot silently regress.
+        captured = {}
+
+        def fake_run(cmd, **kw):
+            captured["cmd"] = cmd
+            return _Res(_envelope("ok"))
+
+        R.subprocess.run = fake_run
+        R._call_via_cli("/fake/claude", "sys", "usr", "haiku")
+        self.assertIn("--strict-mcp-config", captured["cmd"])
+        self.assertIn("--output-format", captured["cmd"])
+        self.assertIn("json", captured["cmd"])
+
+
+class CallClaudeTextRouting(unittest.TestCase):
+    """The CLI->API fallback loop: a rate-limit is NOT retried on the same
+    account (futile in-window) and its transient signal survives to the caller."""
+
+    def setUp(self):
+        self._orig = (R._resolve_cli, R._resolve_api_key,
+                      R._call_via_cli, R._call_via_api)
+
+    def tearDown(self):
+        (R._resolve_cli, R._resolve_api_key,
+         R._call_via_cli, R._call_via_api) = self._orig
+
+    def test_ratelimit_no_apikey_raises_ratelimit_and_skips_retry(self):
+        calls = {"cli": 0}
+
+        def cli_raises(*a, **k):
+            calls["cli"] += 1
+            raise RateLimitExhausted("weekly limit")
+
+        R._resolve_cli = lambda: "/fake/claude"
+        R._resolve_api_key = lambda: None
+        R._call_via_cli = cli_raises
+        with self.assertRaises(RateLimitExhausted):
+            R.call_claude_text(system="s", user="u", model="haiku")
+        self.assertEqual(calls["cli"], 1)  # rate-limit NOT retried
+
+    def test_ratelimit_with_apikey_falls_to_api_without_retry(self):
+        calls = {"cli": 0, "api": 0}
+
+        def cli_raises(*a, **k):
+            calls["cli"] += 1
+            raise RateLimitExhausted("session limit")
+
+        def api_ok(*a, **k):
+            calls["api"] += 1
+            return "from-api"
+
+        R._resolve_cli = lambda: "/fake/claude"
+        R._resolve_api_key = lambda: "sk-test"
+        R._call_via_cli = cli_raises
+        R._call_via_api = api_ok
+        self.assertEqual(
+            R.call_claude_text(system="s", user="u", model="haiku"), "from-api")
+        self.assertEqual(calls["cli"], 1)  # rate-limit not retried
+        self.assertEqual(calls["api"], 1)
+
+    def test_generic_unavailable_still_retries_then_falls_to_api(self):
+        # A non-rate-limit failure keeps the cheap one-retry insurance.
+        calls = {"cli": 0}
+
+        def cli_raises(*a, **k):
+            calls["cli"] += 1
+            raise RouterUnavailable("network blip")
+
+        R._resolve_cli = lambda: "/fake/claude"
+        R._resolve_api_key = lambda: "sk-test"
+        R._call_via_cli = cli_raises
+        R._call_via_api = lambda *a, **k: "from-api"
+        self.assertEqual(
+            R.call_claude_text(system="s", user="u", model="haiku"), "from-api")
+        self.assertEqual(calls["cli"], 2)  # retried once, THEN API
+
 
 if __name__ == "__main__":
     sys.exit(0 if unittest.main(exit=False).result.wasSuccessful() else 1)

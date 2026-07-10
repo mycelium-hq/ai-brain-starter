@@ -226,6 +226,11 @@ def _call_via_cli(
         "--no-session-persistence",
         "--disable-slash-commands",
         "--dangerously-skip-permissions",
+        # Router calls are pure text/JSON generation — none invoke MCP tools.
+        # Without this, `claude -p` cold-loads the whole project .mcp.json fleet
+        # on EVERY call (slow + heavy footprint). With no --mcp-config alongside
+        # it, --strict-mcp-config loads ZERO MCP servers.
+        "--strict-mcp-config",
     ]
     _log(f"calling via CLI ({cli}, model={model})")
     try:
@@ -382,6 +387,7 @@ def call_claude_text(
     prefer_api = os.environ.get("CLAUDE_ROUTER_PREFER_API_KEY") == "1"
 
     cli = None if prefer_api else _resolve_cli()
+    last_ratelimit: RateLimitExhausted | None = None
     if cli is not None:
         # One retry: an unattended `claude -p` (cron, launchd, agent) can
         # intermittently hang or return a stale-OAuth refusal on the first
@@ -391,6 +397,15 @@ def call_claude_text(
         for cli_attempt in range(1, cli_attempts + 1):
             try:
                 return _call_via_cli(cli, system, user, model)
+            except RateLimitExhausted as e:
+                # Retrying the SAME account inside its limit window is futile.
+                # Skip straight to the API-key tier, and remember the signal so
+                # a caller with no API key gets RateLimitExhausted (transient,
+                # retry after reset) rather than a misleading "no CLI" error.
+                # MUST precede the RouterUnavailable handler (it is a subclass).
+                last_ratelimit = e
+                _log(f"CLI rate-limited; not retrying, trying API fallback: {e}")
+                break
             except RouterUnavailable as e:
                 if cli_attempt < cli_attempts:
                     _log(f"CLI attempt {cli_attempt}/{cli_attempts} failed "
@@ -402,6 +417,12 @@ def call_claude_text(
     api_key = _resolve_api_key()
     if api_key is not None:
         return _call_via_api(api_key, system, user, model, max_tokens, cache_system)
+
+    if last_ratelimit is not None:
+        # Every CLI path was rate-limited and no API key is configured. Surface
+        # the transient signal so a scheduled caller can back off and retry
+        # after the window resets, not treat this as a hard config failure.
+        raise last_ratelimit
 
     raise RouterUnavailable(
         "no claude CLI and no ANTHROPIC_API_KEY — install `claude` "
