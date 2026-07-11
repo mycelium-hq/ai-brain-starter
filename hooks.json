@@ -279,6 +279,11 @@
             "type": "command",
             "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/surface-deployed-hooks-behind.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
             "statusMessage": "Checking deployed hooks match what was pulled (deploy-fails-open drift)..."
+          },
+          {
+            "type": "command",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/scripts/heal-journal-guard.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "statusMessage": "Self-healing the /journal Step-0 context guard (registration + vault preflight)..."
           }
         ]
       }

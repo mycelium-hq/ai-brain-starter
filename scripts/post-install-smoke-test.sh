@@ -162,6 +162,31 @@ else
   warn "dev-hub-refresh-on-session-start.py not present"
 fi
 
+# === 4c. Journal Step-0 context-guard self-heal (2026-07-07) ===
+# The SessionStart self-heal that re-derives the /journal context guard from the
+# vault-synced substrate on every session, so a stale account cannot silently skip
+# Step 0. --self-test carries the pos/neg + repair controls; the direct negative
+# control here proves the check BITES on an unprotected settings.json.
+hdr "Journal-guard self-heal"
+HEALER="$SKILL_DIR/scripts/heal-journal-guard.py"
+if [[ -f "$HEALER" ]]; then
+  if python3 "$HEALER" --self-test >/dev/null 2>&1; then
+    ok "heal-journal-guard.py --self-test (registration + preflight controls)"
+  else
+    fail "heal-journal-guard.py --self-test failed"
+  fi
+  NEG_SET=$(mktemp)
+  printf '%s' '{"hooks": {}}' > "$NEG_SET"
+  if python3 "$HEALER" --check-only --settings "$NEG_SET" >/dev/null 2>&1; then
+    fail "self-heal --check-only PASSED an unprotected settings.json (guard asleep)"
+  else
+    ok "self-heal --check-only trips on an unprotected account (exit 1)"
+  fi
+  rm -f "$NEG_SET"
+else
+  warn "heal-journal-guard.py not present"
+fi
+
 # === 5. Aggregator smoke ===
 hdr "Aggregator scripts"
 for s in aggregate-sessions.py aggregate-decisions.py rotate-meta-archives.py; do

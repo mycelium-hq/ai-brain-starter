@@ -109,6 +109,12 @@ ABS_FINGERPRINTS = [
     # Client-side deployed==committed drift detector (MYC-2507): surfaces when this
     # deploy step itself failed silently and settings.json fell behind hooks.json.
     "ai-brain-starter/hooks/surface-deployed-hooks-behind.py",
+    # Journal Step-0 context guard (2026-07-07) + its SessionStart self-heal. OWNED so
+    # the installer dedups the guard (skill-path vs a ~/.claude/hooks/ copy) PER MATCHER,
+    # verifies both scripts on disk, and can retire/relocate them. Registered under two
+    # matchers each; the matcher-aware merge above keeps both copies.
+    "ai-brain-starter/hooks/warn-journal-saved-without-context.py",
+    "ai-brain-starter/scripts/heal-journal-guard.py",
 ]
 
 # Path-divergence-robust matching: an ai-brain-starter hook may be wired at the
@@ -134,6 +140,8 @@ ABS_OWNED_BASENAMES = {
     "session-start-context.py", "inject-instinct-context.py",
     # Client-side deployed==committed drift detector (MYC-2507):
     "surface-deployed-hooks-behind.py",
+    # Journal Step-0 context guard + its SessionStart self-heal (2026-07-07):
+    "warn-journal-saved-without-context.py", "heal-journal-guard.py",
 }
 
 # Hooks ai-brain-starter USED TO ship and has deliberately RETIRED. The
@@ -483,14 +491,24 @@ def merge_hooks(existing: dict, new_template: dict) -> tuple[dict, dict]:
         existing_groups = merged["hooks"][event]
         # Collect all ABS-owned commands from new template (flattened)
         for new_group in new_groups:
+            # A hook is identified by (matcher, command): the SAME command under two
+            # DIFFERENT matchers is two DISTINCT registrations, not a duplicate. The
+            # journal-context guard and observe-tool-calls both ship one byte-identical
+            # command under two matchers; a matcher-BLIND dedup collapsed the second copy
+            # into the first, so a fresh install landed the guard under Bash only and
+            # left Write|Edit|MultiEdit journal saves unguarded. Scope every replace /
+            # dedup decision below to groups carrying THIS matcher.
+            matcher = new_group.get("matcher")
             new_hooks = new_group.get("hooks", [])
             for new_hook in new_hooks:
                 cmd = new_hook.get("command", "")
                 if not cmd:
                     continue
-                # Look for this command in any existing group
+                # Look for this command in an existing group WITH THE SAME MATCHER.
                 replaced = False
                 for eg in existing_groups:
+                    if eg.get("matcher") != matcher:
+                        continue
                     eg_hooks = eg.get("hooks", [])
                     for i, eh in enumerate(eg_hooks):
                         eh_cmd = eh.get("command", "")
@@ -505,7 +523,6 @@ def merge_hooks(existing: dict, new_template: dict) -> tuple[dict, dict]:
 
                 if not replaced:
                     # Find or create a group with the same matcher (if any)
-                    matcher = new_group.get("matcher")
                     target_group = None
                     for eg in existing_groups:
                         if eg.get("matcher") == matcher:
