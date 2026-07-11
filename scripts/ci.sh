@@ -194,6 +194,10 @@ INTEGRATION_TESTS=(
   # lint FAILS an unguarded non-ASCII-printing CLI and that the guard is load-bearing
   # under a real cp1252 console; also asserts the real scripts/ tree is clean.
   test_utf8_console_guard
+  # Journal Step-0 context-guard self-heal (2026-07-07): end-to-end proof the
+  # SessionStart repair restores an unprotected account (registration under both
+  # matchers + vault preflight) and no-ops on a healthy one, with pos/neg controls.
+  test_heal_journal_guard
 )
 # ---- Gate-coverage invariant -------------------------------------------------
 # The list above is an explicit allow-list, and allow-lists rot: a new
