@@ -320,7 +320,9 @@ def main() -> int:
 
         # Count only scratch worktrees for the cap warning; deliberate sibling
         # worktrees (~/dev/<repo>-<slug>) are not part of the pileup problem.
-        registered = sum(1 for w in list_worktrees(main_repo) if is_scratch_worktree(w))
+        registered = sum(
+            1 for w in (list_worktrees(main_repo) or []) if is_scratch_worktree(w)
+        )
 
         wt_dir = main_repo / WORKTREES_SEG
         on_disk = 0
