@@ -36,6 +36,18 @@
 #                           reads the empty output as failure (ai-brain-starter#313).
 #                           A dedicated lint.yml 'utf8-console-guard' job is
 #                           authoritative in CI; here it runs locally (pure stdlib).
+#   (f) Python unit tests - the scripts/test_*.py stdlib suites (the claude-router
+#                           structured-envelope gate, the graph-liveness
+#                           STAMP-GREEN-WHILE-GONE guard). Gate (a) py_compiles them,
+#                           which proves they PARSE but never that their asserts RUN;
+#                           a suite that compiles but never executes is a false green
+#                           (revert the code it guards and the gate stays green -
+#                           MYC-2922). scripts/test_*.py runs as a GLOB (a new one can
+#                           never go dormant); hooks/test_*.py + tests/test_*.py are
+#                           guarded by a coverage invariant so a new one must be wired
+#                           to run (wrapper or direct) or the gate fails (MYC-2959).
+#                           Unlike (c)/(d)/(e) it has no dedicated CI job, so it runs
+#                           in BOTH CI and the local pre-push gate (like (a) and (b)).
 #
 # It does NOT run the OTHER pure-lint jobs (bash -n, pwsh ParseFile, BOM, em-dash,
 # JSON, privacy, references, no-remote-pipe-install). Those stay as their own
@@ -296,5 +308,64 @@ else
   utf8_note="passed"
 fi
 
+# ---- (f) Python unit tests (scripts/ + hooks/ + tests/) --------------------
+# Every Python unit suite in the repo, run under the SAME interpreter as the rest
+# of the gate. Gate (a) py_compiles them (proves they parse); this proves their
+# asserts RUN. scripts/test_*.py is a pure GLOB (a new one runs automatically, can
+# never sit dormant - the false-green class MYC-2922 closes); hooks/+tests/ suites
+# split between integration-wrapper-driven and direct-run, guarded by a coverage
+# invariant below (MYC-2959). No dedicated lint.yml job, so (unlike c/d/e) it runs
+# in CI too. `set -e` aborts on the first failing suite (stop-on-first-failure).
+echo "==> (f) Python unit tests: scripts/test_*.py  [$("$PY" --version 2>&1)]"
+unit_count=0
+while IFS= read -r -d '' t; do
+  unit_count=$((unit_count + 1))
+  echo "--- $t"
+  "$PY" "$t"
+done < <(git ls-files -z -- 'scripts/test_*.py')
+if [ "$unit_count" -eq 0 ]; then
+  echo "::error::no scripts/test_*.py matched - the unit-test glob is empty (did the suites move or get renamed?)"
+  exit 1
+fi
+echo "    OK - $unit_count scripts/ unit suite(s) passed"
+
+# hooks/ + tests/ Python suites: unlike scripts/ (a pure glob), these split into two
+# run paths - some are driven by a tests/integration/*.sh wrapper (already in the
+# section (b) allow-list), the rest must run directly here. So a bare glob would
+# DOUBLE-run the wrapped ones. Instead a coverage invariant (mirrors the section (b)
+# allow-list invariant, L203-224) asserts every hooks/test_*.py + tests/test_*.py is
+# EITHER wrapper-referenced OR in PY_DIRECT below; a suite in neither is dormant and
+# fails the gate LOUD (the false-green class MYC-2922 closed for scripts/, MYC-2959
+# for hooks/+tests/). PY_DIRECT then runs the non-wrapped suites exactly once.
+PY_DIRECT=(
+  tests/test_instinct.py
+  hooks/test_live_session_reap.py
+  hooks/test_relocation_orphan_reclaim.py
+)
+dormant_py=()
+while IFS= read -r -d '' f; do
+  base="$(basename "$f")"
+  # covered by a tests/integration/*.sh wrapper (proxy: the wrapper names the file)?
+  if grep -qF -- "$base" tests/integration/*.sh 2>/dev/null; then continue; fi
+  in_direct=0
+  for d in "${PY_DIRECT[@]}"; do [ "$d" = "$f" ] && { in_direct=1; break; }; done
+  [ "$in_direct" -eq 1 ] && continue
+  dormant_py+=("$f")
+done < <(git ls-files -z -- 'hooks/test_*.py' 'tests/test_*.py')
+if [ "${#dormant_py[@]}" -gt 0 ]; then
+  echo "::error::dormant Python test suite(s) — none runs in any CI job. Run each via a tests/integration/*.sh wrapper or add it to PY_DIRECT in scripts/ci.sh: ${dormant_py[*]}"
+  exit 1
+fi
+echo "==> (f cont.) hooks/ + tests/ direct-run suites: ${#PY_DIRECT[@]}"
+for t in "${PY_DIRECT[@]}"; do
+  if [ ! -f "$t" ]; then
+    echo "::error::PY_DIRECT names a missing suite (moved/renamed?): $t"
+    exit 1
+  fi
+  echo "--- $t"
+  "$PY" "$t"
+done
+echo "    OK - ${#PY_DIRECT[@]} hooks/+tests/ direct suite(s) passed; dormancy invariant clean"
+
 echo
-echo "All gates passed: py_compile ($count file(s)) + ${#INTEGRATION_TESTS[@]} integration tests + shellcheck [$shellcheck_note] + phase-doc python [$phasepy_note] + utf8 console guard [$utf8_note]."
+echo "All gates passed: py_compile ($count file(s)) + ${#INTEGRATION_TESTS[@]} integration tests + $unit_count scripts/ + ${#PY_DIRECT[@]} hooks/tests unit suite(s) + shellcheck [$shellcheck_note] + phase-doc python [$phasepy_note] + utf8 console guard [$utf8_note]."
