@@ -36,6 +36,16 @@
 #                           reads the empty output as failure (ai-brain-starter#313).
 #                           A dedicated lint.yml 'utf8-console-guard' job is
 #                           authoritative in CI; here it runs locally (pure stdlib).
+#   (f) Python unit tests - the scripts/test_*.py stdlib suites (the claude-router
+#                           structured-envelope gate, the graph-liveness
+#                           STAMP-GREEN-WHILE-GONE guard). Gate (a) py_compiles them,
+#                           which proves they PARSE but never that their asserts RUN;
+#                           a suite that compiles but never executes is a false green
+#                           (revert the code it guards and the gate stays green -
+#                           MYC-2922). Run as a GLOB so a newly added scripts/test_*.py
+#                           runs automatically and can never go dormant. Unlike
+#                           (c)/(d)/(e) it has no dedicated CI job, so it runs in BOTH
+#                           CI and the local pre-push gate (like (a) and (b)).
 #
 # It does NOT run the OTHER pure-lint jobs (bash -n, pwsh ParseFile, BOM, em-dash,
 # JSON, privacy, references, no-remote-pipe-install). Those stay as their own
@@ -296,5 +306,26 @@ else
   utf8_note="passed"
 fi
 
+# ---- (f) Python unit tests (scripts/test_*.py) -----------------------------
+# The scripts/test_*.py stdlib suites, run under the SAME interpreter as the rest
+# of the gate. Gate (a) py_compiles them (proves they parse); this proves their
+# asserts RUN. A GLOB, not an allow-list: a newly added scripts/test_*.py runs
+# automatically and can never sit dormant - the false-green class MYC-2922 closes.
+# It has no dedicated lint.yml job, so (unlike c/d/e) it runs in CI too. `set -e`
+# aborts on the first failing suite (stop-on-first-failure, like the integration
+# gate). The empty-glob guard fails loud rather than silently passing zero tests.
+echo "==> (f) Python unit tests: scripts/test_*.py  [$("$PY" --version 2>&1)]"
+unit_count=0
+while IFS= read -r -d '' t; do
+  unit_count=$((unit_count + 1))
+  echo "--- $t"
+  "$PY" "$t"
+done < <(git ls-files -z -- 'scripts/test_*.py')
+if [ "$unit_count" -eq 0 ]; then
+  echo "::error::no scripts/test_*.py matched - the unit-test glob is empty (did the suites move or get renamed?)"
+  exit 1
+fi
+echo "    OK - $unit_count scripts/ unit suite(s) passed"
+
 echo
-echo "All gates passed: py_compile ($count file(s)) + ${#INTEGRATION_TESTS[@]} integration tests + shellcheck [$shellcheck_note] + phase-doc python [$phasepy_note] + utf8 console guard [$utf8_note]."
+echo "All gates passed: py_compile ($count file(s)) + ${#INTEGRATION_TESTS[@]} integration tests + $unit_count scripts/ unit suite(s) + shellcheck [$shellcheck_note] + phase-doc python [$phasepy_note] + utf8 console guard [$utf8_note]."

@@ -284,7 +284,7 @@ jobs:
           exit $fail
 
   ci:
-    name: ci gate (py_compile + integration tests)
+    name: ci gate (py_compile + unit + integration tests)
     runs-on: ubuntu-latest
     # The repo's unit/type gate, consolidated into ONE command - scripts/ci.sh -
     # so this workflow and the local pre-push gate (~/.local/bin/ci-test, which
