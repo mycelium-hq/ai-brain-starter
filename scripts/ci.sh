@@ -157,6 +157,7 @@ INTEGRATION_TESTS=(
   test_vault_backup_conf_bom
   test_resource_aware_session_close
   test_cloud_sync_guard
+  test_cloud_safe_file_walkers
   test_cloud_sync_offer
   test_worktree_on_vault_guard
   test_machinery_sidecar

@@ -44,6 +44,7 @@ Your message when this rule triggers.
 | `fact-check-template` | block | Template for catching specific misattributions or wrong facts |
 | `public-repo-firewall` | block | Personal names/data leaking into public repos |
 | `dangerous-rm` | block | `rm -rf` commands without confirmation |
+| `warn-filesystem-walk-without-bounded-read` | warn | Recursive Python content walkers missing the shared bounded read |
 
 ## Authoring guide and regression harness
 
