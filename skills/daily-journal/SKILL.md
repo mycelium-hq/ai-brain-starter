@@ -162,7 +162,7 @@ Read the ⭐ FAMILY / PARTNER threads BEFORE the work chatter — that is the pa
 
 Do NOT ask the opener until the preflight ran AND every MCP pull it listed is done. A contextless journal — no calendar, no messages, no activity — is the exact failure this kills (2026-07-07 incident: the model skipped Step 0 and the user had to ask "why didn't you pull everything?"). If a fetcher isn't installed on this vault, the preflight says so and you proceed honestly with what it got — but you STILL run it. At save time the entry frontmatter MUST carry a `context_sources:` block naming every source folded in; `warn-journal-saved-without-context.py` fires if a journal is written for a day whose preflight marker is missing.
 
-**0-pre. Read the journal config (mandatory).** Look for `⚙️ Meta/journal-config.md` (or `Meta/journal-config.md` if the vault doesn't use emoji-prefixed Meta). Parse the `data_sources:` frontmatter block.
+**0-pre. Read the journal config (mandatory).** Look for `⚙️ Meta/journal-config.md` (or `Meta/journal-config.md` if the vault doesn't use emoji-prefixed Meta). Parse the `data_sources:` frontmatter block, and read `filename_format:` (`descriptive` | `date` | `date-title`; default `descriptive` when absent or the file doesn't exist yet) — apply it at every save (Steps 1.5 and 7).
 
 If the file does not exist, copy `templates/journal-config.md` from this skill's repo into the vault and ask the user once:
 
@@ -289,7 +289,7 @@ Capture their answer. After saving the journal entry (Step 9), update the weekly
 - **Floor tag + `## Concepts`:** best-effort from the current content.
 - **No `## Panel dialogue` section yet** — it is added at enrichment (Step 7) only if the panel actually runs. A captured-and-abandoned entry simply has no panel section, and that is a valid, complete entry.
 
-**Save it the same way Step 7 saves** (Bash `cat` heredoc into the monthly subfolder, then verify the file exists — never fail silently). Pick the filename now from the initial content using Step 7's descriptive-title rule. You may refine the filename later ONLY if the day's theme clearly shifts — rename in place, never create a second file.
+**Save it the same way Step 7 saves** (Bash `cat` heredoc into the monthly subfolder, then verify the file exists — never fail silently). Pick the filename now from the initial content using Step 7's filename rule (honoring `filename_format` from the config). You may refine the filename later ONLY if the day's theme clearly shifts — rename in place, never create a second file.
 
 **Don't announce the save as a production.** A light "Got it — saved." is enough, then flow into Step 2. The floor under them is already there; they don't need to feel the mechanics.
 
@@ -558,10 +558,12 @@ Wait for explicit confirmation, then update the file (Step 7). Showing panel con
 - Write: `cat > "/full/path/file.md" << 'EOF' ... EOF`
 - Read/verify: `cat "/full/path/file.md"` or `ls -la "/full/path/file.md"`
 
-**Filename format:** Create a descriptive title from the content (5-8 words, Title Case), like:
-- "Ranch Weekend Dad Health Worries.md"
-- "Great Team Meeting Feeling Momentum.md"
-- "Mom Visit Kept Cool This Time.md"
+**Filename format:** Honor `filename_format` from `journal-config.md` (read at Step 0-pre; default `descriptive`):
+- **`descriptive`** (default): a 5-8 word Title Case summary of the content, e.g. "Ranch Weekend Dad Health Worries.md", "Great Team Meeting Feeling Momentum.md", "Mom Visit Kept Cool This Time.md".
+- **`date`**: the entry's date, `YYYY-MM-DD.md` (e.g. "2026-04-11.md").
+- **`date-title`**: date prefix + a short 2-4 word title, e.g. "2026-04-11 Ranch Weekend.md".
+
+If the vault's `CLAUDE.md` states a filename rule, it wins — `filename_format` should already match it; if they ever disagree, follow `CLAUDE.md`.
 
 **Entry format:**
 

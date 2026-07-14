@@ -79,7 +79,7 @@ Read these sources in parallel (skip any set to `none` in prefs):
 - The last-session file — what was just worked on
 - The decision log — last 10–15 entries (look for repeating decision types)
 - Any content drafts or writing drafts — recent drafts (look for recurring metaphors)
-- Last 7 journal entries (if a `journal-index.json` exists in the journal folder, use it; otherwise read directly)
+- Last 7 journal entries (if a `journal-index.json` exists in the vault's Meta folder (`⚙️ Meta/` or `Meta/`), use it; otherwise read directly)
 
 If a weekly review was just run, its output is already in context — use that, don't re-scan journals.
 
