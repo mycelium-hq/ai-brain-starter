@@ -341,6 +341,7 @@ PY_DIRECT=(
   tests/test_instinct.py
   hooks/test_live_session_reap.py
   hooks/test_relocation_orphan_reclaim.py
+  hooks/test_secret_patterns_fp_filter.py
 )
 dormant_py=()
 while IFS= read -r -d '' f; do
