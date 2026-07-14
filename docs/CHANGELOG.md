@@ -9,6 +9,33 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-07-14: the journal now tracks how you MOVE between floors, not just where you stand
+
+**Who this affects:** everyone who uses `/journal`, `/weekly`, or `/monthly`.
+
+**What changed and why:** naming your floor is a point; a year of floors is a map of how you actually move — what pulls you down, what pulls you back up, where you loop. The journal now captures that movement, and the insight reports read it.
+
+**In `/journal` (daily-journal skill):**
+
+- **The door.** Every session now ends with ONE small, dated, physical action matched to your floor — and tomorrow's session opens by asking if it happened. A named floor without a next move produces articulate stuck people; the map now always comes with a door. Includes a guard for floors that deserve *time* rather than exits (fresh grief gets a container — "ten minutes to feel this fully" — not an escape plan).
+- **Body-first check.** Low floors usually arrive body-first, story-second. Before the journal accepts "it's about the meeting," it checks sleep, food, movement, and sunlight — and tells you when the floor might be physiology, not psychology.
+- **Shadow-twin probe.** Before tagging Acceptance, Neutrality, Peace, or Pride, one distinguishing question ("if this could change tomorrow, would you want it to?") — because Resignation feels like Acceptance from the inside, and the mislabel is how people stay stuck for years.
+- **Movement capture.** New frontmatter records yesterday's floor, WHY the floor changed (body / witness / rupture / rope / role / story), and — when something pulled you up from a low floor — what the rope was. Over months this builds your personal rope inventory: the things that reliably work for YOU.
+- **Crisis protocol, formalized.** The "crisis-tier override" other steps referenced now has a full definition: stop all mechanics, witness first, ask the nearest-rope question, surface a support line once, save their words verbatim.
+- **Hand the naming back.** After ~30 entries, roughly weekly, you name the floor before Claude does. The journal trains the muscle instead of becoming it.
+
+**In `/weekly` and `/monthly` (insights skill) — new section 0e, the Movement report:**
+
+- Your personal **transition map** (your Fear goes to Frustration, not Shame — everyone's wiring differs)
+- **Loop detection** with mechanism classes (protective / structural / physiological) — loops need their mechanism addressed, not the floor's generic way out
+- **Resilience direction** — after each dip, did you land higher than before or snap back to the stuck place? Speed means nothing without direction; this trend is the single most important line in the report
+- **Body-attribution rate** ("5 of your 7 low-floor days were underslept days")
+- **Rope inventory** and **door completion rate** (the insight-vs-action gauge: "you named the floor 12 times and walked through the door 3 times — the map is not the walking")
+
+The standalone `claude-daily-journal` plugin got the same journal-skill changes in its 1.4.0 (kept in sync).
+
+---
+
 ## 2026-07-05: your vault's hooks no longer silently die when a Python plugin is present
 
 **Who this affects:** everyone installing — especially workshop rooms. Found on a test install the day before a workshop.

@@ -205,6 +205,21 @@ If `health_lab_panel(today)` returns ANY marker with `status: low` or `status: h
 
 Use the `curious` register: observation + question. Do NOT use `clinical` for this section even though the data is clinical. The reader is reading their own life, not a chart review. The data is the input; the question is the load-bearing artifact.
 
+### 0e. Movement report (transitions, loops, resilience direction, ropes, doors)
+
+**A floor is a point; a period of floors is a vector field.** This section reads the movement frontmatter the daily-journal skill records (`floor_yesterday`, `moved_because`, `body_check`, `rope`, `door`, `door_prev`) and reports on motion, not position. If fewer than ~10 entries carry these fields yet, write one line ("movement data is still thin — [X] entries carry it") and report only what's real. Never fabricate transitions from entries that lack the fields.
+
+**Compute (by script against the index/frontmatter, never hand-counted):**
+
+1. **Transition pairs** — from consecutive entries (and `floor_yesterday` where present): which floors lead to which for THIS user. Surface the top 2-3 recurring transitions: "Your Fear goes to Frustration (4 of 5 times), not to Shame. That's your wiring — the generic map doesn't apply to you."
+2. **Loop detection** — a 2-3 floor cycle appearing 3+ times in the period (or vs. baseline months). Cross-reference each loop with people mentions, topics, and calendar position (same week of month? same season? cycle-phase if health data exists). Name the loop AND its likely mechanism class: protective (guarding a worse floor underneath), structural (same person/context keeps rebuilding it), or physiological (calendar/cycle-coupled). The mechanism matters more than the floors: loops need the mechanism addressed, not the floor's generic "way out."
+3. **Resilience direction (not just speed)** — for each low-floor dip (floor ≤ 18 after a higher entry): where did the next 1-3 entries land? Above the pre-dip baseline, back at it, or at a recurring stuck floor? Fast-back-to-stuck is reactivity, not resilience — the stopwatch can't tell them apart, the direction can. Report the period's bounces and, monthly, the trend: "Your bounces this quarter land on Willingness; in March they landed back on Resignation. That's the single most important line in this report."
+4. **Body-attribution rate** — of the period's low-floor entries, what fraction had 2+ "no" values in `body_check`? "5 of your 7 low-floor days were underslept days. Before working on the psychology, protect the sleep."
+5. **Rope inventory** — aggregate `rope:` values across all time (not just the period). These are the user's proven handholds. Surface as a short list in the report AND append new ropes to the relevant floor notes' Personal Patterns: "What has actually pulled you up: the dogs (6×), walking (4×), calling [person] (2×)."
+6. **Door completion rate** — doors set vs. `door_prev: done`. This is the insight-vs-action gauge: a high floor-naming accuracy with a low door rate means the journal is producing articulate stuckness. Say so directly (coach voice): "You named the floor correctly 12 times and walked through the door 3 times. The map is not the walking."
+
+**Banned shapes:** transition claims from non-consecutive entries presented as consecutive; calling a fast return to a low baseline "resilient"; prescribing a floor's generic way-out for a loop without naming the loop's mechanism; padding this section when the data is thin.
+
 ### 1. The week/month at a glance (DEMOTED — appendix-level)
 - How many entries (and any gaps, gaps often mean good stretches)
 - Floor distribution: how many entries on each floor, primary floor for the period
