@@ -69,12 +69,18 @@ def find_schemas_dir() -> Path:
 
 
 def load_schema(schema_path: Path) -> dict:
-    with schema_path.open("r", encoding="utf-8") as f:
-        return json.load(f)
+    # Bounded read (shared safe_read): a schema on a cloud-synced vault could be a
+    # placeholder or a stalled mount; never block on it (cloud-safe walker ratchet).
+    res = safe_read_text(schema_path, timeout=5.0, max_bytes=1_000_000)
+    if not res.ok:
+        raise OSError(f"cannot read schema {schema_path}: {res.status} {res.detail}")
+    return json.loads(res.text or "")
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _meta_resolver import find_meta_dir as _find_meta_dir_helper  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+from _lib.safe_read import safe_read_text  # noqa: E402
 
 
 def find_meta_dir(vault: Path) -> Path:
@@ -139,8 +145,8 @@ def validate_against_schema(data: dict, schema: dict) -> list[str]:
     """Lightweight JSON-schema validator (no jsonschema dependency).
 
     Supports: type, const, enum, pattern, required, properties, oneOf,
-    minimum, maximum, minLength. Sufficient for our schemas; no need to
-    pull in the full jsonschema package.
+    minimum, maximum, minLength, items, minItems, maxItems. Sufficient for
+    our schemas; no need to pull in the full jsonschema package.
     """
     errors: list[str] = []
     return _validate(data, schema, "", errors) or errors
@@ -190,6 +196,15 @@ def _validate(value: Any, schema: dict, path: str, errors: list[str]) -> list[st
         if len(value) < schema["minLength"]:
             errors.append(f"{path or '(root)'}: length {len(value)} < minLength {schema['minLength']}")
 
+    if isinstance(value, list):
+        if "minItems" in schema and len(value) < schema["minItems"]:
+            errors.append(f"{path or '(root)'}: {len(value)} items < minItems {schema['minItems']}")
+        if "maxItems" in schema and len(value) > schema["maxItems"]:
+            errors.append(f"{path or '(root)'}: {len(value)} items > maxItems {schema['maxItems']}")
+        if isinstance(schema.get("items"), dict):
+            for i, item in enumerate(value):
+                _validate(item, schema["items"], f"{path}[{i}]", errors)
+
     if isinstance(value, dict):
         for req in schema.get("required", []):
             if req not in value:
@@ -205,10 +220,13 @@ def validate_file(file_path: Path, schema: dict, schema_name: str, fix: bool = F
     """Return (errors, warnings) for one file."""
     errors: list[str] = []
     warnings: list[str] = []
-    try:
-        text = file_path.read_text(encoding="utf-8")
-    except OSError as e:
-        return ([f"{file_path}: cannot read ({e})"], [])
+    # Bounded read (shared safe_read): the linter walks the vault, which may live
+    # on a cloud mount; a per-file daemon+timeout means one placeholder can never
+    # wedge the whole lint (cloud-safe-file-walkers ratchet).
+    res = safe_read_text(file_path, timeout=5.0, max_bytes=1_000_000)
+    if not res.ok:
+        return ([f"{file_path}: cannot read ({res.status})"], [])
+    text = res.text or ""
     fm, fm_err = extract_frontmatter(text)
     if fm_err:
         errors.append(f"{file_path}: {fm_err}")
@@ -296,6 +314,16 @@ def run_self_test() -> int:
         (
             "journal floor out of range",
             "creationDate: 2026-04-30\nfloor: 99\n",
+            "journal", False,
+        ),
+        (
+            "journal floor as array (elevator emotion)",
+            "creationDate: 2026-04-30\nfloor: [Gratitude, Excitement]\n",
+            "journal", True,
+        ),
+        (
+            "journal floor empty array (rejected)",
+            "creationDate: 2026-04-30\nfloor: []\n",
             "journal", False,
         ),
     ]

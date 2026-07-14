@@ -14,9 +14,10 @@
     "floor": {
       "oneOf": [
         {"type": "integer", "minimum": 1, "maximum": 34},
-        {"type": "string", "minLength": 1}
+        {"type": "string", "minLength": 1},
+        {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1, "maxItems": 3}
       ],
-      "description": "Floor framework level (numeric 1-34 or named)"
+      "description": "Floor framework level: numeric 1-34, a named floor, or an array of 1-3 named floors for elevator emotions (e.g. [Gratitude, Excitement]) — first element is dominant. Matches daily-journal SKILL.md, which instructs the array form for dual/elevator floors."
     },
     "tags": {
       "type": ["array", "string", "null"],
