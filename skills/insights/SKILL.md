@@ -24,7 +24,7 @@ Journal entries are in: `[VAULT_PATH]/Journals/`
 **DO NOT grep thousands of files.** Use the journal index instead.
 
 ### Step 0: Load the journal index
-Read `[VAULT_PATH]/Meta/journal-index.json`. Structure: `{"total": N, "last_updated": "YYYY-MM-DD", "entries": [{file, date, floor, floor_level}, ...]}`. Access entries via `idx["entries"]`, then filter by `entry["date"]`.
+Read `[VAULT_PATH]/⚙️ Meta/journal-index.json` (or `[VAULT_PATH]/Meta/journal-index.json` on vaults without an emoji-prefixed Meta — the same folder `build-journal-index.py` writes to). Structure: `{"total": N, "last_updated": "YYYY-MM-DD", "entries": [{file, date, floor, floor_level}, ...]}`. Access entries via `idx["entries"]`, then filter by `entry["date"]`.
 
 If the index doesn't exist or is more than 7 days old, rebuild it first:
 ```bash
