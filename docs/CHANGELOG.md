@@ -9,6 +9,20 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-07-14: the secret detector stopped crying wolf over container IDs and migration checksums
+
+**Who this affects:** everyone — a detector that flags things that aren't secrets teaches you to stop trusting its real alerts.
+
+**The bug:** the secret detector cried wolf 16 times in one session over things that are not secrets: the ID Docker prints when it starts a container, and the checksums a database migration table stores.
+
+**The fix:** those two exact shapes are now recognized by their command context and quietly recorded instead of alarmed. Everything else — including a real secret printed in the same output — still alarms. The scrubbing and scanning layers that protect your session files were not loosened at all.
+
+**New test:** `hooks/test_secret_patterns_fp_filter.py`, run directly by `scripts/ci.sh`'s Python unit-test gate.
+
+**What you should do:** nothing. Update as usual.
+
+---
+
 ## 2026-07-14: the journal now tracks how you MOVE between floors, not just where you stand
 
 **Who this affects:** everyone who uses `/journal`, `/weekly`, or `/monthly`.
