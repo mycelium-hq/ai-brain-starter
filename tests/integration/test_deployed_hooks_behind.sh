@@ -159,11 +159,15 @@ else bad "skill-content drift went silent or unnamed" "$(printf '%s' "$OUT" | he
 cp "$SKILLCLONE/skills/daily-journal/SKILL.md" "$INST/daily-journal/SKILL.md"
 run_hook "$SKILLCLONE" "/nonexistent/settings.json" "$INST"
 if ! fired; then ok "a synced bare copy stays silent (skill-drift neg-control)"; else bad "cried wolf on a synced copy" "$(printf '%s' "$OUT" | head -c 300)"; fi
-# DIRECTIONAL: a bare copy that LEADS upstream is never nagged as behind.
+# AHEAD: a bare copy AHEAD of canonical is a trapped improvement -> FIRES as
+# "upstream this so clients get it", and must NOT tell the user to sync it down.
 printf '## Setup\nx\n## Local Only Section\nmine\n### Step 7\ny\n' > "$INST/daily-journal/SKILL.md"
 printf '## Setup\nx\n### Step 7\ny\n' > "$SKILLCLONE/skills/daily-journal/SKILL.md"
 run_hook "$SKILLCLONE" "/nonexistent/settings.json" "$INST"
-if ! fired; then ok "a bare copy that LEADS upstream is not nagged (directional)"; else bad "nagged a leading copy" "$(printf '%s' "$OUT" | head -c 300)"; fi
+if fired && mentions 'Ahead of canonical' && mentions 'daily-journal'; then
+  ok "a copy AHEAD of canonical fires as upstream-this (not silent)"
+else bad "an ahead copy went silent or unnamed" "$(printf '%s' "$OUT" | head -c 300)"; fi
+if printf '%s' "$OUT" | grep -qi 'upstream'; then ok "ahead message frames it as upstream, so the improvement reaches clients"; else bad "ahead message did not say upstream"; fi
 
 echo
 echo "=== summary: $PASS passed, $FAIL failed ==="

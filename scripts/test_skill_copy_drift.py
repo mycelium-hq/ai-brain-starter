@@ -169,18 +169,39 @@ class ClassifyDriftTests(unittest.TestCase):
         d = self._by_name(SS.classify_drift(self.clone, self.install))["daily-journal"]
         self.assertEqual(d["status"], "behind")
 
-    # --- message builder: surfaces behind/content/diverged, hides leads -----
-    def test_message_hides_leads_and_names_missing(self):
+    # --- message builder: surfaces BOTH directions with opposite actions -----
+    # Canonical is the best version; a copy behind it is applied, a copy AHEAD
+    # of it is an improvement to upstream so every client gets it (never synced
+    # down, which would delete the newer local work).
+    def test_message_surfaces_behind_and_leads_distinctly(self):
         _skill(self.clone, "daily-journal", CLONE_JOURNAL_AHEAD)
-        _skill(self.install, "daily-journal", BARE_JOURNAL)
+        _skill(self.install, "daily-journal", BARE_JOURNAL)          # behind
         _skill(self.clone, "insights", BARE_JOURNAL)
-        _skill(self.install, "insights", CLONE_JOURNAL_AHEAD)  # insights LEADS
-        drifts = SS.classify_drift(self.clone, self.install)
-        msg = SS.drift_message(drifts)
+        _skill(self.install, "insights", CLONE_JOURNAL_AHEAD)        # LEADS canonical
+        msg = SS.drift_message(SS.classify_drift(self.clone, self.install))
         self.assertIsNotNone(msg)
+        # behind: named with the missing section + the apply command.
         self.assertIn("daily-journal", msg)
         self.assertIn("Crisis protocol", msg)
-        self.assertNotIn("insights", msg)  # a leading copy is never nagged
+        self.assertIn("Behind canonical", msg)
+        # leads: named under an "ahead" section, framed as upstream-not-sync-down.
+        self.assertIn("insights", msg)
+        self.assertIn("Ahead of canonical", msg)
+        low = msg.lower()
+        self.assertIn("upstream", low)
+        self.assertTrue("do not run sync" in low or "don't sync" in low
+                        or "would overwrite" in low,
+                        "leads message must warn against syncing an ahead copy down")
+
+    def test_message_leads_only_still_fires(self):
+        # Even with NOTHING behind, a copy ahead of canonical must be surfaced —
+        # a trapped improvement is not a silent-OK state.
+        _skill(self.clone, "insights", BARE_JOURNAL)
+        _skill(self.install, "insights", CLONE_JOURNAL_AHEAD)
+        msg = SS.drift_message(SS.classify_drift(self.clone, self.install))
+        self.assertIsNotNone(msg)
+        self.assertIn("Ahead of canonical", msg)
+        self.assertIn("insights", msg)
 
     def test_message_none_when_all_synced(self):
         _skill(self.clone, "daily-journal", BARE_JOURNAL)

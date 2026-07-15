@@ -233,50 +233,93 @@ def classify_drift(clone_skills_root: Path, install_root: Path) -> list[dict]:
 
 
 def drift_message(drifts: list[dict]) -> str | None:
-    """Human-facing SessionStart line for upstream-ahead skill drift, or None
-    when there is nothing to say. Surfaces behind / content / diverged (upstream
-    changed and the bare copy lacks it); a copy that only LEADS is omitted — the
-    user is ahead, and telling them to overwrite their own newer work with an
-    older version would be the exact preserve-not-destroy failure this guards."""
-    actionable = [d for d in drifts if d["status"] in ("behind", "content", "diverged")]
-    if not actionable:
+    """Human-facing SessionStart report for skill-content drift, or None when
+    everything matches the canonical checkout. Canonical (`ai-brain-starter`) is
+    the source of the BEST version; every copy should converge to it and every
+    improvement should flow UP into it, so ALL clients — including paid ones —
+    run the best version. So this reports drift in BOTH directions, with the
+    correct (opposite) action for each:
+
+      behind / content -> the copy is OLDER than canonical: apply canonical
+                          (sync-skills.py, backup-first).
+      leads            -> the copy is AHEAD of canonical: an improvement is
+                          trapped locally where clients can't get it. Upstream
+                          it (PR to ai-brain-starter) — or, if it is a personal
+                          customization, move it into a config file. Do NOT sync
+                          canonical down over it; that would delete the newer work.
+      diverged         -> both moved: reconcile by hand (upstream the local part,
+                          THEN apply canonical), never a blind overwrite.
+    """
+    behind = sorted([d for d in drifts if d["status"] in ("behind", "content")],
+                    key=lambda d: d["name"])
+    leads = sorted([d for d in drifts if d["status"] == "leads"], key=lambda d: d["name"])
+    diverged = sorted([d for d in drifts if d["status"] == "diverged"], key=lambda d: d["name"])
+    if not (behind or leads or diverged):
         return None
     py = "py -3" if os.name == "nt" else "python3"
     fix = f"{py} ~/.claude/skills/ai-brain-starter/scripts/sync-skills.py"
-    n = len(actionable)
-    plural = "s" if n != 1 else ""
-    lines = [
-        "[ai-brain-starter skill-content check]",
-        "",
-        (f"Housekeeping, nothing is broken: {n} installed skill{plural} "
-         f"{'are' if n != 1 else 'is'} running an OLDER version than the copy AI "
-         f"Brain Starter already has on this machine — the latest improvements "
-         f"haven't been applied to the skill{plural} you actually use yet. To "
-         f"apply them (your current copy is backed up to <file>.bak-YYYY-MM-DD-HHMM "
-         f"first, so nothing is lost):"),
-        "",
-        "```",
-        fix,
-        "```",
-        "",
-        "Behind:",
-    ]
-    for d in sorted(actionable, key=lambda d: d["name"]):
-        if d["status"] == "content":
-            lines.append(f"- `{d['name']}` — updated content (same sections, newer text)")
-        elif d["status"] == "diverged":
-            secs = ", ".join(d["missing_sections"][:6]) or "(body changes)"
-            lines.append(f"- `{d['name']}` — new upstream section(s): {secs} "
-                         "(also has local sections — review the diff before applying)")
-        else:  # behind
-            secs = ", ".join(d["missing_sections"][:6]) or "(body changes)"
-            lines.append(f"- `{d['name']}` — missing new section(s): {secs}")
+
+    lines = ["[ai-brain-starter skill-content check]", ""]
+
+    if behind:
+        n = len(behind)
+        s = "s" if n != 1 else ""
+        lines += [
+            (f"{n} installed skill{s} {'are' if n != 1 else 'is'} running an OLDER "
+             f"version than the canonical AI Brain Starter copy on this machine — the "
+             f"latest improvements haven't reached the skill{s} you actually use yet. "
+             f"Apply them (your copy is backed up to <file>.bak-YYYY-MM-DD-HHMM first):"),
+            "", "```", fix, "```", "", "Behind canonical:",
+        ]
+        for d in behind:
+            if d["status"] == "content":
+                lines.append(f"- `{d['name']}` — updated content (same sections, newer text)")
+            else:
+                secs = ", ".join(d["missing_sections"][:6]) or "(body changes)"
+                lines.append(f"- `{d['name']}` — missing new section(s): {secs}")
+
+    if leads:
+        n = len(leads)
+        s = "s" if n != 1 else ""
+        if behind:
+            lines.append("")
+        lines += [
+            (f"{n} installed skill{s} {'are' if n != 1 else 'is'} AHEAD of canonical — "
+             f"an improvement is sitting in your local copy where clients (including paid "
+             f"ones) can't get it. Get it to everyone: if it is a general improvement, PR "
+             f"it into ai-brain-starter so canonical becomes the best version; if it is a "
+             f"personal customization, move it into a config file so the skill stays "
+             f"canonical. Do NOT run sync-skills.py on {'these' if n != 1 else 'this'} — "
+             f"it would overwrite the newer local version with the older canonical one."),
+            "", "Ahead of canonical (upstream, don't sync down):",
+        ]
+        for d in leads:
+            secs = ", ".join(d["extra_sections"][:6]) or "(body changes)"
+            lines.append(f"- `{d['name']}` — local-only content: {secs}")
+
+    if diverged:
+        n = len(diverged)
+        s = "s" if n != 1 else ""
+        if behind or leads:
+            lines.append("")
+        lines += [
+            (f"{n} installed skill{s} {'have' if n != 1 else 'has'} DIVERGED (both "
+             f"canonical AND the local copy changed) — reconcile by hand: upstream the "
+             f"local part, then apply canonical. Never a blind overwrite in either "
+             f"direction."),
+            "", "Diverged (reconcile):",
+        ]
+        for d in diverged:
+            up = ", ".join(d["missing_sections"][:4]) or "(body)"
+            loc = ", ".join(d["extra_sections"][:4]) or "(body)"
+            lines.append(f"- `{d['name']}` — new upstream: {up}; local-only: {loc}")
+
     lines += [
         "",
-        ("Explain this to the user in one friendly sentence and offer to run the "
-         "command — routine maintenance, not an error. Any skill marked "
-         "'review the diff' has local edits an overwrite would replace (they are "
-         "backed up), so show what changes first."),
+        ("Explain this to the user in one friendly sentence and offer to act — routine "
+         "maintenance, not an error. 'Behind' = one command to apply. 'Ahead' = an "
+         "improvement to upstream so every client gets it (offer to open the PR); never "
+         "sync it down. 'Diverged' = show the diff and reconcile."),
     ]
     return "\n".join(lines)
 
