@@ -99,6 +99,10 @@ def find_journals_dir(vault: Path) -> Path | None:
 
 def extract_frontmatter(text: str) -> tuple[str | None, str | None]:
     """Return (frontmatter_text, error_message_or_None)."""
+    # Normalize CRLF before matching: safe_read_text decodes raw bytes with no
+    # universal-newline translation, so Windows-written files (and text-mode
+    # temp files) arrive with \r\n intact and would trip the LF-only regex.
+    text = text.replace("\r\n", "\n")
     if not text.startswith("---"):
         return (None, None)  # no frontmatter, that's fine for many files
     m = re.match(r"^---\n(.*?)\n---\s*", text, re.DOTALL)
@@ -345,10 +349,21 @@ def run_self_test() -> int:
             print(f"FAIL [{desc}]: expected pass={should_pass}, got pass={actual_pass}")
         else:
             print(f"PASS [{desc}]")
+    # Regression: CRLF line endings (Windows editors, text-mode temp files)
+    # must not trip the frontmatter delimiter regex.
+    crlf_text = "---\r\ncreationDate: 2026-04-30\r\nfloor: 16\r\n---\r\n\r\nbody\r\n"
+    crlf_fm, crlf_err = extract_frontmatter(crlf_text)
+    if crlf_err or crlf_fm is None:
+        failures += 1
+        print(f"FAIL [journal CRLF line endings]: {crlf_err or 'no frontmatter extracted'}")
+    else:
+        print("PASS [journal CRLF line endings]")
+
+    total = len(fixtures) + 1
     if failures:
-        print(f"\n{failures}/{len(fixtures)} fixtures failed.")
+        print(f"\n{failures}/{total} fixtures failed.")
         return 1
-    print(f"\n{len(fixtures)}/{len(fixtures)} fixtures passed.")
+    print(f"\n{total}/{total} fixtures passed.")
     return 0
 
 
