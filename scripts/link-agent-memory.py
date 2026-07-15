@@ -23,11 +23,17 @@ WHAT IT DOES (idempotent, loss-free, never deletes)
    vault dir without loss (same-name-but-different files are kept as
    ``<name>.from-tooldir``), then backs the directory up to
    ``memory.pre-link-backup[-N]`` — never deletes — and replaces it with a
-   symlink.
-4. If it is missing, creates the symlink directly.
-5. If it is already the correct symlink, no-ops.
-6. Verifies the end state and FAILS LOUD if the symlink does not resolve to the
+   link.
+4. If it is missing, creates the link directly.
+5. If it is already the correct link, no-ops.
+6. Verifies the end state and FAILS LOUD if the link does not resolve to the
    vault dir — a wrong-key silent no-op is the worst outcome.
+
+The link is a symlink on POSIX and a directory JUNCTION on Windows: a real
+symlink there needs admin rights or Developer Mode (``symlink_to`` dies with
+``WinError 1314`` for normal users), while junctions need no privilege and
+Obsidian, git, and Python all traverse them like normal directories. Junction
+targets must be absolute local paths — the vault dir here always is.
 
 After this runs, everything Claude Code "remembers" is a file in the user's
 vault, visible in Obsidian and tracked by the vault's git.
@@ -42,6 +48,8 @@ from __future__ import annotations
 import argparse
 import os
 import shutil
+import stat
+import subprocess
 import sys
 from pathlib import Path
 
@@ -56,11 +64,54 @@ def _say(msg: str, quiet: bool) -> None:
         print(msg)
 
 
-def _same_target(link: Path, target: Path) -> bool:
+def _is_link(p: Path) -> bool:
+    """Symlink on any OS, or an NTFS directory junction on Windows.
+
+    Junctions are what this script creates on Windows, but ``is_symlink()`` is
+    False for them (they are mount-point reparse points, not symlinks), so the
+    idempotency / verify / refuse-to-clobber checks must read the reparse tag.
+    """
+    if p.is_symlink():
+        return True
+    if os.name != "nt":
+        return False
     try:
-        return link.is_symlink() and Path(os.path.realpath(link)) == Path(os.path.realpath(target))
+        st = os.lstat(p)
     except OSError:
         return False
+    return getattr(st, "st_reparse_tag", 0) == stat.IO_REPARSE_TAG_MOUNT_POINT
+
+
+def _same_target(link: Path, target: Path) -> bool:
+    try:
+        return _is_link(link) and Path(os.path.realpath(link)) == Path(os.path.realpath(target))
+    except OSError:
+        return False
+
+
+def _make_dir_link(link: Path, target: Path) -> None:
+    """Create ``link`` as a directory link pointing at ``target``.
+
+    POSIX: a symlink. Windows: a directory junction — ``symlink_to`` there
+    raises ``WinError 1314`` unless the process is elevated or Developer Mode
+    is on, while junctions need no privilege at all.
+    """
+    if os.name != "nt":
+        link.symlink_to(target, target_is_directory=True)
+        return
+    try:
+        import _winapi  # CPython-private but long-stable; ships CreateJunction
+    except ImportError:
+        _winapi = None
+    if _winapi is not None and hasattr(_winapi, "CreateJunction"):
+        _winapi.CreateJunction(str(target), str(link))
+        return
+    # Non-CPython Windows fallback: cmd's mklink /J creates the same junction.
+    subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(link), str(target)],
+        check=True,
+        capture_output=True,
+    )
 
 
 def _migrate_contents(src_dir: Path, dst_dir: Path, *, dry_run: bool, quiet: bool) -> int:
@@ -118,11 +169,11 @@ def link_agent_memory(vault: str, *, dry_run: bool = False, quiet: bool = False)
         _say(f"✓ already linked: {mem} -> {agent_mem}", quiet)
         return mem
 
-    # A symlink pointing somewhere ELSE -> do not clobber; fail loud.
-    if mem.is_symlink():
+    # A link (symlink/junction) pointing somewhere ELSE -> do not clobber; fail loud.
+    if _is_link(mem):
         current = os.path.realpath(mem)
         raise SystemExit(
-            f"link-agent-memory: {mem} is already a symlink to {current}, not the vault's "
+            f"link-agent-memory: {mem} is already a link to {current}, not the vault's "
             f"Agent Memory ({agent_mem}). Refusing to clobber. Resolve by hand."
         )
 
@@ -131,7 +182,7 @@ def link_agent_memory(vault: str, *, dry_run: bool = False, quiet: bool = False)
         moved = _migrate_contents(mem, agent_mem, dry_run=dry_run, quiet=quiet)
         backup = _backup_path(mem)
         if dry_run:
-            _say(f"  would migrate {moved} file(s), back up {mem} -> {backup}, then symlink", quiet)
+            _say(f"  would migrate {moved} file(s), back up {mem} -> {backup}, then link", quiet)
             _say(f"  would link: {mem} -> {agent_mem}", quiet)
             return mem
         mem.rename(backup)
@@ -141,7 +192,7 @@ def link_agent_memory(vault: str, *, dry_run: bool = False, quiet: bool = False)
         return mem
 
     proj_dir.mkdir(parents=True, exist_ok=True)
-    mem.symlink_to(agent_mem, target_is_directory=True)
+    _make_dir_link(mem, agent_mem)
 
     # Verify — a wrong-key / failed link is a silent brain-loss bug. Fail loud.
     if not _same_target(mem, agent_mem):
@@ -155,7 +206,9 @@ def link_agent_memory(vault: str, *, dry_run: bool = False, quiet: bool = False)
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Symlink Claude Code project memory into the vault.")
+    ap = argparse.ArgumentParser(
+        description="Link Claude Code project memory into the vault (symlink on POSIX, junction on Windows)."
+    )
     ap.add_argument("--vault", required=True, help="Absolute path to the Obsidian vault.")
     ap.add_argument("--dry-run", action="store_true", help="Show what would happen; change nothing.")
     ap.add_argument("--quiet", action="store_true", help="Only print on error.")
