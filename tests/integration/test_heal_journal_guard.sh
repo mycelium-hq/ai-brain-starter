@@ -43,6 +43,16 @@ fi
 # --- build a throwaway account + vault ---------------------------------------
 FAKE_HOME="$(mktemp -d)"; TMPDIRS+=("$FAKE_HOME")
 FAKE_VAULT="$(mktemp -d)"; TMPDIRS+=("$FAKE_VAULT")
+# Sandboxing HOME alone does not isolate Windows Python: since 3.8,
+# ntpath.expanduser/Path.home() resolve against USERPROFILE and ignore HOME
+# (CPython bpo-36264), so the script under test would read/write the REAL
+# ~/.claude. Point USERPROFILE at the same sandbox, Windows-spelled where
+# cygpath exists (Git Bash). On Linux/macOS cygpath is absent and nothing
+# reads the extra variable, so the CI (ubuntu) run is unchanged.
+FAKE_HOME_NATIVE="$FAKE_HOME"
+if command -v cygpath >/dev/null 2>&1; then
+  FAKE_HOME_NATIVE="$(cygpath -w "$FAKE_HOME")"
+fi
 # The registered guard command resolves ~ against $HOME, so the guard script must
 # exist under the fake skill path for the "script on disk" health check to pass.
 mkdir -p "$FAKE_HOME/.claude/skills/ai-brain-starter/hooks"
@@ -55,11 +65,12 @@ mkdir -p "$FAKE_VAULT/⚙️ Meta/scripts" "$FAKE_VAULT/⚙️ Meta/Decisions" "
 printf '%s\n' '{"hooks": {}}' > "$FAKE_HOME/.claude/settings.json"
 
 run_heal() {  # runs the wired SessionStart path against the fake account
-  printf '%s' '{}' | env HOME="$FAKE_HOME" VAULT_ROOT="$FAKE_VAULT" \
-    HEAL_JOURNAL_GUARD_NO_COOLDOWN=1 python3 "$HEAL" 2>/dev/null
+  printf '%s' '{}' | env HOME="$FAKE_HOME" USERPROFILE="$FAKE_HOME_NATIVE" \
+    VAULT_ROOT="$FAKE_VAULT" HEAL_JOURNAL_GUARD_NO_COOLDOWN=1 python3 "$HEAL" 2>/dev/null
 }
 check_only() {  # read-only diagnosis; exit 1 on any gap
-  env HOME="$FAKE_HOME" VAULT_ROOT="$FAKE_VAULT" python3 "$HEAL" --check-only >/dev/null 2>&1
+  env HOME="$FAKE_HOME" USERPROFILE="$FAKE_HOME_NATIVE" VAULT_ROOT="$FAKE_VAULT" \
+    python3 "$HEAL" --check-only >/dev/null 2>&1
 }
 guard_matchers() {  # prints the sorted PreToolUse matchers the guard is registered under
   python3 - "$FAKE_HOME/.claude/settings.json" <<'PY'
