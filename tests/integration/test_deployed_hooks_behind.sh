@@ -37,9 +37,16 @@ trap cleanup EXIT
 ok()  { PASS=$((PASS + 1)); echo "  PASS  $1"; }
 bad() { FAIL=$((FAIL + 1)); echo "  FAIL  $1 :: ${2:-}"; }
 
-# run_hook SKILL_DIR SETTINGS_JSON — drive the detector with an explicit committed
-# hooks.json source (SKILL_DIR/hooks.json) and deployed settings.json path.
-run_hook() { OUT="$(ABS_SKILL_DIR="$1" ABS_SETTINGS_JSON="$2" python3 "$HOOK" <<<'{}' 2>/dev/null)"; }
+# The hook now surfaces TWO things (MYC-2507 deployed-hook drift + MYC-3076
+# skill-content drift), so its test must pin BOTH inputs. Default the skill-copy
+# install root to an EMPTY dir so the hook-drift cases below can never be polluted
+# by whatever bare skill copies happen to live in the real ~/.claude/skills.
+EMPTY_INSTALL="$TMP/empty-install"; mkdir -p "$EMPTY_INSTALL"
+
+# run_hook SKILL_DIR SETTINGS_JSON [INSTALL_DIR] — drive the detector with an
+# explicit committed hooks.json source (SKILL_DIR/hooks.json), deployed
+# settings.json path, and (for the skill-drift cases) a bare-copy install root.
+run_hook() { OUT="$(ABS_SKILL_DIR="$1" ABS_SETTINGS_JSON="$2" ABS_SYNC_INSTALL_DIR="${3:-$EMPTY_INSTALL}" python3 "$HOOK" <<<'{}' 2>/dev/null)"; }
 fired()       { printf '%s' "$OUT" | grep -q 'additionalContext'; }
 mentions()    { printf '%s' "$OUT" | grep -q "$1"; }
 notmentions() { ! printf '%s' "$OUT" | grep -q "$1"; }
@@ -135,6 +142,28 @@ if fired; then ok "control: drift fires without the pin (case 2 confirmed reprod
 touch "$PINDIR/.ai-brain-starter-pinned"
 run_hook "$REPO_ROOT" "$PINDIR/settings.json"
 if ! fired; then ok "pinned install stays silent (escape hatch honored)"; else bad "nagged a pinned install" "$(printf '%s' "$OUT" | head -c 300)"; fi
+
+echo "=== 7. SKILL-CONTENT DRIFT (MYC-3076): a bare copy behind the clone FIRES; synced is SILENT ==="
+# A clone with a skills/ tree but NO hooks.json (so the hook-drift half stays
+# silent and only the skill-drift half can speak), plus a bare install copy that
+# lacks a section the clone has.
+SKILLCLONE="$TMP/skillclone"; INST="$TMP/skillinst"
+mkdir -p "$SKILLCLONE/skills/daily-journal" "$INST/daily-journal"
+printf '## Setup\nx\n### Step 7\ny\n' > "$INST/daily-journal/SKILL.md"
+printf '## Setup\nx\n## Crisis protocol\nsafety\n### Step 7\ny\n' > "$SKILLCLONE/skills/daily-journal/SKILL.md"
+run_hook "$SKILLCLONE" "/nonexistent/settings.json" "$INST"
+if fired && mentions 'skill-content check' && mentions 'daily-journal' && mentions 'Crisis protocol'; then
+  ok "skill-content drift fires, names the skill + the missing section"
+else bad "skill-content drift went silent or unnamed" "$(printf '%s' "$OUT" | head -c 300)"; fi
+# NEG-CONTROL: make the bare copy identical -> silent.
+cp "$SKILLCLONE/skills/daily-journal/SKILL.md" "$INST/daily-journal/SKILL.md"
+run_hook "$SKILLCLONE" "/nonexistent/settings.json" "$INST"
+if ! fired; then ok "a synced bare copy stays silent (skill-drift neg-control)"; else bad "cried wolf on a synced copy" "$(printf '%s' "$OUT" | head -c 300)"; fi
+# DIRECTIONAL: a bare copy that LEADS upstream is never nagged as behind.
+printf '## Setup\nx\n## Local Only Section\nmine\n### Step 7\ny\n' > "$INST/daily-journal/SKILL.md"
+printf '## Setup\nx\n### Step 7\ny\n' > "$SKILLCLONE/skills/daily-journal/SKILL.md"
+run_hook "$SKILLCLONE" "/nonexistent/settings.json" "$INST"
+if ! fired; then ok "a bare copy that LEADS upstream is not nagged (directional)"; else bad "nagged a leading copy" "$(printf '%s' "$OUT" | head -c 300)"; fi
 
 echo
 echo "=== summary: $PASS passed, $FAIL failed ==="
