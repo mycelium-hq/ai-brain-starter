@@ -45,6 +45,17 @@ whether or not a vault exists. Comparing by BASENAME (not full command string)
 makes the diff invariant under [VAULT_PATH] substitution — no false positives from
 resolved-vs-placeholder paths.
 
+ALSO SURFACES SKILL-CONTENT DRIFT (MYC-3076): the same fail-open-silent class,
+one artifact over. sync-skills.py copies updated skill CONTENT into the bare
+~/.claude/skills/<name> copies that actually serve a skill — but only inside the
+auto-update's `head != origin` branch, so once the clone is current, a lagging
+bare copy never catches up and nothing says so (the 2026-07-14 daily-journal +
+insights movement mechanics reached the clone but not /journal + /weekly). We
+call sync-skills.classify_drift() (its own source of truth, reusing its symlink
+/ .git-fork skip guards) and append an upstream-ahead report to the SAME update-
+check message — no new SessionStart hook, so the footprint SLA (MYC-2348) is
+untouched. Directional: a copy that LEADS upstream is never nagged as behind.
+
 LIMITATION (honest): a detector can only fire once it is itself deployed, so it
 cannot report its own first-time non-deployment. After the first successful
 deploy it self-perpetuates and catches every subsequent stale deploy. Checkout-
@@ -95,6 +106,56 @@ def _skill_dir() -> Path:
     if env:
         return Path(env)
     return Path(__file__).resolve().parent.parent
+
+
+def _load_module(basename: str, mod_name: str):
+    """Import a script by filename (hyphenated -> importlib) from the checkout so
+    this hook shares ONE source of truth with it. Returns the module or None."""
+    candidates = [
+        Path(__file__).resolve().parent.parent / "scripts" / basename,
+        _skill_dir() / "scripts" / basename,
+        Path.home() / ".claude" / "skills" / "ai-brain-starter" / "scripts" / basename,
+    ]
+    for path in candidates:
+        try:
+            if not path.is_file():
+                continue
+            spec = importlib.util.spec_from_file_location(mod_name, path)
+            if spec is None or spec.loader is None:
+                continue
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return mod
+        except Exception:
+            continue
+    return None
+
+
+def _skill_drift_message() -> str | None:
+    """MYC-3076: surface bare `~/.claude/skills/<name>` copies whose SKILL.md has
+    fallen behind the clone's bundled copy. Uses sync-skills.classify_drift (the
+    skill-model source of truth) so it reports exactly what a sync would touch.
+    Honors the same pin escape-hatch; any error -> None (fail open)."""
+    settings_path = Path(
+        os.environ.get("ABS_SETTINGS_JSON")
+        or (Path.home() / ".claude" / "settings.json")
+    )
+    if (settings_path.parent / ".ai-brain-starter-pinned").exists():
+        return None
+    ss = _load_module("sync-skills.py", "_abs_sync_skills")
+    if ss is None:
+        return None
+    try:
+        # Clone skills root = this checkout's own skills/ (ABS_SKILL_DIR-aware, so
+        # tests stay hermetic). Install root = the bare copies, override-aware.
+        clone_skills = _skill_dir() / "skills"
+        install_root = Path(
+            os.environ.get("ABS_SYNC_INSTALL_DIR")
+            or (Path.home() / ".claude" / "skills")
+        )
+        return ss.drift_message(ss.classify_drift(clone_skills, install_root))
+    except Exception:
+        return None
 
 
 def _load_installer():
@@ -305,7 +366,11 @@ def main() -> None:
         json.load(sys.stdin)
     except Exception:
         pass
-    _emit(_drift_message())
+    # Two fail-open checks under one "update check" surface: deployed hooks behind
+    # (this file's original job) + skill content behind (MYC-3076). Emit whichever
+    # fired; both, separated, if both; silent if neither.
+    parts = [m for m in (_drift_message(), _skill_drift_message()) if m]
+    _emit("\n\n".join(parts) if parts else None)
 
 
 if __name__ == "__main__":

@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import filecmp
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -124,6 +125,172 @@ def sync_skill_folder(source_dir: Path, dest_dir: Path, skill_name: str,
             sync_file(src_file, dest_dir / rel, skill_name, stamp, r)
 
 
+# --------------------------------------------------------------------------
+# Drift DETECTION (MYC-3076) — the read-only twin of the sync above.
+#
+# sync-skills.py propagates skill content ONLY when the auto-update actually
+# moves the clone's HEAD (ai-brain-auto-update.py runs it inside the
+# `head != origin` branch). Once the clone reaches origin/main by any path, sync
+# never re-fires, so the clone can sit AHEAD of the bare `~/.claude/skills/<name>`
+# copies that actually serve a skill — with zero signal. That is
+# LIVE-SKILL-COPY-DRIFT (the sequel to MYC-720's clone drift, one level up):
+# the 2026-07-14 daily-journal + insights movement mechanics reached the clone
+# but not the copies serving /journal + /weekly.
+#
+# classify_drift() reports it, DIRECTIONALLY: it names sections the clone has
+# that a bare copy LACKS (upstream-ahead) and never flags a copy that only LEADS
+# upstream (a local edit later upstreamed — e.g. the array-floor form), so the
+# surface can never nag a user to overwrite their own newer work. It reuses the
+# EXACT skip guards the sync uses (symlink / .git-fork), so what it reports is
+# exactly what a sync would touch — one source of truth.
+
+_HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$")
+
+
+def _headings(text: str) -> list[str]:
+    """Ordered, whitespace-collapsed section headings from a SKILL.md body."""
+    out: list[str] = []
+    for line in text.splitlines():
+        m = _HEADING_RE.match(line)
+        if m:
+            out.append(" ".join(m.group(1).split()))
+    return out
+
+
+def _dedup(items: list[str]) -> list[str]:
+    return list(dict.fromkeys(items))
+
+
+def classify_drift(clone_skills_root: Path, install_root: Path) -> list[dict]:
+    """Compare each bundled skill's SKILL.md in the clone against the installed
+    bare copy. Returns a sorted list of dicts for skills that DIFFER and are not
+    skip-guarded; identical/synced, clone-only, and skip-guarded skills are
+    omitted. Each dict is {name, status, missing_sections, extra_sections}:
+
+      behind    - the clone has section(s) the bare copy lacks, and none the
+                  other way (the clean upstream-ahead case; the headline signal).
+      content   - same section set, different body (upstream text improved).
+      diverged  - both sides have unique sections (a local fork AND upstream
+                  moved; needs a human merge, never a blind overwrite).
+      leads     - the bare copy has section(s) the clone lacks and none the
+                  other way (the copy is AHEAD — never surfaced as "behind").
+
+    missing_sections = clone-only headings (what an apply would add).
+    extra_sections   = bare-only headings (local sections an apply would drop).
+    """
+    results: list[dict] = []
+    if not clone_skills_root.is_dir():
+        return results
+    for skill_dir in sorted(clone_skills_root.iterdir()):
+        if not skill_dir.is_dir():
+            continue
+        name = skill_dir.name
+        src = skill_dir / "SKILL.md"
+        if not src.is_file():
+            continue  # nothing to compare for this skill
+        dest_dir = install_root / name
+        if not dest_dir.exists():
+            continue  # no bare copy installed — the clone's own copy is what runs
+        # Mirror sync_skill_folder's overwrite skip guards EXACTLY: a symlinked or
+        # independently-git-managed install is not one sync would touch, so it is
+        # not drift we can (or should) act on.
+        if _any_symlink(dest_dir) or (dest_dir / ".git").exists():
+            continue
+        dest = dest_dir / "SKILL.md"
+        try:
+            if dest.is_file():
+                if filecmp.cmp(str(src), str(dest), shallow=False):
+                    continue  # identical — in sync, no drift
+                dest_text = dest.read_text(encoding="utf-8", errors="replace")
+            else:
+                dest_text = ""  # dir exists but SKILL.md absent -> fully behind
+            src_text = src.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue  # unreadable -> can't prove drift -> stay silent (fail open)
+
+        src_headings = _headings(src_text)
+        dest_headings = _headings(dest_text)
+        clone_norm = {h.lower() for h in src_headings}
+        bare_norm = {h.lower() for h in dest_headings}
+        missing = _dedup([h for h in src_headings if h.lower() not in bare_norm])
+        extra = _dedup([h for h in dest_headings if h.lower() not in clone_norm])
+
+        if missing and not extra:
+            status = "behind"
+        elif extra and not missing:
+            status = "leads"
+        elif missing and extra:
+            status = "diverged"
+        else:
+            status = "content"  # same heading set, body changed
+        results.append({
+            "name": name,
+            "status": status,
+            "missing_sections": missing,
+            "extra_sections": extra,
+        })
+    return results
+
+
+def drift_message(drifts: list[dict]) -> str | None:
+    """Human-facing SessionStart line for upstream-ahead skill drift, or None
+    when there is nothing to say. Surfaces behind / content / diverged (upstream
+    changed and the bare copy lacks it); a copy that only LEADS is omitted — the
+    user is ahead, and telling them to overwrite their own newer work with an
+    older version would be the exact preserve-not-destroy failure this guards."""
+    actionable = [d for d in drifts if d["status"] in ("behind", "content", "diverged")]
+    if not actionable:
+        return None
+    py = "py -3" if os.name == "nt" else "python3"
+    fix = f"{py} ~/.claude/skills/ai-brain-starter/scripts/sync-skills.py"
+    n = len(actionable)
+    plural = "s" if n != 1 else ""
+    lines = [
+        "[ai-brain-starter skill-content check]",
+        "",
+        (f"Housekeeping, nothing is broken: {n} installed skill{plural} "
+         f"{'are' if n != 1 else 'is'} running an OLDER version than the copy AI "
+         f"Brain Starter already has on this machine — the latest improvements "
+         f"haven't been applied to the skill{plural} you actually use yet. To "
+         f"apply them (your current copy is backed up to <file>.bak-YYYY-MM-DD-HHMM "
+         f"first, so nothing is lost):"),
+        "",
+        "```",
+        fix,
+        "```",
+        "",
+        "Behind:",
+    ]
+    for d in sorted(actionable, key=lambda d: d["name"]):
+        if d["status"] == "content":
+            lines.append(f"- `{d['name']}` — updated content (same sections, newer text)")
+        elif d["status"] == "diverged":
+            secs = ", ".join(d["missing_sections"][:6]) or "(body changes)"
+            lines.append(f"- `{d['name']}` — new upstream section(s): {secs} "
+                         "(also has local sections — review the diff before applying)")
+        else:  # behind
+            secs = ", ".join(d["missing_sections"][:6]) or "(body changes)"
+            lines.append(f"- `{d['name']}` — missing new section(s): {secs}")
+    lines += [
+        "",
+        ("Explain this to the user in one friendly sentence and offer to run the "
+         "command — routine maintenance, not an error. Any skill marked "
+         "'review the diff' has local edits an overwrite would replace (they are "
+         "backed up), so show what changes first."),
+    ]
+    return "\n".join(lines)
+
+
+def check_mode() -> int:
+    """`--check`: report skill-content drift, change NOTHING, always exit 0.
+    The read-only path the SessionStart surfacer and CI can call safely."""
+    drifts = classify_drift(_starter_dir() / "skills", _install_dir())
+    msg = drift_message(drifts)
+    print(msg if msg else
+          "skill-content check: all installed skill copies are in sync with the checkout.")
+    return 0
+
+
 def main() -> int:
     starter = _starter_dir()
     install = _install_dir()
@@ -197,4 +364,5 @@ if __name__ == "__main__":
             _stream.reconfigure(encoding="utf-8")  # Python 3.7+
         except (AttributeError, ValueError):
             pass
-    sys.exit(main())
+    # --check is the read-only drift report (MYC-3076); default is the sync.
+    sys.exit(check_mode() if "--check" in sys.argv[1:] else main())
