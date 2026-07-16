@@ -100,7 +100,7 @@ function Store-Passphrase { param([string]$slug, [string]$plain)
 function Get-Passphrase { param([string]$slug)
   $pf = Join-Path $env:USERPROFILE ".claude\.vault-backup-pass-$slug"
   if (-not (Test-Path -LiteralPath $pf)) { return $null }
-  $secure = (Get-Content -Raw -LiteralPath $pf) | ConvertTo-SecureString
+  $secure = ((Get-Content -Raw -LiteralPath $pf) -replace '[^0-9A-Fa-f]', '') | ConvertTo-SecureString
   $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
   try { return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
   finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
@@ -127,7 +127,11 @@ function New-Archive {
       $pass = Get-Passphrase $slug
       if (-not $pass) { Die "could not read backup passphrase" }
       $out = "$outBase.zip.gpg"
+      $prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
       & $gpg.Source --batch --yes --pinentry-mode loopback --passphrase $pass -c --cipher-algo AES256 -o $out $zip 2>$null
+      $gpgCode = $LASTEXITCODE
+      $ErrorActionPreference = $prevEAP
+      if ($gpgCode -ne 0 -or -not (Test-Path -LiteralPath $out)) { Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue; Die "gpg encryption failed (exit $gpgCode)" }
       Remove-Item -LiteralPath $zip -Force
       return $out
     }
@@ -185,7 +189,10 @@ function Cmd-Setup {
   if ($Schedule -eq "daily") {
     try {
       $self = $MyInvocation.MyCommand.Path
-      $action  = New-ScheduledTaskAction -Execute "pwsh" -Argument "-NoProfile -File `"$self`" run -Vault `"$v`""
+      # pwsh (PowerShell 7) is not present on every Windows box; fall back to the
+      # built-in Windows PowerShell 5.1 so the daily task actually runs there.
+      $psExe   = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') }
+      $action  = New-ScheduledTaskAction -Execute $psExe -Argument "-NoProfile -File `"$self`" run -Vault `"$v`""
       $trigger = New-ScheduledTaskTrigger -Daily -At 3am
       Register-ScheduledTask -TaskName "ai-brain-starter vault-backup $slug" -Action $action -Trigger $trigger -Force | Out-Null
       Ok "Daily backup scheduled (03:00 local)."
@@ -231,7 +238,11 @@ function Cmd-Verify {
       $slug = if ($e.keychain_account) { $e.keychain_account } else { Slug-For $v }
       $pass = Get-Passphrase $slug
       $zip = Join-Path $tmp "restore.zip"
+      $prevEAP = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
       & $gpg.Source --batch --yes --pinentry-mode loopback --passphrase $pass -o $zip -d $newest.FullName 2>$null
+      $gpgCode = $LASTEXITCODE
+      $ErrorActionPreference = $prevEAP
+      if ($gpgCode -ne 0 -or -not (Test-Path -LiteralPath $zip)) { Die "gpg decryption failed (exit $gpgCode)" }
       Expand-Archive -LiteralPath $zip -DestinationPath $tmp -Force
       Remove-Item -LiteralPath $zip -Force
     } else {
