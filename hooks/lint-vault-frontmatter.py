@@ -158,6 +158,9 @@ def main() -> int:
     if projected is None:
         emit_allow()
         return 0
+    # Write content arrives verbatim from the tool_input JSON and may carry
+    # \r\n; normalize so the delimiter regex below is line-ending-agnostic.
+    projected = projected.replace("\r\n", "\n")
 
     # Extract frontmatter from projected content
     if not projected.startswith("---"):
@@ -212,7 +215,9 @@ def main() -> int:
     # Write projected content to a temp file and call validator
     import subprocess
     import tempfile
-    with tempfile.NamedTemporaryFile(suffix=".md", mode="w", delete=False, encoding="utf-8") as tf:
+    # newline="\n": text mode on Windows would otherwise expand \n to \r\n,
+    # which the validator (safe_read_text: no newline translation) rejects.
+    with tempfile.NamedTemporaryFile(suffix=".md", mode="w", delete=False, encoding="utf-8", newline="\n") as tf:
         # Adjust path so detect_type in validator finds the right schema
         tf.write(projected)
         tmp_path = tf.name

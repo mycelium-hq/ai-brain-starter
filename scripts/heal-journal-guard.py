@@ -56,10 +56,11 @@ PREFLIGHT_BASENAME = "journal-preflight.py"
 # always the matchers hooks.json actually registers the guard under.
 FALLBACK_MATCHERS = ("Bash", "Write|Edit|MultiEdit")
 HEAL_COOLDOWN_SECONDS = 6 * 3600
-# A guard command names its script as a quoted or bare ~/ or / path ending in the guard
-# basename. Tolerates the `python3 <path> 2>/dev/null || echo ...` fallback-chain form.
+# A guard command names its script as a quoted or bare ~/, /, or Windows drive-letter
+# (C:\ or C:/) path ending in the guard basename. Tolerates the
+# `python3 <path> 2>/dev/null || echo ...` fallback-chain form.
 _GUARD_PATH_RE = re.compile(
-    r"['\"]?((?:~|/)[^\s'\"|&;]*" + re.escape(GUARD_BASENAME) + r")['\"]?"
+    r"['\"]?((?:~|/|[A-Za-z]:[\\/])[^\s'\"|&;]*" + re.escape(GUARD_BASENAME) + r")['\"]?"
 )
 # The installed vault hooks embed the absolute vault path right before the meta folder;
 # same regex sync-vault-scripts.sh uses, so both resolve the identical root.

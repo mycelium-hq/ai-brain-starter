@@ -9,6 +9,23 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-07-15: Windows catch-up — journaling unblocked, the false banner silenced, agent memory finally linkable
+
+**Who this affects:** Windows users only. Nothing changes on Mac or Linux.
+
+**The bugs:** four pieces of the vault machinery assumed Mac/Linux conventions — `\n` line endings, `/`-style paths, and privilege-free symlinks:
+
+1. **The schema validator** read perfectly good Windows-written files and reported "frontmatter delimiter '---' not properly closed" — a false alarm — because its delimiter check only understood `\n` endings.
+2. **The write-time frontmatter linter** had the same blind spot twice: the content it inspects can arrive with `\r\n`, and the temp file it hands to the validator picked up `\r\n` on the way (Windows text mode expands newlines). Net effect: **every** journal, decision, and session write was blocked on Windows.
+3. **The journal-guard self-heal** only recognized guard registrations whose script path starts with `~` or `/`. A Windows path like `C:\Users\...` never matched, so a healthy install was reported as a permanent "registration gap" — and printed a `[heal-journal-guard]` banner at every session start.
+4. **The agent-memory link** created a symlink, which on Windows needs admin rights or Developer Mode — everyone else got `WinError 1314`, so Claude's persistent memory could never be wired into the vault. And the memory-routing nudge only recognized symlinks, so even a correctly linked store would have kept nudging forever.
+
+**The fix:** line endings are normalized before the delimiter check (validator + linter), the linter's temp file is written with plain `\n`, the guard's path matcher accepts drive-letter paths, and on Windows the memory link is now a **directory junction** — no privilege needed, and Obsidian, git, and Python traverse it like a normal folder (the nudge recognizes junctions too). A CRLF regression fixture joined the validator's `--self-test` (now 12 fixtures), and the guard's own `--self-test` passes on Windows.
+
+**What you should do:** nothing — update as usual. If you're on Windows and journal writes were mysteriously blocked, that banner greeted you every session, or agent-memory setup died with `WinError 1314`, this was why.
+
+---
+
 ## 2026-07-14: the secret detector stopped crying wolf over container IDs and migration checksums
 
 **Who this affects:** everyone — a detector that flags things that aren't secrets teaches you to stop trusting its real alerts.
