@@ -47,6 +47,14 @@ HOME="$SANDBOX" EMAIL_GATE_BYPASS=1 PREFLIGHT_BYPASS=1 bash bootstrap.sh
 
 After the run, inspect `$SANDBOX/.claude/` to see what got created. To reset and re-test: `rm -rf "$SANDBOX"` and start over.
 
+**On Windows (Git Bash), export `USERPROFILE` alongside `HOME`.** `HOME` redirects bash and the POSIX tools, but Windows Python ignores it: since Python 3.8, `Path.home()` / `os.path.expanduser("~")` resolve against `USERPROFILE`, not `HOME` (CPython bpo-36264). So any Python the run invokes — hooks, installers, the self-heal scripts — still reads and writes your **real** `~/.claude` while your assertions look at the sandbox. Point both variables at the sandbox, Windows-spelling the path:
+
+```bash
+HOME="$SANDBOX" USERPROFILE="$(cygpath -w "$SANDBOX")" <command under test>
+```
+
+On macOS/Linux `cygpath` is absent and nothing reads `USERPROFILE`, so the exact same invocation is a no-op there — write it once, it works everywhere (`tests/integration/test_heal_journal_guard.sh` uses this pattern). Running the suite on Windows also needs a real `python3` on `PATH`: the Microsoft Store alias Windows ships fails with "Python was not found", so shim it once with a two-line script that `exec`s `py -3 "$@"`.
+
 **Two flags worth knowing for tests:**
 
 - `--dry-run` — shows what would be installed without making changes. Every install path respects this; if you add a new install step, wrap it in `do_cmd`, `git_clone_safe`, `claude_install_safe`, `claude_marketplace_safe`, or `pipx_install_safe` to keep dry-run actually dry.
