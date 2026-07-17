@@ -45,6 +45,7 @@ Your message when this rule triggers.
 | `public-repo-firewall` | block | Personal names/data leaking into public repos |
 | `dangerous-rm` | block | `rm -rf` commands without confirmation |
 | `warn-filesystem-walk-without-bounded-read` | warn | Recursive Python content walkers missing the shared bounded read |
+| `warn-delegated-task-needs-source` | warn | Delegated to-do (`[owner:: …]`) with no `[[link]]` or URL to its brief/source |
 
 ## Authoring guide and regression harness
 
