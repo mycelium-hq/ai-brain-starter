@@ -149,9 +149,17 @@ def main() -> int:
 
 
 def _detect_lang_hint() -> str:
-    raw = os.environ.get("LC_ALL") or os.environ.get("LANG") or ""
-    if raw[:2].lower() == "es":
+    # An explicit env locale wins in BOTH directions. Before this, "es" could
+    # short-circuit but "en" could not, so on a Spanish-locale Mac the
+    # AppleLocale fallback always won and nothing — not even LANG=en_US —
+    # could force the English block. That made the ask untestable on any
+    # es_* Mac (the integration test greps English copy) and overrode the
+    # shell locale of English-preferring users on Spanish systems.
+    raw = (os.environ.get("LC_ALL") or os.environ.get("LANG") or "").lower()
+    if raw[:2] == "es":
         return "es"
+    if raw[:2] == "en":
+        return "en"
     if sys.platform == "darwin":
         try:
             result = subprocess.run(
