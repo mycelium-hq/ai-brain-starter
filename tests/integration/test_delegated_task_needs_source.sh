@@ -44,16 +44,24 @@ trap 'rm -rf "$TMP"' EXIT
 # ---- A. FIRING CONTRACT ------------------------------------------------------
 echo "=== A. firing contract (regex mirrors hookify: IGNORECASE + search, ANDed) ==="
 
-# A0: rule file contract (name / event / action + the two condition fields).
+# A0: rule file contract. Beyond name/event/action + the two condition fields,
+# assert the rule is ENABLED and EVERY operator is regex_match. Both guard a
+# silent-no-op the regex cases below would miss: a rule shipped `enabled: false`
+# never loads, and an operator swapped to `contains`/`equals` changes firing from
+# regex to substring while the extracted-pattern test stays a false green.
+total_ops=$(grep -cE '^[[:space:]]*operator:' "$RULE")
+regex_ops=$(grep -cE '^[[:space:]]*operator: regex_match$' "$RULE")
 if [ -f "$RULE" ] \
    && grep -q '^name: warn-delegated-task-needs-source$' "$RULE" \
    && grep -q '^event: file$' "$RULE" \
    && grep -q '^action: warn$' "$RULE" \
+   && grep -q '^enabled: true$' "$RULE" \
    && grep -q 'field: file_path' "$RULE" \
-   && grep -q 'field: content' "$RULE"; then
-  ok "rule file contract (name/event/action + file_path & content conditions)"
+   && grep -q 'field: content' "$RULE" \
+   && [ "$total_ops" -ge 2 ] && [ "$total_ops" -eq "$regex_ops" ]; then
+  ok "rule file contract (name/event/action/enabled + file_path & content, all regex_match)"
 else
-  bad "rule file contract" "missing name/event/action or a condition field"
+  bad "rule file contract" "name/event/action/enabled, a condition field, or a non-regex_match operator (ops=$total_ops regex=$regex_ops)"
 fi
 
 # A1: positive + negative firing cases, driven off the SHIPPED patterns. Extract
