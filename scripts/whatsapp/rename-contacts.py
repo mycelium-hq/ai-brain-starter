@@ -50,7 +50,8 @@ if not WA_DIR.exists():
 # ── Export contacts from macOS Contacts via Swift ─────────────────────────────
 
 SWIFT = """
-import Contacts, Foundation
+import Contacts
+import Foundation
 let store = CNContactStore()
 let keys = [CNContactGivenNameKey, CNContactFamilyNameKey,
             CNContactOrganizationNameKey, CNContactPhoneNumbersKey] as [CNKeyDescriptor]
@@ -63,7 +64,19 @@ do {
         if name.isEmpty { return }
         for ph in c.phoneNumbers { out += "\\(name)\\t\\(ph.value.stringValue)\\n" }
     }
-} catch { fputs("Error: \\(error)\\n", stderr); exit(1) }
+} catch {
+    // An ad-hoc `swift` script has no app bundle / NSContactsUsageDescription, so
+    // macOS cannot show a consent prompt and TCC attributes access to the parent
+    // (your terminal). Report an access failure distinctly (exit 2) so the caller
+    // can guide the user precisely, instead of matching a locale-dependent string.
+    let status = CNContactStore.authorizationStatus(for: .contacts)
+    if status != .authorized {
+        fputs("CONTACTS_ACCESS_UNAVAILABLE status=\\(status.rawValue)\\n", stderr)
+        exit(2)
+    }
+    fputs("Error: \\(error)\\n", stderr)
+    exit(1)
+}
 print(out, terminator: "")
 """
 
@@ -75,12 +88,20 @@ with tempfile.NamedTemporaryFile(suffix=".swift", mode="w", delete=False) as f:
 result = subprocess.run(["swift", swift_path], capture_output=True, text=True)
 os.unlink(swift_path)
 
+if result.returncode == 2 or "CONTACTS_ACCESS_UNAVAILABLE" in result.stderr:
+    print("\nCould not read Contacts: macOS has not granted Contacts access to this step.")
+    print("This step runs an ad-hoc Swift script, which has no app bundle for macOS to")
+    print("attach a Contacts permission to, so it cannot show you an access prompt. Fix:")
+    print("  1. Open System Settings > Privacy & Security > Contacts")
+    print("  2. Enable access for the terminal app you ran this from (Terminal, iTerm, ...)")
+    print("  3. Re-run this script.")
+    print("If access is already enabled and it still fails, this macOS version blocks")
+    print("ad-hoc scripts from Contacts; the WhatsApp files keep their phone-number names")
+    print("and the rest of the export is unaffected.")
+    sys.exit(1)
+
 if result.returncode != 0:
-    err = result.stderr.strip()
-    print(f"\nCould not read Contacts: {err}")
-    if "Access Denied" in err:
-        print("\nFix: System Settings › Privacy & Security › Contacts")
-        print("     Enable access for Terminal, then re-run.")
+    print(f"\nCould not read Contacts: {result.stderr.strip()}")
     sys.exit(1)
 
 # ── Phone → name lookup ───────────────────────────────────────────────────────
