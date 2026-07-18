@@ -47,6 +47,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import sys
 import time
 from datetime import datetime
@@ -744,6 +745,119 @@ def link_agent_memory_into_vault(vault_path: str, quiet: bool) -> None:
             print(result.stderr, file=sys.stderr)
 
 
+def _hookify_templates_dir(hooks_template_path: Path) -> Path:
+    """The shipped hookify-rule templates live beside hooks.json at the repo root."""
+    return hooks_template_path.resolve().parent / "templates" / "hookify-rules"
+
+
+def activate_default_hookify_rules(
+    templates_dir: Path,
+    config_dir: Path,
+    *,
+    dry_run: bool,
+    quiet: bool,
+    fail_on_missing: bool,
+) -> int:
+    """Copy the activate-by-default hookify rule templates into config_dir (~/.claude).
+
+    Reproducible activation for substrate rules that should fire on every install
+    (warn-delegated-task-needs-source). Without this a rule template merged into
+    the repo only fires on a machine where someone hand-copied it — the
+    DEPLOYED-not-COMMITTED-not-WORKING gap for hookify rules.
+
+    Contract:
+      - templates/hookify-rules/activation.json's 'default' list names the rules
+        that auto-activate; everything else is opt-in (manual cp).
+      - COPY-IF-ABSENT: an existing destination is never overwritten, so a user's
+        customized rule (the README tells them to customize) survives re-install
+        and the daily update run.
+      - Fail-loud under fail_on_missing ONLY when the manifest PROMISES a
+        default template that is not on disk (governed-set drift: the manifest
+        claims a rule ships, but it does not). A missing or unreadable manifest
+        is treated as "feature unavailable" and skipped, never fatal, so a
+        partial or older checkout still installs its hooks. Outside
+        fail_on_missing a missing default template only warns; rule activation
+        never blocks the core hooks install unless asked to fail closed on a
+        broken promise.
+
+    Returns 0 normally, 1 only under fail_on_missing when the manifest names a
+    default template that is missing on disk.
+    """
+    manifest_path = templates_dir / "activation.json"
+    if not manifest_path.is_file():
+        # No manifest: this checkout predates the activation feature (or is a
+        # minimal fixture). Activation is additive, so skip and never block the
+        # hooks install -- even under --fail-on-missing, which is about missing
+        # hook SCRIPTS, not this optional feature. Fail-loud is reserved for a
+        # manifest that PROMISES a default template it does not ship (below).
+        if not quiet:
+            print(
+                f"Hookify rules: no activation manifest at {manifest_path}; "
+                "skipping activation.",
+                file=sys.stderr,
+            )
+        return 0
+
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as e:
+        if not quiet:
+            print(
+                f"Hookify rules: could not read activation manifest {manifest_path}: "
+                f"{e}; skipping activation.",
+                file=sys.stderr,
+            )
+        return 0
+
+    default_rules = list(manifest.get("default", []))
+    copied: list[str] = []
+    already: list[str] = []
+    missing: list[str] = []
+    for name in default_rules:
+        src = templates_dir / name
+        if not src.is_file():
+            missing.append(name)
+            continue
+        dest = config_dir / name
+        if dest.exists():
+            already.append(name)
+            continue
+        if not dry_run:
+            try:
+                config_dir.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(src, dest)
+            except OSError as e:
+                # A filesystem error copying one rule must not abort the core
+                # hooks install (activation is best-effort). Warn and move on.
+                if not quiet:
+                    print(f"  WARNING: could not activate {name}: {e}", file=sys.stderr)
+                continue
+        copied.append(name)
+
+    if missing and fail_on_missing:
+        print(
+            "ERROR: hookify activation manifest names default template(s) missing "
+            f"on disk: {', '.join(missing)}",
+            file=sys.stderr,
+        )
+        return 1
+
+    if not quiet:
+        verb = "Would activate" if dry_run else "Activated"
+        print(
+            f"Hookify rules: {verb} {len(copied)} default rule(s), "
+            f"{len(already)} already present in {config_dir}"
+        )
+        marker = "~" if dry_run else "+"
+        for name in copied:
+            print(f"  {marker} {name}")
+    if missing and not quiet:
+        for name in missing:
+            print(f"  WARNING: default template missing, skipped: {name}", file=sys.stderr)
+
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
@@ -827,6 +941,23 @@ def main() -> int:
                     print(f"Backup at {backup}")
             return 0
         return 2
+
+    # === activate default hookify rules (reproducible activation) ===
+    # Independent of the settings-merge below: copies the activate-by-default rule
+    # templates into ~/.claude so a rule merged into the repo actually fires on a
+    # fresh machine (not only where someone hand-copied it). Runs on every install
+    # invocation — even when the hooks are already in sync — so the two concerns
+    # (settings.json wiring vs rule-file presence) can never drift. Copy-if-absent,
+    # so it never clobbers a user's customized rule.
+    rc = activate_default_hookify_rules(
+        _hookify_templates_dir(hooks_template_path),
+        settings_path.parent,
+        dry_run=args.dry_run,
+        quiet=args.quiet,
+        fail_on_missing=args.fail_on_missing,
+    )
+    if rc != 0:
+        return rc
 
     # === install / update path ===
     merged, summary = merge_hooks(existing, template)
