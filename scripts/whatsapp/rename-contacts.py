@@ -52,32 +52,56 @@ if not WA_DIR.exists():
 SWIFT = """
 import Contacts
 import Foundation
+
 let store = CNContactStore()
-let keys = [CNContactGivenNameKey, CNContactFamilyNameKey,
-            CNContactOrganizationNameKey, CNContactPhoneNumbersKey] as [CNKeyDescriptor]
-var out = ""
-do {
-    let req = CNContactFetchRequest(keysToFetch: keys)
-    try store.enumerateContacts(with: req) { c, _ in
-        var name = "\\(c.givenName) \\(c.familyName)".trimmingCharacters(in: .whitespaces)
-        if name.isEmpty { name = c.organizationName }
-        if name.isEmpty { return }
-        for ph in c.phoneNumbers { out += "\\(name)\\t\\(ph.value.stringValue)\\n" }
+
+func emit() {
+    let keys = [CNContactGivenNameKey, CNContactFamilyNameKey,
+                CNContactOrganizationNameKey, CNContactPhoneNumbersKey] as [CNKeyDescriptor]
+    var out = ""
+    do {
+        let req = CNContactFetchRequest(keysToFetch: keys)
+        try store.enumerateContacts(with: req) { c, _ in
+            var name = "\\(c.givenName) \\(c.familyName)".trimmingCharacters(in: .whitespaces)
+            if name.isEmpty { name = c.organizationName }
+            if name.isEmpty { return }
+            for ph in c.phoneNumbers { out += "\\(name)\\t\\(ph.value.stringValue)\\n" }
+        }
+    } catch {
+        fputs("Error: \\(error)\\n", stderr)
+        exit(1)
     }
-} catch {
-    // An ad-hoc `swift` script has no app bundle / NSContactsUsageDescription, so
-    // macOS cannot show a consent prompt and TCC attributes access to the parent
-    // (your terminal). Report an access failure distinctly (exit 2) so the caller
-    // can guide the user precisely, instead of matching a locale-dependent string.
-    let status = CNContactStore.authorizationStatus(for: .contacts)
-    if status != .authorized {
-        fputs("CONTACTS_ACCESS_UNAVAILABLE status=\\(status.rawValue)\\n", stderr)
+    print(out, terminator: "")
+}
+
+// A plain `swift` script has no app bundle / NSContactsUsageDescription of its own,
+// so macOS TCC attributes Contacts access to the responsible parent (your terminal).
+// requestAccess therefore shows the one-click "allow Contacts for <terminal>" prompt
+// on first run; a Developer-ID-signed helper would prompt as itself. A denied or
+// restricted state can't be re-prompted, so exit 2 and let the caller explain the
+// manual grant. Exit 2 = access unavailable, distinct from exit 1 = a real fetch error.
+let status = CNContactStore.authorizationStatus(for: .contacts)
+switch status {
+case .authorized:
+    emit()
+case .notDetermined:
+    let sema = DispatchSemaphore(value: 0)
+    var granted = false
+    store.requestAccess(for: .contacts) { ok, _ in granted = ok; sema.signal() }
+    if sema.wait(timeout: .now() + 120) == .timedOut {
+        fputs("CONTACTS_ACCESS_UNAVAILABLE status=prompt-timeout\\n", stderr)
         exit(2)
     }
-    fputs("Error: \\(error)\\n", stderr)
-    exit(1)
+    if granted {
+        emit()
+    } else {
+        fputs("CONTACTS_ACCESS_UNAVAILABLE status=denied\\n", stderr)
+        exit(2)
+    }
+default:
+    fputs("CONTACTS_ACCESS_UNAVAILABLE status=\\(status.rawValue)\\n", stderr)
+    exit(2)
 }
-print(out, terminator: "")
 """
 
 print("Reading macOS Contacts...")
@@ -89,15 +113,14 @@ result = subprocess.run(["swift", swift_path], capture_output=True, text=True)
 os.unlink(swift_path)
 
 if result.returncode == 2 or "CONTACTS_ACCESS_UNAVAILABLE" in result.stderr:
-    print("\nCould not read Contacts: macOS has not granted Contacts access to this step.")
-    print("This step runs an ad-hoc Swift script, which has no app bundle for macOS to")
-    print("attach a Contacts permission to, so it cannot show you an access prompt. Fix:")
+    print("\nCould not read Contacts: access was not granted.")
+    print("On the first run macOS shows a prompt to allow Contacts for your terminal")
+    print("app -- click Allow. If it was denied, or your Mac restricts it:")
     print("  1. Open System Settings > Privacy & Security > Contacts")
     print("  2. Enable access for the terminal app you ran this from (Terminal, iTerm, ...)")
     print("  3. Re-run this script.")
-    print("If access is already enabled and it still fails, this macOS version blocks")
-    print("ad-hoc scripts from Contacts; the WhatsApp files keep their phone-number names")
-    print("and the rest of the export is unaffected.")
+    print("(This step only maps phone numbers to names; skipping it keeps the")
+    print("phone-number filenames and does not affect the rest of the export.)")
     sys.exit(1)
 
 if result.returncode != 0:
