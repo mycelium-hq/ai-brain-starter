@@ -23,6 +23,15 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  # A superseded push to the same PR cancels the in-flight run instead of
+  # billing it to completion. Scoped to pull_request ONLY: push / schedule runs
+  # are never cancelled (and if a merge queue is ever wired here, cancelling a
+  # queued group would deadlock it). Added by MYC-3180 after ci-cost-audit.py
+  # flagged this workflow as billing every superseded push in full.
+  group: lint-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   shell:
     name: bash syntax (.sh)
@@ -358,3 +367,20 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
       - name: run the UTF-8 console guard over tracked vault scripts
         run: python3 scripts/check-utf8-stdout.py
+
+      # Folded into this job rather than given its own: GitHub bills every JOB a
+      # one-minute minimum and these checks take about a second each. A separate
+      # job would cost more in billing floor than in compute — the exact
+      # anti-pattern ci-cost-audit.py itself reports.
+      - name: ci-cost-audit negative controls (the auditor must still bite)
+        # Proves the CI-spend auditor still fires on a workflow with no
+        # concurrency group, a merge-queue-deadlocking cancel-in-progress, and an
+        # ungated macOS runner — and still stays quiet on a well-formed one. An
+        # auditor that silently stopped detecting would let a client install
+        # drift back into an unbounded Actions bill behind a green check.
+        run: python3 scripts/ci-cost-audit.py --self-test
+
+      - name: ci-cost-audit runs clean against this repo's own workflows
+        # Dogfood: the substrate passes the audit it ships. Advisory findings
+        # are allowed; `high` is not.
+        run: python3 scripts/ci-cost-audit.py --fail-on high
