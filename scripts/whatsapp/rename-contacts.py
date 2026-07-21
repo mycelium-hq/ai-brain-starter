@@ -47,84 +47,81 @@ if not WA_DIR.exists():
     print(f"Error: {WA_DIR} not found. Run sync.mjs first.")
     sys.exit(1)
 
-# ── Export contacts from macOS Contacts via Swift ─────────────────────────────
+# ── Export contacts from macOS Contacts via Contacts.app ──────────────────────
+# Ask the app that already owns the data. Contacts.app holds Contacts access
+# inherently and `osascript` ships with every macOS, so this needs neither an
+# Xcode toolchain nor an app bundle of its own:
+#   * the previous Swift path ran `swift`, which on a Mac without Xcode is a stub
+#     that triggers a multi-GB "install developer tools" prompt. Most people
+#     running this are not developers, so that step simply failed for them.
+#   * an ad-hoc-built binary never gets its own TCC identity (verified: `tccutil
+#     reset` reports "No such bundle identifier" for one, yet it still reads
+#     contacts via the host app's grant), so it can never hold Contacts access.
+# The remaining gate is the standard one-click Automation prompt, "<host app>
+# wants to control Contacts". JXA rather than AppleScript: same two Apple Events,
+# about 6x faster on a large address book (3.3s vs 20.8s for ~3k contacts).
 
-SWIFT = """
-import Contacts
-import Foundation
-
-let store = CNContactStore()
-
-func emit() {
-    let keys = [CNContactGivenNameKey, CNContactFamilyNameKey,
-                CNContactOrganizationNameKey, CNContactPhoneNumbersKey] as [CNKeyDescriptor]
-    var out = ""
-    do {
-        let req = CNContactFetchRequest(keysToFetch: keys)
-        try store.enumerateContacts(with: req) { c, _ in
-            var name = "\\(c.givenName) \\(c.familyName)".trimmingCharacters(in: .whitespaces)
-            if name.isEmpty { name = c.organizationName }
-            if name.isEmpty { return }
-            for ph in c.phoneNumbers { out += "\\(name)\\t\\(ph.value.stringValue)\\n" }
-        }
-    } catch {
-        fputs("Error: \\(error)\\n", stderr)
-        exit(1)
-    }
-    print(out, terminator: "")
+JXA = r"""
+const app = Application('Contacts');
+const names = app.people.name();
+const phones = app.people.phones.value();
+const rows = [];
+for (let i = 0; i < names.length; i++) {
+  const nm = names[i] === null ? '' : String(names[i]);
+  const ps = phones[i] || [];
+  for (const p of ps) if (p) rows.push(nm + '\t' + String(p));
 }
-
-// A plain `swift` script has no app bundle / NSContactsUsageDescription of its own,
-// so macOS TCC attributes Contacts access to the responsible parent (your terminal).
-// requestAccess therefore shows the one-click "allow Contacts for <terminal>" prompt
-// on first run; a Developer-ID-signed helper would prompt as itself. A denied or
-// restricted state can't be re-prompted, so exit 2 and let the caller explain the
-// manual grant. Exit 2 = access unavailable, distinct from exit 1 = a real fetch error.
-let status = CNContactStore.authorizationStatus(for: .contacts)
-switch status {
-case .authorized:
-    emit()
-case .notDetermined:
-    let sema = DispatchSemaphore(value: 0)
-    var granted = false
-    store.requestAccess(for: .contacts) { ok, _ in granted = ok; sema.signal() }
-    if sema.wait(timeout: .now() + 120) == .timedOut {
-        fputs("CONTACTS_ACCESS_UNAVAILABLE status=prompt-timeout\\n", stderr)
-        exit(2)
-    }
-    if granted {
-        emit()
-    } else {
-        fputs("CONTACTS_ACCESS_UNAVAILABLE status=denied\\n", stderr)
-        exit(2)
-    }
-default:
-    fputs("CONTACTS_ACCESS_UNAVAILABLE status=\\(status.rawValue)\\n", stderr)
-    exit(2)
-}
+rows.join('\n');
 """
 
+
+def host_app() -> str:
+    """The app macOS attributes this script's permissions to.
+
+    TCC grants Automation (and Contacts) to the APP that launched the script,
+    never to the script itself. Naming the right one matters: telling someone to
+    enable "Terminal" when they ran this from Claude points them at a row that is
+    not in their list.
+    """
+    bundle = os.environ.get("__CFBundleIdentifier", "")
+    known = {
+        "com.anthropic.claudefordesktop": "Claude",
+        "com.apple.Terminal": "Terminal",
+        "com.googlecode.iterm2": "iTerm",
+        "com.microsoft.VSCode": "Visual Studio Code",
+        "dev.warp.Warp-Stable": "Warp",
+    }
+    if bundle in known:
+        return known[bundle]
+    term = os.environ.get("TERM_PROGRAM", "")
+    if term == "Apple_Terminal":
+        return "Terminal"
+    if term:
+        return term.replace(".app", "")
+    return bundle or "the app you ran this from"
+
+
 print("Reading macOS Contacts...")
-with tempfile.NamedTemporaryFile(suffix=".swift", mode="w", delete=False) as f:
-    f.write(SWIFT)
-    swift_path = f.name
+with tempfile.NamedTemporaryFile(suffix=".js", mode="w", delete=False) as f:
+    f.write(JXA)
+    jxa_path = f.name
 
-result = subprocess.run(["swift", swift_path], capture_output=True, text=True)
-os.unlink(swift_path)
+result = subprocess.run(
+    ["osascript", "-l", "JavaScript", jxa_path], capture_output=True, text=True
+)
+os.unlink(jxa_path)
 
-if result.returncode == 2 or "CONTACTS_ACCESS_UNAVAILABLE" in result.stderr:
-    print("\nCould not read Contacts: access was not granted.")
-    print("On the first run macOS shows a prompt to allow Contacts for your terminal")
-    print("app -- click Allow. If it was denied, or your Mac restricts it:")
-    print("  1. Open System Settings > Privacy & Security > Contacts")
-    print("  2. Enable access for the terminal app you ran this from (Terminal, iTerm, ...)")
+if result.returncode != 0:
+    err = (result.stderr or "").strip()
+    app_name = host_app()
+    print(f"\nCould not read Contacts: {err[:300]}")
+    print(f"\nmacOS grants this to the app that ran the script, which is {app_name}.")
+    print("The first run shows a one-click prompt. If it was denied:")
+    print("  1. Open System Settings > Privacy & Security > Automation")
+    print(f"  2. Under {app_name}, enable Contacts")
     print("  3. Re-run this script.")
     print("(This step only maps phone numbers to names; skipping it keeps the")
     print("phone-number filenames and does not affect the rest of the export.)")
-    sys.exit(1)
-
-if result.returncode != 0:
-    print(f"\nCould not read Contacts: {result.stderr.strip()}")
     sys.exit(1)
 
 # ── Phone → name lookup ───────────────────────────────────────────────────────
