@@ -212,6 +212,12 @@ INTEGRATION_TESTS=(
   # SessionStart repair restores an unprotected account (registration under both
   # matchers + vault preflight) and no-ops on a healthy one, with pos/neg controls.
   test_heal_journal_guard
+  # Anti-fabrication guard family (MYC-1017): proves a fresh install REGISTERS the
+  # Stop + PreToolUse guards, and that the SHIPPED wiring blocks the incident it
+  # exists for while passing an honest close. File presence is not the assertion —
+  # activation is (the family sat dormant in the repo precisely because nothing
+  # asserted registration).
+  test_installer_registers_fabrication_guards
 )
 # ---- Gate-coverage invariant -------------------------------------------------
 # The list above is an explicit allow-list, and allow-lists rot: a new
@@ -343,6 +349,8 @@ PY_DIRECT=(
   hooks/test_live_session_reap.py
   hooks/test_relocation_orphan_reclaim.py
   hooks/test_secret_patterns_fp_filter.py
+  hooks/test_check_fabricated_verification.py
+  hooks/test_warn_chained_state_command.py
 )
 dormant_py=()
 while IFS= read -r -d '' f; do

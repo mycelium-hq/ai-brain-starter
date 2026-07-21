@@ -76,6 +76,17 @@
             "type": "command",
             "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/verify-session-close-cascade.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/verify-session-close-cascade.py; else echo '{\"continue\":true,\"suppressOutput\":true}'; fi",
             "statusMessage": "Verifying session-close cascade (advisory unless the cascade is installed)..."
+          },
+          {
+            "_comment": "Anti-fabrication family. Blocks a close that asserts a verification result (deploy / HTTP status / commit / push / PR opened-or-merged) with no tool call in the session that sourced it from the system of record, or that names a hook/rule as having fired when that name is in no tool error. Wired if/then/else (NOT '|| echo') so a real block (the JSON decision) reaches Claude Code instead of being masked. Bypass: FAB_VERIFY_CHECK_BYPASS=1 / FAB_HOOK_CHECK_BYPASS=1.",
+            "type": "command",
+            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/check-fabricated-verification.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/check-fabricated-verification.py; else echo '{\"continue\":true,\"suppressOutput\":true}'; fi",
+            "statusMessage": "Checking closing claims against tool evidence..."
+          },
+          {
+            "type": "command",
+            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/check-fabricated-hook-attribution.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/check-fabricated-hook-attribution.py; else echo '{\"continue\":true,\"suppressOutput\":true}'; fi",
+            "statusMessage": "Checking hook attributions against fire evidence..."
           }
         ]
       }
@@ -106,6 +117,11 @@
           {
             "type": "command",
             "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/warn-journal-saved-without-context.py 2>/dev/null || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'"
+          },
+          {
+            "_comment": "Warn-only. One Bash call chaining git commit/push, gh pr create/merge or gh release after '&&' AND piping to tail/head: '&&' short-circuits, so a truncated tail shows the FAILING step's error text while the agent infers the earlier steps landed. Bypass: CHAINED_STATE_CMD_BYPASS=1.",
+            "type": "command",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/warn-chained-state-command-truncated.py 2>/dev/null || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'"
           }
         ]
       },
