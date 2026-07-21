@@ -23,6 +23,16 @@ import json
 import os
 import re
 import sys
+from pathlib import Path
+
+# Fire telemetry (MYC-285). Fail-open: a missing _lib must never break the
+# guard or its tests.
+try:
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "_lib"))
+    from guard_telemetry import log_fire
+except Exception:  # pragma: no cover - telemetry is never load-bearing
+    def log_fire(*_a, **_k):
+        return
 
 # State-changing commands whose success cannot be inferred from a truncated tail.
 STATE_CMD = re.compile(
@@ -38,6 +48,7 @@ CHAIN = re.compile(r"(?<!&)&&(?!&)")
 
 def main() -> None:
     if os.environ.get("CHAINED_STATE_CMD_BYPASS") == "1":
+        log_fire("warn-chained-state-command-truncated", status="bypassed")
         sys.exit(0)
     try:
         data = json.load(sys.stdin)
@@ -74,6 +85,8 @@ def main() -> None:
         "the end state from the system of record: `git rev-parse origin/<branch>` for a push, "
         "`gh pr view <n> --json headRefOid,state` for a PR. Bypass: CHAINED_STATE_CMD_BYPASS=1."
     )
+    log_fire("warn-chained-state-command-truncated", status="warned",
+             cmds=",".join(hits))
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",

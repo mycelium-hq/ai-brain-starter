@@ -237,6 +237,57 @@ else:
     PASS += 1
     print("PASS  15. FAB_VERIFY_CHECK_BYPASS=1 disables the guard")
 
+# --- FAST PATH: no-claim turns must skip the evidence read, without weakening ---
+# The guard early-exits before parsing the transcript when the final message
+# contains no claim at all. That is only safe if the gate is the exact
+# disjunction of the detectors' entry conditions. These pin both halves.
+import check_fab_shim as _shim  # noqa: E402  (loader below)
+
+for _label, _text, _want in [
+    ("16. fast-path gate lets a pushed-claim through to its detector",
+     "The branch is pushed and up to date on origin.", True),
+    ("17. fast-path gate lets a PR claim through", "PR #144 is open.", True),
+    ("18. fast-path gate lets a merged claim through", "The work is merged.", True),
+    ("19. fast-path gate lets a committed claim through", "The changes are committed.", True),
+    ("20. fast-path gate lets an HTTP claim through", "curl confirms HTTP 200.", True),
+    ("21. fast-path gate lets a cited ID through", "Deploy `6a191f3a2844` completed.", True),
+    ("22. fast-path gate skips a genuinely claim-free close",
+     "Refactored the parser and added two tests. Both pass locally.", False),
+]:
+    _got = _shim.has_any_claim(_text)
+    if _got == _want:
+        PASS += 1
+        print(f"PASS  {_label}")
+    else:
+        FAIL += 1
+        print(f"FAIL  {_label} :: gate returned {_got}, expected {_want}")
+
+# --- TELEMETRY: a block must be observable in the fleet log ---
+import tempfile as _tf, os as _os  # noqa: E402
+_td = _tf.mkdtemp()
+_log = _os.path.join(_td, "guard-fires.jsonl")
+_blocked, _ = run(
+    "All 16 fixes are committed and pushed to origin. PR #144 contains every one.",
+    commands=[INCIDENT_CMD], results=[INCIDENT_TAIL],
+    env=dict(_os.environ, GUARD_FIRES_LOG=_log),
+)
+if _blocked and _os.path.exists(_log) and "check-fabricated-verification" in open(_log).read():
+    PASS += 1
+    print("PASS  23. block emits guard-fire telemetry (fleet report can see it)")
+else:
+    FAIL += 1
+    print(f"FAIL  23. telemetry :: blocked={_blocked} log_exists={_os.path.exists(_log)}")
+
+_log2 = _os.path.join(_td, "bypass.jsonl")
+run("It is pushed.", commands=["git push"], results=["ok"],
+    env=dict(_os.environ, FAB_VERIFY_CHECK_BYPASS="1", GUARD_FIRES_LOG=_log2))
+if _os.path.exists(_log2) and "bypassed" in open(_log2).read():
+    PASS += 1
+    print("PASS  24. bypass is recorded as 'bypassed' (heeded-vs-bypassed math works)")
+else:
+    FAIL += 1
+    print("FAIL  24. bypass telemetry not recorded")
+
 print()
 print(f"=== summary: {PASS} passed, {FAIL} failed ===")
 sys.exit(1 if FAIL else 0)

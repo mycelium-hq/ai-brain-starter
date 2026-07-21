@@ -45,6 +45,16 @@ import re
 import sys
 from pathlib import Path
 
+# Fire telemetry (MYC-285). Fail-open: a missing _lib must never break the
+# guard or its tests. Without this the guard is invisible to the fleet report —
+# we could not tell whether it ever fires, or is being bypassed in the field.
+try:
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "_lib"))
+    from guard_telemetry import log_fire
+except Exception:  # pragma: no cover - telemetry is never load-bearing
+    def log_fire(*_a, **_k):
+        return
+
 # Token shapes that name a concrete external artifact you can only know by
 # running something: git SHAs (7-40 hex), deploy/build IDs (>=8 hex or
 # hex-with-dashes), long numeric run IDs (>=8 digits).
@@ -173,6 +183,7 @@ def _present(tok: str, blob: str) -> bool:
 
 def main() -> None:
     if os.environ.get("FAB_VERIFY_CHECK_BYPASS") == "1":
+        log_fire("check-fabricated-verification", status="bypassed")
         sys.exit(0)
     try:
         data = json.load(sys.stdin)
@@ -187,6 +198,15 @@ def main() -> None:
     try:
         last = _last_assistant_text(tp)
         if not last:
+            sys.exit(0)
+        # Cheap gate before the expensive read. Every detector requires a match
+        # in `last`; with no claim of any kind there, `findings` is provably
+        # empty, so parsing the whole transcript for evidence is pure waste.
+        # Stop fires once per turn and a long session's transcript reaches tens
+        # of MB, so skipping the second full parse on the common (no-claim) turn
+        # is most of this guard's cost. Behavior is unchanged by construction:
+        # this is the disjunction of the detectors' own entry conditions.
+        if not _has_any_claim(last):
             sys.exit(0)
         result_blob, command_blob = _evidence(tp)
     except Exception:
@@ -290,8 +310,26 @@ def main() -> None:
         "Forensic writeups and not-yet-happened plans pass automatically. Hard bypass: "
         "FAB_VERIFY_CHECK_BYPASS=1."
     )
+    log_fire("check-fabricated-verification", status="blocked", findings=len(set(findings)))
     print(json.dumps({"decision": "block", "reason": msg}))
     sys.exit(0)
+
+
+def _has_any_claim(text: str) -> bool:
+    """True if `text` could possibly trip ANY detector.
+
+    This is the exact disjunction of the detectors' entry conditions:
+      A -> ID_TOKEN            B -> HTTP_CLAIM | DEPLOY_CLAIM
+      C -> COMMITTED | PUSHED | PR | MERGED
+    Keep it in sync when adding a detector, or that detector goes dark. The
+    unit suite's blocking cases fail loudly if this ever under-matches, since
+    a claim that no longer reaches its detector stops being blocked.
+    """
+    for pat in (ID_TOKEN, HTTP_CLAIM, DEPLOY_CLAIM,
+                COMMITTED_CLAIM, PUSHED_CLAIM, PR_CLAIM, MERGED_CLAIM):
+        if pat.search(text):
+            return True
+    return False
 
 
 def _claim_exempt(text: str, claim_re: "re.Pattern") -> bool:
