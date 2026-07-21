@@ -22,7 +22,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 GATE="$REPO_ROOT/scripts/check-hookify-template-capabilities.py"
 TPL_DIR="$REPO_ROOT/templates/hookify-rules"
-ALLOWLISTED="hookify.block-malformed-mcp-json.local.md"
+ALLOWLISTED="hookify.warn-rotation-push-on-local-only-leak.local.md"
 
 PASS=0; FAIL=0
 ok()  { PASS=$((PASS + 1)); echo "PASS  $1"; }

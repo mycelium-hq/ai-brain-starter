@@ -39,9 +39,9 @@ OFFICIAL_FIELDS_BY_EVENT["all"] = set().union(*OFFICIAL_FIELDS_BY_EVENT.values()
 # flight. Keeps this gate GREEN today (never ship a known-red gate) while making the
 # debt visible. DELETE an entry when its PR ships -- the gate then enforces it.
 KNOWN_UPSTREAM_GAPS = {
-    "hookify.block-malformed-mcp-json.local.md":
-        "operator regex_not_match not in official engine "
-        "-- upstream fix: anthropics/claude-code#78715",
+    # block-malformed-mcp-json is NOT listed: it was rewritten to an anchored
+    # negative lookahead inside a plain regex_match, so it now fires on the
+    # official engine today rather than waiting on anthropics/claude-code#78715.
     "hookify.warn-rotation-push-on-local-only-leak.local.md":
         "event:prompt rules never fire on the official engine (payload key is "
         "`prompt`, engine reads `user_prompt`) -- upstream fix: anthropics/claude-code#79873",
