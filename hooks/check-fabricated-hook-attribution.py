@@ -24,6 +24,15 @@ import sys
 import time
 from pathlib import Path
 
+# Fire telemetry (MYC-285). Fail-open: a missing _lib must never break the
+# guard or its tests.
+try:
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "_lib"))
+    from guard_telemetry import log_fire
+except Exception:  # pragma: no cover - telemetry is never load-bearing
+    def log_fire(*_a, **_k):
+        return
+
 WINDOW_SEC = 600
 LOG_PATH = Path.home() / ".claude" / "hookify-blocks.log"
 
@@ -41,6 +50,7 @@ CLAIM_PATTERNS = [
 
 def main() -> None:
     if os.environ.get("FAB_HOOK_CHECK_BYPASS") == "1":
+        log_fire("check-fabricated-hook-attribution", status="bypassed")
         sys.exit(0)
     try:
         data = json.load(sys.stdin)
@@ -74,6 +84,8 @@ def main() -> None:
         f"from the actual tool error in this turn, or say 'a hook blocked this' without "
         f"naming a specific one. Bypass for forensic discussion: FAB_HOOK_CHECK_BYPASS=1."
     )
+    log_fire("check-fabricated-hook-attribution", status="blocked",
+             names=",".join(fabricated))
     print(json.dumps({"decision": "block", "reason": msg}))
     sys.exit(0)
 
