@@ -7,9 +7,10 @@ This script cross-references macOS Contacts to rename them to real names
 and updates the frontmatter + message sender lines inside each file.
 
 Requirements:
-  - macOS
-  - Terminal must have Contacts permission:
-    System Settings › Privacy & Security › Contacts › Terminal (enable)
+  - macOS (contacts are read through Contacts.app via osascript; no Xcode needed)
+  - The app you run this from (Claude, Terminal, iTerm, ...) needs permission to
+    control Contacts. The first run shows a one-click prompt; to change it later:
+    System Settings › Privacy & Security › Automation › <that app> › Contacts
 
 Usage:
   VAULT_ROOT=/path/to/vault python3 rename-contacts.py
@@ -26,6 +27,16 @@ import subprocess
 import tempfile
 import argparse
 from pathlib import Path
+
+# macOS only: contacts are read through Contacts.app via osascript, which does not
+# exist elsewhere. Say so in a sentence instead of dying on a FileNotFoundError
+# traceback -- this repo installs on Windows too, and this step is optional.
+if sys.platform != "darwin":
+    print("rename-contacts.py runs on macOS only: it reads Contacts through "
+          f"Contacts.app via osascript (detected platform: {sys.platform}).")
+    print("The rest of the WhatsApp export is unaffected; chats just keep their "
+          "phone-number names.")
+    sys.exit(1)
 
 # ── Args ──────────────────────────────────────────────────────────────────────
 
@@ -144,6 +155,15 @@ for line in result.stdout.splitlines():
         phone_map[d[2:]] = name          # Colombia: without country code
 
 print(f"Loaded {len(phone_map):,} phone entries")
+
+# Zero entries means nothing can be renamed. Say why and stop, rather than
+# scanning every file to change nothing and leaving the user to guess.
+if not phone_map:
+    print("\nNo usable contacts came back, so no file can be renamed.")
+    print("Either the address book is empty, or Contacts returned no data. Check")
+    print("System Settings > Privacy & Security > Automation >")
+    print(f"{host_app()} > Contacts, then re-run.")
+    sys.exit(1)
 
 def lookup(digits: str) -> str | None:
     return (phone_map.get(digits)
