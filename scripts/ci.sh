@@ -218,6 +218,12 @@ INTEGRATION_TESTS=(
   # activation is (the family sat dormant in the repo precisely because nothing
   # asserted registration).
   test_installer_registers_fabrication_guards
+  # Hookify template capability gate (2026-07-18): the OFFICIAL engine returns
+  # False for an operator it does not implement and None for a field it cannot
+  # resolve, so a shipped template using either loads fine and SILENTLY NEVER
+  # FIRES — protection that is not actually there. Negative controls prove the
+  # gate reddens on a bad operator, a bad field, and a stale allowlist entry.
+  test_hookify_template_capabilities
 )
 # ---- Gate-coverage invariant -------------------------------------------------
 # The list above is an explicit allow-list, and allow-lists rot: a new

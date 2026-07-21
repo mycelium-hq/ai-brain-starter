@@ -85,6 +85,22 @@ jobs:
       - name: run the meta-resolution guard
         run: bash scripts/check-meta-resolution.sh
 
+  hookify-capabilities:
+    name: hookify templates evaluable by the official engine
+    runs-on: ubuntu-latest
+    # We ship hookify rule templates for people to copy onto the OFFICIAL plugin
+    # (anthropics/claude-code -> plugins/hookify). That engine returns False for an
+    # operator it does not implement and None for a field it cannot resolve, so a
+    # template using a capability it lacks loads fine and SILENTLY NEVER FIRES -
+    # protection that is not actually there. This gate fails loud instead.
+    # No untrusted user input is referenced in any run: command.
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+      - name: run the hookify capability gate
+        run: python3 -S scripts/check-hookify-template-capabilities.py
+      - name: negative controls for the gate
+        run: bash tests/integration/test_hookify_template_capabilities.sh
+
   powershell:
     name: PowerShell parse (.ps1)
     runs-on: ubuntu-latest
