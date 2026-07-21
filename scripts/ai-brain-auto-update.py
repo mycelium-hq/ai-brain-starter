@@ -82,6 +82,85 @@ def _reclaim_stale_lock(lock: Path) -> None:
         pass
 
 
+GIT_LOCK_NAMES = ("index.lock", "HEAD.lock", "shallow.lock")
+
+
+def _git_dir(repo: Path) -> "Path | None":
+    """The real .git directory, WITHOUT shelling out to git (which is exactly
+    what a stuck lock can break). `.git` is a directory in a normal clone and a
+    `gitdir:` pointer FILE in a linked worktree."""
+    dot = repo / ".git"
+    try:
+        if dot.is_dir():
+            return dot
+        if dot.is_file():
+            txt = dot.read_text(encoding="utf-8", errors="replace").strip()
+            if txt.startswith("gitdir:"):
+                p = Path(txt.split(":", 1)[1].strip())
+                return p if p.is_absolute() else (repo / p).resolve()
+    except OSError:
+        return None
+    return None
+
+
+def _lock_is_held(lock: Path) -> "bool | None":
+    """True if a LIVE process holds the lock, False if provably not, None if we
+    cannot tell (no lsof). Never guesses True->False: unknown stays unknown, and
+    the caller then falls back to the age test alone."""
+    try:
+        r = subprocess.run(["lsof", "-t", str(lock)],
+                           capture_output=True, text=True, timeout=5)
+        return bool(r.stdout.strip())
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+
+def _reclaim_stale_git_locks(repo: Path) -> list:
+    """Remove ABANDONED git lock files, which otherwise block every future pull
+    FOREVER (MYC-3175, the 3rd mechanism of the MYC-1988 install-clone-freeze
+    class). Same reasoning as _reclaim_stale_lock above, applied to git's own
+    locks: a git process killed mid-operation strands `.git/index.lock`, and
+    from then on EVERY `git pull` fails with "Unable to create index.lock".
+    Nothing self-heals, so the install silently stops receiving updates —
+    including guard and security fixes.
+
+    Deliberately conservative; removing a lock a live git holds would corrupt
+    the repo. A lock is reclaimed ONLY when BOTH hold:
+      * older than ABS_STALE_GIT_LOCK_AGE_SEC (default 1h). No git operation
+        holds an index lock for an hour; a real one clears in seconds.
+      * not held by any live process, per lsof. When lsof is unavailable the
+        age test alone decides — and on Windows the unlink itself raises
+        PermissionError while a process holds the file, which is a stronger
+        check than lsof and needs no extra code.
+
+    Returns the names reclaimed (for surfacing), never raises.
+    """
+    try:
+        min_age = float(os.environ.get("ABS_STALE_GIT_LOCK_AGE_SEC", "3600"))
+    except ValueError:
+        min_age = 3600.0
+    gitdir = _git_dir(repo)
+    if gitdir is None:
+        return []
+    reclaimed = []
+    for name in GIT_LOCK_NAMES:
+        lock = gitdir / name
+        try:
+            if not lock.is_file():
+                continue
+            if (time.time() - lock.stat().st_mtime) <= min_age:
+                continue  # recent -> assume a real concurrent git operation
+            if _lock_is_held(lock) is True:
+                continue  # a live process owns it; never stomp it
+            lock.unlink()
+            reclaimed.append(name)
+        except OSError:
+            # Windows raises PermissionError while the file is genuinely held.
+            # Leaving it alone is the correct, safe outcome.
+            continue
+    return reclaimed
+
+
 def _install_fix_cmd() -> str:
     """The manual re-install command, phrased for the user's actual platform."""
     py = "python" if os.name == "nt" else "python3"
@@ -124,12 +203,28 @@ def run() -> None:
         if not (skill / ".git").exists():
             silent()
 
+        # 2b. Reclaim abandoned git locks BEFORE any git call. A stranded
+        # .git/index.lock fails every fetch/merge forever, so without this the
+        # install freezes permanently and silently (MYC-3175).
+        reclaimed_locks = _reclaim_stale_git_locks(skill)
+
         # 3. Fetch. Network down -> gentle note, never crash the turn.
         try:
             fetch = _git(["fetch", "origin", "main", "--quiet"], skill)
         except (subprocess.TimeoutExpired, OSError):
             fetch = None
         if fetch is None or fetch.returncode != 0:
+            err = (fetch.stderr or "") if fetch is not None else ""
+            if "lock" in err.lower():
+                # Not a network problem. Saying "couldn't reach the internet"
+                # here sends the user to debug wifi while a held lock blocks
+                # every update (MYC-3175).
+                emit_ctx(
+                    "AI Brain Starter could not check for updates: a git lock file "
+                    f"in {skill} is being held. If another git process is running "
+                    "there, this clears itself; otherwise the updater auto-clears "
+                    "locks older than an hour on the next check. Verbatim git "
+                    f"error: {err.strip()[:300]}")
             emit_ctx(
                 "AI Brain Starter checked for updates but couldn't reach the "
                 "internet (or the repository). Nothing is wrong — it will try "
@@ -141,6 +236,17 @@ def run() -> None:
         except (subprocess.TimeoutExpired, OSError):
             silent()
         if not head or head == origin:
+            # Surface a heal even when there is nothing to pull. This is the
+            # case that was invisible before: the clone had been frozen for
+            # days by a stranded lock, and going silent here would hide both
+            # the freeze and the repair (MYC-3175).
+            if reclaimed_locks:
+                emit_ctx(
+                    "AI Brain Starter cleared an abandoned git lock "
+                    f"({', '.join(reclaimed_locks)}) in {skill} that a crashed git "
+                    "process had left behind. Every update had been failing since "
+                    "then, silently. Updates work again — your copy is now current. "
+                    "No action needed.")
             silent()  # already current
 
         # 4. ff-ONLY. Tracked-file edits or a divergent fork refuse the pull.
@@ -156,6 +262,22 @@ def run() -> None:
                     "first). Everything else keeps working in the meantime.")
             merge = _git(["merge", "--ff-only", "origin/main", "--quiet"], skill)
             if merge.returncode != 0:
+                # Distinguish the two causes. A stuck lock is NOT a fork, and
+                # telling the user "you have a local fork" sends them to fix
+                # the wrong thing while the real cause (an abandoned
+                # .git/*.lock a crashed git left behind) persists forever.
+                # A lock still present HERE survived 2b, so it is either fresh
+                # (a real concurrent git) or genuinely held.
+                if "lock" in (merge.stderr or "").lower():
+                    emit_ctx(
+                        "AI Brain Starter auto-update is BLOCKED: a git lock file in "
+                        f"{skill} is being held, so the pull cannot run. If another "
+                        "git process is working there right now, this clears itself. "
+                        "If nothing else is running, a crashed git left the lock "
+                        "behind and every future update will keep failing until it "
+                        "is removed — the updater auto-clears locks older than an "
+                        "hour, so this should resolve on the next check. Verbatim "
+                        f"git error: {(merge.stderr or '').strip()[:300]}")
                 emit_ctx(
                     "AI Brain Starter auto-update is BLOCKED (safely): your copy at "
                     f"{skill} has diverged from the official version (a local "
