@@ -26,6 +26,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NamedTuple, Optional
 
+# Abandoned-git-lock reclaim (MYC-3175), shared with the install-clone updater.
+# Fail-open: a missing sibling must never break the scan.
+try:
+    from .git_locks import reclaim_stale_git_locks
+except ImportError:  # loaded as a plain module (not a package), the common case
+    try:
+        import sys as _sys
+        _sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from git_locks import reclaim_stale_git_locks
+    except Exception:  # pragma: no cover - heal is best-effort
+        def reclaim_stale_git_locks(_repo):
+            return []
+
 
 SOURCE_EXT_RE = re.compile(
     r"\.(py|ts|tsx|js|jsx|go|rs|java|rb|php|c|cpp|h|hpp|swift|kt|scala)$"
@@ -895,6 +908,13 @@ def execute_hub_refresh(
         return res
 
     upstream = f"origin/{fresh.default_branch}"
+    # Reclaim an abandoned index.lock first (MYC-3175). A crashed git strands it
+    # and then EVERY ff here fails forever, so the hub silently rots while the
+    # report keeps calling it merely "behind" — the same permanent freeze the
+    # install clone hit. Conservative: only an old, unheld lock is removed.
+    reclaimed = reclaim_stale_git_locks(state.repo)
+    if reclaimed:
+        res["reclaimed_locks"] = reclaimed
     rc, _out, err = _git(state.repo, "merge", "--ff-only", upstream)
     res["ok"] = rc == 0
     res["applied"] = rc == 0
