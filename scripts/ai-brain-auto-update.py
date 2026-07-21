@@ -82,83 +82,26 @@ def _reclaim_stale_lock(lock: Path) -> None:
         pass
 
 
-GIT_LOCK_NAMES = ("index.lock", "HEAD.lock", "shallow.lock")
-
-
-def _git_dir(repo: Path) -> "Path | None":
-    """The real .git directory, WITHOUT shelling out to git (which is exactly
-    what a stuck lock can break). `.git` is a directory in a normal clone and a
-    `gitdir:` pointer FILE in a linked worktree."""
-    dot = repo / ".git"
-    try:
-        if dot.is_dir():
-            return dot
-        if dot.is_file():
-            txt = dot.read_text(encoding="utf-8", errors="replace").strip()
-            if txt.startswith("gitdir:"):
-                p = Path(txt.split(":", 1)[1].strip())
-                return p if p.is_absolute() else (repo / p).resolve()
-    except OSError:
-        return None
-    return None
-
-
-def _lock_is_held(lock: Path) -> "bool | None":
-    """True if a LIVE process holds the lock, False if provably not, None if we
-    cannot tell (no lsof). Never guesses True->False: unknown stays unknown, and
-    the caller then falls back to the age test alone."""
-    try:
-        r = subprocess.run(["lsof", "-t", str(lock)],
-                           capture_output=True, text=True, timeout=5)
-        return bool(r.stdout.strip())
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-
-
-def _reclaim_stale_git_locks(repo: Path) -> list:
-    """Remove ABANDONED git lock files, which otherwise block every future pull
-    FOREVER (MYC-3175, the 3rd mechanism of the MYC-1988 install-clone-freeze
-    class). Same reasoning as _reclaim_stale_lock above, applied to git's own
-    locks: a git process killed mid-operation strands `.git/index.lock`, and
-    from then on EVERY `git pull` fails with "Unable to create index.lock".
-    Nothing self-heals, so the install silently stops receiving updates —
-    including guard and security fixes.
-
-    Deliberately conservative; removing a lock a live git holds would corrupt
-    the repo. A lock is reclaimed ONLY when BOTH hold:
-      * older than ABS_STALE_GIT_LOCK_AGE_SEC (default 1h). No git operation
-        holds an index lock for an hour; a real one clears in seconds.
-      * not held by any live process, per lsof. When lsof is unavailable the
-        age test alone decides — and on Windows the unlink itself raises
-        PermissionError while a process holds the file, which is a stronger
-        check than lsof and needs no extra code.
-
-    Returns the names reclaimed (for surfacing), never raises.
-    """
-    try:
-        min_age = float(os.environ.get("ABS_STALE_GIT_LOCK_AGE_SEC", "3600"))
-    except ValueError:
-        min_age = 3600.0
-    gitdir = _git_dir(repo)
-    if gitdir is None:
+# Abandoned-git-lock reclaim (MYC-3175). ONE canonical implementation in
+# hooks/_lib/git_locks.py, shared with the ~/dev hub fleet — a second copy would
+# rot the moment one is fixed. Fail-open: a missing _lib must never break the
+# updater, which is the thing that would repair it.
+try:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks" / "_lib"))
+    from git_locks import reclaim_stale_git_locks as _reclaim_stale_git_locks
+except Exception:  # pragma: no cover - heal is best-effort, never load-bearing
+    def _reclaim_stale_git_locks(_repo):
         return []
-    reclaimed = []
-    for name in GIT_LOCK_NAMES:
-        lock = gitdir / name
-        try:
-            if not lock.is_file():
-                continue
-            if (time.time() - lock.stat().st_mtime) <= min_age:
-                continue  # recent -> assume a real concurrent git operation
-            if _lock_is_held(lock) is True:
-                continue  # a live process owns it; never stomp it
-            lock.unlink()
-            reclaimed.append(name)
-        except OSError:
-            # Windows raises PermissionError while the file is genuinely held.
-            # Leaving it alone is the correct, safe outcome.
-            continue
-    return reclaimed
+
+
+def _stamp(path: Path) -> None:
+    """Record 'this happened now'. Never raises — a stamp failure must not
+    break the update it is only observing."""
+    try:
+        path.touch()
+        os.utime(path, None)
+    except OSError:
+        pass
 
 
 def _install_fix_cmd() -> str:
@@ -173,6 +116,13 @@ def run() -> None:
     skill = _skill_dir()
     pin = state / ".ai-brain-starter-pinned"
     last = state / ".ai-brain-starter-last-update"
+    # Distinct from `last`, and the distinction IS the signal (MYC-3175).
+    # `last` records that an ATTEMPT happened; this records that the clone was
+    # confirmed CURRENT with origin. A frozen clone keeps stamping `last`
+    # forever while this one stops moving — the only reliable freeze signal,
+    # since "behind origin" is precisely what a clone that cannot fetch
+    # under-reports.
+    last_ok = state / ".ai-brain-starter-last-successful-pull"
     lock = state / ".ai-brain-starter-update.lock"
     interval_days = float(os.environ.get("ABS_UPDATE_INTERVAL_DAYS", "6"))
     deploy_timeout = float(os.environ.get("ABS_UPDATE_DEPLOY_TIMEOUT", "120"))
@@ -197,6 +147,12 @@ def run() -> None:
     try:
         try:
             last.touch()  # claim this interval up-front (matches prior behavior)
+            # Seed the success stamp on the FIRST run so staleness is measured
+            # from real data. Without a seed, a clone that never once pulled
+            # successfully would have no stamp to age — and the freeze it is
+            # meant to catch would be the exact case that stays invisible.
+            if not last_ok.exists():
+                last_ok.touch()
         except OSError:
             pass
 
@@ -236,6 +192,10 @@ def run() -> None:
         except (subprocess.TimeoutExpired, OSError):
             silent()
         if not head or head == origin:
+            # Confirmed current with origin: the fetch reached the remote and
+            # HEAD matches it. That is a SUCCESSFUL pull for freeze-detection
+            # purposes even though nothing moved.
+            _stamp(last_ok)
             # Surface a heal even when there is nothing to pull. This is the
             # case that was invisible before: the clone had been frozen for
             # days by a stranded lock, and going silent here would hide both
@@ -286,6 +246,10 @@ def run() -> None:
                     "main (or your preferred strategy).")
         except (subprocess.TimeoutExpired, OSError):
             silent()
+
+        # The ff-only merge succeeded: fetched from origin and moved HEAD onto
+        # it. Every emit_ctx above exits, so reaching here means a real pull.
+        _stamp(last_ok)
 
         try:
             log = _git(["log", "--oneline", f"{head}..HEAD"], skill)

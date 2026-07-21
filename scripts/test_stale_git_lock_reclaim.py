@@ -37,9 +37,27 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-spec = importlib.util.spec_from_file_location("abs_au", HERE / "ai-brain-auto-update.py")
-au = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(au)
+
+# The reclaim is CANONICAL in hooks/_lib/git_locks.py and shared with the ~/dev
+# hub fleet (MYC-3175 item 4), so test it there — testing a consumer's private
+# copy is what lets two copies drift apart unnoticed.
+_gl_spec = importlib.util.spec_from_file_location(
+    "abs_git_locks", HERE.parent / "hooks" / "_lib" / "git_locks.py")
+au = importlib.util.module_from_spec(_gl_spec)
+sys.modules["abs_git_locks"] = au
+_gl_spec.loader.exec_module(au)
+# The public names, aliased to the private ones this suite was written against.
+au._reclaim_stale_git_locks = au.reclaim_stale_git_locks
+au._git_dir = au.git_dir
+au._lock_is_held = au.lock_is_held
+
+# The updater must still REACH the canonical reclaim — the import could silently
+# fall through to its fail-open stub and every heal would quietly stop happening.
+_au_spec = importlib.util.spec_from_file_location(
+    "abs_au", HERE / "ai-brain-auto-update.py")
+_au = importlib.util.module_from_spec(_au_spec)
+sys.modules["abs_au"] = _au
+_au_spec.loader.exec_module(_au)
 
 PASS = 0
 FAIL = 0
@@ -200,6 +218,16 @@ try:
         bad("9. tunable", f"exists={lock.exists()} returned={got}")
 finally:
     del os.environ["ABS_STALE_GIT_LOCK_AGE_SEC"]
+
+# --- 10. the updater is WIRED to the canonical reclaim, not its fail-open stub -
+# Without this the import could silently fall through and every heal would stop
+# happening, with all nine cases above still green (they test the lib directly).
+if getattr(_au, "_reclaim_stale_git_locks", None) is not None and \
+        _au._reclaim_stale_git_locks.__doc__ == au.reclaim_stale_git_locks.__doc__:
+    ok("10. ai-brain-auto-update resolves the CANONICAL reclaim (not the stub)")
+else:
+    bad("10. updater wiring",
+        "the updater fell back to its fail-open stub — heals would silently stop")
 
 print()
 print(f"=== summary: {PASS} passed, {FAIL} failed ===")
