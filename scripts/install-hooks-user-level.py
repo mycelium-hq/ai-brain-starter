@@ -116,6 +116,14 @@ ABS_FINGERPRINTS = [
     # matchers each; the matcher-aware merge above keeps both copies.
     "ai-brain-starter/hooks/warn-journal-saved-without-context.py",
     "ai-brain-starter/scripts/heal-journal-guard.py",
+    # Anti-fabrication guard family (MYC-1017). These target a MODEL-GENERAL bug
+    # class — an agent asserting a verification result or a hook attribution it
+    # never sourced from evidence — so they belong in the substrate, ACTIVATED
+    # here. Shipping the files without registering them is ARTIFACT-WITHOUT-
+    # ACTIVATION: guards present on disk, dormant in behavior.
+    "ai-brain-starter/hooks/check-fabricated-verification.py",
+    "ai-brain-starter/hooks/check-fabricated-hook-attribution.py",
+    "ai-brain-starter/hooks/warn-chained-state-command-truncated.py",
 ]
 
 # Path-divergence-robust matching: an ai-brain-starter hook may be wired at the
@@ -143,6 +151,10 @@ ABS_OWNED_BASENAMES = {
     "surface-deployed-hooks-behind.py",
     # Journal Step-0 context guard + its SessionStart self-heal (2026-07-07):
     "warn-journal-saved-without-context.py", "heal-journal-guard.py",
+    # Anti-fabrication guard family (MYC-1017). Basenames listed so a copy wired
+    # at ~/.claude/hooks/ dedups against the skill-path copy instead of doubling.
+    "check-fabricated-verification.py", "check-fabricated-hook-attribution.py",
+    "warn-chained-state-command-truncated.py",
 }
 
 # Hooks ai-brain-starter USED TO ship and has deliberately RETIRED. The
