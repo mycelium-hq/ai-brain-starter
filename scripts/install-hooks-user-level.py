@@ -98,6 +98,11 @@ ABS_FINGERPRINTS = [
     "ai-brain-starter/hooks/block-secret-in-note.py",
     # Write-time template-purity guard (MYC-1765, structural isolation plane):
     "ai-brain-starter/hooks/block-populated-public-skill.py",
+    # Write-time reusable-workflow permission guard. A callee asking for a scope
+    # its caller never grants makes GitHub refuse to START the run:
+    # startup_failure, zero jobs, no annotation, no check-run. Single-file
+    # linters cannot see it — the defect lives BETWEEN two files.
+    "ai-brain-starter/hooks/warn-workflow-call-permission-elevation.py",
     # Context-budget measurer (always-loaded text layer; MYC-619):
     "ai-brain-starter/hooks/context-budget-measure.py",
     # Vault-in-worktree melt tripwire (3-channel detect; SessionStart + tool-time + dedup):
@@ -143,6 +148,7 @@ ABS_OWNED_BASENAMES = {
     "worktree-footprint-signal.py", "remediate-runaway-procs.py",
     "block-secret-in-note.py", "context-budget-measure.py",
     "block-populated-public-skill.py",
+    "warn-workflow-call-permission-elevation.py",
     "warn-vault-session-in-worktree.py", "warn-learning-to-tool-private-memory.py",
     "warn-stale-dev-checkout.py", "dev-hub-refresh-on-session-start.py",
     # Session-start context loaders (MYC-2359 UPS -> SessionStart relocation):
