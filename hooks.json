@@ -162,6 +162,11 @@
           },
           {
             "type": "command",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/warn-workflow-call-permission-elevation.py 2>/dev/null || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'",
+            "statusMessage": "Checking reusable-workflow permissions (callee cannot exceed caller)..."
+          },
+          {
+            "type": "command",
             "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/warn-journal-saved-without-context.py 2>/dev/null || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'"
           }
         ]
