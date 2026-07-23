@@ -122,6 +122,11 @@
             "_comment": "Warn-only. One Bash call chaining git commit/push, gh pr create/merge or gh release after '&&' AND piping to tail/head: '&&' short-circuits, so a truncated tail shows the FAILING step's error text while the agent infers the earlier steps landed. Bypass: CHAINED_STATE_CMD_BYPASS=1.",
             "type": "command",
             "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/warn-chained-state-command-truncated.py 2>/dev/null || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'"
+          },
+          {
+            "_comment": "BLOCKING gate (CONCURRENT-SESSION-HEAD-DRIFT). From a worktree-rooted session, blocks `cd`/`pushd` into the MAIN checkout, which shares one .git/HEAD with every other main-checkout session. No-op unless cwd matches <main>/.claude/worktrees/<slug>. Wired in the `if [ -f ]` form on purpose: this hook signals by EXIT CODE 2 and writes its remediation prose to STDERR, so the usual `<script> 2>/dev/null || echo <allow>` idiom would discard the message AND convert the block into an allow. Bypass: WORKTREE_CD_BYPASS=1.",
+            "type": "command",
+            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/check-cd-outside-worktree.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/check-cd-outside-worktree.py; else echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'; fi"
           }
         ]
       },
