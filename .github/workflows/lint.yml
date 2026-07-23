@@ -410,3 +410,16 @@ jobs:
         # window must stay quiet. Sub-second and stdlib-only, folded into this job
         # for the same billing-floor reason as the checks above.
         run: python3 scripts/check-shipped-version-drift.py --self-test
+
+      - name: hook emission-channel negative controls (a mute guard must go RED)
+        # MYC-3246: a hook shipped registered, on disk, and 8/8 green — and mute,
+        # because it wrote to stderr while its own wiring ends in `2>/dev/null`.
+        # Its per-hook tests could not see it (the harness merged stderr with
+        # `2>&1`), so only a check that reads the WIRING catches the class.
+        run: python3 scripts/check-hook-emission-channel.py --self-test
+
+      - name: every wired hook can actually reach a reader
+        # The live half: scans hooks.json against hooks/ on this tree. Verified
+        # to red on c8da71f (the commit that shipped the mute hook) and stay
+        # green after the fix — a real before/after fixture, not a synthetic one.
+        run: python3 scripts/check-hook-emission-channel.py
