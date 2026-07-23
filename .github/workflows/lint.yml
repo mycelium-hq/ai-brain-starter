@@ -400,3 +400,13 @@ jobs:
         # Dogfood: the substrate passes the audit it ships. Advisory findings
         # are allowed; `high` is not.
         run: python3 scripts/ci-cost-audit.py --fail-on high
+
+      - name: shipped-version-drift negative controls (the alarm must still bite)
+        # The live half runs on a schedule (release-drift-heartbeat.yml), so a PR
+        # can silently break its decision logic and nothing reds until the next
+        # cron — and a drift alarm that stopped alarming looks exactly like a repo
+        # with no drift. This runs the pure-logic negative controls on every PR:
+        # real drift past the grace window must RED, and the normal bump-then-cut
+        # window must stay quiet. Sub-second and stdlib-only, folded into this job
+        # for the same billing-floor reason as the checks above.
+        run: python3 scripts/check-shipped-version-drift.py --self-test
