@@ -41,12 +41,15 @@
     "PreCompact": 3,
     "SessionEnd": 3
   },
+  "_budget_rationale": {
+    "fanout_per_tool.PreToolUse.Bash": "5 -> 6: activating check-cd-outside-worktree.py, the worktree HEAD-isolation gate that shipped unregistered (present on disk, dormant in behavior). Intentional: it is a pure in-process string match on the payload cwd — no git, no I/O — and returns immediately unless the session is worktree-rooted, so the added cost is one interpreter spawn on Bash calls. Bought against a documented ~30-minute reflog rescue from CONCURRENT-SESSION-HEAD-DRIFT."
+  },
   "fanout_per_tool": {
     "PreToolUse": {
       "Write": 9,
       "Edit": 9,
       "MultiEdit": 9,
-      "Bash": 5,
+      "Bash": 6,
       "Read": 4,
       "Glob": 3,
       "Grep": 3,

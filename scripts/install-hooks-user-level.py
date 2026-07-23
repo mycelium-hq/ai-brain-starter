@@ -92,6 +92,12 @@ ABS_FINGERPRINTS = [
     "ai-brain-starter/hooks/remove-ended-worktree.py",
     "ai-brain-starter/hooks/enforce-worktree-cap.py",
     "ai-brain-starter/hooks/worktree-footprint-signal.py",
+    # Worktree HEAD-isolation gate. The other worktree hooks CLEAN UP after a
+    # worktree; this one PREVENTS the drift (a `cd` from a worktree session into
+    # the shared main checkout). Shipped + tested since MYC-782 but unregistered
+    # here until now: present on disk, dormant in behavior on every fresh
+    # install (ARTIFACT-WITHOUT-ACTIVATION).
+    "ai-brain-starter/hooks/check-cd-outside-worktree.py",
     # Auto-remediation (the FIX side of the surfacing hooks):
     "ai-brain-starter/hooks/remediate-runaway-procs.py",
     # Write-time secret guard:
@@ -146,6 +152,10 @@ ABS_OWNED_BASENAMES = {
     "snapshot-pending-work-on-stop.py", "surface-orphan-worktree-snapshots.py",
     "remove-ended-worktree.py", "enforce-worktree-cap.py",
     "worktree-footprint-signal.py", "remediate-runaway-procs.py",
+    # Worktree HEAD-isolation gate (MYC-782). Basename listed so a copy wired at
+    # ~/.claude/hooks/ — the hand-wired form on pre-registration machines —
+    # dedups against the skill-path copy instead of double-firing.
+    "check-cd-outside-worktree.py",
     "block-secret-in-note.py", "context-budget-measure.py",
     "block-populated-public-skill.py",
     "warn-workflow-call-permission-elevation.py",
