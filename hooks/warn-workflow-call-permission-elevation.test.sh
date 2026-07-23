@@ -67,7 +67,7 @@ jobs:
 run_write() { # file_path content
   printf '{"tool_name":"Write","tool_input":{"file_path":"%s","content":%s}}' \
     "$1" "$(python3 -c 'import json,sys;print(json.dumps(sys.stdin.read()))' <<<"$2")" \
-    | python3 "$HOOK" 2>&1
+    | python3 "$HOOK" 2>/dev/null
 }
 
 # 1 FORWARD: writing a caller whose existing callee already asks for more.
@@ -114,6 +114,29 @@ jobs:
 # 8 Unparseable YAML must not break the user's edit.
 check "unparseable yaml -> quiet, never breaks the edit" quiet \
   "$(run_write "$WF/smoke.yml" ':::not: [valid')"
+
+# 9 EMISSION CHANNEL. Every hooks.json command in this repo ends in
+#   `2>/dev/null || echo <allow>`, so stderr is discarded before Claude Code
+#   sees it. A warning must therefore arrive on STDOUT as valid
+#   hookSpecificOutput.additionalContext JSON. run_write already captures
+#   stdout only (cases 1+2 are the behavioural half of this control); this
+#   asserts the payload SHAPE, so a revert to a bare stderr write -- or to
+#   plain unstructured text on stdout -- fails here instead of shipping mute.
+printf '%s' "$CALLER_TIGHT" > "$WF/release.yml"
+emit="$(run_write "$WF/smoke.yml" "$CALLEE_ELEVATED")"
+if printf '%s' "$emit" | python3 -c '
+import json,sys
+d = json.load(sys.stdin)
+ctx = d["hookSpecificOutput"]["additionalContext"]
+assert d["hookSpecificOutput"]["hookEventName"] == "PreToolUse", "wrong hookEventName"
+assert "WORKFLOW PERMISSION ELEVATION" in ctx, "diagnostic missing from additionalContext"
+' 2>/dev/null; then
+  printf '  ok   %-58s (%s)\n' "warns via stdout hookSpecificOutput JSON" "json"; pass=$((pass+1))
+else
+  printf '  FAIL %-58s %s\n' "warns via stdout hookSpecificOutput JSON" \
+    "stdout is not additionalContext JSON -- the wiring discards stderr, so this ships MUTE"
+  printf '%s\n' "$emit" | sed 's/^/       /'; fail=$((fail+1))
+fi
 
 echo
 if [ "$fail" -eq 0 ]; then

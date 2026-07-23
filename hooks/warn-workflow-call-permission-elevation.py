@@ -35,6 +35,13 @@ WARN, NOT BLOCK. A workflow edit is not destructive and the consequence lands
 at release time, not now. This surfaces the problem at authoring time with the
 exact fix; a repo that wants a hard stop should also run the check in CI.
 
+THE WARNING GOES ON STDOUT. Every hooks.json command in this repo is wired as
+`<script> 2>/dev/null || echo <allow-json>` -- stderr is discarded by the shell
+before Claude Code ever reads it. A diagnostic written to stderr is therefore
+deployed, registered, green in its own tests, and MUTE in production. Case 9 of
+the test suite pins the channel, and the harness captures stdout only so the
+behavioural cases fail the same way production would.
+
 Bypass: WORKFLOW_PERMS_BYPASS=1
 """
 from __future__ import annotations
@@ -222,7 +229,7 @@ def main() -> int:
             f"    fix: add `{scope}: {want}` to a `permissions:` block on job `{job_id}` in {caller}"
         )
 
-    sys.stderr.write(
+    warning = (
         "WORKFLOW PERMISSION ELEVATION -- GitHub will refuse to START this workflow.\n"
         "A called workflow's GITHUB_TOKEN can only be DOWNGRADED from its caller's.\n"
         "The run returns startup_failure with ZERO jobs, no annotation and no\n"
@@ -233,6 +240,17 @@ def main() -> int:
         "actionlint will not catch this; it lints each file in isolation.\n"
         "Bypass: WORKFLOW_PERMS_BYPASS=1\n"
     )
+
+    # STDOUT, as hookSpecificOutput.additionalContext -- NOT stderr. Every
+    # hooks.json command in this repo ends in `2>/dev/null || echo <allow>`, so
+    # a hook that writes its diagnostic to stderr is registered, tested green,
+    # and PERMANENTLY SILENT in production. Only stdout survives the wiring.
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "additionalContext": warning,
+        }
+    }))
     return 0
 
 
