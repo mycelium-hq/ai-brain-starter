@@ -131,6 +131,24 @@ def run() -> None:
     if pin.exists():
         silent()
 
+    # 0b. Reclaim abandoned git locks BEFORE the rate limit (MYC-3175 recurrence,
+    # 2026-07-23). Healing used to sit at step 2b, AFTER step 1 -- which gated the
+    # cure behind the disease. A stranded .git/index.lock fails every git
+    # operation forever, and step 1 claims the interval up-front, so a lock
+    # appearing just after a run cannot be healed for a full interval: every
+    # session in that window returns at step 1 without ever reaching the healer.
+    #
+    # Observed: a 0-byte lock dated Jul 21 18:32 survived ~30h of sessions on a
+    # machine where this healer was already deployed AND wired, and had to be
+    # cleared by hand. That is exactly the MYC-2453 cooldown-locks-out-retries
+    # trap that MYC-3175 named as a sibling it was not repeating.
+    #
+    # Safe to hoist: the reclaim is stdlib, network-free, and returns immediately
+    # when no lock file exists, so the common path costs one stat. It stays
+    # conservative (age threshold + liveness check) exactly as before.
+    if (skill / ".git").exists():
+        _reclaim_stale_git_locks(skill)
+
     # 1. Rate-limit: only once per interval. Absent LAST means "never ran".
     try:
         if last.is_file() and (time.time() - last.stat().st_mtime) < interval_days * 86400:
