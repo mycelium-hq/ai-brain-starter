@@ -87,7 +87,8 @@ def _current_head() -> str | None:
     try:
         result = subprocess.run(
             ["git", "-C", SKILL_DIR, "rev-parse", "HEAD"],
-            capture_output=True, text=True, timeout=3,
+            capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=3,
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -149,14 +150,23 @@ def main() -> int:
 
 
 def _detect_lang_hint() -> str:
-    raw = os.environ.get("LC_ALL") or os.environ.get("LANG") or ""
-    if raw[:2].lower() == "es":
+    # An explicit env locale wins in BOTH directions. Before this, "es" could
+    # short-circuit but "en" could not, so on a Spanish-locale Mac the
+    # AppleLocale fallback always won and nothing — not even LANG=en_US —
+    # could force the English block. That made the ask untestable on any
+    # es_* Mac (the integration test greps English copy) and overrode the
+    # shell locale of English-preferring users on Spanish systems.
+    raw = (os.environ.get("LC_ALL") or os.environ.get("LANG") or "").lower()
+    if raw[:2] == "es":
         return "es"
+    if raw[:2] == "en":
+        return "en"
     if sys.platform == "darwin":
         try:
             result = subprocess.run(
                 ["defaults", "read", "-g", "AppleLocale"],
-                capture_output=True, text=True, timeout=2,
+                capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=2,
             )
             if result.returncode == 0 and result.stdout.strip()[:2].lower() == "es":
                 return "es"
