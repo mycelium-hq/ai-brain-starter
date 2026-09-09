@@ -29,6 +29,20 @@ One practical note that cost an hour: the default's **first call after an idle s
 
 ---
 
+## 2026-09-04: "creo que ya" did nothing, so you had to say goodbye twice
+
+**Who this affects:** anyone working in Spanish who signs off with *creo que ya* — roughly, "I think that's it".
+
+Spanish has a lot of ways to say you are done, and the detector knows most of them. This one it did not know at all. Typed on its own, *creo que ya* matched no tier — not a strong sign-off, not an ambiguous one, nothing — so the session carried on and you had to say goodbye a second time, in different words, before anything happened.
+
+It now sits in the ambiguous tier rather than the strong one. That is deliberate. On its own the phrase is a goodbye. It is also how a lot of sentences start that are not — *creo que ya entendí*, *creo que ya lo tengo*. Ambiguous is the tier for exactly that: Claude asks whether you meant to close, instead of guessing and filing your session while you are still mid-sentence.
+
+Only the bare phrase matches. Anything written after it falls through untouched, the same as every other entry in that tier.
+
+*creo que ya está* is very likely the same case, but it has not been reported or observed in use, so it was left alone rather than added on a hunch.
+
+---
+
 ## 2026-09-02: /graphify can now show you what its typed edges would do, before they do it
 
 **Who this affects:** anyone running `/graphify` on a vault with frontmatter and wikilinks — so, anyone whose graph is built from notes rather than code.
