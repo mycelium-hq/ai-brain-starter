@@ -95,6 +95,61 @@ def is_likely_person_name(candidate):
     return True
 
 
+def self_reference_names():
+    """The vault owner's own name variants — never stub a CRM card for yourself.
+
+    Same config `vault-insight-engine.py` already reads:
+    `<vault>/⚙️ Meta/self-reference-names.txt` (or `Meta/` on non-emoji vaults),
+    one name per line, `#` for comments. Without it the owner's own name gets
+    filed as a contact to warm up.
+    """
+    names = set()
+    for meta in ("⚙️ Meta", "Meta"):
+        path = os.path.join(VAULT, meta, "self-reference-names.txt")
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#"):
+                        names.add(line)
+        except Exception:
+            pass
+        break
+    return names
+
+
+def existing_non_person_notes():
+    """Basenames of notes that already exist and declare a non-`person` type.
+
+    Ground truth beats heuristics: `is_likely_person_name` is a keyword blacklist
+    written in English, so Spanish, French, or Portuguese concept notes sail right
+    through it ("Punta Jama", "Pisos Bajos", "Segundo Ingreso" were all about to be
+    filed as people). If the vault already holds a note by that name and it says
+    `type: concept` / `project` / anything but `person`, it is not a person — in
+    any language. One cheap pass, and it demotes the English blacklist from sole
+    defense to fallback.
+    """
+    blocked = set()
+    # NOTE: SKIP_PARTS is deliberately NOT applied here. It exists to keep
+    # infrastructure folders from being *scanned for candidates*; using it here
+    # too would hide those same notes from identity resolution, so a
+    # `type: meta` note inside Meta/ still got stubbed as a person.
+    for fp in glob.glob(os.path.join(VAULT, "**", "*.md"), recursive=True):
+        try:
+            with open(fp, "r", encoding="utf-8", errors="replace") as f:
+                head = f.read(600)
+        except Exception:
+            continue
+        if not head.startswith("---"):
+            continue
+        m = re.search(r"(?m)^type:\s*(.+?)\s*$", head)
+        if m and m.group(1).strip().strip("\"'").lower() != "person":
+            blocked.add(os.path.splitext(os.path.basename(fp))[0])
+    return blocked
+
+
 def scan_file_for_names(filepath):
     """Return set of unique candidate person names from a file's wikilinks."""
     try:
@@ -159,6 +214,7 @@ def main():
     args = ap.parse_args()
 
     crm_existing = get_crm_names()
+    not_people = existing_non_person_notes() | self_reference_names()
 
     # Determine file set
     if args.target:
@@ -191,7 +247,7 @@ def main():
     new_candidates = {}  # name → first source file
     for fp in files:
         for name in scan_file_for_names(fp):
-            if name in crm_existing or name in new_candidates:
+            if name in crm_existing or name in new_candidates or name in not_people:
                 continue
             new_candidates[name] = fp
 
