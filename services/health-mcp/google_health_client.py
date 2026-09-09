@@ -27,11 +27,20 @@ the rest of the substrate don't need to know the data came from Google.
 Response-shape note: the Google Health API returns *typed* dataPoints — each
 point carries a nested object keyed by the data type (e.g. a point in the
 `steps` collection has a `steps` object, one in `weight` has a `weight` object)
-plus an `interval` {startTime, endTime}. The exact inner value field names are
-only partially documented publicly. Every inner-field path below is marked
-`# VERIFY` where it is doc-informed rather than doc-confirmed; the fixture tests
-pin the assumed contract, so a live-API mismatch is a one-line fix in
-_METRIC_SPECS, not a rearchitecture.
+plus an `interval` {startTime, endTime}.
+
+Field names below were checked 2026-09-09 against developers.google.com/health
+(data-types index, the vitals + calories pages, and the dataTypes.dataPoints
+REST reference). steps, active-energy-burned, total-calories, heart-rate,
+weight, height, blood-glucose, and body-fat are CONFIRMED against those pages
+(three were wrong as first written — steps and body-fat were already right).
+The remaining rows (distance, active-minutes, floors,
+daily-resting-heart-rate, daily-heart-rate-variability,
+daily-oxygen-saturation, daily-respiratory-rate, daily-vo2-max) are still
+`# VERIFY`: doc-informed, not doc-confirmed — no example JSON for these was
+found on the pages checked. The fixture tests pin the assumed contract for
+every row, confirmed or not, so a live-API mismatch on a remaining `# VERIFY`
+row is a one-line fix in _METRIC_SPECS, not a rearchitecture.
 """
 from __future__ import annotations
 
@@ -230,25 +239,25 @@ class _Spec:
 
 # Every `field`/`type_key` marked below is doc-informed; pinned by fixtures.
 _METRIC_SPECS: list[_Spec] = [
-    _Spec("steps", "steps", "count", "HKQuantityTypeIdentifierStepCount", "count", _sum),  # VERIFY field
+    _Spec("steps", "steps", "count", "HKQuantityTypeIdentifierStepCount", "count", _sum),  # confirmed: developers.google.com/health/reference/rest/v4/users.dataTypes.dataPoints
     _Spec("distance", "distance", "distanceMillimeters", "HKQuantityTypeIdentifierDistanceWalkingRunning", "km", _sum, scale=1e-6),  # VERIFY
-    _Spec("active-energy-burned", "activeEnergyBurned", "energyKcal", "HKQuantityTypeIdentifierActiveEnergyBurned", "kcal", _sum),  # VERIFY
+    _Spec("active-energy-burned", "activeEnergyBurned", "kcal", "HKQuantityTypeIdentifierActiveEnergyBurned", "kcal", _sum),  # confirmed: developers.google.com/health/data-types/calories (was "energyKcal")
     _Spec("active-minutes", "activeMinutes", "minutes", "HKQuantityTypeIdentifierAppleExerciseTime", "min", _sum),  # VERIFY
     _Spec("floors", "floors", "count", "HKQuantityTypeIdentifierFlightsClimbed", "count", _sum),  # VERIFY
-    _Spec("heart-rate", "heartRate", "bpm", "HKQuantityTypeIdentifierHeartRate", "count/min", _avg),  # VERIFY
+    _Spec("heart-rate", "heartRate", "beatsPerMinute", "HKQuantityTypeIdentifierHeartRate", "count/min", _avg),  # confirmed: developers.google.com/health/data-types/vitals (was "bpm")
     _Spec("daily-resting-heart-rate", "dailyRestingHeartRate", "bpm", "HKQuantityTypeIdentifierRestingHeartRate", "count/min", _min),  # VERIFY
     _Spec("daily-heart-rate-variability", "dailyHeartRateVariability", "hrvMs", "HKQuantityTypeIdentifierHeartRateVariabilitySDNN", "ms", _avg),  # VERIFY
     _Spec("daily-oxygen-saturation", "dailyOxygenSaturation", "percentage", "HKQuantityTypeIdentifierOxygenSaturation", "%", _avg),  # VERIFY
     _Spec("daily-respiratory-rate", "dailyRespiratoryRate", "breathsPerMinute", "HKQuantityTypeIdentifierRespiratoryRate", "count/min", _avg),  # VERIFY
     _Spec("daily-vo2-max", "dailyVo2Max", "vo2MaxMlPerKgMin", "HKQuantityTypeIdentifierVO2Max", "ml/kg*min", _last),  # VERIFY
-    _Spec("weight", "weight", "weightKilograms", "HKQuantityTypeIdentifierBodyMass", "kg", _last),  # VERIFY
-    _Spec("body-fat", "bodyFat", "percentage", "HKQuantityTypeIdentifierBodyFatPercentage", "%", _last),  # VERIFY
-    _Spec("height", "height", "heightMeters", "HKQuantityTypeIdentifierHeight", "m", _last),  # VERIFY
-    _Spec("blood-glucose", "bloodGlucose", "mgPerDl", "HKQuantityTypeIdentifierBloodGlucose", "mg/dL", _avg),  # VERIFY
+    _Spec("weight", "weight", "weightGrams", "HKQuantityTypeIdentifierBodyMass", "kg", _last, scale=1e-3),  # confirmed: developers.google.com/health/reference/rest/v4/users.dataTypes.dataPoints (was "weightKilograms", unscaled)
+    _Spec("body-fat", "bodyFat", "percentage", "HKQuantityTypeIdentifierBodyFatPercentage", "%", _last),  # confirmed: developers.google.com/health/data-types
+    _Spec("height", "height", "heightMillimeters", "HKQuantityTypeIdentifierHeight", "m", _last, scale=1e-3),  # confirmed: developers.google.com/health data-types (was "heightMeters", unscaled)
+    _Spec("blood-glucose", "bloodGlucose", "bloodGlucoseMilligramsPerDeciliter", "HKQuantityTypeIdentifierBloodGlucose", "mg/dL", _avg),  # confirmed: developers.google.com/health/data-types/vitals (was "mgPerDl")
 ]
 
 # total-calories handled specially -> BasalEnergyBurned = total - active
-_TOTAL_CAL_SPEC = _Spec("total-calories", "totalCalories", "energyKcal", "", "kcal", _sum)  # VERIFY
+_TOTAL_CAL_SPEC = _Spec("total-calories", "totalCalories", "kcal", "", "kcal", _sum)  # same field convention as active-energy-burned, both documented in kcal (was "energyKcal")
 
 # Google sleep-stage token -> our schema stage vocabulary (hk_types.py).
 _SLEEP_STAGE_MAP = {

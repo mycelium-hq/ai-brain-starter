@@ -55,8 +55,8 @@ def test_distance_scaled_mm_to_km(monkeypatch):
 
 def test_total_calories_derives_basal(monkeypatch):
     _install_points(monkeypatch, {
-        "active-energy-burned": [_pt("activeEnergyBurned", "energyKcal", 300)],
-        "total-calories": [_pt("totalCalories", "energyKcal", 2000)],
+        "active-energy-burned": [_pt("activeEnergyBurned", "kcal", 300)],
+        "total-calories": [_pt("totalCalories", "kcal", 2000)],
     })
     out = list(ghc.fetch_range(date(2026, 1, 1), date(2026, 1, 1)))
     basal = [r for r in out if r["type"] == "HKQuantityTypeIdentifierBasalEnergyBurned"]
@@ -67,7 +67,7 @@ def test_total_calories_derives_basal(monkeypatch):
 
 def test_total_calories_without_active_yields_no_basal(monkeypatch):
     _install_points(monkeypatch, {
-        "total-calories": [_pt("totalCalories", "energyKcal", 2000)],
+        "total-calories": [_pt("totalCalories", "kcal", 2000)],
     })
     out = list(ghc.fetch_range(date(2026, 1, 1), date(2026, 1, 1)))
     assert not [r for r in out if r["type"] == "HKQuantityTypeIdentifierBasalEnergyBurned"]
@@ -83,6 +83,56 @@ def test_hrv_and_rhr_daily_records(monkeypatch):
     rhr = [r for r in out if r["type"] == "HKQuantityTypeIdentifierRestingHeartRate"]
     assert hrv and hrv[0]["value"] == 65.0 and hrv[0]["unit"] == "ms"
     assert rhr and rhr[0]["value"] == 52.0
+
+
+def test_heart_rate_uses_beats_per_minute_field(monkeypatch):
+    # developers.google.com/health/data-types/vitals: field is "beatsPerMinute",
+    # not "bpm" as first guessed (2026-09-09 PR sweep).
+    _install_points(monkeypatch, {
+        "heart-rate": [_pt("heartRate", "beatsPerMinute", 61), _pt("heartRate", "beatsPerMinute", 63)],
+    })
+    recs = [r for r in ghc.fetch_range(date(2026, 1, 1), date(2026, 1, 1))
+            if r["type"] == "HKQuantityTypeIdentifierHeartRate"]
+    assert recs and recs[0]["value"] == pytest.approx(62.0)   # averaged
+    assert recs[0]["unit"] == "count/min"
+
+
+def test_weight_uses_grams_field_and_scales_to_kg(monkeypatch):
+    # developers.google.com/health/reference/rest/v4/users.dataTypes.dataPoints:
+    # field is "weightGrams", not "weightKilograms" as first guessed, and the
+    # value needs a 1e-3 scale to land in kg (2026-09-09 PR sweep).
+    _install_points(monkeypatch, {
+        "weight": [_pt("weight", "weightGrams", 68_000)],
+    })
+    recs = [r for r in ghc.fetch_range(date(2026, 1, 1), date(2026, 1, 1))
+            if r["type"] == "HKQuantityTypeIdentifierBodyMass"]
+    assert recs and recs[0]["value"] == pytest.approx(68.0)
+    assert recs[0]["unit"] == "kg"
+
+
+def test_height_uses_millimeters_field_and_scales_to_meters(monkeypatch):
+    # Same class of fix as weight: field is "heightMillimeters", not
+    # "heightMeters", and needs a 1e-3 scale (2026-09-09 PR sweep).
+    _install_points(monkeypatch, {
+        "height": [_pt("height", "heightMillimeters", 1_780)],
+    })
+    recs = [r for r in ghc.fetch_range(date(2026, 1, 1), date(2026, 1, 1))
+            if r["type"] == "HKQuantityTypeIdentifierHeight"]
+    assert recs and recs[0]["value"] == pytest.approx(1.78)
+    assert recs[0]["unit"] == "m"
+
+
+def test_blood_glucose_uses_full_field_name(monkeypatch):
+    # developers.google.com/health/data-types/vitals: field is
+    # "bloodGlucoseMilligramsPerDeciliter", not "mgPerDl" as first guessed
+    # (2026-09-09 PR sweep).
+    _install_points(monkeypatch, {
+        "blood-glucose": [_pt("bloodGlucose", "bloodGlucoseMilligramsPerDeciliter", 95.0)],
+    })
+    recs = [r for r in ghc.fetch_range(date(2026, 1, 1), date(2026, 1, 1))
+            if r["type"] == "HKQuantityTypeIdentifierBloodGlucose"]
+    assert recs and recs[0]["value"] == pytest.approx(95.0)
+    assert recs[0]["unit"] == "mg/dL"
 
 
 def test_sleep_stages_mapped(monkeypatch):

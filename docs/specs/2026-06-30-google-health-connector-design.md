@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-30
 **Status:** Approved (pending spec review)
-**Author:** Nelly Ortiz (with Claude)
+**Author:** Claude Code
 **Component:** `services/health-mcp`
 **Supersedes:** the Fitbit Web API path (`fitbit_client.py`), which Google is
 sunsetting from **September 2026**.

@@ -32,7 +32,6 @@ from fastmcp import FastMCP
 import coach as coach_mod
 import cycle as cycle_mod
 import db
-import fitbit_client
 import google_health_client
 import labs as labs_mod
 import live_tcp
