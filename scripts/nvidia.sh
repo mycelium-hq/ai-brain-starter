@@ -46,16 +46,25 @@ esac
 # (free-tier) account today.
 case "$MODEL_KEY" in
   llama|gemma|default|grunt)
-    # Clean JSON in `content`, no reasoning scratchpad. Best for grunt work.
-    # ~1.5s warm; the first call after an idle spell takes 10-15s (cold start),
-    # so give it a generous curl timeout rather than assuming it is dead.
+    # Clean text in `content`, no reasoning scratchpad — the right SHAPE for
+    # grunt work. But measured 2026-09-09 on a free-tier account: 3 of 5 calls
+    # returned content; the other 2 hung past a 90s timeout with no body at all.
+    # Latency on the successful ones ranged 8s to 86s. Give it a long timeout
+    # and a retry, and do not put it in a path that cannot tolerate a miss.
+    # It also needs headroom: at max_tokens=20 it returns 200 with an EMPTY
+    # `content` and finish_reason "stop". Budget >= 50.
     MODEL="google/diffusiongemma-26b-a4b-it"
     ;;
   deepseek|deepseek-flash)
-    # Works, but emits its scratchpad in `reasoning_content` — wrong for extraction.
+    # Emits its scratchpad in `reasoning_content` — wrong shape for extraction.
+    # Also returned 529 "Service temporarily overloaded" on most probes today.
     MODEL="deepseek-ai/deepseek-v4-flash-0731"
     ;;
   muse)
+    # Answers fast (~1s) but puts its output in `reasoning_content`, and at
+    # max_tokens=50 returned an empty `content` 5 times out of 5. Needs a large
+    # budget (200+) before anything usable lands in `content`. Not a grunt-work
+    # model despite the speed.
     MODEL="meta/muse-glimmer-30b"
     ;;
   *)
