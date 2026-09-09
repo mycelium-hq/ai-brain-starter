@@ -281,6 +281,8 @@ def _call_via_cli(
                 input=user,   # prompt body on stdin, never argv
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=CLI_TIMEOUT_SECONDS,
                 check=False,  # tolerate non-zero exits with a valid envelope
             )
@@ -294,6 +296,8 @@ def _call_via_cli(
                     input=_fold_system_into_stdin(system, user),
                     capture_output=True,
                     text=True,
+                    encoding="utf-8",
+                    errors="replace",
                     timeout=CLI_TIMEOUT_SECONDS,
                     check=False,
                 )
