@@ -9,6 +9,22 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-09-09: the NVIDIA grunt-work models are back — and the map now tells you it will rot
+
+**Who this affects:** anyone using `scripts/nvidia.sh` or `_nvidia_router.py` to send cheap, bulk work to NVIDIA's free tier instead of Claude.
+
+Every model ID in that map was dead. Calls came back `404 Not found for account`, so the router fell back to Claude for work that was supposed to be free.
+
+The interesting part is why the old map looked fine. `/v1/models` still listed those models — but **listing is not access**. The catalog shows models your key cannot call, and which ones you *can* call is per-account. Probing the catalog tells you nothing; only a real completion does.
+
+It also rots fast. Of six IDs verified on one day, four were gone eight days later — including the default.
+
+So the map has been re-probed against actual `/v1/chat/completions` calls and now carries the shorter, working set, plus a note on each entry about what it is good for: the default answers in about a second with clean JSON and no reasoning scratchpad, which is what grunt work needs; the reasoning model puts its scratchpad in `reasoning_content`, which is the wrong shape for extraction. The `--model` error message now lists the real options and warns that availability is per-account.
+
+**The honest caveat, now written into both files:** these IDs were verified on one free-tier account on 2026-08-31. If yours differ, probe a completion — do not trust the catalog, and do not trust this map to still be current.
+
+---
+
 ## 2026-09-02: /graphify can now show you what its typed edges would do, before they do it
 
 **Who this affects:** anyone running `/graphify` on a vault with frontmatter and wikilinks — so, anyone whose graph is built from notes rather than code.

@@ -10,10 +10,14 @@
 # voice-sensitive prose, or agentic tool-use loops.
 #
 # Usage:
-#   nvidia.sh "prompt" [max_tokens]                       # Llama 3.3 70B (default)
-#   nvidia.sh --model qwen3 "prompt" [max_tokens]         # multilingual
-#   nvidia.sh --model deepseek "prompt" [max_tokens]      # code-focused
-#   nvidia.sh --model nemotron "prompt" [max_tokens]      # NVIDIA Nemotron
+#   nvidia.sh "prompt" [max_tokens]                       # diffusiongemma-26b (default, ~1s)
+#   nvidia.sh --model minimax "prompt" [max_tokens]       # multilingual, slower
+#   nvidia.sh --model deepseek "prompt" [max_tokens]      # reasoning; scratchpad in reasoning_content
+#   nvidia.sh --model muse "prompt" [max_tokens]
+#
+# Model availability is PER-ACCOUNT and rotates fast. /v1/models lists models
+# your key cannot call (404 "Not found for account") — probe a real completion
+# before trusting any ID.
 #
 # Examples:
 #   nvidia.sh "Extract dates from: $(cat note.md)" 500
@@ -33,39 +37,31 @@ case "${1:-}" in
     ;;
 esac
 
-# Model IDs verified live on integrate.api.nvidia.com 2026-05-10.
+# Model IDs re-verified live 2026-08-31 by probing /v1/chat/completions, not
+# /v1/models. KEY FINDING: the catalog lists models this account cannot call —
+# they return 404 "Not found for account". Listing != access. Access is
+# per-account, so no hardcoded map is right for everyone or for long: of the six
+# IDs verified on 2026-08-23, four were gone eight days later, including the
+# default. Only these answered on this (free-tier) account today.
 case "$MODEL_KEY" in
-  llama|llama3|llama-3.3)
-    MODEL="meta/llama-3.3-70b-instruct"
-    ;;
-  llama4|llama4-maverick)
-    MODEL="meta/llama-4-maverick-17b-128e-instruct"
-    ;;
-  qwen3|qwen)
-    # Non-reasoning multilingual; output in `content` field.
-    MODEL="qwen/qwen3-next-80b-a3b-instruct"
-    ;;
-  qwen3-thinking)
-    # Reasoning variant — output in `reasoning_content`. Parser falls back.
-    MODEL="qwen/qwen3-next-80b-a3b-thinking"
-    ;;
-  qwen3-coder)
-    MODEL="qwen/qwen3-coder-480b-a35b-instruct"
+  llama|gemma|default|grunt)
+    # 1.0s, clean JSON in `content`, no reasoning scratchpad. Best for grunt work.
+    MODEL="google/diffusiongemma-26b-a4b-it"
     ;;
   deepseek|deepseek-flash)
-    MODEL="deepseek-ai/deepseek-v4-flash"
+    # Works, but emits its scratchpad in `reasoning_content` — wrong for extraction.
+    MODEL="deepseek-ai/deepseek-v4-flash-0731"
     ;;
-  deepseek-pro)
-    MODEL="deepseek-ai/deepseek-v4-pro"
+  minimax|qwen|qwen3)
+    # Multilingual stand-in. Slower and flaky on long prompts.
+    MODEL="minimaxai/minimax-m3"
     ;;
-  nemotron|nemotron-nano)
-    MODEL="nvidia/llama-3.1-nemotron-nano-8b-v1"
-    ;;
-  nemotron-super)
-    MODEL="nvidia/llama-3.3-nemotron-super-49b-v1.5"
+  muse)
+    MODEL="meta/muse-glimmer-30b"
     ;;
   *)
-    echo "Error: unknown --model '$MODEL_KEY'. Valid: llama (default) | llama4 | qwen3 | qwen3-coder | deepseek | deepseek-pro | nemotron | nemotron-super" >&2
+    echo "Error: unknown --model '$MODEL_KEY'. Valid: llama/gemma (default) | deepseek | minimax | muse" >&2
+    echo "Availability is per-account and changes often; re-probe before trusting this list." >&2
     exit 1
     ;;
 esac
