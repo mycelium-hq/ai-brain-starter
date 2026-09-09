@@ -36,7 +36,23 @@ sys.path.insert(0, str(HOOK_DIR))
 
 from _lib.secret_patterns import redact, scan  # noqa: E402
 
-SCRUB_LOG = HOOK_DIR / "scrub-log.jsonl"
+# NOT HOOK_DIR. HOOK_DIR is where THIS COPY of the hook lives, which is right
+# for importing the sibling _lib above and wrong for an audit log: the wired
+# copy on a real install is `~/.claude/skills/ai-brain-starter/hooks/`, a GIT
+# CHECKOUT, so the log accumulated as an untracked file inside the deployed
+# public repo. That contradicted this module's own docstring (which places it
+# at ~/.claude/hooks/) and made the deployed-hook-drift surfacer report a
+# hand-edit on every session — 108 false fires in one day, measured
+# 2026-09-01. A standing alarm that is always wrong is how a surfacer trains
+# itself into wallpaper, which is what MYC-683 exists to prevent.
+#
+# .gitignore covers the stray copies already on disk; this is the root fix.
+# One log per MACHINE is also the behaviour an audit trail wants — both
+# deployment copies now append to the same file instead of one each.
+SCRUB_LOG = Path(
+    os.environ.get("SCRUB_LOG_PATH")
+    or (Path.home() / ".claude" / "hooks" / "scrub-log.jsonl")
+)
 
 
 def _read_payload() -> dict:
@@ -77,7 +93,7 @@ def _scrub_file(path: Path) -> tuple[int, list[tuple[str, int]]]:
 
     Idempotent: if no patterns match, file is not rewritten.
     """
-    original = path.read_text()
+    original = path.read_text(encoding="utf-8")
     hits_pre = scan(original)
     if not hits_pre:
         return 0, []
@@ -95,13 +111,16 @@ def _scrub_file(path: Path) -> tuple[int, list[tuple[str, int]]]:
     backup = path.with_suffix(path.suffix + f".bak.{int(time.time())}")
     shutil.copy2(path, backup)
 
-    path.write_text(out_text)
+    path.write_text(out_text, encoding="utf-8")
     return abs(len(out_text) - len(original)), hits_pre
 
 
 def _log(summary: dict) -> None:
     try:
-        with SCRUB_LOG.open("a") as f:
+        # The directory may not exist when the hook runs from the skills
+        # checkout on an install that has no ~/.claude/hooks of its own.
+        SCRUB_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with SCRUB_LOG.open("a", encoding="utf-8") as f:
             f.write(json.dumps(summary, separators=(",", ":")) + "\n")
     except OSError:
         pass
@@ -142,14 +161,30 @@ def main() -> int:
     )
     if hits_pre:
         names = ", ".join(f"{n}×{c}" for n, c in hits_pre)
-        print(
-            f"[scrub-session-jsonl-secrets] redacted {names} from {jsonl.name}",
-            file=sys.stderr,
-        )
+        # stdout, not stderr: the SessionEnd wiring idiom discards stderr
+        # (`2>/dev/null || echo '{...}'`), so a stderr-only notice that we
+        # rewrote the user's transcript would never reach the user.
+        print(json.dumps({
+            "continue": True,
+            "systemMessage": (
+                f"[scrub-session-jsonl-secrets] redacted {names} from "
+                f"{jsonl.name}"
+            ),
+        }))
+        return 0
 
     print(json.dumps({"continue": True, "suppressOutput": True}))
     return 0
 
 
 if __name__ == "__main__":
+    # Windows cp1252-console safety (ai-brain-starter#313; hooks/ sweep #314).
+    # A hook that print()s non-ASCII raises UnicodeEncodeError on a cp1252
+    # console: the gate then fails silently OPEN, or denies the tool call with
+    # no legible cause. Idempotent; a no-op on an already-UTF-8 console.
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8")  # Python 3.7+
+        except (AttributeError, ValueError):
+            pass
     raise SystemExit(main())

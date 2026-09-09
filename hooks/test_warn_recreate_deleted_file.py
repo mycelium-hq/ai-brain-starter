@@ -3,7 +3,7 @@
 
 Self-contained: builds throwaway git repos in a temp dir, drives the hook via
 subprocess with realistic PreToolUse(Write) payloads, asserts on stdout JSON.
-Run: python3 warn-recreate-deleted-file.test.py   (exit 0 = all pass)
+Run: python3 hooks/test_warn_recreate_deleted_file.py   (exit 0 = all pass)
 """
 from __future__ import annotations
 
@@ -18,7 +18,8 @@ HOOK = str(Path(__file__).with_name("warn-recreate-deleted-file.py"))
 
 def _git(repo: Path, *args: str) -> None:
     subprocess.run(["git", "-C", str(repo), *args], check=True,
-                   capture_output=True, text=True)
+                   capture_output=True, text=True,
+                   encoding="utf-8", errors="replace")
 
 
 def _init_repo(repo: Path) -> None:
@@ -31,7 +32,8 @@ def _init_repo(repo: Path) -> None:
 
 def run(payload: dict) -> dict:
     r = subprocess.run([sys.executable, HOOK], input=json.dumps(payload),
-                       capture_output=True, text=True)
+                       capture_output=True, text=True,
+                       encoding="utf-8", errors="replace")
     assert r.returncode == 0, f"hook must always exit 0, got {r.returncode}: {r.stderr}"
     out = r.stdout.strip()
     return json.loads(out) if out else {}
@@ -53,7 +55,7 @@ def main() -> int:
         repo = tmp / "repo"
         _init_repo(repo)
         f = repo / "orphan.py"
-        f.write_text("print('hi')\n")
+        f.write_text("print('hi')\n", encoding="utf-8")
         _git(repo, "add", "orphan.py")
         _git(repo, "commit", "-q", "-m", "add orphan")
         f.unlink()
@@ -74,7 +76,7 @@ def main() -> int:
 
         # Case 3: editing/overwriting a file that currently EXISTS → MUST NOT fire.
         live = repo / "live.py"
-        live.write_text("v1\n")
+        live.write_text("v1\n", encoding="utf-8")
         _git(repo, "add", "live.py")
         _git(repo, "commit", "-q", "-m", "add live")
         cases.append(("overwrite live file silent", False, fired({
@@ -120,4 +122,13 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # Windows cp1252-console safety (ai-brain-starter#313; hooks/ sweep #314).
+    # A hook that print()s non-ASCII raises UnicodeEncodeError on a cp1252
+    # console: the gate then fails silently OPEN, or denies the tool call with
+    # no legible cause. Idempotent; a no-op on an already-UTF-8 console.
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8")  # Python 3.7+
+        except (AttributeError, ValueError):
+            pass
     sys.exit(main())

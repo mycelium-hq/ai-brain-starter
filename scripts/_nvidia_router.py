@@ -12,9 +12,8 @@ API:
   call_nvidia_text(system, user, model="llama", max_tokens=1000) -> str
   call_nvidia_json(system, user, model="llama", max_tokens=1000) -> dict | list
 
-Model aliases (verified live 2026-05-10):
-  llama (default) | llama4 | qwen3 | qwen3-coder | deepseek | deepseek-pro
-  | nemotron | nemotron-super
+Model aliases (verified live 2026-09-09):
+  llama / gemma / default / grunt (all the same model) | deepseek | muse
 
 Reads NVIDIA_API_KEY via canonical fallback chain (env -> .zshenv ->
 .zsh_secrets -> .zshrc -> .zprofile -> .bashrc).
@@ -40,21 +39,20 @@ class NvidiaUnavailable(RuntimeError):
 
 
 MODELS = {
-    "llama": "meta/llama-3.3-70b-instruct",
-    "llama3": "meta/llama-3.3-70b-instruct",
-    "llama-3.3": "meta/llama-3.3-70b-instruct",
-    "llama4": "meta/llama-4-maverick-17b-128e-instruct",
-    "llama4-maverick": "meta/llama-4-maverick-17b-128e-instruct",
-    "qwen3": "qwen/qwen3-next-80b-a3b-instruct",
-    "qwen": "qwen/qwen3-next-80b-a3b-instruct",
-    "qwen3-thinking": "qwen/qwen3-next-80b-a3b-thinking",
-    "qwen3-coder": "qwen/qwen3-coder-480b-a35b-instruct",
-    "deepseek": "deepseek-ai/deepseek-v4-flash",
-    "deepseek-flash": "deepseek-ai/deepseek-v4-flash",
-    "deepseek-pro": "deepseek-ai/deepseek-v4-pro",
-    "nemotron": "nvidia/llama-3.1-nemotron-nano-8b-v1",
-    "nemotron-nano": "nvidia/llama-3.1-nemotron-nano-8b-v1",
-    "nemotron-super": "nvidia/llama-3.3-nemotron-super-49b-v1.5",
+    # Re-verified 2026-09-09 by probing /v1/chat/completions, not /v1/models.
+    # The catalog lists models this account cannot call (404 "Not found for
+    # account"): listing != access, and access is per-account. Four of the six
+    # IDs verified on 2026-08-23 were gone eight days later, the default among
+    # them. On 2026-09-09, nine days later, minimaxai/minimax-m3 answered 410
+    # Gone ("end of life") and was dropped — so did the qwen aliases that
+    # pointed at it. Re-probe before trusting this map.
+    "llama": "google/diffusiongemma-26b-a4b-it",
+    "gemma": "google/diffusiongemma-26b-a4b-it",
+    "default": "google/diffusiongemma-26b-a4b-it",
+    "grunt": "google/diffusiongemma-26b-a4b-it",
+    "deepseek": "deepseek-ai/deepseek-v4-flash-0731",
+    "deepseek-flash": "deepseek-ai/deepseek-v4-flash-0731",
+    "muse": "meta/muse-glimmer-30b",
 }
 
 ENDPOINT = "https://integrate.api.nvidia.com/v1/chat/completions"

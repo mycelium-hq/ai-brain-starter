@@ -20,7 +20,7 @@ treats the payload as authoritative.
 
 Bypass: SUBAGENT_RETURN_VALIDATE_BYPASS=1 in env.
 
-Wired into ~/.claude/settings.json hooks.PostToolUse with matcher "Agent".
+PostToolUse matcher: "Agent|Task" -- the harness names this tool either way.
 """
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ def main() -> None:
     except Exception:
         sys.exit(0)
 
-    if payload.get("tool_name") != "Agent":
+    if payload.get("tool_name") not in ("Agent", "Task"):
         sys.exit(0)
 
     tin = payload.get("tool_input", {}) or {}
@@ -127,4 +127,13 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    # Windows cp1252-console safety (ai-brain-starter#313; hooks/ sweep #314).
+    # A hook that print()s non-ASCII raises UnicodeEncodeError on a cp1252
+    # console: the gate then fails silently OPEN, or denies the tool call with
+    # no legible cause. Idempotent; a no-op on an already-UTF-8 console.
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8")  # Python 3.7+
+        except (AttributeError, ValueError):
+            pass
     main()

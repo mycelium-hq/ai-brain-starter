@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# exit-contract: ADVISORY -- an interactive operator sync whose status action
+#   reports divergence for a human to resolve
+
 # vault-multi-machine-sync.sh — keep two installs of the same vault coherent.
 #
 # Use case: you work from machine A and machine B. Same vault, two clones.
@@ -31,6 +34,21 @@
 #   - --dry-run shows the plan without making changes.
 
 set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Shared git-dir / index-lock resolver. FAIL CLOSED when the guard is missing:
+# without it we cannot resolve the real lock path, so we cannot prove no other
+# session is mid-commit, and this script's whole concurrency stance is "abort if
+# someone else is writing".
+CLOSE_GUARD="$SCRIPT_DIR/_session_close_guard.sh"
+if [ -f "$CLOSE_GUARD" ]; then
+  # shellcheck source=scripts/_session_close_guard.sh
+  . "$CLOSE_GUARD"
+else
+  vault_git_locked() { return 0; }
+  vault_git_index_lock() { echo ""; return 1; }
+fi
 
 ACTION="${1:-status}"
 DRY_RUN=0
@@ -88,8 +106,13 @@ fi
 
 # === lock check ===
 
-if [[ -f ".git/index.lock" ]]; then
-  warn "Concurrent git operation detected (.git/index.lock present)"
+# Lock path RESOLVED from git, never assembled as ".git/index.lock": on a
+# sidecar-relocated vault .git is a POINTER FILE, so the assembled path can
+# never exist and this abort would never fire. Fails closed - an unresolvable
+# git dir counts as locked.
+if vault_git_locked "$VAULT"; then
+  warn "Concurrent git operation detected (git index.lock present, or the git dir could not be resolved)"
+  echo "  Lock path: $(vault_git_index_lock "$VAULT" 2>/dev/null || echo '<unresolvable>')"
   echo "  Wait for that to finish, or remove the lock if it's stale."
   exit 2
 fi

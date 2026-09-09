@@ -1,4 +1,6 @@
 #!/bin/bash
+# exit-contract: ENFORCING
+
 # vault-daily-maintenance.sh - heavy vault maintenance, kept OFF the interactive
 # session-close path.
 #
@@ -63,6 +65,11 @@ else
   close_load_per_core() { echo "0"; }
   close_mutex_acquire() { return 0; }
   close_mutex_release() { :; }
+  # The index-lock resolver FAILS CLOSED, unlike the three above. Without the
+  # guard we cannot resolve the real git dir, so we cannot prove no other writer
+  # holds the lock - skip the reconcile commit (artifacts stay on disk for the
+  # next run) rather than commit into an unknown lock state.
+  vault_git_wait_unlocked() { return 1; }
 fi
 
 # Auto-detect the Meta folder via the shared resolver (prefers the variant
@@ -151,13 +158,62 @@ if ! close_mutex_acquire 60; then
 fi
 log "acquired close-cascade mutex ($$)"
 
+# Every step's status used to be logged and then DISCARDED: this script exited
+# 0 unconditionally, so a step that had been failing for weeks reported success
+# to launchd every night and to anyone reading `launchctl list`. A runner that
+# cannot fail cannot tell you its steps are failing (MYC-4116).
+#
+# Steps still never ABORT the pass -- that part was right, and is why the
+# aggregators keep running when one leg dies. The change is that failures are
+# remembered, named in the log, written to a state file a SessionStart reader
+# can pick up, and reflected in the final exit code.
+# CRITICAL_STEPS -- the ONLY labels whose non-zero exit is a real failure.
+#
+# A blanket "any non-zero step" rule is WRONG here, and was briefly shipped as
+# one (b27fd6e, corrected in this change). Most legs of this pass are SURFACERS
+# that use the exit code as a findings count, so they exit non-zero while
+# perfectly healthy: aggregate-sessions and aggregate-decisions report pending
+# outcomes, relocate-watch reports residuals, close-phase-contract and
+# check-rule-conflicts report findings -- the last only since it was fixed to
+# carry a verdict at all. Alarming on those is several false reds a day, and a
+# daily red is background inside a week, which is the exact bug class this
+# accounting exists to fix.
+#
+# So the alarm is an explicit must-be-green ALLOWLIST, never a blanket rule.
+# Empty here on purpose: no leg in the substrate's own pass is unambiguously
+# must-be-green today. Add a label only when its non-zero means BROKEN rather
+# than FOUND-SOMETHING -- a security control's negative control is the
+# archetype (MYC-4116 seeds the personal vault's copy with pii-scrub-control
+# and pii-scrub-hugeline).
+CRITICAL_STEPS=()
+
+# Every failure, critical or not, for the state file and the log. Advisory by
+# design: this list does NOT gate the exit code.
+FAILED_STEPS=()
+# The subset that must be green. This one DOES gate the exit code.
+FAILED_CRITICAL=()
+
+_is_critical() {
+  local needle="$1" c
+  for c in ${CRITICAL_STEPS+"${CRITICAL_STEPS[@]}"}; do
+    [ "$c" = "$needle" ] && return 0
+  done
+  return 1
+}
+
 run() {
-  # run <label> <command...> - runs at low priority, logs a tail, never aborts.
+  # run <label> <command...> - runs at low priority, logs a tail, never aborts,
+  # and REMEMBERS a non-zero status for the summary + exit code.
   local label="$1"; shift
   local out rc
   out=$(nice -n 10 "$@" 2>&1); rc=$?
   printf '%s\n' "$out" | tail -3
   log "[$label] rc=$rc :: $(printf '%s\n' "$out" | tail -1)"
+  if [ "$rc" -ne 0 ]; then
+    FAILED_STEPS+=("$label(rc=$rc)")
+    _is_critical "$label" && FAILED_CRITICAL+=("$label(rc=$rc)")
+  fi
+  return 0
 }
 
 # === RECONCILE (data safety): aggregators + commit deferred close artifacts ===
@@ -169,9 +225,10 @@ AGG_DECISIONS="$SCRIPT_DIR/aggregate-decisions.py"
 # Commit any close artifacts left uncommitted by a load-deferred close. Targeted
 # paths only - NEVER `git add -A` (vaults are commonly 10k-60k+ files).
 if [ -d "$VAULT/.git" ] || git -C "$VAULT" rev-parse --git-dir >/dev/null 2>&1; then
-  WAITED=0
-  while [ -f "$VAULT/.git/index.lock" ] && [ $WAITED -lt 60 ]; do sleep 2; WAITED=$((WAITED + 2)); done
-  if [ ! -f "$VAULT/.git/index.lock" ]; then
+  # Lock path RESOLVED from git, never assembled as "$VAULT/.git/index.lock": on
+  # a sidecar-relocated vault .git is a POINTER FILE, so the assembled path can
+  # never exist and this check would pass forever. Fails closed.
+  if vault_git_wait_unlocked "$VAULT"; then
     PATHS=()
     for p in "$META_DIR/Sessions" "$META_DIR/Decisions" \
              "$META_DIR/Last Session.md" "$META_DIR/Decision Log.md" \
@@ -185,7 +242,7 @@ if [ -d "$VAULT/.git" ] || git -C "$VAULT" rev-parse --git-dir >/dev/null 2>&1; 
       log "[reconcile-commit] staged ${#PATHS[@]} close-artifact path(s)"
     fi
   else
-    log "[reconcile-commit] SKIPPED - git index.lock held >60s"
+    log "[reconcile-commit] SKIPPED - git index.lock held (or git dir unresolvable) after ${VAULT_GIT_LOCK_MAX_WAIT:-60}s"
   fi
 fi
 
@@ -234,6 +291,16 @@ PASSIVE="$SCRIPT_DIR/passive-capture.py"
 # no relocation was ever recorded. rc=1 (ALARM) is logged, never fatal (set +e + run).
 RELOCWATCH="$SCRIPT_DIR/relocate-sweep.py"
 [ -f "$RELOCWATCH" ] && run "relocate-watch" /usr/bin/env python3 "$RELOCWATCH" --watch
+
+# Cloud-sync machinery scan (MYC-1133). Walks every synced root for git repos /
+# node_modules / build trees -- the sync-daemon storm + silent-corruption class.
+# Heavy (full walk of every cloud root) so it belongs here and NOT on SessionStart:
+# a per-session walk becomes N concurrent full walks under N sessions, which is the
+# storm itself. It writes ~/.claude/state/sync-guard-last.json; the SessionStart
+# surfacer reads that snapshot. Scheduling this is what gives the surfacer anything
+# to say -- without it the surfacer is silent forever and the guard is decoration.
+SYNCGUARD="$SCRIPT_DIR/../hooks/check-sync-folder-machinery.py"
+[ -f "$SYNCGUARD" ] && run "sync-folder-machinery" /usr/bin/env python3 "$SYNCGUARD" --json
 
 # === AUTO-GC (MYC-2363) =====================================================
 # The reclaim tier. Every piece below already existed and every one was OPT-IN,
@@ -326,5 +393,39 @@ if [ "${ABS_NO_AUTO_GC:-0}" != "1" ] && [ -n "${GC_SEEN_MARKER:-}" ] && [ ! -f "
 fi
 
 close_mutex_release
+
+# Report failed steps to three surfaces that fail differently: the log (a human
+# tailing it), a state file (a SessionStart reader), and the exit code (launchd,
+# cron MAILTO, a hand run). The plist is StartCalendarInterval-only with no
+# KeepAlive/SuccessfulExit, so a non-zero exit records status without provoking
+# a restart loop.
+MAINT_STATE_DIR="${HOME}/.claude/state"
+MAINT_STATE="$MAINT_STATE_DIR/vault-daily-maintenance-last.json"
+mkdir -p "$MAINT_STATE_DIR" 2>/dev/null || true
+{
+  printf '{"finished_at":"%s","failed_count":%d,"failed_steps":[' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${#FAILED_STEPS[@]}"
+  for i in ${FAILED_STEPS+"${!FAILED_STEPS[@]}"}; do
+    [ "$i" -gt 0 ] && printf ','
+    printf '"%s"' "${FAILED_STEPS[$i]}"
+  done
+  printf '],"failed_critical":['
+  for i in ${FAILED_CRITICAL+"${!FAILED_CRITICAL[@]}"}; do
+    [ "$i" -gt 0 ] && printf ','
+    printf '"%s"' "${FAILED_CRITICAL[$i]}"
+  done
+  printf ']}\n'
+} > "$MAINT_STATE" 2>/dev/null || true
+
+# Advisory failures are LOGGED but never gate the exit -- see CRITICAL_STEPS.
+if [ "${#FAILED_STEPS[@]}" -gt 0 ]; then
+  log "=== vault-daily-maintenance: ${#FAILED_STEPS[@]} non-zero step(s) (advisory; most are findings counts): ${FAILED_STEPS[*]} ==="
+fi
+
+if [ "${#FAILED_CRITICAL[@]}" -gt 0 ]; then
+  log "=== vault-daily-maintenance FAILED ${#FAILED_CRITICAL[@]} CRITICAL STEP(S): ${FAILED_CRITICAL[*]} @ $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
+  exit 1
+fi
+
 log "=== vault-daily-maintenance COMPLETE @ $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
 exit 0

@@ -118,6 +118,34 @@ set -euo pipefail
 
 REPO_URL="https://github.com/mycelium-hq/ai-brain-starter.git"
 SKILL_DIR="$HOME/.claude/skills/ai-brain-starter"
+
+# === Python interpreter ===
+# `python3` is only ever the FIRST match on PATH, and on macOS that is
+# /usr/bin/python3 (3.9) whenever Homebrew sits later in PATH. The version
+# check further down used to test that one name and, finding it too old,
+# install Python 3.12 -- which fixes nothing on that machine, because
+# installing a formula cannot change what `python3` resolves to while /usr/bin
+# still comes first. The result was a redundant install, after which every
+# python3 call below still ran 3.9.
+#
+# So resolve an interpreter once, here, before anything uses one, and use it
+# everywhere below. AI_BRAIN_PYTHON names one directly, for a prefix no search
+# would guess (pyenv, conda).
+PY="python3"
+pick_python() {
+  local candidate resolved
+  for candidate in "${AI_BRAIN_PYTHON:-}" python3 python3.14 python3.13 python3.12 python3.11 python3.10; do
+    [[ -n "$candidate" ]] || continue
+    resolved="$(command -v "$candidate" 2>/dev/null || true)"
+    [[ -n "$resolved" ]] || continue
+    if "$resolved" -c 'import sys; sys.exit(0 if sys.version_info[:2] >= (3,10) else 1)' >/dev/null 2>&1; then
+      PY="$resolved"
+      return 0
+    fi
+  done
+  return 1
+}
+pick_python || true
 DRY_RUN=0
 # Corporate / hardened install profile (surfaced by an enterprise security
 # review). When 1, the installer: skips ALL third-party plugin marketplaces,
@@ -220,7 +248,7 @@ for arg in "$@"; do
         for a in "$@"; do
           [[ "$a" == "--install-hooks-user-level" ]] || forward_args+=("$a")
         done
-        exec python3 "$INSTALLER" "${forward_args[@]}"
+        exec "$PY" "$INSTALLER" "${forward_args[@]}"
       else
         echo "ERROR: install-hooks-user-level.py not found." >&2
         exit 2
@@ -325,6 +353,14 @@ is_linux() { [[ "$(uname -s)" == "Linux" ]]; }
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# have_sudo — true only if this shell could elevate WITHOUT a password prompt
+# right now (root, or cached/passwordless sudo). A non-interactive run (Claude
+# Code's Bash tool, or a piped remote installer) can never answer a prompt, so
+# that is the right question here, not "is the user in the admin group"
+# (preflight.sh's Section 5 answers that broader one for a human reading the
+# report).
+have_sudo() { [[ "$EUID" -eq 0 ]] || sudo -n true 2>/dev/null; }
+
 # quiet_retry CMD... — run with FULL output captured to $BOOTSTRAP_LOG (never
 # /dev/null: a silent failure used to be undiagnosable), retrying once after
 # 5s. Workshop rooms put 30 machines on one Wi-Fi hitting PyPI at the same
@@ -384,6 +420,94 @@ version_at_least() {
   local required="$1" actual="$2"
   [[ -z "$actual" ]] && return 1
   [[ "$(printf '%s\n%s\n' "$required" "$actual" | sort -V | head -1)" == "$required" ]]
+}
+
+# ───────────────────────────────────────────────────────────────────────────────
+# User-space Node + Python fallback (no brew, no sudo, no compiler).
+#
+# A corporate laptop with no admin rights has neither. Until now that meant
+# `brew install node` / `brew install python@3.12` simply failed (err), and
+# the install never recovered — the exact "install DIES here" the 2026-08-12
+# cohort session hit (git already got the same fallback treatment above).
+# Mirrors bootstrap.ps1's Node ZIP fallback: fetch an official, relocatable
+# tarball into a user-owned prefix, no elevation involved anywhere.
+#   - Node: nodejs.org ships one directly.
+#   - Python: python.org's macOS/Linux builds all need an installer with admin
+#     rights; python-build-standalone (the engine behind uv/rye/mise, GitHub's
+#     own astral-sh org) is the portable, no-compile equivalent and is pinned
+#     the same way the Node version below is.
+# ───────────────────────────────────────────────────────────────────────────────
+NODE_FALLBACK_VERSION="v20.18.0"
+PY_FALLBACK_VERSION="3.12.7"
+PY_FALLBACK_TAG="20241016"
+
+# user_space_platform — echoes "<os>-<arch>" (darwin|linux, x64|arm64) for
+# building download URLs.
+user_space_platform() {
+  local os arch
+  os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+  case "$(uname -m)" in
+    arm64|aarch64) arch="arm64" ;;
+    *)             arch="x64" ;;
+  esac
+  printf '%s-%s\n' "$os" "$arch"
+}
+
+# add_user_path_entry DIR — put DIR on PATH for this session, and persist it
+# into the user's shell rc file (idempotent) so the next shell sees it too.
+# Every path here is user-owned, so no admin is ever needed. Conceptual
+# equivalent of bootstrap.ps1's Add-UserPathEntry (Windows keeps one per-user
+# PATH in the registry; a POSIX shell keeps it in a dotfile instead).
+add_user_path_entry() {
+  local dir="$1" rc
+  case ":$PATH:" in *":$dir:"*) : ;; *) export PATH="$dir:$PATH" ;; esac
+  case "${SHELL:-}" in
+    */zsh) rc="$HOME/.zshrc" ;;
+    *)     rc="$HOME/.bashrc" ;;
+  esac
+  [[ -f "$rc" ]] || : > "$rc"
+  grep -qF "$dir" "$rc" 2>/dev/null || printf '\nexport PATH="%s:$PATH"\n' "$dir" >> "$rc"
+}
+
+# fetch_tarball URL DEST INNER_DIR — download URL and move its INNER_DIR
+# (the top-level folder every one of these release tarballs unpacks into) to
+# DEST, replacing whatever was there. Non-zero on any failure; never leaves a
+# partial DEST (extracts to a scratch dir first, only moves on full success).
+fetch_tarball() {
+  local url="$1" dest="$2" inner="$3" tmp
+  tmp="$(mktemp -d)" || return 1
+  if ! curl -fsSL "$url" -o "$tmp/dl.tar.gz"; then rm -rf "$tmp"; return 1; fi
+  if ! tar -xzf "$tmp/dl.tar.gz" -C "$tmp"; then rm -rf "$tmp"; return 1; fi
+  [[ -d "$tmp/$inner" ]] || { rm -rf "$tmp"; return 1; }
+  mkdir -p "$(dirname "$dest")" || { rm -rf "$tmp"; return 1; }
+  rm -rf "$dest"
+  mv "$tmp/$inner" "$dest" || { rm -rf "$tmp"; return 1; }
+  rm -rf "$tmp"
+}
+
+# install_node_userspace — land a working `node`/`npm` under ~/.local/node
+# with no brew and no sudo. 0 on success (node is on PATH); non-zero on any
+# failure (caller degrades via note_gap, never err — see the Node section).
+install_node_userspace() {
+  local plat os arch triple
+  plat="$(user_space_platform)"; os="${plat%-*}"; arch="${plat#*-}"
+  triple="node-${NODE_FALLBACK_VERSION}-${os}-${arch}"
+  fetch_tarball "https://nodejs.org/dist/${NODE_FALLBACK_VERSION}/${triple}.tar.gz" \
+    "$HOME/.local/node" "$triple" || return 1
+  add_user_path_entry "$HOME/.local/node/bin"
+}
+
+# install_python_userspace — land a working `python3` under ~/.local/python
+# with no brew and no sudo. Same contract as install_node_userspace above.
+install_python_userspace() {
+  local plat os arch triple os_tag
+  plat="$(user_space_platform)"; os="${plat%-*}"; arch="${plat#*-}"
+  case "$os" in darwin) os_tag="apple-darwin" ;; *) os_tag="unknown-linux-gnu" ;; esac
+  case "$arch" in arm64) arch="aarch64" ;; *) arch="x86_64" ;; esac
+  triple="cpython-${PY_FALLBACK_VERSION}+${PY_FALLBACK_TAG}-${arch}-${os_tag}-install_only"
+  fetch_tarball "https://github.com/astral-sh/python-build-standalone/releases/download/${PY_FALLBACK_TAG}/${triple}.tar.gz" \
+    "$HOME/.local/python" "python" || return 1
+  add_user_path_entry "$HOME/.local/python/bin"
 }
 
 # ───────────────────────────────────────────────────────────────────────────────
@@ -536,7 +660,7 @@ if [[ "$UNINSTALL" == "1" ]]; then
 
   if [[ -f "$HOME/.claude/.mcp.json" ]]; then
     backup_file "$HOME/.claude/.mcp.json"
-    python3 - <<'PY' || warn "MCP cleanup failed"
+    "$PY" - <<'PY' || warn "MCP cleanup failed"
 import json, os
 p = os.path.expanduser("~/.claude/.mcp.json")
 m = json.load(open(p))
@@ -549,7 +673,7 @@ PY
 
   if [[ -f "$HOME/.claude/settings.json" ]]; then
     backup_file "$HOME/.claude/settings.json"
-    python3 - <<'PY' || warn "settings cleanup failed"
+    "$PY" - <<'PY' || warn "settings cleanup failed"
 import json, os
 p = os.path.expanduser("~/.claude/settings.json")
 s = json.load(open(p))
@@ -602,7 +726,7 @@ if [[ "${EMAIL_GATE_BYPASS:-0}" != "1" && $DRY_RUN -eq 0 && ! -f "$EMAIL_MARKER"
     esac
     log "$(t "Minting install token for $EMAIL via $INSTALL_API_BASE..." \
             "Generando token de instalación para $EMAIL en $INSTALL_API_BASE...")"
-    QM_PAYLOAD="$(EMAIL="$EMAIL" NAME="$NAME" QM_LANG="$QM_LANG" QM_OS="$QM_OS" python3 <<'PY'
+    QM_PAYLOAD="$(EMAIL="$EMAIL" NAME="$NAME" QM_LANG="$QM_LANG" QM_OS="$QM_OS" "$PY" <<'PY'
 import json, os
 print(json.dumps({
   "email": os.environ.get("EMAIL",""),
@@ -618,7 +742,7 @@ PY
       -H "content-type: application/json" \
       -d "$QM_PAYLOAD" 2>/dev/null)"
     set -e
-    QM_TOKEN="$(printf '%s' "${QM_RESP:-}" | python3 -c '
+    QM_TOKEN="$(printf '%s' "${QM_RESP:-}" | "$PY" -c '
 import json, sys
 try:
     d = json.load(sys.stdin)
@@ -857,7 +981,7 @@ hdr "Cleaning up deprecated tools"
 # into every session. The built-in memory system covers all use cases safely.
 SETTINGS="$HOME/.claude/settings.json"
 _claude_mem_present=0
-if [[ -f "$SETTINGS" ]] && python3 -c "
+if [[ -f "$SETTINGS" ]] && "$PY" -c "
 import json, sys
 try:
     s = json.load(open('$SETTINGS'))
@@ -874,7 +998,7 @@ if [[ $_claude_mem_present -eq 1 ]]; then
     dry "would remove claude-mem from settings.json (marketplace + plugin entry)"
   else
     backup_file "$SETTINGS"
-    python3 - <<'PY'
+    "$PY" - <<'PY'
 import json, os
 p = os.path.expanduser("~/.claude/settings.json")
 s = json.load(open(p))
@@ -932,27 +1056,26 @@ if is_mac && ! have brew && [[ "$CORPORATE_PROFILE" == "1" ]]; then
             "Perfil corporativo: falta Homebrew — se omite su instalación (sin sudo, solo espacio de usuario).")"
   warn "$(t "Install Homebrew via your IT-approved channel + re-run if you want brew-managed python/node. Continuing without it." \
             "Instalá Homebrew por tu canal aprobado de IT + volvé a correr si querés python/node vía brew. Se continúa sin él.")"
+elif is_mac && ! have brew && [[ $DRY_RUN -eq 0 ]] && [[ ! -t 0 ]]; then
+  # Non-interactive (the common case: the user pasted the install prompt into
+  # Claude Code, which runs this in a shell with no TTY to answer the Mac
+  # password prompt Homebrew's installer needs). Attempting it anyway is the
+  # exact MYC-739 cascade (2026-06-09 workshop): it fails on the unanswerable
+  # prompt and drags Obsidian, gh, node, pipx, and graphify down with it — a
+  # wall of red "failed" lines and no setup interview. Same fix as the
+  # corporate branch above: skip brew and keep going instead of stopping here.
+  # The user-space Python/Node fallbacks below don't need brew, and each
+  # brew-carried component note_gaps itself so the setup interview finishes
+  # it quietly. (MYC-739, MYC-4285)
+  warn "$(t "Homebrew needs your Mac password, which a non-interactive run can't type — skipping its install and continuing without it." \
+            "Homebrew necesita tu contraseña de Mac, que una corrida no interactiva no puede tipear — se omite su instalación y se continúa sin él.")"
+  print_terminal_step
+  log "$(t "That Terminal step is optional — only needed if you'd rather have Homebrew-managed installs. Everything below already continues without it." \
+           "Ese paso de Terminal es opcional — solo hace falta si preferís instalaciones vía Homebrew. Todo lo de abajo ya continúa sin él.")"
 elif is_mac && ! have brew; then
-  # Homebrew is genuinely missing. Its installer needs the Mac password at an
-  # interactive sudo prompt. When stdin is NOT a TTY — the common case: the user
-  # pasted the install prompt into Claude Code, which runs this in a
-  # non-interactive shell — that prompt can't be answered. Attempting it anyway
-  # fails and drags Obsidian, gh, node, and every brew-installed tool down with
-  # it: a wall of red "failed" lines and no setup interview (the exact failure
-  # the 2026-06-09 workshop hit). Instead, stop here and hand the user ONE
-  # Terminal command that does every password-gated install, then re-runs this
-  # whole bootstrap idempotently. That is the same "open Terminal, run one line"
-  # step the web guide already lists; surfacing it cleanly here is the recovery
-  # for anyone who skipped it. (MYC-739)
-  if [[ $DRY_RUN -eq 0 ]] && [[ ! -t 0 ]]; then
-    print_terminal_step
-    # For the assistant reading bootstrap output: STOP here. Relay the command
-    # above to the user verbatim and WAIT for them to confirm it finished. Do
-    # NOT try to install Homebrew yourself, do NOT "work around" it, and do NOT
-    # continue to the setup interview until they confirm.
-    exit 0
-  fi
-
+  # Homebrew is genuinely missing, and this IS an interactive terminal (or a
+  # dry run) — its installer needs the Mac password at an interactive sudo
+  # prompt, and here that prompt can actually be answered (or previewed).
   if [[ $DRY_RUN -eq 1 ]]; then
     # A dry run must NEVER mutate the machine. This branch used to fall
     # through to the real installer ("or dry-run: install for real") — a live
@@ -990,18 +1113,104 @@ elif is_mac && ! have brew; then
 fi
 
 # ───────────────────────────────────────────────────────────────────────────────
+# git
+# The entry command fetches this repo and every later update runs `git pull`, so
+# git is a prerequisite — and until now it was the one prerequisite bootstrap
+# never installed. Corporate laptops block the CLI installers that provide it
+# (2026-08-12 cohort install session: "Git and Node.js CLI installs require
+# administrator rights"), and none of the no-admin recovery below could help,
+# because the fetch
+# that lands THIS script ran first and needed git. The entry command now falls
+# back to an archive, so we can arrive here without git; install it for the
+# update path.
+#
+# PRESENCE IS NOT CAPABILITY on macOS. With the Command Line Tools absent,
+# /usr/bin/git exists and is on PATH, so `have git` returns true — but running it
+# raises the CLT install dialog and exits non-zero. Probe by EXECUTION, bounded,
+# so a stub that opens a GUI cannot hang a non-interactive install.
+# ───────────────────────────────────────────────────────────────────────────────
+
+have_working_git() {
+  have git || return 1
+  run_with_timeout 15 git --version >/dev/null 2>&1
+}
+
+# adopt_archive_install DIR REPO_URL — turn a directory that holds this repo's
+# files but no .git (the archive entry path) into a real clone, so the update
+# path works on every later run. Returns non-zero on any failure; the caller
+# treats that as non-fatal, because archive content is complete and functional
+# and only auto-update depends on this.
+#
+# NEVER destroys local edits: a bare `reset --hard` would silently discard a
+# hand-patched archive install, so the tree is staged and diffed against
+# origin/main first, and anything that differs is copied aside under the same
+# .bak-<stamp> convention the rest of this installer uses. Writes the backup
+# path to .adopt-backup-path so the caller can surface it.
+adopt_archive_install() {
+  local dir="$1" repo_url="$2" shelved
+  cd "$dir" || return 1
+  rm -f "$dir/.adopt-backup-path" 2>/dev/null || true
+  git init -q || return 1
+  git remote remove origin 2>/dev/null || true
+  git remote add origin "$repo_url" || return 1
+  git fetch --quiet origin main || return 1
+  git add -A 2>/dev/null || true
+  if ! git diff --cached --quiet origin/main 2>/dev/null; then
+    shelved="$dir.bak-$(date +%Y-%m-%d-%H%M)"
+    cp -R "$dir" "$shelved" || return 1
+    printf '%s\n' "$shelved" > "$dir/.adopt-backup-path" 2>/dev/null || true
+  fi
+  git reset --hard --quiet origin/main || return 1
+  git branch -q -M main 2>/dev/null || true
+  git branch -q --set-upstream-to=origin/main main 2>/dev/null || true
+  return 0
+}
+
+if ! have_working_git; then
+  if [[ "$CORPORATE_PROFILE" == "1" ]]; then
+    warn "$(t "Corporate profile: git not found — NOT auto-installing (user-space, no sudo)." \
+              "Perfil corporativo: no se encontró git — NO se instala automáticamente (espacio de usuario, sin sudo).")"
+    warn "$(t "The exact request for IT: install Git (macOS: Xcode Command Line Tools; Linux: the distro's git package)." \
+              "El pedido exacto para IT: instalar Git (macOS: Xcode Command Line Tools; Linux: el paquete git de la distro).")"
+  elif [[ $DRY_RUN -eq 1 ]]; then
+    dry "would: install git (brew on Mac; apt/dnf/pacman on Linux)"
+  elif is_mac; then
+    hdr "$(t "Installing git" "Instalando git")"
+    if have brew; then
+      quiet_retry brew install git || note_gap "git" "brew install git"
+    else
+      # No brew and no working git. Apple's only supported route is the Command
+      # Line Tools, which open a GUI dialog and want an admin password, neither
+      # answerable from here. Do NOT fire `xcode-select --install` blindly: an
+      # unexplained dialog is exactly what strands a non-technical installer.
+      # Name the click, then keep going — thanks to the archive entry path the
+      # rest of the install does not need git, only auto-update does.
+      warn "$(t "git isn't available yet, and installing it needs one click only you can make." \
+                "git todavía no está disponible, y instalarlo necesita un clic que sólo podés hacer vos.")"
+      warn "$(t "  In Terminal run:  xcode-select --install   then click Install in the window that appears." \
+                "  En Terminal corré:  xcode-select --install   y hacé clic en Instalar en la ventana que aparece.")"
+      warn "$(t "  Everything else continues now — only automatic updates wait on it." \
+                "  Todo lo demás sigue ahora — sólo las actualizaciones automáticas dependen de eso.")"
+      note_gap "git" "xcode-select --install"
+    fi
+  else
+    hdr "$(t "Installing git" "Instalando git")"
+    sudo apt-get install -y git 2>/dev/null \
+      || sudo dnf install -y git 2>/dev/null \
+      || sudo pacman -S --noconfirm git 2>/dev/null \
+      || note_gap "git" "install git with your distribution's package manager"
+  fi
+fi
+have_working_git && ok "git $(git --version 2>/dev/null | awk '{print $3}')"
+
+# ───────────────────────────────────────────────────────────────────────────────
 # Python 3.10+
 # ───────────────────────────────────────────────────────────────────────────────
 
-if ! python3 -c "import sys; assert sys.version_info >= (3,10)" 2>/dev/null; then
-  if [[ "$CORPORATE_PROFILE" == "1" ]]; then
-    warn "$(t "Corporate profile: Python 3.10+ not found — NOT auto-installing (user-space, no sudo)." \
-              "Perfil corporativo: no se encontró Python 3.10+ — NO se instala automáticamente (espacio de usuario, sin sudo).")"
-    warn "$(t "Provision Python via your IT-approved channel, then re-run. Some steps that need python3 will be skipped." \
-              "Instalá Python por tu canal aprobado de IT y volvé a correr. Algunos pasos que necesitan python3 se omitirán.")"
-  elif [[ $DRY_RUN -eq 1 ]]; then
-    dry "would: install Python 3.12 (brew on Mac; apt/dnf/pacman on Linux)"
-  else
+if ! "$PY" -c "import sys; assert sys.version_info >= (3,10)" 2>/dev/null; then
+  if [[ $DRY_RUN -eq 1 ]]; then
+    dry "would: install Python 3.12 (brew on Mac; apt/dnf/pacman on Linux; user-space tarball with neither)"
+  elif { is_mac && have brew; } || { is_linux && have_sudo; }; then
     hdr "Installing Python 3.12"
     if is_mac; then
       brew install python@3.12 || err "python install failed"
@@ -1011,23 +1220,29 @@ if ! python3 -c "import sys; assert sys.version_info >= (3,10)" 2>/dev/null; the
         || sudo pacman -S --noconfirm python python-pip 2>/dev/null \
         || err "python install failed (couldn't find apt/dnf/pacman)"
     fi
+  else
+    # No admin path reachable (no brew on Mac, no sudo on Linux — corporate
+    # laptops included). Degrade, never end the install: land a real python3
+    # in user space instead of erroring.
+    hdr "$(t "Installing Python 3.12 (user-space — no admin needed)" \
+              "Instalando Python 3.12 (espacio de usuario — sin admin)")"
+    install_python_userspace || note_gap "python3" "install Python 3.10+ yourself, then re-run"
   fi
 fi
-have python3 && ok "python3 $(python3 --version | awk '{print $2}')"
+# A newly installed interpreter lands under a versioned name, in a prefix
+# that may not come first in PATH either, so re-resolve instead of assuming
+# `python3` changed meaning.
+pick_python || true
+have "$PY" && ok "python3 $("$PY" --version 2>/dev/null | awk '{print $2}')"
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Node.js + npm
 # ───────────────────────────────────────────────────────────────────────────────
 
 if ! have node; then
-  if [[ "$CORPORATE_PROFILE" == "1" ]]; then
-    warn "$(t "Corporate profile: Node.js not found — NOT auto-installing (user-space, no sudo)." \
-              "Perfil corporativo: no se encontró Node.js — NO se instala automáticamente (espacio de usuario, sin sudo).")"
-    warn "$(t "Provision Node.js via your IT-approved channel, then re-run. Some steps that need node will be skipped." \
-              "Instalá Node.js por tu canal aprobado de IT y volvé a correr. Algunos pasos que necesitan node se omitirán.")"
-  elif [[ $DRY_RUN -eq 1 ]]; then
-    dry "would: install Node.js (brew on Mac; apt/dnf/pacman on Linux)"
-  else
+  if [[ $DRY_RUN -eq 1 ]]; then
+    dry "would: install Node.js (brew on Mac; apt/dnf/pacman on Linux; user-space tarball with neither)"
+  elif { is_mac && have brew; } || { is_linux && have_sudo; }; then
     hdr "Installing Node.js"
     if is_mac; then
       brew install node || err "node install failed"
@@ -1037,6 +1252,13 @@ if ! have node; then
         || sudo pacman -S --noconfirm nodejs npm 2>/dev/null \
         || err "node install failed"
     fi
+  else
+    # No admin path reachable (no brew on Mac, no sudo on Linux — corporate
+    # laptops included). Degrade, never end the install: land a real node in
+    # user space instead of erroring.
+    hdr "$(t "Installing Node.js (user-space — no admin needed)" \
+              "Instalando Node.js (espacio de usuario — sin admin)")"
+    install_node_userspace || note_gap "node" "install Node.js yourself, then re-run"
   fi
 fi
 have node && ok "node $(node --version)"
@@ -1076,10 +1298,13 @@ if ! have pipx && [[ $DRY_RUN -eq 1 ]]; then
   dry "would: install pipx (brew on Mac; pip --user on Linux)"
 elif ! have pipx; then
   hdr "Installing pipx"
-  if is_mac; then
+  if is_mac && have brew; then
     brew install pipx && pipx ensurepath || err "pipx install failed"
   else
-    python3 -m pip install --user pipx && python3 -m pipx ensurepath || err "pipx install failed"
+    # No brew (brew-less Mac, same as the Homebrew section above) or Linux:
+    # pip --user needs no elevation and no brew either way.
+    "$PY" -m pip install --user pipx && "$PY" -m pipx ensurepath \
+      || note_gap "pipx" "pip install --user pipx yourself, then re-run"
   fi
 fi
 # pipx installs console scripts into ~/.local/bin, and `pipx ensurepath` only
@@ -1100,8 +1325,12 @@ if ! have gh && [[ $DRY_RUN -eq 1 ]]; then
   dry "would: install gh, the GitHub CLI (brew on Mac; apt/dnf/pacman on Linux)"
 elif ! have gh; then
   hdr "Installing gh (GitHub CLI)"
-  if is_mac; then
+  if is_mac && have brew; then
     brew install gh || warn "gh install failed — non-blocking, continue"
+  elif is_mac; then
+    # Brew-less Mac (same reasoning as the Homebrew section above): no brew
+    # to install it through, and non-blocking either way.
+    note_gap "gh" "install gh yourself from https://cli.github.com, then re-run"
   else
     sudo apt-get install -y gh 2>/dev/null \
       || sudo dnf install -y gh 2>/dev/null \
@@ -1122,7 +1351,7 @@ have gh && ok "gh $(gh --version 2>/dev/null | head -1 | awk '{print $3}')" || t
 if is_mac; then
   if [[ ! -d "/Applications/Obsidian.app" ]] && [[ $DRY_RUN -eq 1 ]]; then
     dry "would: brew install --cask obsidian"
-  elif [[ ! -d "/Applications/Obsidian.app" ]]; then
+  elif [[ ! -d "/Applications/Obsidian.app" ]] && have brew; then
     hdr "$(t "Installing Obsidian" "Instalando Obsidian")"
     log "$(t \
       "Obsidian is the note-taking app this whole setup writes into. Free, runs locally, no account." \
@@ -1134,6 +1363,10 @@ if is_mac; then
       || err "$(t \
         "Obsidian install failed — install manually from https://obsidian.md and re-run this script" \
         "Falló la instalación de Obsidian — instalalo manual desde https://obsidian.md y volvé a correr este script")"
+  elif [[ ! -d "/Applications/Obsidian.app" ]]; then
+    # Brew-less Mac (same reasoning as the Homebrew section above): no brew
+    # to install it through.
+    note_gap "Obsidian" "install Obsidian yourself from https://obsidian.md, then re-run"
   fi
   if [[ -d "/Applications/Obsidian.app" ]]; then
     ok "$(t "Obsidian installed at /Applications/Obsidian.app" \
@@ -1201,7 +1434,7 @@ elif ! have graphify; then
   # the fallback when pipx itself misbehaves; both land in ~/.local/bin,
   # which is already exported above.
   quiet_retry pipx install graphifyy \
-    || quiet_retry python3 -m pip install --user graphifyy \
+    || quiet_retry "$PY" -m pip install --user graphifyy \
     || true
   hash -r 2>/dev/null || true
   if have graphify; then
@@ -1296,6 +1529,37 @@ if [[ -d "$SKILL_DIR/.git" ]]; then
   fi
 
   cd - >/dev/null
+elif [[ -f "$SKILL_DIR/bootstrap.sh" ]]; then
+  # The directory holds this repo's files but has no .git: the entry command
+  # fetched an archive because git was unavailable at the time. `git clone` into
+  # a non-empty directory FAILS, and that failure used to land in the red
+  # actionable list — trading a missing-git block for a scary-looking one. Adopt
+  # the directory as a real clone instead, which restores the update path above
+  # for every later run.
+  if ! have_working_git; then
+    warn "$(t "Installed from an archive, and git isn't available yet — automatic updates stay off until git is installed." \
+              "Instalado desde un archivo, y git todavía no está disponible — las actualizaciones automáticas quedan apagadas hasta instalar git.")"
+    SKIPPED+=("ai-brain-starter clone (archive install, git unavailable)")
+  elif [[ $DRY_RUN -eq 1 ]]; then
+    dry "would: adopt $SKILL_DIR as a git clone of $REPO_URL"
+  else
+    log "$(t "Installed from an archive — reconnecting it to the repository so updates work." \
+             "Instalado desde un archivo — reconectándolo al repositorio para que las actualizaciones funcionen.")"
+    if ( adopt_archive_install "$SKILL_DIR" "$REPO_URL" ); then
+      if [[ -f "$SKILL_DIR/.adopt-backup-path" ]]; then
+        warn "$(t "Local changes were found in the archive install. A copy is at:" \
+                  "Se encontraron cambios locales en la instalación por archivo. Hay una copia en:")"
+        warn "  $(cat "$SKILL_DIR/.adopt-backup-path" 2>/dev/null)"
+      fi
+      INSTALLED+=("ai-brain-starter clone (adopted from archive install)")
+    else
+      # Non-fatal: the archive content is complete and fully functional. Only
+      # auto-update needs the git wiring, so this is a warn, never a red ✗.
+      warn "$(t "Couldn't reconnect the archive install to the repository — automatic updates stay off. Everything else works." \
+                "No se pudo reconectar la instalación por archivo al repositorio — las actualizaciones automáticas quedan apagadas. Todo lo demás funciona.")"
+      note_gap "ai-brain-starter clone" "rm -rf $SKILL_DIR && git clone $REPO_URL $SKILL_DIR"
+    fi
+  fi
 else
   do_cmd "clone ai-brain-starter to $SKILL_DIR" git clone --quiet "$REPO_URL" "$SKILL_DIR" || err "ai-brain-starter clone failed"
   INSTALLED+=("ai-brain-starter clone")
@@ -1318,7 +1582,7 @@ SKILL_FORKS=()
 SKILL_SYMLINKS=()
 SKILLS_TO_SYNC=()
 
-for sub in graphify cierre-de-llamada meeting-todos patterns insights deconstruct daily-journal rise repurpose-talk nano-banana second-brain-mapping setup-vault-types diagnose note-todos sunday-review coach coaching backfill-journal-body-context longitudinal resolver-query for-my-team health-context health-doctor health-setup ingest-github ingest-health ingest-youtube evolve instinct-export instinct-import interview-me longitudinal doubt-driven-development secret-warn; do
+for sub in graphify cierre-de-llamada meeting-todos patterns insights deconstruct daily-journal rise repurpose-talk nano-banana second-brain-mapping setup-vault-types diagnose note-todos sunday-review coach coaching backfill-journal-body-context longitudinal resolver-query for-my-team health-context health-doctor health-setup ingest-github ingest-health ingest-youtube evolve instinct-export instinct-import interview-me doubt-driven-development secret-warn optimize-brain security-snapshot vault-system skillify-meta-loop; do
   dst="$HOME/.claude/skills/$sub"
 
   if [[ -L "$dst" ]]; then
@@ -1683,7 +1947,7 @@ backup_file "$HOME/.claude/.mcp.json"
 if [[ $DRY_RUN -eq 1 ]]; then
   dry "would register granola + chatprd MCPs in ~/.claude/.mcp.json (existing entries preserved)"
 else
-  python3 - <<'PY' || err "MCP registration failed"
+  "$PY" - <<'PY' || err "MCP registration failed"
 import json, os
 p = os.path.expanduser("~/.claude/.mcp.json")
 try:
@@ -1723,7 +1987,7 @@ if [[ $DRY_RUN -eq 1 ]]; then
   [[ "$CORPORATE_PROFILE" == "1" ]] && \
     dry "would ENFORCE telemetry-off + pin env in settings.json: DISABLE_TELEMETRY, DISABLE_ERROR_REPORTING, DISABLE_FEEDBACK_COMMAND, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, DISABLE_AUTOUPDATER, MYCELIUM_NO_PING"
 else
-  python3 - <<'PY' || err "settings.json plugin registration failed"
+  "$PY" - <<'PY' || err "settings.json plugin registration failed"
 import json, os
 p = os.path.expanduser("~/.claude/settings.json")
 corporate = os.environ.get("CORPORATE_PROFILE") == "1"
@@ -1825,7 +2089,7 @@ for check in "${CHECKS[@]}"; do
   fi
 done
 # Skill folders (full bundled set + humanizer + ai-brain-starter itself)
-for sub in graphify cierre-de-llamada meeting-todos patterns insights deconstruct daily-journal rise repurpose-talk nano-banana humanizer ai-brain-starter diagnose second-brain-mapping setup-vault-types note-todos sunday-review coach coaching backfill-journal-body-context longitudinal resolver-query for-my-team health-context health-doctor health-setup ingest-github ingest-health ingest-youtube evolve instinct-export instinct-import interview-me doubt-driven-development secret-warn; do
+for sub in graphify cierre-de-llamada meeting-todos patterns insights deconstruct daily-journal rise repurpose-talk nano-banana humanizer ai-brain-starter diagnose second-brain-mapping setup-vault-types note-todos sunday-review coach coaching backfill-journal-body-context longitudinal resolver-query for-my-team health-context health-doctor health-setup ingest-github ingest-health ingest-youtube evolve instinct-export instinct-import interview-me doubt-driven-development secret-warn optimize-brain security-snapshot vault-system skillify-meta-loop; do
   if [[ -d "$HOME/.claude/skills/$sub" ]]; then
     ok "skill: $sub"
   else
@@ -1919,7 +2183,7 @@ if [[ -f "$USER_HOOK_INSTALLER" ]] && [[ "$DRY_RUN" -eq 0 ]]; then
   # not present on the local fork, the runtime swallows the failure silently
   # via `2>/dev/null || echo '{"continue":true}'`. Verifying at install time
   # surfaces the gap loudly so it can actually be fixed.
-  python3 "$USER_HOOK_INSTALLER" --quiet --fail-on-missing 2>&1 | tee -a "$BOOTSTRAP_LOG"
+  "$PY" "$USER_HOOK_INSTALLER" --quiet --fail-on-missing 2>&1 | tee -a "$BOOTSTRAP_LOG"
   rc=${PIPESTATUS[0]}
   if [[ "$rc" -eq 0 ]]; then
     ok "User-level hooks installed (~/.claude/settings.json)"
@@ -1953,7 +2217,7 @@ if [[ -f "$EMAIL_MARKER" && $DRY_RUN -eq 0 ]]; then
     if [[ -f "$SIG_FILE" ]] && have python3; then
       HMAC_SECRET="$(head -1 "$SIG_FILE" 2>/dev/null | tr -d '[:space:]')"
       if [[ -n "$HMAC_SECRET" ]]; then
-        SIG="$(python3 -c 'import hmac,hashlib,sys; t,s=sys.argv[1:3]; print(hmac.new(s.encode(),t.encode(),hashlib.sha256).hexdigest())' "$RECORDED_TOKEN" "$HMAC_SECRET" 2>/dev/null || true)"
+        SIG="$("$PY" -c 'import hmac,hashlib,sys; t,s=sys.argv[1:3]; print(hmac.new(s.encode(),t.encode(),hashlib.sha256).hexdigest())' "$RECORDED_TOKEN" "$HMAC_SECRET" 2>/dev/null || true)"
       fi
     fi
     if [[ -n "$SIG" ]]; then

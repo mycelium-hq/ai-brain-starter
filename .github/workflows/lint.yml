@@ -70,6 +70,22 @@ jobs:
         with:
           python-version: "3.12"
 
+      # Installed HERE, before any step that parses YAML or frontmatter -- not
+      # further down next to the one consumer that prompted it. Placed lower,
+      # it ran AFTER stale-rule-check.py --self-test and that step died on
+      # "ERROR: PyYAML required" (PR #619, run 33237272846).
+      #
+      # Load-bearing, not cosmetic: without PyYAML ci-cost-audit.py parses
+      # NOTHING -- every workflow lands in its "unparsed" branch and every
+      # static rule is skipped. Until 2026-08-29 that skip was filed as an
+      # advisory finding, so the step named "runs clean against this repo's own
+      # workflows" passed green having checked nothing (measured on 8b9038b,
+      # where the same --fail-on high command exits 1 on a box that has
+      # PyYAML). The auditor now exits 2 when it cannot parse, so this install
+      # is what keeps those steps meaningful rather than merely quiet.
+      - name: install PyYAML (guards that parse YAML or frontmatter need it)
+        run: python3 -m pip install --user pyyaml
+
       # ---- instant checks first (byte / JSON scans, no tooling) -------------
 
       - name: JSON validity (hooks.json, *.mcp.json)
@@ -85,35 +101,24 @@ jobs:
           done < <(find . \( -name 'hooks.json' -o -name '*.mcp.json' \) -not -path './.git/*')
           exit $fail
 
-      - name: UTF-8 BOM on .ps1 (Windows PS 5.1 fix)
-        run: |
-          set -e
-          fail=0
-          while IFS= read -r f; do
-            head=$(head -c 3 "$f" | od -An -tx1 | tr -d ' \n')
-            if [ "$head" != "efbbbf" ]; then
-              echo "::error file=$f::missing UTF-8 BOM (Windows PowerShell 5.1 will crash on non-ASCII bytes). Fix: prepend the bytes EF BB BF to the file."
-              fail=1
-            fi
-          done < <(find . -name '*.ps1' -not -path './.git/*')
-          exit $fail
+      # BOTH .ps1 byte rules (UTF-8 BOM required, U+2014 banned) live in
+      # scripts/check-ps1-encoding.sh, NOT inline here, so this enforcing gate
+      # and the locally-runnable one (scripts/ci.sh, which the pre-push hook
+      # requires) cannot drift. As inline loops they were unreachable locally:
+      # a BOM-less .ps1 passed a full green `bash scripts/ci.sh` and failed only
+      # after a push, costing a whole CI round-trip each time (measured
+      # 2026-08-19 on tests/integration/test_bootstrap_ps1_slash_commands.ps1).
+      # ONE scanner rather than two because both rules read the same file list,
+      # and the enumeration is where the bugs have been (#559). The annotations
+      # still name the file and which rule it broke, so collapsing the two steps
+      # loses no attribution.
+      # scripts/test_ps1_encoding_gate.py fails if any caller stops delegating
+      # or re-inlines a private copy of either byte comparison.
+      - name: .ps1 encoding negative controls (the guard must still bite)
+        run: bash scripts/check-ps1-encoding.sh --self-test
 
-      # Em dashes in bash are stylistic. Em dashes in .ps1 are technical: they were the
-      # exact byte that crashed the Windows PowerShell 5.1 parser before the BOM fix.
-      # Even with BOM, keeping .ps1 ASCII-clean is defense-in-depth against the next
-      # time someone saves a file without BOM.
-      - name: no em dashes in .ps1 (Windows PS 5.1 hazard)
-        run: |
-          set -e
-          fail=0
-          while IFS= read -r f; do
-            if grep -n $'\xe2\x80\x94' "$f" >/dev/null 2>&1; then
-              echo "::error file=$f::contains em dash. Replace with ASCII hyphen or comma. Em dashes break Windows PowerShell 5.1 parsing if the BOM is ever lost."
-              grep -n $'\xe2\x80\x94' "$f" | head -5 | sed "s|^|  |"
-              fail=1
-            fi
-          done < <(find . -name '*.ps1' -not -path './.git/*')
-          exit $fail
+      - name: .ps1 encoding (UTF-8 BOM + no em dashes, Windows PS 5.1)
+        run: bash scripts/check-ps1-encoding.sh
 
       # NOTE: ubuntu-latest ships bash 5.x, so this proves MODERN-bash syntax
       # only. It is structurally blind to constructs that parse on 5.x and fail
@@ -150,12 +155,88 @@ jobs:
       # the wrong vault and skips the file it exists for. Shipped that way in
       # hooks/validate-handoff-frontmatter.py and was inert on every install
       # (#375/#404) - two unrelated users had already hand-patched it identically.
+      # A worktree is fresh when it is CREATED, not forever. This guard's
+      # discriminator is "has work started on this branch", NOT "is it behind",
+      # so its self-test runs two worktrees that are EQUALLY behind and differ
+      # only by one commit. A regression in either direction (warn on behind
+      # alone / never warn) fails it; a one-case test could not tell them apart.
+      - name: unstarted-worktree staleness negative controls (the guard must still bite)
+        run: python3 hooks/warn-stale-dev-checkout.py --self-test
+
+      # Both SHA-pinned baselines publish a per-tier burn-down count in their
+      # section headers, and every checker skips `#` lines - so a header that no
+      # longer matches its rows breaks nothing and fails nothing. Four were stale
+      # simultaneously before this landed (SEV-4 claiming 42 files over 26 rows).
+      # A backlog nobody can trust the size of is not a ratchet.
+      - name: baseline section-header negative controls (the guard must still bite)
+        run: python3 scripts/_baseline_sections.py --self-test
+
+      # Every scripts/test_*.py, DISCOVERED BY GLOB. Measured 2026-08-26: the
+      # repo carried 30 such suites and exactly ONE (test_ps1_encoding_gate.py)
+      # was named in any workflow, so 29 had never run in CI - including
+      # test_dev_worktree_prune.py and test_dev_worktree_prune_failsafe.py, the
+      # safety controls for the tool that DELETES whole worktrees. A suite that
+      # never runs and a suite that passes report the same green. Naming them
+      # here would re-create the bug: the next suite added would be dormant too.
+      - name: scripts/test_*.py suites (globbed - a dormant suite is not a passing one)
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          suites=(scripts/test_*.py)
+          if [ ${#suites[@]} -eq 0 ]; then
+            echo "no scripts/test_*.py found - the glob broke, not the repo"; exit 1
+          fi
+          echo "discovered ${#suites[@]} suite(s)"
+          rc=0
+          for t in "${suites[@]}"; do
+            echo "::group::$t"
+            if python3 "$t"; then echo "  ok   $t"; else echo "  FAIL $t"; rc=1; fi
+            echo "::endgroup::"
+          done
+          exit $rc
+
+      # Every tiered baseline, DISCOVERED BY GLOB rather than named here. Naming
+      # them would be the original bug one level up: a hand-maintained list of
+      # what to check goes stale exactly as silently as a hand-maintained count,
+      # and a baseline added later would simply never be looked at. Flat
+      # baselines have no ledger and are skipped; matching NOTHING is an error,
+      # never a pass. (utf8's checker cannot host this itself - it is content-
+      # pinned by the cloud-safe walker ratchet, where any edit obliges a
+      # safe_read migration. vault-root's checker also validates its own
+      # baseline inline, since only the scanner can count reads.)
+      - name: baseline burn-down counts match their rows (all tiered baselines)
+        run: python3 scripts/_baseline_sections.py --check-all scripts
+
       # Self-test first (cheap, and proves the guard still bites), then the tree.
       - name: naive VAULT_ROOT read negative controls (the guard must still bite)
         run: python3 scripts/check-vault-root-reads.py --self-test
 
       - name: no naive VAULT_ROOT reads (resolve via _resolve_vault_root)
         run: python3 scripts/check-vault-root-reads.py
+
+      - name: SessionStart emit-shape negative controls (the guard must still bite)
+        run: python3 scripts/check-sessionstart-emit-shape.py --self-test
+
+      - name: no SessionStart hook strands context on a top-level key
+        run: python3 scripts/check-sessionstart-emit-shape.py
+
+      # A negative control needs a "before" source. Read it from a MOVING ref
+      # (`git show origin/main:file`) and the control is guaranteed to pass in
+      # the PR that adds it and guaranteed to fail forever after it lands --
+      # merging is what turns origin/main into the fixed code, after which the
+      # control runs the fix against itself. Measured 2026-08-16: five straight
+      # commits red on main, every merge in the repo blocked.
+      #
+      # It is unrunnable-to-catch: green every time you run it pre-merge. Only
+      # reading it, or this guard, finds it. Vendor the before-state under
+      # tests/fixtures/ instead -- a fixture is immune to ref movement, history
+      # rewrites AND clone depth, which a pinned SHA is not (the `ci` job below
+      # checks out shallow, so old objects are simply absent there).
+      - name: frozen-before-state negative controls (the guard must still bite)
+        run: python3 scripts/check-frozen-before-state.py --self-test
+
+      - name: no moving ref as a test's before-state (vendor a fixture)
+        run: python3 scripts/check-frozen-before-state.py
 
       # Same SILENT-NO-OP family: hooks.json wires several hooks by their
       # ~/.claude/hooks/ path behind a `[ -f <path> ] &&` guard. The guard is
@@ -176,11 +257,129 @@ jobs:
       # active - MYC-1017, MYC-1031, and MYC-782 / #371 all shipped that way.
       # Also asserts every hook we wire is installer-OWNED, without which a
       # re-install duplicates a hand-wired copy instead of replacing it.
+      # A checker that prints a finding and exits 0 is, to every caller, a
+      # checker that found nothing -- and a deliberate advisory is
+      # indistinguishable from a gate that forgot to fail. This requires each
+      # one to SAY which it is, in the file. The baseline is capped and may
+      # only shrink, so a new script cannot join the undeclared tail.
+      - name: exit-contract negative controls (the gate must still bite)
+        run: python3 scripts/check-exit-contract.py --self-test
+
+      # The per-checker controls for the exit codes changed alongside the gate.
+      # Each constructs the finding its checker names and asserts it goes RED;
+      # each was mutation-tested (revert the fix, the control must fail AT ITS
+      # OWN SITE). Unwired, they would be files nobody runs.
+      - name: split-meta negative controls (a detected split must go RED)
+        run: python3 scripts/check-split-meta.py --self-test
+
+      - name: stale-rule negative controls (an unevaluable entry must go RED)
+        run: python3 scripts/stale-rule-check.py --self-test
+
+      - name: vault-repo drift negative controls (drift must reach the exit)
+        run: bash scripts/vault-repo-drift-check.sh --self-test
+
+      - name: drift-check negative controls (STATUS must carry the finding)
+        run: bash scripts/drift-check.sh --self-test
+
+      - name: every checker declares whether its findings can fail
+        run: python3 scripts/check-exit-contract.py
+
       - name: hook-activation negative controls (a dormant guard must go RED)
         run: python3 scripts/check-hook-activation.py --selftest
 
       - name: every shipped hook is wired, and every wired hook is owned
         run: python3 scripts/check-hook-activation.py
+
+      # The fourth, disjoint question: a hook can be wired, owned and able to
+      # speak, and still have a matcher that never fires on any real input.
+      # Only a negative control separates a QUIET guard from a DEAD one.
+      - name: hook negative-control checks (this check must go RED on its own cases)
+        run: python3 scripts/check-hook-negative-control.py --selftest
+
+      - name: no shipped hook lacks a test surface
+        run: python3 scripts/check-hook-negative-control.py
+
+      # Enforced on BOTH sides on purpose. Measured 2026-09-01: this job ran 20
+      # scripts/*.py checks and scripts/ci.sh ran 9, so `ci-test` reported GREEN
+      # on a commit this job then rejected. Running the ratchet here too means
+      # adding a step above without adding it to ci.sh fails in CI as well as
+      # locally, instead of quietly widening the gap again.
+      - name: local gate parity self-test (must catch its own blind spots)
+        run: python3 scripts/check-local-gate-parity.py --self-test
+
+      - name: the local gate runs every check this job requires
+        run: python3 scripts/check-local-gate-parity.py
+
+      # The check above asks whether a hook is wired AT ALL. This asks whether it
+      # is wired on BOTH PLATFORMS - a question nothing in this repo used to ask.
+      #
+      # hooks.json is POSIX shell. On native Windows the installer rewrites every
+      # command through hook_runner.py, and anything it cannot rewrite - anything
+      # that runs `bash` - is DROPPED. Four hooks are dropped today and three of
+      # them (write-hook.sh, session-end-hook.sh, graph-context-hook.sh) have NO
+      # Windows equivalent, so meeting-todos extraction, the session-close
+      # finalizer and graph-context routing are POSIX-only features. Every existing
+      # check stayed green through that: the installer exits 0 because it installed
+      # what it could, --verify verifies what is WIRED (not what went missing), and
+      # CI asserts the install SUCCEEDS. A Windows job and a macOS job could differ
+      # by three whole features and both pass.
+      #
+      # The gate diffs the two legs by running the installer's OWN pipeline twice
+      # (never a private copy of the drop rule, which would agree today and drift
+      # silently), and fails on any difference not carrying a written reason in
+      # scripts/hook-parity-allowlist.json. The allowlist is the deliverable: it
+      # turns a silent drop into a reviewed decision, and a stale entry fails too,
+      # so it cannot rot into excuses for problems already fixed.
+      # Self-test first (cheap, and proves the gate bites a synthetic mismatch).
+      - name: hook-parity negative controls (a silent platform drop must go RED)
+        run: python3 scripts/check-hook-parity.py --self-test
+
+      - name: every hook is wired on both POSIX and Windows, or reviewed as not
+        run: python3 scripts/check-hook-parity.py
+
+      # The cross-REPO sibling of the gate above. That one asks whether one
+      # behaviour reaches both PLATFORMS; this asks whether one contract's several
+      # hand-written IMPLEMENTATIONS know about each other.
+      #
+      # machinery-sidecar/1 drifted three times: Google Drive Mirror roots taught
+      # here and not in the Rust twin (MYC-1088), the vault-target guard that let
+      # Studio git-init a repo over a founder's $HOME (MYC-4035), and the python
+      # interpreter probe the Windows leg had already solved correctly while the
+      # POSIX leg kept the weaker check. Every check on both sides stayed green
+      # each time, because each implementation is internally consistent and no
+      # gate had ever seen another.
+      #
+      # G4 is the load-bearing one: a sentence in THIS repo asserting the current
+      # state of code in ANOTHER repo cannot stay true, because nothing here runs
+      # when that repo merges. ADR-0007 carried exactly such a sentence; it was
+      # accurate for 29 minutes and wrong for the following eight days.
+      # Self-test first (cheap, and proves the gate bites a synthetic mismatch).
+      - name: paired-implementation negative controls (the gate must bite)
+        run: python3 scripts/check-paired-implementations.py --self-test
+
+      - name: paired implementations are declared, present, and claim-free
+        run: python3 scripts/check-paired-implementations.py
+
+      # The advisory half. A PR touching one side of a paired contract gets the
+      # other side named inline on its Files tab. ADVISORY, never blocking: the
+      # repos have different release cadences and a hard cross-repo gate would
+      # only get bypassed. This is the step that would have said "the Rust twin
+      # also implements this" on the PR that shipped the vault-target guard here
+      # and not there (MYC-4028 -> MYC-4035).
+      #
+      # Security note: github.base_ref is bound to an env var per the SAFE pattern
+      # documented at the top of this file, never interpolated into the shell.
+      # Paths go through a FILE, not word-splitting, so a path with a space
+      # cannot silently become two arguments.
+      - name: name the counterparts of any paired file this PR touches (advisory)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --quiet origin "$BASE_REF"
+          git diff --name-only "origin/$BASE_REF...HEAD" > "$RUNNER_TEMP/changed.txt"
+          python3 scripts/check-paired-implementations.py \
+            --changed-from "$RUNNER_TEMP/changed.txt"
 
       # The READ half of the UTF-8 console guard below. That one fails a CLI that
       # PRINTS non-ASCII without reconfiguring stdout; this fails one that READS a
@@ -223,6 +422,26 @@ jobs:
             done
           done < <(grep -rn -E '`scripts/[A-Za-z0-9_./-]+\.(sh|ps1|py|plist)`' phases/ 2>/dev/null || true)
           [ -f /tmp/lint-ref-fail ] && exit 1 || exit 0
+
+      # Broader than the phases-only check above: every slash command and
+      # scripts/*.py path across README.md, docs/, phases/, and every
+      # skills/*/SKILL.md, plus a cheap check that a documented --flag is
+      # actually wired somewhere besides its own menu line. Built for
+      # MYC-4121 after eight of these were found by hand in one audit
+      # (/optimize-brain never shipped, /mem-search advertised after its own
+      # removal, two image scripts documented with a fabricated ship date,
+      # three graphify flags wired nowhere but their own menu, ...). See
+      # scripts/check-doc-promises.py's module docstring for what is checked
+      # and the bounded, documented exemptions for what is not. No
+      # untrusted input reaches this step -- it reads only committed
+      # tracked files already on the runner's checkout.
+      - name: doc-promises negative controls (the guard must still bite)
+        run: |
+          python3 scripts/check-doc-promises.py --self-test
+          python3 scripts/check-doc-promises.py --fixture-test
+
+      - name: every documented command, script, and flag actually exists
+        run: python3 scripts/check-doc-promises.py
 
       # Catches the bug class from the May 2026 install-UX incident: the README
       # told the installing assistant to run `bash <(curl -fsSL .../bootstrap.sh)`.
@@ -340,6 +559,13 @@ jobs:
       - name: ensure shellcheck present
         run: command -v shellcheck >/dev/null || { sudo apt-get update && sudo apt-get install -y shellcheck; }
 
+      # A signal death and a lint finding used to be the same exit here, so a
+      # shellcheck the kernel killed reported "found issues" and a reader went
+      # hunting for a defect that did not exist (MYC-4259). These controls shim
+      # a fake shellcheck to drive each documented status.
+      - name: shellcheck exit-code negative controls (a killed linter is not a finding)
+        run: bash scripts/shellcheck.sh --self-test
+
       - name: shellcheck (.sh, -S warning)
         run: bash scripts/shellcheck.sh
 
@@ -363,46 +589,24 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}
-        run: git fetch origin "$BASE_REF" --depth=50
+        # NO --depth here. checkout above uses fetch-depth: 0, and a depth-limited
+        # fetch re-introduces a shallow boundary: on a PR older than that many
+        # commits the merge base falls outside it and `git diff BASE...HEAD`
+        # cannot be computed at all.
+        run: git fetch origin "$BASE_REF"
+
+      # The scan itself lives in scripts/check-private-context.sh so this
+      # enforcing gate and a local run cannot drift, and so its negative control
+      # is runnable. Same reasoning as check-ps1-encoding.sh above.
+      - name: private-context negative controls (the guard must still bite)
+        if: github.event_name == 'pull_request'
+        run: bash scripts/check-private-context.sh --self-test
 
       - name: private-context tokens (PR-scoped)
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}
-        run: |
-          set -e
-          P='\b[A]delaida\b|\b[O]nde\b|\b[D]iaz.Roa\b|\b[B]ogot[aá]\b|\b[S]ergio Perez\b|\b[N]atalia\b|\b[P]aola\b|\b[A]ccenture\b|\b[H]igh.Rise Series\b|\b[S]hark Tank\b'
-          BASE="origin/$BASE_REF"
-          fail=0
-          while IFS= read -r f; do
-            [ -z "$f" ] && continue
-            [ ! -f "$f" ] && continue
-            case "$f" in
-              */.venv/*|*/node_modules/*|*/__pycache__/*) continue ;;
-            esac
-            case "$f" in
-              *.md|*.sh|*.ps1|*.py|*.json|*.yml|*.yaml|*.txt|.env.example) ;;
-              *) continue ;;
-            esac
-            # Scan ONLY lines this PR adds (diff lines starting with `+`,
-            # excluding the `+++ b/path` file header). Pre-existing committed
-            # content is intentionally ignored: CI gates net-new private-context
-            # additions, not legacy text in files this PR happens to touch.
-            added_lines=$(git diff "$BASE"..HEAD -- "$f" | grep -E '^\+' | grep -vE '^\+\+\+' || true)
-            if [ -z "$added_lines" ]; then
-              continue
-            fi
-            if matches=$(echo "$added_lines" | grep -nE "$P" 2>/dev/null); then
-              echo "::error file=$f::private-context token added in this PR"
-              echo "$matches" | head -3 | sed 's|^|  |'
-              fail=1
-            fi
-          done < <(git diff --name-only "$BASE"..HEAD)
-          if [ "$fail" = "1" ]; then
-            echo "::error::Private-context scan failed. Use placeholders or fictional names instead."
-            exit 1
-          fi
-          echo "Private-context scan passed (added lines only)."
+        run: bash scripts/check-private-context.sh "origin/$BASE_REF"
 
       # ---- last: the only step that installs anything ------------------------
 
@@ -423,9 +627,57 @@ jobs:
       - name: phase-doc Python (no undefined names / F821)
         run: python3 scripts/check-phase-python.py
 
+      # The step above lints Python embedded in phases/*.md. THIS one lints the
+      # repo's own tracked *.py -- which nothing in CI did until it landed. The
+      # `ci` job py_compiles every tracked *.py, but py_compile parses: it cannot
+      # see a name that does not exist. `env=_GIT_CLEAN_ENV` shipped in
+      # hooks/session-lock.py on 2026-08-12 (4a2bf7c) with the constant never
+      # defined and sat on main for thirteen days (fixed 2026-08-25, 5952dac).
+      # session-lock.py is the concurrency gate and settings.json registers it
+      # behind an allow-fallback wrapper, so that NameError did not fail loudly --
+      # the hook crashed, the wrapper answered "allow", and the gate was open.
+      # Reuses the ruff installed two steps above (fail-closed), so this costs no
+      # extra install and no extra billed job.
+      - name: repo Python (no undefined names / E9,F63,F7,F82)
+        run: bash scripts/ruff-gate.sh
+
+      - name: ruff-gate negative controls (a dead linter must not read as clean)
+        run: bash scripts/ruff-gate.sh --self-test
+
+      # The .ps1 half of the same gap. `.ps1 encoding` above checks BOM + em
+      # dashes, and the pwsh parse step checks syntax -- neither looks at
+      # semantics, on the platform (Windows install) with the fewest local eyes.
+      # Deliberately a curated RULE list, not a severity floor: `-Severity
+      # Warning` would land 318 findings red on day one, 251 of them
+      # PSAvoidUsingWriteHost, which is the CORRECT call in an installer that
+      # talks to a human. See scripts/psscriptanalyzer.sh for the measurement.
+      # The module install has no `|| true`: a gate that cannot run must not
+      # report clean, same reasoning as the ruff install above.
+      - name: install PSScriptAnalyzer (the .ps1 analyzer this gate needs)
+        shell: pwsh
+        run: Install-Module -Name PSScriptAnalyzer -Repository PSGallery -Scope CurrentUser -Force -AcceptLicense
+
+      - name: repo PowerShell (security + real-bug rules over tracked *.ps1)
+        run: bash scripts/psscriptanalyzer.sh
+
+      - name: psscriptanalyzer negative controls (a dead analyzer must not read as clean)
+        run: bash scripts/psscriptanalyzer.sh --self-test
+
   bash32-syntax:
     name: bash 3.2 syntax (macOS /bin/bash)
     runs-on: macos-latest
+    env:
+      # Read by scripts/ci-cost-audit.py. macOS bills 10x Linux, and this job
+      # is ungated on purpose, so the auditor would otherwise flag it HIGH --
+      # correctly, on its own terms. The exemption is declared here rather than
+      # suppressed silently: the rationale is the comment block below, and the
+      # short version is that this is the ONLY surface on which bash 3.2
+      # parsing is proven, the guarantee has to hold on every change, and a
+      # real bug shipped through the gap it closes.
+      CI_COST_DELIBERATE: >-
+        Only surface proving bash 3.2 parsing; the guarantee must hold on every
+        change and a real unrunnable-test bug shipped through this gap before
+        the job existed. Syntax-only, so it is the cheapest form of the check.
     # macOS ships bash 3.2.57 at /bin/bash -- the last GPLv2 release -- and that
     # is the ONLY bash on an unmodified Mac. This repo's install path is a
     # supported dev environment there, so every .sh here has to PARSE under it.

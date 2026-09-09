@@ -6,7 +6,7 @@ already saw on this turn, so this layer is detection + loud-alert + audit
 log. Two outputs:
 
 1. STDERR alert to the agent in the SAME turn ("secrets just landed in
-   your transcript, rotation playbook at <path>"). The agent sees this as
+   your transcript, rotate now"). The agent sees this as
    additional context and can react.
 
 2. Append-only audit log at ~/.claude/hooks/secret-detection-log.jsonl.
@@ -43,8 +43,20 @@ sys.path.insert(0, str(HOOK_DIR))
 
 from _lib.secret_patterns import filter_tool_output_false_positives, scan  # noqa: E402
 
-LOG_PATH = HOOK_DIR / "secret-detection-log.jsonl"
-PLAYBOOK_HINT = "⚙️ Meta/Handoffs/20260513-eng6-secrets-rotation-playbook.md"
+# NOT HOOK_DIR — same reason as scrub-session-jsonl-secrets.py, and the same
+# contradiction with this module's own docstring above, which places this log
+# at ~/.claude/hooks/. HOOK_DIR is where THIS COPY runs from, and the wired
+# copy on a real install is a GIT CHECKOUT of this repo, so an append-only
+# audit log accumulated inside it as an untracked file and was reported as a
+# hand-edit by the deployed-hook-drift surfacer on every session.
+#
+# It also SPLIT the audit trail: each deployed copy kept its own log, so the
+# record of what this detector caught depended on which copy happened to run.
+# One log per machine is the only version of an audit trail worth having.
+LOG_PATH = Path(
+    os.environ.get("SECRET_DETECTION_LOG_PATH")
+    or (Path.home() / ".claude" / "hooks" / "secret-detection-log.jsonl")
+)
 
 # Per the user's stated preference (2026-05-23): grep'ing her own .env.local /
 # admin.env / .zsh_secrets to verify what's stored is intentional, not a leak.
@@ -148,7 +160,8 @@ def main() -> int:
             {"pattern": n, "count": c, "reason": r} for n, c, r in fp_suppressed
         ]
     try:
-        with LOG_PATH.open("a") as f:
+        LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with LOG_PATH.open("a", encoding="utf-8") as f:
             f.write(json.dumps(entry, separators=(",", ":")) + "\n")
     except OSError:
         # Log write failure shouldn't break the hook; alert path runs anyway.
@@ -171,9 +184,9 @@ def main() -> int:
     alert = (
         f"⚠️ SECRETS DETECTED in Bash tool output ({summary}). "
         f"This session's transcript now contains plaintext secrets. "
-        f"Rotate per {PLAYBOOK_HINT}, then run "
-        f"`bash \"⚙️ Meta/scripts/scrub-session-jsonl-20260513-secrets.sh\"` "
-        f"(or the equivalent for any new pattern). "
+        f"Rotate the exposed credential(s) at their provider now, then "
+        f"scrub them from this session's transcript before it is shared, "
+        f"synced, or archived. "
         f"Audit log: {LOG_PATH}."
     )
     print(
@@ -193,4 +206,13 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # Windows cp1252-console safety (ai-brain-starter#313; hooks/ sweep #314).
+    # A hook that print()s non-ASCII raises UnicodeEncodeError on a cp1252
+    # console: the gate then fails silently OPEN, or denies the tool call with
+    # no legible cause. Idempotent; a no-op on an already-UTF-8 console.
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8")  # Python 3.7+
+        except (AttributeError, ValueError):
+            pass
     raise SystemExit(main())

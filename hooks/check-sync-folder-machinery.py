@@ -48,9 +48,26 @@ from _lib.worktree_safety import drive_mirror_root_paths  # noqa: E402
 
 HOME = os.path.expanduser("~")
 
+# Verdict snapshot. SessionStart reads THIS instead of re-walking: a per-session
+# walk of every cloud root becomes N concurrent full walks under N sessions,
+# which is the exact freeze mechanism this guard exists to prevent.
+STATE_PATH = os.path.join(HOME, ".claude", "state", "sync-guard-last.json")
+
 # Directory names that mean "machinery, never sync this"
 MARKER_DIRS = {".git", "node_modules", ".venv", "venv", "target",
-               "__pycache__", ".next", "dist", "build", ".tox", ".gradle"}
+               "__pycache__", ".next", "dist", "build", ".tox", ".gradle",
+               ".codegraph", ".smart-env"}
+# `worktrees` is machinery ONLY under a tool dir. A bare folder named
+# "worktrees" is plausible user content, so it is scoped by PARENT rather than
+# added as another ambiguous bare name alongside dist/build/target. See
+# scan_root. Deliberately absent from THIS file's marker set: `.obsidian` -- it legitimately
+# syncs, that is how Obsidian mobile works, and a guard that cries wolf on real
+# folders teaches bypass, which then masks the true hits.
+# Only ".claude": ".git" is itself in MARKER_DIRS and is pruned from dirnames before the
+# walk descends, so os.walk never yields a dirpath ending in "/.git" and a ".git" entry
+# here could only fire if a scan ROOT were named .git. Listing it read as coverage that
+# does not exist. A repo's own .git/worktrees is covered by the .git hit itself.
+WORKTREE_PARENTS = {".claude"}
 # A plain folder this big is also too much for a File Provider to live-sync
 FILE_COUNT_THRESHOLD = 5000
 # Per-root safety budget so a streamed Google Drive can't hang the scan
@@ -68,8 +85,13 @@ DRIVE_MIRROR_SYNC_TYPE = 1
 
 def _defaults_bool(domain, key):
     try:
+        # Decode explicitly: text=True alone uses the LOCALE encoding, which on a
+        # non-UTF-8 console raises UnicodeDecodeError on any non-ASCII path (vault
+        # folders carry emoji). errors="replace" keeps a mangled byte from turning
+        # an advisory probe into a crash.
         out = subprocess.run(["defaults", "read", domain, key],
-                             capture_output=True, text=True, timeout=5)
+                             capture_output=True, text=True, timeout=5,
+                             encoding="utf-8", errors="replace")
         return out.returncode == 0 and out.stdout.strip() == "1"
     except Exception:
         return False
@@ -123,7 +145,18 @@ def scan_root(root, provider):
     findings = []
     start = time.monotonic()
     base_depth = root.rstrip("/").count("/")
-    for dirpath, dirnames, filenames in os.walk(root, topdown=True):
+    def _unreadable(err):
+        # os.walk's default onerror is None -- it SWALLOWS a permission/IO failure and
+        # yields nothing for that subtree, so an unreadable root produced findings:[] and
+        # main() printed "clean". That routes an unproven scan into the one verdict this
+        # guard must never emit. Recorded as coverage-PARTIAL, same channel as a budget
+        # truncation.
+        findings.append({"path": getattr(err, "filename", root) or root,
+                         "provider": provider,
+                         "reason": f"unreadable subtree ({type(err).__name__}) -- coverage PARTIAL, not clean",
+                         "severity": "info"})
+
+    for dirpath, dirnames, filenames in os.walk(root, topdown=True, onerror=_unreadable):
         if time.monotonic() - start > ROOT_TIME_BUDGET_S:
             findings.append({"path": root, "provider": provider,
                              "reason": "scan-time-budget-exceeded (large/streamed tree)",
@@ -132,13 +165,29 @@ def scan_root(root, provider):
         if dirpath.count("/") - base_depth >= MAX_DEPTH:
             dirnames[:] = []
             continue
-        hit = MARKER_DIRS.intersection(dirnames)
+        candidates = set(MARKER_DIRS.intersection(dirnames))
+        # An EMPTY .claude/worktrees still counts -- it is the SEED, not the
+        # storm. 0 files, so FILE_COUNT_THRESHOLD structurally cannot see it,
+        # and it fills with a ~6.5K-file checkout the next time a session ticks
+        # the worktree box. Missed for 8 days inside a live Google Drive root
+        # while this scan reported findings:[] every morning (MYC-4188).
+        if "worktrees" in dirnames and os.path.basename(dirpath.rstrip("/")) in WORKTREE_PARENTS:
+            candidates.add("worktrees")
+        # A SYMLINK here is the documented CURE, never the disease. Shape B in
+        # CLOUD_SYNC.md tells the user to run relocate-machinery-sidecar, which moves
+        # .smart-env / .codegraph / .claude/worktrees to a sidecar and leaves a symlink
+        # behind -- the churn is then outside the synced tree by construction. os.walk
+        # lists a symlinked directory in dirnames, so without this filter a vault fixed
+        # EXACTLY as our own docs instruct reports three permanent HIGH findings that no
+        # action can clear. The pre-existing markers were accidentally immune: .git
+        # remediates to a pointer FILE, which never appears in dirnames.
+        hit = {h for h in candidates if not os.path.islink(os.path.join(dirpath, h))}
         for h in sorted(hit):
             findings.append({"path": os.path.join(dirpath, h), "provider": provider,
                              "reason": f"machinery dir '{h}' inside synced folder",
                              "severity": "high"})
         # don't descend into machinery we already flagged
-        dirnames[:] = [d for d in dirnames if d not in MARKER_DIRS]
+        dirnames[:] = [d for d in dirnames if d not in candidates and d not in MARKER_DIRS]
         if len(filenames) >= FILE_COUNT_THRESHOLD:
             findings.append({"path": dirpath, "provider": provider,
                              "reason": f"{len(filenames)}+ files in one synced dir",
@@ -153,6 +202,33 @@ def run_scan():
     return findings
 
 
+def truncated_roots(findings):
+    """Roots whose walk hit the time budget -> coverage is PARTIAL, not clean."""
+    return [f["path"] for f in findings
+            if "budget" in f.get("reason", "") or "coverage PARTIAL" in f.get("reason", "")]
+
+
+def write_snapshot(findings, high):
+    """Persist the verdict so SessionStart can report it without re-walking.
+
+    Fail-open: a snapshot we cannot write must never break the scan.
+    """
+    try:
+        os.makedirs(os.path.dirname(STATE_PATH), exist_ok=True)
+        tmp = STATE_PATH + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump({
+                "scanned_at": time.time(),
+                "roots": [{"path": p, "provider": prov} for p, prov in synced_roots()],
+                "findings": findings,
+                "high_count": len(high),
+                "truncated_roots": truncated_roots(findings),
+            }, fh, indent=2)
+        os.replace(tmp, STATE_PATH)   # atomic: a reader never sees a half-written file
+    except Exception:
+        pass
+
+
 def self_test():
     """Negative control: build a synced-like tree with a .git, prove we flag it."""
     import tempfile
@@ -163,19 +239,66 @@ def self_test():
         big = os.path.join(tmp, "hugedir")
         os.makedirs(big)
         for i in range(FILE_COUNT_THRESHOLD + 5):
-            open(os.path.join(big, f"f{i}"), "w").close()
+            open(os.path.join(big, f"f{i}"), "w", encoding="utf-8").close()
         f = scan_root(tmp, "TEST")
         got_marker = any(x["reason"].startswith("machinery dir '.git'") for x in f)
         got_big = any("files in one synced dir" in x["reason"] for x in f)
         # control: a clean docs tree must produce NOTHING
         clean = os.path.join(tmp, "clean_docs")
         os.makedirs(clean)
-        open(os.path.join(clean, "notes.md"), "w").close()
+        open(os.path.join(clean, "notes.md"), "w", encoding="utf-8").close()
         f2 = scan_root(clean, "TEST")
         print(f"[self-test] detects .git inside synced folder: {got_marker}")
         print(f"[self-test] detects oversized synced dir:      {got_big}")
         print(f"[self-test] clean docs tree -> no findings:    {len(f2) == 0}")
         ok = got_marker and got_big and len(f2) == 0
+
+        # --- MYC-4188: the seed case. An EMPTY .claude/worktrees inside a
+        # synced root must fire, and the innocent look-alikes must stay silent.
+        # This leg exists because the previous control suite was built only from
+        # bugs already fixed, so it could not report a word missing from its own
+        # vocabulary -- the guard walked into the directory, looked straight at
+        # the hazard, and did not know the name.
+        seed = os.path.join(tmp, "seed_root")
+        os.makedirs(os.path.join(seed, ".claude", "worktrees"))   # empty -> MUST flag
+        os.makedirs(os.path.join(seed, ".obsidian"))              # legit sync -> silent
+        os.makedirs(os.path.join(seed, "worktrees"))              # bare name -> silent
+        open(os.path.join(seed, ".claude", "settings.local.json"), "w", encoding="utf-8").close()
+        # Sidecar-symlink control. The islink regression above shipped past this diff's
+        # own new legs because every fixture here was a REAL dir. A suite made only of
+        # the bug you just fixed cannot see the bug you just made.
+        sidecar = os.path.join(tmp, "sidecar_target")
+        os.makedirs(os.path.join(sidecar, "worktrees"))
+        os.makedirs(os.path.join(sidecar, "smart-env"))
+        fixed = os.path.join(tmp, "fixed_vault")
+        os.makedirs(os.path.join(fixed, ".claude"))
+        os.symlink(os.path.join(sidecar, "worktrees"), os.path.join(fixed, ".claude", "worktrees"))
+        os.symlink(os.path.join(sidecar, "smart-env"), os.path.join(fixed, ".smart-env"))
+
+        f3 = scan_root(seed, "TEST")
+        seed_paths = {x["path"] for x in f3}
+        got_seed = os.path.join(seed, ".claude", "worktrees") in seed_paths
+        quiet_obsidian = os.path.join(seed, ".obsidian") not in seed_paths
+        quiet_bare = os.path.join(seed, "worktrees") not in seed_paths
+        print(f"[self-test] detects EMPTY .claude/worktrees:   {got_seed}")
+        print(f"[self-test] .obsidian stays silent:            {quiet_obsidian}")
+        print(f"[self-test] bare worktrees/ stays silent:      {quiet_bare}")
+        f4 = scan_root(fixed, "TEST")
+        quiet_sidecar = len(f4) == 0
+        print(f"[self-test] sidecar SYMLINKS stay silent:      {quiet_sidecar}")
+        ok = ok and got_seed and quiet_obsidian and quiet_bare and quiet_sidecar
+
+        # Unreadable-subtree control: coverage must read PARTIAL, never clean.
+        locked = os.path.join(tmp, "locked_root")
+        os.makedirs(os.path.join(locked, "vault", ".git"))
+        os.chmod(locked, 0o000)
+        try:
+            f5 = scan_root(locked, "TEST")
+            loud_unreadable = bool(truncated_roots(f5))
+        finally:
+            os.chmod(locked, 0o755)
+        print(f"[self-test] unreadable root reports PARTIAL:   {loud_unreadable}")
+        ok = ok and loud_unreadable
 
         # Metadata-only negative control: a FIFO has the same forever-blocking
         # behavior as a placeholder if opened for content. This scanner must
@@ -213,7 +336,7 @@ def self_test():
         os.makedirs(os.path.join(mirror_git, ".git"))
         mirror_clean = os.path.join(tmp, "mirror_clean")    # Mirror, clean -> no finding
         os.makedirs(mirror_clean)
-        open(os.path.join(mirror_clean, "notes.md"), "w").close()
+        open(os.path.join(mirror_clean, "notes.md"), "w", encoding="utf-8").close()
         stream_git = os.path.join(tmp, "stream_vault")      # sync_type=2 -> IGNORED
         os.makedirs(os.path.join(stream_git, ".git"))
 
@@ -256,11 +379,22 @@ def main():
         return self_test()
     findings = run_scan()
     high = [f for f in findings if f["severity"] == "high"]
+    partial = truncated_roots(findings)
+    write_snapshot(findings, high)
     if "--json" in sys.argv:
-        print(json.dumps({"findings": findings, "high_count": len(high)}, indent=2))
+        print(json.dumps({"findings": findings, "high_count": len(high),
+                          "truncated_roots": partial}, indent=2))
         return 0
     if not high:
-        print("[sync-guard] clean — no machinery found in any cloud-synced folder.")
+        # A truncated walk saw only PART of the tree. Never call that clean:
+        # an unscanned root and a genuinely empty one look identical from here.
+        if partial:
+            print("[sync-guard] ⚠️  PARTIAL SCAN — no machinery found in the part "
+                  "that was walked, but these roots timed out and were NOT fully checked:")
+            for p in partial:
+                print(f"[sync-guard]     {p}")
+        else:
+            print("[sync-guard] clean — no machinery found in any cloud-synced folder.")
         for f in findings:
             print(f"[sync-guard] note: {f['reason']} @ {f['path']}")
         return 0
@@ -269,6 +403,11 @@ def main():
     for f in high:
         print(f"[sync-guard]   • [{f['provider']}] {f['reason']}")
         print(f"[sync-guard]     {f['path']}")
+    # info-severity notes were previously printed ONLY on the clean path, so a
+    # truncated root was invisible whenever any high finding existed.
+    for f in findings:
+        if f["severity"] != "high":
+            print(f"[sync-guard]   note: {f['reason']} @ {f['path']}")
     print("[sync-guard] FIX: move it to a local home-root path (e.g. ~/dev, ~/code),")
     print("[sync-guard]      back up via git remote + a verified backup. Cloud sync is")
     print("[sync-guard]      for documents only — and sync is not a backup.")
@@ -276,4 +415,13 @@ def main():
 
 
 if __name__ == "__main__":
+    # Windows cp1252-console safety (ai-brain-starter#313; hooks/ sweep #314).
+    # A hook that print()s non-ASCII raises UnicodeEncodeError on a cp1252
+    # console: the gate then fails silently OPEN, or denies the tool call with
+    # no legible cause. Idempotent; a no-op on an already-UTF-8 console.
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8")  # Python 3.7+
+        except (AttributeError, ValueError):
+            pass
     sys.exit(main())

@@ -204,8 +204,8 @@ def main() -> None:
         sys.exit(0)
 
     warn(
-        "Agent briefing has likely-verbose patterns. The 2026-04-26 digest "
-        f"showed avg 19.4 turns/agent (target <8) for {subagent}. Issues:"
+        f"Agent briefing for {subagent} has likely-verbose patterns. A vague "
+        "or unbounded brief drives the subagent's turn count up. Issues:"
     )
     for i, msg in enumerate(issues, 1):
         warn(f"  [{i}] {msg}")
@@ -218,4 +218,13 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    # Windows cp1252-console safety (ai-brain-starter#313; hooks/ sweep #314).
+    # A hook that print()s non-ASCII raises UnicodeEncodeError on a cp1252
+    # console: the gate then fails silently OPEN, or denies the tool call with
+    # no legible cause. Idempotent; a no-op on an already-UTF-8 console.
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8")  # Python 3.7+
+        except (AttributeError, ValueError):
+            pass
     main()

@@ -24,6 +24,7 @@ auto-scrub layer were the structural fix.
 from __future__ import annotations
 
 import re
+import sys
 from dataclasses import dataclass
 
 
@@ -48,10 +49,50 @@ class SecretPattern:
 # Provider-issued credentials (long-lived; high blast radius)
 _PROVIDER = [
     SecretPattern(
+        # The original `api\d{2}` infix was mandatory, so this pattern was blind to
+        # `sk-ant-oat01-...` -- the OAuth token Claude Code itself issues and exports
+        # as CLAUDE_CODE_OAUTH_TOKEN. Same class as the nvapi- miss below: the one
+        # credential shape the product's own auth path uses was the one shape no
+        # guard could see, and `redact()` passed it through intact.
+        #
+        # Matched by PROPERTY -- `sk-ant-` + letters + digits -- not by an enumerated
+        # `api|oat` alternation. The infix set is OPEN, and a known-good list against
+        # an open set re-opens this exact gap on the next shape Anthropic mints.
+        #
+        # An intermediate version of this fix used `[a-z]{3}\d{2}`, which is itself a
+        # CLOSED set wearing the language of an open one: it silently missed
+        # `admin01` (5 letters), `oath01` (4) and `oat1` (1 digit), each of which
+        # survived redaction ENTIRELY. Measured, not hypothesised. `[a-z]{2,}\d+`
+        # is the weakest structure that actually delivers the stated property.
+        #
+        # FALSE POSITIVES ARE THE CHEAP SIDE HERE and are accepted deliberately: a
+        # long placeholder (`sk-ant-oat01-YOUR_OAUTH_TOKEN_GOES_HERE_...`, 40+ chars)
+        # DOES match and gets redacted. The `{40,}` floor suppresses SHORT
+        # placeholders and prose only -- it is not a placeholder filter, and an
+        # earlier comment here claiming otherwise was measurably false. Redacting a
+        # placeholder in a transcript costs nothing; missing a live credential does
+        # not. Measured incidence across 2,030 tracked files: one new match, and it
+        # is this file's own test vector.
         name="anthropic-api-key",
-        regex=re.compile(r"sk-ant-api\d{2}-[\w\-]{40,}", re.ASCII),
+        regex=re.compile(r"sk-ant-[a-z]{2,}\d+-[\w\-]{40,}", re.ASCII),
         redaction="[REDACTED-anthropic-api-key]",
-        description="Anthropic API key, format sk-ant-api{NN}-{token}.",
+        description=(
+            "Anthropic API key or OAuth token: sk-ant-<letters><digits>-<token>. "
+            "Covers api{NN} (API key), oat{NN} (CLAUDE_CODE_OAUTH_TOKEN), and any "
+            "future infix of the same shape. Does NOT match an infix with no digits."
+        ),
+    ),
+    SecretPattern(
+        # NVIDIA build-API key. Added after a real leak: a live key reached a
+        # session transcript via a process listing, then turned up in 8+ files
+        # including backups. The shape had been written into a prose checklist
+        # a human reads, never into executable code -- so every guard reported
+        # a confident CLEAN over it. If an auth path is documented as supported,
+        # its credential shape belongs here, in code, not only in a checklist.
+        name="nvidia-api-key",
+        regex=re.compile(r"nvapi-[A-Za-z0-9_\-]{40,}", re.ASCII),
+        redaction="[REDACTED-nvidia-api-key]",
+        description="NVIDIA build/NIM API key, format nvapi-{token}.",
     ),
     SecretPattern(
         # Tightened after early audits: original `{20,}` matched
@@ -150,6 +191,35 @@ _PROVIDER = [
         regex=re.compile(r"\bnpg_[A-Za-z0-9]{12,}\b", re.ASCII),
         redaction="[REDACTED-neon-password]",
         description="Neon-issued database password (npg_ prefix, >=12 chars).",
+    ),
+    SecretPattern(
+        # Backblaze B2 applicationKey. The B2 *keyID* is non-secret (it is a
+        # username); the *applicationKey* is the secret. Shape: `K` + 3-digit
+        # cluster + 27 alphanumerics = 31 chars. Boundaried BOTH sides so it
+        # matches at clean delimiters but skips a mid-base64 run -- same
+        # discipline as the google-api-key carve-out above, because a 31-char
+        # alphanumeric run is common inside encoded blobs.
+        name="backblaze-b2-app-key",
+        regex=re.compile(r"\bK[0-9]{3}[A-Za-z0-9]{27}\b", re.ASCII),
+        redaction="[REDACTED-b2-app-key]",
+        description=(
+            "Backblaze B2 application key (K + 3-digit cluster + 27 chars = 31). "
+            "The keyID is non-secret; this is the applicationKey."
+        ),
+    ),
+    SecretPattern(
+        # npm automation/access token. This shape is named in the operator
+        # pre-push scrub checklist a human reads, and was in NO executable
+        # detector on either the deployed or the substrate copy -- the same
+        # GUARD-BLIND-TO-THE-CREDENTIAL-ITS-OWN-DOCS-TELL-YOU-TO-USE class the
+        # nvidia-api-key entry above was added for. It is not hypothetical for
+        # this repo: ci.sh, the release workflow and bootstrap.sh all reach the
+        # npm registry, and an npm_ automation token is the standard credential
+        # for a publish path. Boundaried both sides, same reason as B2.
+        name="npm-access-token",
+        regex=re.compile(r"\bnpm_[A-Za-z0-9]{36,}\b", re.ASCII),
+        redaction="[REDACTED-npm-access-token]",
+        description="npm automation/access token, format npm_{36+ alphanumerics}.",
     ),
 ]
 
@@ -408,13 +478,27 @@ def filter_tool_output_false_positives(
 
 # Self-test (run `python3 -m hooks._lib.secret_patterns`)
 if __name__ == "__main__":
+    # This module's self-test prints pattern names and redaction markers. On a
+    # Windows cp1252 console any non-ASCII byte in that output raises
+    # UnicodeEncodeError and the self-test dies with no legible cause
+    # (ai-brain-starter#313). Idempotent; a no-op on an already-UTF-8 console.
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8")  # Python 3.7+
+        except (AttributeError, ValueError):
+            pass
+
     SAMPLES = {
         "anthropic-api-key": "sk-ant-api03-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+        # The oat shape (CLAUDE_CODE_OAUTH_TOKEN). Was invisible to this registry
+        # until the `api\d{2}` infix was widened to `[a-z]{3}\d{2}`.
+        "anthropic-oauth-token": "sk-ant-oat01-abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
         "hubspot-pat": "pat-na1-AAAAAAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA",
         "postgres-url": "postgres://user:hunter2_supersecret@db.example.com:5432/dbname",
         "redis-url": "rediss://:p123abc456def@redis.example.com:6379",
         "jwt": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
         "github-pat": "github_pat_AAAAAAAAAAAAAAAAAAAAAA_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN",
+        "nvidia-api-key": "nvapi-" + "Xy7Zq2Lm9Rt4Bv6Nc8Ka1Pd3Wf5Hj0Gs7Ue2Yi4Ao6Bn1Cm",
         "hex-256": "a" * 64,
         "clean": "no secrets here just regular text and code",
     }
@@ -424,10 +508,13 @@ if __name__ == "__main__":
         if "REDACTED" in redacted:
             print(f"  -> {redacted}")
     print("\nIdempotency check:")
-    once, _ = redact("sk-ant-api03-" + "x" * 50)
-    twice, hits2 = redact(once)
-    assert once == twice, "non-idempotent"
-    assert hits2 == [], f"second pass should produce no hits, got {hits2}"
+    # Both Anthropic shapes: an api key and an oat OAuth token.
+    for _prefix in ("sk-ant-api03-", "sk-ant-oat01-"):
+        once, hits1 = redact(_prefix + "x" * 50)
+        twice, hits2 = redact(once)
+        assert hits1 != [], f"{_prefix} was not redacted at all, got {hits1}"
+        assert once == twice, f"non-idempotent for {_prefix}"
+        assert hits2 == [], f"second pass should produce no hits, got {hits2}"
     print("  OK: redaction is idempotent.")
 
     # False-positive exclusions — gate regressions.
@@ -459,6 +546,37 @@ if __name__ == "__main__":
         "real-google-api-key": 'GOOGLE_MAPS_KEY="AIza' + "Y" * 35 + '"',
         # Real Google API key at line start — MUST still match
         "real-google-api-key-bare": "AIza" + "Z" * 35,
+        # Anthropic oat shape (CLAUDE_CODE_OAUTH_TOKEN) — MUST match. The SAMPLES
+        # loop above only PRINTS, so an asserted vector is required for the widening
+        # to be proven at all. These asserts run under `python3 -m hooks._lib
+        # .secret_patterns`; the CI-registered coverage lives in
+        # hooks/test_secret_patterns_anthropic.py, which scripts/ci.sh executes.
+        "real-anthropic-oauth-token": "export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-" + "Kp7Vn2Qr9Xt4Bm6Zc8La1Wd3Hf5Jg0Ys7Ue2Ni4Ao6Br1Cm",
+        # Existing api shape — MUST still match (regression guard on the widening).
+        "real-anthropic-api-key": "sk-ant-api03-" + "Kp7Vn2Qr9Xt4Bm6Zc8La1Wd3Hf5Jg0Ys7Ue2Ni4Ao6Br1Cm",
+        # Shapes the intermediate `[a-z]{3}\d{2}` silently missed. Each of these
+        # survived redaction ENTIRELY before the infix was opened to `[a-z]{2,}\d+`.
+        "real-anthropic-admin-key": "sk-ant-admin01-" + "Kp7Vn2Qr9Xt4Bm6Zc8La1Wd3Hf5Jg0Ys7Ue2Ni4Ao6Br1Cm",
+        "real-anthropic-4letter-infix": "sk-ant-oath01-" + "Kp7Vn2Qr9Xt4Bm6Zc8La1Wd3Hf5Jg0Ys7Ue2Ni4Ao6Br1Cm",
+        "real-anthropic-1digit-infix": "sk-ant-oat1-" + "Kp7Vn2Qr9Xt4Bm6Zc8La1Wd3Hf5Jg0Ys7Ue2Ni4Ao6Br1Cm",
+        # Negative controls: the match is STRUCTURED (letters then digits), not a
+        # blanket `sk-ant-*`. Each of these must stay silent.
+        "anthropic-oat-placeholder": "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-YOUR_TOKEN_HERE",
+        "anthropic-oat-too-short": "sk-ant-oat01-abc123",
+        "anthropic-prose-mention": "The OAuth token is shaped sk-ant-oat01- plus a long token.",
+        # No digit pair after the 3 letters → not the documented shape → no match.
+        "anthropic-no-digit-infix": "sk-ant-oauth-" + "z" * 50,
+        # Backblaze B2 applicationKey — MUST match. K + 3-digit cluster + 27.
+        "real-b2-app-key": "B2_KEY=K005" + "A" * 27,
+        # Same shape mid-base64 (no boundary either side) — MUST be skipped.
+        "b2-in-base64": "x" + "K005" + "A" * 27 + "z",
+        # npm automation token — MUST match. npm_ + 36.
+        "real-npm-token": "NPM_TOKEN=npm_" + "B" * 36,
+        # Same shape mid-base64 (no boundary either side) — MUST be skipped.
+        "npm-in-base64": "x" + "npm_" + "B" * 36 + "z",
+        # Longer-than-36 token — MUST still match. Pins the `,` in {36,}:
+        # a bare {36} would silently miss any future longer npm shape.
+        "real-npm-token-long": "NPM_TOKEN=npm_" + "C" * 44,
     }
     expected_hits = {
         "github-asset-digest": [],   # sha256: prefix → skipped
@@ -473,6 +591,23 @@ if __name__ == "__main__":
         "aiza-in-base64": [],         # surrounded by alphanumerics → skipped
         "real-google-api-key": ["google-api-key"],
         "real-google-api-key-bare": ["google-api-key"],
+        "real-anthropic-oauth-token": ["anthropic-api-key"],
+        "real-anthropic-api-key": ["anthropic-api-key"],
+        "anthropic-oat-placeholder": [],   # <40 chars after prefix
+        "anthropic-oat-too-short": [],     # <40 chars after prefix
+        "anthropic-prose-mention": [],     # bare shape, no token
+        "real-anthropic-admin-key": ["anthropic-api-key"],
+        "real-anthropic-4letter-infix": ["anthropic-api-key"],
+        "real-anthropic-1digit-infix": ["anthropic-api-key"],
+        # `oauth` has NO digits, so it is not the credential shape. This stays a
+        # legitimate boundary: it separates a credential from a word, and unlike
+        # the letter-count boundary it does not hide a real token shape.
+        "anthropic-no-digit-infix": [],
+        "real-b2-app-key": ["backblaze-b2-app-key"],
+        "b2-in-base64": [],           # no boundary before K → skipped
+        "real-npm-token": ["npm-access-token"],
+        "npm-in-base64": [],          # no boundary before npm_ → skipped
+        "real-npm-token-long": ["npm-access-token"],
     }
     failures = 0
     for label, sample in FP_SAMPLES.items():

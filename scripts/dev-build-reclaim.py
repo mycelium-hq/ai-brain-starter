@@ -75,6 +75,9 @@ Config: the dev root resolves from $ABS_DEV_ROOT, else the install config's
 Log dir override: $DEV_BUILD_RECLAIM_LOG_DIR (tests point this at a temp dir so a
 run never writes a manifest into the operator's real audit trail).
 """
+# exit-contract: NOT-A-CHECKER -- deletes regenerable build artifacts from
+#   worktrees
+
 
 from __future__ import annotations
 
@@ -121,6 +124,31 @@ except ImportError as exc:
           f"Refusing to delete anything on a resolver I cannot trust.",
           file=sys.stderr)
     sys.exit(2)
+
+# Fail-CLOSED process-liveness gate, resolved defensively so an older deployed
+# _lib makes this tool REFUSE deletions rather than fail to import and quietly
+# revert to the unguarded path.
+try:
+    from _lib.worktree_safety import process_busy_reason as _process_busy_reason
+except Exception:  # pragma: no cover - depends on the deployed layout
+    _process_busy_reason = None  # type: ignore[assignment]
+
+
+def worktree_busy(wt: Path, cache: dict | None = None) -> str | None:
+    """Why `wt`'s build output must not be reclaimed, or None.
+
+    Probes the WORKTREE, never the artifact directory: a compiler does not sit
+    in `target/`, it sits in the source root and writes into it. Probing the
+    artifact dir would answer "nobody home" for exactly the build this exists to
+    protect. An absent or broken probe REFUSES — the bottom pressure rung sets
+    the idle threshold to zero days, which every worktree passes, so this gate
+    and the session lock are all that stand between an actively-compiling tree
+    and losing its cache.
+    """
+    if _process_busy_reason is None:
+        return ("process-liveness helper unavailable in this _lib deploy; "
+                "refusing every deletion")
+    return _process_busy_reason(wt, cache=cache)
 
 
 # Directory names that are ALWAYS regenerable build output.
@@ -293,6 +321,10 @@ def plan(dev_root: Path, min_idle: float, now: float) -> tuple[list, list]:
     """(reclaimable artifacts, skipped-worktree notes). Never silently drops one."""
     out: list = []
     skipped: list = []
+    # One process-table reading for the whole planning pass. The apply loop takes
+    # its OWN, because sizing every candidate can take minutes and a build can
+    # start in that window.
+    probe_cache: dict = {}
     if not dev_root.is_dir():
         return out, skipped
     try:
@@ -315,6 +347,14 @@ def plan(dev_root: Path, min_idle: float, now: float) -> tuple[list, list]:
             continue
         if has_live_session_lock(wt, now):
             skipped.append(f"{entry}: live session lock, preserved")
+            continue
+        # The session lock is a PROXY and fails OPEN: it depends on a writer that
+        # stops emitting during one long call, and its own probe falls through to
+        # lock files when it cannot measure. A running compiler is direct
+        # evidence and fails CLOSED.
+        busy = worktree_busy(wt, probe_cache)
+        if busy:
+            skipped.append(f"{entry}: {busy}, preserved")
             continue
         for art in find_artifacts(wt):
             out.append({"worktree": str(wt), "path": str(art),
@@ -427,8 +467,18 @@ def main() -> int:
         # cloud-safe-walker gate proves write-only from `open(path, MODE)` and
         # cannot see the mode when it is Path.open's first argument, so the
         # append would read to it as a recursive content read.
+        # A FRESH probe, not plan()'s. Sizing every candidate above walks hundreds
+        # of gigabytes and can take minutes; on a shared machine a liveness
+        # reading has a shelf life measured in minutes, so it is re-taken here,
+        # immediately before the first deletion.
+        apply_probe_cache: dict = {}
         with open(manifest, "a", encoding="utf-8") as mf:
             for it in items:
+                busy = worktree_busy(Path(it["worktree"]), apply_probe_cache)
+                if busy:
+                    skipped.append(f"{os.path.basename(it['worktree'])}: "
+                                   f"{busy} at apply time, preserved")
+                    continue
                 try:
                     remove_artifact(Path(it["path"]))
                     deleted += 1

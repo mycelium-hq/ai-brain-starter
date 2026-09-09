@@ -22,6 +22,9 @@ Usage:
 If graphify is installed via pipx, use the pipx python interpreter.
 For multi-vault setups, pass --vault-root to target a specific vault.
 """
+# exit-contract: ADVISORY -- a pipeline stage whose verification note is
+#   advisory to the operator running the graphify stages by hand
+
 import argparse
 import hashlib
 import json
@@ -39,9 +42,19 @@ DEFAULT_VAULT = _SCRIPT_DIR.parent.parent  # scripts/ -> parent folder -> vault 
 # VAULT is set in main() from --vault-root arg; default here for import-time safety
 VAULT = DEFAULT_VAULT
 sys.path.insert(0, str(_SCRIPT_DIR))
+# scripts/ -> repo root -> hooks/ (same layout as scripts/relocate-sweep.py)
+sys.path.insert(0, str(_SCRIPT_DIR.parent / "hooks"))
 
 from graphify_canonicalize import canonicalize, force_valid_file_types
+from _lib.safe_read import safe_read_bytes, safe_read_text  # noqa: E402
 
+
+# graph.json holds the whole vault graph, so it blows past safe_read's 1 MB
+# default early — a few thousand notes is enough. This ceiling is only here to
+# catch a runaway file, not to bound normal growth: the merge below decodes the
+# entire document into memory anyway, so a graph this read would reject is one
+# the script could not process regardless.
+MAX_GRAPH_BYTES = 200_000_000
 
 SLASH_LABEL_RE = re.compile(r"^[\w\s\u00C0-\uFFFF]+/[\w\s\u00C0-\uFFFF]+$")
 
@@ -163,7 +176,11 @@ def main():
         if not p.exists():
             print(f"  MISSING chunk {i:02d}, aborting")
             sys.exit(1)
-        data = json.loads(p.read_text())
+        chunk_read = safe_read_text(p)
+        if not chunk_read.ok:
+            print(f"  UNREADABLE chunk {i:02d} ({chunk_read.status}), aborting")
+            sys.exit(1)
+        data = json.loads(chunk_read.text)
         for n in data.get("nodes", []):
             old = n.get("label", "")
             new = clean_slash_label(old)
@@ -235,9 +252,13 @@ def main():
     graph_path = Path(args.graph_path)
     if graph_path.exists():
         backup = Path(args.graph_path + f".backup_{ts}_pre_{args.stage_name.replace(' ', '_')}_finish")
-        backup.write_bytes(graph_path.read_bytes())
+        graph_read = safe_read_bytes(graph_path, max_bytes=MAX_GRAPH_BYTES)
+        if not graph_read.ok:
+            print(f"  ERROR: could not read existing graph.json ({graph_read.status}), aborting")
+            sys.exit(1)
+        backup.write_bytes(graph_read.data)
         print(f"  backed up: {backup}")
-        existing = json.loads(graph_path.read_text(encoding="utf-8"))
+        existing = json.loads(graph_read.data.decode("utf-8"))
     else:
         print(f"  no existing graph.json found, starting fresh")
         existing = {"nodes": [], "links": [], "hyperedges": []}
@@ -390,11 +411,24 @@ def main():
     print(f"  {len(communities)} communities")
     scores = score_all(G, communities)
 
-    # Lesson #43: build community_labels from highest-degree node per community
-    community_labels = {}
-    for cid, nids in communities.items():
-        best = max(nids, key=lambda n: G.degree(n))
-        community_labels[cid] = G.nodes[best].get("label", best)
+    # Name each community after its highest-degree member, skipping labels that
+    # identify a record rather than a topic -- a daily-note or timestamp node wins on
+    # degree in journal-heavy corpora while saying nothing about the cluster. Falls
+    # back to the plain highest-degree pick if the shared module isn't importable.
+    _here = Path(__file__).resolve().parent
+    for _cand in (_here, _here.parent / "skills" / "graphify" / "scripts"):
+        if (_cand / "graphify_seed_labels.py").is_file():
+            sys.path.insert(0, str(_cand))
+            break
+    try:
+        from graphify_seed_labels import anchor_label
+
+        community_labels = {cid: anchor_label(G, nids) for cid, nids in communities.items()}
+    except ImportError:
+        community_labels = {}
+        for cid, nids in communities.items():
+            best = max(nids, key=lambda n: G.degree(n))
+            community_labels[cid] = G.nodes[best].get("label", best)
 
     gn = god_nodes(G, top_n=20)
     try:
@@ -422,7 +456,12 @@ def main():
     lines.append("")
     lines.append("## Top God Nodes")
     for i, n in enumerate(gn, 1):
-        lines.append(f"{i}. `{n['label']}` ({n['edges']} edges)")
+        # god_nodes() returns "degree"; "edges" has never been a key on it.
+        # This raised KeyError *after* Step 3 had already written the merged
+        # graph and *before* Step 5 saved the semantic cache, so the graph
+        # looked healthy and the next --update silently re-paid full price.
+        deg = n.get("degree", n.get("edges", n.get("edge_count", 0)))
+        lines.append(f"{i}. `{n['label']}` ({deg} edges)")
     lines.append("")
     lines.append("## Surprising Connections")
     for s in sc[:10]:
@@ -501,7 +540,8 @@ def main():
         manifest = {"version": 1, "entries": {}}
         if manifest_path.exists():
             try:
-                manifest = json.loads(manifest_path.read_text())
+                manifest_read = safe_read_text(manifest_path)
+                manifest = json.loads(manifest_read.text) if manifest_read.ok else {"version": 1, "entries": {}}
                 if "entries" not in manifest:
                     manifest = {"version": 1, "entries": {}}
             except Exception:
@@ -558,7 +598,10 @@ def main():
             list_path = Path(f"{chunk_prefix}{i:02d}_files.txt")
             if not list_path.is_file():
                 continue
-            for line in list_path.read_text().splitlines():
+            list_read = safe_read_text(list_path)
+            if not list_read.ok:
+                continue
+            for line in list_read.text.splitlines():
                 line = line.strip()
                 if not line:
                     continue
@@ -581,8 +624,11 @@ def main():
 
         for abs_path, staged_sf in files_in_stage.items():
             try:
-                content = Path(abs_path).read_bytes()
-                sha = hashlib.sha256(content + b"\x00" + abs_path.encode()).hexdigest()
+                content_read = safe_read_bytes(Path(abs_path))
+                sha = (
+                    hashlib.sha256(content_read.data + b"\x00" + abs_path.encode()).hexdigest()
+                    if content_read.ok else None
+                )
             except Exception:
                 sha = None
             manifest["entries"][abs_path] = {
@@ -610,12 +656,16 @@ def main():
         cutoff = time.time() - 3600  # last hour
         upgraded = 0
         recent = 0
-        for c in cache_dir.glob("*.json"):
+        # rglob, not glob: the cache is nested (cache/semantic/, cache/ast/),
+        # so a flat glob matches nothing and reports 0 touched entries even
+        # when the run upgraded hundreds.
+        for c in cache_dir.rglob("*.json"):
             if c.stat().st_mtime < cutoff:
                 continue
             recent += 1
             try:
-                if is_llm_extraction(json.loads(c.read_text())):
+                cache_read = safe_read_text(c)
+                if cache_read.ok and is_llm_extraction(json.loads(cache_read.text)):
                     upgraded += 1
             except Exception:
                 pass
@@ -632,7 +682,7 @@ def main():
     print(f"TOP 15 GOD NODES (post-{args.stage_name})")
     print("=" * 60)
     for i, n in enumerate(gn[:15], 1):
-        print(f"  {i:2d}. {n['label']} ({n['edges']})")
+        print(f"  {i:2d}. {n['label']} ({n.get('degree', n.get('edges', 0))})")
 
     print()
     print(f"{args.stage_name.upper()} FINISH COMPLETE")

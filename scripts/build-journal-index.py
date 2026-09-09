@@ -8,6 +8,12 @@ of journal entries in milliseconds without re-reading every file.
 
 Run weekly via cron, or manually after a journaling session.
 
+Insight reports saved by /weekly or /monthly (weekly-insights, monthly-insights,
+or their own report subfolder) are excluded from the index — see
+DEFAULT_EXCLUDE_DIRS below (a typed non-journal note is already excluded upstream). Without this, a report saved
+inside the journal folder gets indexed as an entry and inflates every count the
+insights skill reports.
+
 Usage:
     python3 build-journal-index.py [--vault-root .] [--journal-dir Journals]
 
@@ -45,7 +51,24 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 from _meta_resolver import find_meta_dir  # noqa: E402
+
+# `_lib` is a PACKAGE at hooks/_lib/ in the repo checkout, and this script is ALSO
+# synced into a live vault at <meta>/scripts/ (VAULT_SCRIPTS in
+# scripts/sync-vault-scripts.sh). ../hooks does not exist there, so this import
+# used to die with `ModuleNotFoundError: No module named '_lib'`. insights/SKILL.md
+# invokes the VAULT copy, so /weekly and /monthly rebuilt no index at all and the
+# stale (usually empty) journal-index.json just sat there looking fine.
+#
+# Fixed by SYNCING THE REAL PRIMITIVE, not by degrading to a local one: the sync
+# now mirrors hooks/_lib/{__init__,safe_read}.py into <meta>/scripts/_lib/, which
+# the first sys.path entry above resolves. Deliberately NOT a try/except fallback
+# with a hand-rolled reader -- scripts/check-cloud-safe-file-walkers.py refuses to
+# trust a locally-defined safe_read_text (its own negative control is "bogus
+# safe_read module is not trusted"), and it is right to: a recursive walker must
+# reach the ONE audited primitive, or the guarantee is only as good as the copy.
+# safe_read.py is stdlib-only, so mirroring it costs the vault nothing.
 from _lib.safe_read import safe_read_text  # noqa: E402
+from _floors import Floors, strip_wikilink  # noqa: E402
 
 # Read bounds for the shared safe_read primitive. Journal frontmatter sits in
 # the first lines; safe_read hands back the whole (size-capped) file. 1 MB is
@@ -75,20 +98,80 @@ def _parse_inline_list(v):
     return v
 
 
+JOURNAL_DIR_CANDIDATES = (
+    "📓 Journals", "Journals",       # en (Phase 3 default)
+    "📔 Journal", "Journal",
+    "📓 Diarios", "Diarios",         # es (what Phase 1 tells the installer to create)
+    "📓 Diario", "Diario",           # es, singular variant
+    "📓 Diário", "Diário",           # pt
+)
+
+
+
+# Second layer: skip report subfolders outright, so a report that is missing its
+# `type` field still never reaches the index. Same localization spread as
+# JOURNAL_DIR_CANDIDATES above — the insights skill saves reports under a
+# folder named in the vault's own language.
+DEFAULT_EXCLUDE_DIRS = ("Resúmenes", "Resumenes", "Summaries", "Reports", "Resumos")
+
+
+def find_journal_dir(vault):
+    """Auto-detect the journal folder, mirroring what find_meta_dir does for Meta.
+
+    The --journal-dir default was the hardcoded English "Journals", but Phase 3
+    creates a LOCALIZED folder on a non-English install ("📓 Diario" on es), and
+    insights/SKILL.md invokes this script with NO arguments — so that default was
+    the only thing ever consulted. Result: /weekly and /monthly died with
+    "journal directory not found" on every non-English vault.
+
+    Returns None when nothing matches, so the caller still fails loud rather
+    than inventing a folder (same contract as the Meta resolver).
+
+    NOTE: no `str | None` return annotation — insights/SKILL.md runs this with
+    /usr/bin/python3, which is 3.9 on macOS, and this module has no
+    `from __future__ import annotations`, so a PEP 604 union would crash at
+    import time. (gate (a) of scripts/ci.sh guards this class.)
+    """
+    for name in JOURNAL_DIR_CANDIDATES:
+        p = os.path.join(vault, name)
+        if os.path.isdir(p):
+            return p
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--vault-root", default=".",
                     help="Vault root directory (default: current working directory)")
-    ap.add_argument("--journal-dir", default="Journals",
-                    help="Journal subfolder relative to vault root (default: Journals)")
+    ap.add_argument("--journal-dir", default=None,
+                    help="Journal subfolder relative to vault root. Default: auto-detect, "
+                         "handling localized names ('📓 Journals', '📓 Diario', '📓 Diário'...).")
     ap.add_argument("--meta-dir", default=None,
                     help="Meta subfolder where the index is written. Default: auto-detect the "
                          "vault's Meta folder (handles '⚙️ Meta' and plain 'Meta'). The folder "
                          "must already exist; this script never creates it.")
+    ap.add_argument("--exclude-dir", action="append", default=None,
+                    help="Subfolder name to skip, e.g. the folder insight reports are saved in "
+                         f"(repeatable). Default: {', '.join(DEFAULT_EXCLUDE_DIRS)}")
     args = ap.parse_args()
 
+    exclude_dirs = set(args.exclude_dir if args.exclude_dir is not None
+                       else DEFAULT_EXCLUDE_DIRS)
+
     vault = os.path.abspath(args.vault_root)
-    journal_dir = os.path.join(vault, args.journal_dir)
+
+    if args.journal_dir is not None:
+        journal_dir = os.path.join(vault, args.journal_dir)
+    else:
+        journal_dir = find_journal_dir(vault)
+        if journal_dir is None:
+            print(
+                f"journal directory not found under {vault} "
+                f"(tried: {', '.join(JOURNAL_DIR_CANDIDATES)}). "
+                f"Pass --journal-dir if yours is named differently.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
     if not os.path.isdir(journal_dir):
         print(f"journal directory not found: {journal_dir}", file=sys.stderr)
@@ -115,10 +198,23 @@ def main():
     output_path = os.path.join(meta_dir, "journal-index.json")
     entries = []
     skipped = []
+    excluded_dirs = []
+    excluded_by_type = []
+
+    # Floor vocabulary comes from the vault's own floor notes. When there are
+    # none there is nothing to check against, and the skip is announced below
+    # rather than passing silently.
+    floors = Floors(vault)
+    inconsistencies = []
 
     # Recursive walk: indexes journals nested under year-month subfolders
     # (e.g. Journals/2026-04/2026-04-15.md), not just top-level files.
-    for root, _dirs, files in os.walk(journal_dir):
+    for root, dirs, files in os.walk(journal_dir):
+        # Prune report subfolders in place so os.walk never descends into them.
+        for d in dirs:
+            if d in exclude_dirs:
+                excluded_dirs.append(os.path.relpath(os.path.join(root, d), journal_dir))
+        dirs[:] = [d for d in dirs if d not in exclude_dirs]
         for fname in files:
             if not fname.endswith(".md"):
                 continue
@@ -146,6 +242,24 @@ def main():
                         meta[k.strip()] = v.strip().strip("'\"")
                 if i > 15:
                     break
+            # A typed non-journal note living under the journal folder is not an
+            # entry. The recursive walk picks up the insight reports that
+            # /weekly and /monthly write into "Weekly Insights/" and
+            # "Monthly Insights/" subfolders, and those carry a creationDate,
+            # so the creationDate gate alone let them in — on one real vault,
+            # 29 indexed "entries" for 27 lived days. /patterns reads the last 7
+            # from this index, so the machine was re-reading its own summaries
+            # as if they were new material.
+            #
+            # Only a type that is present AND not "journal" disqualifies a file.
+            # An absent type still indexes: entries written before the daily-journal
+            # template gained `type: journal` (#379) have no field at all, and
+            # excluding those would empty the index on exactly the vaults that
+            # fix targets.
+            entry_type = meta.get("type")
+            if entry_type is not None and entry_type != "journal":
+                excluded_by_type.append(os.path.relpath(fpath, journal_dir))
+                continue
             if "creationDate" in meta:
                 # Store path relative to journal_dir so subfoldered entries
                 # with colliding basenames stay distinct.
@@ -154,12 +268,17 @@ def main():
                     "date": meta["creationDate"][:10],
                 }
                 if "floor" in meta:
-                    entry["floor"] = meta["floor"]
+                    entry["floor"] = strip_wikilink(meta["floor"])
                 if "floor_level" in meta:
-                    entry["floor_level"] = meta["floor_level"]
+                    entry["floor_level"] = strip_wikilink(meta["floor_level"])
                 if "floor_arc" in meta:
-                    entry["floor_arc"] = _parse_inline_list(meta["floor_arc"])
+                    _arc = _parse_inline_list(meta["floor_arc"])
+                    entry["floor_arc"] = (
+                        [strip_wikilink(x) for x in _arc]
+                        if isinstance(_arc, list) else strip_wikilink(_arc))
                 entries.append(entry)
+                inconsistencies.extend(
+                    floors.check(meta, label=os.path.relpath(fpath, journal_dir)))
 
     if skipped:
         preview = ", ".join(f"{f} [{s}]" for f, s in skipped[:5])
@@ -172,12 +291,41 @@ def main():
         "last_updated": datetime.now().strftime("%Y-%m-%dT%H:%M"),
         "entries": entries,
     }
-    with open(output_path, "w") as f:
+    # encoding="utf-8" is LOAD-BEARING, not decoration. Text mode without it uses
+    # locale.getpreferredencoding(), which is cp1252 on a stock Windows box. Paired
+    # with ensure_ascii=False below, a single accented title ("Reunión", "día") is
+    # then written as cp1252 bytes into a file every consumer opens as UTF-8 —
+    # /weekly, /monthly, diagnose, insight-fact-check — which die on
+    # `UnicodeDecodeError: 'utf-8' codec can't decode byte 0xed`. The write itself
+    # raises nothing, so the corruption is silent at the point it is created.
+    # Not reproducible on a box with PYTHONUTF8=1 set, which is exactly why this
+    # survived: it is invisible to the maintainer and fatal to a fresh install.
+    with open(output_path, "w", encoding="utf-8") as f:
         json.dump(output, f, indent=2, ensure_ascii=False)
 
     print(f"Indexed {len(entries)} entries → {output_path}")
     if entries:
         print(f"  date range: {entries[0]['date']} → {entries[-1]['date']}")
+    # Report what the filters removed. A silent filter is how the opposite bug
+    # (real entries vanishing from the index) starts and stays unnoticed.
+    if excluded_dirs:
+        print(f"  excluded folder(s): {', '.join(sorted(set(excluded_dirs)))}")
+    if excluded_by_type:
+        preview = ", ".join(sorted(excluded_by_type)[:5])
+        more = " ..." if len(excluded_by_type) > 5 else ""
+        print(f"  excluded {len(excluded_by_type)} non-journal file(s) by type: {preview}{more}")
+
+    if not floors:
+        print("  note: no floor notes found — frontmatter consistency check skipped",
+              file=sys.stderr)
+    elif not floors.has_tiers:
+        print("  note: floor notes declare no tiers — tier consistency check skipped",
+              file=sys.stderr)
+    if inconsistencies:
+        print("  {} frontmatter inconsistency(ies):".format(len(inconsistencies)),
+              file=sys.stderr)
+        for issue in inconsistencies:
+            print("    - {}".format(issue), file=sys.stderr)
 
 
 if __name__ == "__main__":
