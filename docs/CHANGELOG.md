@@ -21,7 +21,11 @@ It also rots fast. Of six IDs verified on one day, four were gone eight days lat
 
 So the map has been re-probed against actual `/v1/chat/completions` calls and now carries the shorter, working set, plus a note on each entry about what it is good for: the default answers in about a second with clean JSON and no reasoning scratchpad, which is what grunt work needs; the reasoning model puts its scratchpad in `reasoning_content`, which is the wrong shape for extraction. The `--model` error message now lists the real options and warns that availability is per-account.
 
-**The honest caveat, now written into both files:** these IDs were verified on one free-tier account on 2026-08-31. If yours differ, probe a completion — do not trust the catalog, and do not trust this map to still be current.
+**And the rot proved itself while this was being written.** Nine days after the 2026-08-31 pass, one more of the four — the multilingual stand-in — came back `410 Gone, end of life`. It and its aliases are out. That is three separate die-offs in eighteen days.
+
+**The honest caveat, now written into both files:** these IDs were verified on one free-tier account on 2026-09-09. If yours differ, probe a completion — do not trust the catalog, and do not trust this map to still be current.
+
+One practical note that cost an hour: the default's **first call after an idle spell takes 10–15 seconds** (cold start), then settles to about 1.5s. A 60-second timeout is not generous, it is barely enough. Do not read a slow first call as a dead model.
 
 ---
 

@@ -10,8 +10,7 @@
 # voice-sensitive prose, or agentic tool-use loops.
 #
 # Usage:
-#   nvidia.sh "prompt" [max_tokens]                       # diffusiongemma-26b (default, ~1s)
-#   nvidia.sh --model minimax "prompt" [max_tokens]       # multilingual, slower
+#   nvidia.sh "prompt" [max_tokens]                       # diffusiongemma-26b (default; ~1.5s warm, 10-15s cold)
 #   nvidia.sh --model deepseek "prompt" [max_tokens]      # reasoning; scratchpad in reasoning_content
 #   nvidia.sh --model muse "prompt" [max_tokens]
 #
@@ -21,7 +20,7 @@
 #
 # Examples:
 #   nvidia.sh "Extract dates from: $(cat note.md)" 500
-#   nvidia.sh --model qwen3 "Translate to Spanish: ..." 800
+#   nvidia.sh --model deepseek "Explain this stack trace: ..." 800
 #
 # Returns just the content. Exit 1 on API error.
 # Reads NVIDIA_API_KEY via canonical fallback chain
@@ -37,30 +36,30 @@ case "${1:-}" in
     ;;
 esac
 
-# Model IDs re-verified live 2026-08-31 by probing /v1/chat/completions, not
+# Model IDs re-verified live 2026-09-09 by probing /v1/chat/completions, not
 # /v1/models. KEY FINDING: the catalog lists models this account cannot call —
 # they return 404 "Not found for account". Listing != access. Access is
 # per-account, so no hardcoded map is right for everyone or for long: of the six
 # IDs verified on 2026-08-23, four were gone eight days later, including the
-# default. Only these answered on this (free-tier) account today.
+# default; and minimaxai/minimax-m3, verified on 2026-08-31, answered 410 Gone
+# ("end of life") nine days after that. Only these answered on this
+# (free-tier) account today.
 case "$MODEL_KEY" in
   llama|gemma|default|grunt)
-    # 1.0s, clean JSON in `content`, no reasoning scratchpad. Best for grunt work.
+    # Clean JSON in `content`, no reasoning scratchpad. Best for grunt work.
+    # ~1.5s warm; the first call after an idle spell takes 10-15s (cold start),
+    # so give it a generous curl timeout rather than assuming it is dead.
     MODEL="google/diffusiongemma-26b-a4b-it"
     ;;
   deepseek|deepseek-flash)
     # Works, but emits its scratchpad in `reasoning_content` — wrong for extraction.
     MODEL="deepseek-ai/deepseek-v4-flash-0731"
     ;;
-  minimax|qwen|qwen3)
-    # Multilingual stand-in. Slower and flaky on long prompts.
-    MODEL="minimaxai/minimax-m3"
-    ;;
   muse)
     MODEL="meta/muse-glimmer-30b"
     ;;
   *)
-    echo "Error: unknown --model '$MODEL_KEY'. Valid: llama/gemma (default) | deepseek | minimax | muse" >&2
+    echo "Error: unknown --model '$MODEL_KEY'. Valid: llama/gemma (default) | deepseek | muse" >&2
     echo "Availability is per-account and changes often; re-probe before trusting this list." >&2
     exit 1
     ;;
@@ -129,7 +128,7 @@ if not r.get("choices"):
     print(f"NO_CHOICES:{json.dumps(r)[:300]}", file=sys.stderr)
     sys.exit(2)
 msg = r["choices"][0].get("message", {}) or {}
-# Reasoning models (e.g. qwen3-thinking) deliver output in
+# Reasoning models (e.g. deepseek) deliver output in
 # `reasoning_content` instead of `content`. Fall back when content is empty.
 out = msg.get("content") or msg.get("reasoning_content") or ""
 print(out)
