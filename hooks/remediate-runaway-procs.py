@@ -43,8 +43,10 @@ across sessions, and the memory they hold is what amplifies every interpreter
 start ~10x once swap fills. Scoped by PATH, not by name — a name list is a
 denylist against an open set. Reaped only when it is ALL of:
   * orphaned (PPID == 1);
-  * its command references a path under `~/.claude/` (session-owned — nothing
-    under there is a user program);
+  * its EXECUTABLE (argv[0]) lives under `~/.claude/` — nothing under there is
+    a user program. NOT a command-line substring test: every Claude Code tool
+    shell sources a snapshot from `~/.claude/shell-snapshots/`, so that form
+    matches every live shell, including detached builds a session is watching;
   * NOT under `~/.claude/hooks/` (CLASS 2 owns those, with its CPU gate);
   * older than RUNAWAY_HELPER_MIN_AGE_MIN minutes (default 15);
   * NOT launchd-managed. A launchd daemon is PPID == 1 BY DESIGN, so this is
@@ -141,6 +143,11 @@ def _should_reap_hook(
     return True
 
 
+# argv[0] basenames that are shells: a wrapper process, never a session-owned
+# helper binary. Kept module-level so the control test can assert on it.
+_SHELL_BASENAMES = frozenset({"sh", "bash", "zsh", "dash", "ksh", "fish", "csh", "tcsh"})
+
+
 def _launchd_pids() -> set[int]:
     """PIDs currently managed by launchd.
 
@@ -199,8 +206,11 @@ def _should_reap_orphan_helper(
     Reaped ONLY when it is ALL of:
       * not this very hook (pid != self_pid);
       * orphaned (ppid == 1) — its real parent already died;
-      * its command references a path under ~/.claude/ (session-owned);
-      * NOT under ~/.claude/hooks/ — CLASS 2 owns those, with a CPU gate;
+      * its EXECUTABLE (argv[0]) lives under ~/.claude/ — a command-line
+        substring test is WRONG here: every tool shell sources a snapshot
+        from ~/.claude/shell-snapshots/, so that test matches live shells;
+      * argv[0] NOT under ~/.claude/hooks/ — CLASS 2 owns those;
+      * argv[0] is not a shell (a wrapper is never a helper binary);
       * age_min >= min_age — never a just-spawned helper mid-handshake;
       * NOT launchd-managed — see _launchd_pids(); unknown => never reap.
     """
@@ -208,11 +218,22 @@ def _should_reap_orphan_helper(
         return False
     if ppid != 1:
         return False
-    if claude_dir not in command:
-        return False
-    if hooks_dir in command:
-        return False
     if age_min < min_age:
+        return False
+    # Scope on the EXECUTABLE, never on the command line. Every Claude Code
+    # tool shell `source`s a snapshot from ~/.claude/shell-snapshots/, so a
+    # substring test against the whole command line matches every live shell
+    # on the box -- including a detached build another session is monitoring.
+    # Measured on a real machine: a command-line test selected 3 processes, all
+    # false positives, one of them a running compile in a worktree.
+    argv0 = command.split()[0] if command.split() else ""
+    if not argv0.startswith(claude_dir):
+        return False
+    if argv0.startswith(hooks_dir):
+        return False
+    # A shell is a wrapper, never a session-owned helper binary, even if it
+    # somehow lives under ~/.claude/. Defense in depth behind the argv0 gate.
+    if os.path.basename(argv0) in _SHELL_BASENAMES:
         return False
     if launchd_pids is None:
         return False  # cannot distinguish launchd from orphan -> fail closed

@@ -96,7 +96,7 @@ PY
 
 echo "PASS: _should_reap_hook pos+neg control (assertions 1-6)"
 
-# --- Assertions 9-16: CLASS 3 orphaned-session-helper pos/neg control -----
+# --- Assertions 9-19: CLASS 3 orphaned-session-helper pos/neg control -----
 # Bug class: the 2026-09-09 melt (load 172 on 10 cores, swap 97.8% full).
 # Helpers whose session had died sat at PPID 1 holding hundreds of MB. CLASS 1
 # missed them (comm not in RUNAWAY_PROC_NAMES); CLASS 2 missed them (not under
@@ -142,7 +142,7 @@ check("negative: user program outside ~/.claude not reaped", False,
 
 # 12. NEG: under hooks/ — CLASS 2 owns that path, with its own CPU gate.
 check("negative: hooks-dir process left to CLASS 2", False,
-      command=f"python3 {HOOKS}scan-prior-sessions-for-secrets.py",
+      command=f"{HOOKS}scan-prior-sessions-for-secrets.py --flag",
       age_min=300.0, ppid=1, pid=12345, **common)
 
 # 13. NEG: too young — never a helper still mid-handshake.
@@ -165,6 +165,24 @@ check("negative: unknown launchd state fails closed", False,
 check("negative: self pid not reaped", False,
       command=helper_cmd, age_min=300.0, ppid=1, pid=999999, **common)
 
+# 17-19. NEG: THE REGRESSION. Scope is argv[0], never a command-line substring.
+# Found by dry-running the predicate against a real machine's process table:
+# a command-line test selected 3 live processes, ALL false positives, because
+# every Claude Code tool shell sources a snapshot from ~/.claude/shell-snapshots/.
+# One of them was a detached compile in a worktree that another session was
+# monitoring — reaping it would have destroyed real work.
+check("negative: tool shell that merely SOURCES from ~/.claude not reaped", False,
+      command=f"/bin/zsh -c source {CLAUDE}shell-snapshots/snapshot-zsh-1789012345.sh",
+      age_min=300.0, ppid=1, pid=12345, **common)
+
+check("negative: detached build mentioning ~/.claude not reaped", False,
+      command=f"bash -c cd /tmp/some-worktree && source {CLAUDE}shell-snapshots/s.sh && cargo test",
+      age_min=300.0, ppid=1, pid=12345, **common)
+
+check("negative: a shell living under ~/.claude is still a wrapper", False,
+      command=f"{CLAUDE}bin/bash -c 'sleep 1'",
+      age_min=300.0, ppid=1, pid=12345, **common)
+
 if failures:
     print("CLASS 3 PREDICATE CONTROL FAILED:", file=sys.stderr)
     for f in failures:
@@ -173,7 +191,7 @@ if failures:
 print("All CLASS 3 predicate pos/neg controls passed.")
 PY2
 
-echo "PASS: _should_reap_orphan_helper pos+neg control (assertions 9-16)"
+echo "PASS: _should_reap_orphan_helper pos+neg control (assertions 9-19)"
 
 # --- Assertion 7: bypass env -> no-op, valid JSON -------------------------
 OUT="$(RUNAWAY_REMEDIATE_BYPASS=1 printf '{}' | RUNAWAY_REMEDIATE_BYPASS=1 python3 "$HOOK" 2>/dev/null)"
