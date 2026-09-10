@@ -240,6 +240,8 @@ def run_detector(prompt: str, claude_md: str | None = None) -> dict:
                 input=hook_input,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=10,
                 env=env,
             )
