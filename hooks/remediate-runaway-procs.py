@@ -33,6 +33,24 @@ killing one loses nothing. Reaped here only when it is ALL of:
     CPU (default 50). The dual age-AND-cpu gate means a normal fast hook, a
     legitimately-bounded scan, or an idle process is never touched.
 
+CLASS 3 — orphaned session-owned helpers (added after the 2026-09-09 melt).
+A machine at load 172 on 10 cores with swap 97.8% full, 0% idle and half of all
+CPU in the kernel. Helpers started by sessions that had since died — a message
+bridge, a tunnel, a transcription binary, a package-manager resolver — sat at
+PPID 1 holding hundreds of MB each. CLASS 1 missed them (comm not in
+RUNAWAY_PROC_NAMES), CLASS 2 missed them (not under hooks/). They accumulate
+across sessions, and the memory they hold is what amplifies every interpreter
+start ~10x once swap fills. Scoped by PATH, not by name — a name list is a
+denylist against an open set. Reaped only when it is ALL of:
+  * orphaned (PPID == 1);
+  * its command references a path under `~/.claude/` (session-owned — nothing
+    under there is a user program);
+  * NOT under `~/.claude/hooks/` (CLASS 2 owns those, with its CPU gate);
+  * older than RUNAWAY_HELPER_MIN_AGE_MIN minutes (default 15);
+  * NOT launchd-managed. A launchd daemon is PPID == 1 BY DESIGN, so this is
+    the discriminator that keeps the user's own scheduled agents alive. If
+    `launchctl list` cannot be read, CLASS 3 reaps NOTHING (fails closed).
+
 It NEVER kills by CPU-share guesswork on arbitrary processes, never touches a
 process with a living parent outside the hook path, and never touches anything
 off these two narrow classes.
@@ -119,6 +137,86 @@ def _should_reap_hook(
     if age_min < min_age:
         return False
     if cpu < min_cpu:
+        return False
+    return True
+
+
+def _launchd_pids() -> set[int]:
+    """PIDs currently managed by launchd.
+
+    THE FALSE POSITIVE THIS EXISTS FOR: a launchd-managed daemon has PPID == 1
+    BY DESIGN, so a naive "PPID == 1 means orphaned" rule would reap the user's
+    own scheduled agents (e.g. the 4-hourly message-bridge plists) every single
+    session. Membership here is the discriminator between "reparented because
+    its parent died" and "started by launchd on purpose".
+
+    Fails CLOSED: if `launchctl list` cannot be read we return a sentinel that
+    the caller treats as "unknown", and CLASS 3 reaps nothing. A reaper that
+    cannot tell the two apart must not guess.
+    """
+    try:
+        out = subprocess.run(
+            ["launchctl", "list"], capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=10,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return None  # type: ignore[return-value]
+    if out.returncode != 0:
+        return None  # type: ignore[return-value]
+    pids: set[int] = set()
+    for line in out.stdout.splitlines()[1:]:
+        col = line.split(None, 1)
+        if not col:
+            continue
+        try:
+            pids.add(int(col[0]))
+        except ValueError:
+            continue  # "-" for a loaded-but-not-running job
+    return pids
+
+
+def _should_reap_orphan_helper(
+    command: str,
+    age_min: float,
+    *,
+    ppid: int,
+    claude_dir: str,
+    hooks_dir: str,
+    pid: int,
+    self_pid: int,
+    min_age: float,
+    launchd_pids: "set[int] | None",
+) -> bool:
+    """Pure decision for CLASS 3 (orphaned session-owned helper). Factored out
+    so the pos/neg control test exercises every branch deterministically.
+
+    Scoped by PATH, never by name. A name list ("yes", "whatsapp-bridge", ...)
+    is a denylist against an open set and always ships the gap between the
+    names someone thought of and the ones that actually orphan. Every helper a
+    session starts lives under ~/.claude/, and nothing under ~/.claude/ is a
+    user program — so the path IS the property that makes this safe.
+
+    Reaped ONLY when it is ALL of:
+      * not this very hook (pid != self_pid);
+      * orphaned (ppid == 1) — its real parent already died;
+      * its command references a path under ~/.claude/ (session-owned);
+      * NOT under ~/.claude/hooks/ — CLASS 2 owns those, with a CPU gate;
+      * age_min >= min_age — never a just-spawned helper mid-handshake;
+      * NOT launchd-managed — see _launchd_pids(); unknown => never reap.
+    """
+    if pid == self_pid:
+        return False
+    if ppid != 1:
+        return False
+    if claude_dir not in command:
+        return False
+    if hooks_dir in command:
+        return False
+    if age_min < min_age:
+        return False
+    if launchd_pids is None:
+        return False  # cannot distinguish launchd from orphan -> fail closed
+    if pid in launchd_pids:
         return False
     return True
 
@@ -228,7 +326,57 @@ def main() -> int:
             except (ProcessLookupError, PermissionError):
                 continue
 
-    if not reaped and not hook_reaped:
+    # --- CLASS 3: orphaned session-owned helpers (PPID == 1, under ~/.claude/) -
+    # The class that melted the machine 2026-09-09 (load 172 on 10 cores, swap
+    # 97.8% full). Helpers a dead session had started -- a message bridge, a
+    # tunnel, a transcription binary, a package-manager resolver -- sat at
+    # PPID == 1 holding hundreds of MB each. CLASS 1 missed them (comm is not
+    # in RUNAWAY_PROC_NAMES) and CLASS 2 missed them (not under hooks/), so
+    # they accumulated across every session until memory pressure amplified
+    # every interpreter start ~10x and the box stopped making progress.
+    claude_dir = os.path.expanduser("~/.claude/")
+    try:
+        helper_age = float(os.environ.get("RUNAWAY_HELPER_MIN_AGE_MIN", "15"))
+    except ValueError:
+        helper_age = 15.0
+    helper_reaped: list[tuple[int, str, float]] = []
+    try:
+        out3 = subprocess.run(
+            ["ps", "-axww", "-o", "pid=,ppid=,etime=,command="],
+            capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=15,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        out3 = None
+    if out3 is not None and out3.returncode == 0:
+        launchd = _launchd_pids()
+        self_pid3 = os.getpid()
+        for line in out3.stdout.splitlines():
+            parts = line.split(None, 3)
+            if len(parts) < 4:
+                continue
+            pid_s, ppid_s, etime, command = parts
+            try:
+                pid, ppid = int(pid_s), int(ppid_s)
+            except ValueError:
+                continue
+            try:
+                age = _etime_to_min(etime)
+            except (ValueError, IndexError):
+                continue
+            if not _should_reap_orphan_helper(
+                command, age, ppid=ppid, claude_dir=claude_dir,
+                hooks_dir=hooks_dir, pid=pid, self_pid=self_pid3,
+                min_age=helper_age, launchd_pids=launchd,
+            ):
+                continue
+            try:
+                os.kill(pid, signal.SIGKILL)
+                helper_reaped.append((pid, os.path.basename(command.split()[0]), age))
+            except (ProcessLookupError, PermissionError):
+                continue
+
+    if not reaped and not hook_reaped and not helper_reaped:
         return _emit(None)
 
     msgs: list[str] = []
@@ -254,10 +402,24 @@ def main() -> int:
             f"~/.claude/hooks process, idempotent so it re-runs next session). "
             f"This is the SessionStart pile-up class that can freeze a machine."
         )
+    if helper_reaped:
+        by_helper: dict[str, int] = {}
+        for _, h, _a in helper_reaped:
+            by_helper[h] = by_helper.get(h, 0) + 1
+        psum = ", ".join(f"{h}×{n}" for h, n in sorted(by_helper.items()))
+        oldest_h3 = max(r[2] for r in helper_reaped) / 60.0
+        msgs.append(
+            f"Reaped {len(helper_reaped)} orphaned session helper(s) "
+            f"({psum}; oldest {oldest_h3:.1f}h, all PPID=1 under ~/.claude/ and "
+            f"not launchd-managed — their session died, they are respawned on "
+            f"demand). These accumulate silently and hold RAM, which is what "
+            f"turns many concurrent sessions into a thrashing machine."
+        )
     return _emit(
         "[auto-remediate] " + " ".join(msgs) +
         " Tune RUNAWAY_PROC_NAMES / RUNAWAY_MIN_AGE_MIN / RUNAWAY_HOOK_MIN_AGE_MIN /"
-        " RUNAWAY_HOOK_MIN_CPU; bypass with RUNAWAY_REMEDIATE_BYPASS=1."
+        " RUNAWAY_HOOK_MIN_CPU / RUNAWAY_HELPER_MIN_AGE_MIN;"
+        " bypass with RUNAWAY_REMEDIATE_BYPASS=1."
     )
 
 
