@@ -914,11 +914,21 @@ def sibling_worktree_signal() -> str:
         return ""
     if n <= warn_at:
         return ""
+    # The hint must be RUNNABLE from wherever the session actually is. A bare
+    # relative path resolved ONLY when cwd happened to be this repo's checkout,
+    # so in every other repo -- which is most sessions, and every client's --
+    # the advertised command printed "No such file or directory". A hint nobody
+    # can follow is the same as no hint, and worse, because it reads like one.
+    # HOOK_DIR is this file's own directory and scripts/ is its sibling in BOTH
+    # the source repo and the installed copy, so this resolves in both.
+    pruner = HOOK_DIR.parent / "scripts" / "dev-worktree-prune.py"
+    cmd = (f"python3 {pruner}" if pruner.is_file()
+           else "python3 scripts/dev-worktree-prune.py")
     return (
         f"[footprint] {n} leftover session worktree(s) under {dev_root} "
         f"(soft cap {warn_at}). Each is close to a full checkout. The daily "
         f"maintenance pass reclaims the safe ones automatically; force it now "
-        f"with `python3 scripts/dev-worktree-prune.py` (dry-run) then `--apply` "
+        f"with `{cmd}` (dry-run) then `--apply` "
         f"— dirty ones are snapshotted first and un-backed-up ones are kept."
     )
 
