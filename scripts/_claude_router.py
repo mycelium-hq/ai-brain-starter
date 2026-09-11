@@ -47,6 +47,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -185,6 +186,59 @@ def _classify_cli_failure(text: str, raw: str = "") -> RouterUnavailable:
     )
 
 
+SYSTEM_PROMPT_FILE_FLAG = "--append-system-prompt-file"
+
+
+def _cli_argv(cli: str, model: str, system_file: str | None) -> list[str]:
+    """Build the `claude -p` argv. NEITHER prompt is ever an element.
+
+    Process argv is readable by any local process (`ps`, `pgrep -fl`,
+    `/proc/<pid>/cmdline`) for the whole lifetime of the child. The user
+    prompt therefore travels on stdin and the system prompt in a 0600 file
+    whose PATH — not whose contents — is what appears on the command line.
+    """
+    cmd = [cli, "-p"]
+    if system_file is not None:
+        cmd += [SYSTEM_PROMPT_FILE_FLAG, system_file]
+    cmd += [
+        "--model",
+        model,
+        "--output-format",
+        "json",                 # structured envelope, not raw text
+        "--no-session-persistence",
+        "--disable-slash-commands",
+        "--dangerously-skip-permissions",
+        # Router calls are pure text/JSON generation — none invoke MCP tools.
+        # Without this, `claude -p` cold-loads the whole project .mcp.json fleet
+        # on EVERY call (slow + heavy footprint). With no --mcp-config alongside
+        # it, --strict-mcp-config loads ZERO MCP servers.
+        "--strict-mcp-config",
+    ]
+    return cmd
+
+
+def _rejected_the_system_prompt_file_flag(result) -> bool:
+    """True when this `claude` build does not know --append-system-prompt-file.
+
+    Older CLIs answer `error: unknown option '--append-system-prompt-file'` and
+    exit before doing any work. Matched on the flag name inside an
+    unknown-option message, so a model response merely *mentioning* the flag
+    can never trigger the fallback (that text arrives on stdout, not stderr).
+    """
+    stderr = getattr(result, "stderr", "") or ""
+    return "unknown option" in stderr and SYSTEM_PROMPT_FILE_FLAG in stderr
+
+
+def _fold_system_into_stdin(system: str, user: str) -> str:
+    """Fallback payload for a CLI with no system-prompt-file flag.
+
+    Degrades an appended system prompt to a delimited preamble on stdin. Worse
+    steering than a real system prompt, but it keeps the Max-plan tier working
+    on older CLIs without putting either prompt back on the command line.
+    """
+    return f"<system>\n{system}\n</system>\n\n{user}"
+
+
 def _call_via_cli(
     cli: str, system: str, user: str, model: str
 ) -> str:
@@ -213,38 +267,46 @@ def _call_via_cli(
     we accept it. The earlier MIN_RESPONSE_CHARS heuristic was wrong because
     legitimate replies can be very short ("PONG.", "Yes", "42").
     """
-    cmd = [
-        cli,
-        "-p",
-        user,
-        "--append-system-prompt",
-        system,
-        "--model",
-        model,
-        "--output-format",
-        "json",                 # structured envelope, not raw text
-        "--no-session-persistence",
-        "--disable-slash-commands",
-        "--dangerously-skip-permissions",
-        # Router calls are pure text/JSON generation — none invoke MCP tools.
-        # Without this, `claude -p` cold-loads the whole project .mcp.json fleet
-        # on EVERY call (slow + heavy footprint). With no --mcp-config alongside
-        # it, --strict-mcp-config loads ZERO MCP servers.
-        "--strict-mcp-config",
-    ]
     _log(f"calling via CLI ({cli}, model={model})")
+    tmp_dir = tempfile.mkdtemp(prefix="claude-router-")  # 0700
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=CLI_TIMEOUT_SECONDS,
-            check=False,  # tolerate non-zero exits with a valid envelope
-        )
-    except subprocess.TimeoutExpired as e:
-        raise RouterUnavailable(
-            f"claude CLI timed out after {CLI_TIMEOUT_SECONDS}s"
-        ) from e
+        system_file = os.path.join(tmp_dir, "append-system-prompt.txt")
+        fd = os.open(system_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(system)
+
+        try:
+            result = subprocess.run(
+                _cli_argv(cli, model, system_file),
+                input=user,   # prompt body on stdin, never argv
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=CLI_TIMEOUT_SECONDS,
+                check=False,  # tolerate non-zero exits with a valid envelope
+            )
+            if _rejected_the_system_prompt_file_flag(result):
+                # Older CLI. Retry with the system prompt folded into the
+                # stdin payload — never back onto the command line.
+                _log(f"CLI does not support {SYSTEM_PROMPT_FILE_FLAG}; "
+                     "folding the system prompt into stdin")
+                result = subprocess.run(
+                    _cli_argv(cli, model, None),
+                    input=_fold_system_into_stdin(system, user),
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=CLI_TIMEOUT_SECONDS,
+                    check=False,
+                )
+        except subprocess.TimeoutExpired as e:
+            raise RouterUnavailable(
+                f"claude CLI timed out after {CLI_TIMEOUT_SECONDS}s"
+            ) from e
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
     stdout = result.stdout.strip()
 

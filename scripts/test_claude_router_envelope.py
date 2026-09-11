@@ -32,6 +32,8 @@ Exit 0 = pass. Vanilla unittest, no third-party deps.
 from __future__ import annotations
 
 import json
+import os
+import stat
 import sys
 import unittest
 from pathlib import Path
@@ -237,6 +239,147 @@ class CallClaudeTextRouting(unittest.TestCase):
         self.assertEqual(
             R.call_claude_text(system="s", user="u", model="haiku"), "from-api")
         self.assertEqual(calls["cli"], 2)  # retried once, THEN API
+
+
+# --------------------------------------------------------------------------
+# MYC-4655: neither prompt may appear in the child process argv.
+# --------------------------------------------------------------------------
+USER_SENTINEL = "USERSENTINEL9d41f0a7"
+SYS_SENTINEL = "SYSSENTINEL3b7c2e15"
+
+
+class PromptsNeverInArgv(unittest.TestCase):
+    """Process argv is world-readable (`ps`, `pgrep -fl`, /proc/<pid>/cmdline).
+
+    The router used to pass the FULL user prompt as a positional argument and
+    the FULL system prompt as the value of `--append-system-prompt`, so any
+    local process could read a client's prompt body — which routinely quotes
+    credentials, transcripts and private client text — for the whole lifetime
+    of the child (up to CLI_TIMEOUT_SECONDS).
+
+    These are the negative controls. Revert the fix and every one of them goes
+    red with the sentinel found inside an argv element.
+    """
+
+    def setUp(self):
+        self._orig_run = R.subprocess.run
+        self.seen = {}
+
+    def tearDown(self):
+        R.subprocess.run = self._orig_run
+
+    def _fake_run(self, stdout=None, stderr="", returncode=0):
+        """Record argv + stdin, and snapshot any real file named in argv."""
+        stdout = _envelope("ok") if stdout is None else stdout
+        calls = self.seen.setdefault("calls", [])
+
+        def run(cmd, **kw):
+            files = {}
+            for element in cmd:
+                if isinstance(element, str) and os.path.isfile(element):
+                    files[element] = (
+                        Path(element).read_text(encoding="utf-8"),
+                        stat.S_IMODE(os.stat(element).st_mode),
+                    )
+            calls.append({"cmd": list(cmd), "kwargs": dict(kw), "files": files})
+            if len(calls) == 1:
+                return _Res(stdout, returncode, stderr)
+            return _Res(_envelope("ok"), 0, "")
+
+        R.subprocess.run = run
+
+    def _invoke(self, **kw):
+        self._fake_run(**kw)
+        return R._call_via_cli(
+            "/fake/claude", SYS_SENTINEL, USER_SENTINEL, "haiku")
+
+    def _argv(self, index=0):
+        return self.seen["calls"][index]["cmd"]
+
+    # --- the defect ---------------------------------------------------------
+    def test_user_prompt_never_appears_in_argv(self):
+        self._invoke()
+        for element in self._argv():
+            self.assertNotIn(
+                USER_SENTINEL, element,
+                f"user prompt leaked into argv element {element!r}")
+
+    def test_system_prompt_never_appears_in_argv(self):
+        self._invoke()
+        for element in self._argv():
+            self.assertNotIn(
+                SYS_SENTINEL, element,
+                f"system prompt leaked into argv element {element!r}")
+
+    def test_no_bare_positional_prompt_after_dash_p(self):
+        # `-p` must be followed by a flag, never by the prompt body.
+        self._invoke()
+        argv = self._argv()
+        after = argv[argv.index("-p") + 1]
+        self.assertTrue(
+            after.startswith("--"), f"positional prompt after -p: {after!r}")
+
+    # --- where the prompts actually travel ----------------------------------
+    def test_user_prompt_travels_via_stdin(self):
+        self._invoke()
+        self.assertEqual(self.seen["calls"][0]["kwargs"].get("input"),
+                         USER_SENTINEL)
+
+    def test_system_prompt_travels_via_a_private_file_removed_afterwards(self):
+        self._invoke()
+        files = self.seen["calls"][0]["files"]
+        holding = [
+            (path, mode) for path, (text, mode) in files.items()
+            if SYS_SENTINEL in text
+        ]
+        self.assertEqual(
+            len(holding), 1,
+            f"expected exactly one file carrying the system prompt, got {files!r}")
+        path, mode = holding[0]
+        self.assertEqual(mode, 0o600, f"{path} is mode {oct(mode)}, not 0600")
+        self.assertIn(path, self._argv())
+        self.assertFalse(
+            os.path.exists(path), f"{path} survived the call — not unlinked")
+
+    def test_prompt_file_is_removed_even_when_the_cli_fails(self):
+        with self.assertRaises(RouterUnavailable):
+            self._invoke(stdout="", returncode=1)
+        for path in self.seen["calls"][0]["files"]:
+            self.assertFalse(os.path.exists(path), f"{path} survived a failure")
+
+    # --- byte-for-byte guard on everything else -----------------------------
+    def test_every_other_flag_is_unchanged(self):
+        self._invoke()
+        argv = self._argv()
+        self.assertEqual(argv[0], "/fake/claude")
+        self.assertEqual(argv[1], "-p")
+        for pair in (("--model", "haiku"), ("--output-format", "json")):
+            self.assertIn(pair[0], argv)
+            self.assertEqual(argv[argv.index(pair[0]) + 1], pair[1])
+        for flag in ("--no-session-persistence", "--disable-slash-commands",
+                     "--dangerously-skip-permissions", "--strict-mcp-config"):
+            self.assertIn(flag, argv)
+
+    # --- older CLI without the file flag ------------------------------------
+    def test_cli_without_the_file_flag_still_keeps_prompts_out_of_argv(self):
+        # An older `claude` rejects --append-system-prompt-file. The router
+        # retries with the system prompt folded into the stdin payload — it
+        # never falls back to putting either prompt on the command line.
+        self._invoke(
+            stdout="",
+            returncode=1,
+            stderr="error: unknown option '--append-system-prompt-file'\n",
+        )
+        self.assertEqual(len(self.seen["calls"]), 2, "no retry happened")
+        retry = self.seen["calls"][1]
+        for element in retry["cmd"]:
+            self.assertNotIn(USER_SENTINEL, element)
+            self.assertNotIn(SYS_SENTINEL, element)
+        self.assertNotIn("--append-system-prompt-file", retry["cmd"])
+        self.assertNotIn("--append-system-prompt", retry["cmd"])
+        payload = retry["kwargs"].get("input") or ""
+        self.assertIn(SYS_SENTINEL, payload)
+        self.assertIn(USER_SENTINEL, payload)
 
 
 if __name__ == "__main__":
