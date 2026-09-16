@@ -39,7 +39,8 @@ on ALL of:
      since staging, AND
   3. when the SessionStart restart witness is available on this install, a
      source == "startup" was recorded AFTER the pull was staged
-     (hooks/mark-session-startup.py).
+     (hooks/_lib/session_startup_stamp.py, invoked from the SessionStart
+     hook hooks/surface-deployed-hooks-behind.py).
 
 Gate 3 is the one that actually answers "did a new process begin". MEASURED
 2026-09-16 against Claude Code 2.1.246/2.1.258 by registering a probe
@@ -393,7 +394,10 @@ def _install_fix_cmd() -> str:
             "--quiet --fail-on-missing")
 
 
-# Written by hooks/mark-session-startup.py. Names duplicated rather than
+# Written by hooks/_lib/session_startup_stamp.py (called from the
+# SessionStart hook hooks/surface-deployed-hooks-behind.py, which already
+# reads that payload -- folded in there rather than added as its own entry so
+# the SessionStart fan-out stays flat). Names duplicated rather than
 # imported: this script must keep working via the standalone .sh delegator on
 # installs that predate hooks/_lib, and a missing import must never break the
 # update that would fix it (same reasoning as _read_session_id).
@@ -404,9 +408,8 @@ STARTUP_NAME = ".ai-brain-starter-session-startup"
 def _startup_signal(state: Path) -> "tuple[bool, float | None]":
     """(witness_available, last_startup_at) -- gate 3's inputs.
 
-    witness_available is True only when hooks/mark-session-startup.py has run
-    on this install AND recorded that the harness actually carried a `source`
-    field. Both halves matter: without the first we cannot tell "no restart
+    witness_available is True only when the SessionStart stamp has run on this
+    install AND recorded that the harness actually carried a `source` field. Both halves matter: without the first we cannot tell "no restart
     yet" from "nothing is watching", and without the second an older Claude
     Code that never emits `source` would look like a machine that never
     restarts, and would wedge the deploy forever instead of falling back.
