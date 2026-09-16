@@ -123,6 +123,10 @@
     {
       "_comment": "RELAYED SPEECH — the user asks Claude to TELL SOMEONE ELSE a phrase that happens to be a close signal ('dile a Ana que ya quedó', 'avísale que listo', 'contéstale que hasta luego'). The close phrase is message CONTENT addressed to a third party, not a sign-off to Claude. Strict because 'ya quedó' and bare 'listo' are high_confidence, so a weak-tier guard cannot override them. Requires a reporting verb BEFORE 'que' AND a close phrase right after it, so a bare 'ya quedó' still fires.",
       "pattern": "\\b(d[íi]le|d[íi]gale|d[íi]les|dices|digas|diga|av[íi]sale|av[íi]sele|escr[íi]bele|escr[íi]bale|cu[ée]ntale|com[ée]ntale|resp[óo]ndele|cont[ée]stale|recu[ée]rdale|advi[ée]rtele|m[áa]ndale|env[íi]ale|diciendo|dici[ée]ndole)\\b[^\\n]{0,50}\\bque\\b\\s*(ya\\s+qued[óo]|ya\\s+est[áa]|ya\\s+es\\s+todo|es\\s+todo|listo|gracias|chao|chau|nos\\s+vemos|hasta\\s+luego|hasta\\s+ma[ñn]ana|buenas\\s+noches|me\\s+voy)\\b"
+    },
+    {
+      "_comment": "QUOTED CONTENT \u2014 a close phrase wrapped in quotes or backticks with substantive text around it is the SUBJECT of the message, not a sign-off: testing the detector, reporting a false positive, editing the phrase list, quoting a config line. Deliberately generic (it matches any quoted span, not a fixed phrase list) because a user's closingSignals.custom phrases are unknown to this pack and skip false_positive_guards entirely \u2014 only strict_guards outrank them. A bare quoted phrase with nothing around it still fires: someone typing \"chao\" is saying goodbye, not quoting.",
+      "pattern": "(?:\\S+\\s+)[`\"'\u201c\u2018][^`\"'\u201d\u2019\\n]{2,60}[`\"'\u201d\u2019]|[`\"'\u201c\u2018][^`\"'\u201d\u2019\\n]{2,60}[`\"'\u201d\u2019]\\s+\\S+\\s+\\S+"
     }
   ]
 }
