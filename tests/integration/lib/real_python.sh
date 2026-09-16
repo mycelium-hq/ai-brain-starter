@@ -45,7 +45,12 @@
 # On success PATH is exported and REAL_PYTHON_SHIM_DIR names the directory it
 # created — empty when nothing was needed — so the caller can clean it up.
 
-REAL_PYTHON_SHIM_DIR="${REAL_PYTHON_SHIM_DIR:-}"
+# An OUTPUT of ensure_real_python, never an input: deliberately NOT inherited
+# from the environment. ci.sh's exit trap runs `rm -rf "$REAL_PYTHON_SHIM_DIR"`
+# whenever it is non-empty, so honouring an exported value would let
+# `REAL_PYTHON_SHIM_DIR=~/work bash scripts/ci.sh` delete a directory this run
+# never created. The function assigns it on every path.
+REAL_PYTHON_SHIM_DIR=''
 
 # Printed by the probe script, required back by _real_python_runs. A status of 0
 # on its own is too weak: a wrapper is free to print its advice and exit 0, and
@@ -70,6 +75,11 @@ _real_python_runs() {
 ensure_real_python() {
     local probe_dir probe cand resolved real=''
 
+    # Re-assert the output contract on every path, the no-op one included, so a
+    # stale or exported value can never reach the caller's cleanup as if this
+    # run had created it.
+    REAL_PYTHON_SHIM_DIR=''
+
     probe_dir="$(mktemp -d)" || return 1
     probe="$probe_dir/real_python_probe.py"
     if ! printf 'print("%s")\n' "$_REAL_PYTHON_SENTINEL" > "$probe"; then
@@ -91,6 +101,16 @@ ensure_real_python() {
                 /opt/homebrew/bin/python3 /usr/local/bin/python3 /usr/bin/python3; do
         resolved="$(command -v "$cand" 2>/dev/null)" || continue
         [ -n "$resolved" ] || continue
+        # A relative PATH entry (`bin`, `node_modules/.bin`, `.`) makes
+        # command -v hand back a relative path. It would PASS the probe, which
+        # runs it against the current directory, and then `ln -s` would resolve
+        # the same string against the temp dir instead — a dangling symlink,
+        # after which python3 falls through to the next PATH entry (the shim)
+        # while this function reports success. Take absolute paths only.
+        case "$resolved" in
+            /*) ;;
+            *) continue ;;
+        esac
         if _real_python_runs "$resolved" "$probe"; then
             real="$resolved"
             break
