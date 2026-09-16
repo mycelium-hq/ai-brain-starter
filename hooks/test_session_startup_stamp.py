@@ -164,7 +164,12 @@ def main() -> int:
             home = root / "host-home"; (home / ".claude").mkdir(parents=True)
             env = dict(os.environ)
             env["ABS_UPDATE_STATE_DIR"] = str(hd)
+            # USERPROFILE alongside HOME: on Windows Path.home() reads
+            # USERPROFILE, so redirecting HOME alone leaves this test
+            # writing stamp files into the operator's REAL ~/.claude.
+            # scripts/ci.sh gates exactly this (HOME-only sandbox).
             env["HOME"] = str(home)
+            env["USERPROFILE"] = str(home)
             try:
                 res = subprocess.run(
                     [sys.executable, str(HOST)],
