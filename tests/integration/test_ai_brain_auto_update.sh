@@ -69,6 +69,8 @@
 #                                         just staging                 [NEG]
 #   T15 tree dirtied AFTER staging, before the deferred merge -> still
 #                                         caught (defense in depth)     [NEG]
+#   T16 STRUCTURAL: every checkout-path f-string interpolation routes
+#                                         through _redact_text          [GATE]
 #
 # Run: bash tests/integration/test_ai_brain_auto_update.sh  (0 = pass, 1 = fail)
 set -uo pipefail
@@ -525,6 +527,83 @@ if [ "$before" = "$after" ] && ! deployed "$ST" && pending "$ST" && says 'now ha
   ok "T15: a tree dirtied AFTER staging but before the deferred merge is still caught (defense in depth)"
 else
   no "T15: deployed over a tree dirtied after staging (head-unchanged:$([ "$before" = "$after" ] && echo y || echo n) deploy:$(deployed "$ST" && echo y || echo n))"
+fi
+
+# ---- T16. STRUCTURAL: every checkout-path interpolation is redacted ------
+# T9 and T13 are BEHAVIOUR tests: each proves that ONE path redacts. Neither
+# can see a NEW display site added later -- and that is not hypothetical. The
+# original MYC-4704 redaction sweep keyed on the local name `str(skill)`, and
+# therefore missed _install_fix_cmd(), which reaches the same value through
+# the module-level accessor `_skill_dir()` and interpolated it RAW into two
+# emit_ctx messages (the installer-failed branch and the no-session-id
+# activation note). One concept, two spellings; a name-keyed sweep saw one.
+#
+# So this pins every site by PROPERTY, not by name or line number: a DISPLAY
+# use is one that lands inside an f-string. The legitimate non-display uses --
+# the ABS_SYNC_STARTER_DIR env-var value handed to the sync child, Path joins,
+# git argv elements -- are never inside an f-string, so they pass with no
+# allow-list, and there is no allow-list to rot as the file grows.
+#
+# Ships its own NEGATIVE CONTROL: a guard that has never failed on the thing
+# it exists to catch is not evidence that the thing is absent.
+GUARD="$TMPROOT/redaction_guard.py"
+cat > "$GUARD" <<'PYEOF'
+import ast, sys
+
+
+def is_path_atom(n):
+    if isinstance(n, ast.Name) and n.id == "skill":
+        return True
+    return (isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+            and n.func.id == "_skill_dir")
+
+
+def is_redact(n):
+    return (isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+            and n.func.id == "_redact_text")
+
+
+viol = set()
+
+
+def scan(node, protected):
+    if is_redact(node):
+        protected = True
+    if is_path_atom(node) and not protected:
+        viol.add(node.lineno)
+        return
+    for ch in ast.iter_child_nodes(node):
+        scan(ch, protected)
+
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    tree = ast.parse(fh.read())
+for js in ast.walk(tree):
+    if isinstance(js, ast.JoinedStr):
+        for part in js.values:
+            if isinstance(part, ast.FormattedValue):
+                scan(part.value, False)
+for ln in sorted(viol):
+    print("BARE-CHECKOUT-PATH-IN-FSTRING line %d" % ln)
+print("VIOLATIONS=%d" % len(viol))
+PYEOF
+
+T16SRC="$REPO_ROOT/scripts/ai-brain-auto-update.py"
+T16REAL="$(python3 "$GUARD" "$T16SRC" | sed -n 's/^VIOLATIONS=//p')"
+
+# Plant one bare site per spelling on a COPY -- never on the real file.
+T16COPY="$TMPROOT/planted_auto_update.py"
+cp "$T16SRC" "$T16COPY"
+{
+  printf '\n\ndef _planted_local_name(skill):\n    return f"checkout at {skill}"\n'
+  printf '\n\ndef _planted_accessor():\n    return f"checkout at {_skill_dir()}"\n'
+} >> "$T16COPY"
+T16PLANTED="$(python3 "$GUARD" "$T16COPY" | sed -n 's/^VIOLATIONS=//p')"
+
+if [ "$T16REAL" = "0" ] && [ "$T16PLANTED" = "2" ]; then
+  ok "T16: every checkout-path f-string interpolation routes through _redact_text (live=0; guard catches both spellings)"
+else
+  no "T16: structural redaction guard (live=$T16REAL expected 0; planted=$T16PLANTED expected 2)"
 fi
 
 echo

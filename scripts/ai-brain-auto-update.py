@@ -357,9 +357,25 @@ def _stamp(path: Path) -> None:
 
 
 def _install_fix_cmd() -> str:
-    """The manual re-install command, phrased for the user's actual platform."""
+    """The manual re-install command, phrased for the user's actual platform.
+
+    The checkout path is redacted like every other display site (MYC-4704).
+    This string is NOT internal: it reaches additionalContext through two
+    emit_ctx callers -- the installer-failed branch and the no-session-id
+    activation note -- and _skill_dir() is caller-influenced via
+    ABS_SKILL_DIR. It was missed by the original redaction sweep because
+    that sweep keyed on `str(skill)`, the local name used in run() and
+    _resolve_pending_deploy; this function reaches the same value through
+    the module-level accessor, a different spelling of one concept.
+
+    Redacting does not break the copy-pasteable command: a path with no
+    secret in it passes secret_patterns.redact() through byte-identical
+    (measured), so the output only changes in the case where emitting the
+    raw path would itself be the bug.
+    """
     py = "python" if os.name == "nt" else "python3"
-    return (f"{py} \"{_skill_dir() / 'scripts' / 'install-hooks-user-level.py'}\" "
+    installer = _skill_dir() / "scripts" / "install-hooks-user-level.py"
+    return (f"{py} \"{_redact_text(str(installer))}\" "
             "--quiet --fail-on-missing")
 
 
