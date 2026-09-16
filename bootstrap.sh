@@ -132,18 +132,36 @@ SKILL_DIR="$HOME/.claude/skills/ai-brain-starter"
 # everywhere below. AI_BRAIN_PYTHON names one directly, for a prefix no search
 # would guess (pyenv, conda).
 PY="python3"
+# The probe runs a SCRIPT FILE, never `-c`. A PATH shim can answer `-c` and
+# still refuse a script path: trailofbits/modern-python forwards `-c`, `-` and
+# `-m` (bar pip) to the real interpreter and rejects only a script, on the
+# stated grounds that those forms do not resolve a script against a project's
+# dependencies. A `-c` probe therefore SELECTS THE SHIM as $PY -- the version
+# answer comes from the real interpreter behind it -- while every use below is a
+# script path (`exec "$PY" "$INSTALLER"`, `"$PY" "$USER_HOOK_INSTALLER"`), so
+# the install dies much later with the shim's advice instead of failing here.
+# Measured with the plugin on PATH: the old probe picked the shim itself.
+# Same defect, same fix, as tests/integration/lib/real_python.sh.
 pick_python() {
-  local candidate resolved
+  local candidate resolved probe_dir probe rc=1
+  probe_dir="$(mktemp -d)" || return 1
+  probe="$probe_dir/ai_brain_pick_python_probe.py"
+  printf '%s\n' \
+    'import sys' \
+    'if sys.version_info[:2] >= (3, 10):' \
+    '    print("__ai_brain_python_ok__")' > "$probe" || { rm -rf "$probe_dir"; return 1; }
   for candidate in "${AI_BRAIN_PYTHON:-}" python3 python3.14 python3.13 python3.12 python3.11 python3.10; do
     [[ -n "$candidate" ]] || continue
     resolved="$(command -v "$candidate" 2>/dev/null || true)"
     [[ -n "$resolved" ]] || continue
-    if "$resolved" -c 'import sys; sys.exit(0 if sys.version_info[:2] >= (3,10) else 1)' >/dev/null 2>&1; then
+    if [[ "$("$resolved" "$probe" 2>/dev/null)" == *__ai_brain_python_ok__* ]]; then
       PY="$resolved"
-      return 0
+      rc=0
+      break
     fi
   done
-  return 1
+  rm -rf "$probe_dir"
+  return $rc
 }
 pick_python || true
 DRY_RUN=0

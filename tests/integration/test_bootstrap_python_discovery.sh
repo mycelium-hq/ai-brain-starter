@@ -61,23 +61,53 @@ BASH_BIN="$(command -v bash)"
 PICK_SRC="$(awk '/^pick_python\(\)[ ]*\{/,/^}$/' "$BOOTSTRAP")"
 [ -n "$PICK_SRC" ] || fail "1: pick_python() not found in bootstrap.sh"
 
-# mk_py DIR NAME VERSION — a stand-in interpreter answering the two questions
-# pick_python asks: the >=3.10 probe (-c), and --version.
+# mk_py DIR NAME VERSION — a stand-in interpreter answering the questions
+# pick_python asks: the >=3.10 probe as a SCRIPT FILE (the shape every later
+# "$PY" call uses), the same probe via -c, and --version.
 mk_py() {
   local path="$1/$2" minor="${3#3.}"
   cat > "$path" <<STUB
 #!/bin/sh
-if [ "\$1" = "-c" ]; then
-  [ "$minor" -ge 10 ] && exit 0
-  exit 1
-fi
+case "\$1" in
+  -c) [ "$minor" -ge 10 ] && exit 0; exit 1 ;;
+  --version|-V) echo "Python $3"; exit 0 ;;
+  *.py) [ "$minor" -ge 10 ] && { echo "__ai_brain_python_ok__"; exit 0; }; exit 1 ;;
+esac
 echo "Python $3"
 STUB
   chmod +x "$path"
 }
 
+# mk_shim_py DIR NAME VERSION — the shape trailofbits/modern-python ships: `-c`
+# answers exactly like a real interpreter of that version, a SCRIPT PATH is
+# refused. This is the stub a `-c` probe cannot tell from a working interpreter.
+mk_shim_py() {
+  local path="$1/$2" minor="${3#3.}"
+  cat > "$path" <<STUB
+#!/bin/sh
+case "\$1" in
+  -c) [ "$minor" -ge 10 ] && exit 0; exit 1 ;;
+  --version|-V) echo "Python $3"; exit 0 ;;
+esac
+echo "ERROR: Use 'uv run python <script>' instead of python3 <script>" >&2
+exit 1
+STUB
+  chmod +x "$path"
+}
+
+# pick_python writes its probe to a temp file, so it needs mktemp and rm. The
+# PATH seal below exists to control which INTERPRETERS are visible, not to
+# forbid coreutils, so those two live in their own directory appended after the
+# stub dir. It holds no python, so no outcome here can still be decided by the
+# runner's own interpreters — the trap the seal was built for.
+UTILS="$TMP/utils"; mkdir -p "$UTILS"
+for _u in mktemp rm; do
+  _r="$(command -v "$_u" 2>/dev/null)" || fail "setup: $_u not found, cannot build the utils dir"
+  ln -s "$_r" "$UTILS/$_u"
+done
+
 # run_pick DIR [AI_BRAIN_PYTHON] -> prints "PY=<resolved>" and, on failure,
-# "PICK_FAILED". PATH is the stub dir ONLY.
+# "PICK_FAILED". PATH is the stub dir plus the python-free utils dir.
 run_pick() {
   local dir="$1" override="${2:-}" harness="$TMP/pick-harness.sh"
   {
@@ -87,7 +117,7 @@ run_pick() {
     echo 'pick_python || echo "PICK_FAILED"'
     echo 'echo "PY=$PY"'
   } > "$harness"
-  env -i PATH="$dir" AI_BRAIN_PYTHON="$override" "$BASH_BIN" "$harness" 2>&1
+  env -i PATH="$dir:$UTILS" AI_BRAIN_PYTHON="$override" "$BASH_BIN" "$harness" 2>&1
 }
 
 # ── 2. THE REPORTED CASE: too-old python3, good python3.12 alongside ──
@@ -170,4 +200,38 @@ STRAY="$(grep -nE '(^|[^A-Za-z_#"])python3 ' "$BOOTSTRAP" \
 [ -z "$STRAY" ] || fail "7: these python3 invocations still bypass \$PY, so they keep running whatever PATH resolves first:
 $STRAY"
 
-echo "PASS: test_bootstrap_python_discovery (7 checks, 1 negative control)"
+# ── 8. a shim that answers -c but refuses a script file is NOT selected ──
+# The shape trailofbits/modern-python ships. pick_python probed with `-c`, which
+# that shim forwards to the real interpreter, so the version answer came back
+# healthy and the SHIM ITSELF was selected as $PY. Every later use is a script
+# path -- `exec "$PY" "$INSTALLER"` and `"$PY" "$USER_HOOK_INSTALLER"` -- so the
+# install died there instead, with the shim's advice as the error. Measured on a
+# machine carrying the plugin: the old probe picked the shim.
+D8="$TMP/case8"; mkdir -p "$D8"
+mk_shim_py "$D8" python3    3.14   # answers -c like a 3.14, refuses scripts
+mk_py      "$D8" python3.12 3.12   # a real interpreter sitting right beside it
+
+# Negative controls FIRST, on the fixture itself. The shim must genuinely PASS
+# the old -c probe, or this leg is a re-run of case 2 and says nothing about the
+# blind spot; and it must genuinely refuse a script file, or it is not a shim.
+if ! env -i PATH="$D8" "$D8/python3" \
+     -c 'import sys; sys.exit(0 if sys.version_info[:2] >= (3,10) else 1)' >/dev/null 2>&1; then
+  fail "8 (negative control): the shim stub fails the -c probe, so a -c-based pick_python would have rejected it anyway and this leg proves nothing"
+fi
+: > "$TMP/case8-probe.py"
+if env -i PATH="$D8" "$D8/python3" "$TMP/case8-probe.py" >/dev/null 2>&1; then
+  fail "8 (negative control): the shim stub runs script files, so it does not model a shim at all"
+fi
+
+OUT8="$(run_pick "$D8")"
+case "$OUT8" in
+  *PICK_FAILED*) fail "8: pick_python found nothing, but python3.12 was right there. Output: $OUT8" ;;
+esac
+case "$OUT8" in
+  *"PY=$D8/python3.12"*) : ;;
+  *"PY=$D8/python3"*)
+    fail "8: pick_python selected the SHIM as \$PY. Every \"\$PY\" <script> call in bootstrap.sh then dies with the shim's advice instead of installing. Got: $OUT8" ;;
+  *) fail "8: expected python3.12 to be chosen, got: $OUT8" ;;
+esac
+
+echo "PASS: test_bootstrap_python_discovery (8 checks, 3 negative controls)"
