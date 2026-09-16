@@ -38,7 +38,11 @@
 # and fail in CI (exactly the trap documented in the userspace-fallback test).
 # Stubs use #!/bin/sh, not `env bash`, because `env` needs a PATH to find bash.
 #
-# Self-contained; no network; never writes outside its own temp dir.
+# Self-contained; no network. Its own writes stay in its temp dir, with one
+# exception worth knowing: run_pick uses `env -i`, which clears TMPDIR, so
+# pick_python's probe dir lands in the system temp instead. pick_python removes
+# it on every path, but this file's EXIT trap cannot reach it if that is
+# interrupted mid-run.
 
 set -euo pipefail
 
@@ -71,16 +75,28 @@ mk_py() {
 case "\$1" in
   -c) [ "$minor" -ge 10 ] && exit 0; exit 1 ;;
   --version|-V) echo "Python $3"; exit 0 ;;
-  *.py) [ "$minor" -ge 10 ] && { echo "__ai_brain_python_ok__"; exit 0; }; exit 1 ;;
+  *.py) [ "$minor" -ge 10 ] && echo "__ai_brain_python_ok__"; exit 0 ;;
 esac
 echo "Python $3"
 STUB
   chmod +x "$path"
 }
 
-# mk_shim_py DIR NAME VERSION — the shape trailofbits/modern-python ships: `-c`
-# answers exactly like a real interpreter of that version, a SCRIPT PATH is
-# refused. This is the stub a `-c` probe cannot tell from a working interpreter.
+# NOTE on the *.py arm: it exits 0 for EVERY version and prints the token only
+# when the version qualifies, because that is what a real interpreter does — the
+# probe script runs fine on 3.9 and simply prints nothing. Exiting non-zero for
+# old versions instead would model a state no Python can reach, and it would
+# make this whole file blind to a probe that reads the exit status and ignores
+# stdout: such a probe selects a real 3.9 as $PY (the original 2026-08-18 bug)
+# while every check here still passes. Check 5 is the oracle that catches it.
+
+# mk_shim_py DIR NAME VERSION — a shim on the two axes check 8 turns on: `-c`
+# is answered exactly as a real interpreter of that version would, and a SCRIPT
+# PATH is refused. It is NOT a faithful model of trailofbits/modern-python
+# elsewhere — that shim scans argv for a mode selector, so it also forwards `-`
+# and `-m` (bar pip) and REFUSES `--version`, where this stub does the opposite.
+# bootstrap.sh has several `"$PY" - <<` call sites the real shim forwards fine;
+# anyone extending this stub to cover them must read the shim, not this.
 mk_shim_py() {
   local path="$1/$2" minor="${3#3.}"
   cat > "$path" <<STUB
@@ -111,7 +127,7 @@ done
 run_pick() {
   local dir="$1" override="${2:-}" harness="$TMP/pick-harness.sh"
   {
-    echo 'set -uo pipefail'
+    echo 'set -euo pipefail'   # the flags bootstrap.sh itself runs under
     echo 'PY="python3"'
     printf '%s\n' "$PICK_SRC"
     echo 'pick_python || echo "PICK_FAILED"'

@@ -144,12 +144,27 @@ PY="python3"
 # Same defect, same fix, as tests/integration/lib/real_python.sh.
 pick_python() {
   local candidate resolved probe_dir probe rc=1
-  probe_dir="$(mktemp -d)" || return 1
+  # Probing by script file needs somewhere to put the script, which the old -c
+  # probe did not. Say so out loud if that fails: the caller is `pick_python ||
+  # true`, so a silent return leaves $PY as the literal `python3` and quietly
+  # reinstates BOTH bugs this function exists to prevent — the shim on one kind
+  # of machine, macOS's 3.9 on the other.
+  probe_dir="$(mktemp -d)" || probe_dir=''
+  if [[ -z "$probe_dir" ]]; then
+    echo "WARN: no temp dir available to probe for a Python interpreter; falling" >&2
+    echo "      back to bare \`python3\`, which may be a shim or older than 3.10." >&2
+    return 1
+  fi
   probe="$probe_dir/ai_brain_pick_python_probe.py"
-  printf '%s\n' \
+  if ! printf '%s\n' \
     'import sys' \
     'if sys.version_info[:2] >= (3, 10):' \
-    '    print("__ai_brain_python_ok__")' > "$probe" || { rm -rf "$probe_dir"; return 1; }
+    '    print("__ai_brain_python_ok__")' > "$probe"; then
+    rm -rf "$probe_dir"
+    echo "WARN: could not write the interpreter probe under $probe_dir; falling" >&2
+    echo "      back to bare \`python3\`, which may be a shim or older than 3.10." >&2
+    return 1
+  fi
   for candidate in "${AI_BRAIN_PYTHON:-}" python3 python3.14 python3.13 python3.12 python3.11 python3.10; do
     [[ -n "$candidate" ]] || continue
     resolved="$(command -v "$candidate" 2>/dev/null || true)"
