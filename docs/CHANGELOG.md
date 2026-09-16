@@ -9,6 +9,18 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-09-16: "es todo por hoy" now closes the session in Spanish
+
+**Who this affects:** Spanish speakers, especially in Colombia and Mexico.
+
+The Spanish pack already knew the whole "por hoy" family — `cerremos por hoy`, `terminamos por hoy`, `ya estuvo por hoy`, `ya fue por hoy` — but not `es todo por hoy`, which is the most common of the set.
+
+It slipped through because the neighbouring pattern needs a pronoun in front. `eso es todo` matches; drop the `eso`, which is what most people do, and nothing matched at all. The session stayed open, and with it the backup and the capture cascade that only run on close.
+
+The new pattern is anchored to the end of the message on purpose. Bare `es todo` is a substring of `es todo lo que necesito para el informe`, so an unanchored version would end sessions in the middle of a sentence. `es todo por hoy lo que alcancé a revisar` still does not fire, and neither does the question `¿es todo por hoy o seguimos?`.
+
+---
+
 ## 2026-09-09: the NVIDIA grunt-work models are back — and the map now tells you it will rot
 
 **Who this affects:** anyone using `scripts/nvidia.sh` or `_nvidia_router.py` to send cheap, bulk work to NVIDIA's free tier instead of Claude.

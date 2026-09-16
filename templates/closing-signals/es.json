@@ -27,6 +27,7 @@
     "\\btermin(emos|amos)\\s+(esto|aquí|acá|por\\s+hoy)\\b",
     "\\bya\\s+estuvo\\s+por\\s+(hoy|ahora)\\b",
     "\\bya\\s+fue\\s+(por\\s+(hoy|ahora))\\b",
+    "\\bes\\s+todo\\s+por\\s+(hoy|ahora)[,.!\\s]*(gracias)?[!.\\s]*$",
     "\\bhasta luego\\b",
     "^chao+[!.\\s]*$",
     "^bye+[!.\\s]*$",
