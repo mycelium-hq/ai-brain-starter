@@ -9,6 +9,22 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-09-16: asking about a close phrase no longer closes the session
+
+**Who this affects:** anyone who set their own `closingSignals.custom` phrases in CLAUDE.md — and, if you write in Spanish, anyone at all.
+
+Your custom close phrases are the highest authority in the detector: they fire no matter what, and they deliberately skip the false-positive guards. That is the right call for a phrase you chose yourself — until you need to *talk about* it.
+
+Quote one of your own phrases and the session closed. Testing the detector, reporting a false positive, asking to add a phrase to the list, pasting a config line — all of them ended the session mid-task. It happened live while someone was asking to test the very phrase that closed the session on them.
+
+This is the same shape as the relayed-speech fix from #661, one tier up. There the close phrase was content addressed to a third party (`dile a Ana que ya quedó`). Here it is content wrapped in quotes. Both times the phrase is what the message is *about*, not what the message *does*.
+
+The guard that was supposed to catch this only knew four phrases: `chao`, `bye`, `listo`, and two ways to say "close the session". Your own phrases were invisible to it, because a shared language pack cannot know what you put in your CLAUDE.md.
+
+The new guard does not carry a phrase list at all. Any quoted span with real text around it is treated as content, whatever the phrase happens to be. A bare quoted phrase with nothing around it still closes the session — someone typing `"chao"` is saying goodbye, not quoting.
+
+---
+
 ## 2026-09-09: the NVIDIA grunt-work models are back — and the map now tells you it will rot
 
 **Who this affects:** anyone using `scripts/nvidia.sh` or `_nvidia_router.py` to send cheap, bulk work to NVIDIA's free tier instead of Claude.
