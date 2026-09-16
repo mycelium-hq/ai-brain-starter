@@ -622,18 +622,24 @@ fi
 # That isolates gate 3 -- neither test can pass for an unrelated reason.
 # ==========================================================================
 
-# $1=state  $2=source_present(y|n)  $3=startup stamp `at`, or "none" for no stamp
+# $1=state  $2=source_present(y|n)  $3=startup stamp `at` | "none" | "raw:<body>"
+# $4=session_id recorded IN the startup stamp (default sess-B, the resolving one)
+# $5=age in seconds of the SEEN file (default 0 = fresh)
 witness() {
+  seen_at=$(( $(date +%s) - ${5:-0} ))
   if [ "$2" = "y" ]; then
     printf '{"schema":1,"at":%s,"source":"startup","source_present":true,"session_id":"w"}' \
-      "$(date +%s)" > "$1/.ai-brain-starter-sessionstart-seen"
+      "$seen_at" > "$1/.ai-brain-starter-sessionstart-seen"
   else
     printf '{"schema":1,"at":%s,"source":"","source_present":false,"session_id":"w"}' \
-      "$(date +%s)" > "$1/.ai-brain-starter-sessionstart-seen"
+      "$seen_at" > "$1/.ai-brain-starter-sessionstart-seen"
   fi
-  if [ "$3" != "none" ]; then
-    printf '{"schema":1,"at":%s,"session_id":"w"}' "$3" > "$1/.ai-brain-starter-session-startup"
-  fi
+  case "$3" in
+    none) : ;;
+    raw:*) printf '%s' "${3#raw:}" > "$1/.ai-brain-starter-session-startup" ;;
+    *) printf '{"schema":1,"at":%s,"session_id":"%s"}' "$3" "${4:-sess-B}" \
+         > "$1/.ai-brain-starter-session-startup" ;;
+  esac
 }
 
 # ---- T17. Witness available, last start PREDATES staging -> NO deploy -----
@@ -656,7 +662,7 @@ fi
 # second, so an unpadded stamp can land microseconds BEHIND staging and flake.
 IFS=$'\t' read -r ST CO < <(new_fixture)
 SID=sess-A run_upd "$ST" "$CO"
-witness "$ST" y "$(( $(date +%s) + 5 ))"
+witness "$ST" y "$(( $(date +%s) + 5 ))" sess-B
 SID=sess-B run_upd "$ST" "$CO"
 after=$(git -C "$CO" rev-parse HEAD)
 om=$(git -C "$CO" rev-parse origin/main)
@@ -709,6 +715,82 @@ if [ "$after" = "$before" ] && ! deployed "$ST" && pending "$ST" && marker_is "$
   ok "T21: witness live with no start ever recorded -> deferred, not treated as a restart"
 else
   no "T21: deployed with the witness live and no start recorded (deploy:$(deployed "$ST" && echo y || echo n))"
+fi
+
+# ==========================================================================
+# T22-T25. Gate-3 hardening from an independent adversarial review. Each of
+# these DEPLOYED against the first implementation of gate 3; each is RED
+# without the corresponding fix.
+# ==========================================================================
+
+# ---- T22. A startup stamped by a DIFFERENT session does NOT deploy --------
+# The `claude -p` hole. A subprocess emits source=="startup" exactly like a
+# real start (measured), and CLAUDE.md makes `claude -p` the default path for
+# every build that calls an LLM programmatically -- so the long-running
+# compacted session this gate exists to stop could satisfy "some startup
+# happened since staging" by shelling out, with no human anywhere. Gate 3 must
+# require THIS session to be the fresh one.
+IFS=$'\t' read -r ST CO < <(new_fixture)
+before=$(git -C "$CO" rev-parse HEAD)
+SID=sess-A run_upd "$ST" "$CO"
+witness "$ST" y "$(( $(date +%s) + 5 ))" "claude-p-subprocess"
+SID=sess-B run_upd "$ST" "$CO"
+after=$(git -C "$CO" rev-parse HEAD)
+if [ "$after" = "$before" ] && ! deployed "$ST" && pending "$ST" && marker_is "$CO" OLD; then
+  ok "T22: a startup stamped by ANOTHER session (the \`claude -p\` shape) does not satisfy gate 3"
+else
+  no "T22: a subprocess startup unblocked the deploy (deploy:$(deployed "$ST" && echo y || echo n) marker:$(marker_is "$CO" NEW && echo NEW || echo OLD))"
+fi
+
+# ---- T23/T24. Unparseable + implausible stamps must FAIL, not pass --------
+# _startup_signal used to fall back to the stamp's mtime when its JSON would
+# not parse -- and mtime on a corrupt stamp is always FRESHER than staging, so
+# corrupt/null/non-numeric/infinite all DEPLOYED: a fail-OPEN, and the exact
+# inverse of a valid-but-stale stamp, which correctly defers.
+for bad in 'raw:{not json' 'raw:{"at":null,"session_id":"sess-B"}' \
+           'raw:{"at":"nope","session_id":"sess-B"}' \
+           'raw:{"at":1e999,"session_id":"sess-B"}'; do
+  IFS=$'\t' read -r ST CO < <(new_fixture)
+  before=$(git -C "$CO" rev-parse HEAD)
+  SID=sess-A run_upd "$ST" "$CO"
+  witness "$ST" y "$bad"
+  SID=sess-B run_upd "$ST" "$CO"
+  after=$(git -C "$CO" rev-parse HEAD)
+  if [ "$after" = "$before" ] && ! deployed "$ST" && marker_is "$CO" OLD; then
+    ok "T23: an unparseable/implausible startup stamp fails gate 3 (${bad:0:28}...)"
+  else
+    no "T23: a corrupt stamp DEPLOYED via the mtime fallback (${bad:0:28}...)"
+  fi
+done
+
+# ---- T24b. A future-dated stamp (fast RTC, then NTP correction) ----------
+IFS=$'\t' read -r ST CO < <(new_fixture)
+before=$(git -C "$CO" rev-parse HEAD)
+SID=sess-A run_upd "$ST" "$CO"
+witness "$ST" y "$(( $(date +%s) + 8640000 ))"   # 100 days ahead
+SID=sess-B run_upd "$ST" "$CO"
+after=$(git -C "$CO" rev-parse HEAD)
+if [ "$after" = "$before" ] && ! deployed "$ST" && marker_is "$CO" OLD; then
+  ok "T24: a future-dated startup stamp is rejected rather than satisfying gate 3 forever"
+else
+  no "T24: a stamp dated 100 days ahead satisfied gate 3"
+fi
+
+# ---- T25. A witness that has gone SILENT must fall back, not wedge -------
+# witness_available used to be sticky and unbounded: once seen existed, gate 3
+# was armed forever. If the hook then stopped firing (settings.json rewritten,
+# interpreter unresolvable, read-only ~/.claude) the deploy could NEVER
+# resolve, silently -- the MYC-720 silent-drift class this updater fights.
+IFS=$'\t' read -r ST CO < <(new_fixture)
+SID=sess-A run_upd "$ST" "$CO"
+witness "$ST" y none "" 5184000          # seen file 60 days old, no startup stamp
+SID=sess-B run_upd "$ST" "$CO"
+after=$(git -C "$CO" rev-parse HEAD)
+om=$(git -C "$CO" rev-parse origin/main)
+if [ "$after" = "$om" ] && deployed "$ST" && marker_is "$CO" NEW; then
+  ok "T25: a witness silent past ABS_WITNESS_MAX_AGE_DAYS falls back to the two-factor gate instead of wedging forever"
+else
+  no "T25: a silent witness wedged the deploy permanently (head==om:$([ "$after" = "$om" ] && echo y || echo n) deploy:$(deployed "$ST" && echo y || echo n))"
 fi
 
 echo

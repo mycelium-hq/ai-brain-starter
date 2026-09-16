@@ -37,10 +37,10 @@ on ALL of:
   1. session_id differs from the one that staged the pull, AND
   2. at least ABS_UPDATE_MIN_DEPLOY_DELAY_SECONDS (default 300) has passed
      since staging, AND
-  3. when the SessionStart restart witness is available on this install, a
-     source == "startup" was recorded AFTER the pull was staged
-     (hooks/_lib/session_startup_stamp.py, invoked from the SessionStart
-     hook hooks/surface-deployed-hooks-behind.py).
+  3. when the SessionStart restart witness is available on this install, THIS
+     session is itself a source == "startup" session that began AFTER the pull
+     was staged (hooks/_lib/session_startup_stamp.py, invoked from the
+     SessionStart hook hooks/surface-deployed-hooks-behind.py).
 
 Gate 3 is the one that actually answers "did a new process begin". MEASURED
 2026-09-16 against Claude Code 2.1.246/2.1.258 by registering a probe
@@ -68,13 +68,37 @@ auto-compacts WELL PAST the delay used to satisfy both gates and could
 activate mid-conversation. It no longer can, because a compaction does not
 stamp a startup.
 
+Gate 3 asks whether THIS session is the fresh one, not whether SOME startup
+happened since staging. The weaker form was the first implementation and an
+adversarial review broke it: a `claude -p` subprocess emits
+source == "startup" exactly like a real start (measured), and CLAUDE.md makes
+`claude -p` the default path for every build that calls an LLM
+programmatically -- so the long-running compacted session this gate exists to
+stop could satisfy it by shelling out, with no human anywhere. Binding the
+stamp's session_id to the session resolving the deploy closes that, because a
+subprocess stamps its own id and that id never comes back to resolve anything.
+
+The witness is also AGE-BOUNDED (ABS_WITNESS_MAX_AGE_DAYS, default 30). The
+seen file is rewritten on every SessionStart, so a stale one means the witness
+has stopped firing -- settings.json rewritten by another tool, an unresolvable
+interpreter swallowed by hooks.json's `|| echo` fallback, a read-only
+~/.claude. Without the bound, that pins gate 3 shut forever and the update
+silently never lands again, which is the MYC-720 silent-drift class this
+updater exists to fight. Stale witness -> fall back, do not wedge.
+
 The composition only ever ADDS a condition. When the witness is unavailable
--- an older Claude Code whose payload carries no `source`, or an install
-whose settings.json predates the witness being wired -- gate 3 is skipped and
-the behavior is exactly the pre-existing two-factor gate, never weaker. A
-missing, stale, or corrupt stamp can only DELAY a deploy, never trigger one
-early, so there is no input to the witness that makes this less careful than
-it was without it.
+-- an older Claude Code whose payload carries no `source`, an install whose
+settings.json predates the witness, or a witness that has gone silent -- gate
+3 is skipped and the behavior is exactly the pre-existing two-factor gate,
+never weaker.
+
+A missing, stale, or corrupt stamp can only DELAY a deploy, never trigger one
+early. That claim was FALSE in the first implementation and is load-bearing
+here: `_startup_signal` fell back to the stamp's mtime when its JSON would not
+parse, and mtime on a corrupt stamp is always fresher than the staging time,
+so corrupt / null / non-numeric / infinite stamps all PASSED. The mtime
+fallback is gone and values are plausibility-bounded; unparseable now reads
+exactly like absent.
 
 Safety, preserved from the shell version:
   - Pinnable:      ~/.claude/.ai-brain-starter-pinned present => no-op.
@@ -100,7 +124,7 @@ Safety, preserved from the shell version:
 Hermetically testable via env overrides (tests/integration/
 test_ai_brain_auto_update.sh runs through the .sh delegator): ABS_SKILL_DIR,
 ABS_UPDATE_STATE_DIR, ABS_UPDATE_INTERVAL_DAYS, ABS_UPDATE_DEPLOY_TIMEOUT,
-ABS_UPDATE_MIN_DEPLOY_DELAY_SECONDS.
+ABS_UPDATE_MIN_DEPLOY_DELAY_SECONDS, ABS_WITNESS_MAX_AGE_DAYS.
 """
 
 from __future__ import annotations
@@ -394,6 +418,29 @@ def _install_fix_cmd() -> str:
             "--quiet --fail-on-missing")
 
 
+def _witness_max_age() -> float:
+    """Seconds after which a silent witness is treated as NOT wired (F4)."""
+    try:
+        return float(os.environ.get("ABS_WITNESS_MAX_AGE_DAYS", "30")) * 86400
+    except (TypeError, ValueError):
+        return 30 * 86400
+
+
+def _plausible_ts(value) -> "float | None":
+    """A finite, non-future epoch seconds value, or None. Rejects the shapes an
+    adversarial review found passing gate 3: None, "nope", Infinity, and a
+    stamp dated ahead of the clock (fast RTC then an NTP correction)."""
+    try:
+        ts = float(value)
+    except (TypeError, ValueError):
+        return None
+    if ts != ts or ts in (float("inf"), float("-inf")) or ts <= 0:
+        return None
+    if ts > time.time() + 300:   # small allowance for ordinary clock jitter
+        return None
+    return ts
+
+
 # Written by hooks/_lib/session_startup_stamp.py (called from the
 # SessionStart hook hooks/surface-deployed-hooks-behind.py, which already
 # reads that payload -- folded in there rather than added as its own entry so
@@ -405,45 +452,56 @@ SEEN_NAME = ".ai-brain-starter-sessionstart-seen"
 STARTUP_NAME = ".ai-brain-starter-session-startup"
 
 
-def _startup_signal(state: Path) -> "tuple[bool, float | None]":
-    """(witness_available, last_startup_at) -- gate 3's inputs.
+def _startup_signal(state: Path) -> "tuple[bool, float | None, str]":
+    """(witness_available, last_startup_at, last_startup_session) -- gate 3's
+    inputs. See the module docstring for how they compose.
 
     witness_available is True only when the SessionStart stamp has run on this
-    install AND recorded that the harness actually carried a `source` field. Both halves matter: without the first we cannot tell "no restart
-    yet" from "nothing is watching", and without the second an older Claude
-    Code that never emits `source` would look like a machine that never
-    restarts, and would wedge the deploy forever instead of falling back.
+    install RECENTLY and recorded that the harness carried a `source` field.
+    Both halves matter, and so does "recently": without the field check an
+    older Claude Code looks like a machine that never restarts; without the
+    age bound a witness that has STOPPED firing (settings.json rewritten by
+    another tool, an unresolvable interpreter swallowed by hooks.json's
+    `|| echo` fallback, a read-only ~/.claude) pins gate 3 shut forever and
+    the update silently never lands again -- the MYC-720 silent-drift class
+    this updater exists to fight. The seen file is rewritten on EVERY
+    SessionStart, so an old one means the witness is not running, and the
+    honest response is to fall back to the two-factor gate, not to wedge.
 
-    last_startup_at is the wall clock of the most recent source == "startup".
-    Read from the stamp's JSON, falling back to its mtime if the JSON is
-    unreadable (a torn write) -- the file existing at all still evidences a
-    start, and mtime is the conservative reading of when.
+    last_startup_at / last_startup_session are read ONLY from the stamp's
+    JSON. There is deliberately NO mtime fallback: mtime on an unparseable
+    stamp is always FRESHER than the staging time, so falling back to it
+    turned a corrupt file into a PASS -- the exact inversion of this gate's
+    fail-safe direction (an adversarial review measured corrupt / null /
+    non-numeric / infinite stamps all DEPLOYING). A stamp that cannot be
+    parsed now yields None and fails gate 3, like an absent one.
 
-    Every failure path returns a value that WITHHOLDS the deploy rather than
-    granting it: (False, ...) hands the decision back to the pre-existing
-    two-factor gate, and a None timestamp fails gate 3 outright.
+    Values are plausibility-bounded: non-finite and future-dated stamps are
+    discarded. `{"at": Infinity}` otherwise satisfies gate 3 permanently for
+    every future pull, and a backward clock correction after a fast-RTC boot
+    leaves a stamp dated days ahead that does the same.
     """
+    seen_at = None
     available = False
     try:
         info = json.loads((state / SEEN_NAME).read_text(encoding="utf-8"))
-        available = bool(isinstance(info, dict) and info.get("source_present"))
+        if isinstance(info, dict) and info.get("source_present"):
+            seen_at = _plausible_ts(info.get("at"))
+            available = seen_at is not None and (
+                (time.time() - seen_at) <= _witness_max_age())
     except (OSError, ValueError):
         available = False
 
-    stamp = state / STARTUP_NAME
     at = None
+    session = ""
     try:
-        info = json.loads(stamp.read_text(encoding="utf-8"))
-        if isinstance(info, dict) and info.get("at") is not None:
-            at = float(info["at"])
-    except (OSError, ValueError, TypeError):
-        at = None
-    if at is None:
-        try:
-            at = stamp.stat().st_mtime
-        except OSError:
-            at = None
-    return available, at
+        info = json.loads((state / STARTUP_NAME).read_text(encoding="utf-8"))
+        if isinstance(info, dict):
+            at = _plausible_ts(info.get("at"))
+            session = str(info.get("session_id") or "")
+    except (OSError, ValueError):
+        at, session = None, ""
+    return available, at, session
 
 
 def _resolve_pending_deploy(pending: Path, session_id: str, skill: Path,
@@ -491,16 +549,26 @@ def _resolve_pending_deploy(pending: Path, session_id: str, skill: Path,
     # is pinned True, so the expression below collapses to exactly the
     # pre-existing `session_differs and old_enough` gate. It can only ever
     # subtract deploys from that set, never add one.
-    witness_available, last_startup_at = _startup_signal(state)
+    witness_available, last_startup_at, startup_session = _startup_signal(state)
     if not witness_available:
         restarted_since_stage = True
     else:
-        try:
-            restarted_since_stage = (
-                last_startup_at is not None and pulled_at is not None
-                and float(last_startup_at) >= float(pulled_at))
-        except (TypeError, ValueError):
-            restarted_since_stage = False
+        # THIS session must itself be the one that started fresh after the pull
+        # was staged -- not merely "some startup happened since".
+        #
+        # "Some startup happened" is satisfied by ANY new process, including a
+        # `claude -p` subprocess, which emits source == "startup" exactly like a
+        # real start (measured). CLAUDE.md makes `claude -p` the default path
+        # for every build that calls an LLM programmatically, so the
+        # long-running compacted session this gate exists to stop could unblock
+        # its OWN deploy by shelling out -- with no human anywhere. Binding the
+        # stamp's session_id to the resolving session closes that: a subprocess
+        # stamps its own id, and an id that never comes back to resolve a deploy
+        # can never satisfy this.
+        restarted_since_stage = (
+            last_startup_at is not None and pulled_at is not None
+            and last_startup_at >= float(pulled_at)
+            and bool(session_id) and startup_session == session_id)
 
     if not (session_differs and old_enough and restarted_since_stage
             and old_head and new_head):
