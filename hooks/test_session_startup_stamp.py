@@ -73,9 +73,23 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
+        # Every state dir this test creates, recorded as it is made.
+        # The stray-tempfile check below walks THESE, not the tree: a
+        # recursive rglob that reaches a read is exactly what
+        # tests/integration/test_cloud_safe_file_walkers.sh forbids,
+        # because such a walk blocks forever on a cloud-sync placeholder
+        # (Google Drive / iCloud). A test knows the directories it made;
+        # it has no reason to go looking.
+        used: list[Path] = []
+
+        def newdir(name: str) -> Path:
+            d = root / name
+            d.mkdir()
+            used.append(d)
+            return d
 
         # ---- 1. startup stamps -------------------------------------------
-        d = root / "startup"; d.mkdir()
+        d = newdir("startup")
         record({"session_id": "s1", "hook_event_name": "SessionStart",
                 "source": "startup"}, d)
         stamp, seen = read_json(d / STARTUP_NAME), read_json(d / SEEN_NAME)
@@ -88,7 +102,7 @@ def main() -> int:
 
         # ---- 2 + 3. non-startup never stamps, never ADVANCES --------------
         for src in ("resume", "compact", "clear", "fork"):
-            d = root / f"src-{src}"; d.mkdir()
+            d = newdir(f"src-{src}")
             planted = 1000.0
             (d / STARTUP_NAME).write_text(
                 json.dumps({"schema": 1, "at": planted, "session_id": "old"}),
@@ -102,13 +116,13 @@ def main() -> int:
             check(read_json(d / SEEN_NAME) is not None,
                   f"source={src} wrote no seen file")
 
-        d = root / "compact-fresh"; d.mkdir()
+        d = newdir("compact-fresh")
         record({"source": "compact"}, d)
         check(not (d / STARTUP_NAME).exists(),
               "source=compact created a startup stamp on a fresh install")
 
         # ---- 4. absent `source` ------------------------------------------
-        d = root / "nosource"; d.mkdir()
+        d = newdir("nosource")
         record({"session_id": "s3", "hook_event_name": "SessionStart"}, d)
         seen = read_json(d / SEEN_NAME)
         check(isinstance(seen, dict) and seen.get("source_present") is False,
@@ -122,7 +136,7 @@ def main() -> int:
         # ---- 5. malformed payloads ---------------------------------------
         for label, bad in (("None", None), ("list", ["startup"]),
                            ("str", "startup"), ("nested", {"source": {"x": 1}})):
-            d = root / f"bad-{label}"; d.mkdir()
+            d = newdir(f"bad-{label}")
             try:
                 record(bad, d)  # type: ignore[arg-type]
             except Exception as exc:
@@ -132,7 +146,7 @@ def main() -> int:
                   f"payload {label} wrote a startup stamp")
 
         # ---- 6. unwritable state dir -------------------------------------
-        d = root / "ro"; d.mkdir(); os.chmod(d, 0o500)
+        d = newdir("ro"); os.chmod(d, 0o500)
         try:
             record({"source": "startup"}, d)
         except Exception as exc:
@@ -140,12 +154,13 @@ def main() -> int:
         finally:
             os.chmod(d, 0o700)
 
-        strays = [str(p) for p in root.rglob("*.tmp*")]
+        strays = [e.name for d in used for e in d.iterdir()
+                  if ".tmp" in e.name]
         check(not strays, f"left temp files behind: {strays[:3]}")
 
         # ---- 7. ACTIVATION: the host hook actually calls it ---------------
         if HOST.is_file():
-            hd = root / "host"; hd.mkdir()
+            hd = newdir("host")
             home = root / "host-home"; (home / ".claude").mkdir(parents=True)
             env = dict(os.environ)
             env["ABS_UPDATE_STATE_DIR"] = str(hd)
