@@ -1376,6 +1376,11 @@ PY_DIRECT=(
   tests/test_entity_disambiguator_clustering.py
   tests/test_graphify_stage_select_cache_key.py
   tests/test_claude_project_key.py
+  # ReDoS regression for the two git-global-flag scanners in
+  # hooks/session-lock.py (CodeQL py/redos). 4 of its legs fail against
+  # the pre-fix revision, and 12 behaviour legs pin the -C / --git-dir /
+  # $VAR fail-open escapes so the fix cannot quietly tighten the gate.
+  tests/test_session_lock_redos.py
   hooks/test_live_session_reap.py
   hooks/test_relocation_orphan_reclaim.py
   hooks/test_worktree_remove_verifies_side_effect.py
