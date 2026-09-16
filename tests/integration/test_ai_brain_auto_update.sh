@@ -136,10 +136,12 @@ run_upd() {
     OUT="$(printf '{"session_id":"%s"}' "$SID" | \
           ABS_UPDATE_STATE_DIR="$1" ABS_SKILL_DIR="$2" ABS_UPDATE_INTERVAL_DAYS="${INTERVAL:-0}" \
           ABS_UPDATE_DEPLOY_TIMEOUT=30 ABS_UPDATE_MIN_DEPLOY_DELAY_SECONDS="${MINDELAY:-0}" \
+          ABS_UPDATE_NON_INTERACTIVE="${NONINT:-}" \
           bash "$SCRIPT" 2>/dev/null)"
   else
     OUT="$(ABS_UPDATE_STATE_DIR="$1" ABS_SKILL_DIR="$2" ABS_UPDATE_INTERVAL_DAYS="${INTERVAL:-0}" \
           ABS_UPDATE_DEPLOY_TIMEOUT=30 ABS_UPDATE_MIN_DEPLOY_DELAY_SECONDS="${MINDELAY:-0}" \
+          ABS_UPDATE_NON_INTERACTIVE="${NONINT:-}" \
           bash "$SCRIPT" < /dev/null 2>/dev/null)"
   fi
 }
@@ -791,6 +793,43 @@ if [ "$after" = "$om" ] && deployed "$ST" && marker_is "$CO" NEW; then
   ok "T25: a witness silent past ABS_WITNESS_MAX_AGE_DAYS falls back to the two-factor gate instead of wedging forever"
 else
   no "T25: a silent witness wedged the deploy permanently (head==om:$([ "$after" = "$om" ] && echo y || echo n) deploy:$(deployed "$ST" && echo y || echo n))"
+fi
+
+# ---- T26. A NON-INTERACTIVE session never resolves a deploy (gate 4) -----
+# MEASURED 2026-09-16: `claude -p` fires BOTH SessionStart (source=="startup")
+# AND UserPromptSubmit under its own fresh session_id, so a print-mode
+# subprocess satisfies gates 1-3 BY ITSELF and would merge on behalf of the
+# long-running parent that spawned it -- which then runs the new code without
+# ever restarting. This is the `claude -p` hole in its second shape: gate 3's
+# session binding stops the parent BORROWING the child's stamp, but cannot stop
+# the CHILD deploying. Nothing in the payload distinguishes print mode, so the
+# caller declares it.
+IFS=$'\t' read -r ST CO < <(new_fixture)
+before=$(git -C "$CO" rev-parse HEAD)
+SID=sess-A run_upd "$ST" "$CO"                    # long-running session stages
+witness "$ST" y "$(( $(date +%s) + 5 ))" sess-P   # the subprocess's OWN startup
+NONINT=1 SID=sess-P run_upd "$ST" "$CO"           # ...resolving as itself
+after=$(git -C "$CO" rev-parse HEAD)
+if [ "$after" = "$before" ] && ! deployed "$ST" && pending "$ST" && marker_is "$CO" OLD; then
+  ok "T26: a declared non-interactive session does not resolve a deploy, even though gates 1-3 all clear for it"
+else
+  no "T26: a programmatic session merged on a human's behalf (deploy:$(deployed "$ST" && echo y || echo n) marker:$(marker_is "$CO" NEW && echo NEW || echo OLD))"
+fi
+
+# ---- T26b. ...and the SAME setup WITHOUT the flag still deploys ----------
+# Matched pair: proves T26 is gated on the declaration, not on something else
+# in the fixture, and documents the RESIDUAL -- a programmatic caller that does
+# not declare itself can still resolve a deploy.
+IFS=$'\t' read -r ST CO < <(new_fixture)
+SID=sess-A run_upd "$ST" "$CO"
+witness "$ST" y "$(( $(date +%s) + 5 ))" sess-P
+SID=sess-P run_upd "$ST" "$CO"
+after=$(git -C "$CO" rev-parse HEAD)
+om=$(git -C "$CO" rev-parse origin/main)
+if [ "$after" = "$om" ] && deployed "$ST"; then
+  ok "T26b: without the declaration the same session DOES deploy -- T26 is gated on gate 4, and this is the stated residual"
+else
+  no "T26b: control failed -- T26 may pass for an unrelated reason (head==om:$([ "$after" = "$om" ] && echo y || echo n))"
 fi
 
 echo

@@ -40,7 +40,20 @@ on ALL of:
   3. when the SessionStart restart witness is available on this install, THIS
      session is itself a source == "startup" session that began AFTER the pull
      was staged (hooks/_lib/session_startup_stamp.py, invoked from the
-     SessionStart hook hooks/surface-deployed-hooks-behind.py).
+     SessionStart hook hooks/surface-deployed-hooks-behind.py), AND
+  4. ABS_UPDATE_NON_INTERACTIVE is not set -- a programmatic session never
+     resolves a deploy on a human's behalf.
+
+Gate 4 exists because gate 3 alone is not enough. MEASURED 2026-09-16:
+`claude -p` fires BOTH SessionStart (source == "startup") AND
+UserPromptSubmit, under its own fresh session_id -- so a print-mode subprocess
+satisfies gates 1-3 by itself and would merge for the long-running parent that
+spawned it, which then runs the new code without ever restarting. Nothing in
+the hook payload distinguishes print mode (CLAUDE_CODE_ENTRYPOINT is inherited
+from the spawner; `[ -t 0 ]` is always false for a hook fed JSON on stdin), so
+the caller declares it instead. RESIDUAL, stated plainly: a programmatic
+caller that does NOT set it is still able to resolve a deploy. Any tool in
+this ecosystem that shells out to Claude should set it.
 
 Gate 3 is the one that actually answers "did a new process begin". MEASURED
 2026-09-16 against Claude Code 2.1.246/2.1.258 by registering a probe
@@ -124,7 +137,8 @@ Safety, preserved from the shell version:
 Hermetically testable via env overrides (tests/integration/
 test_ai_brain_auto_update.sh runs through the .sh delegator): ABS_SKILL_DIR,
 ABS_UPDATE_STATE_DIR, ABS_UPDATE_INTERVAL_DAYS, ABS_UPDATE_DEPLOY_TIMEOUT,
-ABS_UPDATE_MIN_DEPLOY_DELAY_SECONDS, ABS_WITNESS_MAX_AGE_DAYS.
+ABS_UPDATE_MIN_DEPLOY_DELAY_SECONDS, ABS_WITNESS_MAX_AGE_DAYS,
+ABS_UPDATE_NON_INTERACTIVE.
 """
 
 from __future__ import annotations
@@ -744,6 +758,29 @@ def run() -> None:
         # resolved or not (see its docstring for why falling through would
         # risk overwriting the staged record with a second, undelayed batch).
         if pending.exists():
+            # A NON-INTERACTIVE session must never resolve a deploy (gate 4).
+            # MEASURED 2026-09-16: `claude -p` fires BOTH SessionStart (with
+            # source == "startup") AND UserPromptSubmit, in its own fresh
+            # session_id. So a print-mode subprocess satisfies gates 1-3 by
+            # itself -- it IS a genuinely new process, and it IS the session
+            # resolving the deploy -- and it would merge on behalf of the
+            # long-running parent that spawned it. The parent then runs the new
+            # code on its next hook event, having never restarted: the original
+            # defect, one hop removed. Gate 3's session binding stops the parent
+            # borrowing the child's stamp; it cannot stop the child deploying.
+            #
+            # Nothing in the payload distinguishes print mode (measured:
+            # CLAUDE_CODE_ENTRYPOINT is INHERITED from the spawning process, and
+            # `[ -t 0 ]` is always false for a hook, which is fed JSON on
+            # stdin). So the caller declares it. Any tool that spawns Claude
+            # programmatically sets this; the deploy then waits for a session a
+            # human is actually sitting in.
+            #
+            # Exits silently rather than falling through: the fetch/stage path
+            # below would overwrite `pending`'s old_head/session_id record with
+            # a second, never-delayed batch (see _resolve_pending_deploy).
+            if (os.environ.get("ABS_UPDATE_NON_INTERACTIVE") or "").strip() not in ("", "0"):
+                silent()
             _resolve_pending_deploy(pending, session_id, skill, last_ok,
                                      deploy_timeout, min_deploy_delay, state)
 
