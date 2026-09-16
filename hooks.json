@@ -372,6 +372,16 @@
             "statusMessage": "Self-healing the /journal Step-0 context guard (registration + vault preflight)..."
           }
         ]
+      },
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/mark-session-startup.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "statusMessage": "Recording a genuine session start (auto-update deploy gate)..."
+          }
+        ]
       }
     ],
     "SessionEnd": [

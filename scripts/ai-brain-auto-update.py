@@ -32,34 +32,48 @@ not rev-parse, not merge-base, not status, not log). When a new commit is
 found, this STAGES it (records old/new HEAD + which session_id found it) and
 does NOT merge. The merge -- the step that actually rewrites files hook
 commands read directly -- runs only from `_resolve_pending_deploy()`, gated
-on BOTH of:
+on ALL of:
 
   1. session_id differs from the one that staged the pull, AND
   2. at least ABS_UPDATE_MIN_DEPLOY_DELAY_SECONDS (default 300) has passed
-     since staging.
+     since staging, AND
+  3. when the SessionStart restart witness is available on this install, a
+     source == "startup" was recorded AFTER the pull was staged
+     (hooks/mark-session-startup.py).
 
-Why both, not just (1): Claude Code does not publicly document whether
-session_id survives auto-compaction or `--resume` unchanged within what a
-user experiences as one continuous conversation (research for this fix found
-no guarantee either way). This repo's own docs/adr/0005 measured SessionStart
-firing once per "session-segment" -- startup AND EACH resume/compaction --
-so the harness already treats compaction as *some* kind of boundary; whether
-that boundary is a genuine restart (an opportunity for review) or just an
-internal context-management event is exactly what could not be settled from
-documentation or this harness's behavior. hooks/session-lock.py's own
-docstring records the other candidate signal -- process identity -- as a
-dead end here: "each hook invocation is a fresh, instantly-exiting process",
-so there is no long-lived session PID to anchor a second check to. Given
-that, (2) is the one signal available that changes only with real elapsed
-time, not with any in-conversation event: it does not prove a restart
-happened, but it does guarantee the ORIGINAL exploit shape -- "the next hook
-event in the same session, seconds later, runs the new code" -- cannot recur,
-because seconds can no longer satisfy a minutes-long minimum. A single very
-long-running session that happens to auto-compact well past the delay could
-still slip through on session_id alone; that residual gap is real, is not
-closed here, and the robust close (gate on SessionStart's own documented
-`source` field, once a hook exists on that event to read it) is tracked as a
-follow-up, not folded into this fix.
+Gate 3 is the one that actually answers "did a new process begin". MEASURED
+2026-09-16 against Claude Code 2.1.246/2.1.258 by registering a probe
+SessionStart hook under a sandboxed HOME and reading the bytes it received:
+the payload carries `"source":"startup"`, and a SessionStart `matcher` both
+fires on the value it names and FILTERS the ones it does not (a
+"matcher":"compact" block did not fire on a startup; an unmatched block and a
+"matcher":"startup" block both did, byte-identically). Only `startup` is
+trusted -- `fork` is also a new process but inherits the parent conversation,
+so it is not the "a human could have intervened" boundary this gate is about.
+
+Gates 1 and 2 are RETAINED, not replaced, and that is deliberate. session_id
+alone was never sufficient: this repo's own docs/adr/0005 measured
+SessionStart firing once per "session-segment" -- startup AND EACH
+resume/compaction -- so the harness treats compaction as some kind of
+boundary, and hooks/session-lock.py's docstring rules out the other candidate
+signal, process identity ("each hook invocation is a fresh, instantly-exiting
+process"). The elapsed-time minimum guarantees the ORIGINAL exploit shape
+("the next hook event in the same session, seconds later, runs the new
+code") cannot recur.
+
+What gate 3 adds is the case gate 2 could not cover, and which this file
+previously documented as an open residual: a long-running session that
+auto-compacts WELL PAST the delay used to satisfy both gates and could
+activate mid-conversation. It no longer can, because a compaction does not
+stamp a startup.
+
+The composition only ever ADDS a condition. When the witness is unavailable
+-- an older Claude Code whose payload carries no `source`, or an install
+whose settings.json predates the witness being wired -- gate 3 is skipped and
+the behavior is exactly the pre-existing two-factor gate, never weaker. A
+missing, stale, or corrupt stamp can only DELAY a deploy, never trigger one
+early, so there is no input to the witness that makes this less careful than
+it was without it.
 
 Safety, preserved from the shell version:
   - Pinnable:      ~/.claude/.ai-brain-starter-pinned present => no-op.
@@ -379,9 +393,59 @@ def _install_fix_cmd() -> str:
             "--quiet --fail-on-missing")
 
 
+# Written by hooks/mark-session-startup.py. Names duplicated rather than
+# imported: this script must keep working via the standalone .sh delegator on
+# installs that predate hooks/_lib, and a missing import must never break the
+# update that would fix it (same reasoning as _read_session_id).
+SEEN_NAME = ".ai-brain-starter-sessionstart-seen"
+STARTUP_NAME = ".ai-brain-starter-session-startup"
+
+
+def _startup_signal(state: Path) -> "tuple[bool, float | None]":
+    """(witness_available, last_startup_at) -- gate 3's inputs.
+
+    witness_available is True only when hooks/mark-session-startup.py has run
+    on this install AND recorded that the harness actually carried a `source`
+    field. Both halves matter: without the first we cannot tell "no restart
+    yet" from "nothing is watching", and without the second an older Claude
+    Code that never emits `source` would look like a machine that never
+    restarts, and would wedge the deploy forever instead of falling back.
+
+    last_startup_at is the wall clock of the most recent source == "startup".
+    Read from the stamp's JSON, falling back to its mtime if the JSON is
+    unreadable (a torn write) -- the file existing at all still evidences a
+    start, and mtime is the conservative reading of when.
+
+    Every failure path returns a value that WITHHOLDS the deploy rather than
+    granting it: (False, ...) hands the decision back to the pre-existing
+    two-factor gate, and a None timestamp fails gate 3 outright.
+    """
+    available = False
+    try:
+        info = json.loads((state / SEEN_NAME).read_text(encoding="utf-8"))
+        available = bool(isinstance(info, dict) and info.get("source_present"))
+    except (OSError, ValueError):
+        available = False
+
+    stamp = state / STARTUP_NAME
+    at = None
+    try:
+        info = json.loads(stamp.read_text(encoding="utf-8"))
+        if isinstance(info, dict) and info.get("at") is not None:
+            at = float(info["at"])
+    except (OSError, ValueError, TypeError):
+        at = None
+    if at is None:
+        try:
+            at = stamp.stat().st_mtime
+        except OSError:
+            at = None
+    return available, at
+
+
 def _resolve_pending_deploy(pending: Path, session_id: str, skill: Path,
                              last_ok: Path, deploy_timeout: float,
-                             min_deploy_delay: float) -> None:
+                             min_deploy_delay: float, state: Path) -> None:
     """Finish a deploy a PRIOR invocation staged (MYC-4704 gate e6). ALWAYS
     exits the process (via emit_ctx or silent()) -- the caller holds the
     single-flight lock and must never fall through to a fresh fetch/stage
@@ -389,11 +453,14 @@ def _resolve_pending_deploy(pending: Path, session_id: str, skill: Path,
     or not (that would risk clobbering `pending`'s old_head/session_id
     record with a second, never-delayed batch of commits).
 
-    Gated on BOTH: a differing session_id, and a minimum elapsed time since
-    staging. See the module docstring for why neither is trusted alone.
+    Gated on ALL of: a differing session_id, a minimum elapsed time since
+    staging, and -- when the SessionStart restart witness is available on this
+    install -- a source == "startup" recorded AFTER staging. See the module
+    docstring for why the first two are not trusted alone, and why adding the
+    third can never make this weaker than it was without it.
 
-    Same-session, unresolvable, or too-soon -> stays silent and pending,
-    deliberately (no emit_ctx) -- re-announcing "still waiting" every turn
+    Same-session, unresolvable, too-soon, or no restart witnessed since
+    staging -> stays silent and pending, deliberately (no emit_ctx) -- re-announcing "still waiting" every turn
     would rebuild the exact recurring-nag pattern ADR-0003 retired the
     email gate for.
     """
@@ -417,10 +484,26 @@ def _resolve_pending_deploy(pending: Path, session_id: str, skill: Path,
     except (TypeError, ValueError):
         old_enough = False
 
-    if not (session_differs and old_enough and old_head and new_head):
+    # Gate 3. MONOTONE BY CONSTRUCTION: when the witness is unavailable this
+    # is pinned True, so the expression below collapses to exactly the
+    # pre-existing `session_differs and old_enough` gate. It can only ever
+    # subtract deploys from that set, never add one.
+    witness_available, last_startup_at = _startup_signal(state)
+    if not witness_available:
+        restarted_since_stage = True
+    else:
+        try:
+            restarted_since_stage = (
+                last_startup_at is not None and pulled_at is not None
+                and float(last_startup_at) >= float(pulled_at))
+        except (TypeError, ValueError):
+            restarted_since_stage = False
+
+    if not (session_differs and old_enough and restarted_since_stage
+            and old_head and new_head):
         silent()
 
-    # Both gates cleared. Merge to the EXACT sha staged, never a moving
+    # All gates cleared. Merge to the EXACT sha staged, never a moving
     # `origin/main` -- deploying whatever origin has become BY NOW would
     # activate a second batch of commits that were never staged or delayed
     # at all, reopening this same bug for that batch.
@@ -591,7 +674,7 @@ def run() -> None:
         # risk overwriting the staged record with a second, undelayed batch).
         if pending.exists():
             _resolve_pending_deploy(pending, session_id, skill, last_ok,
-                                     deploy_timeout, min_deploy_delay)
+                                     deploy_timeout, min_deploy_delay, state)
 
         # 2. Reclaim abandoned git locks BEFORE the rate limit (MYC-3175
         # recurrence, 2026-07-23). Healing used to sit after the rate limit,

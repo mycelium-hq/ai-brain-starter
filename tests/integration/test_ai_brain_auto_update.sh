@@ -606,6 +606,111 @@ else
   no "T16: structural redaction guard (live=$T16REAL expected 0; planted=$T16PLANTED expected 2)"
 fi
 
+# ==========================================================================
+# T17-T21. GATE 3: the SessionStart restart witness (MYC-4704 follow-up).
+#
+# Gates 1+2 (differing session_id, elapsed time) could not tell a genuine
+# restart from a long session that auto-compacted past the delay -- the
+# residual the updater's docstring used to declare open. hooks/mark-session-
+# startup.py stamps ONLY on a SessionStart payload carrying source=="startup"
+# (measured shape, 2026-09-16), and the updater now also requires that stamp
+# to be NEWER than the moment it staged the pull.
+#
+# T17/T18 are a MATCHED PAIR: identical setup, both with a differing
+# session_id and MINDELAY=0 so gates 1+2 are satisfied in BOTH. The single
+# variable is whether the witnessed start happened before or after staging.
+# That isolates gate 3 -- neither test can pass for an unrelated reason.
+# ==========================================================================
+
+# $1=state  $2=source_present(y|n)  $3=startup stamp `at`, or "none" for no stamp
+witness() {
+  if [ "$2" = "y" ]; then
+    printf '{"schema":1,"at":%s,"source":"startup","source_present":true,"session_id":"w"}' \
+      "$(date +%s)" > "$1/.ai-brain-starter-sessionstart-seen"
+  else
+    printf '{"schema":1,"at":%s,"source":"","source_present":false,"session_id":"w"}' \
+      "$(date +%s)" > "$1/.ai-brain-starter-sessionstart-seen"
+  fi
+  if [ "$3" != "none" ]; then
+    printf '{"schema":1,"at":%s,"session_id":"w"}' "$3" > "$1/.ai-brain-starter-session-startup"
+  fi
+}
+
+# ---- T17. Witness available, last start PREDATES staging -> NO deploy -----
+# This is the compaction case. Against the pre-gate-3 code this DEPLOYS
+# (both old gates clear), which is the RED this test pivots on.
+IFS=$'\t' read -r ST CO < <(new_fixture)
+before=$(git -C "$CO" rev-parse HEAD)
+SID=sess-A run_upd "$ST" "$CO"          # stage
+witness "$ST" y 1000                    # a start, but long BEFORE the staging
+SID=sess-B run_upd "$ST" "$CO"          # different session, MINDELAY=0
+after=$(git -C "$CO" rev-parse HEAD)
+if [ "$after" = "$before" ] && ! deployed "$ST" && pending "$ST" && marker_is "$CO" OLD; then
+  ok "T17: witness available but no start since staging -> deferred even though session_id differs AND the elapsed-time gate clears"
+else
+  no "T17: deployed without a restart witnessed since staging (head-unchanged:$([ "$after" = "$before" ] && echo y || echo n) deploy:$(deployed "$ST" && echo y || echo n) marker:$(marker_is "$CO" NEW && echo NEW || echo OLD))"
+fi
+
+# ---- T18. Same setup, start POSTDATES staging -> activates ---------------
+# +5s margin: pulled_at is a float time.time(); `date +%s` truncates to the
+# second, so an unpadded stamp can land microseconds BEHIND staging and flake.
+IFS=$'\t' read -r ST CO < <(new_fixture)
+SID=sess-A run_upd "$ST" "$CO"
+witness "$ST" y "$(( $(date +%s) + 5 ))"
+SID=sess-B run_upd "$ST" "$CO"
+after=$(git -C "$CO" rev-parse HEAD)
+om=$(git -C "$CO" rev-parse origin/main)
+if [ "$after" = "$om" ] && deployed "$ST" && ! pending "$ST" && marker_is "$CO" NEW; then
+  ok "T18: a witnessed start AFTER staging activates the deferred merge (REACH preserved under gate 3)"
+else
+  no "T18: a genuine restart did not activate (head==om:$([ "$after" = "$om" ] && echo y || echo n) deploy:$(deployed "$ST" && echo y || echo n) marker:$(marker_is "$CO" NEW && echo NEW || echo OLD))"
+fi
+
+# ---- T19. No witness at all -> pre-existing two-factor gate, unchanged ----
+# The no-regression assertion: an install whose settings.json predates the
+# witness must behave EXACTLY as before, not wedge forever waiting for a
+# stamp nothing writes.
+IFS=$'\t' read -r ST CO < <(new_fixture)
+SID=sess-A run_upd "$ST" "$CO"
+SID=sess-B run_upd "$ST" "$CO"          # no witness files written at all
+after=$(git -C "$CO" rev-parse HEAD)
+om=$(git -C "$CO" rev-parse origin/main)
+if [ "$after" = "$om" ] && deployed "$ST" && ! pending "$ST" && marker_is "$CO" NEW; then
+  ok "T19: with no witness wired, the legacy two-factor gate still activates -- gate 3 adds no deadlock"
+else
+  no "T19: an install with no witness wedged (head==om:$([ "$after" = "$om" ] && echo y || echo n) deploy:$(deployed "$ST" && echo y || echo n))"
+fi
+
+# ---- T20. Witness fired but harness carries no `source` -> fall back ------
+# An older Claude Code. source_present=false must read as "unusable signal"
+# and hand the decision back to gates 1+2, NOT as "never restarted".
+IFS=$'\t' read -r ST CO < <(new_fixture)
+SID=sess-A run_upd "$ST" "$CO"
+witness "$ST" n none
+SID=sess-B run_upd "$ST" "$CO"
+after=$(git -C "$CO" rev-parse HEAD)
+om=$(git -C "$CO" rev-parse origin/main)
+if [ "$after" = "$om" ] && deployed "$ST" && ! pending "$ST" && marker_is "$CO" NEW; then
+  ok "T20: a harness that emits no source falls back to the two-factor gate instead of wedging"
+else
+  no "T20: source_present=false wedged the deploy (head==om:$([ "$after" = "$om" ] && echo y || echo n) deploy:$(deployed "$ST" && echo y || echo n))"
+fi
+
+# ---- T21. Witness available, no startup stamp ever -> NO deploy ----------
+# Distinct from T20: the field EXISTS on this harness, so absence of a stamp
+# is real evidence of "no restart", not a missing capability.
+IFS=$'\t' read -r ST CO < <(new_fixture)
+before=$(git -C "$CO" rev-parse HEAD)
+SID=sess-A run_upd "$ST" "$CO"
+witness "$ST" y none
+SID=sess-B run_upd "$ST" "$CO"
+after=$(git -C "$CO" rev-parse HEAD)
+if [ "$after" = "$before" ] && ! deployed "$ST" && pending "$ST" && marker_is "$CO" OLD; then
+  ok "T21: witness live with no start ever recorded -> deferred, not treated as a restart"
+else
+  no "T21: deployed with the witness live and no start recorded (deploy:$(deployed "$ST" && echo y || echo n))"
+fi
+
 echo
 echo "test_ai_brain_auto_update: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ] || exit 1

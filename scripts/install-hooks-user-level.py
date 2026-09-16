@@ -155,6 +155,11 @@ ABS_FINGERPRINTS = [
     # .py; it stays in this list so uninstall still recognizes it.
     "ai-brain-starter/scripts/ai-brain-auto-update.sh",
     "ai-brain-starter/scripts/ai-brain-auto-update.py",
+    # Restart witness for the auto-updater's deferred deploy (MYC-4704
+    # follow-up). Wired on SessionStart with "matcher": "startup"; the
+    # updater refuses to merge a staged pull until this has stamped a
+    # start LATER than the staging. Owned so a re-install dedups it.
+    "ai-brain-starter/hooks/mark-session-startup.py",
     # Worktree-lifecycle hooks (cleanup + footprint observability):
     "ai-brain-starter/hooks/snapshot-pending-work-on-stop.py",
     "ai-brain-starter/hooks/surface-orphan-worktree-snapshots.py",
@@ -283,6 +288,7 @@ ABS_OWNED_BASENAMES = {
     "inject-love-language-context.py", "inject-meeting-workflow-on-trigger.py",
     "session-end-hook.sh", "email-gate-hook.py", "graph-context-hook.sh",
     "post-update-email-ask.py", "ai-brain-auto-update.sh", "ai-brain-auto-update.py",
+    "mark-session-startup.py",
     "snapshot-pending-work-on-stop.py", "surface-orphan-worktree-snapshots.py",
     "remove-ended-worktree.py", "enforce-worktree-cap.py",
     "worktree-footprint-signal.py", "remediate-runaway-procs.py",
