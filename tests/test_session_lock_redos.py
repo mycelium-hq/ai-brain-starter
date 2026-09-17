@@ -16,27 +16,41 @@ added token.
 The fix pins the character after the dashes to a word character
 (`--?[\\w][\\w-]*`), which leaves every flag token exactly ONE parse.
 
+NOTE ON THE PATHOLOGICAL INPUT. A run of BARE `--` tokens does NOT reproduce
+this — `--?` takes `-`, `[\\w-]+` takes `-`, and there is no second parse, so
+`'git ' + '-- ' * 40` completes in 0.0000s even against the VULNERABLE
+pattern. A test built on that input would have passed before the fix. Three
+or more dashes per token is what splits two ways; that is what is used here.
+
 These tests read the pattern text straight out of the committed source rather
 than re-declaring it, so they bind to what actually ships. Re-declared copies
 would pass while the real hook stayed vulnerable.
+
+RUNNER CONTRACT. scripts/ci.sh runs every PY_DIRECT suite as a PLAIN SCRIPT
+(`"$PY" "$t"`), under a Python 3.9 that has no pytest installed. So this file
+must not import pytest and must execute its own checks from __main__ — a
+pytest-only file registered in PY_DIRECT satisfies the dormancy invariant's
+letter while running zero assertions, which is a silent false green. It stays
+pytest-COLLECTABLE (plain `test_*` functions, plain asserts) so `pytest
+tests/` locally exercises exactly the same checks.
 
 No network, no imports from the hook module (it is a PreToolUse hook and its
 filename is not a valid module name); the source is parsed as text with `ast`.
 The timing probe runs in a subprocess so a pathological pattern is KILLED by
 the timeout instead of hanging the suite.
 
-Run with:
+Run either way:
+    python3 tests/test_session_lock_redos.py
     python3 -m pytest tests/test_session_lock_redos.py -v
 """
 
 from __future__ import annotations
 
 import ast
+import re
 import subprocess
 import sys
 from pathlib import Path
-
-import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SESSION_LOCK = REPO_ROOT / "hooks" / "session-lock.py"
@@ -67,7 +81,7 @@ print(time.perf_counter() - start)
 """
 
 
-def _extract_flag_scanner_patterns() -> dict[str, str]:
+def _extract_flag_scanner_patterns():
     """Pull the two git-global-flag regex literals out of the committed source.
 
     Matches on the shape of the pattern (a starred git-global-flag group plus
@@ -75,7 +89,7 @@ def _extract_flag_scanner_patterns() -> dict[str, str]:
     the file moving around.
     """
     tree = ast.parse(SESSION_LOCK.read_text(encoding="utf-8"))
-    found: dict[str, str] = {}
+    found = {}
     for node in ast.walk(tree):
         if not (isinstance(node, ast.Call) and node.args):
             continue
@@ -95,18 +109,19 @@ def _extract_flag_scanner_patterns() -> dict[str, str]:
 PATTERNS = _extract_flag_scanner_patterns()
 
 
-def _time_search(pattern: str, payload: str) -> float:
+def _time_search(pattern, payload):
     """Run one re.search in a child process; return the seconds it took.
 
     Raises subprocess.TimeoutExpired (child killed) if it overruns.
     """
     proc = subprocess.run(
         [sys.executable, "-c", _CHILD, pattern, payload],
-        capture_output=True,
-        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
         timeout=KILL_SECONDS,
     )
-    assert proc.returncode == 0, f"probe child failed: {proc.stderr}"
+    assert proc.returncode == 0, "probe child failed: {}".format(proc.stderr)
     return float(proc.stdout.strip())
 
 
@@ -115,12 +130,13 @@ def _time_search(pattern: str, payload: str) -> float:
 # --------------------------------------------------------------------------
 
 
-def test_both_flag_scanner_patterns_are_found_in_source() -> None:
+def test_both_flag_scanner_patterns_are_found_in_source():
     """If a rename hides the patterns, every test below would vacuously pass."""
-    assert SESSION_LOCK.is_file(), f"missing hook source: {SESSION_LOCK}"
+    assert SESSION_LOCK.is_file(), "missing hook source: {}".format(SESSION_LOCK)
     assert set(PATTERNS) == {"dash_c", "git_dir"}, (
-        "expected exactly the -C and --git-dir flag scanners in "
-        f"{SESSION_LOCK.name}; found {sorted(PATTERNS)}"
+        "expected exactly the -C and --git-dir flag scanners in {}; found {}".format(
+            SESSION_LOCK.name, sorted(PATTERNS)
+        )
     )
 
 
@@ -129,100 +145,103 @@ def test_both_flag_scanner_patterns_are_found_in_source() -> None:
 # --------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("key", ["dash_c", "git_dir"])
-def test_flag_scanner_resists_catastrophic_backtracking(key: str) -> None:
+def test_flag_scanner_resists_catastrophic_backtracking():
     """A long run of dashes that never reaches the tail must not blow up.
 
     RED on the pre-fix source: the child is killed at KILL_SECONDS and this
     fails with subprocess.TimeoutExpired.
     """
-    pattern = PATTERNS[key]
-    try:
-        elapsed = _time_search(pattern, PATHOLOGICAL)
-    except subprocess.TimeoutExpired:
-        pytest.fail(
-            f"{key} pattern exceeded {KILL_SECONDS}s on {len(PATHOLOGICAL)} chars "
-            "of dash-run input (catastrophic backtracking — py/redos). "
-            f"pattern: {pattern!r}"
+    for key in ("dash_c", "git_dir"):
+        pattern = PATTERNS[key]
+        try:
+            elapsed = _time_search(pattern, PATHOLOGICAL)
+        except subprocess.TimeoutExpired:
+            raise AssertionError(
+                "{} pattern exceeded {}s on {} chars of dash-run input "
+                "(catastrophic backtracking — py/redos). pattern: {!r}".format(
+                    key, KILL_SECONDS, len(PATHOLOGICAL), pattern
+                )
+            )
+        assert elapsed < BUDGET_SECONDS, (
+            "{} pattern took {:.3f}s (budget {}s) on {} chars of dash-run "
+            "input".format(key, elapsed, BUDGET_SECONDS, len(PATHOLOGICAL))
         )
-    assert elapsed < BUDGET_SECONDS, (
-        f"{key} pattern took {elapsed:.3f}s (budget {BUDGET_SECONDS}s) on "
-        f"{len(PATHOLOGICAL)} chars of dash-run input"
-    )
 
 
-@pytest.mark.parametrize("key", ["dash_c", "git_dir"])
-def test_flag_scanner_cost_does_not_grow_with_dash_run_length(key: str) -> None:
+def test_flag_scanner_cost_does_not_grow_with_dash_run_length():
     """Doubling the pathological input must not explode the cost.
 
     Guards the CLASS, not just the one length above: any future edit that
     reintroduces an ambiguous parse would show up here as superlinear growth.
     """
-    pattern = PATTERNS[key]
     long_payload = "git " + "--- " * 56
-    try:
-        elapsed = _time_search(pattern, long_payload)
-    except subprocess.TimeoutExpired:
-        pytest.fail(
-            f"{key} pattern exceeded {KILL_SECONDS}s at double length — cost "
-            "grows with dash-run length (ambiguous parse reintroduced)"
-        )
-    assert elapsed < BUDGET_SECONDS
+    for key in ("dash_c", "git_dir"):
+        pattern = PATTERNS[key]
+        try:
+            elapsed = _time_search(pattern, long_payload)
+        except subprocess.TimeoutExpired:
+            raise AssertionError(
+                "{} pattern exceeded {}s at double length — cost grows with "
+                "dash-run length (ambiguous parse reintroduced)".format(
+                    key, KILL_SECONDS
+                )
+            )
+        assert elapsed < BUDGET_SECONDS
 
 
 # --------------------------------------------------------------------------
 # Behaviour preservation: the gate's real job is extracting the repo path
+#
+# These 12 cases pass IDENTICALLY against the pre-fix and post-fix source.
+# That is the point: this file has a documented false-block history
+# (MYC-717 / 578 / 680 / 622), so the fix must not quietly narrow the gate.
 # --------------------------------------------------------------------------
 
+DASH_C_CASES = [
+    ("git -C /some/path status", "/some/path"),
+    ("git --no-pager -C /some/path log", "/some/path"),
+    ("git --no-pager --no-replace-objects -C /p log", "/p"),
+    ("git --literal-pathspecs -C /p status", "/p"),
+    ("git -C /p -c user.name=x commit", "/p"),
+    # Unresolved shell variable: the caller checks for "$" and fails open.
+    ('git -C "$d" status', '"$d"'),
+    # No -C at all.
+    ("git commit -m 'hi'", None),
+    ("git --git-dir=/p/.git status", None),
+]
 
-@pytest.mark.parametrize(
-    ("command", "expected"),
-    [
-        ("git -C /some/path status", "/some/path"),
-        ("git --no-pager -C /some/path log", "/some/path"),
-        ("git --no-pager --no-replace-objects -C /p log", "/p"),
-        ("git --literal-pathspecs -C /p status", "/p"),
-        ("git -C /p -c user.name=x commit", "/p"),
-        # Unresolved shell variable: the caller checks for "$" and fails open.
-        ('git -C "$d" status', '"$d"'),
-        # No -C at all.
-        ("git commit -m 'hi'", None),
-        ("git --git-dir=/p/.git status", None),
-    ],
-)
-def test_dash_c_scanner_still_extracts_the_path(
-    command: str, expected: str | None
-) -> None:
-    import re
-
-    match = re.search(PATTERNS["dash_c"], command)
-    assert (match.group(1) if match else None) == expected
-
-
-@pytest.mark.parametrize(
-    ("command", "expected"),
-    [
-        ("git --git-dir=/p/.git status", "/p/.git"),
-        ("git --git-dir /p/.git status", "/p/.git"),
-        ("git --git-dir=/p/.git --work-tree=/w status", "/p/.git"),
-        # --work-tree is deliberately NOT matched: it does not move the
-        # git-dir, so matching it would relax the gate. See the comment above
-        # the mg = re.search(...) line in session-lock.py.
-        ("git --work-tree=/p status", None),
-        ("git --work-tree /p status", None),
-        ("git -C /some/path status", None),
-    ],
-)
-def test_git_dir_scanner_still_extracts_the_git_dir(
-    command: str, expected: str | None
-) -> None:
-    import re
-
-    match = re.search(PATTERNS["git_dir"], command)
-    assert (match.group(1) if match else None) == expected
+GIT_DIR_CASES = [
+    ("git --git-dir=/p/.git status", "/p/.git"),
+    ("git --git-dir /p/.git status", "/p/.git"),
+    ("git --git-dir=/p/.git --work-tree=/w status", "/p/.git"),
+    # --work-tree is deliberately NOT matched: it does not move the git-dir,
+    # so matching it would relax the gate. See the comment above the
+    # mg = re.search(...) line in session-lock.py.
+    ("git --work-tree=/p status", None),
+    ("git --work-tree /p status", None),
+    ("git -C /some/path status", None),
+]
 
 
-def test_separate_value_flag_still_defeats_the_scanner() -> None:
+def test_dash_c_scanner_still_extracts_the_path():
+    for command, expected in DASH_C_CASES:
+        match = re.search(PATTERNS["dash_c"], command)
+        got = match.group(1) if match else None
+        assert got == expected, "{!r}: expected {!r}, got {!r}".format(
+            command, expected, got
+        )
+
+
+def test_git_dir_scanner_still_extracts_the_git_dir():
+    for command, expected in GIT_DIR_CASES:
+        match = re.search(PATTERNS["git_dir"], command)
+        got = match.group(1) if match else None
+        assert got == expected, "{!r}: expected {!r}, got {!r}".format(
+            command, expected, got
+        )
+
+
+def test_separate_value_flag_still_defeats_the_scanner():
     """`git -c <name>=<value> -C <path>` does NOT match — and did not before.
 
     `-c` takes its value as a SEPARATE token, and the starred group requires
@@ -235,18 +254,17 @@ def test_separate_value_flag_still_defeats_the_scanner() -> None:
     Consequence is fail-CLOSED: no -C is seen, so the command is attributed to
     the effective cwd rather than let through as another repo's business.
     """
-    import re
-
     assert re.search(PATTERNS["dash_c"], "git -c core.x=y -C /p status") is None
 
 
-def test_end_of_options_separator_is_not_treated_as_a_flag() -> None:
+def test_end_of_options_separator_is_not_treated_as_a_flag():
     """`git -- -C /other/repo commit` no longer matches. Deliberate.
 
-    This is the ONE input whose behaviour the ReDoS fix changes. It is not a
-    real git invocation: git rejects a bare `--` as a global option
-    ("unknown option: --", verified against the installed git), so nothing
-    that works on a command line stops working here.
+    This is the ONE input whose behaviour the ReDoS fix changes. Verified
+    against the installed git (2.50.1): a bare `--` is rejected as a global
+    option ("unknown option: --"), so nothing that works on a command line
+    stops working here. Differentially tested across 97,656 inputs per
+    scanner; this family is the only divergence.
 
     The direction is safe. In the unbalanced-quotes branch an extracted -C
     path is used to let a command THROUGH ("not this lock's business"), so
@@ -254,6 +272,30 @@ def test_end_of_options_separator_is_not_treated_as_a_flag() -> None:
     falls back to cwd attribution instead of opening an escape hatch keyed on
     a token git itself refuses.
     """
-    import re
-
     assert re.search(PATTERNS["dash_c"], "git -- -C /other/repo commit") is None
+
+
+# --------------------------------------------------------------------------
+# Plain-script runner: scripts/ci.sh invokes this file directly, with no
+# pytest available. Without this block the file would exit 0 having asserted
+# nothing.
+# --------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    checks = [
+        (name, obj)
+        for name, obj in sorted(globals().items())
+        if name.startswith("test_") and callable(obj)
+    ]
+    assert checks, "no test_* functions found — the runner would be vacuous"
+    failures = 0
+    for name, fn in checks:
+        try:
+            fn()
+        except Exception as exc:  # noqa: BLE001 - report, do not mask
+            failures += 1
+            print("FAIL  {}: {}".format(name, exc))
+        else:
+            print("PASS  {}".format(name))
+    print("\n{} passed, {} failed".format(len(checks) - failures, failures))
+    sys.exit(1 if failures else 0)

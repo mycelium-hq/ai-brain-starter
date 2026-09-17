@@ -1524,6 +1524,22 @@ if [ "${#dormant_py[@]}" -gt 0 ]; then
   echo "::error::dormant Python test suite(s) — none runs in any CI job. Run each via a tests/integration/*.sh wrapper or add it to PY_DIRECT in scripts/ci.sh: ${dormant_py[*]}"
   exit 1
 fi
+# A PY_DIRECT suite is run as a PLAIN SCRIPT below, by a Python that has no
+# pytest (this job pins 3.9 and installs only ruff). A pytest-only file
+# therefore either crashes on import or -- if pytest happens to be importable,
+# as it is on a dev box -- exits 0 having collected NOTHING. The second case is
+# the dangerous one: it satisfies the dormancy invariant above while asserting
+# nothing, and reports GREEN. Caught exactly that way on 2026-09-16.
+pytest_only=()
+for t in "${PY_DIRECT[@]}"; do
+  [ -f "$t" ] || continue
+  if grep -qE '^[[:space:]]*(import pytest|from pytest)' "$t"; then pytest_only+=("$t"); fi
+done
+if [ "${#pytest_only[@]}" -gt 0 ]; then
+  echo "::error::PY_DIRECT suite(s) import pytest, but this gate runs them as plain scripts with no pytest -- they would assert NOTHING and still exit 0. Give each a __main__ runner and plain asserts, or move it to a tests/integration/*.sh wrapper: ${pytest_only[*]}"
+  exit 1
+fi
+
 echo "==> (f cont.) hooks/ + tests/ direct-run suites: ${#PY_DIRECT[@]}"
 for t in "${PY_DIRECT[@]}"; do
   if [ ! -f "$t" ]; then
