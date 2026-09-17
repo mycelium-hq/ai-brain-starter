@@ -1372,6 +1372,13 @@ PY_DIRECT=(
   hooks/test_surface_stalled_git_operation.py
   hooks/test_memory_index.py
   hooks/test_session_start_context.py
+  # Cross-agent scratchpad clobber guard. Every subagent is handed the SAME
+  # scratchpad_dir as its parent (only agent_id differs), so two agents writing
+  # one basename silently destroy each other's file and the reader cannot tell.
+  # 19 legs: 6 that must DENY, 12 that must stay silent (self-rewrite, reads,
+  # off-scratchpad, bypass), and the shell-variable form that slipped past the
+  # guard's own first production run. Plain script, no pytest.
+  hooks/test_scratchpad_cross_agent_clobber.py
   tests/test_instinct.py
   tests/test_entity_disambiguator_clustering.py
   tests/test_graphify_stage_select_cache_key.py
