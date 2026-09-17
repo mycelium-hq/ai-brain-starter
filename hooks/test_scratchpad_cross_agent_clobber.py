@@ -26,6 +26,7 @@ Stdlib only. Exit 0 = all pass.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -37,17 +38,54 @@ HOOK = Path(__file__).resolve().parent / "block-scratchpad-cross-agent-clobber.p
 FAILURES: list[str] = []
 
 
+def run(payload: dict, env=None) -> tuple[str, str]:
+    """Drive the hook as a process. Returns (verdict, message).
+
+    verdict is "allow" / "deny" / "warn" / "silent". The WARN tier speaks a
+    different shape from the DENY tier -- additionalContext with no
+    permissionDecision, the shape block-git-mutation-mid-operation.py already
+    ships on PreToolUse -- so a helper that only ever read permissionDecision
+    would KeyError on a warning and report it as a crash.
+    """
+    r = subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload),
+                       capture_output=True, text=True, env=env,
+                       encoding="utf-8", errors="replace")
+    assert r.returncode == 0, f"hook must always exit 0, got {r.returncode}: {r.stderr[:200]}"
+    if not (r.stdout or "").strip():
+        return "silent", ""
+    hs = json.loads(r.stdout).get("hookSpecificOutput") or {}
+    if "permissionDecision" in hs:
+        return hs["permissionDecision"], hs.get("permissionDecisionReason") or ""
+    if "additionalContext" in hs:
+        return "warn", hs["additionalContext"]
+    return "silent", ""
+
+
 def decide(scratch: Path, agent, *, command=None, file_path=None, tool="Bash", env=None):
     ti = {"command": command} if command is not None else {"file_path": file_path}
     payload = {"scratchpad_dir": str(scratch), "tool_name": tool,
                "cwd": str(scratch.parent), "tool_input": ti}
     if agent:
         payload["agent_id"] = agent
-    r = subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload),
-                       capture_output=True, text=True, env=env,
-                       encoding="utf-8", errors="replace")
-    assert r.returncode == 0, f"hook must always exit 0, got {r.returncode}: {r.stderr[:200]}"
-    return json.loads(r.stdout)["hookSpecificOutput"]["permissionDecision"]
+    return run(payload, env=env)[0]
+
+
+def tmp_decide(cfg: Path, session, *, command=None, file_path=None, tool="Bash",
+               agent=None, scratch=None):
+    """Drive the bare-/tmp tier. Keyed on session_id, ledger under CLAUDE_CONFIG_DIR.
+
+    CLAUDE_CONFIG_DIR is threaded EXPLICITLY (never ambient) so these controls
+    cannot read or write the real ~/.claude ledger.
+    """
+    ti = {"command": command} if command is not None else {"file_path": file_path}
+    payload = {"tool_name": tool, "cwd": "/", "tool_input": ti, "session_id": session}
+    if agent:
+        payload["agent_id"] = agent
+    if scratch:
+        payload["scratchpad_dir"] = str(scratch)
+    env = {**os.environ, "CLAUDE_CONFIG_DIR": str(cfg)}
+    env.pop("SCRATCHPAD_CLOBBER_BYPASS", None)
+    return run(payload, env=env)
 
 
 def check(label, got, want):
@@ -97,6 +135,82 @@ def main() -> int:
     pf = s / "parent-notes.md"
     check("15 main session claims", decide(s, None, command=f"echo x > {pf}"), "allow")
     check("16 subagent clobbers main", decide(s, "EEE", command=f"echo y > {pf}"), "deny")
+
+    # ==== BARE /tmp TIER (MYC-4822) =========================================
+    # The scratchpad is at least per-session. Bare /tmp is shared by EVERY
+    # session on the machine, so it is the strictly more dangerous surface and
+    # had no guard at all -- only prose, which was violated during the very
+    # session that built the scratchpad guard: `/tmp/agent-attr-probe.jsonl`,
+    # written here, received a payload from a DIFFERENT live session while this
+    # session was reading the file as its own.
+    #
+    # WARN, never DENY: legitimate /tmp traffic is constant and a deny tier here
+    # would teach bypass (rules/over-strict-verification-teaches-bypass.md).
+    cfg = tmp / "claude-config"
+    cfg.mkdir()
+    recap = "/tmp/close-recap-mycelium.md"
+
+    v, msg = tmp_decide(cfg, "sess-AAA", command=f"echo x > {recap}")
+    check("17 session A claims a bare /tmp name", v, "allow")
+
+    v, msg = tmp_decide(cfg, "sess-BBB", command=f"echo y > {recap}")
+    check("18 session B collides -> WARN (never deny)", v, "warn")
+    check("18a warning names the OTHER session", "sess-AAA" in msg, True)
+    check("18b steer is the session scratchpad", "scratchpad" in msg.lower(), True)
+
+    check("19 session A rewrites its own /tmp file -> silent",
+          tmp_decide(cfg, "sess-AAA", command=f"echo z > {recap}")[0], "allow")
+
+    # A subagent shares its parent's session_id, so it is the SAME owner. The
+    # /tmp tier is cross-SESSION; keying it on agent_id would warn on every
+    # subagent write of its own session's file.
+    check("20 subagent of the owning session -> silent",
+          tmp_decide(cfg, "sess-AAA", agent="sub-1", command=f"echo z > {recap}")[0], "allow")
+
+    # --- governed by PROPERTY: a name carrying no disambiguator -------------
+    # Never a denylist of known-bad names; the next generic name a script picks
+    # must be covered without anyone adding it anywhere.
+    for label, path in [
+        ("21a mktemp dir", "/tmp/tmp.NvyF0REjpV/notes.md"),
+        ("21b mktemp file", "/tmp/close-recap.7hQ2xR9d"),
+        ("21c pid suffix", "/tmp/close-recap-mycelium-48213.md"),
+        ("21d uuid", "/tmp/probe-2efc3bcd-c516-49ca-8d0c-3eda97bed550.jsonl"),
+        ("21e epoch", "/tmp/verify-1758112233.log"),
+    ]:
+        check(f"{label} claim is silent",
+              tmp_decide(cfg, "sess-CCC", command=f"echo a > {path}")[0], "allow")
+        check(f"{label} second session still silent",
+              tmp_decide(cfg, "sess-DDD", command=f"echo b > {path}")[0], "allow")
+
+    # --- the Write tool is attributed the same way --------------------------
+    body = "/tmp/pr-body.md"
+    check("22 Write tool claims", tmp_decide(cfg, "sess-EEE", file_path=body, tool="Write")[0], "allow")
+    check("23 Write tool cross-session collides",
+          tmp_decide(cfg, "sess-FFF", file_path=body, tool="Write")[0], "warn")
+
+    # --- reads and non-/tmp writes are never governed -----------------------
+    check("24 a bare /tmp READ is never governed",
+          tmp_decide(cfg, "sess-FFF", command=f"cat {recap}")[0], "allow")
+    check("25 a write outside /tmp is never governed",
+          tmp_decide(cfg, "sess-FFF", command=f"echo x > {tmp}/elsewhere.md")[0], "allow")
+
+    # --- the ledger lives under ~/.claude, NEVER in the surface it governs ---
+    check("26 ledger written under CLAUDE_CONFIG_DIR", (cfg / "tmp-owners.json").is_file(), True)
+    check("27 no ledger dropped into /tmp", Path("/tmp/tmp-owners.json").exists(), False)
+
+    # --- the scratchpad LIVES under /tmp on macOS ---------------------------
+    # realpath($CLAUDE_CODE_TMPDIR | /tmp)/claude-<uid>/<cwd>/<sid>/scratchpad,
+    # so a scratchpad path IS a /tmp path. The two tiers must not both fire on
+    # it, and the scratchpad must keep DENY -- a downgrade to warn there would
+    # be a silent regression of the shipped guard. Needs a REAL directory: the
+    # scratchpad ledger is written inside it.
+    sp2 = Path(tempfile.mkdtemp(prefix="sp-clobber-tmptier-", dir="/tmp"))
+    dual = sp2 / "verify-run.log"
+    check("28 scratchpad claim inside the /tmp tree",
+          tmp_decide(cfg, "sess-GGG", agent="ag-1", command=f"echo a > {dual}", scratch=sp2)[0], "allow")
+    check("29 scratchpad stays DENY, not downgraded to warn",
+          tmp_decide(cfg, "sess-GGG", agent="ag-2", command=f"echo b > {dual}", scratch=sp2)[0], "deny")
+    shutil.rmtree(sp2, ignore_errors=True)
 
     shutil.rmtree(tmp, ignore_errors=True)
     if FAILURES:
