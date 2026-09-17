@@ -90,11 +90,59 @@ def check_hook_paths(obj, path="$"):
                 cmd = h.get("command", "")
                 if not cmd:
                     continue
-                for tok in cmd.split():
-                    if tok.startswith("/") and not tok.startswith("//"):
-                        if not Path(tok).exists():
-                            _emit("WARN", f"MISSING-HOOK-FILE at hooks.{event}[{i}].hooks[{j}]: {tok}")
-                        break
+                for tok_raw, tok_abs in _hook_script_tokens(cmd):
+                    if _is_existence_guarded(cmd, tok_raw):
+                        continue        # `[ -f X ] && ...` fails SAFE by construction
+                    if not Path(tok_abs).exists():
+                        _emit("WARN", f"MISSING-HOOK-FILE at hooks.{event}[{i}].hooks[{j}]: {tok_abs}")
+
+
+# ─── Hook-script path resolution ───────────────────────────────────────────
+#
+# Measured 2026-09-17: the previous implementation scanned for the FIRST
+# absolute token and then `break`. Every hook on this fleet is spelled
+# `/usr/bin/python3 /path/to/hook.py`, so the first absolute token is the
+# INTERPRETER -- which always exists -- and the script path was never checked.
+# MISSING-HOOK-FILE therefore could not fire for the dominant hook form.
+#
+# It also warned on `[ -f X ] && ... || true`, which is the one form that CANNOT
+# break anything. Noise on the safe shape, silence on the fatal one, is why the
+# warning was never actionable.
+#
+# The fatal shape is not hypothetical: a registered hook whose file is absent
+# exits non-zero, and a non-zero PreToolUse hook voids the whole tool call, so
+# one stale registration breaks EVERY Bash call in EVERY concurrent session on
+# the machine. Ticket MYC-1862.
+
+_SCRIPT_EXT = (".py", ".sh", ".mjs", ".js")
+
+
+def _hook_script_tokens(cmd: str):
+    """(as-written, resolved) for each token that looks like a hook SCRIPT.
+
+    Skips interpreters and bare args by requiring a script extension, and
+    resolves `~/` because most of the fleet is spelled that way and the old
+    absolute-only test skipped all of it.
+    """
+    pairs = []
+    for raw in cmd.split():
+        tok = raw.strip("\"'")
+        if "[VAULT_PATH]" in tok or "[PYTHON]" in tok:
+            continue                      # installer placeholders, not real paths
+        if tok.startswith("~/"):
+            resolved = str(Path.home() / tok[2:])
+        elif tok.startswith("/") and not tok.startswith("//"):
+            resolved = tok
+        else:
+            continue
+        if resolved.endswith(_SCRIPT_EXT):
+            pairs.append((tok, resolved))
+    return pairs
+
+
+def _is_existence_guarded(cmd: str, tok_raw: str) -> bool:
+    """True when the command already tests for the file, e.g. `[ -f X ] && ...`."""
+    return any(f"-f {q}{tok_raw}{q}" in cmd for q in ("", '"', "'"))
 
 
 def check_perms(obj, path="$"):
@@ -129,6 +177,11 @@ def lint_content(content: str, label: str) -> None:
         _emit("BLOCK", f"INVALID-JSON in {label}: {e}")
         return
     check_enums(data, path=label)
+    # Measured 2026-09-17: this entry point (the PreToolUse wrapper on Write)
+    # omitted check_hook_paths, while lint_file ran it -- so the ONE path that
+    # could PREVENT a bad registration from landing was the blind one, and the
+    # self-test, which drives lint_content, could never have caught it.
+    check_hook_paths(data, path=label)
     check_perms(data, path=label)
 
 
@@ -177,6 +230,35 @@ SELF_TEST_FIXTURES = [
     {
         "name": "valid config (must NOT trigger)",
         "json": '{"model": "sonnet", "theme": "light"}',
+        "expects": None,
+    },
+    {
+        # REGRESSION: the dominant hook form. `break`-on-first-absolute stopped
+        # at the interpreter, so this returned CLEAN while the hook was broken.
+        "name": "interpreter + missing script (the real-world form)",
+        "json": '{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": ['
+                '{"type": "command", "command": "/usr/bin/python3 /nonexistent/hook.py"}]}]}}',
+        "expects": "MISSING-HOOK-FILE",
+    },
+    {
+        "name": "tilde-rooted missing script",
+        "json": '{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": ['
+                '{"type": "command", "command": "/usr/bin/python3 ~/.claude/hooks/nonexistent-xyz.py"}]}]}}',
+        "expects": "MISSING-HOOK-FILE",
+    },
+    {
+        # `[ -f X ]` fails safe -- warning here is pure noise and trains people
+        # to ignore the real signal.
+        "name": "existence-guarded missing script (must NOT trigger)",
+        "json": '{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": ['
+                '{"type": "command", "command": "[ -f ~/.claude/hooks/nope.py ] && '
+                '/usr/bin/python3 ~/.claude/hooks/nope.py || true"}]}]}}',
+        "expects": None,
+    },
+    {
+        "name": "installer placeholder path (must NOT trigger)",
+        "json": '{"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": ['
+                '{"type": "command", "command": "bash \'[VAULT_PATH]/scripts/x.sh\'"}]}]}}',
         "expects": None,
     },
 ]

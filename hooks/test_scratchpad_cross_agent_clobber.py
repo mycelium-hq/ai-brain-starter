@@ -44,7 +44,8 @@ def decide(scratch: Path, agent, *, command=None, file_path=None, tool="Bash", e
     if agent:
         payload["agent_id"] = agent
     r = subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload),
-                       capture_output=True, text=True, env=env)
+                       capture_output=True, text=True, env=env,
+                       encoding="utf-8", errors="replace")
     assert r.returncode == 0, f"hook must always exit 0, got {r.returncode}: {r.stderr[:200]}"
     return json.loads(r.stdout)["hookSpecificOutput"]["permissionDecision"]
 
