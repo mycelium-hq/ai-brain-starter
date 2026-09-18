@@ -60,12 +60,30 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import unicodedata
 from datetime import date
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+# Reach the ONE audited safe_read primitive rather than a local reader: the
+# recursive vault-wide rglob below must survive a cloud placeholder / stalled
+# mount / FIFO, and scripts/check-cloud-safe-file-walkers.py refuses to trust
+# anything else (its own negative control is "bogus safe_read module is not
+# trusted"). Same convention as scripts/build-journal-index.py.
+from _lib.safe_read import safe_read_text  # noqa: E402
+
+# Read bounds for the shared safe_read primitive. A vault note is nowhere
+# near 1 MB; anything larger is skipped rather than blocking the walk.
+READ_TIMEOUT = 5.0
+MAX_NOTE_BYTES = 1_000_000
 
 SKIP_PARTS = {
     "⚙️ Meta", "Archive", "🗄 Archive", "_review_alternate_drafts",
     ".claude", ".git", ".obsidian", ".trash", "node_modules", "worktrees",
+    # graphify's own output. Linking into GRAPH_REPORT.md / WIKILINK_GAPS.md
+    # rewrites generated files that the next run overwrites anyway, and makes
+    # the gap report link its own table rows.
+    "graphify-out",
 }
 EXISTING_LINK_RE = re.compile(r'\[\[[^\]]+\]\]')
 
@@ -123,6 +141,21 @@ def _in_protected_span(start: int, end: int, spans: list[tuple[int, int]]) -> bo
     """True if [start, end] falls inside any protected span."""
     return any(s <= start and end <= e for s, e in spans)
 
+
+def _norm(s: str) -> str:
+    """NFC-normalize before casefolding for Unicode-safe stem/name comparison.
+
+    casefold() alone does not normalize composed vs. decomposed Unicode forms.
+    macOS/HFS+ and some editors can leave filenames NFD-decomposed (an accented
+    letter stored as a base letter plus a combining mark), while a label typed
+    or generated elsewhere arrives NFC-composed. Two forms of the same visible
+    string then compare UNEQUAL under a bare casefold(), so a stem == target
+    self-link guard silently fails to fire for accented notes. Normalize both
+    sides to NFC first so visually-identical strings compare equal regardless
+    of which composition the filesystem handed back.
+    """
+    return unicodedata.normalize("NFC", s).casefold()
+
 DATAVIEW_BACKLINKS = '''\
 ```dataviewjs
 const name = dv.current().file.name;
@@ -162,6 +195,7 @@ def collect_mentions(
     """
     pattern = re.compile(r'\b' + re.escape(search_term) + r'\b', re.IGNORECASE)
     results = []
+    skipped: list[tuple[str, str]] = []
 
     files = sorted(
         vault.rglob("*.md"),
@@ -172,10 +206,13 @@ def collect_mentions(
     for md in files:
         if any(part in SKIP_PARTS for part in md.parts):
             continue
-        try:
-            text = md.read_text(encoding="utf-8", errors="ignore")
-        except OSError:
+        result = safe_read_text(
+            md, timeout=READ_TIMEOUT, max_bytes=MAX_NOTE_BYTES, errors="ignore"
+        )
+        if not result.ok:
+            skipped.append((str(md.relative_to(vault)), result.status))
             continue
+        text = result.text
 
         # Strip wikilink markup for cleaner quotes: [[X|Y]] → Y, [[X]] → X
         clean = re.sub(r'\[\[(?:[^\]|]+\|)?([^\]]+)\]\]', r'\1', text)
@@ -199,6 +236,11 @@ def collect_mentions(
 
         if max_total is not None and len(results) >= max_total:
             break
+
+    if skipped:
+        preview = ", ".join(f"{f} [{s}]" for f, s in skipped[:5])
+        more = " ..." if len(skipped) > 5 else ""
+        print(f"  note: skipped {len(skipped)} unreadable file(s): {preview}{more}", file=sys.stderr)
 
     return results if max_total is None else results[:max_total]
 
@@ -349,7 +391,13 @@ type: concept
 
 def load_report(report_path: Path) -> list[dict]:
     terms = []
-    for line in report_path.read_text(encoding="utf-8").splitlines():
+    result = safe_read_text(
+        report_path, timeout=READ_TIMEOUT, max_bytes=MAX_NOTE_BYTES
+    )
+    if not result.ok:
+        print(f"  ⚠ could not read {report_path}: {result.status}")
+        return terms
+    for line in result.text.splitlines():
         if not line.startswith("|"):
             continue
         parts = [p.strip() for p in line.strip("|").split("|")]
@@ -434,13 +482,25 @@ def find_contexts(vault: Path, search_term: str, max_results: int = 2) -> list[t
     """Show preview snippets during approval prompt (unlinked only)."""
     pattern = re.compile(r'\b' + re.escape(search_term) + r'\b', re.IGNORECASE)
     results = []
+    skipped: list[tuple[str, str]] = []
     for md in vault.rglob("*.md"):
         if any(part in SKIP_PARTS for part in md.parts):
             continue
-        try:
-            text = md.read_text(encoding="utf-8", errors="ignore")
-        except OSError:
+        # A note must not offer itself as "context" for its own entity — it is
+        # not an external mention, and because this function returns as soon as
+        # max_results is reached, a note mentioning itself twice can fill every
+        # preview slot before a real external mention is ever reached. Same
+        # guard as the self-link check in apply_wikilink (see _norm()).
+        if _norm(md.stem) == _norm(search_term):
+            print(f"  (self-link) skipping {md.relative_to(vault)}: stem matches search term '{search_term}'")
             continue
+        result = safe_read_text(
+            md, timeout=READ_TIMEOUT, max_bytes=MAX_NOTE_BYTES, errors="ignore"
+        )
+        if not result.ok:
+            skipped.append((str(md.relative_to(vault)), result.status))
+            continue
+        text = result.text
         protected = _collect_protected_spans(text)
         for m in pattern.finditer(text):
             if _in_protected_span(m.start(), m.end(), protected):
@@ -450,7 +510,15 @@ def find_contexts(vault: Path, search_term: str, max_results: int = 2) -> list[t
             snippet = "..." + text[start:end].replace("\n", " ").strip() + "..."
             results.append((md, snippet))
             if len(results) >= max_results:
-                return results
+                break
+        if len(results) >= max_results:
+            break
+
+    if skipped:
+        preview = ", ".join(f"{f} [{s}]" for f, s in skipped[:5])
+        more = " ..." if len(skipped) > 5 else ""
+        print(f"  note: skipped {len(skipped)} unreadable file(s): {preview}{more}", file=sys.stderr)
+
     return results
 
 
@@ -471,13 +539,26 @@ def apply_wikilink(vault: Path, search_term: str, link_target: str, display: str
     replacement = f"[[{link_target}|{display}]]" if is_alias else f"[[{search_term}]]"
     pattern = re.compile(r'\b' + re.escape(search_term) + r'\b', re.IGNORECASE)
     modified = 0
+    skipped: list[tuple[str, str]] = []
     for md in vault.rglob("*.md"):
         if any(part in SKIP_PARTS for part in md.parts):
             continue
-        try:
-            text = md.read_text(encoding="utf-8", errors="ignore")
-        except OSError:
+        # A note must not link to itself: it renders as a link back to the page
+        # you are already reading, and adds a self-loop to the graph. Compared
+        # NFC-normalized (see _norm()) so an NFD-decomposed filename on disk
+        # still matches an NFC link_target instead of silently slipping past —
+        # and the skip is announced instead of continuing invisibly, including
+        # under --dry-run.
+        if _norm(md.stem) == _norm(link_target):
+            print(f"  (self-link) skipping {md.relative_to(vault)}: stem matches link target '{link_target}'")
             continue
+        result = safe_read_text(
+            md, timeout=READ_TIMEOUT, max_bytes=MAX_NOTE_BYTES, errors="ignore"
+        )
+        if not result.ok:
+            skipped.append((str(md.relative_to(vault)), result.status))
+            continue
+        text = result.text
         protected = _collect_protected_spans(text)
         for m in pattern.finditer(text):
             if _in_protected_span(m.start(), m.end(), protected):
@@ -489,6 +570,12 @@ def apply_wikilink(vault: Path, search_term: str, link_target: str, display: str
                 md.write_text(new_text, encoding="utf-8")
             modified += 1
             break
+
+    if skipped:
+        preview = ", ".join(f"{f} [{s}]" for f, s in skipped[:5])
+        more = " ..." if len(skipped) > 5 else ""
+        print(f"  note: skipped {len(skipped)} unreadable file(s): {preview}{more}", file=sys.stderr)
+
     return modified
 
 
