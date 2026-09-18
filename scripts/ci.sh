@@ -1370,6 +1370,12 @@ echo "    OK - $unit_count scripts/ unit suite(s) passed"
 # fails the gate LOUD (the false-green class MYC-2922 closed for scripts/, MYC-2959
 # for hooks/+tests/). PY_DIRECT then runs the non-wrapped suites exactly once.
 PY_DIRECT=(
+  # SessionStart restart witness for the auto-updater's deferred deploy
+  # (MYC-4704 follow-up). Its ACTIVATION assertion is the only thing
+  # proving the witness is not dead code: it has no hooks.json entry of
+  # its own by design (SessionStart fan-out is at budget), so the fold
+  # into surface-deployed-hooks-behind.py is what wires it.
+  hooks/test_session_startup_stamp.py
   hooks/test_umbrella_map.py
   hooks/test_surface_stalled_git_operation.py
   hooks/test_memory_index.py

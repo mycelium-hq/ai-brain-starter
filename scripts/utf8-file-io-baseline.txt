@@ -23,7 +23,7 @@
 #
 # <sha256-of-normalized-content> <tag> <repo-relative-path>
 
-# ---- SEV-A-write  (29 file(s)) ----
+# ---- SEV-A-write  (28 file(s)) ----
 b87ac14c241be51fb2427ac9a86ab8de4a5b161549f2ee0d445b6e9ca4f65550 SEV-A-write hooks/_lib/session_echo.test.py
 987aca2ae82229a42d29a8c89fed690e9de7e6fad4182dea564bc92557a81922 SEV-A-write hooks/auto-capture-public-ships.py
 a04ec6c84be6756813f4cde517ff379338b57ec9bf4c9c4172172951e62f91c3 SEV-A-write hooks/imessage-mcp-auto-export.py
@@ -49,7 +49,6 @@ f363924aeb716ab903c3903204d4bd432973a2d0af92dd6e40960d05b8ab9e63 SEV-A-write scr
 015ab78efb862035f1d73e367e649987f4d6d6604c707f636c0efa9403abb16e SEV-A-write scripts/test-relocate-watch.py
 93e073dede317c9a08d5a27481bf9ad1e5dcf18790fa20b3356425b1a1e45590 SEV-A-write scripts/test_graph_liveness_check.py
 a711143474788ad1d943bfd47e679116dcf5e4dddb17be9454842d45fd7d1579 SEV-A-write scripts/test_stale_git_lock_reclaim.py
-bf2aa37b1fc14be871ed01920e719d1f71d87052e536d4c435ed2fff227ca8ec SEV-A-write scripts/test_stale_pull_surface.py
 1bc37b829f0ad1c3a92a45030f30a92349a49352a71d272680f869a2974c9d14 SEV-A-write scripts/vault-nested-repos.py
 a29f6c2b98ccf874e4c818e2487ce74f32248ecbbce73a11c91a738561f3aa84 SEV-A-write skills/graphify/scripts/graphify_chunk.py
 8397e371e756c7cff96453d8f8f2c895e1e8ac0762edc8538c573c059e07d19d SEV-A-write skills/graphify/scripts/graphify_prep.py

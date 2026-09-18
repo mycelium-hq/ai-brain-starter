@@ -257,6 +257,48 @@ _CONNECTION_STRING = [
         redaction=r"\1REDACTED mongo password\3",
         description="Password inside a mongodb:// or mongodb+srv:// connection URL.",
     ),
+    SecretPattern(
+        # MYC-4704 finding 3: the three patterns above enumerate vendors
+        # (postgres/redis/mongo) -- a list that will always lag, since
+        # GitLab (`https://oauth2:glpat-...@gitlab.com/...`), Azure DevOps
+        # (`https://:<PAT>@dev.azure.com/...`), Bitbucket app passwords
+        # (`https://user:app_password@bitbucket.org/...`), and plain HTTP
+        # basic auth all embed a credential in the exact same shape --
+        # scheme://user:pass@host -- with no dedicated pattern here. One
+        # generic shape covers all of them AND every future vendor that
+        # uses the same convention, without a new pattern per vendor.
+        #
+        # Excludes the three schemes already handled above (via negative
+        # lookahead) so this never double-processes their output: redact()
+        # applies patterns in list order and mutates progressively, so by
+        # the time this pattern would see a postgres/redis/mongo URL its
+        # password is already replaced with e.g. "REDACTED pg password" --
+        # matching that AGAIN would both be redundant and risk a
+        # non-idempotent second-pass rewrite (the replacement text itself
+        # contains no @ or whitespace-free run long enough to matter today,
+        # but excluding by scheme is cheap and removes the question
+        # entirely rather than relying on that happening to be safe).
+        # Requires the `:` (unlike a bare `scheme://secret@host` with no
+        # colon, e.g. `ssh://git@github.com/...`) -- widening to match
+        # colon-less URLs too would flag `git@github.com`-style remotes
+        # constantly; a colon is the actual, distinguishing shape of
+        # "this field is explicitly a password", named in the vendor
+        # examples above, not an incidental restriction.
+        name="generic-url-credential",
+        regex=re.compile(
+            r"\b(?!postgres(?:ql)?://|rediss?://|mongodb(?:\+srv)?://)"
+            r"([A-Za-z][A-Za-z0-9+.\-]*://[^\s/:@]*:)([^@\s]+)(@)",
+            re.ASCII | re.IGNORECASE,
+        ),
+        redaction=r"\1REDACTED url password\3",
+        description=(
+            "Password embedded in any scheme://user:pass@host URL not already "
+            "covered above (GitLab glpat- tokens, Azure DevOps PATs, Bitbucket "
+            "app passwords, plain HTTP basic auth, and any future vendor that "
+            "uses the same convention). One generic shape instead of an "
+            "enumerated vendor list that will always lag."
+        ),
+    ),
 ]
 
 
@@ -577,6 +619,34 @@ if __name__ == "__main__":
         # Longer-than-36 token — MUST still match. Pins the `,` in {36,}:
         # a bare {36} would silently miss any future longer npm shape.
         "real-npm-token-long": "NPM_TOKEN=npm_" + "C" * 44,
+        # MYC-4704 finding 3: generic-url-credential. Four vendor shapes the
+        # review named explicitly — MUST all match via the ONE generic
+        # pattern, not a per-vendor one.
+        "gitlab-url-cred": "git clone https://oauth2:glpat-1234567890abcdefghij@gitlab.com/group/repo.git",
+        "azure-devops-url-cred": "git remote add origin https://:abcdEFGH1234567890ijklMNOP5678@dev.azure.com/org/project/_git/repo",
+        "bitbucket-url-cred": "https://myuser:app_password_xyz123@bitbucket.org/team/repo.git",
+        "plain-basic-auth-url-cred": "curl https://admin:hunter2ReallyLongPassword@internal.example.com/api",
+        # The actual "negative test asserting an UNLISTED credential shape
+        # still does not leak": a 5th shape named nowhere in this file or
+        # in generic-url-credential's own description (not Postgres/Redis/
+        # Mongo, not GitLab/Azure/Bitbucket/plain-basic-auth either) — an
+        # FTP credential for a private, made-up host. If this still gets
+        # redacted, the pattern is proven genuinely generic rather than a
+        # 4-vendor list wearing a "generic" docstring.
+        "unlisted-vendor-url-cred": "ftp://deploy:s3cr3tDeployTok3n99887766@files.example-internal.net/uploads",
+        # Exclusion regression guard: postgres/redis/mongo URLs must be
+        # redacted by their OWN dedicated pattern only, never ALSO by
+        # generic-url-credential (double-processing risk — see the
+        # pattern's own comment).
+        "postgres-url-excluded-from-generic": "postgres://user:hunter2_supersecret@db.example.com:5432/dbname",
+        "redis-url-excluded-from-generic": "rediss://:p123abc456def@redis.example.com:6379",
+        "mongo-url-excluded-from-generic": "mongodb+srv://user:hunter2_supersecret@cluster0.mongodb.net/db",
+        # False-positive guard: a colon-LESS `scheme://user@host` (the
+        # standard SSH git-remote shape) must NOT match — `user` here is a
+        # literal, well-known non-secret username, not a password field.
+        # Widening the pattern to catch colon-less URLs too would fire on
+        # this constantly.
+        "ssh-colonless-not-matched": "git clone ssh://git@github.com/org/repo.git",
     }
     expected_hits = {
         "github-asset-digest": [],   # sha256: prefix → skipped
@@ -608,6 +678,15 @@ if __name__ == "__main__":
         "real-npm-token": ["npm-access-token"],
         "npm-in-base64": [],          # no boundary before npm_ → skipped
         "real-npm-token-long": ["npm-access-token"],
+        "gitlab-url-cred": ["generic-url-credential"],
+        "azure-devops-url-cred": ["generic-url-credential"],
+        "bitbucket-url-cred": ["generic-url-credential"],
+        "plain-basic-auth-url-cred": ["generic-url-credential"],
+        "unlisted-vendor-url-cred": ["generic-url-credential"],
+        "postgres-url-excluded-from-generic": ["postgres-url-password"],
+        "redis-url-excluded-from-generic": ["redis-url-password"],
+        "mongo-url-excluded-from-generic": ["mongo-url-password"],
+        "ssh-colonless-not-matched": [],
     }
     failures = 0
     for label, sample in FP_SAMPLES.items():
