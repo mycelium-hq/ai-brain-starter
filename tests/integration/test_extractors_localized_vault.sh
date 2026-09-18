@@ -157,12 +157,21 @@ Cómo se organizan las carpetas del vault y qué va en cada una, con ejemplos.
 MD
 
 # ── Run extraction, then the engine ─────────────────────────────────────
-if ! VAULT_ROOT="$V" "$PY" "$STARTER/scripts/vault-metadata-extract.py" --progress-every 0 >"$TMP/extract.log" 2>&1; then
+# VAULT_ROOT_FORCE=1: the copied extractors live under $STARTER (their
+# auto-detected root per _base.py's _resolve_vault_root()), but the fixture
+# content is at $V, a sibling directory under $TMP. Without the force flag
+# the resolver treats that mismatch as the wrong-vault hazard it exists to
+# catch and silently falls back to $STARTER (which holds no fixture content
+# at all), so every assertion below would see None/empty rather than the
+# planted Spanish journals -- same override _resolve_vault_root() documents
+# for scripts/aggregate-sessions.py callers that legitimately target a
+# non-default vault.
+if ! VAULT_ROOT="$V" VAULT_ROOT_FORCE=1 "$PY" "$STARTER/scripts/vault-metadata-extract.py" --progress-every 0 >"$TMP/extract.log" 2>&1; then
   echo "FAIL: vault-metadata-extract.py exited non-zero" >&2
   cat "$TMP/extract.log" >&2
   exit 1
 fi
-if ! VAULT_ROOT="$V" INSIGHTS_OUTPUT="$TMP/insights.md" \
+if ! VAULT_ROOT="$V" VAULT_ROOT_FORCE=1 INSIGHTS_OUTPUT="$TMP/insights.md" \
      "$PY" "$STARTER/scripts/vault-insight-engine.py" --quiet >"$TMP/engine.log" 2>&1; then
   echo "FAIL: vault-insight-engine.py exited non-zero" >&2
   cat "$TMP/engine.log" >&2

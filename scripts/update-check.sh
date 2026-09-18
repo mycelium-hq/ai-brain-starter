@@ -90,7 +90,20 @@ if [[ -z "$CURRENT" || -z "$LATEST" ]]; then
   exit 0
 fi
 
-if [[ "$CURRENT" == "$LATEST" ]]; then
+# Up to date means origin/main is CONTAINED in HEAD, not that the two SHAs are
+# equal. A clone carrying local commits (a fix not yet upstream, a site-specific
+# patch) has already merged every upstream commit and is still never SHA-equal,
+# so the equality test reported BEHIND with COMMITS_BEHIND: 0 every single day —
+# for the rest of that clone's life. A daily alarm that is always wrong is worse
+# than no alarm: it teaches the reader to skip the line, and the day the clone is
+# genuinely behind, that line reads exactly the same as the 200 false ones before
+# it. Measured 2026-09-11 on a clone holding two local patches.
+#
+# --is-ancestor is the honest question: has this clone already taken everything
+# origin/main has? Divergence (neither ref contains the other) still falls
+# through to BEHIND with the real count, which is correct — there ARE upstream
+# commits missing.
+if [[ "$CURRENT" == "$LATEST" ]] || git merge-base --is-ancestor "$LATEST" "$CURRENT" 2>/dev/null; then
   echo "STATUS: UP_TO_DATE"
   echo "CURRENT_HEAD: $(git rev-parse --short HEAD)"
   echo "$TODAY" > "$CHECK_FILE"

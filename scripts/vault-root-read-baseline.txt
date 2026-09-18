@@ -81,11 +81,10 @@ fd7dcaf462d1fe6a8a3d350573c2b63c896ca4089a02b7888048b70e9807b459 SEV-C-script-lo
 # ---- SEV-D-cli-default  (1 file(s), 1 read(s)) ----
 36aafbca40f8381430c029bb0a53794a679a102007dfe0b06a174d4d72955576 SEV-D-cli-default scripts/whatsapp/rename-contacts.py
 
-# ---- SEV-E-no-default  (11 file(s), 13 read(s)) ----
+# ---- SEV-E-no-default  (10 file(s), 12 read(s)) ----
 85006d7e25f42ba787b2ce616bd1c71590c3990f89f3153a6f958156c93029ed SEV-E-no-default hooks/coach-auto-prescribe-on-journal.py
 33804a89b8c6ac80575f93ea2a5e0f9f6e47aeb3bb6e8dab0413729fd3fc8c94 SEV-E-no-default hooks/inject-love-language-context.py
 d11e46cfd26ba07935e39f6bd73c36095e242d4a2a5a6856d12a07f7b929195b SEV-E-no-default scripts/backfill-journal-body-context.py
-66295b6759ce0653131ffa32fcbdb4e2c467fb833fe9770f1d72948ece7df513 SEV-E-no-default scripts/extractors/_base.py
 9ceedddb923461f4c803b48b1d8349c9e54f9f6ff73e40969aeb3332206c8824 SEV-E-no-default scripts/granola_core.py
 63fb9c590ff9d6f690249a4238094e595229adda50a5cfc8d55e87c1115b7a9d SEV-E-no-default scripts/graph-to-neo4j.py
 24f7876383293d84f9524173e1e1b795b90eb4f18cee25dc64f5adaa57f59783 SEV-E-no-default scripts/hallucination-watch.py
