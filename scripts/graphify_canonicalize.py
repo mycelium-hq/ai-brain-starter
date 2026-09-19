@@ -60,6 +60,17 @@ def strip_unmatched_close(label: str) -> str:
     return label
 
 
+# Bare unit tails that a "/" can produce in non-English prose ("$49/mes",
+# "$400/h", "20 km/h"). Never a note name, so never the result of a folder strip.
+_UNIT_TAILS = frozenset({
+    "mes", "meses", "h", "hr", "hrs", "hora", "horas", "min", "mins", "seg",
+    "dia", "dias", "día", "días", "sem", "semana", "semanas", "ano", "año",
+    "anos", "años", "mois", "jour", "jours", "heure", "heures",
+    "monat", "stunde", "u", "ud", "uds", "pers", "persona", "personas",
+    "km", "kg", "m", "l",
+})
+
+
 def strip_folder_prefix(label: str) -> str:
     """Strip folder path prefixes from wikilink-style labels.
 
@@ -82,6 +93,31 @@ def strip_folder_prefix(label: str) -> str:
     # Leave URLs alone
     if label.startswith(("http://", "https://", "//")):
         return label
+
+    # Non-English guard: "/" is not always a path separator.
+    #
+    # Spanish, Portuguese, French and German prose write dates as DD/MM/YYYY and
+    # rates as "$49/mes", "$400/h". Splitting on the last "/" turns
+    # "Sesion del 24/08/2026" into "2026" and "$49/mes" into "mes" -- so EVERY
+    # dated note in the corpus canonicalizes onto the same node and they all
+    # become neighbours of each other.
+    #
+    # Measured on an 8,858-node Spanish vault: 12 such supernodes absorbing 119
+    # edges that no source document contains. "2026" ranked #7 god node with 31
+    # edges, linking notes with nothing in common. The damage is not noise in the
+    # gap report -- it is false edges, which pollute community detection and the
+    # "surprising connections" output.
+    #
+    # Rule: a digit immediately before the "/" means this is not a folder path.
+    # Covers 24/08/2026, 08/09, $49/mes, $400/h; leaves "CRM/Jane Doe" alone.
+    head, _, tail_raw = label.rpartition("/")
+    if head and head[-1].isdigit():
+        return label
+    # Second guard: a bare unit or a pure number is never a note name.
+    tail_probe = tail_raw.strip().lower()
+    if tail_probe.isdigit() or tail_probe in _UNIT_TAILS:
+        return label
+
     # Take the last segment (Obsidian behavior for bare-name resolution)
     tail = label.rsplit("/", 1)[-1].strip()
     return tail if tail else label
@@ -265,7 +301,7 @@ def main():
         print(f"not found: {src}", file=sys.stderr)
         sys.exit(1)
 
-    extraction = json.loads(src.read_text())
+    extraction = json.loads(src.read_text(encoding="utf-8"))
     print(f"input: {len(extraction.get('nodes', []))} nodes, "
           f"{len(extraction.get('edges', []))} edges, "
           f"{len(extraction.get('hyperedges', []))} hyperedges")

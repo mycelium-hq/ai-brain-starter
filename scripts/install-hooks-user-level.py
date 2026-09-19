@@ -390,6 +390,9 @@ HOME_HOOKS_INSTALLER_DEPLOYS = {
     "retry-budget.py",              # PreToolUse(Bash) 4th-identical-command blocker
     "validate-mcp-json.py",         # PreToolUse(Write|Edit) .mcp.json parse gate
     "vault-context.py",             # UserPromptSubmit vault-context injector
+    "block-scratchpad-cross-agent-clobber.py",
+                                    # PreToolUse(Bash,Write|Edit) shared-scratchpad
+                                    # cross-agent clobber blocker
 }
 
 # Package files under hooks/_lib/ that a HOME_HOOKS_INSTALLER_DEPLOYS hook
@@ -408,6 +411,11 @@ HOME_HOOKS_LIB_DEPS = {
     "standing_report.py",  # dev-hub-refresh + orphan-claude-branches -> condense()
     "session_echo.py",     # available to any per-prompt injector -> should_emit()
     "claude_project_key.py",  # context-budget-measure.py -> claude_project_key()
+    "cmd_env.py",          # block-scratchpad-cross-agent-clobber.py -> inline_bypass();
+                           # without it the import falls into a no-op fallback and the
+                           # advertised inline bypass silently STOPS WORKING (the guard
+                           # then denies a write the operator explicitly un-gated).
+    "guard_telemetry.py",  # block-scratchpad-cross-agent-clobber.py -> log_fire()
 }
 
 # Hooks ai-brain-starter USED TO ship and has deliberately RETIRED. The

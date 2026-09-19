@@ -112,8 +112,12 @@ fi
 # The load average says the machine is not busy; it does not say the machine is
 # a good place to spend a few minutes of disk churn right now. Two cases where
 # it is not, both invisible to loadavg:
-#   * ON BATTERY - a GC pass is never worth someone's remaining charge. It is a
-#     daily job; tomorrow (or the next time they plug in) is soon enough.
+#   * ON BATTERY AND LOW - a GC pass is never worth someone's LAST charge.
+#     Deferring ON BATTERY *at any level* is what this used to do, and it is a
+#     trap for anyone who works unplugged: "tomorrow, or the next time they plug
+#     in" never arrives, the pass silently stops running for weeks, and each log
+#     line still promises that the next run will catch up. Threshold instead:
+#     defer below MAINT_MIN_BATTERY_PCT (default 50), run above it.
 #   * SOMEONE IS TYPING - felt footprint is the point. Work that lands while the
 #     user is mid-task is exactly the "the install made my machine slower"
 #     experience this whole track exists to prevent.
@@ -130,6 +134,25 @@ on_battery() {
   return 1
 }
 
+# Remaining charge as a whole-number percentage, or empty when unknowable.
+# Numeric validation after each attempt, per scripts/PORTABILITY.md: a probe that
+# is absent or prints non-numeric text must fall through, not hand back garbage.
+battery_percent() {
+  local p=""
+  if command -v pmset >/dev/null 2>&1; then                 # BSD/macOS
+    p=$(pmset -g batt 2>/dev/null | grep -o '[0-9][0-9]*%' | head -1 | tr -d '%')
+  fi
+  case "$p" in ''|*[!0-9]*)                                 # GNU/Linux
+    for c in /sys/class/power_supply/BAT*/capacity; do
+      [ -r "$c" ] || continue
+      p=$(cat "$c" 2>/dev/null)
+      break
+    done ;;
+  esac
+  case "$p" in ''|*[!0-9]*) p="" ;; esac   # neither gave a plain integer -> empty
+  printf '%s' "$p"
+}
+
 # Seconds since the last keyboard/mouse event, or empty when unknowable.
 user_idle_seconds() {
   if command -v ioreg >/dev/null 2>&1; then
@@ -140,8 +163,14 @@ user_idle_seconds() {
 
 if [ $FORCE -eq 0 ]; then
   if on_battery; then
-    log "DEFERRED - on battery. A daily GC pass is not worth someone's charge; next run catches up."
-    exit 0
+    BATT_PCT="$(battery_percent)"
+    BATT_FLOOR="${MAINT_MIN_BATTERY_PCT:-50}"
+    if [ -n "$BATT_PCT" ] && [ "$BATT_PCT" -lt "$BATT_FLOOR" ] 2>/dev/null; then
+      log "DEFERRED - on battery at ${BATT_PCT}% (< ${BATT_FLOOR}%). Not worth someone's last charge; next run catches up."
+      exit 0
+    fi
+    # Fails OPEN when the charge is unknowable, same contract as the gates above.
+    log "on battery at ${BATT_PCT:-unknown}% (floor ${BATT_FLOOR}%) - proceeding"
   fi
   IDLE_S="$(user_idle_seconds)"
   IDLE_FLOOR="${MAINT_MIN_USER_IDLE_SEC:-300}"
@@ -219,8 +248,14 @@ run() {
 # === RECONCILE (data safety): aggregators + commit deferred close artifacts ===
 AGG_SESSIONS="$SCRIPT_DIR/aggregate-sessions.py"
 AGG_DECISIONS="$SCRIPT_DIR/aggregate-decisions.py"
-[ -f "$AGG_SESSIONS" ]  && VAULT_ROOT="$VAULT" run "aggregate-sessions"  /usr/bin/env python3 "$AGG_SESSIONS"
-[ -f "$AGG_DECISIONS" ] && VAULT_ROOT="$VAULT" run "aggregate-decisions" /usr/bin/env python3 "$AGG_DECISIONS"
+# VAULT_ROOT_FORCE=1 is required, not belt-and-braces: both aggregators resolve
+# their own vault and DISCARD an env VAULT_ROOT that points somewhere else,
+# logging "auto-detect (env VAULT_ROOT ignored: vault mismatch)". This script
+# lives under the skill checkout, so without the override they auto-detect the
+# skill directory, fail with "<skill>/⚙️ Meta does not exist" and exit 1 — on
+# EVERY maintenance run, with the rc=1 buried in the log and nothing surfaced.
+[ -f "$AGG_SESSIONS" ]  && VAULT_ROOT="$VAULT" VAULT_ROOT_FORCE=1 run "aggregate-sessions"  /usr/bin/env python3 "$AGG_SESSIONS"
+[ -f "$AGG_DECISIONS" ] && VAULT_ROOT="$VAULT" VAULT_ROOT_FORCE=1 run "aggregate-decisions" /usr/bin/env python3 "$AGG_DECISIONS"
 
 # Commit any close artifacts left uncommitted by a load-deferred close. Targeted
 # paths only - NEVER `git add -A` (vaults are commonly 10k-60k+ files).

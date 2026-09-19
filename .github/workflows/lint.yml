@@ -238,6 +238,23 @@ jobs:
       - name: no moving ref as a test's before-state (vendor a fixture)
         run: python3 scripts/check-frozen-before-state.py
 
+      # A vendored copy of hooks/_lib/safe_read.py lives at
+      # scripts/extractors/_lib/ (7ce621fc) so vault-insight-engine.py still
+      # resolves _lib when it runs from a bare copy of scripts/ with no
+      # sibling hooks/ -- the shape tests/integration/
+      # test_extractors_localized_vault.sh exercises. The real hooks/_lib
+      # always wins when it is present, so nothing in the normal checkout
+      # would ever notice the vendored copy going stale after a
+      # hooks/_lib/safe_read.py patch; only that fallback shape would
+      # silently keep running the old rules. This makes that divergence a
+      # build failure instead of a comment's promise to "diff the two if
+      # hooks/_lib/safe_read.py ever changes".
+      - name: vendored _lib negative controls (a divergent mirror must go RED)
+        run: python3 scripts/check-vendored-lib-in-sync.py --self-test
+
+      - name: every vendored _lib mirror matches hooks/_lib/ byte for byte
+        run: python3 scripts/check-vendored-lib-in-sync.py
+
       # Same SILENT-NO-OP family: hooks.json wires several hooks by their
       # ~/.claude/hooks/ path behind a `[ -f <path> ] &&` guard. The guard is
       # correct at runtime (a deleted optional hook should be silent) and lethal
