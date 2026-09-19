@@ -9,6 +9,30 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-09-19: the graph routing hook told you to customize it, then overwrote your customization
+
+**Who this affects:** anyone who set up `graph-context-hook.sh` and has only ONE graph — the default second graph points at `$VAULT_ROOT/Work/`, a folder most vaults do not have.
+
+The hook's own header says "CUSTOMIZE THIS SCRIPT for your vault" and lists four values to edit. But `install-hooks-user-level.py` treats it as a vault-content hook and copies it from the skill into the vault **unconditionally**, and the auto-update runs that roughly every six days. So the file asks you to edit it and then silently discards what you wrote.
+
+**What that looked like on one vault:** the local edit emptied `SECONDARY_GRAPH`, which is the documented way to say "I only have one graph" — the code already guards on it being empty. After an installer run the default came back, and every prompt containing *work*, *team*, *client*, *meeting*, *deadline* or *sprint* was injected with:
+
+> ⚠ LOST — this graph was built before but is GONE now ... rebuild it: /graphify --update on Work/
+
+A false alarm about a graph that never existed, plus an instruction to rebuild it, on every prompt of that family. The user had already moved the file out of the installer's reach once; the installer simply repointed `settings.json` back at the copy it manages, and the edited file sat there unused.
+
+**The fix:** every CONFIG value now reads an env override, so it can live in `~/.claude/settings.json` → `env`, which the installer does not touch — exactly how `VAULT_ROOT` already worked. One graph only:
+
+```json
+"env": { "SECONDARY_GRAPH": "" }
+```
+
+Note for anyone reading the diff: `SECONDARY_GRAPH` uses `${VAR-default}`, not `${VAR:-default}`. The bare `-` is the only spelling that honours an exported empty value; with `:-` the default would come back and re-enable the graph the user just turned off. The other values keep `:-` because emptying them is not a supported configuration.
+
+Nothing changes if you set no env vars: same defaults, same behaviour.
+
+---
+
 ## 2026-09-13: dates with slashes were merging unrelated notes in the graph
 
 **Who this affects:** anyone whose vault is not in English — Spanish, Portuguese, French and German all write dates as DD/MM/YYYY.
