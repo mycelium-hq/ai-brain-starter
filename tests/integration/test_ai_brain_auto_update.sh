@@ -71,6 +71,10 @@
 #                                         caught (defense in depth)     [NEG]
 #   T16 STRUCTURAL: every checkout-path f-string interpolation routes
 #                                         through _redact_text          [GATE]
+#   T31 secret carrying an invisible char -> redacted, NOT reassembled
+#                                         by the fence sanitizer        [NEG]
+#   T32 STRUCTURAL: _redact_text is the OUTERMOST sanitizer at every
+#                                         fence site                    [GATE]
 #
 # Run: bash tests/integration/test_ai_brain_auto_update.sh  (0 = pass, 1 = fail)
 set -uo pipefail
@@ -942,6 +946,131 @@ if pending "$ST"; then
   fi
 else
   ok "T30: staging with no session id left no unresolvable record (nothing to pin)"
+fi
+
+# ==========================================================================
+# T31-T32. The SANITIZER COMPOSITION ORDER. Every guard above proves one
+# sanitizer against its own target; nothing proved the two in combination,
+# which is how 12 green checks sat over a reproducible leak.
+# ==========================================================================
+
+# ---- T31. A secret split by an INVISIBLE character must not be reassembled
+# _fence_safe() opens with _strip_invisible(), which deletes exactly the
+# Unicode Cf/Cc characters a secret regex cannot match ACROSS. Composed with
+# the fence on the OUTSIDE, the two sanitizers cancelled: _redact_text saw
+# ghp_<20 chars><invisible><20 chars>, matched nothing because the character
+# run is broken, and then _fence_safe removed the character and emitted the
+# reassembled live credential into additionalContext.
+#
+# Why no existing check caught it: T9/T13/T29 each plant a WHOLE secret (the
+# regex sees it, so order is irrelevant) and T27 plants a bare invisible
+# character inside a fence TAG (no secret involved). None planted a secret
+# that itself CARRIES an invisible character -- the one input on which the
+# two guards interact.
+#
+# BOTH halves are asserted. "token absent" alone passes vacuously whenever
+# the fixture breaks and $OUT is empty -- the exact vacuity T27 documents --
+# so the redaction MARKER must be present too.
+#
+# The clean token is never a literal in this file: it is concatenated at
+# runtime so this test cannot itself trip a secret scanner.
+PAT_BODY="A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0"   # 40 alnum; pattern needs 36+
+PAT_CLEAN="ghp_$PAT_BODY"
+for ch in 200b 00ad 2060 feff; do
+  SUBJ=$(mktemp "$TMPROOT/subjpat.XXXXXX")
+  uv run python -c "
+import sys,pathlib
+b=sys.argv[3]
+pathlib.Path(sys.argv[1]).write_text(
+    'chore: rotate ghp_' + b[:20] + chr(int(sys.argv[2],16)) + b[20:] + ' ok',
+    encoding='utf-8')" "$SUBJ" "$ch" "$PAT_BODY" 2>/dev/null || \
+  python3 -c "
+import sys,pathlib
+b=sys.argv[3]
+pathlib.Path(sys.argv[1]).write_text(
+    'chore: rotate ghp_' + b[:20] + chr(int(sys.argv[2],16)) + b[20:] + ' ok',
+    encoding='utf-8')" "$SUBJ" "$ch" "$PAT_BODY"
+  fence_fixture "pat$ch" "$SUBJ"
+  if printf '%s' "$OUT" | grep -qF "$PAT_CLEAN"; then
+    no "T31: U+$ch -- the fence sanitizer REASSEMBLED a credential the secret regex had missed"
+  elif says_lit '[REDACTED-github-pat-classic]'; then
+    ok "T31: a secret carrying U+$ch is redacted, not reassembled, before reaching additionalContext"
+  else
+    no "T31: U+$ch -- neither the token nor a redaction marker is present; assertion is vacuous ($(printf '%s' "$OUT" | wc -c | tr -d ' ') bytes of output)"
+  fi
+done
+
+# ---- T32. STRUCTURAL: redaction is the OUTERMOST sanitizer at every site --
+# T31 is a BEHAVIOUR test and it can only reach the commit-subject fence.
+# The sync-output fence composes across two functions (_run_sync_skills
+# redacts its captured stdout; the emit site fences it), and no fixture here
+# makes a stub sync script print a poisoned secret. A new fence site added
+# later is invisible to T31 entirely.
+#
+# So this pins the invariant by PROPERTY, in the same spirit as T16: every
+# _fence_safe call must sit INSIDE a _redact_text call, and no _fence_safe
+# call may take a _redact_text call as its argument. The first catches a
+# site that fences without redacting; the second catches the exact inversion
+# that shipped. No allow-list, so nothing rots as the file grows.
+#
+# Ships its own NEGATIVE CONTROL: a guard that has never failed on the thing
+# it exists to catch is not evidence that the thing is absent.
+ORDER_GUARD="$TMPROOT/order_guard.py"
+cat > "$ORDER_GUARD" <<'PYEOF'
+import ast, sys
+
+
+def called(n, name):
+    return (isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+            and n.func.id == name)
+
+
+inverted = set()   # _fence_safe(_redact_text(...)) -- the composition that shipped
+unwrapped = set()  # a _fence_safe(...) that no _redact_text encloses
+
+
+def scan(node, protected):
+    if called(node, "_redact_text"):
+        protected = True
+    if called(node, "_fence_safe"):
+        if not protected:
+            unwrapped.add(node.lineno)
+        for a in list(node.args) + [k.value for k in node.keywords]:
+            for sub in ast.walk(a):
+                if called(sub, "_redact_text"):
+                    inverted.add(node.lineno)
+    for ch in ast.iter_child_nodes(node):
+        scan(ch, protected)
+
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    scan(ast.parse(fh.read()), False)
+for ln in sorted(inverted):
+    print("REDACT-INSIDE-FENCE line %d" % ln)
+for ln in sorted(unwrapped):
+    print("FENCE-WITHOUT-REDACT line %d" % ln)
+print("VIOLATIONS=%d" % len(inverted | unwrapped))
+PYEOF
+
+T32SRC="$REPO_ROOT/scripts/ai-brain-auto-update.py"
+T32PY="$(command -v python3 || echo python3)"
+T32REAL="$("$T32PY" "$ORDER_GUARD" "$T32SRC" | sed -n 's/^VIOLATIONS=//p')"
+
+# Plant one of EACH violation shape on a COPY -- never on the real file.
+T32COPY="$TMPROOT/planted_order.py"
+cp "$T32SRC" "$T32COPY"
+{
+  printf '\n\ndef _planted_inverted(changes):\n    return f"x {_fence_safe(_redact_text(changes))}"\n'
+  printf '\n\ndef _planted_unwrapped(changes):\n    return f"x {_fence_safe(changes)}"\n'
+} >> "$T32COPY"
+T32PLANTED="$("$T32PY" "$ORDER_GUARD" "$T32COPY" | sed -n 's/^VIOLATIONS=//p')"
+
+if [ "$T32REAL" = "0" ] && [ "$T32PLANTED" = "2" ]; then
+  ok "T32: redaction is the outermost sanitizer at every fence site (guard proven RED on both violation shapes)"
+elif [ "$T32REAL" != "0" ]; then
+  no "T32: $T32REAL fence site(s) sanitize in the wrong order: $("$T32PY" "$ORDER_GUARD" "$T32SRC" | grep -v '^VIOLATIONS=' | tr '\n' ' ')"
+else
+  no "T32: the order guard is INERT -- it found $T32PLANTED/2 planted violations, so its clean run on the real file proves nothing"
 fi
 
 echo
