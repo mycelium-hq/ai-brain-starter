@@ -36,6 +36,32 @@ if _REAL_EXTRACTORS not in sys.path:
 from _base import VAULT, SKIP_PARTS, iso_date_from  # noqa: E402
 from _floors import floor_num_from_fm  # noqa: E402
 
+# scripts/ -> repo root -> hooks/_lib. Reach the ONE audited safe_read
+# primitive rather than a local reader: the recursive vault-wide glob in
+# load_vault_index() below must survive a cloud placeholder / stalled mount /
+# FIFO, and scripts/check-cloud-safe-file-walkers.py refuses to trust
+# anything else. Same convention as scripts/build-journal-index.py.
+#
+# This script is ALSO run from a bare copy of scripts/ that has no sibling
+# hooks/ dir: tests/integration/test_extractors_localized_vault.sh makes "a
+# private copy of scripts/" (its own words) to prove the tree still works when
+# it is a plain copy, not the repo checkout — the same shape a real deploy
+# would hand this script. `../hooks` does not exist there, so this import used
+# to die with `ModuleNotFoundError: No module named '_lib'`, exactly the
+# failure build-journal-index.py hit before scripts/sync-vault-scripts.sh
+# started mirroring hooks/_lib/{__init__,safe_read}.py alongside it. That sync
+# only mirrors scripts/ FILENAMES (VAULT_SCRIPTS), which cannot express a
+# package directory, and this script isn't in that manifest anyway — so the
+# mirror instead lives at scripts/extractors/_lib/ (a byte-identical copy of
+# hooks/_lib/__init__.py + safe_read.py), inside the one directory this
+# script's own sys.path entry above already guarantees travels with any copy.
+# The real hooks/_lib wins whenever it exists (its sys.path entry is inserted
+# after, so it lands first); the extractors/_lib mirror only activates when
+# ../hooks is entirely absent. Keep the mirror byte-identical to hooks/_lib —
+# diff the two if hooks/_lib/safe_read.py ever changes.
+sys.path.insert(0, os.path.join(HERE, "..", "hooks"))
+from _lib.safe_read import safe_read_text  # noqa: E402
+
 # Insight report location: override with INSIGHTS_OUTPUT env var.
 # Default: picks the first folder that exists: ⚙️ Meta, Meta, else vault root.
 def _default_output_path():
@@ -64,17 +90,15 @@ def _load_self_reference_names():
         return set(filter(None, (n.strip() for n in env.split(","))))
     config_path = os.path.join(VAULT, "⚙️ Meta", "self-reference-names.txt")
     if os.path.isfile(config_path):
-        try:
-            with open(config_path, encoding="utf-8") as fh:
-                names = set()
-                for raw in fh:
-                    line = raw.strip()
-                    if not line or line.startswith("#"):
-                        continue
-                    names.add(line)
-                return names
-        except OSError:
-            pass
+        result = safe_read_text(config_path, timeout=5.0, max_bytes=1_000_000, errors="replace")
+        if result.ok:
+            names = set()
+            for raw in result.text.splitlines():
+                line = raw.strip()
+                if not line or line.startswith("#"):
+                    continue
+                names.add(line)
+            return names
     return set()
 
 
@@ -156,15 +180,21 @@ def load_scope_paths(scope_file):
     """Load newline-delimited file paths from a scope file. Returns set of absolute paths."""
     if not scope_file:
         return None
+    result = safe_read_text(scope_file, timeout=5.0, max_bytes=1_000_000, errors="replace")
+    if not result.ok:
+        # Fail loud, not a silent no-op: a scope file that cannot be read must
+        # not quietly fall back to "unscoped" — that would silently widen
+        # every finding below to the whole vault instead of the caller's
+        # intended slice.
+        sys.exit(f"ERROR: could not read scope file {scope_file}: {result.status}")
     paths = set()
-    with open(scope_file, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if not os.path.isabs(line):
-                line = os.path.join(VAULT, line)
-            paths.add(os.path.normpath(line))
+    for line in result.text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if not os.path.isabs(line):
+            line = os.path.join(VAULT, line)
+        paths.add(os.path.normpath(line))
     return paths
 
 
@@ -175,11 +205,10 @@ def load_vault_index():
         parts = set(fp.split(os.sep))
         if parts & SKIP_PARTS:
             continue
-        try:
-            with open(fp, "r", encoding="utf-8") as f:
-                content = f.read()
-        except Exception:
+        result = safe_read_text(fp, timeout=5.0, max_bytes=1_000_000, errors="replace")
+        if not result.ok:
             continue
+        content = result.text
         if not content.startswith("---"):
             continue
         end = content.find("\n---", 3)
@@ -573,15 +602,25 @@ def render_report(index, findings, baseline, scope_label=None, scoped_n=None, to
         lines.append(f"| `{t}` | {n:,} |")
     lines.append("")
 
+    # Same fallbacks as lucky_charm_people() / drag_people(), so the captions
+    # below state the cutoff actually used instead of a hardcoded one.
+    high_floor_cutoff = baseline["journal_floor_p75"] or 12
+    low_floor_cutoff = baseline["journal_floor_p25"] or 6
+
     # Findings sections — skip any with no results.
     sections = [
         ("Lucky-charm people — high-floor associations",
-         "*People who, when they show up in your journals, the floor is usually ≥12 (Acceptance or above).*",
+         # The cutoff is self-tuned from this vault's own floor distribution
+         # (p75), so the caption must read it too. A hardcoded "≥12
+         # (Acceptance)" contradicts the baseline table printed a few lines
+         # above, which already reports the real p75 — a report that misstates
+         # its own criteria.
+         f"*People who, when they show up in your journals, the floor is usually ≥{high_floor_cutoff:g}.*",
          findings["lucky_charm_people"],
          lambda r: f"- **{r['name']}** — {r['mentions']} mentions, {int(r['ratio']*100)}% on high floors (top floors seen: {', '.join(r['top_floors'])})"),
 
         ("Drag people — low-floor associations",
-         "*People who correlate with floor ≤6 (Desire and below). Not necessarily toxic — could be reflecting shared struggles. Worth looking at.*",
+         f"*People who correlate with floor ≤{low_floor_cutoff:g}. Not necessarily toxic — could be reflecting shared struggles. Worth looking at.*",
          findings["drag_people"],
          lambda r: f"- **{r['name']}** — {r['mentions']} mentions, {int(r['ratio']*100)}% on low floors (top floors seen: {', '.join(r['top_floors'])})"),
 

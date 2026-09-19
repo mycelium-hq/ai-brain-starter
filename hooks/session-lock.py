@@ -962,7 +962,7 @@ def _is_home_repo_git_mutation(command, cwd, main_root, index_probe=None):
             # coarse branch attributed `git -C /other-repo commit -m "<multi-
             # line>"` to the home cwd and false-blocked (SIBLING-SESSION-FALSE-BLOCK
             # class).
-            mc = re.search(r"\bgit\s+(?:--?[\w-]+(?:=\S+)?\s+)*-C\s+(\S+)", seg)
+            mc = re.search(r"\bgit\s+(?:--?[\w][\w-]*(?:=\S+)?\s+)*-C\s+(\S+)", seg)
             if mc:
                 cpath = _expand(mc.group(1).strip("\"'"))
                 if "$" in cpath:
@@ -982,7 +982,7 @@ def _is_home_repo_git_mutation(command, cwd, main_root, index_probe=None):
             # collision surface; an absolute one outside home → let through, an
             # unresolvable $VAR → fail open. (--work-tree is intentionally NOT matched
             # here: it does not move the git-dir, so it must not relax the gate.)
-            mg = re.search(r"\bgit\s+(?:--?[\w-]+(?:=\S+)?\s+)*--git-dir(?:=|\s+)(\S+)", seg)
+            mg = re.search(r"\bgit\s+(?:--?[\w][\w-]*(?:=\S+)?\s+)*--git-dir(?:=|\s+)(\S+)", seg)
             if mg:
                 gpath = _expand(mg.group(1).strip("\"'"))
                 if "$" in gpath:

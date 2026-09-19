@@ -143,6 +143,10 @@
           {
             "type": "command",
             "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/block-skip-prefix-in-vault-write.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/block-skip-prefix-in-vault-write.py; else echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'; fi"
+          },
+          {
+            "type": "command",
+            "command": "[ -f ~/.claude/hooks/block-scratchpad-cross-agent-clobber.py ] && [PYTHON] ~/.claude/hooks/block-scratchpad-cross-agent-clobber.py || true"
           }
         ]
       },
@@ -203,6 +207,10 @@
           {
             "type": "command",
             "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/block-skip-prefix-in-vault-write.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/block-skip-prefix-in-vault-write.py; else echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'; fi"
+          },
+          {
+            "type": "command",
+            "command": "[ -f ~/.claude/hooks/block-scratchpad-cross-agent-clobber.py ] && [PYTHON] ~/.claude/hooks/block-scratchpad-cross-agent-clobber.py || true"
           }
         ]
       },

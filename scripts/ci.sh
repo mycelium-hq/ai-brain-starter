@@ -1207,6 +1207,8 @@ echo "==> (e2b) hook activation: $PY scripts/check-hook-activation.py"
 "$PY" scripts/check-sessionstart-emit-shape.py
 "$PY" scripts/check-frozen-before-state.py --self-test >/dev/null
 "$PY" scripts/check-frozen-before-state.py
+"$PY" scripts/check-vendored-lib-in-sync.py --self-test >/dev/null
+"$PY" scripts/check-vendored-lib-in-sync.py
 "$PY" scripts/check-split-meta.py --self-test
 "$PY" scripts/check-hook-parity.py --self-test >/dev/null
 "$PY" scripts/check-hook-parity.py
@@ -1372,10 +1374,22 @@ PY_DIRECT=(
   hooks/test_surface_stalled_git_operation.py
   hooks/test_memory_index.py
   hooks/test_session_start_context.py
+  # Cross-agent scratchpad clobber guard. Every subagent is handed the SAME
+  # scratchpad_dir as its parent (only agent_id differs), so two agents writing
+  # one basename silently destroy each other's file and the reader cannot tell.
+  # 19 legs: 6 that must DENY, 12 that must stay silent (self-rewrite, reads,
+  # off-scratchpad, bypass), and the shell-variable form that slipped past the
+  # guard's own first production run. Plain script, no pytest.
+  hooks/test_scratchpad_cross_agent_clobber.py
   tests/test_instinct.py
   tests/test_entity_disambiguator_clustering.py
   tests/test_graphify_stage_select_cache_key.py
   tests/test_claude_project_key.py
+  # ReDoS regression for the two git-global-flag scanners in
+  # hooks/session-lock.py (CodeQL py/redos). 4 of its legs fail against
+  # the pre-fix revision, and 12 behaviour legs pin the -C / --git-dir /
+  # $VAR fail-open escapes so the fix cannot quietly tighten the gate.
+  tests/test_session_lock_redos.py
   hooks/test_live_session_reap.py
   hooks/test_relocation_orphan_reclaim.py
   hooks/test_worktree_remove_verifies_side_effect.py
@@ -1504,6 +1518,15 @@ PY_DIRECT=(
   # the hook's own os.environ). Scans this repo's own hooks/ for real and
   # fleet-tests every hook the fix touched -- see the file's own docstring.
   hooks/test_bypass_reachability_watchdog.py
+  # strip_folder_prefix() in graphify_canonicalize.py kept whatever follows
+  # the last "/", which is safe for a path-form wikilink but wrong for a
+  # non-English date or rate ("24/08/2026", "$49/mes") -- every dated note
+  # in a Spanish/Portuguese/French/German vault canonicalized onto the same
+  # node, manufacturing edges that appear in no source document (measured:
+  # 12 supernodes, 119 fabricated edges on one 8,858-node vault). Tests both
+  # shipped copies (scripts/ and skills/graphify/scripts/) so a fix to one
+  # cannot silently leave the other behind.
+  tests/test_graphify_canonicalize_slash_guard.py
 )
 dormant_py=()
 while IFS= read -r -d '' f; do
@@ -1519,6 +1542,22 @@ if [ "${#dormant_py[@]}" -gt 0 ]; then
   echo "::error::dormant Python test suite(s) — none runs in any CI job. Run each via a tests/integration/*.sh wrapper or add it to PY_DIRECT in scripts/ci.sh: ${dormant_py[*]}"
   exit 1
 fi
+# A PY_DIRECT suite is run as a PLAIN SCRIPT below, by a Python that has no
+# pytest (this job pins 3.9 and installs only ruff). A pytest-only file
+# therefore either crashes on import or -- if pytest happens to be importable,
+# as it is on a dev box -- exits 0 having collected NOTHING. The second case is
+# the dangerous one: it satisfies the dormancy invariant above while asserting
+# nothing, and reports GREEN. Caught exactly that way on 2026-09-16.
+pytest_only=()
+for t in "${PY_DIRECT[@]}"; do
+  [ -f "$t" ] || continue
+  if grep -qE '^[[:space:]]*(import pytest|from pytest)' "$t"; then pytest_only+=("$t"); fi
+done
+if [ "${#pytest_only[@]}" -gt 0 ]; then
+  echo "::error::PY_DIRECT suite(s) import pytest, but this gate runs them as plain scripts with no pytest -- they would assert NOTHING and still exit 0. Give each a __main__ runner and plain asserts, or move it to a tests/integration/*.sh wrapper: ${pytest_only[*]}"
+  exit 1
+fi
+
 echo "==> (f cont.) hooks/ + tests/ direct-run suites: ${#PY_DIRECT[@]}"
 for t in "${PY_DIRECT[@]}"; do
   if [ ! -f "$t" ]; then
