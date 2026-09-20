@@ -21,7 +21,7 @@ This is the same shape as the relayed-speech fix from #661, one tier up. There t
 
 The guard that was supposed to catch this only knew four phrases: `chao`, `bye`, `listo`, and two ways to say "close the session". Your own phrases were invisible to it, because a shared language pack cannot know what you put in your CLAUDE.md.
 
-The new guard does not carry a phrase list at all. Any quoted span with real text around it is treated as content, whatever the phrase happens to be. A bare quoted phrase with nothing around it still closes the session — someone typing `"chao"` is saying goodbye, not quoting.
+The detector treats quoted spans with real text around them as content, whatever the phrase happens to be. A separate, unquoted close command still works in the same message, even when a filename elsewhere is quoted. A bare quoted phrase with nothing around it still closes the session — someone typing `"chao"` is saying goodbye, not quoting.
 
 ---
 

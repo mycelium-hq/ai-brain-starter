@@ -231,6 +231,19 @@ CONFIG_FIXTURES: list[tuple[str, str, str | None, str]] = [
     # typing "chao" with quotes is saying goodbye, not quoting).
     ("cq-bare-quoted-only", '"es todo por hoy"', "explicit", _CUSTOM_ES_MD),
 
+    # A quoted filename must not suppress a separate, unquoted custom close.
+    ("cq-unrelated-quote-en", 'The "auth" task is done. close this session',
+     "explicit", 'closingSignals.custom: ["close this session"]\nclosingSignals.customOnly: true\n'),
+    ("cq-unrelated-quote-es", 'El archivo "reporte" quedó listo. cierra la sesión',
+     "explicit", _CUSTOM_ES_MD),
+    ("cq-quoted-then-unquoted", '"es todo por hoy". cierra la sesión',
+     "explicit", _CUSTOM_ES_MD),
+    ("cq-quote-only-content", 'Compara "ya es todo" con "es todo por hoy"',
+     None, _CUSTOM_ES_MD),
+    ("cq-curly-quote", 'Prueba “es todo por hoy” aquí', None, _CUSTOM_ES_MD),
+    ("cq-multiline-code", 'Prueba este ejemplo:\n```\nes todo por hoy\n```',
+     None, _CUSTOM_ES_MD),
+
     # suppress (customOnly off): named phrases never fire; others still do.
     ("sup-im-done-off", "i'm done", None, _SUPPRESS_MD),
     ("sup-ya-esta-off", "ya está", None, _SUPPRESS_MD),
