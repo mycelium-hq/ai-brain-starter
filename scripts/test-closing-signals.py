@@ -92,6 +92,17 @@ FIXTURES: list[tuple[str, str, str | None]] = [
     ("pt-pronto", "pronto", "high_confidence"),
     ("pt-obrigado", "obrigado", "high_confidence"),
 
+    # === "es todo por hoy" (es) — completes the "por hoy" family ===
+    # The pack already had cerremos/terminamos/ya estuvo/ya fue "por hoy" but
+    # not "es todo por hoy", which is the most common of the set in Colombian
+    # and Mexican usage. "(eso|esto) es todo" did not cover it: without the
+    # leading pronoun it matched nothing. End-anchored on purpose — bare
+    # "es todo" is a substring of "es todo lo que necesito para el informe".
+    ("es-todo-por-hoy", "es todo por hoy", "high_confidence"),
+    ("es-eso-es-todo-por-hoy", "eso es todo por hoy", "high_confidence"),
+    ("es-todo-por-hoy-gracias", "es todo por hoy, gracias", "high_confidence"),
+    ("es-todo-por-ahora", "es todo por ahora", "high_confidence"),
+
     # === Emoji-only ===
     ("emoji-wave", "👋", "emoji_only"),
     ("emoji-pray", "🙏", "emoji_only"),
@@ -108,6 +119,9 @@ FIXTURES: list[tuple[str, str, str | None]] = [
     ("amb-pt-beleza", "beleza", "ambiguous"),
 
     # === False positives — should NOT match ===
+    ("neg-es-todo-por-hoy-mas", "es todo por hoy lo que alcancé a revisar", None),
+    ("neg-es-todo-por-hoy-pregunta", "¿es todo por hoy o seguimos?", None),
+    ("neg-es-todo-necesito", "es todo lo que necesito para el informe", None),
     ("neg-mid-conv", "now lets keep going on the other thing", None),
     ("neg-ok-now-do", "okay now do X", None),
     ("neg-ok-lets", "ok let's continue with the next file", None),
