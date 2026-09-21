@@ -69,7 +69,7 @@
 #                                         just staging                 [NEG]
 #   T15 tree dirtied AFTER staging, before the deferred merge -> still
 #                                         caught (defense in depth)     [NEG]
-#   T16 STRUCTURAL: every checkout-path f-string interpolation routes
+#   T16 STRUCTURAL: every checkout-path value reaching emit_ctx routes
 #                                         through _redact_text          [GATE]
 #   T31 secret carrying an invisible char -> redacted, NOT reassembled
 #                                         by the fence sanitizer        [NEG]
@@ -536,83 +536,176 @@ else
 fi
 
 # ---- T16. STRUCTURAL: every checkout-path interpolation is redacted ------
-# T9 and T13 are BEHAVIOUR tests: each proves that ONE path redacts. Neither
-# can see a NEW display site added later -- and that is not hypothetical. The
-# original MYC-4704 redaction sweep keyed on the local name `str(skill)`, and
-# therefore missed _install_fix_cmd(), which reaches the same value through
-# the module-level accessor `_skill_dir()` and interpolated it RAW into two
-# emit_ctx messages (the installer-failed branch and the no-session-id
-# activation note). One concept, two spellings; a name-keyed sweep saw one.
+# T9/T13/T29/T31 are BEHAVIOUR tests: each proves ONE path redacts. None can
+# see a NEW display site added later, and that is not hypothetical -- the
+# original MYC-4704 redaction sweep keyed on the local name `str(skill)` and
+# therefore missed _install_fix_cmd(), which reaches the same value through the
+# module-level accessor `_skill_dir()` and interpolated it RAW into two
+# emit_ctx messages. One concept, two spellings.
 #
-# So this pins every site by PROPERTY, not by name or line number: a DISPLAY
-# use is one that lands inside an f-string. The legitimate non-display uses --
-# the ABS_SYNC_STARTER_DIR env-var value handed to the sync child, Path joins,
-# git argv elements -- are never inside an f-string, so they pass with no
-# allow-list, and there is no allow-list to rot as the file grows.
+# The FIRST version of this guard then repeated that mistake one level up: it
+# matched those two atom spellings inside f-strings only. Measured against it,
+# six other spellings of the identical leak walked straight through -- an alias
+# (`checkout = _skill_dir()`), `.format()`, `%`, `+` concatenation, `.join()`,
+# and `p = str(skill)` then concatenating `p`. A guard whose SCOPE is narrower
+# than its PURPOSE reports clean over the gap and is read as coverage.
 #
-# Ships its own NEGATIVE CONTROL: a guard that has never failed on the thing
-# it exists to catch is not evidence that the thing is absent.
+# So this version anchors on the SINK, not on spellings. The only way the
+# checkout path reaches the model is emit_ctx(), so it taints `skill` and
+# `_skill_dir()`, follows aliases through assignment and str(), follows helpers
+# whose return value reaches emit_ctx, and flags any tainted value there that
+# is not wrapped in _redact_text -- however it was formatted.
+#
+# Taint deliberately does NOT flow through a call that merely RECEIVES the path
+# as an argument: `reclaimed_locks = _reclaim_stale_git_locks(skill)` returns
+# LOCK NAMES, not the path, and an earlier draft that tainted it produced three
+# false positives on clean code. A guard that cries wolf gets read as noise.
+#
+# No allow-list: the legitimate non-display uses (the ABS_SYNC_STARTER_DIR env
+# value handed to the sync child, Path joins, git argv elements) never reach
+# emit_ctx, so they are out of scope by construction, not by exemption -- there
+# is nothing to keep in sync as the file grows.
+#
+# Ships BOTH controls: it must report zero on the real file (a guard that
+# cannot be quiet is useless) and must catch every one of the eight spellings
+# (a guard that has never failed on the thing it catches is not evidence).
 GUARD="$TMPROOT/redaction_guard.py"
 cat > "$GUARD" <<'PYEOF'
 import ast, sys
 
 
-def is_path_atom(n):
-    if isinstance(n, ast.Name) and n.id == "skill":
-        return True
-    return (isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
-            and n.func.id == "_skill_dir")
+def fname(n):
+    return n.func.id if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) else None
 
 
 def is_redact(n):
-    return (isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
-            and n.func.id == "_redact_text")
+    return fname(n) == "_redact_text"
 
+
+def seed(n):
+    return (isinstance(n, ast.Name) and n.id == "skill") or fname(n) == "_skill_dir"
+
+
+def unprotected_seeds(node):
+    if is_redact(node):
+        return []
+    if seed(node):
+        return [node]
+    out = []
+    for ch in ast.iter_child_nodes(node):
+        out += unprotected_seeds(ch)
+    return out
+
+
+def aliases(scope):
+    tainted = {"skill"}
+    for _ in range(6):
+        before = set(tainted)
+        for a in (n for n in ast.walk(scope) if isinstance(n, ast.Assign)):
+            v = a.value
+            while fname(v) == "str" and v.args:
+                v = v.args[0]
+            carries = seed(v) or (isinstance(v, ast.Name) and v.id in tainted)
+            if isinstance(v, ast.BinOp):
+                carries = bool(unprotected_seeds(v)) or any(
+                    isinstance(x, ast.Name) and x.id in tainted for x in ast.walk(v))
+            if carries:
+                for t in a.targets:
+                    for nm in ast.walk(t):
+                        if isinstance(nm, ast.Name):
+                            tainted.add(nm.id)
+        if tainted == before:
+            break
+    return tainted
+
+
+tree = ast.parse(open(sys.argv[1], encoding="utf-8").read())
+funcs = {f.name: f for f in ast.walk(tree) if isinstance(f, ast.FunctionDef)}
+
+
+def calls_in(n):
+    return {fname(c) for c in ast.walk(n) if fname(c)} & funcs.keys()
+
+
+reaching, frontier = set(), set()
+for c in ast.walk(tree):
+    if fname(c) == "emit_ctx":
+        frontier |= calls_in(c)
+while frontier:
+    nxt = set()
+    for nm in frontier - reaching:
+        reaching.add(nm)
+        for r in (n for n in ast.walk(funcs[nm]) if isinstance(n, ast.Return) and n.value):
+            nxt |= calls_in(r.value)
+    frontier = nxt - reaching
 
 viol = set()
 
 
-def scan(node, protected):
-    if is_redact(node):
-        protected = True
-    if is_path_atom(node) and not protected:
-        viol.add(node.lineno)
-        return
-    for ch in ast.iter_child_nodes(node):
-        scan(ch, protected)
+def check(expr, tainted):
+    for s in unprotected_seeds(expr):
+        viol.add(s.lineno)
+    for n in ast.walk(expr):
+        if isinstance(n, ast.Name) and n.id in tainted and n.id != "skill":
+            if not any(is_redact(p) and n in list(ast.walk(p))
+                       for p in ast.walk(expr) if isinstance(p, ast.Call)):
+                viol.add(n.lineno)
 
 
-with open(sys.argv[1], encoding="utf-8") as fh:
-    tree = ast.parse(fh.read())
-for js in ast.walk(tree):
-    if isinstance(js, ast.JoinedStr):
-        for part in js.values:
-            if isinstance(part, ast.FormattedValue):
-                scan(part.value, False)
+for scope in list(funcs.values()) + [tree]:
+    t = aliases(scope)
+    for c in ast.walk(scope):
+        if fname(c) == "emit_ctx":
+            for a in c.args:
+                check(a, t)
+
+for nm in reaching:
+    f = funcs[nm]
+    t = aliases(f)
+    for r in (n for n in ast.walk(f) if isinstance(n, ast.Return) and n.value):
+        check(r.value, t)
+
 for ln in sorted(viol):
-    print("BARE-CHECKOUT-PATH-IN-FSTRING line %d" % ln)
+    print("UNREDACTED-CHECKOUT-PATH line %d" % ln)
 print("VIOLATIONS=%d" % len(viol))
 PYEOF
 
 T16SRC="$REPO_ROOT/scripts/ai-brain-auto-update.py"
 T16REAL="$(python3 "$GUARD" "$T16SRC" | sed -n 's/^VIOLATIONS=//p')"
 
-# Plant one bare site per spelling on a COPY -- never on the real file.
-T16COPY="$TMPROOT/planted_auto_update.py"
-cp "$T16SRC" "$T16COPY"
-{
-  printf '\n\ndef _planted_local_name(skill):\n    return f"checkout at {skill}"\n'
-  printf '\n\ndef _planted_accessor():\n    return f"checkout at {_skill_dir()}"\n'
-} >> "$T16COPY"
-T16PLANTED="$(python3 "$GUARD" "$T16COPY" | sed -n 's/^VIOLATIONS=//p')"
+# NEGATIVE CONTROL: every spelling of the same leak, one per copy, so a guard
+# that catches only some cannot hide behind an aggregate count.
+T16CAUGHT=0
+T16TOTAL=0
+T16MISSED=""
+while IFS='|' read -r t16name t16body; do
+  [ -n "$t16name" ] || continue
+  T16TOTAL=$((T16TOTAL + 1))
+  t16copy="$TMPROOT/planted_${t16name}.py"
+  cp "$T16SRC" "$t16copy"
+  printf '\n\n%b\n' "$t16body" >> "$t16copy"
+  if [ "$(python3 "$GUARD" "$t16copy" | sed -n 's/^VIOLATIONS=//p')" -gt 0 ]; then
+    T16CAUGHT=$((T16CAUGHT + 1))
+  else
+    T16MISSED="$T16MISSED $t16name"
+  fi
+done <<'T16CASES'
+fstring_local|def _p(skill):\n    emit_ctx(f"at {skill}")
+fstring_accessor|def _p():\n    emit_ctx(f"at {_skill_dir()}")
+alias_variable|def _p():\n    checkout = _skill_dir()\n    emit_ctx(f"at {checkout}")
+dot_format|def _p(skill):\n    emit_ctx("at {}".format(skill))
+percent_format|def _p(skill):\n    emit_ctx("at %s" % skill)
+concatenation|def _p(skill):\n    emit_ctx("at " + str(skill))
+join_call|def _p(skill):\n    emit_ctx(" ".join(["at", str(skill)]))
+alias_via_str|def _p(skill):\n    p = str(skill)\n    emit_ctx("at " + p)
+T16CASES
 
-if [ "$T16REAL" = "0" ] && [ "$T16PLANTED" = "2" ]; then
-  ok "T16: every checkout-path f-string interpolation routes through _redact_text (live=0; guard catches both spellings)"
+if [ "$T16REAL" = "0" ] && [ "$T16CAUGHT" = "$T16TOTAL" ]; then
+  ok "T16: every checkout-path value reaching emit_ctx routes through _redact_text (live=0; all $T16TOTAL leak spellings caught)"
 else
-  no "T16: structural redaction guard (live=$T16REAL expected 0; planted=$T16PLANTED expected 2)"
+  no "T16: redaction guard (live=$T16REAL expected 0; caught $T16CAUGHT/$T16TOTAL, missed:${T16MISSED:- none})"
 fi
 
-# ==========================================================================
 # T17-T21. GATE 3: the SessionStart restart witness (MYC-4704 follow-up).
 #
 # Gates 1+2 (differing session_id, elapsed time) could not tell a genuine
