@@ -26,6 +26,19 @@ import json
 import os
 import re
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    # Heredoc-aware shared primitive (MYC-4115). A local re-implementation is
+    # the GUARD-DISARMED-BY-ITS-OWN-OUTPUT class (MYC-4724): a naive whole-string
+    # regex counts a bypass token that merely APPEARS in a heredoc body or in
+    # trailing text, so quoting this guard's own block message next to a git
+    # command would disarm it.
+    from _lib.cmd_env import inline_bypass
+except Exception:                                    # pragma: no cover - fail open
+    def inline_bypass(command, var, value="1"):
+        return False
 
 # A git read that resolves a <rev>:<path> object spec.
 GIT_OBJECT_READ = re.compile(
@@ -35,11 +48,6 @@ GIT_OBJECT_READ = re.compile(
 UNBRACED_REF = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*):(?=[A-Za-z0-9_./~-])")
 
 BYPASS = "ZSH_COLON_BYPASS"
-
-
-def inline_bypass(command: str) -> bool:
-    """A `VAR=1 cmd` prefix never reaches os.environ — read the command too."""
-    return re.search(rf"\b{BYPASS}=1\b", command) is not None
 
 
 def offending(command: str):
@@ -59,11 +67,13 @@ def _selftest() -> int:
         ("git show origin/main:src/app.py", False),        # no variable
         ('echo "$MSG: done"', False),                      # not a git read
         ('git log --format="%H"', False),                  # no ref spec
-        ('ZSH_COLON_BYPASS=1 git show "$SHA:x.py"', False),  # inline bypass
+        ('ZSH_COLON_BYPASS=1 git show "$SHA:x.py"', False),  # real inline bypass
+        # the token merely APPEARING in a heredoc body must NOT disarm it
+        ('cat <<EOF\nZSH_COLON_BYPASS=1\nEOF\ngit show "$SHA:x.py"', True),
     ]
     bad = 0
     for cmd, want in cases:
-        got = bool(offending(cmd)) and not inline_bypass(cmd)
+        got = bool(offending(cmd)) and not inline_bypass(cmd, BYPASS)
         mark = "ok " if got == want else "FAIL"
         if got != want:
             bad += 1
@@ -85,7 +95,7 @@ def main() -> None:
         sys.exit(0)
 
     command = (data.get("tool_input", {}) or {}).get("command", "") or ""
-    if os.environ.get(BYPASS) == "1" or inline_bypass(command):
+    if os.environ.get(BYPASS) == "1" or inline_bypass(command, BYPASS):
         sys.exit(0)
 
     names = offending(command)
@@ -103,7 +113,10 @@ def main() -> None:
         f'    git show "${{{first}}}:path/to/file"\n\n'
         f"If you are asserting an ABSENCE from this command, also run a positive "
         f"control: the same command against a ref where the symbol is known present.\n\n"
-        f"Bypass: ZSH_COLON_BYPASS=1 (only when the colon is genuinely not a ref spec)."
+        f"A documented inline bypass exists for the case where the colon is "
+        f"genuinely not a ref spec; see the hook docstring. It is deliberately "
+        f"not printed here, so quoting this message next to a git command "
+        f"cannot disarm the guard (MYC-4724)."
     )
     print(
         json.dumps(
