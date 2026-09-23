@@ -9,6 +9,18 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-09-23: the Decision Log index stops listing decisions as "????-??-?? — What"
+
+**Who this affects:** anyone whose decision files have `creationDate` but no `decision_date`, or use a What/Why template with `## What` (or `## Qué`) as the first heading. Session-close writes plenty of both.
+
+The index at the top of `Decision Log.md` took the date from `decision_date` only and the title from the first heading in the file. On one 102-decision vault, 16 entries showed up as `????-??-??`, and 12 of those had the same title, "Qué". An index where a dozen rows read the same thing is no help for finding a decision.
+
+It wasn't only cosmetic. A decision with no date stays in the main log forever, so closed decisions without `decision_date` could never move to `Decision Log Archive.md`.
+
+Now, when `decision_date` is missing, the date comes from `creationDate`, and failing that from the date at the start of the filename. Headings that are just template labels (What, Why, Context, Qué, Por qué, Contexto…) are skipped. When nothing else is left, the title is the first sentence of the What section, stripped of bold and links and cut at about 90 characters. Decision files are not touched. The fix is entirely in how the index is built.
+
+---
+
 ## 2026-09-17: graphify's self-link guard missed accented filenames, and skipped files were invisible
 
 **Who this affects:** anyone running `graphify_apply_wikilinks.py` on a vault with accented filenames, notes that share a name across folders, or notes near the 1 MB read cap.
