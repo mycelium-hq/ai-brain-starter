@@ -71,6 +71,11 @@ def run(command: str, *, tool: str = "Bash", env: dict | None = None,
         input=payload,
         capture_output=True,
         text=True,
+        # Decode explicitly: `text=True` alone uses the LOCALE encoding, which
+        # raises UnicodeDecodeError on a non-UTF-8 Windows console for any
+        # non-ASCII path or output. The deny reason here carries em dashes.
+        encoding="utf-8",
+        errors="replace",
         env=child_env,
     )
     return proc.returncode, proc.stdout
