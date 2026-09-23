@@ -66,7 +66,8 @@ def surfacer_out(state: Path, extra_env=None) -> str:
            "ABS_SKILL_DIR": str(state / "noskill")}
     env.update(extra_env or {})
     r = subprocess.run([sys.executable, str(SURFACER)], input="{}",
-                       capture_output=True, text=True, env=env, timeout=60)
+                       capture_output=True, text=True, env=env, timeout=60,
+                       encoding="utf-8", errors="replace")
     try:
         d = json.loads(r.stdout or "{}")
     except json.JSONDecodeError:
@@ -77,7 +78,7 @@ def surfacer_out(state: Path, extra_env=None) -> str:
 def mkstate(tmp: Path, name: str, age_days=None, pinned=False) -> Path:
     s = tmp / name
     s.mkdir(parents=True, exist_ok=True)
-    (s / "settings.json").write_text("{}")
+    (s / "settings.json").write_text("{}", encoding="utf-8")
     if age_days is not None:
         stamp = s / ".ai-brain-starter-last-successful-pull"
         stamp.touch()
@@ -125,18 +126,29 @@ env0 = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
 
 def mkrepo(p: Path) -> Path:
     subprocess.run(["git", "init", "-q", str(p)], check=True, env=env0)
-    (p / "f.txt").write_text("x")
+    (p / "f.txt").write_text("x", encoding="utf-8")
     subprocess.run(["git", "-C", str(p), "add", "f.txt"], check=True, env=env0)
     subprocess.run(["git", "-C", str(p), "commit", "-qm", "init"], check=True, env=env0)
     subprocess.run(["git", "-C", str(p), "branch", "-M", "main"], check=True, env=env0)
     return p
 
 
-def run_updater(clone: Path, state: Path):
+def run_updater(clone: Path, state: Path, session_id: str | None = None):
+    """MYC-4704 gate e6: the pull is now two-phase -- a bare call (no
+    session_id, matching this helper's original no-input shape) only
+    STAGES a pull; the merge itself waits for a later call whose
+    session_id both differs from the staging call's AND clears
+    ABS_UPDATE_MIN_DEPLOY_DELAY_SECONDS (set to 0 here -- this file tests
+    the last_ok/staleness contract, not the elapsed-time gate, which
+    test_ai_brain_auto_update.sh already covers on its own)."""
     env = {**env0, "ABS_SKILL_DIR": str(clone), "ABS_UPDATE_STATE_DIR": str(state),
-           "ABS_UPDATE_INTERVAL_DAYS": "0"}
+           "ABS_UPDATE_INTERVAL_DAYS": "0", "ABS_UPDATE_MIN_DEPLOY_DELAY_SECONDS": "0"}
+    kwargs = {}
+    if session_id is not None:
+        kwargs["input"] = json.dumps({"session_id": session_id})
     return subprocess.run([sys.executable, str(UPDATER)], capture_output=True,
-                          text=True, env=env, timeout=180)
+                          text=True, env=env, timeout=180,
+                          encoding="utf-8", errors="replace", **kwargs)
 
 
 origin = mkrepo(TMP / "o1")
@@ -149,15 +161,25 @@ stamp = st / ".ai-brain-starter-last-successful-pull"
 ok("7. updater SEEDS the success stamp on first run") if stamp.is_file() \
     else bad("7. seed", "stamp absent after a run")
 
-# 8. advances on a real pull
-(origin / "new.txt").write_text("y")
+# 8. advances on a real, COMPLETED pull. MYC-4704 gate e6 made the pull
+# two-phase: a bare call only STAGES (last_ok must NOT advance yet -- it
+# is not yet confirmed current), so this drives it through both phases --
+# stage with one session_id, resolve with a different one -- before
+# asserting either half of the original claim.
+(origin / "new.txt").write_text("y", encoding="utf-8")
 subprocess.run(["git", "-C", str(origin), "add", "new.txt"], check=True, env=env0)
 subprocess.run(["git", "-C", str(origin), "commit", "-qm", "second"], check=True, env=env0)
 old_t = time.time() - 10 * 86400
 os.utime(stamp, (old_t, old_t))
-run_updater(clone, st)
+run_updater(clone, st, session_id="stage-8")      # phase 1: stage only
+if (clone / "new.txt").exists() or stamp.stat().st_mtime > old_t + 86400:
+    bad("8. premise", "staging alone already pulled or advanced the stamp "
+                      "-- the two-phase gate is not doing its job")
+run_updater(clone, st, session_id="resolve-8")     # phase 2: a different,
+                                                    # old-enough (MINDELAY=0)
+                                                    # session resolves it
 if stamp.stat().st_mtime > old_t + 86400 and (clone / "new.txt").exists():
-    ok("8. updater ADVANCES the stamp on a real successful pull")
+    ok("8. updater ADVANCES the stamp once a staged pull actually completes")
 else:
     bad("8. advance", f"pulled={(clone/'new.txt').exists()} "
                       f"advanced={stamp.stat().st_mtime > old_t + 86400}")
@@ -166,7 +188,7 @@ else:
 origin2 = mkrepo(TMP / "o2")
 clone2 = TMP / "c2"
 subprocess.run(["git", "clone", "-q", str(origin2), str(clone2)], check=True, env=env0)
-(origin2 / "z.txt").write_text("z")
+(origin2 / "z.txt").write_text("z", encoding="utf-8")
 subprocess.run(["git", "-C", str(origin2), "add", "z.txt"], check=True, env=env0)
 subprocess.run(["git", "-C", str(origin2), "commit", "-qm", "third"], check=True, env=env0)
 st2 = TMP / "s2"
@@ -176,14 +198,14 @@ stamp2 = st2 / ".ai-brain-starter-last-successful-pull"
 
 # Origin must be AHEAD again, or "no stamp advance" would be untestable: a clone
 # already current is CORRECTLY confirmed current, blocked working tree or not.
-(origin2 / "w.txt").write_text("w")
+(origin2 / "w.txt").write_text("w", encoding="utf-8")
 subprocess.run(["git", "-C", str(origin2), "add", "w.txt"], check=True, env=env0)
 subprocess.run(["git", "-C", str(origin2), "commit", "-qm", "fourth"], check=True, env=env0)
 
 frozen_t = time.time() - 30 * 86400
 os.utime(stamp2, (frozen_t, frozen_t))
 # Block the ff the way a real user does: dirty a tracked file.
-(clone2 / "f.txt").write_text("locally edited")
+(clone2 / "f.txt").write_text("locally edited", encoding="utf-8")
 run_updater(clone2, st2)
 if (clone2 / "w.txt").exists():
     bad("9. premise", "the pull was NOT blocked — fixture proves nothing")

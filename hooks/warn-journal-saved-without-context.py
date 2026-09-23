@@ -209,6 +209,43 @@ def _marker_exists(vault, date_iso):
     return False
 
 
+_SHELL_WRITE = ("cat >", "cat >>", "tee ", "tee -", " > ", " >> ", "mv ", "cp ", "rsync ")
+
+# A journal written from an inline interpreter script (`python3 - <<'EOF' ... EOF`)
+# used to sail straight past this guard: none of the shell redirect markers above
+# appear in such a command, so `blob` stayed empty and the hook no-opped. Found
+# 2026-08-24, when an entire /journal session's edits were made that way and the
+# guard never fired once.
+#
+# The interpreter token is looked for in the command LINES, the write call in the
+# FULL text. That split is the whole point: a `python3` on the command line makes
+# the heredoc body a PROGRAM, whose journal path is a real write target, while a
+# `python3` appearing only INSIDE a body is inert data — a test fixture or a doc —
+# and must not open the gate. That is the 2026-08-28 false-positive class
+# `_strip_heredocs` exists to stop, and this branch must not reopen it.
+# Requires BOTH, so a read-only script that merely names a journal path still
+# fails open.
+# The interpreter must sit in COMMAND position and be followed by a flag or a
+# heredoc (`python3 - <<PY`, `python3 <<PY`, `node -e`), never merely appear as
+# a substring. Without that, writing a FILE whose name contains "python3" and
+# whose body holds a journal path would open the gate — the same false-positive
+# class `_strip_heredocs` was written to close.
+_INTERP_RE = re.compile(
+    r"(?:^|[;&|]|\s)(?:python3?|node|ruby|perl|deno|bun)\s+(?:-|<<)")
+_INTERP_WRITE_RE = re.compile(
+    r"write_text\(|writelines\(|\.write\(|writeFileSync|appendFileSync|"
+    r"File\.write|open\([^)]*['\"][wax]")
+
+
+def _shell_write(text):
+    return any(m in text for m in _SHELL_WRITE)
+
+
+def _interpreter_write(gate_text, full_text):
+    """True when the COMMAND runs an interpreter and its SCRIPT writes a file."""
+    return bool(_INTERP_RE.search(gate_text)) and bool(_INTERP_WRITE_RE.search(full_text))
+
+
 try:
     payload = json.load(sys.stdin)
 except Exception:
@@ -218,6 +255,7 @@ tool_name = payload.get("tool_name", "")
 tool_input = payload.get("tool_input", {}) or {}
 
 blob = ""          # text to scan for path + date + vault root
+interp_write = False   # gate opened via the inline-interpreter form
 if tool_name == "Write":
     fp = _norm(tool_input.get("file_path", "") or "")
     if JOURNAL_PATH_RE.search(fp):
@@ -234,19 +272,28 @@ elif tool_name == "Bash":
     # Gate on the command LINES only (heredoc bodies stripped), so a write whose
     # PAYLOAD merely mentions a journal path is not mistaken for a journal save.
     gate_text = _strip_heredocs(cmd_norm)
-    if JOURNAL_PATH_RE.search(gate_text) and any(
-        m in gate_text for m in ("cat >", "cat >>", "tee ", "tee -", " > ", " >> ", "mv ", "cp ", "rsync ")
-    ):
+    if JOURNAL_PATH_RE.search(gate_text) and _shell_write(gate_text):
         # Normalized, because _vault_root() below must see forward slashes too.
         # The FULL text (body included) is the blob: the gate narrows, the
         # creationDate scan must not.
         blob = cmd_norm
+    elif JOURNAL_PATH_RE.search(cmd_norm) and _interpreter_write(gate_text, cmd_norm):
+        # Inline-interpreter form: the heredoc body IS the program, so both the
+        # journal path and the write call legitimately live inside it. Scanned on
+        # the full text for that reason, and only after the interpreter token has
+        # been found on the command lines.
+        blob = cmd_norm
+        interp_write = True
 
 if not blob:
     sys.exit(0)  # not a journal save
 
-vault = _resolve_root(_strip_heredocs(blob) if tool_name == "Bash" else blob,
-                      payload.get("cwd") or None)
+# Stripped for the shell form, where a heredoc body is payload that must not be
+# read as a path. NOT stripped for the interpreter form, where the body is the
+# program and its absolute journal path names the real vault.
+vault = _resolve_root(
+    _strip_heredocs(blob) if (tool_name == "Bash" and not interp_write) else blob,
+    payload.get("cwd") or None)
 if not vault:
     sys.exit(0)  # can't locate vault -> fail open
 

@@ -10,14 +10,39 @@ regex matches, enum lookups, or counts. Zero LLM involvement in this base.
 import glob
 import os
 import re
+import sys
 import yaml
 
-# VAULT: self-locating. Override with VAULT_ROOT env var, else climbs from
-# scripts/extractors/_base.py two levels up (scripts/extractors/ → scripts/ → vault root).
-VAULT = os.environ.get(
-    "VAULT_ROOT",
-    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")),
-)
+# VAULT: self-locating. Ground truth is THIS file's own location:
+# scripts/extractors/_base.py two levels up (scripts/extractors/ -> scripts/ ->
+# vault root) is the vault this physical copy belongs to. A VAULT_ROOT env var
+# is honored only when it points at that same vault, or when the caller
+# explicitly sets VAULT_ROOT_FORCE=1 -- same contract as
+# scripts/aggregate-sessions.py's _resolve_vault_root(). A naive `env.get(...,
+# default)` read would let a machine-wide VAULT_ROOT (a shell-profile export,
+# or Claude Code's settings.json env block) silently redirect every extractor
+# -- including copies ported into other vaults -- at one vault, with wrong-
+# vault reads and no error (scripts/check-vault-root-reads.py).
+def _resolve_vault_root() -> str:
+    auto_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    env_raw = os.environ.get("VAULT_ROOT")
+    if not env_raw:
+        return auto_root
+    env_root = os.path.abspath(os.path.expanduser(env_raw))
+    if env_root == auto_root:
+        return env_root
+    if os.environ.get("VAULT_ROOT_FORCE", "").strip().lower() in ("1", "true", "yes"):
+        return env_root
+    print(
+        f"WARNING: VAULT_ROOT env points at {env_root}, but this extractor lives "
+        f"in {auto_root}. Operating on the extractor's own vault ({auto_root}); "
+        f"this copy will NOT touch {env_root}. Set VAULT_ROOT_FORCE=1 to override.",
+        file=sys.stderr,
+    )
+    return auto_root
+
+
+VAULT = _resolve_vault_root()
 
 # CRM folder: override with CRM_FOLDER env var, else auto-detect.
 CRM_ROOT = os.environ.get("CRM_FOLDER")
@@ -38,6 +63,19 @@ SKIP_PARTS = {
     "📥 Inbox", "Inbox",
     ".obsidian", ".git", "node_modules",
 }
+
+# A symlinked top-level folder is ANOTHER vault mounted inside this one (the
+# Phase 20 team-vault pattern). glob's `**` follows those links, so without this
+# every personal-vault script would read — and metadata-extract would WRITE —
+# into the other vault, typically a live cloud-sync folder. Skip them by name.
+try:
+    SKIP_PARTS |= {
+        _e for _e in os.listdir(VAULT)
+        if os.path.islink(os.path.join(VAULT, _e))
+        and os.path.isdir(os.path.join(VAULT, _e))
+    }
+except OSError:
+    pass
 
 SKIP_LINE_PREFIXES = (
     "#", "---", "**Gym", "**Sleep", "**RescueTime",

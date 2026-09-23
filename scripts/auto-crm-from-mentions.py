@@ -22,12 +22,63 @@ import glob
 import os
 import re
 import sys
+import unicodedata
 from datetime import date, datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "extractors"))
+sys.path.insert(0, os.path.join(HERE, "..", "hooks"))
 
 from _base import VAULT, CRM_ROOT, SKIP_PARTS, WIKILINK_RE, get_crm_names  # noqa: E402
+from _lib.safe_read import safe_read_text  # noqa: E402
+
+# Per-file read timeout (s) for the vault walk in resolved_note_names(). The
+# shared reader rejects special/offline files before open; an unknown
+# placeholder or stalled cloud-sync mount is abandoned at this deadline
+# instead of hanging the whole sweep (scripts/check-cloud-safe-file-walkers.py).
+READ_TIMEOUT = 5.0
+
+
+def fold_name(name):
+    """Accent- and case-insensitive key for matching a candidate to an existing
+    CRM file. A vault routinely holds 'Ana Ramirez.md' while notes write
+    [[Ana Ramírez]] — without folding, every accented mention stubs a duplicate
+    of a contact that already exists. Bites any vault kept in a language that
+    uses diacritics, which is most of them outside English."""
+    decomposed = unicodedata.normalize("NFD", name)
+    stripped = "".join(c for c in decomposed if unicodedata.category(c) != "Mn")
+    return " ".join(stripped.lower().split())
+
+
+_RESOLVED_CACHE = None
+
+# Note types that are per-person MIRRORS of an external channel, not contact
+# records. A chat export named after someone is evidence they belong in the CRM,
+# so these must never suppress a stub.
+MIRROR_TYPES = {"whatsapp-chat", "whatsapp_chat", "slack-export", "slack_export",
+                "imessage-chat", "imessage_chat"}
+_TYPE_RE = re.compile(r"^type:\s*[\"']?([\w-]+)", re.MULTILINE)
+
+
+def resolved_note_names():
+    """Folded basenames of every non-mirror note in the vault. A wikilink that
+    already resolves to a real note is not an orphan and needs no CRM stub —
+    this is what keeps concept notes like [[Bien Común]] from being stubbed as
+    people, without letting a WhatsApp mirror hide a genuine contact."""
+    global _RESOLVED_CACHE
+    if _RESOLVED_CACHE is None:
+        names = set()
+        for f in glob.glob(os.path.join(VAULT, "**", "*.md"), recursive=True):
+            if set(f.split(os.sep)) & SKIP_PARTS:
+                continue
+            result = safe_read_text(f, timeout=READ_TIMEOUT, max_bytes=1_000_000, errors="replace")
+            head = result.text[:600] if result.ok else ""
+            m = _TYPE_RE.search(head)
+            if m and m.group(1) in MIRROR_TYPES:
+                continue
+            names.add(fold_name(os.path.splitext(os.path.basename(f))[0]))
+        _RESOLVED_CACHE = names
+    return _RESOLVED_CACHE
 
 # Words that disqualify a wikilink from being a person name.
 # If any of these appear in the candidate, it's not auto-stubbed.
@@ -97,11 +148,10 @@ def is_likely_person_name(candidate):
 
 def scan_file_for_names(filepath):
     """Return set of unique candidate person names from a file's wikilinks."""
-    try:
-        with open(filepath, "r", encoding="utf-8") as f:
-            content = f.read()
-    except Exception:
+    result = safe_read_text(filepath, timeout=READ_TIMEOUT, max_bytes=1_000_000)
+    if not result.ok:
         return set()
+    content = result.text
     candidates = set()
     for m in WIKILINK_RE.findall(content):
         base = os.path.basename(m.strip())
@@ -114,6 +164,8 @@ def create_stub(name, source_file, dry_run=False):
     """Create a minimal CRM stub. Returns path if created, None if skipped."""
     target = os.path.join(CRM_ROOT, f"{name}.md")
     if os.path.exists(target):
+        return None
+    if fold_name(name) in ({fold_name(n) for n in get_crm_names()} | resolved_note_names()):
         return None
     if dry_run:
         return target
@@ -158,7 +210,7 @@ def main():
                     help="Max number of stubs to create in one invocation (default 20). Bulk sweeps can override.")
     args = ap.parse_args()
 
-    crm_existing = get_crm_names()
+    crm_existing = {fold_name(n) for n in get_crm_names()} | resolved_note_names()
 
     # Determine file set
     if args.target:
@@ -189,10 +241,13 @@ def main():
 
     # Aggregate candidates with source tracking
     new_candidates = {}  # name → first source file
+    seen_folded = set()
     for fp in files:
         for name in scan_file_for_names(fp):
-            if name in crm_existing or name in new_candidates:
+            key = fold_name(name)
+            if key in crm_existing or key in seen_folded:
                 continue
+            seen_folded.add(key)
             new_candidates[name] = fp
 
     if not new_candidates:

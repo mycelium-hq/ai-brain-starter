@@ -92,6 +92,17 @@ FIXTURES: list[tuple[str, str, str | None]] = [
     ("pt-pronto", "pronto", "high_confidence"),
     ("pt-obrigado", "obrigado", "high_confidence"),
 
+    # === "es todo por hoy" (es) — completes the "por hoy" family ===
+    # The pack already had cerremos/terminamos/ya estuvo/ya fue "por hoy" but
+    # not "es todo por hoy", which is the most common of the set in Colombian
+    # and Mexican usage. "(eso|esto) es todo" did not cover it: without the
+    # leading pronoun it matched nothing. End-anchored on purpose — bare
+    # "es todo" is a substring of "es todo lo que necesito para el informe".
+    ("es-todo-por-hoy", "es todo por hoy", "high_confidence"),
+    ("es-eso-es-todo-por-hoy", "eso es todo por hoy", "high_confidence"),
+    ("es-todo-por-hoy-gracias", "es todo por hoy, gracias", "high_confidence"),
+    ("es-todo-por-ahora", "es todo por ahora", "high_confidence"),
+
     # === Emoji-only ===
     ("emoji-wave", "👋", "emoji_only"),
     ("emoji-pray", "🙏", "emoji_only"),
@@ -108,6 +119,9 @@ FIXTURES: list[tuple[str, str, str | None]] = [
     ("amb-pt-beleza", "beleza", "ambiguous"),
 
     # === False positives — should NOT match ===
+    ("neg-es-todo-por-hoy-mas", "es todo por hoy lo que alcancé a revisar", None),
+    ("neg-es-todo-por-hoy-pregunta", "¿es todo por hoy o seguimos?", None),
+    ("neg-es-todo-necesito", "es todo lo que necesito para el informe", None),
     ("neg-mid-conv", "now lets keep going on the other thing", None),
     ("neg-ok-now-do", "okay now do X", None),
     ("neg-ok-lets", "ok let's continue with the next file", None),
@@ -183,6 +197,11 @@ _SUPPRESS_MD = (
     "closingSignals.suppress: [\"i'm done\", \"ya está\", \"good night\"]\n"
 )
 
+_CUSTOM_ES_MD = (
+    'closingSignals.custom: ["es todo por hoy", "ya es todo", '
+    '"cierra la sesión", "ciérrame la sesión"]\n'
+)
+
 CONFIG_FIXTURES: list[tuple[str, str, str | None, str]] = [
     # customOnly: only the explicit custom phrases fire; natural sign-offs off.
     ("co-start-cascade", "start closing cascade", "explicit", _CUSTOM_ONLY_MD),
@@ -199,6 +218,45 @@ CONFIG_FIXTURES: list[tuple[str, str, str | None, str]] = [
     ("co-definitional-off",
      "session close isn't i'm done or ya esta or anything other than "
      "lets close this session or start closing cascade", None, _CUSTOM_ONLY_MD),
+
+    # === Custom phrase QUOTED as content — MUST NOT fire ===
+    # Sibling of the relayed-speech bug (#661), one tier up. A user's custom
+    # phrases are highest authority and deliberately skip false_positive_guards,
+    # so a custom phrase quoted as CONTENT — testing the detector, reporting a
+    # false positive, editing the phrase list — fired the full cascade. Only
+    # strict_guards outrank custom, so the guard belongs there. Observed live
+    # 2026-09-15: asking to test the detector closed the session mid-task.
+    ("cq-test-request",
+     'prueba "es todo por hoy" contra el detector', None, _CUSTOM_ES_MD),
+    ("cq-add-to-list",
+     'agrega "ya es todo" a la lista de frases de cierre', None, _CUSTOM_ES_MD),
+    ("cq-backtick-config",
+     "`cierra la sesión` debería estar en closingSignals.custom", None, _CUSTOM_ES_MD),
+    ("cq-report-fp",
+     'el detector dispara con "es todo por hoy" y no debería', None, _CUSTOM_ES_MD),
+    ("cq-single-quotes",
+     "revisa si 'ciérrame la sesión' está cubierta", None, _CUSTOM_ES_MD),
+
+    # ...while the SAME custom phrases unquoted must still close the session.
+    ("cq-bare-es-todo-por-hoy", "es todo por hoy", "explicit", _CUSTOM_ES_MD),
+    ("cq-bare-ya-es-todo", "ya es todo", "explicit", _CUSTOM_ES_MD),
+    ("cq-bare-cierra-sesion", "cierra la sesión", "explicit", _CUSTOM_ES_MD),
+    # A bare quoted phrase with nothing around it is still a close (someone
+    # typing "chao" with quotes is saying goodbye, not quoting).
+    ("cq-bare-quoted-only", '"es todo por hoy"', "explicit", _CUSTOM_ES_MD),
+
+    # A quoted filename must not suppress a separate, unquoted custom close.
+    ("cq-unrelated-quote-en", 'The "auth" task is done. close this session',
+     "explicit", 'closingSignals.custom: ["close this session"]\nclosingSignals.customOnly: true\n'),
+    ("cq-unrelated-quote-es", 'El archivo "reporte" quedó listo. cierra la sesión',
+     "explicit", _CUSTOM_ES_MD),
+    ("cq-quoted-then-unquoted", '"es todo por hoy". cierra la sesión',
+     "explicit", _CUSTOM_ES_MD),
+    ("cq-quote-only-content", 'Compara "ya es todo" con "es todo por hoy"',
+     None, _CUSTOM_ES_MD),
+    ("cq-curly-quote", 'Prueba “es todo por hoy” aquí', None, _CUSTOM_ES_MD),
+    ("cq-multiline-code", 'Prueba este ejemplo:\n```\nes todo por hoy\n```',
+     None, _CUSTOM_ES_MD),
 
     # suppress (customOnly off): named phrases never fire; others still do.
     ("sup-im-done-off", "i'm done", None, _SUPPRESS_MD),

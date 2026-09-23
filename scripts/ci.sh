@@ -529,6 +529,14 @@ INTEGRATION_TESTS=(
   # path, because with a relative one the old code fails open before the gate is
   # reached and the assertion would pass without varying with the defect.
   test_journal_guard_end_to_end
+  # Same guard, the inline-interpreter write form (`python3 - <<PY`, `node -e`).
+  # Those carry no shell redirect marker, so the gate never opened and an entire
+  # /journal session's saves went unguarded (2026-08-24). The fix must compose
+  # with the heredoc-body stripping rather than undo it, so the three gate-shut
+  # controls (read-only script, fixture quoting a journal path, file NAMED
+  # python3_helper.sh) run with NO marker planted: an ALLOW there means the gate
+  # stayed shut, not that a marker satisfied it.
+  test_journal_guard_interpreter_write
   # Close detector, whole-message anchoring + length gate (2026-08-16): the
   # shared pack tiers ran under re.MULTILINE, so every `$`-anchored sign-off
   # matched the end of ANY line and a 60-line handoff whose third line read
@@ -1370,6 +1378,12 @@ echo "    OK - $unit_count scripts/ unit suite(s) passed"
 # fails the gate LOUD (the false-green class MYC-2922 closed for scripts/, MYC-2959
 # for hooks/+tests/). PY_DIRECT then runs the non-wrapped suites exactly once.
 PY_DIRECT=(
+  # SessionStart restart witness for the auto-updater's deferred deploy
+  # (MYC-4704 follow-up). Its ACTIVATION assertion is the only thing
+  # proving the witness is not dead code: it has no hooks.json entry of
+  # its own by design (SessionStart fan-out is at budget), so the fold
+  # into surface-deployed-hooks-behind.py is what wires it.
+  hooks/test_session_startup_stamp.py
   hooks/test_umbrella_map.py
   hooks/test_surface_stalled_git_operation.py
   hooks/test_memory_index.py
