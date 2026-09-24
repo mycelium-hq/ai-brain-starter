@@ -153,18 +153,26 @@ fi
 # This is the fix for the review's HIGH cost finding: two spawns total here,
 # never one per candidate, so a merge staging thousands of unchanged artifacts
 # costs the same two spawns as one.
+# --literal-pathspecs: a candidate path is always used AS A PATHSPEC ARGUMENT
+# here, and without this flag git treats one that STARTS WITH ':' as pathspec
+# MAGIC (":(glob)...", ":!...", etc), not a literal path. A path git cannot
+# parse as magic (":Meta/Sessions/x.md" — no recognized keyword) is then
+# silently dropped from the query, which reads as "absent from the diff" —
+# wrongly EXEMPT, even brand new. Same bug class as the re-parsed `ref:path`
+# quoting fix above, one layer over: it is not enough to stop re-parsing a
+# path as a revision string if the path is still re-parsed as a pathspec.
 _changed_origin=()
 if [ "${_have_origin_ref}" = "1" ]; then
   while IFS= read -r -d '' _c; do
     _changed_origin+=("${_c}")
-  done < <(git diff-index --cached -z --no-renames --name-only \
+  done < <(git --literal-pathspecs diff-index --cached -z --no-renames --name-only \
              "${_origin_ref}" -- "${_artifact_paths[@]}" 2>/dev/null)
 fi
 _changed_mergehead=()
 if [ "${_merge_head_on_default}" = "1" ]; then
   while IFS= read -r -d '' _c; do
     _changed_mergehead+=("${_c}")
-  done < <(git diff-index --cached -z --no-renames --name-only \
+  done < <(git --literal-pathspecs diff-index --cached -z --no-renames --name-only \
              MERGE_HEAD -- "${_artifact_paths[@]}" 2>/dev/null)
 fi
 

@@ -53,8 +53,12 @@ fail(){ echo "FAIL: $1"; fails=$((fails+1)); }
 # removed that directory, staged nothing, and passed. Call this immediately
 # before the guard in every bespoke case; it reports an EXIT= value that matches
 # neither 0 nor 1, so the case fails instead.
+# --literal-pathspecs: $1 is a real path, not a pattern. Without this, a path
+# starting with ':' (pathspec magic) can make git match nothing for a path
+# that IS staged, which reports the same false "nothing staged" this helper
+# exists to catch -- caught building case (q)'s colon-prefixed path.
 require_staged(){
-  if git diff --cached --quiet -- "$1"; then echo "EXIT=setup-staged-nothing:$1"; exit 0; fi
+  if git --literal-pathspecs diff --cached --quiet -- "$1"; then echo "EXIT=setup-staged-nothing:$1"; exit 0; fi
 }
 
 # Negative control for the sandbox itself. If it ever silently stops taking
@@ -538,6 +542,36 @@ new_artifacts_at_scale_case_block(){
 # all (review finding F3, reproduced live in extra.r691.sh's X1). The origin
 # route inside the guard does not depend on MERGE_HEAD, so it still works here
 # even though MERGE_HEAD itself is not yet written at pre-merge-commit time.
+# (q) a NEW artifact path starting with ':' -- BLOCK. A candidate path is
+# used as a pathspec argument to `git diff-index`, and without
+# --literal-pathspecs, git reads a leading ':' as PATHSPEC MAGIC
+# (":(glob)...", ":!...") rather than a literal path. ":Meta/Sessions/x.md"
+# has no recognized magic keyword after the ':', so git silently matches
+# nothing for it -- which reads as "absent from the diff", i.e. wrongly
+# exempt, for a path that was never on origin at all. --literal-pathspecs
+# turns the leading ':' back into an ordinary character. (git add -- itself
+# refuses a bare ':'-prefixed pathspec, so this is staged via `git add .`,
+# which never re-parses a discovered path as its own pathspec argument.)
+new_artifact_colon_prefixed_path_case_block(){
+  local d; d="$(mktemp -d)"
+  (
+    cd "$d" || exit 99
+    git init -q -b main
+    git config user.email t@t; git config user.name t
+    echo seed > seed.txt; git add seed.txt; git commit -qm seed
+    git update-ref refs/remotes/origin/main main
+    git checkout -q -b feature
+    mkdir -p ":Meta/Sessions"; printf 'content\n' > ":Meta/Sessions/weird.md"
+    git add .
+    mkdir -p .githooks; cp "$GUARD" .githooks/guard.sh; chmod +x .githooks/guard.sh
+    require_staged ":Meta/Sessions/weird.md"
+    .githooks/guard.sh; echo "EXIT=$?"
+  ) > "$d/out" 2>&1
+  local got; got="$(sed -n 's/^EXIT=//p' "$d/out")"
+  if [ "$got" = "1" ]; then pass "(q) new colon-prefixed artifact path -> BLOCK (exit $got)"; else fail "(q) new colon-prefixed artifact path -> BLOCK (got '$got' want 1)"; sed 's/^/    /' "$d/out"; fi
+  rm -rf "$d"
+}
+
 premerge_commit_wiring_blocks_topic_merge(){
   local d; d="$(mktemp -d)"
   (
@@ -593,6 +627,7 @@ merge_case_allow_quoted_path
 merge_case_block_mode_only_change
 merge_case_allow_main_own_deletion
 new_artifacts_at_scale_case_block
+new_artifact_colon_prefixed_path_case_block
 premerge_commit_wiring_blocks_topic_merge
 
 echo "---"
