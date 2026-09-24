@@ -13,6 +13,29 @@ import re
 import sys
 import yaml
 
+# Windows cp1252-console safety (#313). MODULE scope, and this is the ONLY
+# place the extractor fleet needs it: every extractor imports this module, and
+# extractors/_dispatcher.py imports it (line ~39) before any print, so both thin
+# launchers -- vault-metadata-extract.py and journal-metadata-extract.py, which
+# `import _dispatcher; _dispatcher.main()` -- are covered on the one path that
+# actually runs extraction. _dispatcher's own guard sits under its `__main__`
+# and never fires on that path; measured under PYTHONIOENCODING=cp1252 on an
+# emoji vault path, the launcher used to die with UnicodeEncodeError at
+# `print(f"Vault: {VAULT}")`.
+#
+# errors="backslashreplace" is DELIBERATE, not decoration. A bare
+# reconfigure(encoding="utf-8") RESETS errors to "strict" -- measured: stderr
+# goes backslashreplace -> strict, stdout surrogateescape -> strict. So the
+# naive guard would REMOVE the one property that keeps a lone surrogate (what
+# glob() hands back for a filename holding non-UTF-8 bytes, reachable on
+# Linux/exFAT/SMB) printable, trading a decode crash for an encode crash.
+# Escaping beats dying for a CLI whose whole job is printing vault paths.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="backslashreplace")  # Python 3.7+
+    except (AttributeError, ValueError):
+        pass
+
 # VAULT: self-locating. Ground truth is THIS file's own location:
 # scripts/extractors/_base.py two levels up (scripts/extractors/ -> scripts/ ->
 # vault root) is the vault this physical copy belongs to. A VAULT_ROOT env var
