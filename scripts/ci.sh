@@ -537,6 +537,14 @@ INTEGRATION_TESTS=(
   # python3_helper.sh) run with NO marker planted: an ALLOW there means the gate
   # stayed shut, not that a marker satisfied it.
   test_journal_guard_interpreter_write
+  # Same guard, the fix command it PRINTS (2026-09-24). Step 1 was the literal
+  # `python3 "⚙️ Meta/scripts/journal-preflight.py"`: a session PATH shim
+  # refuses `python3 <script>`, and the relative path resolves only from the
+  # vault root, so the one sanctioned way past the block could not run. The
+  # printed text is executed from `/` and must reach a sentinel-printing
+  # fixture, so a refusal or a wrong path cannot pass. 8 assertions fail on the
+  # pre-fix hook; both no-marker DENY controls still hold.
+  test_journal_guard_preflight_command
   # Close detector, whole-message anchoring + length gate (2026-08-16): the
   # shared pack tiers ran under re.MULTILINE, so every `$`-anchored sign-off
   # matched the end of ANY line and a 60-line handoff whose third line read
