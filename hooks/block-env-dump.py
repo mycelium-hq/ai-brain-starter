@@ -430,27 +430,27 @@ def _deny_reason(command: str):
             if nxt and nxt[0] == "|" and _is_names_only_extractor(tokens(nxt[1].strip())):
                 continue  # provably strips every value before anyone sees it
             return "bare `env` prints every variable's value"
-        if word == "printenv":
+        if base == "printenv":
             return "`printenv` prints one or every variable's value"
-        if word == "export":
+        if base == "export":
             if not rest or rest == ["-p"]:
                 return "bare `export`/`export -p` prints every exported variable's value"
             continue
-        if word == "set":
+        if base == "set":
             if not rest:
                 return "bare `set` prints every shell variable and function body"
             continue
-        if word in ("declare", "typeset"):
+        if base in ("declare", "typeset"):
             if _declare_denied(rest):
-                return f"`{word}` with no operands or a -p flag prints variable values"
+                return f"`{base}` with no operands or a -p flag prints variable values"
             continue
-        if word == "ps":
+        if base == "ps":
             if _ps_denied(rest):
                 return "`ps` with an environment flag exposes process environ blocks"
             continue
-        if word in ("echo", "printf"):
+        if base in ("echo", "printf"):
             if _echo_reveals_secret(text, segs, idx):
-                return f"`{word}` expands a secret-shaped variable"
+                return f"`{base}` expands a secret-shaped variable"
             continue
     return None
 

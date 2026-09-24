@@ -503,3 +503,31 @@ def test_still_denies_fly_secrets_list_as_real_command():
 
 def test_still_denies_vercel_env_pull_as_real_command():
     assert_denied("vercel env pull")
+
+
+# ---------------------------------------------------------------------------
+# 11. Review item 5 -- strip the path from EVERY verb, not just env.
+# ---------------------------------------------------------------------------
+
+def test_denies_printenv_full_path():
+    assert_denied("/usr/bin/printenv")
+
+
+def test_denies_echo_full_path_secret_var():
+    assert_denied("/bin/echo $GITHUB_TOKEN")
+
+
+def test_denies_export_full_path():
+    assert_denied("/usr/bin/export -p")
+
+
+def test_denies_set_full_path():
+    assert_denied("/bin/set")
+
+
+def test_denies_declare_full_path():
+    assert_denied("/usr/bin/declare -p")
+
+
+def test_denies_ps_full_path():
+    assert_denied("/bin/ps -E")
