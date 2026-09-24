@@ -105,6 +105,13 @@ _ECHO_PRINTERS = {
     "uniq", "tee", "less", "xxd", "od", "base64", "jq",
 }
 
+# `os.environ` / `process.env` used as a BARE reference -- print(os.environ),
+# dict(os.environ), console.log(process.env), JSON.stringify(process.env) --
+# prints the WHOLE environment. NOT flagged when it is narrowed to one
+# variable via subscript/attribute (os.environ["HOME"], os.environ.get(...),
+# process.env.FOO), which the negative lookahead excludes.
+_WHOLE_ENV_SCRIPT_RE = re.compile(r"os\.environ\b(?!\s*[.\[])|process\.env\b(?!\s*[.\[])")
+
 # `env`'s own no-argument options. `-u NAME` is handled separately below (it
 # consumes the following token too).
 _ENV_OPT_NO_ARG = {"-i", "-0"}
@@ -522,6 +529,21 @@ def _deny_reason(command: str):
             if _echo_reveals_secret(text, segs, idx):
                 return f"`{base}` expands a secret-shaped variable"
             continue
+        if base == "gh" and rest[:2] == ["auth", "token"]:
+            return "`gh auth token` prints the live auth token"
+        if (base == "security" and "find-generic-password" in rest
+                and any(f in rest for f in ("-w", "-g"))):
+            return "`security find-generic-password -w/-g` prints the stored secret"
+        if base in ("cat", "head", "tail") and any(
+                t.endswith(".env") for t in rest if not t.startswith("-")):
+            return f"`{base}` of a .env file prints its secret values"
+        if (base in ("docker", "kubectl", "podman") and "exec" in rest
+                and rest and os.path.basename(rest[-1]) == "env"):
+            return f"`{base} exec ... env` dumps the container's environment"
+        if (((base in ("python", "python3") and "-c" in rest)
+                or (base == "node" and "-e" in rest))
+                and _WHOLE_ENV_SCRIPT_RE.search(text)):
+            return f"`{base}` prints the whole environment (os.environ/process.env)"
     return None
 
 

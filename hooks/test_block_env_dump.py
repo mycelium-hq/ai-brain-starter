@@ -681,3 +681,66 @@ def test_allows_names_only_pipeline_continues_past_extractor():
 
 def test_allows_grep_dash_q_presence_consumer():
     assert_allowed("env | grep -q '^GITHUB_TOKEN=' && echo set")
+
+
+# ---------------------------------------------------------------------------
+# 16. Review item 10 -- cheap extra coverage: gh auth token; security
+# find-generic-password -w/-g; cat/head/tail of a .env file; docker/
+# kubectl/podman exec ... env; python -c / node -e printing the WHOLE
+# environment.
+# ---------------------------------------------------------------------------
+
+def test_denies_gh_auth_token():
+    assert_denied("gh auth token")
+
+
+def test_denies_security_find_generic_password_dash_w():
+    assert_denied("security find-generic-password -s svc -w")
+
+
+def test_denies_cat_dot_env():
+    assert_denied("cat .env")
+
+
+def test_denies_head_dot_env():
+    assert_denied("head .env")
+
+
+def test_denies_tail_dot_env():
+    assert_denied("tail .env")
+
+
+def test_denies_docker_exec_env():
+    assert_denied("docker exec app env")
+
+
+def test_denies_kubectl_exec_env():
+    assert_denied("kubectl exec pod -- env")
+
+
+def test_denies_podman_exec_env():
+    assert_denied("podman exec app env")
+
+
+def test_denies_python_dash_c_print_os_environ():
+    assert_denied("python3 -c 'import os; print(os.environ)'")
+
+
+def test_denies_python_dash_c_dict_os_environ():
+    assert_denied("python3 -c 'import os; print(dict(os.environ))'")
+
+
+def test_denies_node_dash_e_console_log_process_env():
+    assert_denied("node -e 'console.log(process.env)'")
+
+
+def test_denies_node_dash_e_json_stringify_process_env():
+    assert_denied("node -e 'console.log(JSON.stringify(process.env))'")
+
+
+def test_allows_cat_dot_env_example_template():
+    assert_allowed("cat .env.example")
+
+
+def test_allows_python_dash_c_single_var_subscript():
+    assert_allowed('python3 -c \'import os; print(os.environ["HOME"])\'')
