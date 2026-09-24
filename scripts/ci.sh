@@ -1063,9 +1063,10 @@ fi
 # ---- (c1) stat portability gate --------------------------------------
 # scripts/check-stat-portability.py is the single source of truth -
 # lint.yml's `lint` job runs the SAME script, so the laptop pre-push gate and
-# CI cannot drift (mirrors check-exit-contract.py's wiring below, not
-# shellcheck.sh's: this one is stdlib-only and hermetic, so there is no
-# external-binary reason to skip it in either place).
+# CI cannot drift. This one is stdlib-only and hermetic (no external binary
+# to install), so unlike the check just above it there is no OS-dependent
+# reason to skip it in either place -- it mirrors check-exit-contract.py's
+# wiring below instead.
 echo "==> (c1) stat portability: $PY scripts/check-stat-portability.py"
 "$PY" scripts/check-stat-portability.py --self-test >/dev/null
 "$PY" scripts/check-stat-portability.py
