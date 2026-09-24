@@ -617,3 +617,67 @@ def test_allows_exported_bypass_carries_to_later_segment():
 def test_still_allows_session_env_bypass():
     r = run_hook("env", env_extra={"ENV_DUMP_BYPASS": "1"})
     assert r.returncode == 0, r.stderr
+
+
+# ---------------------------------------------------------------------------
+# 15. Review item 9 -- names-only extractors matched by EXACT argument list,
+# not a regex that a wider selector can sneak past; grep -q/-c added as
+# presence consumers (never print a value, only an exit code or a count).
+# ---------------------------------------------------------------------------
+
+def test_denies_cut_field_range():
+    assert_denied("env | cut -d= -f1-2")
+
+
+def test_denies_cut_field_list():
+    assert_denied("env | cut -d= -f1,2")
+
+
+def test_denies_cut_open_ended_range():
+    assert_denied("env | cut -d= -f1-")
+
+
+def test_denies_cut_spaced_field_range():
+    assert_denied("env | cut -d= -f 1-3")
+
+
+def test_denies_cut_with_complement_flag():
+    assert_denied("env | cut -d= -f1 --complement")
+
+
+def test_denies_sed_print_then_substitute():
+    # -e p prints the pattern space AS-IS (the real value) before the
+    # substitution ever runs -- not equivalent to the blessed bare script.
+    assert_denied("env | sed -e p -e 's/=.*//'")
+
+
+def test_allows_cut_glued_form():
+    assert_allowed("env | cut -d= -f1")
+
+
+def test_allows_cut_single_quoted_delimiter():
+    assert_allowed("env | cut -d'=' -f1")
+
+
+def test_allows_cut_fully_spaced_form():
+    assert_allowed('env | cut -d "=" -f 1')
+
+
+def test_allows_sed_bare_script():
+    assert_allowed("env | sed 's/=.*//'")
+
+
+def test_allows_awk_bare_script():
+    assert_allowed("env | awk -F= '{print $1}'")
+
+
+def test_still_denies_awk_multi_field_script():
+    assert_denied("env | awk -F= '{print $1, $2}'")
+
+
+def test_allows_names_only_pipeline_continues_past_extractor():
+    assert_allowed("env | cut -d= -f1 | grep -i key")
+
+
+def test_allows_grep_dash_q_presence_consumer():
+    assert_allowed("env | grep -q '^GITHUB_TOKEN=' && echo set")

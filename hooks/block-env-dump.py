@@ -281,23 +281,74 @@ def _env_is_bare_dump(rest: list) -> bool:
     return i >= n
 
 
+def _cut_field_delim(rest: list):
+    """Parse `cut`'s own (delimiter, field) from its argv, accepting the
+    glued/single-quoted/spaced forms shlex hands back (`-d=`, `-d '='`,
+    `-d =`, `-f1`, `-f 1`), or None for EITHER the moment a token doesn't
+    fit that shape at all. An extra flag (`--complement`), an extra field
+    (`-f1-2`, `-f1,2`, `-f1-`), or any other trailing token makes this None
+    -- there is no bucket for "leftover", so it can't be silently ignored."""
+    i, n = 0, len(rest)
+    delim = field = None
+    while i < n:
+        t = rest[i]
+        if t == "-d" and i + 1 < n:
+            delim, i = rest[i + 1], i + 2
+        elif t.startswith("-d") and len(t) > 2:
+            delim, i = t[2:], i + 1
+        elif t == "-f" and i + 1 < n:
+            field, i = rest[i + 1], i + 2
+        elif t.startswith("-f") and len(t) > 2:
+            field, i = t[2:], i + 1
+        else:
+            return None
+    return delim, field
+
+
+def _awk_field_delim(rest: list):
+    """As `_cut_field_delim`, for awk's (delimiter, script): the FIRST
+    token that isn't a `-F` flag becomes the script, and anything after
+    that (a second positional, another flag) makes this None."""
+    i, n = 0, len(rest)
+    delim = script = None
+    while i < n:
+        t = rest[i]
+        if t == "-F" and i + 1 < n:
+            delim, i = rest[i + 1], i + 2
+        elif t.startswith("-F") and len(t) > 2:
+            delim, i = t[2:], i + 1
+        elif script is None:
+            script, i = t, i + 1
+        else:
+            return None
+    return delim, script
+
+
 def _is_names_only_extractor(toks: list) -> bool:
     """True for the three pipeline stages that provably strip every value
-    before anything downstream can see it: `cut -d= -f1`, `sed 's/=.*//'`,
-    `awk -F= '{print $1}'` (spacing/quoting variants). A builder-style sed
-    that keeps a value snippet (`s/^([^=]+)=(.{0,10}).*/...`) is NOT this --
-    it must match the exact blessed script, not merely start with `s/`."""
+    before anything downstream can see it, matched by EXACT approved
+    argument list (not a regex a wider selector can slip past): `cut -d=
+    -f1` (only field 1, no range/list/complement), `sed 's/=.*//'` (that
+    exact script, nothing else -- `-e p -e 's/=.*//'` also prints the
+    value AS-IS via `-e p` first and is NOT this), `awk -F= '{print $1}'`
+    (that exact script, nothing else)."""
     if not toks:
         return False
     cmd, rest = toks[0], toks[1:]
-    joined = " ".join(rest)
     if cmd == "cut":
-        return bool(re.search(r"-d\s*=", joined)) and bool(re.search(r"-f\s*1\b", joined))
+        return _cut_field_delim(rest) == ("=", "1")
     if cmd == "sed":
-        return "s/=.*//" in rest
+        return rest == ["s/=.*//"]
     if cmd == "awk":
-        return bool(re.search(r"-F\s*=", joined)) and "{print $1}" in rest
+        return _awk_field_delim(rest) == ("=", "{print $1}")
     return False
+
+
+def _is_presence_consumer(toks: list) -> bool:
+    """True for `grep -q` / `grep -c`: consumes the whole piped stream but
+    ever prints only an exit code (-q, nothing at all) or a match COUNT
+    (-c), never a matched line's actual value."""
+    return bool(toks) and toks[0] == "grep" and any(t in ("-q", "-c") for t in toks[1:])
 
 
 def _names_secret_var(name: str) -> bool:
@@ -444,8 +495,10 @@ def _deny_reason(command: str):
             if not _env_is_bare_dump(rest):
                 continue
             nxt = segs[idx + 1] if idx + 1 < len(segs) else None
-            if nxt and nxt[0] == "|" and _is_names_only_extractor(tokens(nxt[1].strip())):
-                continue  # provably strips every value before anyone sees it
+            if nxt and nxt[0] == "|":
+                nxt_toks = tokens(nxt[1].strip())
+                if _is_names_only_extractor(nxt_toks) or _is_presence_consumer(nxt_toks):
+                    continue  # provably strips values, or never prints one
             return "bare `env` prints every variable's value"
         if base == "printenv":
             return "`printenv` prints one or every variable's value"
