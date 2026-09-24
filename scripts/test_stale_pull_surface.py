@@ -91,6 +91,15 @@ def mkstate(tmp: Path, name: str, age_days=None, pinned=False) -> Path:
 
 TMP = Path(tempfile.mkdtemp())
 
+# MYC-4907: the updater now refuses any ABS_SKILL_DIR that does not resolve
+# strictly inside ~/.claude/skills. run_updater() below drives ABS_SKILL_DIR
+# at a clone that used to sit directly under TMP (outside any HOME), which
+# would now be refused -- give it a fake HOME whose skills root the clone
+# lives under instead of touching the real one.
+FAKE_HOME = TMP / "home"
+SKILLS_ROOT = FAKE_HOME / ".claude" / "skills"
+SKILLS_ROOT.mkdir(parents=True, exist_ok=True)
+
 # --- 1-6: the surface -------------------------------------------------------
 out = surfacer_out(mkstate(TMP, "fresh", age_days=2))
 ok("1. fresh success stamp (2d) is silent") if "not successfully updated" not in out \
@@ -141,7 +150,8 @@ def run_updater(clone: Path, state: Path, session_id: str | None = None):
     ABS_UPDATE_MIN_DEPLOY_DELAY_SECONDS (set to 0 here -- this file tests
     the last_ok/staleness contract, not the elapsed-time gate, which
     test_ai_brain_auto_update.sh already covers on its own)."""
-    env = {**env0, "ABS_SKILL_DIR": str(clone), "ABS_UPDATE_STATE_DIR": str(state),
+    env = {**env0, "HOME": str(FAKE_HOME), "ABS_SKILL_DIR": str(clone),
+           "ABS_UPDATE_STATE_DIR": str(state),
            "ABS_UPDATE_INTERVAL_DAYS": "0", "ABS_UPDATE_MIN_DEPLOY_DELAY_SECONDS": "0"}
     kwargs = {}
     if session_id is not None:
@@ -152,7 +162,7 @@ def run_updater(clone: Path, state: Path, session_id: str | None = None):
 
 
 origin = mkrepo(TMP / "o1")
-clone = TMP / "c1"
+clone = SKILLS_ROOT / "c1"
 subprocess.run(["git", "clone", "-q", str(origin), str(clone)], check=True, env=env0)
 st = TMP / "s1"
 st.mkdir()
@@ -186,7 +196,7 @@ else:
 
 # 9. does NOT advance when the pull is blocked  <- the signal's whole value
 origin2 = mkrepo(TMP / "o2")
-clone2 = TMP / "c2"
+clone2 = SKILLS_ROOT / "c2"
 subprocess.run(["git", "clone", "-q", str(origin2), str(clone2)], check=True, env=env0)
 (origin2 / "z.txt").write_text("z", encoding="utf-8")
 subprocess.run(["git", "-C", str(origin2), "add", "z.txt"], check=True, env=env0)
