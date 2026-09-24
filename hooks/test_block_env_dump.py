@@ -531,3 +531,29 @@ def test_denies_declare_full_path():
 
 def test_denies_ps_full_path():
     assert_denied("/bin/ps -E")
+
+
+# ---------------------------------------------------------------------------
+# 12. Review item 6 -- ps: only single-dash short flags containing E count,
+# so a long double-dash flag that happens to contain "E" (--sort=-%MEM) is
+# not mistaken for the environment flag. BSD dashless "e" stays denied.
+# ---------------------------------------------------------------------------
+
+def test_allows_ps_long_flag_containing_uppercase_e():
+    assert_allowed("ps aux --sort=-%MEM | head")
+
+
+def test_still_denies_ps_dash_capital_e():
+    assert_denied("ps -E")
+
+
+def test_still_denies_ps_bsd_dashless_eww():
+    assert_denied("ps eww")
+
+
+def test_still_denies_ps_bsd_dashless_auxe():
+    assert_denied("ps auxe")
+
+
+def test_still_allows_ps_pid_lookup():
+    assert_allowed('ps -p "$(pgrep -f server)" -o pid=')

@@ -386,12 +386,14 @@ def _declare_denied(rest: list) -> bool:
 
 
 def _ps_denied(rest: list) -> bool:
-    """A dashed flag group containing uppercase E (macOS `ps -E`), or a
-    BSD-style dashless FIRST argument containing lowercase e (`ps eww`,
-    `ps auxe`). `ps -e` and `ps -p 123 -o pid=` are explicitly fine."""
+    """A single-dash SHORT flag group containing uppercase E (macOS `ps
+    -E`), or a BSD-style dashless FIRST argument containing lowercase e
+    (`ps eww`, `ps auxe`). A double-dash long flag never counts, even when
+    it happens to contain a capital E (`ps aux --sort=-%MEM`). `ps -e` and
+    `ps -p 123 -o pid=` are explicitly fine."""
     if not rest:
         return False
-    if any(t.startswith("-") and "E" in t for t in rest):
+    if any(t.startswith("-") and not t.startswith("--") and "E" in t for t in rest):
         return True
     first = rest[0]
     return not first.startswith("-") and "e" in first
