@@ -35,6 +35,7 @@ exporter is scripts/granola_sync.py.
 from __future__ import annotations  # PEP 604 `X | None` annotations safe on py3.8+
 
 import gzip
+import importlib.util
 import io
 import json
 import os
@@ -175,6 +176,8 @@ def list_notes(key: str, created_after: str | None, user_agent: str = DEFAULT_US
 # vault + filesystem
 # --------------------------------------------------------------------------- #
 def detect_vault_root() -> Path:
+    # vault-root-ok: explicit override for the unattended launchd exporter; one
+    # Granola account feeds one vault; granola_sync --vault-root is checked first
     env_root = os.environ.get("VAULT_ROOT")
     if env_root:
         return Path(env_root)
@@ -278,7 +281,7 @@ def state_path_for(vault_root: Path) -> Path:
 def load_state(state_file: Path) -> dict:
     if Path(state_file).exists():
         try:
-            s = json.loads(Path(state_file).read_text())
+            s = json.loads(Path(state_file).read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             s = {}
     else:
@@ -294,6 +297,62 @@ def save_state(state_file: Path, state: dict) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# untrusted third-party content guard (MYC-4701)
+# --------------------------------------------------------------------------- #
+_UNSET = object()  # sentinel distinct from None: "not attempted" vs "tried, found nothing"
+_guard_module_cache = _UNSET
+
+
+def _untrusted_guard_module():
+    """Load skills/_shared/connector_utils.py for guard_untrusted_body /
+    trust_frontmatter_lines. Cached after the first call, including a None
+    result, so a missing module is not re-probed on every note.
+
+    Returns None -- never raises -- when `_shared` is missing (bootstrap.sh's
+    per-skill copy list omits it) or a stale deployed copy lacks the names.
+    Callers then skip fencing but still stamp the 3 unavailable trust lines
+    by hand: a transcript is always written, never dropped, on a degraded
+    install (N10, N5).
+    """
+    global _guard_module_cache
+    if _guard_module_cache is not _UNSET:
+        return _guard_module_cache
+
+    candidates = [
+        Path(__file__).resolve().parent.parent / "skills" / "_shared",
+        Path.home() / ".claude" / "skills" / "ai-brain-starter" / "skills" / "_shared",
+        Path.home() / ".claude" / "skills" / "_shared",
+    ]
+    mod = None
+    for candidate_dir in candidates:
+        script = candidate_dir / "connector_utils.py"
+        if not script.is_file():
+            continue
+        try:
+            spec = importlib.util.spec_from_file_location("_abs_connector_utils", script)
+            if spec is None or spec.loader is None:
+                continue
+            candidate_mod = importlib.util.module_from_spec(spec)
+            # Registered in sys.modules before exec_module for the same reason
+            # the scanner loader does it (N5): cheap insurance against any
+            # self-referential lookup during exec, not just the dataclass case.
+            sys.modules["_abs_connector_utils"] = candidate_mod
+            spec.loader.exec_module(candidate_mod)
+        except Exception:
+            sys.modules.pop("_abs_connector_utils", None)
+            continue
+        if hasattr(candidate_mod, "guard_untrusted_body") and hasattr(
+            candidate_mod, "trust_frontmatter_lines"
+        ):
+            mod = candidate_mod
+            break
+        sys.modules.pop("_abs_connector_utils", None)
+
+    _guard_module_cache = mod
+    return mod
+
+
+# --------------------------------------------------------------------------- #
 # export one note
 # --------------------------------------------------------------------------- #
 def write_transcript_md(
@@ -304,7 +363,15 @@ def write_transcript_md(
 ) -> tuple[Path | None, str]:
     """Write one note's transcript .md. `extra_frontmatter` lets a caller add
     keys (e.g. the personal exporter's `external_attendees`) without forking this
-    function -- the only sanctioned point of variation."""
+    function -- the only sanctioned point of variation.
+
+    The title, summary, and transcript are third-party content (other meeting
+    participants wrote them, not the operator): always fenced and stamped
+    `content_trust: untrusted` via guard_untrusted_body (MYC-4701). The scan
+    runs on the RAW per-utterance text, not the rendered
+    `` `mm:ss` **Speaker**: `` markdown -- that prefix pushes a line like
+    "System: ..." off the start of its line and defeats a line-anchored
+    pattern that the raw utterance would still trip (N1)."""
     title = note.get("title") or "Untitled Meeting"
     created = note.get("created_at") or ""
     date = created[:10] if created else datetime.now().strftime("%Y-%m-%d")
@@ -328,19 +395,57 @@ def write_transcript_md(
         f"utterances: {n_utt}",
     ]
     for k, v in (extra_frontmatter or {}).items():
-        fm.append(f"{k}: {v}")
-    fm.append("---")
+        # A newline in a caller-supplied value (e.g. an attendee's display
+        # name) would otherwise inject a bogus frontmatter key on the next
+        # line -- flatten to spaces before it ever reaches the file.
+        safe_v = str(v).replace("\r", " ").replace("\n", " ")
+        fm.append(f"{k}: {safe_v}")
 
     body = format_transcript(transcript, meeting_start)
-    content = "\n".join(fm) + "\n\n"
-    content += f"# {title}\n\n"
-    content += f"*Pulled from the Granola API on {datetime.now().strftime('%Y-%m-%d %H:%M')}*\n\n"
+    third_party_block = f"# {' '.join(title.split())}\n\n"
+    third_party_block += (
+        f"*Pulled from the Granola API on {datetime.now().strftime('%Y-%m-%d %H:%M')}*\n\n"
+    )
     if summary_md:
-        content += f"## Summary\n\n{summary_md}\n\n"
-    content += f"## Full Transcript\n\n{body or '_(empty transcript)_'}\n"
+        third_party_block += f"## Summary\n\n{summary_md}\n\n"
+    third_party_block += f"## Full Transcript\n\n{body or '_(empty transcript)_'}\n"
+
+    scan_text = "\n".join(
+        [title, summary_md] + [(u.get("text") or "").strip() for u in transcript]
+    )
+
+    guard_mod = _untrusted_guard_module()
+    if guard_mod is not None:
+        rendered_block, trust = guard_mod.guard_untrusted_body(
+            third_party_block, "granola", scan_text=scan_text
+        )
+        trust_lines = guard_mod.trust_frontmatter_lines(trust)
+    else:
+        # No envelope when the guard module itself is unavailable -- there is
+        # no local fencing logic to fall back to -- but the 3 trust lines are
+        # still stamped by hand so "unavailable" is never silently "clean".
+        rendered_block = third_party_block
+        trust = {"content_trust": "untrusted", "injection_scan": "unavailable", "injection_flags": []}
+        trust_lines = [
+            "content_trust: untrusted",
+            "injection_scan: unavailable",
+            "injection_flags: []",
+        ]
+
+    fm.extend(trust_lines)
+    fm.append("---")
+
+    content = "\n".join(fm) + "\n\n" + rendered_block
+    if not content.endswith("\n"):
+        content += "\n"
+
+    scan_suffix = ""
+    if trust["injection_scan"] != "clean":
+        ids = ", ".join(trust["injection_flags"]) if trust["injection_flags"] else "none"
+        scan_suffix = f" [injection_scan={trust['injection_scan']}: {ids}]"
 
     if dry_run:
-        return filepath, f"DRY-RUN would write {filepath.name} ({n_utt} utterances)"
+        return filepath, f"DRY-RUN would write {filepath.name} ({n_utt} utterances){scan_suffix}"
     meeting_dir.mkdir(parents=True, exist_ok=True)
     filepath.write_text(content, encoding="utf-8")
-    return filepath, f"SAVED {filepath.name} ({n_utt} utterances)"
+    return filepath, f"SAVED {filepath.name} ({n_utt} utterances){scan_suffix}"
