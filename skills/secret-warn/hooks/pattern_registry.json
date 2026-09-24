@@ -287,7 +287,7 @@
       "category": "prompt-injection",
       "description": "Audited content impersonates a system/assistant turn or system prompt",
       "severity": "warn",
-      "regex_b64": "KD9pKSg/Ol58XG4pXHMqKD86c3lzdGVtfGFzc2lzdGFudClccypbOj5dfFxic3lzdGVtIHByb21wdFxifDxcfD9ccypzeXN0ZW1ccypcfD8+",
+      "regex_b64": "KD9pKSg/Ol58XG4pWyBcdFxyXXswLDQwfSg/OnN5c3RlbXxhc3Npc3RhbnQpWyBcdF17MCwxMH1bOj5dfFxic3lzdGVtIHByb21wdFxifDxcfD9ccypzeXN0ZW1ccypcfD8+",
       "applies_to": [
         "audited-content"
       ],
@@ -298,7 +298,7 @@
       "category": "prompt-injection",
       "description": "Audited content cues secret/credential exfiltration",
       "severity": "warn",
-      "regex_b64": "KD9pKX4vXC5zc2h8XGJpZF9yc2FcYnwoPzwhW1x3Ll0pXC5lbnZcYnxwcml2YXRlW19ccy1dP2tleXxBV1NfU0VDUkVUfFxiZXhmaWx0cmF0XHcqfFxicHJpbnRcYlteLlxuXXswLDIwfVxiZW52KD86aXJvbm1lbnQpP1xifFxiY3VybFxiW158XG5dKlx8XHMqKD86c2h8YmFzaCl8XGIoPzpzZW5kfHVwbG9hZHxwb3N0fGxlYWspXGJbXi5cbl17MCwzMH1cYig/OnNlY3JldHx0b2tlbnxjcmVkZW50aWFsfGFwaVtfXHMtXT9rZXl8a2V5KXM/XGI=",
+      "regex_b64": "KD9pKX4vXC5zc2h8XGJpZF9yc2FcYnwoPzwhW1x3Ll0pXC5lbnZcYnxwcml2YXRlW19ccy1dP2tleXxBV1NfU0VDUkVUfFxiZXhmaWx0cmF0XHcqfFxicHJpbnRcYlteLlxuXXswLDIwfVxiZW52KD86aXJvbm1lbnQpP1xifFxiY3VybFxiW158XG5dezAsMzAwfVx8WyBcdF17MCwxMH0oPzpzaHxiYXNoKXxcYig/OnNlbmR8dXBsb2FkfHBvc3R8bGVhaylcYlteLlxuXXswLDMwfVxiKD86c2VjcmV0fHRva2VufGNyZWRlbnRpYWx8YXBpW19ccy1dP2tleXxrZXkpcz9cYg==",
       "applies_to": [
         "audited-content"
       ],
