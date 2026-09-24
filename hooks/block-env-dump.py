@@ -379,8 +379,12 @@ def _echo_reveals_secret(seg_text: str, segs=None, idx=None) -> bool:
 
 
 def _declare_denied(rest: list) -> bool:
-    """`declare`/`typeset` with no operands, or any flag containing `p`."""
+    """`declare`/`typeset` with no operands, or any flag containing `p`.
+    `-F` alone is always safe (function NAMES only, never bodies/values),
+    regardless of whether an operand narrows it to specific names."""
     flags = [t for t in rest if t.startswith("-") and t != "--"]
+    if flags and all(f.lstrip("-") == "F" for f in flags):
+        return False
     operands = [t for t in rest if not t.startswith("-")]
     return (not operands) or any("p" in f for f in flags)
 

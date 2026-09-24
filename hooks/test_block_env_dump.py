@@ -557,3 +557,23 @@ def test_still_denies_ps_bsd_dashless_auxe():
 
 def test_still_allows_ps_pid_lookup():
     assert_allowed('ps -p "$(pgrep -f server)" -o pid=')
+
+
+# ---------------------------------------------------------------------------
+# 13. Review item 7 -- declare -F (function NAMES only, no bodies) allowed.
+# ---------------------------------------------------------------------------
+
+def test_allows_declare_dash_capital_f():
+    assert_allowed("declare -F")
+
+
+def test_allows_declare_dash_capital_f_with_name():
+    assert_allowed("declare -F my_func")
+
+
+def test_still_denies_declare_dash_p():
+    assert_denied("declare -p")
+
+
+def test_still_denies_declare_no_operands():
+    assert_denied("declare -x")
