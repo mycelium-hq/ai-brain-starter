@@ -830,20 +830,26 @@ def _resolve_pending_deploy(pending: Path, session_id: str, skill: Path,
             f"a human can run: {_install_fix_cmd()}")
 
 
-def _refuse_skill_dir_override(last: Path, interval_days: float) -> None:
+def _refuse_skill_dir_override(state: Path, interval_days: float) -> None:
     """ABS_SKILL_DIR failed containment (MYC-4907) -- ALWAYS exits, before
     the caller acquires the single-flight lock or touches the candidate at
-    all. Rate-limited on the SAME `last` stamp / ABS_UPDATE_INTERVAL_DAYS
-    step 3 uses for an ordinary fetch, so a stuck misconfiguration nags at
-    most once per interval, not once per prompt.
+    all. Rate-limited on its OWN marker, NEVER `last` or `last_ok` (F2,
+    independent review): those are what a REAL fetch reads to decide
+    whether it is due and whether the clone is confirmed current. Confirmed
+    live: a session with a bad override touched `last`; a later session
+    with NO override, sharing the same state dir, then saw `last` fresh and
+    went fully silent instead of staging a real, pending update -- one
+    misconfigured project freezing every other project's real updates for
+    up to one interval.
     """
+    marker = state / ".ai-brain-starter-skill-dir-refused"
     try:
-        if last.is_file() and (time.time() - last.stat().st_mtime) < interval_days * 86400:
+        if marker.is_file() and (time.time() - marker.stat().st_mtime) < interval_days * 86400:
             silent()
     except OSError:
         silent()
     try:
-        last.touch()
+        marker.touch()
     except OSError:
         pass
     # The value itself is NEVER echoed, redacted or not (independent review
@@ -904,7 +910,7 @@ def run() -> None:
     # update against the real install in place of whatever the override was
     # meant to isolate, which is worse than refusing outright.
     if skill is None:
-        _refuse_skill_dir_override(last, interval_days)
+        _refuse_skill_dir_override(state, interval_days)
 
     # Single-flight lock now wraps BOTH resolving a deferred deploy and
     # staging a new one (MYC-4704 gate e6). Previously only staging held
