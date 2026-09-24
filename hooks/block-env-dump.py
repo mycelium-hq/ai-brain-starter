@@ -29,7 +29,9 @@ lesson of MYC-4626: a naive regex reads a dangerous command out of a quoted
 string, a comment, or a heredoc body and calls it code, or misses one
 hidden behind a heredoc.
 
-Bypass: ENV_DUMP_BYPASS=1 (inline `VAR=1 <cmd>` prefix or session env).
+Bypass: ENV_DUMP_BYPASS=1, PER SEGMENT (inline `VAR=1 <cmd>` prefix, or
+`export VAR=1` which then carries to every LATER segment, matching real
+shell semantics) or session env (applies to the whole command).
 """
 from __future__ import annotations
 
@@ -40,12 +42,6 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "_lib"))
-try:
-    from cmd_env import inline_bypass
-except Exception:
-    def inline_bypass(command, var, value="1"):  # type: ignore
-        return False
-
 try:
     from shell_parse import (
         ENV_ASSIGN_RE,
@@ -217,30 +213,42 @@ def _mask_quoted(text: str) -> str:
     return "".join(out)
 
 
-def _bare_inline_bypass(command: str, var: str, value: str = "1") -> bool:
-    """Like cmd_env.inline_bypass, but does not require the assignment to be
-    followed by anything else.
+def _segment_bypass_flags(seg_texts: list, var: str, value: str = "1") -> list:
+    """Per-segment bypass truth, aligned to `seg_texts`: True iff THIS
+    segment's own leading tokens carry `var=value`, or an EARLIER segment
+    `export`-ed it (which really does reach every later command in the same
+    shell invocation, per real shell semantics; a bare, non-exported
+    assignment reaches only the command it directly prefixes).
 
-    shell_parse.leading_env_assigns treats `env` (and every other transparent
-    wrapper) as needing a real command AFTER it to "count" -- correct for its
-    own callers, but this hook's whole subject is exactly the shape where
-    `env` has nothing after it. `ENV_DUMP_BYPASS=1 env` is bare on purpose
-    (that is the command being bypassed), so `leading_env_assigns` silently
-    drops the assignment and the advertised inline bypass could never fire.
-    This checks only ITS OWN var, at the front of each segment, with no such
-    restriction.
+    Deliberately NOT shell_parse.leading_env_assigns / segment_bypass_flags:
+    those treat `env` (and every other transparent wrapper) as needing a
+    real command AFTER it to "count" -- correct for their own callers, but
+    this hook's whole subject is exactly the shape where `env` has nothing
+    after it. `ENV_DUMP_BYPASS=1 env` is bare on purpose (that IS the
+    command being bypassed), so leading_env_assigns would silently drop the
+    assignment and the advertised inline bypass could never fire. This
+    walks only the leading `VAR=val` chain itself (with an optional leading
+    `export`), with no requirement that anything real follow.
+
+    A bypass scoped to one segment must never excuse a DIFFERENT segment in
+    the same command: `ENV_DUMP_BYPASS=1 true; env` and `env;
+    ENV_DUMP_BYPASS=1` must each be judged on their own.
     """
-    if not _LIB_OK or not command:
-        return False
-    cleaned = strip_noncode(strip_heredoc_bodies(command))
-    for _sep, seg in split_segments_with_seps(cleaned):
-        for tok in tokens(seg.strip()):
-            if not ENV_ASSIGN_RE.match(tok):
-                break
-            k, _, v = tok.partition("=")
+    flags, exported = [], False
+    for seg in seg_texts:
+        toks = tokens(seg.strip())
+        is_export = bool(toks) and toks[0] == "export"
+        here = exported
+        i = 1 if is_export else 0
+        while i < len(toks) and ENV_ASSIGN_RE.match(toks[i]):
+            k, _, v = toks[i].partition("=")
             if k == var and v == value:
-                return True
-    return False
+                here = True
+                if is_export:
+                    exported = True
+            i += 1
+        flags.append(here)
+    return flags
 
 
 def _skip_leading(toks: list) -> int:
@@ -415,7 +423,10 @@ def _deny_reason(command: str):
         return None  # degraded: only the two whole-string checks above ran
 
     segs = split_segments_with_seps(cleaned)
+    bypass = _segment_bypass_flags([t for _s, t in segs], "ENV_DUMP_BYPASS")
     for idx, (_sep, text) in enumerate(segs):
+        if bypass[idx]:
+            continue
         toks = tokens(text.strip())
         if not toks:
             continue
@@ -475,10 +486,9 @@ def main() -> int:
     if not cmd:
         return 0
 
-    if (os.environ.get("ENV_DUMP_BYPASS") == "1"
-            or inline_bypass(cmd, "ENV_DUMP_BYPASS")
-            or _bare_inline_bypass(cmd, "ENV_DUMP_BYPASS")):
-        return 0
+    if os.environ.get("ENV_DUMP_BYPASS") == "1":
+        return 0  # session-wide bypass; the PER-SEGMENT inline form is
+                  # handled inside _deny_reason itself (review item 8)
 
     try:
         reason = _deny_reason(cmd)

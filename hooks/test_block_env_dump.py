@@ -577,3 +577,43 @@ def test_still_denies_declare_dash_p():
 
 def test_still_denies_declare_no_operands():
     assert_denied("declare -x")
+
+
+# ---------------------------------------------------------------------------
+# 14. Review item 8 -- bypass is PER-SEGMENT: a bypass on one segment must
+# not excuse a DIFFERENT segment in the same command.
+# ---------------------------------------------------------------------------
+
+def test_denies_bypass_on_harmless_segment_then_real_dump():
+    assert_denied("ENV_DUMP_BYPASS=1 true; env")
+
+
+def test_denies_real_dump_then_trailing_bypass():
+    assert_denied("env; ENV_DUMP_BYPASS=1")
+
+
+def test_denies_bypassed_printenv_then_unbypassed_echo():
+    assert_denied('ENV_DUMP_BYPASS=1 printenv PATH && echo $GITHUB_TOKEN')
+
+
+def test_denies_bypassed_pipe_segment_then_unbypassed_env():
+    assert_denied("echo x | ENV_DUMP_BYPASS=1 cat; env")
+
+
+def test_denies_bypassed_git_then_unbypassed_printenv():
+    assert_denied("ENV_DUMP_BYPASS=1 git status && printenv")
+
+
+def test_still_allows_inline_bypass_on_the_dump_itself():
+    assert_allowed("ENV_DUMP_BYPASS=1 env")
+
+
+def test_allows_exported_bypass_carries_to_later_segment():
+    # An EXPORTED assignment really does reach later commands in the same
+    # shell invocation, unlike a bare trailing/prefixing one.
+    assert_allowed("export ENV_DUMP_BYPASS=1; env")
+
+
+def test_still_allows_session_env_bypass():
+    r = run_hook("env", env_extra={"ENV_DUMP_BYPASS": "1"})
+    assert r.returncode == 0, r.stderr
