@@ -355,6 +355,7 @@ INTEGRATION_TESTS=(
   test_open_core_boundary
   test_template_purity
   test_audited_content_injection_scan
+  test_untrusted_ingest_guard
   test_post_tool_use_learnings
   # Wired 2026-07-02 — found dormant by the gate-coverage invariant below.
   # These existed on disk, passed locally, and never ran in CI.
