@@ -579,6 +579,10 @@ INTEGRATION_TESTS=(
   # whose age cannot be proven must never be treated as stale and removed.
   # Runs the real script under the same GNU-stat shim.
   test_vault_safe_commit_lock_age
+  # Same bug class at a different `stat` format letter (%z, size, not %m,
+  # mtime): bootstrap.sh's own log-rotation check crashed outright on real
+  # GNU coreutils, on every run once ~/.claude/.bootstrap.log existed.
+  test_bootstrap_log_rotation_stat
 )
 # ---- Gate-coverage invariant -------------------------------------------------
 # The list above is an explicit allow-list, and allow-lists rot: a new
@@ -1056,15 +1060,15 @@ else
   echo "    install: brew install shellcheck  (macOS)  /  sudo apt-get install -y shellcheck  (Debian/Ubuntu)"
 fi
 
-# ---- (c1) stat-mtime portability gate --------------------------------------
-# scripts/check-stat-mtime-portability.py is the single source of truth -
+# ---- (c1) stat portability gate --------------------------------------
+# scripts/check-stat-portability.py is the single source of truth -
 # lint.yml's `lint` job runs the SAME script, so the laptop pre-push gate and
 # CI cannot drift (mirrors check-exit-contract.py's wiring below, not
 # shellcheck.sh's: this one is stdlib-only and hermetic, so there is no
 # external-binary reason to skip it in either place).
-echo "==> (c1) stat-mtime portability: $PY scripts/check-stat-mtime-portability.py"
-"$PY" scripts/check-stat-mtime-portability.py --self-test >/dev/null
-"$PY" scripts/check-stat-mtime-portability.py
+echo "==> (c1) stat portability: $PY scripts/check-stat-portability.py"
+"$PY" scripts/check-stat-portability.py --self-test >/dev/null
+"$PY" scripts/check-stat-portability.py
 
 # ---- (c2) PowerShell static analysis ---------------------------------------
 # Runs the SAME canonical gate as the lint job's 'repo PowerShell' step, so the
@@ -1604,4 +1608,4 @@ done
 echo "    OK - ${#PY_DIRECT[@]} hooks/+tests/ direct suite(s) passed; dormancy invariant clean"
 
 echo
-echo "All gates passed: py_compile ($count file(s)) + ${#INTEGRATION_TESTS[@]} integration tests + $unit_count scripts/ + ${#PY_DIRECT[@]} hooks/tests unit suite(s) + shellcheck [$shellcheck_note] + stat-mtime portability [passed] + powershell [$pssa_note] + phase-doc python [$phasepy_note] + repo python [$ruffgate_note] + utf8 console guard [$utf8_note] + hook block-protocol [passed] + vault-root reads [passed] + home-hook deploy [passed] + subprocess decode [passed] + py3.9 annotation parity [passed] + ps1 encoding [passed]."
+echo "All gates passed: py_compile ($count file(s)) + ${#INTEGRATION_TESTS[@]} integration tests + $unit_count scripts/ + ${#PY_DIRECT[@]} hooks/tests unit suite(s) + shellcheck [$shellcheck_note] + stat portability [passed] + powershell [$pssa_note] + phase-doc python [$phasepy_note] + repo python [$ruffgate_note] + utf8 console guard [$utf8_note] + hook block-protocol [passed] + vault-root reads [passed] + home-hook deploy [passed] + subprocess decode [passed] + py3.9 annotation parity [passed] + ps1 encoding [passed]."

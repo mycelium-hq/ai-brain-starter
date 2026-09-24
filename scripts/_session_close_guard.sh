@@ -99,6 +99,19 @@ _close_lock_mtime() {
   echo "$m"
 }
 
+_close_lock_size() {
+  # Byte size of $1, cross-platform. Same trap and same fix as
+  # _close_lock_mtime above, for the sibling `stat` format: GNU `-c %s`
+  # first, validated, then BSD `-f %z`, validated again. GNU `stat -f`
+  # means `--file-system`, so `stat -f %z FILE` on Linux does not fail
+  # cleanly the way a BSD-first `||` chain assumes.
+  local s
+  s=$(stat -c %s "$1" 2>/dev/null)              # GNU/Linux
+  case "$s" in ''|*[!0-9]*) s=$(stat -f %z "$1" 2>/dev/null) ;; esac   # BSD/macOS
+  case "$s" in ''|*[!0-9]*) s="" ;; esac        # neither gave a plain integer
+  echo "$s"
+}
+
 close_mutex_acquire() {
   # arg1: max seconds to wait (default 20). Returns 0 if acquired, 1 if not.
   # Reclaims a stale lock (holder PID dead, OR lock file older than 600s).

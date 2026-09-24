@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # A `stat` PATH shim that reproduces real GNU coreutils behavior for the
-# `-f %m` / `-f%m` / `-c %Y` / `-c%Y` invocation shapes used by the
-# cross-platform mtime idiom in scripts/PORTABILITY.md #1.
+# `-f %<letter>` / `-f%<letter>` / `-c %<letter>` / `-c%<letter>`
+# invocation shapes used by the cross-platform mtime/size idiom in
+# scripts/PORTABILITY.md #1.
 #
 # WHY THIS EXISTS
 #
@@ -9,28 +10,39 @@
 # coreutils (Linux). Every contributor and CI's own macOS-less runner still
 # needs to catch a regression WITHOUT a Linux box or Docker handy. This shim
 # makes any host behave exactly like measured GNU coreutils 9.4
-# (ubuntu:24.04) for these four shapes, so the real target script can be run
+# (ubuntu:24.04) for these shapes, so the real target script can be run
 # unmodified and exercise the Linux code path deterministically everywhere.
 #
-# MEASURED 2026-09-25 (docker run --rm ubuntu:24.04 ...; see docs/PORTABILITY.md
-# and the PR that added this file for the transcript):
+# MEASURED 2026-09-25 (docker run --rm ubuntu:24.04 ...; see the PR that
+# added this file, and the one that broadened it from %m-only to any
+# format letter, for the full transcripts of both):
 #
 #   stat -c %Y FILE   -> epoch mtime on stdout, rc=0   (correct GNU form)
-#   stat -c%Y FILE    -> epoch mtime on stdout, rc=0   (glued short option, same)
+#   stat -c %s FILE   -> size in bytes on stdout, rc=0  (correct GNU form)
+#   stat -c%Y FILE    -> same as -c %Y (glued short option)
+#   stat -c%s FILE    -> same as -c %s (glued short option)
 #   stat -f %m FILE   -> multi-line NON-NUMERIC filesystem-status text on
-#                        stdout, rc=1. GNU's `-f` means --file-system; `%m` is
-#                        not a recognized filesystem-mode directive, and BOTH
-#                        "%m" and FILE get statted as filesystem targets, so
-#                        the "%m" lookup fails (rc=1) while FILE's filesystem
-#                        info still prints to stdout before that failure.
+#   stat -f %z FILE      stdout, rc=1. GNU's `-f` means --file-system; the
+#                        format letter is not a recognized filesystem-mode
+#                        directive, and BOTH it and FILE get statted as
+#                        filesystem targets, so the format-letter lookup
+#                        fails (rc=1) while FILE's filesystem info still
+#                        prints to stdout before that failure. This part of
+#                        the mechanism does not depend on WHICH letter was
+#                        asked for -- confirmed identical for %m and %z.
 #   stat -f%m FILE    -> "stat: invalid option -- '%'" on stderr, rc=1, EMPTY
-#                        stdout (glued form fails at option-parsing, before
-#                        touching any operand -- no garbage leaks to stdout).
+#   stat -f%z FILE       stdout (glued form fails at option-parsing, before
+#                        touching any operand -- no garbage leaks to
+#                        stdout). Also confirmed identical for %m and %z.
 #
-# Only these four shapes are implemented. This is a narrow test double for
-# the mtime idiom, not a stat reimplementation -- anything else is a hard
-# error so a test relying on unimplemented behavior fails loudly instead of
-# reading a wrong answer as a real one.
+# Only `%Y`/`%s` (the GNU letters this repo's fixed sites actually use) have
+# a real-value implementation below; any other GNU letter is a hard error.
+# The BSD failure paths (both `-f` shapes) do not need a real-value
+# implementation at all -- their whole point is that they fail before
+# producing a usable answer -- so they are letter-agnostic already. This is
+# a narrow test double for the mtime/size idiom, not a stat reimplementation:
+# an unimplemented shape is a hard error so a test relying on it fails
+# loudly instead of reading a wrong answer as a real one.
 #
 # USAGE
 #   . "$(dirname "${BASH_SOURCE[0]}")/lib/gnu_stat_shim.sh"
@@ -61,27 +73,58 @@ _real_mtime() {
   python3 -c 'import os, sys; print(int(os.path.getmtime(sys.argv[1])))' "$1"
 }
 
-case "${1:-}/${2:-}" in
-  "-c/%Y")
-    _real_mtime "$3"
+_real_size() {
+  # Portable byte size of $1, same independence reasoning as _real_mtime.
+  python3 -c 'import os, sys; print(os.path.getsize(sys.argv[1]))' "$1"
+}
+
+_gnu_value() {
+  # $1 = GNU format letter (Y or s), $2 = file. Exits 2 on any other letter:
+  # this shim only has real-value support for the letters this repo's fixed
+  # sites use, on purpose (see file header).
+  case "$1" in
+    Y) _real_mtime "$2" ;;
+    s) _real_size "$2" ;;
+    *) echo "gnu_stat_shim: no real-value support for -c %$1" >&2; exit 2 ;;
+  esac
+}
+
+_bsd_leak_and_fail() {
+  # $1 = the BSD format letter GNU was asked for (any letter -- this failure
+  # mode does not depend on which one, per the file header measurement).
+  printf '  File: "%s"\n    ID: 0000000000000000 Namelen: 255     Type: overlayfs\nBlock size: 4096       Fundamental block size: 4096\n' "${STAT_FILE_ARG:-}"
+  echo "stat: cannot read file system information for '%$1': No such file or directory" >&2
+  exit 1
+}
+
+case "${1:-}" in
+  -c)
+    # stat -c %<letter> FILE (spaced)
+    fmt="${2:-}"; file="${3:-}"
+    case "$fmt" in
+      %?) _gnu_value "${fmt#%}" "$file"; exit 0 ;;
+      *) echo "gnu_stat_shim: unsupported -c format: $fmt" >&2; exit 2 ;;
+    esac
+    ;;
+  -f)
+    # stat -f %<letter> FILE (spaced) -- always leaks + fails, any letter.
+    fmt="${2:-}"; STAT_FILE_ARG="${3:-}"
+    case "$fmt" in
+      %?) _bsd_leak_and_fail "${fmt#%}" ;;
+      *) echo "gnu_stat_shim: unsupported -f format: $fmt" >&2; exit 2 ;;
+    esac
+    ;;
+  -c%?)
+    # stat -c%<letter> FILE (glued)
+    _gnu_value "${1#-c%}" "${2:-}"
     exit 0
     ;;
-  "-f/%m")
-    printf '  File: "%s"\n    ID: 0000000000000000 Namelen: 255     Type: overlayfs\nBlock size: 4096       Fundamental block size: 4096\n' "$3"
-    echo "stat: cannot read file system information for '$2': No such file or directory" >&2
+  -f%?)
+    # stat -f%<letter> FILE (glued) -- invalid option, always, any letter.
+    echo "stat: invalid option -- '%'" >&2
     exit 1
     ;;
   *)
-    case "${1:-}" in
-      -c%Y)
-        _real_mtime "$2"
-        exit 0
-        ;;
-      -f%m)
-        echo "stat: invalid option -- '%'" >&2
-        exit 1
-        ;;
-    esac
     echo "gnu_stat_shim: unsupported invocation: stat $*" >&2
     exit 2
     ;;

@@ -176,7 +176,13 @@ fi
 echo ""
 echo "Found ${#BACKUPS[@]} backup file(s):"
 for f in "${BACKUPS[@]}"; do
-  size=$(stat -f %z "$f" 2>/dev/null || stat -c %s "$f" 2>/dev/null || echo "?")
+  # Byte size of $f, cross-platform, for display only. GNU/Linux `stat -c %s`
+  # first, then BSD/macOS `stat -f %z`, validated -- see PORTABILITY.md #1.
+  # Unknown -> "?", the same sentinel the original `|| echo "?"` fallback
+  # already used for this listing.
+  size=$(stat -c %s "$f" 2>/dev/null)                        # GNU/Linux
+  case "$size" in ''|*[!0-9]*) size=$(stat -f %z "$f" 2>/dev/null) ;; esac  # BSD/macOS
+  case "$size" in ''|*[!0-9]*) size="?" ;; esac  # neither gave a plain integer -> unknown
   if mtime_h=$(stat -f "%Sm" -t "%Y-%m-%d %H:%M" "$f" 2>/dev/null) || \
      mtime_h=$(date -d "@$(stat -c %Y "$f" 2>/dev/null)" "+%Y-%m-%d %H:%M" 2>/dev/null); then :; else
     mtime_h="?"
