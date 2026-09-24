@@ -124,8 +124,9 @@ run_case "feature-branch + unlisted path -> ALLOW"     claude/x  "notes/random.m
 
 # (a) merging main's unchanged artifact into a feature branch -> ALLOW.
 # One-line mutation that turns this red: delete (or stub to always-0) the
-# "${_have_origin_ref}"/"${_have_merge_head}" exemption block in the guard, i.e.
-# revert to the pre-carve-out matching logic -- this case then gets EXIT=1.
+# "${_have_origin_ref}"/"${_merge_head_on_default}"-gated diff-index exemption
+# block in the guard, i.e. revert to the pre-carve-out matching logic -- this
+# case then gets EXIT=1.
 merge_case_allow_unchanged_artifact(){
   local d; d="$(mktemp -d)"
   (
@@ -150,10 +151,11 @@ merge_case_allow_unchanged_artifact(){
 
 # (b) sentinel note only -- see comment block above; no separate function.
 # One-line mutation that turns "feature-branch + artifact -> BLOCK" red: widen
-# the exemption to match on PATTERN/PATH alone instead of blob equality (e.g.
-# `_exempt=1` as soon as `_matched_pat` is set, without checking `_sblob`
-# against `_oblob`/`_mblob`) -- a brand-new artifact would then be wrongly
-# exempted just because its path looks like a session artifact.
+# the exemption to match on PATTERN/PATH alone instead of the diff-index
+# comparison (e.g. `_exempt=1` as soon as `_matched_pat` is set, without ever
+# computing `_changed_origin`/`_changed_mergehead`) -- a brand-new artifact
+# would then be wrongly exempted just because its path looks like a session
+# artifact.
 
 # (c) a merge whose RESOLUTION modifies an artifact -> BLOCK. Same merge as (a),
 # but the staged content is edited after the merge stages it, so it no longer
@@ -184,9 +186,13 @@ merge_case_block_resolution_modifies(){
 
 # (d) origin ref ABSENT (no remote configured at all, and no merge in progress)
 # -> BLOCK, even though the staged content is byte-identical to LOCAL main.
-# Proves the exemption never falls back to the local <default> branch and never
-# treats "cannot resolve the ref" as "assume it matches" (the empty-string
-# footgun: comparing two failed lookups' empty output would wrongly be equal).
+# With no origin ref and no merge in progress, NEITHER exemption route is
+# active at all (both `_have_origin_ref` and `_merge_head_on_default` stay 0),
+# so this proves the exemption never falls back to comparing against the local
+# <default> branch -- not, as an earlier version of this comment claimed, that
+# it resists an "empty-string" lookup-equality trap: this case never reaches a
+# comparison of any kind, on either the old rev-parse implementation or the
+# current diff-index one.
 no_origin_ref_case_block(){
   local d; d="$(mktemp -d)"
   (
@@ -368,6 +374,211 @@ spawn_count_does_not_scale_with_staged_paths(){
   rm -rf "$d"
 }
 
+# (k) cost does not grow with the number of staged ARTIFACT paths either -- (j)
+# above proves it for ordinary paths, but this is the case the carve-out itself
+# exists for: merging main's OWN 500 unchanged artifacts into a feature branch.
+# On fd7509c (pre-batching) each of the 500 artifacts costs its own
+# `git rev-parse <ref>:<path>` pair, so this alone is >1000 spawns; git and grep
+# are counted through PATH shims exactly as in (j).
+# Mutation that turns this red: go back to a per-path `git rev-parse` lookup
+# instead of the batched `git diff-index` call.
+merge_cost_does_not_scale_with_artifact_count(){
+  local d; d="$(mktemp -d)"
+  local real_git; real_git="$(command -v git)"
+  mkdir -p "$d/shim"
+  printf '#!/bin/sh\necho git >> "%s/spawns"\nexec "%s" "$@"\n' "$d" "$real_git" > "$d/shim/git"
+  chmod +x "$d/shim/git"
+  (
+    cd "$d" || exit 99
+    git init -q -b main repo; cd repo || exit 99
+    git config user.email t@t; git config user.name t
+    echo seed > seed.txt; git add seed.txt; git commit -qm seed
+    mkdir -p Meta/Sessions
+    i=0; while [ "$i" -lt 500 ]; do echo "art $i" > "Meta/Sessions/f$i.md"; i=$((i+1)); done
+    git add Meta/Sessions; git commit -qm "500 artifacts on main"
+    git update-ref refs/remotes/origin/main main
+    git checkout -q -b feature HEAD~1
+    echo "feature work" > feature.txt; git add feature.txt; git commit -qm "feature work"
+    cp "$GUARD" guard.sh; chmod +x guard.sh
+    git merge --no-commit --no-ff origin/main >/dev/null 2>&1
+    if git diff --cached --quiet -- "Meta/Sessions/f0.md"; then echo "EXIT=setup-staged-nothing:Meta/Sessions/f0.md"; exit 0; fi
+    : > "$d/spawns"
+    PATH="$d/shim:$PATH" ./guard.sh; echo "EXIT=$?"
+  ) > "$d/out" 2>&1
+  local got n; got="$(sed -n 's/^EXIT=//p' "$d/out")"; n="$(wc -l < "$d/spawns" | tr -d ' ')"
+  if [ "$got" = "0" ] && [ "$n" -lt 20 ]; then pass "(k) merge 500 unchanged artifacts -> $n git spawns, independent of artifact count"; else fail "(k) merge 500 unchanged artifacts -> got EXIT '$got' and $n git spawns (want 0 and under 20)"; sed 's/^/    /' "$d/out"; fi
+  rm -rf "$d"
+}
+
+# (l) a path containing a double quote, through the merge-exempt route -> ALLOW.
+# fd7509c listed staged paths without -z, so git C-quoted this name in the
+# display string (e.g. "Meta/Sessions/quo\"te.md") and the guard used THAT
+# string, verbatim, as a `ref:path` lookup key -- a path that does not exist,
+# so the lookup failed and this case was a false BLOCK. -z never quotes.
+merge_case_allow_quoted_path(){
+  local d; d="$(mktemp -d)"
+  (
+    cd "$d" || exit 99
+    git init -q -b main
+    git config user.email t@t; git config user.name t
+    echo seed > seed.txt; git add seed.txt; git commit -qm seed
+    mkdir -p "Meta/Sessions"
+    q='Meta/Sessions/quo"te.md'
+    echo "seed-session" > "$q"
+    git add -- "$q"; git commit -qm "quoted-name artifact on main"
+    git update-ref refs/remotes/origin/main main
+    git checkout -q -b feature HEAD~1
+    echo "feature work" > feature.txt; git add feature.txt; git commit -qm "feature work"
+    mkdir -p .githooks; cp "$GUARD" .githooks/guard.sh; chmod +x .githooks/guard.sh
+    git merge --no-commit --no-ff origin/main >/dev/null 2>&1
+    require_staged "$q"
+    .githooks/guard.sh; echo "EXIT=$?"
+  ) > "$d/out" 2>&1
+  local got; got="$(sed -n 's/^EXIT=//p' "$d/out")"
+  if [ "$got" = "0" ]; then pass "(l) merge unchanged double-quote-named artifact -> ALLOW (exit $got)"; else fail "(l) merge unchanged double-quote-named artifact -> ALLOW (got '$got' want 0)"; sed 's/^/    /' "$d/out"; fi
+  rm -rf "$d"
+}
+
+# (m) a MODE-only change on an artifact whose blob matches main -- BLOCK. The
+# old per-path `git rev-parse <ref>:<path>` route compared blob only; git
+# diff-index compares full tree entries (blob AND mode), so a chmod +x with
+# byte-identical content is caught. (A symlink swap with the same target text
+# as the file's bytes proves the identical point; +x is simpler to construct.)
+merge_case_block_mode_only_change(){
+  local d; d="$(mktemp -d)"
+  (
+    cd "$d" || exit 99
+    git init -q -b main
+    git config user.email t@t; git config user.name t
+    echo seed > seed.txt; git add seed.txt; git commit -qm seed
+    mkdir -p "Meta/Sessions"; printf 'same bytes\n' > "Meta/Sessions/a.md"
+    git add "Meta/Sessions/a.md"; git commit -qm "artifact on main"
+    git update-ref refs/remotes/origin/main main
+    git checkout -q -b feature HEAD~1
+    mkdir -p .githooks; cp "$GUARD" .githooks/guard.sh; chmod +x .githooks/guard.sh
+    mkdir -p Meta/Sessions
+    printf 'same bytes\n' > "Meta/Sessions/a.md"
+    chmod +x "Meta/Sessions/a.md"
+    git add "Meta/Sessions/a.md"
+    require_staged "Meta/Sessions/a.md"
+    .githooks/guard.sh; echo "EXIT=$?"
+  ) > "$d/out" 2>&1
+  local got; got="$(sed -n 's/^EXIT=//p' "$d/out")"
+  if [ "$got" = "1" ]; then pass "(m) mode-only change on artifact matching main's blob -> BLOCK (exit $got)"; else fail "(m) mode-only change on artifact matching main's blob -> BLOCK (got '$got' want 1)"; sed 's/^/    /' "$d/out"; fi
+  rm -rf "$d"
+}
+
+# (n) a merge carrying main's OWN deletion of an artifact -> ALLOW. Main added
+# this artifact, then deleted it itself; deleting something already gone from
+# main cannot strand anything, so a merge that propagates that same deletion
+# onto a feature branch (which still has the pre-deletion copy) should not need
+# the bypass either. Branch shape matters here: feature has to branch off AFTER
+# main added the file (so feature still carries it) and BEFORE main deleted it
+# (so the merge has a real 3-way delta to stage), or there is nothing to merge.
+merge_case_allow_main_own_deletion(){
+  local d; d="$(mktemp -d)"
+  (
+    cd "$d" || exit 99
+    git init -q -b main
+    git config user.email t@t; git config user.name t
+    echo seed > seed.txt; git add seed.txt; git commit -qm seed
+    mkdir -p "Meta/Sessions"; echo "will be deleted" > "Meta/Sessions/a.md"
+    git add "Meta/Sessions/a.md"; git commit -qm "artifact added"
+    git checkout -q -b feature
+    echo "feature work" > feature.txt; git add feature.txt; git commit -qm "feature work"
+    git checkout -q main
+    git rm -q "Meta/Sessions/a.md"; git commit -qm "main deletes its own artifact"
+    git update-ref refs/remotes/origin/main main
+    git checkout -q feature
+    mkdir -p .githooks; cp "$GUARD" .githooks/guard.sh; chmod +x .githooks/guard.sh
+    git merge --no-commit --no-ff origin/main >/dev/null 2>&1
+    if git diff --cached --quiet -- "Meta/Sessions/a.md"; then echo "EXIT=setup-staged-nothing:Meta/Sessions/a.md"; exit 0; fi
+    .githooks/guard.sh; echo "EXIT=$?"
+  ) > "$d/out" 2>&1
+  local got; got="$(sed -n 's/^EXIT=//p' "$d/out")"
+  if [ "$got" = "0" ]; then pass "(n) merge carrying main's own deletion of an artifact -> ALLOW (exit $got)"; else fail "(n) merge carrying main's own deletion of an artifact -> ALLOW (got '$got' want 0)"; sed 's/^/    /' "$d/out"; fi
+  rm -rf "$d"
+}
+
+# (o) 3000 NEW artifacts, never on origin, on a feature branch -> BLOCK. Pins
+# that matching stays correct at a scale where the OLD (pre-carve-out,
+# origin/main-shipped) guard's `printf ... | grep -q` pipeline went fail-open:
+# past the 64KiB pipe buffer, an early match makes `grep -q` exit, `printf`
+# takes SIGPIPE, and `set -o pipefail` reads the pipeline's exit as "no match" --
+# letting thousands of new artifacts through unrefused on a feature branch. This
+# guard's in-process matching has no pipe to fail this way; this case is the
+# regression pin so that fail-open cannot come back quietly.
+new_artifacts_at_scale_case_block(){
+  local d; d="$(mktemp -d)"
+  (
+    cd "$d" || exit 99
+    git init -q -b main
+    git config user.email t@t; git config user.name t
+    echo seed > seed.txt; git add seed.txt; git commit -qm seed
+    git update-ref refs/remotes/origin/main main
+    git checkout -q -b feature
+    mkdir -p Meta/Sessions
+    i=0; while [ "$i" -lt 3000 ]; do echo "art $i" > "Meta/Sessions/f$i.md"; i=$((i+1)); done
+    git add Meta/Sessions
+    mkdir -p .githooks; cp "$GUARD" .githooks/guard.sh; chmod +x .githooks/guard.sh
+    require_staged "Meta/Sessions/f0.md"
+    .githooks/guard.sh; echo "EXIT=$?"
+  ) > "$d/out" 2>&1
+  local got; got="$(sed -n 's/^EXIT=//p' "$d/out")"
+  if [ "$got" = "1" ]; then pass "(o) 3000 new artifacts on a feature branch -> BLOCK (exit $got)"; else fail "(o) 3000 new artifacts on a feature branch -> BLOCK (got '$got' want 1)"; sed 's/^/    /' "$d/out"; fi
+  rm -rf "$d"
+}
+
+# (p) WIRING: a conflict-free `git merge` of a topic branch carrying its own
+# artifact, dispatched through git's REAL hooks (core.hooksPath, LOCAL to this
+# throwaway repo, never global) -> the merge itself is refused. Plain
+# `git merge` (no --no-commit) never runs pre-commit; it runs pre-merge-commit,
+# which pre-commit-template.sh does not chain -- before pre-merge-commit-
+# template.sh existed, this exact merge went through with NO hook running at
+# all (review finding F3, reproduced live in extra.r691.sh's X1). The origin
+# route inside the guard does not depend on MERGE_HEAD, so it still works here
+# even though MERGE_HEAD itself is not yet written at pre-merge-commit time.
+premerge_commit_wiring_blocks_topic_merge(){
+  local d; d="$(mktemp -d)"
+  (
+    cd "$d" || exit 99
+    git init -q -b main
+    git config user.email t@t; git config user.name t
+    echo seed > seed.txt; git add seed.txt; git commit -qm seed
+    git checkout -q -b topic
+    mkdir -p "Meta/Sessions"; echo "stranded on topic" > "Meta/Sessions/t.md"
+    git add "Meta/Sessions/t.md"; git commit -qm "artifact stranded on a topic branch"
+    git checkout -q main; git checkout -q -b feature
+    echo "feature work" > feature.txt; git add feature.txt; git commit -qm "feature work"
+    mkdir -p .githooks-wired
+    cp "$GUARD" .githooks-wired/guard-session-artifacts-on-default-branch.sh
+    chmod +x .githooks-wired/guard-session-artifacts-on-default-branch.sh
+    cp "$HERE/../../git-hooks/pre-merge-commit-template.sh" .githooks-wired/pre-merge-commit
+    chmod +x .githooks-wired/pre-merge-commit
+    git config core.hooksPath .githooks-wired
+    _before="$(git rev-parse HEAD)"
+    git merge --no-ff -m "merge topic" topic >/dev/null 2>&1
+    echo "MERGE_RC=$?"
+    _after="$(git rev-parse HEAD)"
+    # A refused pre-merge-commit aborts the COMMIT, not the merge's file/index
+    # writes (same as a conflicted merge: files land, nothing lands on HEAD
+    # until it is resolved and committed by hand). So the real invariant is
+    # "no new merge commit landed on feature", not "the file never touched
+    # the working tree" -- HEAD not moving is what "refused" means here.
+    echo "HEAD_MOVED=$([ "$_before" != "$_after" ] && echo yes || echo no)"
+  ) > "$d/out" 2>&1
+  local rc moved
+  rc="$(sed -n 's/^MERGE_RC=//p' "$d/out")"
+  moved="$(sed -n 's/^HEAD_MOVED=//p' "$d/out")"
+  if [ "$rc" != "0" ] && [ "$moved" = "no" ]; then
+    pass "(p) real pre-merge-commit dispatch blocks a conflict-free topic merge (rc=$rc)"
+  else
+    fail "(p) real pre-merge-commit dispatch blocks a conflict-free topic merge (rc='$rc' head_moved='$moved', want rc!=0 and no)"
+    sed 's/^/    /' "$d/out"
+  fi
+  rm -rf "$d"
+}
+
 merge_case_allow_unchanged_artifact
 merge_case_block_resolution_modifies
 no_origin_ref_case_block
@@ -377,6 +588,12 @@ merge_case_allow_emoji_path
 merge_topic_branch_case_block
 merge_local_default_ahead_case_allow
 spawn_count_does_not_scale_with_staged_paths
+merge_cost_does_not_scale_with_artifact_count
+merge_case_allow_quoted_path
+merge_case_block_mode_only_change
+merge_case_allow_main_own_deletion
+new_artifacts_at_scale_case_block
+premerge_commit_wiring_blocks_topic_merge
 
 echo "---"
 if [ "$fails" -eq 0 ]; then echo "ALL PASS ($((0)) failures)"; exit 0; else echo "$fails FAILED"; exit 1; fi
