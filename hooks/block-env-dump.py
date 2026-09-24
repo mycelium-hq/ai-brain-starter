@@ -165,8 +165,10 @@ def _split_glued_redirect(word: str, rest: list) -> tuple:
         rest = rest[1:]
     return ("" if _is_redirect_fd_prefix(prefix) else prefix), rest
 
-# /proc/<pid>/environ or /proc/self/environ, anywhere in the command.
-_PROC_ENVIRON_RE = re.compile(r"/proc/(?:\d+|self)/environ")
+# /proc/<pid>/environ, /proc/self/environ, /proc/$$/environ, /proc/*/environ
+# -- anywhere in UNQUOTED text (the caller masks quotes first, so a mention
+# inside a commit message or grep pattern never matches).
+_PROC_ENVIRON_RE = re.compile(r"/proc/[^/\s]+/environ")
 
 # Remote secret-dump vocabulary, ported VERBATIM from the `pattern:` field of
 # ~/.claude/hookify.block-secret-dump-command-class.local.md
@@ -175,6 +177,44 @@ _PROC_ENVIRON_RE = re.compile(r"/proc/(?:\d+|self)/environ")
 _REMOTE_DUMP_RE = re.compile(
     r"""(heroku\s+(config(\s|$)|config:get|releases:info|secrets|run\s+.*env(\s|$|\|)))|aws\s+ssm\s+get-parameter|gcloud\s+secrets\s+versions\s+access|vercel\s+env\s+pull|doppler\s+secrets\s+download|fly\s+secrets\s+list|(fly|flyctl)\s+ssh\s+.*-C\s+["'][^"']*(\bprintenv\b|\benv(\s|$|\|))"""
 )
+
+# Commands the remote vocabulary above is scoped to. Checked per-SEGMENT
+# against the segment's own resolved command, not the whole command string --
+# otherwise a commit message or PR body that merely MENTIONS "heroku config"
+# or "vercel env pull" matches too.
+_REMOTE_DUMP_COMMANDS = {"heroku", "aws", "gcloud", "vercel", "doppler", "fly", "flyctl"}
+
+
+def _mask_quoted(text: str) -> str:
+    """Blank out BOTH single- and double-quoted spans, leaving only text a
+    shell would treat as unquoted/literal. Used so a whole-string pattern
+    check (/proc/.../environ) matches a real path, never a mention of one
+    inside a commit message, grep pattern, or PR body."""
+    out, quote, i, n = [], None, 0, len(text)
+    while i < n:
+        c = text[i]
+        if quote:
+            if c == "\\" and quote == '"' and i + 1 < n:
+                i += 2
+                out.append("  ")
+                continue
+            if c == quote:
+                quote = None
+            out.append(" ")
+            i += 1
+            continue
+        if c in ("'", '"'):
+            quote = c
+            out.append(" ")
+            i += 1
+            continue
+        if c == "\\" and i + 1 < n:
+            out.append("  ")
+            i += 2
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
 
 
 def _bare_inline_bypass(command: str, var: str, value: str = "1") -> bool:
@@ -363,9 +403,7 @@ def _deny_reason(command: str):
         return None
     cleaned = strip_noncode(strip_heredoc_bodies(command)) if _LIB_OK else command
 
-    if _REMOTE_DUMP_RE.search(cleaned):
-        return "prints a remote secret/config-var store in plaintext"
-    if _PROC_ENVIRON_RE.search(cleaned):
+    if _PROC_ENVIRON_RE.search(_mask_quoted(cleaned)):
         return "reads /proc/<pid>/environ (the whole process environment)"
     if not _LIB_OK:
         return None  # degraded: only the two whole-string checks above ran
@@ -383,6 +421,8 @@ def _deny_reason(command: str):
         rest = _strip_redirect_tokens(rest)
         base = os.path.basename(word)
 
+        if base in _REMOTE_DUMP_COMMANDS and _REMOTE_DUMP_RE.search(text):
+            return "prints a remote secret/config-var store in plaintext"
         if base == "env":
             if not _env_is_bare_dump(rest):
                 continue

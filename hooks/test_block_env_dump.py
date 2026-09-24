@@ -460,3 +460,46 @@ def test_denies_echo_secret_piped_into_head():
 
 def test_denies_echo_secret_piped_into_cat():
     assert_denied('echo "$GITHUB_TOKEN" | cat')
+
+
+# ---------------------------------------------------------------------------
+# 10. Review item 4 -- remote vocabulary runs only when the SEGMENT's own
+# command is heroku/aws/gcloud/vercel/doppler/fly/flyctl; /proc/.../environ
+# runs on UNQUOTED text only. Stops false-blocking commit messages, greps,
+# and PR bodies that merely mention these strings.
+# ---------------------------------------------------------------------------
+
+def test_allows_commit_message_mentioning_proc_environ():
+    assert_allowed('git commit -m "block /proc/self/environ reads"')
+
+
+def test_allows_grep_pattern_mentioning_proc_environ():
+    assert_allowed('grep -rn "/proc/self/environ" hooks/')
+
+
+def test_allows_commit_message_mentioning_heroku_config():
+    assert_allowed('git commit -m "port the heroku config guard"')
+
+
+def test_allows_grep_pattern_mentioning_aws_ssm():
+    assert_allowed("rg -n 'aws ssm get-parameter' docs/")
+
+
+def test_allows_pr_body_mentioning_vercel_env_pull():
+    assert_allowed('gh pr create --title x --body "blocks vercel env pull"')
+
+
+def test_denies_proc_environ_pid_substitution_no_spaces():
+    assert_denied("cat /proc/$$/environ")
+
+
+def test_still_denies_heroku_config_as_real_command():
+    assert_denied("heroku config -a app")
+
+
+def test_still_denies_fly_secrets_list_as_real_command():
+    assert_denied("fly secrets list -a app")
+
+
+def test_still_denies_vercel_env_pull_as_real_command():
+    assert_denied("vercel env pull")
