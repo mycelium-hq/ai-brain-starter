@@ -22,7 +22,7 @@ import from `_shared.connector_utils` instead of reimplementing.
 | `write_typed_memory(vault_root, type, content, frontmatter, idempotency_key)` | Writes one of `Meta/Workflows/<sha8>.md`, `Meta/Decisions/<sha8>.md`, `Meta/Exceptions/<sha8>.md`. Returns the path. |
 | `normalize_for_vault(items, source_type, scope_id)` | Generic per-item markdown block renderer. Skills with rich source-specific rendering keep their own. |
 | `entity_ids_for(source_type, ids)` | Builds the `entity_ids` dict for external-input frontmatter. |
-| `write_external_input(vault_root, source, scope, date, items, ...)` | Generic write to `<vault>/External Inputs/<source>/<scope>/<date>.md`. Skills today use their own to control frontmatter shape; this helper is the contract for future skills. |
+| `write_external_input(vault_root, source, scope, date, items, ...)` | Generic write to `<vault>/External Inputs/<source>/<scope>/<date>.md`. Skills today use their own to control frontmatter shape; this helper is the contract for future skills. Always fences the body and stamps `content_trust`/`injection_scan`/`injection_flags` via `guard_untrusted_body` (see below). |
 
 ## Secondary helpers (extracted from the 6 skills)
 
@@ -33,6 +33,18 @@ ISO time: `parse_iso`, `to_local_str`, `to_local_date`, `to_local_sortkey`, `now
 Body / text: `excerpt`, `fence_text`, `truncate_body`
 
 Slugs: `slugify`, `slugify_unicode`, `slug_repo`
+
+## Untrusted third-party content (MYC-4701)
+
+Every writer that ingests third-party text (Granola transcripts, GitHub PR/issue bodies, YouTube captions, `write_external_input`) hands the body through this before writing:
+
+| Helper | What it does |
+|---|---|
+| `guard_untrusted_body(text, source, scan_text=None)` | Always marks and fences `text` (never blocks, never quarantines). Returns `(rendered, trust)` where `rendered` is the fenced text (with a warning callout prepended if flagged) and `trust` is `{"content_trust": "untrusted", "injection_scan": "clean"\|"flagged"\|"unavailable", "injection_flags": [ids]}`. Pass `scan_text` to scan a raw field instead of the already-formatted `text` being fenced. |
+| `fence_untrusted(text, source)` | Wraps `text` in id-paired `<!-- BEGIN/END UNTRUSTED CONTENT -->` HTML-comment markers (invisible in Obsidian reading view, visible in source/Read). Neutralizes any lookalike marker text already inside `text` so a forged END can't pass as the real one. Calls `fence_text` for the triple-backtick defense. |
+| `trust_frontmatter_lines(trust)` | Renders the 3 frontmatter lines (`content_trust`, `injection_scan`, `injection_flags`) from a `guard_untrusted_body` trust dict. |
+
+The scan itself (`skills/secret-warn/hooks/audited_content_scan.py`) is loaded lazily and defensively: a missing or out-of-date copy yields `injection_scan: unavailable`, never `clean`, and never blocks or drops the write.
 
 ## Import pattern
 
