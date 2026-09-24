@@ -138,6 +138,11 @@ new_fixture() {
     printf 'echo "sync ok"\n' > scripts/sync-skills.sh
     # install stub: honors ABS_UPDATE_STATE_DIR (inherited env) + writes the marker.
     printf '#!/usr/bin/env python3\nimport os, pathlib\nd=os.environ.get("ABS_UPDATE_STATE_DIR", os.path.expanduser("~/.claude"))\npathlib.Path(d, "DEPLOY_RAN").write_text("ran")\n' > scripts/install-hooks-user-level.py
+    # F3 identity check (MYC-4907): _skill_dir() now also requires this file
+    # to exist under the candidate, or a contained-but-foreign checkout
+    # would be admitted. Every fixture meant to stay ADMITTED needs it;
+    # T33's attacker repo and T41's foreign checkout deliberately omit it.
+    touch scripts/ai-brain-auto-update.py
     printf '# Changelog\n\n## latest\nnew stuff\n' > docs/CHANGELOG.md
     printf 'seed\n' > seed.txt
     printf 'MARKER = "OLD"\n' > hooks/marker.py
@@ -360,6 +365,10 @@ git -c init.defaultBranch=main clone -q "$T9ORIGIN" "$T9CO" 2>/dev/null
   mkdir -p scripts docs
   printf 'echo "sync ok"\n' > scripts/sync-skills.sh
   printf '#!/usr/bin/env python3\nimport os, pathlib\nd=os.environ.get("ABS_UPDATE_STATE_DIR", os.path.expanduser("~/.claude"))\npathlib.Path(d, "DEPLOY_RAN").write_text("ran")\n' > scripts/install-hooks-user-level.py
+  # F3 identity check (MYC-4907): _skill_dir() now also requires this file
+  # to exist under the candidate, or a contained-but-foreign checkout would
+  # be admitted. Every fixture meant to stay ADMITTED needs it.
+  touch scripts/ai-brain-auto-update.py
   printf 'seed\n' > seed.txt
   git add -A; git commit -qm seed
   git push -q -u origin main
@@ -397,6 +406,10 @@ git -c init.defaultBranch=main clone -q "$T10ORIGIN" "$T10CO" 2>/dev/null
   mkdir -p scripts docs
   printf 'echo "sync ok"\n' > scripts/sync-skills.sh
   printf '#!/usr/bin/env python3\nimport os, pathlib\nd=os.environ.get("ABS_UPDATE_STATE_DIR", os.path.expanduser("~/.claude"))\npathlib.Path(d, "DEPLOY_RAN").write_text("ran")\n' > scripts/install-hooks-user-level.py
+  # F3 identity check (MYC-4907): _skill_dir() now also requires this file
+  # to exist under the candidate, or a contained-but-foreign checkout would
+  # be admitted. Every fixture meant to stay ADMITTED needs it.
+  touch scripts/ai-brain-auto-update.py
   printf 'seed\n' > seed.txt
   git add -A; git commit -qm seed
   git push -q -u origin main
@@ -439,6 +452,10 @@ git -c init.defaultBranch=main clone -q "$T11ORIGIN" "$T11CO" 2>/dev/null
   mkdir -p scripts docs
   printf 'echo "sync ok"\n' > scripts/sync-skills.sh
   printf '#!/usr/bin/env python3\nimport os, pathlib\nd=os.environ.get("ABS_UPDATE_STATE_DIR", os.path.expanduser("~/.claude"))\npathlib.Path(d, "DEPLOY_RAN").write_text("ran")\n' > scripts/install-hooks-user-level.py
+  # F3 identity check (MYC-4907): _skill_dir() now also requires this file
+  # to exist under the candidate, or a contained-but-foreign checkout would
+  # be admitted. Every fixture meant to stay ADMITTED needs it.
+  touch scripts/ai-brain-auto-update.py
   printf 'seed\n' > seed.txt
   git add -A; git commit -qm seed
   git push -q -u origin main
@@ -480,6 +497,10 @@ git -c init.defaultBranch=main clone -q "$T12ORIGIN" "$T12CO" 2>/dev/null
   mkdir -p scripts docs
   printf '#!/usr/bin/env python3\nimport os\nprint("SAW_SECRET=" + os.environ.get("FAKE_PARENT_SECRET", "ABSENT"))\n' > scripts/sync-skills.py
   printf '#!/usr/bin/env python3\nimport os, pathlib\nd=os.environ.get("ABS_UPDATE_STATE_DIR", os.path.expanduser("~/.claude"))\npathlib.Path(d, "DEPLOY_RAN").write_text("ran")\n' > scripts/install-hooks-user-level.py
+  # F3 identity check (MYC-4907): _skill_dir() now also requires this file
+  # to exist under the candidate, or a contained-but-foreign checkout would
+  # be admitted. Every fixture meant to stay ADMITTED needs it.
+  touch scripts/ai-brain-auto-update.py
   printf 'seed\n' > seed.txt
   git add -A; git commit -qm seed
   git push -q -u origin main
@@ -515,6 +536,10 @@ T13PAT="ghp_ZYXWVUTSRQPONMLKJIHGFEDCBA0987654321"
   mkdir -p scripts docs
   printf '#!/usr/bin/env python3\nprint("token leaked: %s")\n' "$T13PAT" > scripts/sync-skills.py
   printf '#!/usr/bin/env python3\nimport os, pathlib\nd=os.environ.get("ABS_UPDATE_STATE_DIR", os.path.expanduser("~/.claude"))\npathlib.Path(d, "DEPLOY_RAN").write_text("ran")\n' > scripts/install-hooks-user-level.py
+  # F3 identity check (MYC-4907): _skill_dir() now also requires this file
+  # to exist under the candidate, or a contained-but-foreign checkout would
+  # be admitted. Every fixture meant to stay ADMITTED needs it.
+  touch scripts/ai-brain-auto-update.py
   printf 'seed\n' > seed.txt
   git add -A; git commit -qm seed
   git push -q -u origin main
@@ -978,6 +1003,11 @@ fence_fixture() {
     mkdir -p scripts docs
     printf 'echo "sync ok"\n' > scripts/sync-skills.sh
     printf '#!/usr/bin/env python3\nimport os, pathlib\nd=os.environ.get("ABS_UPDATE_STATE_DIR", os.path.expanduser("~/.claude"))\npathlib.Path(d, "DEPLOY_RAN").write_text("ran")\n' > scripts/install-hooks-user-level.py
+    # F3 identity check (MYC-4907): _skill_dir() now also requires this file
+    # to exist under the candidate, or a contained-but-foreign checkout
+    # would be admitted. Every fixture meant to stay ADMITTED needs it;
+    # T33's attacker repo and T41's foreign checkout deliberately omit it.
+    touch scripts/ai-brain-auto-update.py
     printf 'seed\n' > seed.txt
     git add -A; git commit -qm seed; git push -q -u origin main
     printf 'upstream\n' > upstream.txt; git add upstream.txt
@@ -1261,6 +1291,10 @@ git -c init.defaultBranch=main clone -q "$T34ORIGIN" "$T34SKILL" 2>/dev/null
   mkdir -p scripts docs
   printf 'echo "sync ok"\n' > scripts/sync-skills.sh
   printf '#!/usr/bin/env python3\nimport os, pathlib\nd=os.environ.get("ABS_UPDATE_STATE_DIR", os.path.expanduser("~/.claude"))\npathlib.Path(d, "DEPLOY_RAN").write_text("ran")\n' > scripts/install-hooks-user-level.py
+  # F3 identity check (MYC-4907): _skill_dir() now also requires this file
+  # to exist under the candidate, or a contained-but-foreign checkout would
+  # be admitted. Every fixture meant to stay ADMITTED needs it.
+  touch scripts/ai-brain-auto-update.py
   printf 'seed\n' > seed.txt
   git add -A; git commit -qm seed
   git push -q -u origin main
@@ -1436,7 +1470,7 @@ git -c init.defaultBranch=main clone -q "$T42ORIGIN" "$T42CO" 2>/dev/null
   git config user.email t@t; git config user.name t
   git symbolic-ref HEAD refs/heads/main
   mkdir -p scripts
-  touch scripts/ai-brain-auto-update.py
+  touch scripts/ai-brain-auto-update.py   # F3 identity check (MYC-4907)
   printf '#!/usr/bin/env python3\nimport os\nprint("POSIX=" + os.environ.get("ABS_POSIX_PYTHON", "ABSENT"))\nprint("HOOKRUNNER=" + os.environ.get("ABS_HOOK_RUNNER", "ABSENT"))\nprint("WINLAUNCHER=" + os.environ.get("ABS_WIN_LAUNCHER", "ABSENT"))\n' > scripts/sync-skills.py
   printf '#!/usr/bin/env python3\nimport os, pathlib\nd=os.environ.get("ABS_UPDATE_STATE_DIR", os.path.expanduser("~/.claude"))\npathlib.Path(d, "DEPLOY_RAN").write_text("ran")\n' > scripts/install-hooks-user-level.py
   printf 'seed\n' > seed.txt

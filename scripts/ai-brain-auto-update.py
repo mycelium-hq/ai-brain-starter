@@ -184,6 +184,11 @@ def _skill_dir() -> "Path | None":
     anchor -- hooks.json invokes ~/.claude/skills/ai-brain-starter/... by
     that fixed path -- so containment only lets ABS_SKILL_DIR choose WHICH
     already-trusted checkout to use, never an escape from that boundary.
+    Containment alone is not enough (F3, independent review, confirmed): a
+    CONTAINED but FOREIGN checkout -- another skill repo also living under
+    ~/.claude/skills -- passes it, so an identity check additionally
+    requires this file's own path to exist under the candidate (is_file()
+    only: no git call, no read of its contents).
     """
     override = os.environ.get("ABS_SKILL_DIR")
     if not override:
@@ -194,6 +199,8 @@ def _skill_dir() -> "Path | None":
         if candidate == root:
             return None  # the root itself is not STRICTLY inside it
         candidate.relative_to(root)  # raises ValueError if not contained
+        if not (candidate / "scripts" / "ai-brain-auto-update.py").is_file():
+            return None  # contained, but not an ai-brain-starter checkout
         return candidate
     except (OSError, RuntimeError, ValueError):
         return None
