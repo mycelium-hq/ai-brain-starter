@@ -31,6 +31,17 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Guarded (MYC-4701): _shared may be missing on a fresh install (bootstrap.sh's
+# per-skill copy list omits it -- N10) or a deployed copy may predate these
+# names. Either way this degrades to injection_scan: unavailable instead of
+# crashing the whole ingest on import.
+try:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "_shared"))
+    from connector_utils import guard_untrusted_body, trust_frontmatter_lines
+except ImportError:
+    guard_untrusted_body = None
+    trust_frontmatter_lines = None
+
 VTT_TIMING_RE = re.compile(r"\d{2}:\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}:\d{2}\.\d{3}.*")
 VTT_HEADER_RE = re.compile(r"^(WEBVTT|Kind:|Language:|NOTE\s|X-TIMESTAMP-MAP)", re.MULTILINE)
 SLUG_RE = re.compile(r"[^a-z0-9]+")
@@ -267,6 +278,20 @@ def main() -> int:
         f"Source: {args.url}\n"
     )
 
+    if guard_untrusted_body is not None:
+        # scan_text covers the TITLE too (not just transcript): a video's
+        # title is as third-party as its captions, and `body` alone omits it
+        # whenever a real transcript exists.
+        body, trust = guard_untrusted_body(
+            body, "youtube", scan_text="\n".join([title, transcript])
+        )
+    else:
+        trust = {"content_trust": "untrusted", "injection_scan": "unavailable", "injection_flags": []}
+        sys.stderr.write(
+            "ingest-youtube: injection scanner unavailable; writing "
+            "content_trust=untrusted, injection_scan=unavailable\n"
+        )
+
     fm = {
         "type": "external-input",
         "source": "youtube",
@@ -281,6 +306,9 @@ def main() -> int:
         "subtitle_source": sub_source,
         "word_count": word_count,
         "ingested_at": datetime.now(timezone.utc).isoformat(),
+        "content_trust": trust["content_trust"],
+        "injection_scan": trust["injection_scan"],
+        "injection_flags": "[" + ", ".join(trust["injection_flags"]) + "]",
     }
 
     target = write_vault_file(vault_root, channel_slug, upload_date, video_slug, fm, body)
@@ -291,9 +319,10 @@ def main() -> int:
         )
 
     seed_str = f" Seeds at: {', '.join(str(p) for p in seed_paths)}." if seed_paths else ""
+    scan_str = f" Injection scan: {trust['injection_scan']}." if trust["injection_scan"] != "clean" else ""
     print(
         f"Wrote {word_count} words to {target}. "
-        f"Language: {lang_code}. Subtitle source: {sub_source}.{seed_str}"
+        f"Language: {lang_code}. Subtitle source: {sub_source}.{seed_str}{scan_str}"
     )
     return 0
 
