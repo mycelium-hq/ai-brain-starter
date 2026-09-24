@@ -136,7 +136,13 @@ env0 = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
 def mkrepo(p: Path) -> Path:
     subprocess.run(["git", "init", "-q", str(p)], check=True, env=env0)
     (p / "f.txt").write_text("x", encoding="utf-8")
-    subprocess.run(["git", "-C", str(p), "add", "f.txt"], check=True, env=env0)
+    # F3 identity check (MYC-4907): _skill_dir() now also requires this file
+    # to exist under the candidate, or a contained-but-foreign checkout is
+    # refused. Committed here so clone() (run_updater's ABS_SKILL_DIR
+    # target) inherits it from origin's first commit.
+    (p / "scripts").mkdir(parents=True, exist_ok=True)
+    (p / "scripts" / "ai-brain-auto-update.py").write_text("", encoding="utf-8")
+    subprocess.run(["git", "-C", str(p), "add", "f.txt", "scripts"], check=True, env=env0)
     subprocess.run(["git", "-C", str(p), "commit", "-qm", "init"], check=True, env=env0)
     subprocess.run(["git", "-C", str(p), "branch", "-M", "main"], check=True, env=env0)
     return p
