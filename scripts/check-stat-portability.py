@@ -154,7 +154,8 @@ def find_violations_in_text(lines: list[str]) -> list[tuple[int, str]]:
 def tracked_shell_scripts() -> list[str]:
     out = subprocess.run(
         ["git", "ls-files", "--", "*.sh"],
-        cwd=REPO_ROOT, capture_output=True, text=True, check=True,
+        cwd=REPO_ROOT, capture_output=True, text=True,
+        encoding="utf-8", errors="replace", check=True,
     )
     return [p for p in out.stdout.splitlines() if p]
 
