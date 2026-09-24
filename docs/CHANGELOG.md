@@ -9,6 +9,18 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-09-25: a Linux-only `stat` bug crashed the version-check hook, and left three other scripts relying on luck
+
+**Who this affects:** anyone running ai-brain-starter on Linux, or in CI on ubuntu. macOS was never affected.
+
+Four scripts read a file's modified time with a "try BSD's `stat -f %m` first, fall back to GNU's `stat -c %Y`" pattern. That order is backwards on Linux: GNU's `-f` flag means "show filesystem info," not "custom format," so `stat -f %m FILE` does not fail the way the fallback assumed. On real GNU coreutils it can hand back non-numeric text instead of a clean error, and `hooks/check-claude-code-version.sh` fed that text straight into arithmetic. The result on Linux: every time the version-check cache was fresh (which is most of the time, it is a 6-hour cache), the hook aborted with a bash "unbound variable" error and printed nothing instead of the cached banner.
+
+The other three sites (`scripts/bootstrap-restore.sh`'s backup-age filter, `scripts/diagnose.sh`'s journal-index freshness check, and `scripts/vault-safe-commit.sh`'s stale-lock check) used differently-shaped versions of the same backwards order. Measured against real GNU coreutils, none of those three happened to crash the same way, each had its own accidental reason not to, but none of them were safe by design, and a different coreutils build or a different `stat` implementation could change that without warning.
+
+All four now try GNU's `stat -c %Y` first and check the result is a plain number before trusting it, falling back to BSD's `-f %m` (also validated) only if that fails, the same pattern already used by `_close_lock_mtime` in `scripts/_session_close_guard.sh`. `vault-safe-commit.sh` now calls that shared function directly instead of carrying its own copy. A new check, `scripts/check-stat-mtime-portability.py`, fails CI if this backwards pattern shows up again in any tracked shell script.
+
+---
+
 ## 2026-09-23: the Decision Log index stops listing decisions as "????-??-?? — What"
 
 **Who this affects:** anyone whose decision files have `creationDate` but no `decision_date`, or use a What/Why template with `## What` (or `## Qué`) as the first heading. Session-close writes plenty of both.

@@ -89,11 +89,23 @@ find_backups() {
     local cutoff_epoch
     cutoff_epoch=$(($(date +%s) - SINCE_DAYS * 86400))
     for f in "${before_filter[@]}"; do
+      # Epoch mtime of $f, cross-platform. GNU/Linux `stat -c %Y` first, then
+      # BSD/macOS `stat -f %m`, validating each result is a plain integer
+      # before trusting it -- see PORTABILITY.md #1. A raw `A || B` exit-code
+      # chain is not enough: GNU's `-f` means `--file-system`, so
+      # `stat -f %m FILE` on Linux can still hand back non-numeric text rather
+      # than failing cleanly into the fallback.
       local mtime
-      if mtime=$(stat -f %m "$f" 2>/dev/null) || mtime=$(stat -c %Y "$f" 2>/dev/null); then
-        if [[ "$mtime" -ge "$cutoff_epoch" ]]; then
-          echo "$f"
-        fi
+      mtime=$(stat -c %Y "$f" 2>/dev/null)                          # GNU/Linux
+      case "$mtime" in ''|*[!0-9]*) mtime=$(stat -f %m "$f" 2>/dev/null) ;; esac  # BSD/macOS
+      case "$mtime" in ''|*[!0-9]*) mtime="" ;; esac  # neither gave a plain integer -> unknown
+      # Unknown age -> include the candidate rather than silently hide a real
+      # backup from this recovery listing (--since only narrows what's shown;
+      # restoring still requires a separate explicit per-item confirmation, or
+      # --yes, and never deletes anything -- the prior live file is renamed
+      # aside, not destroyed).
+      if [[ -z "$mtime" ]] || [[ "$mtime" -ge "$cutoff_epoch" ]]; then
+        echo "$f"
       fi
     done
   else
