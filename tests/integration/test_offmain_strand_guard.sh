@@ -288,12 +288,95 @@ merge_case_allow_emoji_path(){
   rm -rf "$d"
 }
 
+# (h) merging a TOPIC branch that carries its own artifact -> BLOCK. MERGE_HEAD is
+# not on the default branch, so its copy proves nothing about stranding.
+# Mutation that turns this red: honour MERGE_HEAD whenever it exists (drop the
+# is-ancestor check that sets _merge_head_on_default).
+merge_topic_branch_case_block(){
+  local d; d="$(mktemp -d)"
+  (
+    cd "$d" || exit 99
+    git init -q -b main
+    git config user.email t@t; git config user.name t
+    echo seed > seed.txt; git add seed.txt; git commit -qm seed
+    git update-ref refs/remotes/origin/main main
+    git checkout -q -b topic
+    mkdir -p "Meta/Sessions"; echo "stranded on topic" > "Meta/Sessions/t.md"
+    git add "Meta/Sessions/t.md"; git commit -qm "artifact stranded on a topic branch"
+    git checkout -q main; git checkout -q -b feature
+    echo "feature work" > feature.txt; git add feature.txt; git commit -qm "feature work"
+    mkdir -p .githooks; cp "$GUARD" .githooks/guard.sh; chmod +x .githooks/guard.sh
+    git merge --no-commit --no-ff topic >/dev/null 2>&1
+    require_staged "Meta/Sessions/t.md"
+    .githooks/guard.sh; echo "EXIT=$?"
+  ) > "$d/out" 2>&1
+  local got; got="$(sed -n 's/^EXIT=//p' "$d/out")"
+  if [ "$got" = "1" ]; then pass "(h) merge a topic branch carrying its own artifact -> BLOCK (exit $got)"; else fail "(h) merge a topic branch carrying its own artifact -> BLOCK (got '$got' want 1)"; sed 's/^/    /' "$d/out"; fi
+  rm -rf "$d"
+}
+
+# (i) merging LOCAL main while origin/main is behind it -> ALLOW through the
+# MERGE_HEAD route alone (origin/main does not have the file yet). Proves the
+# narrowing in (h) did not also shut the route it exists for.
+merge_local_default_ahead_case_allow(){
+  local d; d="$(mktemp -d)"
+  (
+    cd "$d" || exit 99
+    git init -q -b main
+    git config user.email t@t; git config user.name t
+    echo seed > seed.txt; git add seed.txt; git commit -qm seed
+    git update-ref refs/remotes/origin/main main
+    mkdir -p "Meta/Sessions"; echo "closed on local main" > "Meta/Sessions/a.md"
+    git add "Meta/Sessions/a.md"; git commit -qm "artifact on local main, not pushed"
+    git checkout -q -b feature HEAD~1
+    echo "feature work" > feature.txt; git add feature.txt; git commit -qm "feature work"
+    mkdir -p .githooks; cp "$GUARD" .githooks/guard.sh; chmod +x .githooks/guard.sh
+    git merge --no-commit --no-ff main >/dev/null 2>&1
+    require_staged "Meta/Sessions/a.md"
+    .githooks/guard.sh; echo "EXIT=$?"
+  ) > "$d/out" 2>&1
+  local got; got="$(sed -n 's/^EXIT=//p' "$d/out")"
+  if [ "$got" = "0" ]; then pass "(i) merge local main ahead of origin/main -> ALLOW via MERGE_HEAD (exit $got)"; else fail "(i) merge local main ahead of origin/main -> ALLOW via MERGE_HEAD (got '$got' want 0)"; sed 's/^/    /' "$d/out"; fi
+  rm -rf "$d"
+}
+
+# (j) cost does not grow with the number of staged paths. 500 staged NON-artifact
+# files must not start a process per path: git and grep are counted through PATH
+# shims. Measured 2026-09-24: a per-path `printf | grep` took 30.8s on 3000 files.
+# Mutation that turns this red: go back to spawning grep inside the path loop.
+spawn_count_does_not_scale_with_staged_paths(){
+  local d; d="$(mktemp -d)"
+  local real_git real_grep; real_git="$(command -v git)"; real_grep="$(command -v grep)"
+  mkdir -p "$d/shim"
+  printf '#!/bin/sh\necho git >> "%s/spawns"\nexec "%s" "$@"\n' "$d" "$real_git" > "$d/shim/git"
+  printf '#!/bin/sh\necho grep >> "%s/spawns"\nexec "%s" "$@"\n' "$d" "$real_grep" > "$d/shim/grep"
+  chmod +x "$d/shim/git" "$d/shim/grep"
+  (
+    cd "$d" || exit 99
+    git init -q -b main repo; cd repo || exit 99
+    git config user.email t@t; git config user.name t
+    echo seed > seed.txt; git add seed.txt; git commit -qm seed
+    git checkout -q -b feature
+    mkdir -p src; i=0; while [ "$i" -lt 500 ]; do echo "$i" > "src/f$i.txt"; i=$((i+1)); done
+    git add src
+    cp "$GUARD" guard.sh; chmod +x guard.sh
+    : > "$d/spawns"
+    PATH="$d/shim:$PATH" ./guard.sh; echo "EXIT=$?"
+  ) > "$d/out" 2>&1
+  local got n; got="$(sed -n 's/^EXIT=//p' "$d/out")"; n="$(wc -l < "$d/spawns" | tr -d ' ')"
+  if [ "$got" = "0" ] && [ "$n" -lt 20 ]; then pass "(j) 500 staged paths -> $n git/grep spawns, independent of path count"; else fail "(j) 500 staged paths -> got EXIT '$got' and $n git/grep spawns (want 0 and under 20)"; sed 's/^/    /' "$d/out"; fi
+  rm -rf "$d"
+}
+
 merge_case_allow_unchanged_artifact
 merge_case_block_resolution_modifies
 no_origin_ref_case_block
 origin_ref_only_case_allow
 staged_deletion_case_block
 merge_case_allow_emoji_path
+merge_topic_branch_case_block
+merge_local_default_ahead_case_allow
+spawn_count_does_not_scale_with_staged_paths
 
 echo "---"
 if [ "$fails" -eq 0 ]; then echo "ALL PASS ($((0)) failures)"; exit 0; else echo "$fails FAILED"; exit 1; fi
