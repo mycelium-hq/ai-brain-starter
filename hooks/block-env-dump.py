@@ -1,0 +1,304 @@
+#!/usr/bin/env python3
+"""PreToolUse hook: block Bash commands that print environment VALUES.
+
+Pattern this prevents: `env`, `printenv`, bare `export`/`set`, `declare -p`,
+a `ps` invocation with an environment flag, `/proc/<pid>/environ`, or an
+`echo $SECRET_VAR` put a live credential's VALUE into the session
+transcript (~/.claude/projects/.../*.jsonl), where it persists and leaks
+permanently -- a value in a transcript cannot be un-persisted. Unlike a
+stdout scan (detect-secrets-in-bash-output.py, PostToolUse -- by the time it
+runs, the value already landed), this runs PreToolUse and refuses the
+command before it ever executes. Ticket MYC-4988.
+
+Presence and length checks are NOT dumps and stay allowed: `[ -n
+"${NAME:-}" ]`, `echo ${#NAME}`, `compgen -e` (names only), and `env | cut
+-d= -f1` / `sed 's/=.*//'` / `awk -F= '{print $1}'` (the three extractors
+that provably strip every value before anything downstream ever sees it).
+
+Also folds in the REMOTE secret-dump vocabulary (heroku config, aws ssm
+get-parameter, gcloud secrets versions access, vercel env pull, doppler
+secrets download, fly secrets list, fly/flyctl ssh -C '...printenv/env...')
+ported VERBATIM from the hookify rule `block-secret-dump-command-class`
+(~/.claude/hookify.block-secret-dump-command-class.local.md) so one guard
+owns the whole class instead of splitting it across a personal hookify rule
+and a substrate hook.
+
+Parses with hooks/_lib/shell_parse.py (quote-aware segments, heredoc-body
+and comment-tail stripping) rather than a regex over the raw string -- the
+lesson of MYC-4626: a naive regex reads a dangerous command out of a quoted
+string, a comment, or a heredoc body and calls it code, or misses one
+hidden behind a heredoc.
+
+Bypass: ENV_DUMP_BYPASS=1 (inline `VAR=1 <cmd>` prefix or session env).
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "_lib"))
+try:
+    from cmd_env import inline_bypass
+except Exception:
+    def inline_bypass(command, var, value="1"):  # type: ignore
+        return False
+
+try:
+    from shell_parse import (
+        ENV_ASSIGN_RE,
+        WRAPPER_PREFIXES,
+        split_segments_with_seps,
+        strip_heredoc_bodies,
+        strip_noncode,
+        tokens,
+    )
+    _LIB_OK = True
+except Exception:
+    _LIB_OK = False
+
+# Transparent wrappers to skip past when looking for the real command word.
+# `env` is EXCLUDED on purpose: it is also one of the commands this hook
+# inspects directly (a bare `env` dumps values; `env CMD` does not), so it
+# must stay visible as the resolved word instead of being skipped over.
+_SKIP_WRAPPERS = (WRAPPER_PREFIXES - {"env"}) if _LIB_OK else set()
+
+# Name components whose VALUE a command must never print. NAME is split on
+# "_" and each piece is tested against this set; a `*DATABASE_URL` suffix is
+# checked separately below (a DSN rarely has "_" splitting it into a member
+# of this set on its own).
+_SECRET_NAME_PARTS = {
+    "KEY", "TOKEN", "SECRET", "PASSWORD", "PASSWD", "PAT", "DSN",
+    "CREDENTIAL", "CREDENTIALS", "APIKEY",
+}
+
+# `$NAME` or `${NAME...}`, but NOT the length form `${#NAME}` (negative
+# lookahead on the `#`) -- a length is not a value.
+_VAR_REF_NO_LEN = re.compile(r"\$\{(?!#)([A-Za-z_][A-Za-z0-9_]*)|\$([A-Za-z_][A-Za-z0-9_]*)")
+
+# `env`'s own no-argument options. `-u NAME` is handled separately below (it
+# consumes the following token too).
+_ENV_OPT_NO_ARG = {"-i", "-0"}
+
+# A redirection operator with no real command word after it is still "no
+# command" -- `env > /tmp/leak` dumps just as hard as a bare `env`.
+_REDIRECT_RE = re.compile(r"^[0-9]*(>>?|<<?)$|^[&>]&$")
+
+# /proc/<pid>/environ or /proc/self/environ, anywhere in the command.
+_PROC_ENVIRON_RE = re.compile(r"/proc/(?:\d+|self)/environ")
+
+# Remote secret-dump vocabulary, ported VERBATIM from the `pattern:` field of
+# ~/.claude/hookify.block-secret-dump-command-class.local.md
+# (rule: block-secret-dump-command-class) so one guard owns the whole class.
+# Do NOT reword -- keep this byte-identical to the source hookify rule.
+_REMOTE_DUMP_RE = re.compile(
+    r"""(heroku\s+(config(\s|$)|config:get|releases:info|secrets|run\s+.*env(\s|$|\|)))|aws\s+ssm\s+get-parameter|gcloud\s+secrets\s+versions\s+access|vercel\s+env\s+pull|doppler\s+secrets\s+download|fly\s+secrets\s+list|(fly|flyctl)\s+ssh\s+.*-C\s+["'][^"']*(\bprintenv\b|\benv(\s|$|\|))"""
+)
+
+
+def _bare_inline_bypass(command: str, var: str, value: str = "1") -> bool:
+    """Like cmd_env.inline_bypass, but does not require the assignment to be
+    followed by anything else.
+
+    shell_parse.leading_env_assigns treats `env` (and every other transparent
+    wrapper) as needing a real command AFTER it to "count" -- correct for its
+    own callers, but this hook's whole subject is exactly the shape where
+    `env` has nothing after it. `ENV_DUMP_BYPASS=1 env` is bare on purpose
+    (that is the command being bypassed), so `leading_env_assigns` silently
+    drops the assignment and the advertised inline bypass could never fire.
+    This checks only ITS OWN var, at the front of each segment, with no such
+    restriction.
+    """
+    if not _LIB_OK or not command:
+        return False
+    cleaned = strip_noncode(strip_heredoc_bodies(command))
+    for _sep, seg in split_segments_with_seps(cleaned):
+        for tok in tokens(seg.strip()):
+            if not ENV_ASSIGN_RE.match(tok):
+                break
+            k, _, v = tok.partition("=")
+            if k == var and v == value:
+                return True
+    return False
+
+
+def _skip_leading(toks: list) -> int:
+    """Index of the first token past leading `VAR=val` assigns and
+    transparent wrappers (env excluded -- see _SKIP_WRAPPERS)."""
+    i, n = 0, len(toks)
+    while i < n:
+        if ENV_ASSIGN_RE.match(toks[i]) or toks[i] in _SKIP_WRAPPERS:
+            i += 1
+            continue
+        break
+    return i
+
+
+def _env_is_bare_dump(rest: list) -> bool:
+    """True iff `rest` (env's own argv) leaves no command to run: env's
+    inline `VAR=val` assigns and `-i` / `-0` / `-u NAME` consumed, and
+    nothing but (optionally) a redirection is left over."""
+    i, n = 0, len(rest)
+    while i < n:
+        t = rest[i]
+        if ENV_ASSIGN_RE.match(t) or t in _ENV_OPT_NO_ARG:
+            i += 1
+            continue
+        if t == "-u" and i + 1 < n:
+            i += 2
+            continue
+        break
+    return i >= n or bool(_REDIRECT_RE.match(rest[i]))
+
+
+def _is_names_only_extractor(toks: list) -> bool:
+    """True for the three pipeline stages that provably strip every value
+    before anything downstream can see it: `cut -d= -f1`, `sed 's/=.*//'`,
+    `awk -F= '{print $1}'` (spacing/quoting variants). A builder-style sed
+    that keeps a value snippet (`s/^([^=]+)=(.{0,10}).*/...`) is NOT this --
+    it must match the exact blessed script, not merely start with `s/`."""
+    if not toks:
+        return False
+    cmd, rest = toks[0], toks[1:]
+    joined = " ".join(rest)
+    if cmd == "cut":
+        return bool(re.search(r"-d\s*=", joined)) and bool(re.search(r"-f\s*1\b", joined))
+    if cmd == "sed":
+        return "s/=.*//" in rest
+    if cmd == "awk":
+        return bool(re.search(r"-F\s*=", joined)) and "{print $1}" in rest
+    return False
+
+
+def _names_secret_var(name: str) -> bool:
+    up = name.upper()
+    if up.endswith("DATABASE_URL"):
+        return True
+    return any(part in _SECRET_NAME_PARTS for part in up.split("_"))
+
+
+def _echo_reveals_secret(seg_text: str) -> bool:
+    for m in _VAR_REF_NO_LEN.finditer(seg_text):
+        name = m.group(1) or m.group(2)
+        if name and _names_secret_var(name):
+            return True
+    return False
+
+
+def _declare_denied(rest: list) -> bool:
+    """`declare`/`typeset` with no operands, or any flag containing `p`."""
+    flags = [t for t in rest if t.startswith("-") and t != "--"]
+    operands = [t for t in rest if not t.startswith("-")]
+    return (not operands) or any("p" in f for f in flags)
+
+
+def _ps_denied(rest: list) -> bool:
+    """A dashed flag group containing uppercase E (macOS `ps -E`), or a
+    BSD-style dashless FIRST argument containing lowercase e (`ps eww`,
+    `ps auxe`). `ps -e` and `ps -p 123 -o pid=` are explicitly fine."""
+    if not rest:
+        return False
+    if any(t.startswith("-") and "E" in t for t in rest):
+        return True
+    first = rest[0]
+    return not first.startswith("-") and "e" in first
+
+
+def _deny_reason(command: str):
+    """Short reason string if `command` should be denied, else None."""
+    if not command or not command.strip():
+        return None
+    cleaned = strip_noncode(strip_heredoc_bodies(command)) if _LIB_OK else command
+
+    if _REMOTE_DUMP_RE.search(cleaned):
+        return "prints a remote secret/config-var store in plaintext"
+    if _PROC_ENVIRON_RE.search(cleaned):
+        return "reads /proc/<pid>/environ (the whole process environment)"
+    if not _LIB_OK:
+        return None  # degraded: only the two whole-string checks above ran
+
+    segs = split_segments_with_seps(cleaned)
+    for idx, (_sep, text) in enumerate(segs):
+        toks = tokens(text.strip())
+        if not toks:
+            continue
+        i = _skip_leading(toks)
+        if i >= len(toks):
+            continue
+        word, rest = toks[i], toks[i + 1:]
+        base = os.path.basename(word)
+
+        if base == "env":
+            if not _env_is_bare_dump(rest):
+                continue
+            nxt = segs[idx + 1] if idx + 1 < len(segs) else None
+            if nxt and nxt[0] == "|" and _is_names_only_extractor(tokens(nxt[1].strip())):
+                continue  # provably strips every value before anyone sees it
+            return "bare `env` prints every variable's value"
+        if word == "printenv":
+            return "`printenv` prints one or every variable's value"
+        if word == "export":
+            if not rest or rest == ["-p"]:
+                return "bare `export`/`export -p` prints every exported variable's value"
+            continue
+        if word == "set":
+            if not rest:
+                return "bare `set` prints every shell variable and function body"
+            continue
+        if word in ("declare", "typeset"):
+            if _declare_denied(rest):
+                return f"`{word}` with no operands or a -p flag prints variable values"
+            continue
+        if word == "ps":
+            if _ps_denied(rest):
+                return "`ps` with an environment flag exposes process environ blocks"
+            continue
+        if word in ("echo", "printf"):
+            if _echo_reveals_secret(text):
+                return f"`{word}` expands a secret-shaped variable"
+            continue
+    return None
+
+
+def main() -> int:
+    try:
+        payload = json.load(sys.stdin)
+    except Exception:
+        return 0  # fail open: malformed stdin is not this hook's call to make
+
+    tool = payload.get("tool_name") or payload.get("tool", "")
+    if tool != "Bash":
+        return 0
+
+    cmd = (payload.get("tool_input") or {}).get("command", "")
+    if not cmd:
+        return 0
+
+    if (os.environ.get("ENV_DUMP_BYPASS") == "1"
+            or inline_bypass(cmd, "ENV_DUMP_BYPASS")
+            or _bare_inline_bypass(cmd, "ENV_DUMP_BYPASS")):
+        return 0
+
+    try:
+        reason = _deny_reason(cmd)
+    except Exception:
+        return 0  # fail open: a parsing bug must never crash-block a command
+
+    if not reason:
+        return 0
+
+    print(
+        "[block-env-dump] BLOCKED: " + reason + "\n"
+        "Environment values here land in the session transcript permanently\n"
+        "(a leaked secret cannot be un-persisted). Safe forms instead:\n"
+        '  `[ -n "${NAME:-}" ] && echo set`,  `env | cut -d= -f1`,  `echo ${#NAME}`\n'
+        "Bypass: ENV_DUMP_BYPASS=1",
+        file=sys.stderr,
+    )
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
