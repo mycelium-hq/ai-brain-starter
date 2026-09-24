@@ -75,6 +75,15 @@
 #                                         by the fence sanitizer        [NEG]
 #   T32 STRUCTURAL: _redact_text is the OUTERMOST sanitizer at every
 #                                         fence site                    [GATE]
+#   T33 an attacker-controlled ABS_SKILL_DIR is refused before either the
+#                                         installer script or core.fsmonitor
+#                                         ever executes (MYC-4907 repro)  [GATE]
+#   T34 ABS_SKILL_DIR unset resolves to the real default path, unchanged [NEG]
+#   T35 a checkout INSIDE ~/.claude/skills is accepted, not refused      [NEG]
+#   T36 a `..` traversal out of ~/.claude/skills is refused              [NEG]
+#   T37 a symlink inside ~/.claude/skills pointing OUTSIDE it is refused [NEG]
+#   T38 the containment refusal itself is rate-limited to once per
+#                                         ABS_UPDATE_INTERVAL_DAYS         [NEG]
 #
 # Run: bash tests/integration/test_ai_brain_auto_update.sh  (0 = pass, 1 = fail)
 set -uo pipefail
@@ -88,6 +97,16 @@ ok(){ printf '  PASS: %s\n' "$1"; PASS=$((PASS+1)); }
 no(){ printf '  FAIL: %s\n' "$1"; FAIL=$((FAIL+1)); }
 TMPROOT="$(mktemp -d)"; trap 'rm -rf "$TMPROOT"' EXIT
 
+# MYC-4907: the updater now refuses any ABS_SKILL_DIR that does not resolve
+# strictly inside ~/.claude/skills. Every fixture below used to sit directly
+# under $TMPROOT (outside any HOME), which the new containment check would
+# now refuse -- give the whole suite a fake HOME and root every checkout
+# under its skills dir, and pass HOME on the invocation line, instead of
+# touching the real one.
+FAKE_HOME="$TMPROOT/home"
+SKILLS_ROOT="$FAKE_HOME/.claude/skills"
+mkdir -p "$SKILLS_ROOT"
+
 # Fresh isolated state dir + a fake checkout 1 commit BEHIND its bare origin, with
 # stub sync-skills.sh + install-hooks-user-level.py (the latter writes DEPLOY_RAN
 # into the state dir), plus hooks/marker.py -- a stand-in for a real hook file
@@ -97,7 +116,7 @@ TMPROOT="$(mktemp -d)"; trap 'rm -rf "$TMPROOT"' EXIT
 # "<state_dir>\t<checkout>".
 new_fixture() {
   local dir state origin repo
-  dir=$(mktemp -d "$TMPROOT/fx.XXXXXX")
+  dir=$(mktemp -d "$SKILLS_ROOT/fx.XXXXXX")
   state="$dir/state"; mkdir -p "$state"
   origin="$dir/origin.git"
   repo="$dir/checkout"
@@ -138,12 +157,14 @@ new_fixture() {
 run_upd() {
   if [ -n "${SID:-}" ]; then
     OUT="$(printf '{"session_id":"%s"}' "$SID" | \
+          HOME="$FAKE_HOME" \
           ABS_UPDATE_STATE_DIR="$1" ABS_SKILL_DIR="$2" ABS_UPDATE_INTERVAL_DAYS="${INTERVAL:-0}" \
           ABS_UPDATE_DEPLOY_TIMEOUT=30 ABS_UPDATE_MIN_DEPLOY_DELAY_SECONDS="${MINDELAY:-0}" \
           ABS_UPDATE_NON_INTERACTIVE="${NONINT:-}" \
           bash "$SCRIPT" 2>/dev/null)"
   else
-    OUT="$(ABS_UPDATE_STATE_DIR="$1" ABS_SKILL_DIR="$2" ABS_UPDATE_INTERVAL_DAYS="${INTERVAL:-0}" \
+    OUT="$(HOME="$FAKE_HOME" \
+          ABS_UPDATE_STATE_DIR="$1" ABS_SKILL_DIR="$2" ABS_UPDATE_INTERVAL_DAYS="${INTERVAL:-0}" \
           ABS_UPDATE_DEPLOY_TIMEOUT=30 ABS_UPDATE_MIN_DEPLOY_DELAY_SECONDS="${MINDELAY:-0}" \
           ABS_UPDATE_NON_INTERACTIVE="${NONINT:-}" \
           bash "$SCRIPT" < /dev/null 2>/dev/null)"
@@ -318,7 +339,7 @@ fi
 # .py's github-pat-classic pattern (gh[ps]_ + 36 alnum) so no new registry
 # entry is needed to prove the fix.
 PAT_TOKEN="ghp_QWERTYUIOPASDFGHJKLZXCVBNM1234567890"
-T9DIR=$(mktemp -d "$TMPROOT/fx.XXXXXX")
+T9DIR=$(mktemp -d "$SKILLS_ROOT/fx.XXXXXX")
 T9ORIGIN="$T9DIR/origin.git"
 T9CO="$T9DIR/${PAT_TOKEN}-checkout"
 T9STATE="$T9DIR/state"; mkdir -p "$T9STATE"
@@ -355,7 +376,7 @@ fi
 # the literal tag survived unmodified, "ignore prior instructions" would sit
 # OUTSIDE the fence in the emitted message, at the same trust level as the
 # real instructions around it.
-T10DIR=$(mktemp -d "$TMPROOT/fx.XXXXXX")
+T10DIR=$(mktemp -d "$SKILLS_ROOT/fx.XXXXXX")
 T10ORIGIN="$T10DIR/origin.git"
 T10CO="$T10DIR/checkout"
 T10STATE="$T10DIR/state"; mkdir -p "$T10STATE"
@@ -397,7 +418,7 @@ fi
 # cannot escape (MYC-4704 finding 4 -- the fence used to be a literal
 # substring test, so `</UNTRUSTED-COMMIT-SUBJECTS>` sailed through
 # unmodified even though a model reading it would treat it as the same tag).
-T11DIR=$(mktemp -d "$TMPROOT/fx.XXXXXX")
+T11DIR=$(mktemp -d "$SKILLS_ROOT/fx.XXXXXX")
 T11ORIGIN="$T11DIR/origin.git"
 T11CO="$T11DIR/checkout"
 T11STATE="$T11DIR/state"; mkdir -p "$T11STATE"
@@ -438,7 +459,7 @@ fi
 # redaction (a plain non-secret-shaped value like this is not something
 # secret_patterns.redact() would catch at all, so a leak here can only be
 # explained by the child inheriting more than it should).
-T12DIR=$(mktemp -d "$TMPROOT/fx.XXXXXX")
+T12DIR=$(mktemp -d "$SKILLS_ROOT/fx.XXXXXX")
 T12ORIGIN="$T12DIR/origin.git"
 T12CO="$T12DIR/checkout"
 T12STATE="$T12DIR/state"; mkdir -p "$T12STATE"
@@ -472,7 +493,7 @@ fi
 # ---- T13. sync-skills' OWN stdout is secret-redacted before reaching ------
 # additionalContext (MYC-4704 finding 2's second half -- previously fenced
 # as untrusted data but never scrubbed).
-T13DIR=$(mktemp -d "$TMPROOT/fx.XXXXXX")
+T13DIR=$(mktemp -d "$SKILLS_ROOT/fx.XXXXXX")
 T13ORIGIN="$T13DIR/origin.git"
 T13CO="$T13DIR/checkout"
 T13STATE="$T13DIR/state"; mkdir -p "$T13STATE"
@@ -938,7 +959,7 @@ fi
 # (written via a file so arbitrary bytes survive), then run the updater.
 # $1 = label used for the temp dir.
 fence_fixture() {
-  FD=$(mktemp -d "$TMPROOT/$1.XXXXXX"); FO="$FD/origin.git"; FC="$FD/checkout"
+  FD=$(mktemp -d "$SKILLS_ROOT/$1.XXXXXX"); FO="$FD/origin.git"; FC="$FD/checkout"
   FS="$FD/state"; mkdir -p "$FS"
   git -c init.defaultBranch=main init -q --bare "$FO"
   git -c init.defaultBranch=main clone -q "$FO" "$FC" 2>/dev/null
@@ -1164,6 +1185,139 @@ elif [ "$T32REAL" != "0" ]; then
   no "T32: $T32REAL fence site(s) sanitize in the wrong order: $("$T32PY" "$ORDER_GUARD" "$T32SRC" | grep -v '^VIOLATIONS=' | tr '\n' ' ')"
 else
   no "T32: the order guard is INERT -- it found $T32PLANTED/2 planted violations, so its clean run on the real file proves nothing"
+fi
+
+# ==========================================================================
+# T33-T38. MYC-4907: ABS_SKILL_DIR must be CONTAINED inside ~/.claude/skills.
+# An adversarial review pointed ABS_SKILL_DIR at an attacker-controlled git
+# repo; the updater fetched, merged, and EXECUTED that repo's own
+# scripts/install-hooks-user-level.py. _skill_dir() now refuses (returns
+# None) any override that does not resolve STRICTLY inside
+# ~/.claude/skills, BEFORE run() acquires the single-flight lock or performs
+# any git call or file operation involving the candidate.
+# ==========================================================================
+
+# ---- T33. REGRESSION: an attacker-controlled ABS_SKILL_DIR is refused -----
+# before EITHER of its two execution vectors ever fires (the reviewer's
+# repro). Vector 1: scripts/install-hooks-user-level.py, which the OLD code
+# eventually ran as the installer step. Vector 2: .git/config's
+# core.fsmonitor, which real git invokes on a plain `git status` -- exactly
+# what the OLD code ran (unconditionally) against ANY ABS_SKILL_DIR whose
+# .git existed, long before ever reaching the installer (measured: a
+# core.fsmonitor hook script DOES fire on `git status --porcelain
+# --untracked-files=no`, the exact command this file runs). Each vector
+# writes its OWN marker so either one firing is independently observable.
+ATTACKER="$TMPROOT/attacker-repo"          # OUTSIDE $SKILLS_ROOT on purpose
+mkdir -p "$ATTACKER/scripts"
+git -c init.defaultBranch=main init -q "$ATTACKER"
+(
+  cd "$ATTACKER" || exit 1
+  git config user.email t@t; git config user.name t
+  printf '#!/usr/bin/env python3\nimport pathlib\npathlib.Path("INSTALLER_MARKER").write_text("ran")\n' > scripts/install-hooks-user-level.py
+  printf 'seed\n' > seed.txt
+  git add -A; git commit -qm seed
+)
+FSHOOK="$ATTACKER/fsmonitor-hook.sh"
+printf '#!/usr/bin/env bash\ntouch "%s/FSMONITOR_MARKER"\nexit 0\n' "$ATTACKER" > "$FSHOOK"
+chmod +x "$FSHOOK"
+# Configured AFTER the commit above, so building the fixture itself never
+# trips it -- only a git call the UPDATER makes against this repo would.
+git -C "$ATTACKER" config core.fsmonitor "$FSHOOK"
+T33STATE=$(mktemp -d "$TMPROOT/fx.XXXXXX")
+run_upd "$T33STATE" "$ATTACKER"
+if [ ! -e "$ATTACKER/INSTALLER_MARKER" ] && [ ! -e "$ATTACKER/FSMONITOR_MARKER" ] \
+   && says 'BLOCKED' && says_lit 'ABS_SKILL_DIR'; then
+  ok "T33: an ABS_SKILL_DIR outside ~/.claude/skills is refused before either the installer script or core.fsmonitor ever executes"
+else
+  no "T33: attacker repo executed or refusal message missing (installer:$([ -e "$ATTACKER/INSTALLER_MARKER" ] && echo RAN || echo clean) fsmonitor:$([ -e "$ATTACKER/FSMONITOR_MARKER" ] && echo RAN || echo clean) out:$(printf '%s' "$OUT" | head -c 200))"
+fi
+
+# ---- T34. NEG: ABS_SKILL_DIR UNSET resolves to the real default path, -----
+# unchanged (contract #1). Build the checkout AT the literal default
+# location under the fake HOME (not a random fixture name) and run WITHOUT
+# ever setting ABS_SKILL_DIR -- the same code path an ordinary install with
+# no override takes.
+T34SKILL="$SKILLS_ROOT/ai-brain-starter"
+mkdir -p "$T34SKILL"
+T34ORIGIN="$TMPROOT/t34origin.git"
+git -c init.defaultBranch=main init -q --bare "$T34ORIGIN"
+git -c init.defaultBranch=main clone -q "$T34ORIGIN" "$T34SKILL" 2>/dev/null
+(
+  cd "$T34SKILL" || exit 1
+  git config user.email t@t; git config user.name t
+  git symbolic-ref HEAD refs/heads/main
+  mkdir -p scripts docs
+  printf 'echo "sync ok"\n' > scripts/sync-skills.sh
+  printf '#!/usr/bin/env python3\nimport os, pathlib\nd=os.environ.get("ABS_UPDATE_STATE_DIR", os.path.expanduser("~/.claude"))\npathlib.Path(d, "DEPLOY_RAN").write_text("ran")\n' > scripts/install-hooks-user-level.py
+  printf 'seed\n' > seed.txt
+  git add -A; git commit -qm seed
+  git push -q -u origin main
+  printf 'upstream\n' > upstream.txt
+  git add upstream.txt; git commit -qm "upstream ahead"
+  git push -q origin main
+  git reset -q --hard HEAD~1
+)
+T34STATE=$(mktemp -d "$TMPROOT/fx.XXXXXX")
+before=$(git -C "$T34SKILL" rev-parse HEAD)
+run_upd "$T34STATE" ""
+after=$(git -C "$T34SKILL" rev-parse HEAD)
+om=$(git -C "$T34SKILL" rev-parse origin/main)
+if [ "$after" = "$before" ] && [ "$after" != "$om" ] && pending "$T34STATE" && says 'found an update'; then
+  ok "T34: ABS_SKILL_DIR unset resolves to the real default path -- unchanged, no refusal"
+else
+  no "T34: unset ABS_SKILL_DIR did not behave like an ordinary update at the default path: $(printf '%s' "$OUT" | head -c 200)"
+fi
+
+# ---- T35. NEG: a checkout INSIDE ~/.claude/skills is accepted, not --------
+# refused. Every other test in this file already proves this as a
+# side-effect (new_fixture's checkouts live under $SKILLS_ROOT), but this
+# asserts it directly and explicitly, per MYC-4907's own negative-control
+# list, rather than only implicitly.
+IFS=$'\t' read -r ST CO < <(new_fixture)
+run_upd "$ST" "$CO"
+if says 'found an update' && ! says_lit 'ABS_SKILL_DIR'; then
+  ok "T35: a checkout inside ~/.claude/skills is accepted -- no containment refusal"
+else
+  no "T35: a checkout inside the skills root was wrongly refused: $(printf '%s' "$OUT" | head -c 200)"
+fi
+
+# ---- T36. NEG: a `..` traversal out of ~/.claude/skills is refused --------
+TRAVERSAL="$SKILLS_ROOT/../outside-traversal"     # -> $FAKE_HOME/.claude/outside-traversal
+T36STATE=$(mktemp -d "$TMPROOT/fx.XXXXXX")
+run_upd "$T36STATE" "$TRAVERSAL"
+if says 'BLOCKED' && says_lit 'ABS_SKILL_DIR' && ! pending "$T36STATE"; then
+  ok "T36: a \`..\` traversal out of ~/.claude/skills is refused"
+else
+  no "T36: a traversal path was not refused: $(printf '%s' "$OUT" | head -c 200)"
+fi
+
+# ---- T37. NEG: a symlink INSIDE the skills root pointing OUTSIDE it is ----
+# refused. Path.resolve() follows the symlink before the containment check
+# runs, so the ESCAPE is what gets tested, not the link's own location.
+OUTSIDE_TARGET="$TMPROOT/outside-target"
+mkdir -p "$OUTSIDE_TARGET"
+EVIL_LINK="$SKILLS_ROOT/evil-symlink"
+ln -s "$OUTSIDE_TARGET" "$EVIL_LINK"
+T37STATE=$(mktemp -d "$TMPROOT/fx.XXXXXX")
+run_upd "$T37STATE" "$EVIL_LINK"
+if says 'BLOCKED' && says_lit 'ABS_SKILL_DIR' && ! pending "$T37STATE"; then
+  ok "T37: a symlink inside ~/.claude/skills pointing OUTSIDE it is refused"
+else
+  no "T37: a symlink escape was not refused: $(printf '%s' "$OUT" | head -c 200)"
+fi
+
+# ---- T38. The refusal notice itself is rate-limited (contract #4): a -----
+# second invocation within the SAME interval, still misconfigured, stays
+# silent rather than renotifying every prompt -- it reuses the identical
+# `last` stamp an ordinary fetch attempt rate-limits on.
+T38STATE=$(mktemp -d "$TMPROOT/fx.XXXXXX")
+INTERVAL=6 run_upd "$T38STATE" "$TRAVERSAL"     # first call: refused, notifies
+first_out="$OUT"
+INTERVAL=6 run_upd "$T38STATE" "$TRAVERSAL"     # second call, same interval
+if printf '%s' "$first_out" | grep -q 'BLOCKED' && says 'suppressOutput' && ! says 'BLOCKED'; then
+  ok "T38: a refused ABS_SKILL_DIR renotifies at most once per ABS_UPDATE_INTERVAL_DAYS, not every prompt"
+else
+  no "T38: refusal notice did not rate-limit (first:$(printf '%s' "$first_out" | grep -q BLOCKED && echo BLOCKED || echo no) second:$(printf '%s' "$OUT" | head -c 150))"
 fi
 
 echo
