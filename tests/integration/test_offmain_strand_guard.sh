@@ -102,5 +102,175 @@ run_case "feature-branch + emoji-prefixed artifact -> BLOCK" claude/x "⚙️ Me
 run_case "feature-branch + per-repo extension -> BLOCK" claude/x "notes/Weekly Digest.md"         0 1 "Weekly Digest.md"
 run_case "feature-branch + unlisted path -> ALLOW"     claude/x  "notes/random.md"                0 0
 
+# --- Merge carve-out (the DEFECT this pairs with: a plain `git merge origin/main`
+# into a feature branch stages main's OWN unchanged session artifacts, and the
+# guard used to refuse that routine merge, forcing SESSION_ARTIFACT_BRANCH_BYPASS=1
+# on content that could never strand). run_case above cannot express a merge
+# (single branch + single staged path), so these are bespoke like hermetic_check.
+# NOTE: (b) "a NEW artifact on a feature branch -> refused" is already proven by
+# "feature-branch + artifact -> BLOCK" above -- a brand-new path has no origin/
+# MERGE_HEAD blob to match, so it is untouched by the carve-out. Not duplicated
+# here on purpose.
+
+# (a) merging main's unchanged artifact into a feature branch -> ALLOW.
+# One-line mutation that turns this red: delete (or stub to always-0) the
+# "${_have_origin_ref}"/"${_have_merge_head}" exemption block in the guard, i.e.
+# revert to the pre-carve-out matching logic -- this case then gets EXIT=1.
+merge_case_allow_unchanged_artifact(){
+  local d; d="$(mktemp -d)"
+  (
+    cd "$d" || exit 99
+    git init -q -b main
+    git config user.email t@t; git config user.name t
+    echo seed > seed.txt; git add seed.txt; git commit -qm seed
+    mkdir -p "Meta/Sessions"; echo "seed-session" > "Meta/Sessions/a.md"
+    git add "Meta/Sessions/a.md"; git commit -qm "artifact on main"
+    git update-ref refs/remotes/origin/main main
+    git checkout -q -b feature HEAD~1
+    echo "feature work" > feature.txt; git add feature.txt; git commit -qm "feature work"
+    mkdir -p .githooks; cp "$GUARD" .githooks/guard.sh; chmod +x .githooks/guard.sh
+    git merge --no-commit --no-ff origin/main >/dev/null 2>&1
+    .githooks/guard.sh; echo "EXIT=$?"
+  ) > "$d/out" 2>&1
+  local got; got="$(sed -n 's/^EXIT=//p' "$d/out")"
+  if [ "$got" = "0" ]; then pass "(a) merge main's unchanged artifact into feature -> ALLOW (exit $got)"; else fail "(a) merge main's unchanged artifact into feature -> ALLOW (got '$got' want 0)"; sed 's/^/    /' "$d/out"; fi
+  rm -rf "$d"
+}
+
+# (b) sentinel note only -- see comment block above; no separate function.
+# One-line mutation that turns "feature-branch + artifact -> BLOCK" red: widen
+# the exemption to match on PATTERN/PATH alone instead of blob equality (e.g.
+# `_exempt=1` as soon as `_matched_pat` is set, without checking `_sblob`
+# against `_oblob`/`_mblob`) -- a brand-new artifact would then be wrongly
+# exempted just because its path looks like a session artifact.
+
+# (c) a merge whose RESOLUTION modifies an artifact -> BLOCK. Same merge as (a),
+# but the staged content is edited after the merge stages it, so it no longer
+# matches origin/<default> OR MERGE_HEAD.
+merge_case_block_resolution_modifies(){
+  local d; d="$(mktemp -d)"
+  (
+    cd "$d" || exit 99
+    git init -q -b main
+    git config user.email t@t; git config user.name t
+    echo seed > seed.txt; git add seed.txt; git commit -qm seed
+    mkdir -p "Meta/Sessions"; echo "seed-session" > "Meta/Sessions/a.md"
+    git add "Meta/Sessions/a.md"; git commit -qm "artifact on main"
+    git update-ref refs/remotes/origin/main main
+    git checkout -q -b feature HEAD~1
+    echo "feature work" > feature.txt; git add feature.txt; git commit -qm "feature work"
+    mkdir -p .githooks; cp "$GUARD" .githooks/guard.sh; chmod +x .githooks/guard.sh
+    git merge --no-commit --no-ff origin/main >/dev/null 2>&1
+    echo "resolved differently" > "Meta/Sessions/a.md"
+    git add "Meta/Sessions/a.md"
+    .githooks/guard.sh; echo "EXIT=$?"
+  ) > "$d/out" 2>&1
+  local got; got="$(sed -n 's/^EXIT=//p' "$d/out")"
+  if [ "$got" = "1" ]; then pass "(c) merge resolution modifies artifact -> BLOCK (exit $got)"; else fail "(c) merge resolution modifies artifact -> BLOCK (got '$got' want 1)"; sed 's/^/    /' "$d/out"; fi
+  rm -rf "$d"
+}
+
+# (d) origin ref ABSENT (no remote configured at all, and no merge in progress)
+# -> BLOCK, even though the staged content is byte-identical to LOCAL main.
+# Proves the exemption never falls back to the local <default> branch and never
+# treats "cannot resolve the ref" as "assume it matches" (the empty-string
+# footgun: comparing two failed lookups' empty output would wrongly be equal).
+no_origin_ref_case_block(){
+  local d; d="$(mktemp -d)"
+  (
+    cd "$d" || exit 99
+    git init -q -b main
+    git config user.email t@t; git config user.name t
+    echo seed > seed.txt; git add seed.txt; git commit -qm seed
+    mkdir -p "Meta/Sessions"; echo "shared content" > "Meta/Sessions/a.md"
+    git add "Meta/Sessions/a.md"; git commit -qm "artifact on main"
+    git checkout -q -b feature HEAD~1
+    mkdir -p .githooks; cp "$GUARD" .githooks/guard.sh; chmod +x .githooks/guard.sh
+    mkdir -p Meta/Sessions
+    git show main:Meta/Sessions/a.md > Meta/Sessions/a.md
+    git add Meta/Sessions/a.md
+    .githooks/guard.sh; echo "EXIT=$?"
+  ) > "$d/out" 2>&1
+  local got; got="$(sed -n 's/^EXIT=//p' "$d/out")"
+  if [ "$got" = "1" ]; then pass "(d) origin ref absent, content matches local main only -> BLOCK (exit $got)"; else fail "(d) origin ref absent, content matches local main only -> BLOCK (got '$got' want 1)"; sed 's/^/    /' "$d/out"; fi
+  rm -rf "$d"
+}
+
+# (e) extra: the origin/<default> route alone, with no merge in progress at all
+# (e.g. a cherry-pick or a manual re-add of main's content) -> ALLOW. Proves the
+# two exemption routes are independent ORs, not "origin ref only counts mid-merge".
+origin_ref_only_case_allow(){
+  local d; d="$(mktemp -d)"
+  (
+    cd "$d" || exit 99
+    git init -q -b main
+    git config user.email t@t; git config user.name t
+    echo seed > seed.txt; git add seed.txt; git commit -qm seed
+    mkdir -p "Meta/Sessions"; echo "already-on-main" > "Meta/Sessions/a.md"
+    git add "Meta/Sessions/a.md"; git commit -qm "artifact on main"
+    git update-ref refs/remotes/origin/main main
+    git checkout -q -b feature HEAD~1
+    mkdir -p .githooks; cp "$GUARD" .githooks/guard.sh; chmod +x .githooks/guard.sh
+    git show origin/main:Meta/Sessions/a.md > Meta/Sessions/a.md
+    git add Meta/Sessions/a.md
+    .githooks/guard.sh; echo "EXIT=$?"
+  ) > "$d/out" 2>&1
+  local got; got="$(sed -n 's/^EXIT=//p' "$d/out")"
+  if [ "$got" = "0" ]; then pass "(e) origin-ref route alone, no active merge -> ALLOW (exit $got)"; else fail "(e) origin-ref route alone, no active merge -> ALLOW (got '$got' want 0)"; sed 's/^/    /' "$d/out"; fi
+  rm -rf "$d"
+}
+
+# (f) extra: a staged DELETION of an artifact -> BLOCK. There is no staged blob
+# to compare (":${path}" fails to resolve), so it falls through as a hit rather
+# than silently being treated as exempt.
+staged_deletion_case_block(){
+  local d; d="$(mktemp -d)"
+  (
+    cd "$d" || exit 99
+    git init -q -b main
+    git config user.email t@t; git config user.name t
+    mkdir -p "Meta/Sessions"; echo "seed-session" > "Meta/Sessions/a.md"
+    git add "Meta/Sessions/a.md"; git commit -qm seed
+    git update-ref refs/remotes/origin/main main
+    git checkout -q -b feature
+    mkdir -p .githooks; cp "$GUARD" .githooks/guard.sh; chmod +x .githooks/guard.sh
+    git rm -q --cached Meta/Sessions/a.md
+    .githooks/guard.sh; echo "EXIT=$?"
+  ) > "$d/out" 2>&1
+  local got; got="$(sed -n 's/^EXIT=//p' "$d/out")"
+  if [ "$got" = "1" ]; then pass "(f) staged deletion of an artifact -> BLOCK, fail-closed (exit $got)"; else fail "(f) staged deletion of an artifact -> BLOCK, fail-closed (got '$got' want 1)"; sed 's/^/    /' "$d/out"; fi
+  rm -rf "$d"
+}
+
+# (g) extra: emoji + space in the path ("⚙️ Meta"), through the merge-exempt
+# route -- proves the byte-identity check is not just ASCII-safe.
+merge_case_allow_emoji_path(){
+  local d; d="$(mktemp -d)"
+  (
+    cd "$d" || exit 99
+    git init -q -b main
+    git config user.email t@t; git config user.name t
+    echo seed > seed.txt; git add seed.txt; git commit -qm seed
+    mkdir -p "⚙️ Meta/Sessions"; echo "seed-session" > "⚙️ Meta/Sessions/e.md"
+    git add "⚙️ Meta/Sessions/e.md"; git commit -qm "emoji artifact on main"
+    git update-ref refs/remotes/origin/main main
+    git checkout -q -b feature HEAD~1
+    echo "feature work" > feature.txt; git add feature.txt; git commit -qm "feature work"
+    mkdir -p .githooks; cp "$GUARD" .githooks/guard.sh; chmod +x .githooks/guard.sh
+    git merge --no-commit --no-ff origin/main >/dev/null 2>&1
+    .githooks/guard.sh; echo "EXIT=$?"
+  ) > "$d/out" 2>&1
+  local got; got="$(sed -n 's/^EXIT=//p' "$d/out")"
+  if [ "$got" = "0" ]; then pass "(g) merge unchanged emoji-prefixed artifact -> ALLOW (exit $got)"; else fail "(g) merge unchanged emoji-prefixed artifact -> ALLOW (got '$got' want 0)"; sed 's/^/    /' "$d/out"; fi
+  rm -rf "$d"
+}
+
+merge_case_allow_unchanged_artifact
+merge_case_block_resolution_modifies
+no_origin_ref_case_block
+origin_ref_only_case_allow
+staged_deletion_case_block
+merge_case_allow_emoji_path
+
 echo "---"
 if [ "$fails" -eq 0 ]; then echo "ALL PASS ($((0)) failures)"; exit 0; else echo "$fails FAILED"; exit 1; fi
