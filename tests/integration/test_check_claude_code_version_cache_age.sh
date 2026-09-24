@@ -69,7 +69,11 @@ printf '%s\n' "$BANNER" > "$CACHE_FILE"
 # target's own PATH-shim-stripping header (trailofbits modern-python) and
 # `gh`/`awk`/`sed` all still need to resolve normally on this "fresh cache"
 # branch that this test exercises returns before ever touching gh.
-out="$(PATH="$SHIMDIR:$PATH" HOME="$HOME" bash "$TARGET" 2>"$TMP/stderr")"
+# HOME (and, on Windows, USERPROFILE) are already exported by sandbox_home
+# above -- re-stating HOME= here alone would redirect it without its
+# Windows pair, so it is intentionally left out; PATH is the only override
+# this specific call needs.
+out="$(PATH="$SHIMDIR:$PATH" bash "$TARGET" 2>"$TMP/stderr")"
 
 echo "$out" | grep -qF "$BANNER" ||
   fail "fresh cache under GNU stat: expected the cached banner on stdout, got: [$out] (stderr: $(cat "$TMP/stderr"))"
