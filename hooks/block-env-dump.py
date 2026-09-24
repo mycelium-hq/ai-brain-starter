@@ -65,6 +65,12 @@ except Exception:
 # must stay visible as the resolved word instead of being skipped over.
 _SKIP_WRAPPERS = (WRAPPER_PREFIXES - {"env"}) if _LIB_OK else set()
 
+# Shell keywords that precede a real command word without being one
+# themselves: `if env; then` / `while env; do` run env as their condition,
+# `do env; done` and `{ env; }` run it as their body, `! env` negates its
+# exit status -- none of these change WHAT runs, only when/whether.
+_SKIP_KEYWORDS = {"then", "do", "else", "elif", "if", "while", "until", "{", "!", "("}
+
 # Name components whose VALUE a command must never print. NAME is split on
 # "_" and each piece is tested against this set; a `*DATABASE_URL` suffix is
 # checked separately below (a DSN rarely has "_" splitting it into a member
@@ -177,7 +183,8 @@ def _skip_leading(toks: list) -> int:
     transparent wrappers (env excluded -- see _SKIP_WRAPPERS)."""
     i, n = 0, len(toks)
     while i < n:
-        if ENV_ASSIGN_RE.match(toks[i]) or toks[i] in _SKIP_WRAPPERS:
+        if (ENV_ASSIGN_RE.match(toks[i]) or toks[i] in _SKIP_WRAPPERS
+                or toks[i] in _SKIP_KEYWORDS):
             i += 1
             continue
         break

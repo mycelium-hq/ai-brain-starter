@@ -306,3 +306,58 @@ def test_allows_env_real_command_survives_redirect_strip():
     # A REAL command after env must still allow, even with a redirect
     # attached -- the redirect must not eat the genuine trailing command.
     assert_allowed("env FOO=1 python3 x.py 2>/dev/null")
+
+
+# ---------------------------------------------------------------------------
+# 8. Review item 2 -- `_skip_leading` also skips shell keywords: then, do,
+# else, elif, if, while, until, {, ! and (.
+# ---------------------------------------------------------------------------
+
+def test_skip_leading_skips_shell_keywords_directly():
+    # Direct unit proof of the function's own contract. "(" cannot occur as
+    # a leading TOKEN via _deny_reason's own segment splitter (it is always
+    # consumed as a segment separator upstream, never left inside a
+    # segment's text/tokens outside quotes) -- proven end-to-end elsewhere
+    # for every OTHER keyword in this list, this is the direct proof for it.
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("bed", HOOK)
+    bed = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bed)
+    for kw in ("then", "do", "else", "elif", "if", "while", "until", "{", "!", "("):
+        assert bed._skip_leading([kw, "env"]) == 1, f"keyword not skipped: {kw!r}"
+
+
+def test_denies_if_then_env():
+    assert_denied("if true; then env; fi")
+
+
+def test_denies_if_then_else_env():
+    assert_denied("if true; then true; else env; fi")
+
+
+def test_denies_if_env_condition():
+    assert_denied("if env; then true; fi")
+
+
+def test_denies_elif_env():
+    assert_denied("if false; then true; elif env; then true; fi")
+
+
+def test_denies_while_env_condition():
+    assert_denied("while env; do true; done")
+
+
+def test_denies_until_env_condition():
+    assert_denied("until env; do true; done")
+
+
+def test_denies_do_env_body():
+    assert_denied("for i in 1; do env; done")
+
+
+def test_denies_brace_group_env():
+    assert_denied("{ env; }")
+
+
+def test_denies_bang_env():
+    assert_denied("! env")
