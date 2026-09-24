@@ -45,6 +45,17 @@ from connector_utils import (
     yaml_int_array,
 )
 
+# Separate, guarded import (MYC-4701): these two names are newer than the
+# six above, so a deployed _shared that has not synced yet would otherwise
+# raise ImportError on the whole module instead of degrading gracefully.
+# A missing/stale copy means content_trust: untrusted, injection_scan:
+# unavailable -- never a dropped or crashed write.
+try:
+    from connector_utils import guard_untrusted_body, trust_frontmatter_lines
+except ImportError:
+    guard_untrusted_body = None
+    trust_frontmatter_lines = None
+
 BODY_EXCERPT_LIMIT = 800
 
 
@@ -148,8 +159,10 @@ def build_frontmatter(
     pr_ids: list[int],
     issue_ids: list[int],
     ingested_at: str,
+    trust_lines: list[str],
 ) -> str:
     start_date, end_date = date_range_strs(target_date, days)
+    trust_block = "\n".join(trust_lines)
     return (
         "---\n"
         "type: external-input\n"
@@ -162,6 +175,7 @@ def build_frontmatter(
         f"  github_repo: {yaml_escape(repo)}\n"
         f"  github_pr: {yaml_int_array(pr_ids)}\n"
         f"  github_issue: {yaml_int_array(issue_ids)}\n"
+        f"{trust_block}\n"
         "---\n\n"
         f"# GitHub {repo} from {start_date} to {end_date}\n\n"
         f"_{item_count} item(s) ingested via /ingest-github._\n\n"
@@ -211,6 +225,17 @@ def run_from_payload(payload: dict) -> int:
         body_parts.append("_No activity in the date range._\n")
     body = "\n".join(body_parts).rstrip() + "\n"
 
+    if guard_untrusted_body is not None:
+        body, trust = guard_untrusted_body(body, "github")
+        trust_lines = trust_frontmatter_lines(trust)
+    else:
+        trust = {"content_trust": "untrusted", "injection_scan": "unavailable", "injection_flags": []}
+        trust_lines = [
+            "content_trust: untrusted",
+            "injection_scan: unavailable",
+            "injection_flags: []",
+        ]
+
     item_count = len(prs) + len(issues) + len(commits)
     frontmatter = build_frontmatter(
         repo=repo,
@@ -220,14 +245,16 @@ def run_from_payload(payload: dict) -> int:
         pr_ids=pr_ids,
         issue_ids=issue_ids,
         ingested_at=ingested_at,
+        trust_lines=trust_lines,
     )
 
     out_path = write_vault_file(payload, body, frontmatter)
 
+    scan_suffix = f"; injection_scan={trust['injection_scan']}" if trust["injection_scan"] != "clean" else ""
     print(
         f"Wrote {item_count} item(s) "
         f"({len(prs)} prs, {len(issues)} issues, {len(commits)} commits) "
-        f"to {out_path}"
+        f"to {out_path}{scan_suffix}"
     )
     return 0
 
