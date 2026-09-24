@@ -82,9 +82,57 @@ _VAR_REF_NO_LEN = re.compile(r"\$\{(?!#)([A-Za-z_][A-Za-z0-9_]*)|\$([A-Za-z_][A-
 # consumes the following token too).
 _ENV_OPT_NO_ARG = {"-i", "-0"}
 
-# A redirection operator with no real command word after it is still "no
-# command" -- `env > /tmp/leak` dumps just as hard as a bare `env`.
-_REDIRECT_RE = re.compile(r"^[0-9]*(>>?|<<?)$|^[&>]&$")
+# A redirect operator, with everything shlex glues to it in ONE token: shlex
+# has no notion of `<`/`>` as shell metacharacters, so `env>out.txt`,
+# `2>/dev/null` and `>>x` all survive tokenization as a single token apiece
+# (verified against shlex.split directly). `prefix` is what came before the
+# operator in the SAME token; `tail` is what came after (a filename, a dup-fd
+# `&1`, or nothing when the target is a separate following token).
+_REDIR_TOKEN_RE = re.compile(r"^(?P<prefix>[^><]*)(?P<op>&?(?:>>|<<|>|<))(?P<tail>.*)$")
+
+
+def _is_redirect_fd_prefix(prefix: str) -> bool:
+    """True when `prefix` is an fd number or empty -- part of the operator
+    itself (`2>`), never a real command/argument word."""
+    return prefix == "" or prefix.isdigit()
+
+
+def _strip_redirect_tokens(toks: list) -> list:
+    """Drop every redirect clause from an already-tokenized argument list:
+    a bare operator plus its separate target token (`>` `/tmp/x`), and an
+    attached form glued by shlex into one token (`2>/dev/null`, `>>x`). A
+    non-fd word glued to the operator in an ARGUMENT position is kept (rare,
+    but `_split_glued_redirect` below is the one that matters for the verb
+    itself)."""
+    out, i, n = [], 0, len(toks)
+    while i < n:
+        t = toks[i]
+        if "<" not in t and ">" not in t:
+            out.append(t)
+            i += 1
+            continue
+        m = _REDIR_TOKEN_RE.match(t)
+        prefix, tail = m.group("prefix"), m.group("tail")
+        if prefix and not _is_redirect_fd_prefix(prefix):
+            out.append(prefix)
+        skip_next = not tail and i + 1 < n
+        i += 2 if skip_next else 1
+    return out
+
+
+def _split_glued_redirect(word: str, rest: list) -> tuple:
+    """As `_strip_redirect_tokens`, but for the CANDIDATE COMMAND WORD itself
+    (`env>out.txt`, `export>file`): returns the real word (or "" when the
+    token is entirely a redirect, e.g. a bare `>out.txt` in word position)
+    plus `rest` with a separate target token consumed when the operator had
+    nothing attached in the same token."""
+    if "<" not in word and ">" not in word:
+        return word, rest
+    m = _REDIR_TOKEN_RE.match(word)
+    prefix, tail = m.group("prefix"), m.group("tail")
+    if not tail and rest:
+        rest = rest[1:]
+    return ("" if _is_redirect_fd_prefix(prefix) else prefix), rest
 
 # /proc/<pid>/environ or /proc/self/environ, anywhere in the command.
 _PROC_ENVIRON_RE = re.compile(r"/proc/(?:\d+|self)/environ")
@@ -137,9 +185,9 @@ def _skip_leading(toks: list) -> int:
 
 
 def _env_is_bare_dump(rest: list) -> bool:
-    """True iff `rest` (env's own argv) leaves no command to run: env's
-    inline `VAR=val` assigns and `-i` / `-0` / `-u NAME` consumed, and
-    nothing but (optionally) a redirection is left over."""
+    """True iff `rest` (env's own argv, with redirects already stripped by
+    the caller) leaves no command to run: env's inline `VAR=val` assigns and
+    `-i` / `-0` / `-u NAME` consumed, and nothing left over."""
     i, n = 0, len(rest)
     while i < n:
         t = rest[i]
@@ -150,7 +198,7 @@ def _env_is_bare_dump(rest: list) -> bool:
             i += 2
             continue
         break
-    return i >= n or bool(_REDIRECT_RE.match(rest[i]))
+    return i >= n
 
 
 def _is_names_only_extractor(toks: list) -> bool:
@@ -228,6 +276,8 @@ def _deny_reason(command: str):
         if i >= len(toks):
             continue
         word, rest = toks[i], toks[i + 1:]
+        word, rest = _split_glued_redirect(word, rest)
+        rest = _strip_redirect_tokens(rest)
         base = os.path.basename(word)
 
         if base == "env":

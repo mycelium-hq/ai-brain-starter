@@ -252,3 +252,57 @@ def test_ignores_non_bash_tool():
 
 def test_ignores_empty_command():
     assert_allowed("")
+
+
+# ---------------------------------------------------------------------------
+# 7. Review item 1 -- redirects stripped before every "bare" test, including
+# attached forms glued by shlex into one token (no whitespace-splitting for
+# shell operators): `2>/dev/null`, `>/tmp/x`, `>>x`, `env>out.txt`.
+# ---------------------------------------------------------------------------
+
+def test_denies_env_stderr_redirect_attached():
+    assert_denied("env 2>/dev/null")
+
+
+def test_denies_env_stdout_redirect_attached():
+    assert_denied("env >/tmp/x")
+
+
+def test_denies_env_append_redirect_attached():
+    assert_denied("env >>x")
+
+
+def test_denies_env_word_glued_to_redirect():
+    assert_denied("env>out.txt")
+
+
+def test_denies_env_stderr_redirect_piped_to_grep():
+    # A redirect on env's OWN stderr must not be misread as "a real command
+    # word follows env" -- it is still a bare dump, piped to a non-extractor.
+    assert_denied("env 2>/dev/null | grep -i key")
+
+
+def test_denies_export_redirected_to_file():
+    assert_denied("export > /tmp/x")
+
+
+def test_denies_set_redirected_to_file():
+    assert_denied("set > /tmp/x")
+
+
+def test_denies_declare_redirected_to_file():
+    assert_denied("declare > /tmp/x")
+
+
+def test_denies_export_dash_p_stderr_redirect_piped():
+    assert_denied("export -p 2>/dev/null | grep -i token")
+
+
+def test_denies_set_stderr_redirect_piped():
+    assert_denied("set 2>/dev/null | grep -i token")
+
+
+def test_allows_env_real_command_survives_redirect_strip():
+    # A REAL command after env must still allow, even with a redirect
+    # attached -- the redirect must not eat the genuine trailing command.
+    assert_allowed("env FOO=1 python3 x.py 2>/dev/null")
