@@ -406,15 +406,25 @@ def _minimal_env(extra: dict[str, str] | None = None) -> dict[str, str]:
     Keeps only: PATH/HOME-family vars so Path.home() and PATH lookups still
     resolve the right user + binaries, the Windows vars Python's own
     subprocess machinery needs to spawn a child reliably (SystemRoot in
-    particular -- WinSock init can fail without it), and the explicit
-    config both real scripts (VAULT_ROOT; sync-skills.py's own child
-    sync-vault-scripts.sh reads it too) and this test suite's stub scripts
-    (ABS_SKILL_DIR / ABS_UPDATE_STATE_DIR etc.) read by name -- passed
-    through ONLY if the parent already had them, never invented. Dropping
-    the test-hermetic names here would not just be inconvenient, it would
-    silently break test isolation: a stub standing in for the real
-    installer that reads ABS_UPDATE_STATE_DIR would fall back to the REAL
-    ~/.claude the moment that var vanished from its env.
+    particular -- WinSock init can fail without it), ABS_WIN_LAUNCHER (a
+    real user escape hatch, not test-only), and the explicit config both
+    real scripts (VAULT_ROOT; sync-skills.py's own child sync-vault-
+    scripts.sh reads it too) and THIS file's OWN hermetic-test overrides
+    (ABS_SKILL_DIR, ABS_UPDATE_STATE_DIR, ABS_UPDATE_INTERVAL_DAYS,
+    ABS_UPDATE_DEPLOY_TIMEOUT, ABS_UPDATE_MIN_DEPLOY_DELAY_SECONDS) read by
+    name -- passed through ONLY if the parent already had them, never
+    invented. Dropping those would silently break test isolation: a stub
+    standing in for the real installer that reads ABS_UPDATE_STATE_DIR
+    would fall back to the REAL ~/.claude the moment that var vanished.
+
+    ABS_POSIX_PYTHON / ABS_HOOK_RUNNER are DELIBERATELY NOT kept (F4,
+    independent review, confirmed by running it): both are TEST-ONLY knobs
+    for install-hooks-user-level.py's OWN test suite (that file's own
+    docstrings say so, ~:976 and ~:1061) -- not something a caller of THIS
+    file needs forwarded. The prior list forwarded them anyway, and
+    install-hooks-user-level.py writes whatever it receives verbatim into
+    every hook command in settings.json (measured: 51 of 72). Test
+    hermeticity for THIS file's own suite never required either name.
 
     Case-insensitive on the keep-list (`k.upper() in keep_upper`) since
     Windows env var names are case-preserved-but-case-insensitive.
@@ -425,7 +435,7 @@ def _minimal_env(extra: dict[str, str] | None = None) -> dict[str, str]:
         "VAULT_ROOT",
         "ABS_SYNC_STARTER_DIR", "ABS_SYNC_INSTALL_DIR",
         "ABS_FORCE_WINDOWS", "ABS_WIN_UTF8_MODE", "ABS_WIN_LAUNCHER",
-        "ABS_WIN_ABS_INTERPRETER", "ABS_POSIX_PYTHON", "ABS_HOOK_RUNNER",
+        "ABS_WIN_ABS_INTERPRETER",
         "ABS_SKILL_DIR", "ABS_UPDATE_STATE_DIR", "ABS_UPDATE_INTERVAL_DAYS",
         "ABS_UPDATE_DEPLOY_TIMEOUT", "ABS_UPDATE_MIN_DEPLOY_DELAY_SECONDS",
     }
