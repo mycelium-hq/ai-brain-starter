@@ -361,3 +361,102 @@ def test_denies_brace_group_env():
 
 def test_denies_bang_env():
     assert_denied("! env")
+
+
+# ---------------------------------------------------------------------------
+# 9. Review item 3 -- echo/printf secret check rewrite: indirect ${!v}
+# expansion, ${V:+x}/${V+x} allowed, single-quoted text ignored, only
+# uppercase names count, substring-anywhere vs whole-component name rules
+# with a PATH/FILE/DIR exception, and pipe-destination awareness.
+# ---------------------------------------------------------------------------
+
+def test_denies_indirect_expansion_in_loop():
+    assert_denied('for v in OPENAI_API_KEY; do echo "$v=${!v}"; done')
+
+
+def test_denies_indirect_expansion_direct():
+    assert_denied('echo "${!SOME_VAR}"')
+
+
+def test_allows_indirect_name_list_star():
+    assert_allowed("echo ${!FOO*}")
+
+
+def test_allows_indirect_name_list_at():
+    assert_allowed("echo ${!FOO@}")
+
+
+def test_allows_colon_plus_substitution():
+    assert_allowed('echo "${GITHUB_TOKEN:+set}"')
+
+
+def test_allows_plus_substitution_no_colon():
+    assert_allowed('echo "${GITHUB_TOKEN+x}"')
+
+
+def test_denies_minus_default_still_reveals_value():
+    # ":-"/"-" expand to the REAL value when set (only fall back to the
+    # default when unset) -- unlike ":+"/"+", this is not in the allowed set.
+    assert_denied('echo "${GITHUB_TOKEN:-default}"')
+
+
+def test_allows_single_quoted_var_reference():
+    assert_allowed("echo '$GITHUB_TOKEN'")
+
+
+def test_denies_apostrophe_inside_double_quotes_still_scanned():
+    # A "'" inside "..." has no special meaning in bash and must not be
+    # misread as opening a real single-quoted span that swallows content.
+    assert_denied('echo "it'"'"'s $GITHUB_TOKEN"')
+
+
+def test_allows_lowercase_secret_shaped_name():
+    assert_allowed('key=abc; echo "$key"')
+
+
+def test_denies_uppercase_password_substring_anywhere():
+    assert_denied("echo $PGPASSWORD")
+
+
+def test_allows_ssh_key_path_exception():
+    assert_allowed('echo "$SSH_KEY_PATH"')
+
+
+def test_denies_key_component_without_path_exception():
+    assert_denied("echo $MY_KEY")
+
+
+def test_denies_pat_component():
+    assert_denied("echo $GITHUB_PAT")
+
+
+def test_denies_dsn_component():
+    assert_denied("echo $DB_DSN")
+
+
+def test_allows_keychain_path_not_a_key_component():
+    assert_allowed("echo $KEYCHAIN_PATH")
+
+
+def test_allows_patch_dir_not_a_pat_component():
+    assert_allowed("echo $PATCH_DIR")
+
+
+def test_denies_substring_extraction_still_denies():
+    assert_denied('echo "${GITHUB_TOKEN:0:8}"')
+
+
+def test_allows_echo_secret_piped_into_non_printer():
+    assert_allowed('echo "$DOCKER_PASSWORD" | docker login -u me --password-stdin')
+
+
+def test_allows_printf_secret_piped_into_gh_auth():
+    assert_allowed("printf '%s' \"$GITHUB_TOKEN\" | gh auth login --with-token")
+
+
+def test_denies_echo_secret_piped_into_head():
+    assert_denied('echo "$ANTHROPIC_API_KEY" | head -c 10')
+
+
+def test_denies_echo_secret_piped_into_cat():
+    assert_denied('echo "$GITHUB_TOKEN" | cat')

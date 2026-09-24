@@ -71,18 +71,43 @@ _SKIP_WRAPPERS = (WRAPPER_PREFIXES - {"env"}) if _LIB_OK else set()
 # exit status -- none of these change WHAT runs, only when/whether.
 _SKIP_KEYWORDS = {"then", "do", "else", "elif", "if", "while", "until", "{", "!", "("}
 
-# Name components whose VALUE a command must never print. NAME is split on
-# "_" and each piece is tested against this set; a `*DATABASE_URL` suffix is
-# checked separately below (a DSN rarely has "_" splitting it into a member
-# of this set on its own).
-_SECRET_NAME_PARTS = {
-    "KEY", "TOKEN", "SECRET", "PASSWORD", "PASSWD", "PAT", "DSN",
-    "CREDENTIAL", "CREDENTIALS", "APIKEY",
-}
+# Substrings that mark a NAME as secret wherever they appear, even glued to
+# other text with no "_" boundary (PGPASSWORD, DATABASE_URL is a separate
+# suffix rule below since neither half is one of these words on its own).
+_SECRET_NAME_SUBSTRINGS = ("PASSWORD", "PASSWD", "SECRET", "TOKEN", "APIKEY", "CREDENTIAL")
 
-# `$NAME` or `${NAME...}`, but NOT the length form `${#NAME}` (negative
-# lookahead on the `#`) -- a length is not a value.
-_VAR_REF_NO_LEN = re.compile(r"\$\{(?!#)([A-Za-z_][A-Za-z0-9_]*)|\$([A-Za-z_][A-Za-z0-9_]*)")
+# Name components (NAME split on "_") that mark it secret only as a WHOLE
+# component -- "KEY"/"PAT"/"DSN" as substrings alone would false-positive on
+# ordinary words (PATCH, KEYCHAIN). Exempt when the LAST component reads as
+# a path to the secret rather than the secret itself (SSH_KEY_PATH).
+_SECRET_NAME_COMPONENTS = {"KEY", "PAT", "DSN"}
+_PATH_LIKE_LAST_COMPONENT = {"PATH", "FILE", "DIR"}
+
+# `${!NAME}` / `${!NAME*}` / `${!NAME@}` -- bash indirect expansion: NAME
+# holds the NAME of another variable. `${!NAME}` expands to THAT variable's
+# VALUE (the target is not statically knowable, so this counts unconditionally
+# regardless of how NAME itself looks); `*`/`@` list matching variable NAMES
+# only, never a value, and stay allowed.
+_INDIRECT_VAR_RE = re.compile(r"\$\{!([A-Za-z_][A-Za-z0-9_]*)(\*|@)?\}")
+
+# `${NAME<suffix>}`, NOT the length form `${#NAME}` (negative lookahead on
+# `#`) and NOT indirect (negative lookahead on `!`, handled above). `suffix`
+# is captured so the caller can exempt `:+x` / `+x` (substitutes a LITERAL
+# alternate, never reveals NAME's real value) while still denying `:-` / `-`
+# (expands to the real value whenever NAME is actually set) and substring
+# extraction (`:0:8`).
+_BRACE_VAR_RE = re.compile(r"\$\{(?!#)(?!!)([A-Za-z_][A-Za-z0-9_]*)([^}]*)\}")
+
+# Bare `$NAME` (no braces, so no parameter-expansion suffix is possible).
+_BARE_VAR_RE = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)")
+
+# echo/printf piped into one of these still puts the value in the visible
+# transcript (or reformats/greps it there); piped into anything else (a
+# non-printer like `docker login --password-stdin`) is allowed.
+_ECHO_PRINTERS = {
+    "cat", "grep", "head", "tail", "sed", "awk", "cut", "tr", "sort",
+    "uniq", "tee", "less", "xxd", "od", "base64", "jq",
+}
 
 # `env`'s own no-argument options. `-u NAME` is handled separately below (it
 # consumes the following token too).
@@ -228,17 +253,88 @@ def _is_names_only_extractor(toks: list) -> bool:
 
 
 def _names_secret_var(name: str) -> bool:
-    up = name.upper()
-    if up.endswith("DATABASE_URL"):
+    """Only an ALL-UPPERCASE name counts (`$key` is exempt, `$KEY` is not).
+    Secret if it contains a password/secret/token/apikey/credential SUBSTRING
+    anywhere, ends in `DATABASE_URL`, or has a whole `_`-component equal to
+    KEY/PAT/DSN -- unless its LAST component reads as a path to the secret
+    (`_PATH`/`_FILE`/`_DIR`), not the secret's own value."""
+    if not name or not name.isupper():
+        return False
+    if name.endswith("DATABASE_URL"):
         return True
-    return any(part in _SECRET_NAME_PARTS for part in up.split("_"))
+    if any(s in name for s in _SECRET_NAME_SUBSTRINGS):
+        return True
+    parts = name.split("_")
+    if parts[-1] in _PATH_LIKE_LAST_COMPONENT:
+        return False
+    return any(p in _SECRET_NAME_COMPONENTS for p in parts)
 
 
-def _echo_reveals_secret(seg_text: str) -> bool:
-    for m in _VAR_REF_NO_LEN.finditer(seg_text):
-        name = m.group(1) or m.group(2)
-        if name and _names_secret_var(name):
-            return True
+def _mask_single_quoted(text: str) -> str:
+    """Blank out single-quoted SPANS: bash never expands anything inside
+    '...', so a `$NAME` written there is literal text, not a real reference.
+    Quote-aware: a "'" that lives inside a double-quoted span ("it's $X")
+    has no special meaning and must not be misread as opening one."""
+    out, quote, i, n = [], None, 0, len(text)
+    while i < n:
+        c = text[i]
+        if quote == "'":
+            out.append(" " if c != "'" else "'")
+            if c == "'":
+                quote = None
+            i += 1
+            continue
+        if quote == '"':
+            out.append(c)
+            if c == "\\" and i + 1 < n:
+                out.append(text[i + 1]); i += 2; continue
+            if c == '"':
+                quote = None
+            i += 1
+            continue
+        if c == "'":
+            quote = "'"; out.append(" "); i += 1; continue
+        if c == '"':
+            quote = '"'; out.append(c); i += 1; continue
+        if c == "\\" and i + 1 < n:
+            out.append(c); out.append(text[i + 1]); i += 2; continue
+        out.append(c); i += 1
+    return "".join(out)
+
+
+def _piped_into_printer(segs, idx) -> bool:
+    """True iff the segment right after `segs[idx]` is piped-to AND resolves
+    to one of `_ECHO_PRINTERS`. No next segment, a non-`|` separator, or a
+    pipe into anything else (assumed a non-printer, e.g. `docker login
+    --password-stdin`) -- all False, matching the "goes to the transcript"
+    default of `_echo_reveals_secret` when there is nowhere else for it to go."""
+    if segs is None or idx is None:
+        return True  # no pipe context available: conservative default
+    nxt = segs[idx + 1] if idx + 1 < len(segs) else None
+    if not nxt or nxt[0] != "|":
+        return True
+    toks = tokens(nxt[1].strip())
+    return bool(toks) and os.path.basename(toks[0]) in _ECHO_PRINTERS
+
+
+def _echo_reveals_secret(seg_text: str, segs=None, idx=None) -> bool:
+    scan = _mask_single_quoted(seg_text)
+
+    for m in _INDIRECT_VAR_RE.finditer(scan):
+        if not m.group(2):                 # ${!v} unconditional; ${!v*}/${!v@} list names only
+            return _piped_into_printer(segs, idx)
+
+    for m in _BRACE_VAR_RE.finditer(scan):
+        suffix = m.group(2)
+        if suffix.startswith(":+") or suffix.startswith("+"):
+            continue                       # presence-substitution: never reveals the value
+        if _names_secret_var(m.group(1)):
+            return _piped_into_printer(segs, idx)
+
+    for m in _BARE_VAR_RE.finditer(scan):
+        if _names_secret_var(m.group(1)):
+            return _piped_into_printer(segs, idx)
+
     return False
 
 
@@ -313,7 +409,7 @@ def _deny_reason(command: str):
                 return "`ps` with an environment flag exposes process environ blocks"
             continue
         if word in ("echo", "printf"):
-            if _echo_reveals_secret(text):
+            if _echo_reveals_secret(text, segs, idx):
                 return f"`{word}` expands a secret-shaped variable"
             continue
     return None
