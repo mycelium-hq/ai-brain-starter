@@ -47,6 +47,16 @@ fails=0
 pass(){ echo "PASS: $1"; }
 fail(){ echo "FAIL: $1"; fails=$((fails+1)); }
 
+# The guard ALLOWS an empty index, so a setup step that silently fails to stage
+# the artifact turns an ALLOW case into a pass that tested nothing. Measured
+# 2026-09-24: case (e) wrote into Meta/Sessions/ right after a checkout had
+# removed that directory, staged nothing, and passed. Call this immediately
+# before the guard in every bespoke case; it reports an EXIT= value that matches
+# neither 0 nor 1, so the case fails instead.
+require_staged(){
+  if git diff --cached --quiet -- "$1"; then echo "EXIT=setup-staged-nothing:$1"; exit 0; fi
+}
+
 # Negative control for the sandbox itself. If it ever silently stops taking
 # effect, every case below quietly goes back to executing the operator's real
 # global git hooks and resolving their real init.defaultBranch - and the cases
@@ -130,6 +140,7 @@ merge_case_allow_unchanged_artifact(){
     echo "feature work" > feature.txt; git add feature.txt; git commit -qm "feature work"
     mkdir -p .githooks; cp "$GUARD" .githooks/guard.sh; chmod +x .githooks/guard.sh
     git merge --no-commit --no-ff origin/main >/dev/null 2>&1
+    require_staged "Meta/Sessions/a.md"
     .githooks/guard.sh; echo "EXIT=$?"
   ) > "$d/out" 2>&1
   local got; got="$(sed -n 's/^EXIT=//p' "$d/out")"
@@ -163,6 +174,7 @@ merge_case_block_resolution_modifies(){
     git merge --no-commit --no-ff origin/main >/dev/null 2>&1
     echo "resolved differently" > "Meta/Sessions/a.md"
     git add "Meta/Sessions/a.md"
+    require_staged "Meta/Sessions/a.md"
     .githooks/guard.sh; echo "EXIT=$?"
   ) > "$d/out" 2>&1
   local got; got="$(sed -n 's/^EXIT=//p' "$d/out")"
@@ -187,8 +199,12 @@ no_origin_ref_case_block(){
     git checkout -q -b feature HEAD~1
     mkdir -p .githooks; cp "$GUARD" .githooks/guard.sh; chmod +x .githooks/guard.sh
     mkdir -p Meta/Sessions
-    git show main:Meta/Sessions/a.md > Meta/Sessions/a.md
+    # The same bytes main's commit holds. Written as a literal, not read back
+    # with `git show main:...`: check-frozen-before-state cannot tell this temp
+    # repo from the real one and flags a moving-ref read.
+    echo "shared content" > Meta/Sessions/a.md
     git add Meta/Sessions/a.md
+    require_staged "Meta/Sessions/a.md"
     .githooks/guard.sh; echo "EXIT=$?"
   ) > "$d/out" 2>&1
   local got; got="$(sed -n 's/^EXIT=//p' "$d/out")"
@@ -211,8 +227,13 @@ origin_ref_only_case_allow(){
     git update-ref refs/remotes/origin/main main
     git checkout -q -b feature HEAD~1
     mkdir -p .githooks; cp "$GUARD" .githooks/guard.sh; chmod +x .githooks/guard.sh
-    git show origin/main:Meta/Sessions/a.md > Meta/Sessions/a.md
+    # The checkout above removed Meta/Sessions/ (a.md was its only file), so the
+    # directory has to be recreated before the write. Same bytes as main's copy,
+    # written as a literal for the reason given in case (d).
+    mkdir -p Meta/Sessions
+    echo "already-on-main" > Meta/Sessions/a.md
     git add Meta/Sessions/a.md
+    require_staged "Meta/Sessions/a.md"
     .githooks/guard.sh; echo "EXIT=$?"
   ) > "$d/out" 2>&1
   local got; got="$(sed -n 's/^EXIT=//p' "$d/out")"
@@ -235,6 +256,7 @@ staged_deletion_case_block(){
     git checkout -q -b feature
     mkdir -p .githooks; cp "$GUARD" .githooks/guard.sh; chmod +x .githooks/guard.sh
     git rm -q --cached Meta/Sessions/a.md
+    require_staged "Meta/Sessions/a.md"
     .githooks/guard.sh; echo "EXIT=$?"
   ) > "$d/out" 2>&1
   local got; got="$(sed -n 's/^EXIT=//p' "$d/out")"
@@ -258,6 +280,7 @@ merge_case_allow_emoji_path(){
     echo "feature work" > feature.txt; git add feature.txt; git commit -qm "feature work"
     mkdir -p .githooks; cp "$GUARD" .githooks/guard.sh; chmod +x .githooks/guard.sh
     git merge --no-commit --no-ff origin/main >/dev/null 2>&1
+    require_staged "⚙️ Meta/Sessions/e.md"
     .githooks/guard.sh; echo "EXIT=$?"
   ) > "$d/out" 2>&1
   local got; got="$(sed -n 's/^EXIT=//p' "$d/out")"
