@@ -167,9 +167,36 @@ def _state_dir() -> Path:
     return Path(os.environ.get("ABS_UPDATE_STATE_DIR") or (Path.home() / ".claude"))
 
 
-def _skill_dir() -> Path:
-    return Path(os.environ.get("ABS_SKILL_DIR")
-                or (Path.home() / ".claude" / "skills" / "ai-brain-starter"))
+def _default_skill_dir() -> Path:
+    return Path.home() / ".claude" / "skills" / "ai-brain-starter"
+
+
+def _skill_dir() -> "Path | None":
+    """The checkout this updater operates on. Returns None when
+    ABS_SKILL_DIR was SET but refused (MYC-4907) -- every caller must stop,
+    never substitute the default (_install_fix_cmd() is the one
+    display-only exception; see its docstring).
+
+    WHY containment, not an origin-URL check: a checkout's own .git/config
+    (core.fsmonitor) and .git/hooks execute on THIS file's own git calls
+    regardless of what remote it claims to track, so an allowed-origin list
+    guards nothing once the checkout is on disk. HOME is already the trust
+    anchor -- hooks.json invokes ~/.claude/skills/ai-brain-starter/... by
+    that fixed path -- so containment only lets ABS_SKILL_DIR choose WHICH
+    already-trusted checkout to use, never an escape from that boundary.
+    """
+    override = os.environ.get("ABS_SKILL_DIR")
+    if not override:
+        return _default_skill_dir()
+    try:
+        root = (Path.home() / ".claude" / "skills").resolve()
+        candidate = Path(override).resolve()
+        if candidate == root:
+            return None  # the root itself is not STRICTLY inside it
+        candidate.relative_to(root)  # raises ValueError if not contained
+        return candidate
+    except (OSError, RuntimeError, ValueError):
+        return None
 
 
 def silent() -> None:
@@ -503,9 +530,14 @@ def _install_fix_cmd() -> str:
     secret in it passes secret_patterns.redact() through byte-identical
     (measured), so the output only changes in the case where emitting the
     raw path would itself be the bug.
+
+    MYC-4907: _skill_dir() returns None when ABS_SKILL_DIR was set but
+    refused. This falls back to the DEFAULT path for DISPLAY only -- run()
+    itself refuses the whole update and never touches that default.
     """
     py = "python" if os.name == "nt" else "python3"
-    installer = _skill_dir() / "scripts" / "install-hooks-user-level.py"
+    skill = _skill_dir() or _default_skill_dir()
+    installer = skill / "scripts" / "install-hooks-user-level.py"
     return (f"{py} \"{_redact_text(str(installer))}\" "
             "--quiet --fail-on-missing")
 
@@ -798,6 +830,30 @@ def _resolve_pending_deploy(pending: Path, session_id: str, skill: Path,
             f"a human can run: {_install_fix_cmd()}")
 
 
+def _refuse_skill_dir_override(last: Path, interval_days: float) -> None:
+    """ABS_SKILL_DIR failed containment (MYC-4907) -- ALWAYS exits, before
+    the caller acquires the single-flight lock or touches the candidate at
+    all. Rate-limited on the SAME `last` stamp / ABS_UPDATE_INTERVAL_DAYS
+    step 3 uses for an ordinary fetch, so a stuck misconfiguration nags at
+    most once per interval, not once per prompt.
+    """
+    try:
+        if last.is_file() and (time.time() - last.stat().st_mtime) < interval_days * 86400:
+            silent()
+    except OSError:
+        silent()
+    try:
+        last.touch()
+    except OSError:
+        pass
+    emit_ctx(
+        "AI Brain Starter auto-update is BLOCKED (safely): ABS_SKILL_DIR "
+        f"(\"{_redact_text(os.environ.get('ABS_SKILL_DIR', ''))}\") does "
+        "not resolve inside ~/.claude/skills, so it is refused before "
+        "anything there is fetched, merged, or run. Unset it to update the "
+        "real install, or point it at a checkout under ~/.claude/skills.")
+
+
 def run() -> None:
     state = _state_dir()
     skill = _skill_dir()
@@ -836,6 +892,14 @@ def run() -> None:
     # 0. Pinned -> no-op (the escape hatch; must win before any fetch).
     if pin.exists():
         silent()
+
+    # 0b. ABS_SKILL_DIR was set but refused containment (MYC-4907) -- stop
+    # here, before the single-flight lock or anything else touches the
+    # candidate. NEVER falls through to the default: that would run a real
+    # update against the real install in place of whatever the override was
+    # meant to isolate, which is worse than refusing outright.
+    if skill is None:
+        _refuse_skill_dir_override(last, interval_days)
 
     # Single-flight lock now wraps BOTH resolving a deferred deploy and
     # staging a new one (MYC-4704 gate e6). Previously only staging held
