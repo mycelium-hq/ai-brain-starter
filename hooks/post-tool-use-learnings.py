@@ -57,6 +57,40 @@ try:
 except ImportError:
     yaml = None
 
+HOOK_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(HOOK_DIR))
+
+try:
+    from _lib.secret_patterns import redact as _redact_secrets
+except Exception:
+    _redact_secrets = None
+
+
+REDACTION_UNAVAILABLE = "[redaction unavailable -- raw content omitted]"
+
+
+def safe_redact(text: str) -> str:
+    """Redact secrets BEFORE the caller truncates or persists text.
+
+    MYC-4703: every string derived from tool input/output/error that can
+    reach the synced Meta/Learnings/ sink passes through the ONE shared
+    registry (hooks/_lib/secret_patterns.py) here, at the earliest point of
+    capture -- truncating first can cut a credential in half so the pattern
+    no longer matches, leaving a partial secret on disk.
+
+    Fails CLOSED: if the shared registry could not be imported, or redaction
+    itself raises, return a placeholder instead of ever writing raw text.
+    """
+    if not text:
+        return text
+    if _redact_secrets is None:
+        return REDACTION_UNAVAILABLE
+    try:
+        redacted, _hits = _redact_secrets(text)
+        return redacted
+    except Exception:
+        return REDACTION_UNAVAILABLE
+
 
 WATCHED_TOOLS = {"Bash", "Edit", "Write", "Agent", "Task"}
 LEARNING_PATTERN = re.compile(r"<learning>(.*?)</learning>", re.DOTALL | re.IGNORECASE)
@@ -129,8 +163,11 @@ def detect_failure(tool_response: dict, source_tool: str = "") -> tuple[bool, st
     if "exitCode" in tool_response:
         try:
             if int(tool_response.get("exitCode") or 0) != 0:
-                stderr = (tool_response.get("stderr") or "")[:500]
-                stdout = (tool_response.get("stdout") or "")[:500]
+                # Redact BEFORE truncating: a Bash command's stderr/stdout is
+                # where a leaked credential (e.g. argv, curl headers) lives,
+                # and slicing first can cut it in half so the pattern misses.
+                stderr = safe_redact(tool_response.get("stderr") or "")[:500]
+                stdout = safe_redact(tool_response.get("stdout") or "")[:500]
                 return True, (stderr or stdout)
         except (TypeError, ValueError):
             pass
@@ -138,7 +175,7 @@ def detect_failure(tool_response: dict, source_tool: str = "") -> tuple[bool, st
     # Explicit isError flag is authoritative
     if tool_response.get("isError") or tool_response.get("is_error"):
         msg = tool_response.get("error") or tool_response.get("message") or ""
-        return True, str(msg)[:500]
+        return True, safe_redact(str(msg))[:500]
 
     # Write/Edit success short-circuit. Success shape carries filePath +
     # content; the content is the file written, not error output.
@@ -169,7 +206,7 @@ def detect_failure(tool_response: dict, source_tool: str = "") -> tuple[bool, st
     if any(tok in lower for tok in ERROR_TOKENS):
         # Only treat as failure if there's no clear success signal
         if not any(s in lower for s in ("success", " ok ", "completed")):
-            return True, joined[:500]
+            return True, safe_redact(joined)[:500]
     return False, ""
 
 
@@ -287,7 +324,10 @@ def write_learning(
         ],
     }
     if error_excerpt:
-        frontmatter["error_excerpt"] = error_excerpt[:500]
+        # error_excerpt is already redacted+truncated by detect_failure(); this
+        # second pass is idempotent defense-in-depth for any future caller that
+        # hands write_learning an excerpt straight from a tool payload.
+        frontmatter["error_excerpt"] = safe_redact(error_excerpt)[:500]
 
     # Agent/Task captures reach here only on a genuine isError failure or an
     # explicit <learning> annotation (detect_failure short-circuits successful
@@ -302,14 +342,14 @@ def write_learning(
     if learning_text:
         body_parts.append("## Learning annotation")
         body_parts.append("")
-        body_parts.append(learning_text)
+        body_parts.append(safe_redact(learning_text))
         body_parts.append("")
 
     if error_excerpt:
         body_parts.append("## Error excerpt")
         body_parts.append("")
         body_parts.append("```")
-        body_parts.append(error_excerpt[:1000])
+        body_parts.append(safe_redact(error_excerpt)[:1000])
         body_parts.append("```")
         body_parts.append("")
 
@@ -327,9 +367,15 @@ def write_learning(
         body_parts.append("")
         body_parts.append("```json")
         try:
-            body_parts.append(json.dumps(tool_input, indent=2, ensure_ascii=False)[:1500])
+            tool_input_text = json.dumps(tool_input, indent=2, ensure_ascii=False)
         except (TypeError, ValueError):
-            body_parts.append(str(tool_input)[:1500])
+            tool_input_text = str(tool_input)
+        # Redact BEFORE truncating: Bash argv is where a credential (curl
+        # -H 'Authorization: Bearer ...', an embedded API key) actually lives,
+        # and this is the one path that was NEVER redacted before (only the
+        # Agent/Task body above was). Slicing first can cut a key in half so
+        # the pattern no longer matches.
+        body_parts.append(safe_redact(tool_input_text)[:1500])
         body_parts.append("```")
         body_parts.append("")
 
@@ -337,9 +383,10 @@ def write_learning(
         body_parts.append("")
         body_parts.append("```")
         try:
-            body_parts.append(json.dumps(tool_response, indent=2, ensure_ascii=False)[:1500])
+            tool_response_text = json.dumps(tool_response, indent=2, ensure_ascii=False)
         except (TypeError, ValueError):
-            body_parts.append(str(tool_response)[:1500])
+            tool_response_text = str(tool_response)
+        body_parts.append(safe_redact(tool_response_text)[:1500])
         body_parts.append("```")
         body_parts.append("")
 

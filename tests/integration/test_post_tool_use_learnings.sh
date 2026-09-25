@@ -103,6 +103,86 @@ else
   bad "(c) genuine Agent isError failure was NOT captured ($(count_md) file(s)) — hook over-suppresses"
 fi
 
+# --- (f) LEAK CONTROL: Bash argv (Authorization: Bearer header) is redacted -
+# MYC-4703: credentials live in Bash argv (curl -H 'Authorization: Bearer ...'),
+# and before the fix only the Agent/Task body was redacted — Bash was not.
+# Built at runtime by concatenation so no secret-shaped literal sits in source.
+BEARER_TOKEN="Zz9$(printf 'Q%.0s' $(seq 1 40))"
+rm -rf "$LEARN"
+run_hook "$(cat <<JSON
+{"tool_name":"Bash","cwd":"$VAULT","session_id":"s","tool_call_id":"bashA",
+ "tool_input":{"command":"curl -H 'Authorization: Bearer $BEARER_TOKEN' https://api.example.com/v1/widgets"},
+ "tool_response":{"exitCode":22,"stderr":"curl: (22) The requested URL returned error: 401","stdout":""}}
+JSON
+)"
+if [ "$(count_md)" = "1" ]; then
+  CAP="$(find "$LEARN" -name '*.md' | head -1)"
+  if grep -q '\[REDACTED-bearer\]' "$CAP"; then
+    pass "(f.1) Bash argv Authorization: Bearer header is redacted"
+  else
+    bad "(f.1) Bash argv Bearer header redaction marker missing"
+  fi
+  if grep -q "$BEARER_TOKEN" "$CAP"; then
+    bad "(f.2) LEAK: raw Bearer token persisted in Bash capture"
+  else
+    pass "(f.2) raw Bearer token NOT persisted"
+  fi
+else
+  bad "(f) Bash exitCode!=0 was not captured ($(count_md) file(s))"
+fi
+
+# --- (g) LEAK CONTROL: Bash stderr key-shaped secret is redacted -----------
+NPM_TOKEN="npm_$(printf 'B%.0s' $(seq 1 40))"
+rm -rf "$LEARN"
+run_hook "$(cat <<JSON
+{"tool_name":"Bash","cwd":"$VAULT","session_id":"s","tool_call_id":"bashB",
+ "tool_input":{"command":"npm publish"},
+ "tool_response":{"exitCode":1,"stderr":"npm ERR! 403 Forbidden - token $NPM_TOKEN rejected","stdout":""}}
+JSON
+)"
+if [ "$(count_md)" = "1" ]; then
+  CAP="$(find "$LEARN" -name '*.md' | head -1)"
+  if grep -q '\[REDACTED-npm-access-token\]' "$CAP"; then
+    pass "(g.1) Bash stderr npm token is redacted"
+  else
+    bad "(g.1) Bash stderr npm token redaction marker missing"
+  fi
+  if grep -q "$NPM_TOKEN" "$CAP"; then
+    bad "(g.2) LEAK: raw npm token persisted in Bash capture"
+  else
+    pass "(g.2) raw npm token NOT persisted"
+  fi
+else
+  bad "(g) Bash exitCode!=0 was not captured ($(count_md) file(s))"
+fi
+
+# --- (h) NEGATIVE CONTROL: benign Bash failure survives byte-identical -----
+# A redactor that mangles real values (paths, URLs) is its own bug.
+rm -rf "$LEARN"
+BENIGN_CMD="curl -sS https://api.example.com/v1/status?project=demo"
+BENIGN_ERR="curl: (7) Failed to connect to api.example.com port 443: Connection refused"
+run_hook "$(cat <<JSON
+{"tool_name":"Bash","cwd":"$VAULT","session_id":"s","tool_call_id":"benign1",
+ "tool_input":{"command":"$BENIGN_CMD"},
+ "tool_response":{"exitCode":7,"stderr":"$BENIGN_ERR","stdout":""}}
+JSON
+)"
+if [ "$(count_md)" = "1" ]; then
+  CAP="$(find "$LEARN" -name '*.md' | head -1)"
+  if grep -qF "$BENIGN_CMD" "$CAP" && grep -qF "$BENIGN_ERR" "$CAP"; then
+    pass "(h.1) benign command + error text survive byte-identical"
+  else
+    bad "(h.1) benign content was altered by redaction (over-matching bug)"
+  fi
+  if grep -q '\[REDACTED' "$CAP"; then
+    bad "(h.2) benign capture unexpectedly carries a redaction marker"
+  else
+    pass "(h.2) no false-positive redaction on benign content"
+  fi
+else
+  bad "(h) benign Bash exitCode!=0 was not captured ($(count_md) file(s))"
+fi
+
 echo
 if [ "$fail" = "0" ]; then
   echo "test_post_tool_use_learnings: all assertions passed"
