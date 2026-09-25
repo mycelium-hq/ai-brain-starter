@@ -572,6 +572,73 @@ new_artifact_colon_prefixed_path_case_block(){
   rm -rf "$d"
 }
 
+# (r) `git diff-index` ITSELF FAILING (E2BIG, an unreadable object, an index
+# lock -- not "genuinely nothing differs") must not read as "nothing differs".
+# Shim git so any invocation naming diff-index exits nonzero with NO output,
+# while every other git subcommand still runs for real. origin/main is
+# configured (the origin route is active) and NO merge is in progress, so the
+# origin route is the only exemption route this case can go through. The
+# staged artifact is BRAND NEW -- never on origin at all -- so a working
+# comparison would find it "changed" (not exempt) regardless; only a silently
+# swallowed failure can turn this into an ALLOW.
+# Mutation that turns this red: go back to `done < <(git ... diff-index ...)`
+# without capturing and checking that command's own exit status.
+diff_index_failure_case_block(){
+  local d; d="$(mktemp -d)"
+  local real_git; real_git="$(command -v git)"
+  mkdir -p "$d/shim"
+  printf '#!/bin/sh\nfor a in "$@"; do\n  if [ "$a" = "diff-index" ]; then exit 7; fi\ndone\nexec "%s" "$@"\n' \
+    "$real_git" > "$d/shim/git"
+  chmod +x "$d/shim/git"
+  (
+    cd "$d" || exit 99
+    git init -q -b main repo; cd repo || exit 99
+    git config user.email t@t; git config user.name t
+    echo seed > seed.txt; git add seed.txt; git commit -qm seed
+    git update-ref refs/remotes/origin/main main
+    git checkout -q -b feature
+    mkdir -p "Meta/Sessions"; echo "brand new, never on origin" > "Meta/Sessions/new.md"
+    git add "Meta/Sessions/new.md"
+    cp "$GUARD" guard.sh; chmod +x guard.sh
+    require_staged "Meta/Sessions/new.md"
+    PATH="$d/shim:$PATH" ./guard.sh; echo "EXIT=$?"
+  ) > "$d/out" 2>&1
+  local got; got="$(sed -n 's/^EXIT=//p' "$d/out")"
+  if [ "$got" = "1" ]; then pass "(r) git diff-index FAILING on the origin route -> BLOCK, not silently exempt (exit $got)"; else fail "(r) git diff-index FAILING on the origin route -> BLOCK, not silently exempt (got '$got' want 1)"; sed 's/^/    /' "$d/out"; fi
+  rm -rf "$d"
+}
+
+# (s) a brand-new session artifact staged on an UNBORN branch (fresh
+# `git checkout --orphan`, zero commits on it yet) must still be caught. The
+# guard's initial staged-paths listing used to pass an explicit `HEAD`
+# revision to `git diff --cached`, which FAILS to resolve on an unborn branch
+# (there is no commit for HEAD to name yet) and produced no output -- read as
+# "nothing is staged", exiting ALLOW before the artifact-matching loop below
+# ever runs, no matter what is actually staged. No origin ref is configured at
+# all here, so this isolates the initial listing itself from the diff-index
+# exemption routes fixed above: if only those routes were fixed, this case
+# would stay red.
+# Mutation that turns this red: put the explicit `HEAD` argument back on the
+# initial `git diff --cached` listing.
+orphan_branch_new_artifact_case_block(){
+  local d; d="$(mktemp -d)"
+  (
+    cd "$d" || exit 99
+    git init -q -b main
+    git config user.email t@t; git config user.name t
+    echo seed > seed.txt; git add seed.txt; git commit -qm seed
+    git checkout -q --orphan orphantest
+    mkdir -p .githooks; cp "$GUARD" .githooks/guard.sh; chmod +x .githooks/guard.sh
+    mkdir -p "Meta/Sessions"; echo "new on an unborn branch" > "Meta/Sessions/new.md"
+    git add "Meta/Sessions/new.md"
+    require_staged "Meta/Sessions/new.md"
+    .githooks/guard.sh; echo "EXIT=$?"
+  ) > "$d/out" 2>&1
+  local got; got="$(sed -n 's/^EXIT=//p' "$d/out")"
+  if [ "$got" = "1" ]; then pass "(s) new artifact staged on an unborn/orphan branch -> BLOCK (exit $got)"; else fail "(s) new artifact staged on an unborn/orphan branch -> BLOCK (got '$got' want 1)"; sed 's/^/    /' "$d/out"; fi
+  rm -rf "$d"
+}
+
 premerge_commit_wiring_blocks_topic_merge(){
   local d; d="$(mktemp -d)"
   (
@@ -628,6 +695,8 @@ merge_case_block_mode_only_change
 merge_case_allow_main_own_deletion
 new_artifacts_at_scale_case_block
 new_artifact_colon_prefixed_path_case_block
+diff_index_failure_case_block
+orphan_branch_new_artifact_case_block
 premerge_commit_wiring_blocks_topic_merge
 
 echo "---"
