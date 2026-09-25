@@ -12,12 +12,12 @@
 # self-contained "skill root", so VAULT_ROOT / PROJECTS_ROOT / MEMORY_FILE
 # never touch the real ~/.claude or a real vault. claude_performance_digest.py
 # is self-locating (SCRIPT_DIR = its own directory; VAULT_ROOT =
-# SCRIPT_DIR.parent.parent; the secret_patterns import resolves
-# SCRIPT_DIR.parent/hooks/_lib), so the sandbox mirrors that arithmetic
+# SCRIPT_DIR.parent.parent; its _lib imports resolve SCRIPT_DIR.parent/hooks),
+# so the sandbox mirrors that arithmetic
 # under one tmpdir:
 #
 #   $TMP/skill/scripts/claude_performance_digest.py   <- SCRIPT_DIR
-#   $TMP/skill/hooks/_lib/secret_patterns.py           <- SCRIPT_DIR.parent/hooks/_lib
+#   $TMP/skill/hooks/_lib/{secret_patterns,safe_read}.py <- SCRIPT_DIR.parent/hooks/_lib
 #   $TMP/⚙️ Meta/...                                    <- VAULT_ROOT/⚙️ Meta (script creates it)
 #   $TMP/home/.claude/projects/...                     <- PROJECTS_ROOT (via sandbox_home)
 #
@@ -37,6 +37,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT_SRC="$ROOT/scripts/claude_performance_digest.py"
 SECRET_PATTERNS_SRC="$ROOT/hooks/_lib/secret_patterns.py"
+SAFE_READ_SRC="$ROOT/hooks/_lib/safe_read.py"
 
 # shellcheck source=tests/integration/lib/sandbox_home.sh
 . "$ROOT/tests/integration/lib/sandbox_home.sh"
@@ -57,6 +58,7 @@ trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/skill/scripts" "$TMP/skill/hooks/_lib"
 cp "$SCRIPT_SRC" "$TMP/skill/scripts/claude_performance_digest.py"
 cp "$SECRET_PATTERNS_SRC" "$TMP/skill/hooks/_lib/secret_patterns.py"
+cp "$SAFE_READ_SRC" "$TMP/skill/hooks/_lib/safe_read.py"
 DIGEST="$TMP/skill/scripts/claude_performance_digest.py"
 TODO_FILE="$TMP/⚙️ Meta/Claude To-dos.md"
 DIGEST_LOG="$TMP/digest_stdout.log"

@@ -39,13 +39,20 @@ PERFORMANCE_DIR = VAULT_ROOT / "⚙️ Meta" / "Performance"
 TODO_FILE = VAULT_ROOT / "⚙️ Meta" / "Claude To-dos.md"
 PROJECTS_ROOT = Path.home() / ".claude" / "projects"
 
-# Secret redaction (MYC-4635): shared hooks/_lib/secret_patterns.py registry.
-# scripts/ and hooks/ are siblings here and in the installed skill layout;
-# mirrors scripts/ai-brain-auto-update.py's import idiom. Fails CLOSED on a
-# broken import.
-try:
-    sys.path.insert(0, str(SCRIPT_DIR.parent / "hooks" / "_lib"))
-    from secret_patterns import redact as _redact_secrets
+# Shared hooks/_lib helpers: secret redaction (MYC-4635) and bounded reads.
+# hooks/ sits beside scripts/ in the repo and the installed skill; a copy
+# deployed to a vault's ⚙️ Meta/scripts/ finds them in the installed skill.
+HOOKS_DIR = next(
+    (d for d in (SCRIPT_DIR.parent / "hooks",
+                 Path.home() / ".claude" / "skills" / "ai-brain-starter" / "hooks")
+     if (d / "_lib" / "safe_read.py").is_file()),
+    SCRIPT_DIR.parent / "hooks",
+)
+sys.path.insert(0, str(HOOKS_DIR))
+from _lib.safe_read import safe_read_text  # noqa: E402
+
+try:  # Fails CLOSED: without the registry, raw error text is withheld.
+    from _lib.secret_patterns import redact as _redact_secrets  # noqa: E402
 except Exception:  # pragma: no cover - _redact_text has the closed fallback
     _redact_secrets = None
 
@@ -294,7 +301,7 @@ def analyze_subagents(jsonl_path):
     agents = []
     for meta_file in subagent_dir.glob("*.meta.json"):
         try:
-            with open(meta_file) as f:
+            with open(meta_file, encoding="utf-8") as f:
                 meta = json.load(f)
         except (json.JSONDecodeError, OSError):
             continue
@@ -529,7 +536,7 @@ def generate_report(sessions_data, agents_data, days):
         lines.append("")
         # Read prior report's frontmatter for comparison
         try:
-            with open(prior_reports[0]) as f:
+            with open(prior_reports[0], encoding="utf-8") as f:
                 prior_text = f.read()
             prior_osr_match = re.search(r"one_shot_rate:\s*([\d.]+%|N/A)", prior_text)
             if prior_osr_match and global_one_shot is not None:
@@ -559,52 +566,18 @@ def _load_dedupe_sources(vault_root: Path) -> str:
     files under ~/.claude/projects/, vault rules files, and ~/.claude/hooks/*.py.
     Returns a single concatenated string for tag-presence checks.
     """
-    chunks = []
-
-    # 1. ~/.claude/CLAUDE.md (global)
-    global_claude = Path.home() / ".claude" / "CLAUDE.md"
-    if global_claude.exists():
-        try:
-            chunks.append(global_claude.read_text(errors="ignore"))
-        except OSError:
-            pass
-
-    # 2. Vault CLAUDE.md
-    vault_claude = vault_root / "CLAUDE.md"
-    if vault_claude.exists():
-        try:
-            chunks.append(vault_claude.read_text(errors="ignore"))
-        except OSError:
-            pass
-
-    # 3. Cross-session memory files under ~/.claude/projects/
-    projects_root = Path.home() / ".claude" / "projects"
-    if projects_root.exists():
-        for mem in projects_root.rglob("MEMORY.md"):
-            try:
-                chunks.append(mem.read_text(errors="ignore"))
-            except OSError:
-                pass
-
-    # 4. Vault rules files (⚙️ Meta/rules/*.md)
-    rules_dir = vault_root / "⚙️ Meta" / "rules"
-    if rules_dir.exists():
-        for f in rules_dir.glob("*.md"):
-            try:
-                chunks.append(f.read_text(errors="ignore"))
-            except OSError:
-                pass
-
-    # 5. ~/.claude/hooks/*.py (tags embedded in hook comments/code)
-    hooks_dir = Path.home() / ".claude" / "hooks"
-    if hooks_dir.exists():
-        for f in hooks_dir.glob("*.py"):
-            try:
-                chunks.append(f.read_text(errors="ignore"))
-            except OSError:
-                pass
-
-    return "\n".join(chunks)
+    claude_home = Path.home() / ".claude"
+    paths = [claude_home / "CLAUDE.md", vault_root / "CLAUDE.md"]
+    # Fixed depth, not rglob: rglob never descends a symlinked memory/ dir, so
+    # it found no MEMORY.md at all where those dirs are symlinks.
+    for folder, pattern in ((claude_home / "projects", "*/memory/MEMORY.md"),
+                            (vault_root / "⚙️ Meta" / "rules", "*.md"),
+                            (claude_home / "hooks", "*.py")):
+        if folder.is_dir():
+            paths.extend(folder.glob(pattern))
+    # Bounded reads: a cloud-synced or FIFO path can hang an unbounded read_text.
+    reads = (safe_read_text(p, errors="ignore") for p in paths)
+    return "\n".join(r.text for r in reads if r.ok and r.text)
 
 
 # Map prescription types to MEMORY.md rules (behavioral) vs to-dos (investigation)
@@ -644,7 +617,7 @@ def apply_prescriptions(prescriptions, prescription_types):
             written_types.append(rx_type)
 
     if new_rules:
-        with open(MEMORY_FILE, "a") as f:
+        with open(MEMORY_FILE, "a", encoding="utf-8") as f:
             for rule in new_rules:
                 f.write(rule + "\n")
         rules_written = len(new_rules)
@@ -652,7 +625,7 @@ def apply_prescriptions(prescriptions, prescription_types):
     # ── Investigation items -> Claude To-dos ──
     existing_todos = ""
     if TODO_FILE.exists():
-        with open(TODO_FILE, "r") as f:
+        with open(TODO_FILE, "r", encoding="utf-8") as f:
             existing_todos = f.read()
 
     new_todos = []
@@ -671,7 +644,7 @@ def apply_prescriptions(prescriptions, prescription_types):
             new_todos.append(rule_summary)
 
     if new_todos:
-        with open(TODO_FILE, "a") as f:
+        with open(TODO_FILE, "a", encoding="utf-8") as f:
             f.write("\n")
             for todo in new_todos:
                 f.write(todo + "\n")
@@ -725,7 +698,7 @@ def main():
 
     # Write report file (skip with --no-report for prescriptions-only mode)
     if not no_report:
-        with open(report_path, "w") as f:
+        with open(report_path, "w", encoding="utf-8") as f:
             f.write(report)
         print(f"Report saved: {report_path}")
     else:
