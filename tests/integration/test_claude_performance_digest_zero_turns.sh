@@ -22,9 +22,12 @@
 #
 # The script locates everything from where it sits (VAULT_ROOT is
 # SCRIPT_DIR.parent.parent) and from Path.home() (PROJECTS_ROOT, MEMORY_FILE),
-# so each case runs a COPY of it inside its own root, under a sandboxed home:
+# so each case runs a COPY of it inside its own root, under a sandboxed home.
+# hooks/_lib rides along so any shared helper the script imports from
+# SCRIPT_DIR.parent/hooks resolves as it does in a checkout or installed skill:
 #
 #   $TMP/<case>/skill/scripts/claude_performance_digest.py   SCRIPT_DIR
+#   $TMP/<case>/skill/hooks/_lib/                             shared helpers
 #   $TMP/<case>/⚙️ Meta/Performance/weekly-<date>.md          the report
 #   $TMP/<case>/home/.claude/projects/<project>/*.jsonl      PROJECTS_ROOT
 #
@@ -63,11 +66,12 @@ bad() { echo "  FAIL  $1"; fail=1; }
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-# new_case NAME: a fresh root holding its own copy of the script.
+# new_case NAME: a fresh root holding its own copy of the script and hooks/_lib.
 new_case() {
   local c="$TMP/$1"
-  mkdir -p "$c/skill/scripts" "$c/home/.claude/projects"
+  mkdir -p "$c/skill/scripts" "$c/skill/hooks" "$c/home/.claude/projects"
   cp "$SCRIPT_SRC" "$c/skill/scripts/claude_performance_digest.py"
+  cp -R "$ROOT/hooks/_lib" "$c/skill/hooks/_lib"
   printf '%s' "$c"
 }
 
