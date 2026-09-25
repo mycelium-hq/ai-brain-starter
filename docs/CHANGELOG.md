@@ -19,7 +19,7 @@ It told commands apart by their first 400 characters only. Commands that start w
 
 On a machine where a second installer also registered the hook, every Bash command was counted twice, so the block came on the 3rd command instead of the 4th. The hook now counts each command once, however many times it is registered.
 
-And the way `hooks.json` registered it (`... || true`) quietly turned the hook's "block" answer into "allow", so an install carrying only this repo's copy never blocked anything. It is now registered in the same form as the other blocking hooks, and when the hook file is missing it stays out of the way instead of answering for the command.
+And the way `hooks.json` registered it (`... || true`) quietly turned the hook's "block" answer into "allow", so on Mac and Linux an install carrying only this repo's copy never blocked anything. (Windows runs hooks through its own launcher, which kept the block, so it was not affected.) It is now registered in the same form as the other blocking hooks, and when the hook file is missing it stays out of the way instead of answering for the command.
 
 ## 2026-09-25: a Linux-only `stat` bug crashed both the version-check hook and the installer itself
 

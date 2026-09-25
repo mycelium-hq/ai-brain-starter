@@ -18,8 +18,9 @@ defects made it block work that was not a loop, both measured on live sessions:
    form, and the other installer's exit-preserving if/else form. Every
    registration appended a timestamp, so each Bash call counted twice and the
    3rd call was blocked instead of the 4th. The `|| true` copy could never block
-   at all: `||` rewrites exit 2 into 0, so on an install carrying only that copy
-   the guard was decorative.
+   at all under a POSIX shell: `||` rewrites exit 2 into 0, so an install
+   carrying only that copy had a decorative guard. (Windows rewrites hooks.json
+   commands through hook_runner.py, which keeps exit 2.)
 
 The fixes under test: hash the whole normalized command; count each call once,
 keyed on its tool_use_id (every registration of one call sees the same id, and

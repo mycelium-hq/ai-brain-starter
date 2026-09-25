@@ -1439,9 +1439,10 @@ PY_DIRECT=(
   # hashed only the first 400 characters, so distinct commands opening with one
   # long scratch path shared a budget, and a second installer's registration of
   # the same script counted every Bash call twice. The hooks.json `|| true`
-  # wrapper also rewrote the exit-2 block into an allow, so this repo's own copy
-  # never blocked. Drives the hook, the registered hooks.json command and the
-  # real installer in a sandbox HOME; 13 legs fail against the pre-fix revision.
+  # wrapper also rewrote the exit-2 block into an allow, so under a POSIX shell
+  # this repo's own copy never blocked. Drives the hook, the registered
+  # hooks.json command and the real installer in a sandbox HOME; 13 legs fail
+  # against the pre-fix revision.
   hooks/test_retry_budget.py
   tests/test_instinct.py
   tests/test_entity_disambiguator_clustering.py
