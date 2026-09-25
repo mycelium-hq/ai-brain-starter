@@ -102,13 +102,26 @@ _def="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | 
 # hook, and this is the one case too degraded to tell artifact-staged from
 # code-only apart).
 _gitdir="$(git rev-parse --git-dir 2>/dev/null)"
-_staged_dir=""
-if [ -n "${_gitdir}" ]; then
-  _staged_dir="$(mktemp -d "${_gitdir}/guard-staged.XXXXXX" 2>/dev/null)" || _staged_dir=""
-fi
-if [ -z "${_staged_dir}" ]; then
-  _staged_dir="$(mktemp -d 2>/dev/null)" || _staged_dir=""
-fi
+
+# ONE allocation route, shared by BOTH scratch dirs this script needs (the
+# staged listing right below, and the diff-index outputs further down). The
+# sharing is the point, not tidiness: when only the listing got the git-dir-
+# first route and the diff-index dir was left on bare `mktemp` alone, a bare-
+# mktemp failure gated BOTH exemption routes out at once and the merge carve-
+# out silently stopped exempting content byte-identical to origin/<default>.
+# Two copies of an allocation policy is how that gap opened; there is now one.
+_alloc_scratch_dir() {
+  local _d=""
+  if [ -n "${_gitdir}" ]; then
+    _d="$(mktemp -d "${_gitdir}/guard-staged.XXXXXX" 2>/dev/null)" || _d=""
+  fi
+  if [ -z "${_d}" ]; then
+    _d="$(mktemp -d 2>/dev/null)" || _d=""
+  fi
+  printf '%s' "${_d}"
+}
+
+_staged_dir="$(_alloc_scratch_dir)"
 if [ -z "${_staged_dir}" ]; then
   echo "pre-commit: REFUSED — could not create a scratch dir to list staged paths (mktemp failed under both \$(git rev-parse --git-dir) and \$TMPDIR)." >&2
   echo "  Bypass: SESSION_ARTIFACT_BRANCH_BYPASS=1 git commit ...   (or git commit --no-verify)." >&2
@@ -222,7 +235,7 @@ fi
 # ONLY when the ref exists AND the comparison itself actually succeeded; a
 # failed comparison is gated out below exactly like a missing ref — it just
 # doesn't run (fail closed), it never grants an exemption.
-_diffidx_dir="$(mktemp -d 2>/dev/null)" || _diffidx_dir=""
+_diffidx_dir="$(_alloc_scratch_dir)"
 # Replaces the `_cleanup_staged_dir` trap set above (bash keeps only the LAST
 # EXIT trap registered, it does not stack them), so this one also removes
 # `_staged_dir` — otherwise everything from here to the end of the script
