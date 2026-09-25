@@ -618,8 +618,18 @@ diff_index_failure_case_block(){
 # all here, so this isolates the initial listing itself from the diff-index
 # exemption routes fixed above: if only those routes were fixed, this case
 # would stay red.
-# Mutation that turns this red: put the explicit `HEAD` argument back on the
-# initial `git diff --cached` listing.
+# Mutation that turns THIS case red: revert BOTH halves of the fix at once --
+# restore the explicit `HEAD` argument on the initial listing AND remove the
+# exit-status check that follows it (let a failed listing's empty output read
+# as "nothing staged", the pre-fix behavior). Restoring only one half leaves
+# this case green: with `HEAD` back but the exit-status check still in place,
+# the listing fails and that check's own refusal blocks it anyway; with the
+# check dropped but `HEAD` still absent, the listing never fails here in the
+# first place (no revision argument means `git diff --cached` compares
+# against the empty tree on an unborn branch, and succeeds). Measured: both
+# single-half reverts leave the full suite green; only the combined revert
+# turns this case red. See the code-only case below, which isolates the
+# `HEAD` half on its own.
 orphan_branch_new_artifact_case_block(){
   local d; d="$(mktemp -d)"
   (
@@ -636,6 +646,39 @@ orphan_branch_new_artifact_case_block(){
   ) > "$d/out" 2>&1
   local got; got="$(sed -n 's/^EXIT=//p' "$d/out")"
   if [ "$got" = "1" ]; then pass "(s) new artifact staged on an unborn/orphan branch -> BLOCK (exit $got)"; else fail "(s) new artifact staged on an unborn/orphan branch -> BLOCK (got '$got' want 1)"; sed 's/^/    /' "$d/out"; fi
+  rm -rf "$d"
+}
+
+# (s2) a CODE-ONLY change staged on an UNBORN branch (fresh `git checkout
+# --orphan`, zero commits on it yet) must ALLOW. This isolates the explicit-
+# `HEAD`-removal half of the (s) fix from the listing-failure exit-status-
+# check half: with NOTHING artifact-shaped staged, restoring the explicit
+# `HEAD` argument alone still makes the initial `git diff --cached` listing
+# FAIL on the unborn branch (there is no commit for HEAD to name), and the
+# exit-status check -- untouched by this mutation -- then refuses regardless
+# of what was actually staged, turning a pure code change into a false BLOCK.
+# (s) above cannot show this: an artifact staged there gets blocked by
+# whichever half of the fix is still standing, so it stays green no matter
+# which single half is reverted. This case has nothing for the surviving half
+# to catch, so only the `HEAD`-removal half can explain its ALLOW.
+# Mutation that turns this red: put the explicit `HEAD` argument back on the
+# initial `git diff --cached` listing.
+orphan_branch_code_only_case_allow(){
+  local d; d="$(mktemp -d)"
+  (
+    cd "$d" || exit 99
+    git init -q -b main
+    git config user.email t@t; git config user.name t
+    echo seed > seed.txt; git add seed.txt; git commit -qm seed
+    git checkout -q --orphan orphantest
+    mkdir -p .githooks; cp "$GUARD" .githooks/guard.sh; chmod +x .githooks/guard.sh
+    echo "print('hi')" > code.py
+    git add code.py
+    require_staged code.py
+    .githooks/guard.sh; echo "EXIT=$?"
+  ) > "$d/out" 2>&1
+  local got; got="$(sed -n 's/^EXIT=//p' "$d/out")"
+  if [ "$got" = "0" ]; then pass "(s2) code-only staged on an unborn/orphan branch -> ALLOW (exit $got)"; else fail "(s2) code-only staged on an unborn/orphan branch -> ALLOW (got '$got' want 0)"; sed 's/^/    /' "$d/out"; fi
   rm -rf "$d"
 }
 
@@ -697,6 +740,7 @@ new_artifacts_at_scale_case_block
 new_artifact_colon_prefixed_path_case_block
 diff_index_failure_case_block
 orphan_branch_new_artifact_case_block
+orphan_branch_code_only_case_allow
 premerge_commit_wiring_blocks_topic_merge
 
 echo "---"
