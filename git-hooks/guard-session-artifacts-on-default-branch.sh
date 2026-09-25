@@ -66,16 +66,45 @@ _def="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | 
 
 # Off the default branch: block ONLY if a session-close artifact is staged.
 #
-# NUL-separated, rename detection OFF, explicit HEAD as the compare-from tree:
-# git never quotes/escapes a path in -z output, so a name holding a double
-# quote, a backslash, a tab or an embedded newline round-trips as its real
-# bytes instead of a display string that names a DIFFERENT path (or nothing).
+# NUL-separated, rename detection OFF, no explicit compare-from revision: git
+# never quotes/escapes a path in -z output, so a name holding a double quote,
+# a backslash, a tab or an embedded newline round-trips as its real bytes
+# instead of a display string that names a DIFFERENT path (or nothing).
 # --no-renames means a rename is one deletion plus one addition, each checked
 # on its own path — never paired and skipped as a pair.
+#
+# No explicit `HEAD` argument: `git diff --cached` already defaults to
+# comparing against HEAD, and — the case that matters here — against the
+# EMPTY TREE when HEAD is unborn (a fresh `git checkout --orphan`, before its
+# first commit). Passing `HEAD` explicitly forces resolution of a commit that
+# does not exist yet on that branch, which FAILS and produces no output; that
+# used to read as "nothing is staged", so the guard exited ALLOW before the
+# artifact-matching loop below ever ran — no matter what was actually staged.
+# Output goes to a real file, never `done < <(...)`, with its own exit status
+# checked directly (same reasoning as the diff-index fix below: a process
+# substitution only ever exposes the trailing `read`'s exit status). ANY
+# failure of this listing — not just the unborn-HEAD case — used to produce
+# empty output indistinguishable from a genuinely clean index. This is the
+# one listing every later check depends on, so its own failure REFUSES
+# rather than silently allowing.
+_staged_dir="$(mktemp -d 2>/dev/null)" || _staged_dir=""
+if [ -z "${_staged_dir}" ]; then
+  echo "pre-commit: REFUSED — could not create a scratch dir to list staged paths (mktemp failed)." >&2
+  exit 1
+fi
+_cleanup_staged_dir() { [ -n "${_staged_dir}" ] && rm -rf "${_staged_dir}"; }
+trap _cleanup_staged_dir EXIT
+
+_staged_out="${_staged_dir}/staged.nul"
+git diff --cached --name-only -z --no-renames >"${_staged_out}" 2>/dev/null
+if [ "$?" -ne 0 ]; then
+  echo "pre-commit: REFUSED — could not list staged paths (git diff --cached failed)." >&2
+  exit 1
+fi
 _staged_paths=()
 while IFS= read -r -d '' _p; do
   _staged_paths+=("${_p}")
-done < <(git diff --cached --name-only -z --no-renames HEAD 2>/dev/null)
+done < "${_staged_out}"
 [ "${#_staged_paths[@]}" -eq 0 ] && exit 0
 
 # Generic session-close outputs. Literal substring match so a folder icon prefix
@@ -172,7 +201,14 @@ fi
 # failed comparison is gated out below exactly like a missing ref — it just
 # doesn't run (fail closed), it never grants an exemption.
 _diffidx_dir="$(mktemp -d 2>/dev/null)" || _diffidx_dir=""
-_cleanup_diffidx_dir() { [ -n "${_diffidx_dir}" ] && rm -rf "${_diffidx_dir}"; }
+# Replaces the `_cleanup_staged_dir` trap set above (bash keeps only the LAST
+# EXIT trap registered, it does not stack them), so this one also removes
+# `_staged_dir` — otherwise everything from here to the end of the script
+# would leak that scratch dir on exit.
+_cleanup_diffidx_dir() {
+  [ -n "${_staged_dir}" ] && rm -rf "${_staged_dir}"
+  [ -n "${_diffidx_dir}" ] && rm -rf "${_diffidx_dir}"
+}
 trap _cleanup_diffidx_dir EXIT
 
 _origin_route_ok=0
