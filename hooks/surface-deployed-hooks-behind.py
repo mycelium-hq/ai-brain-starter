@@ -94,6 +94,14 @@ FIX_CMD = (
 )
 
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    from _lib.session_startup_stamp import record as _record_session_start
+except Exception:  # fail-open: this hook must never break a session start
+    def _record_session_start(payload, state=None):  # type: ignore
+        return None
+
+
 def _emit(message: str | None = None) -> None:
     """SessionStart additionalContext (reaches the model) or `{}` (silent)."""
     if message:
@@ -447,10 +455,19 @@ def _stale_pull_message() -> "str | None":
 
 
 def main() -> None:
+    payload = None
     try:
-        json.load(sys.stdin)
+        payload = json.load(sys.stdin)
     except Exception:
         pass
+
+    # MYC-4704 follow-up, and the FOURTH check under this one "update check"
+    # surface (see the comment below). Records a genuine session start for
+    # scripts/ai-brain-auto-update.py's deferred-deploy gate. Runs FIRST and
+    # unconditionally: every check below can terminate the process via
+    # _emit(), so anything sequenced after them would be skipped on exactly
+    # the sessions that had something to report. Never raises.
+    _record_session_start(payload if isinstance(payload, dict) else {})
     # Three fail-open checks under one "update check" surface: deployed hooks
     # behind (this file's original job) + skill content behind (MYC-3076) + the
     # clone itself no longer pulling (MYC-3175). Emit whichever fired, separated;

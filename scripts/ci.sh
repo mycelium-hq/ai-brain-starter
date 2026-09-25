@@ -529,6 +529,14 @@ INTEGRATION_TESTS=(
   # path, because with a relative one the old code fails open before the gate is
   # reached and the assertion would pass without varying with the defect.
   test_journal_guard_end_to_end
+  # Same guard, the inline-interpreter write form (`python3 - <<PY`, `node -e`).
+  # Those carry no shell redirect marker, so the gate never opened and an entire
+  # /journal session's saves went unguarded (2026-08-24). The fix must compose
+  # with the heredoc-body stripping rather than undo it, so the three gate-shut
+  # controls (read-only script, fixture quoting a journal path, file NAMED
+  # python3_helper.sh) run with NO marker planted: an ALLOW there means the gate
+  # stayed shut, not that a marker satisfied it.
+  test_journal_guard_interpreter_write
   # Close detector, whole-message anchoring + length gate (2026-08-16): the
   # shared pack tiers ran under re.MULTILINE, so every `$`-anchored sign-off
   # matched the end of ANY line and a 60-line handoff whose third line read
@@ -561,6 +569,27 @@ INTEGRATION_TESTS=(
   # it; this proves the helper still works and still keeps its hands off a PATH
   # that was already healthy.
   test_real_python_shim
+  # PR #682: graph-context-hook.sh's CONFIG now reads env overrides so a vault
+  # can set it from ~/.claude/settings.json instead of editing the file (which
+  # install-hooks-user-level.py overwrites on every auto-update). Proves an
+  # exported-empty SECONDARY_GRAPH disables the secondary branch (bare `-`,
+  # not `:-`), an unset one falls back to the default path, and PRIMARY_PATTERN
+  # replaces rather than extends the default keyword regex.
+  test_graph_context_hook_env
+  # PORTABILITY.md #1: the BSD-first `stat -f %m` mtime read broke
+  # check-claude-code-version.sh's cache-freshness check outright on real GNU
+  # coreutils (unbound-variable abort). Runs the real hook under
+  # lib/gnu_stat_shim.sh so the Linux code path is exercised deterministically
+  # from any host.
+  test_check_claude_code_version_cache_age
+  # Same bug class, vault-safe-commit.sh's non-PID lock-age check: a lock
+  # whose age cannot be proven must never be treated as stale and removed.
+  # Runs the real script under the same GNU-stat shim.
+  test_vault_safe_commit_lock_age
+  # Same bug class at a different `stat` format letter (%z, size, not %m,
+  # mtime): bootstrap.sh's own log-rotation check crashed outright on real
+  # GNU coreutils, on every run once ~/.claude/.bootstrap.log existed.
+  test_bootstrap_log_rotation_stat
 )
 # ---- Gate-coverage invariant -------------------------------------------------
 # The list above is an explicit allow-list, and allow-lists rot: a new
@@ -1038,6 +1067,17 @@ else
   echo "    install: brew install shellcheck  (macOS)  /  sudo apt-get install -y shellcheck  (Debian/Ubuntu)"
 fi
 
+# ---- (c1) stat portability gate --------------------------------------
+# scripts/check-stat-portability.py is the single source of truth -
+# lint.yml's `lint` job runs the SAME script, so the laptop pre-push gate and
+# CI cannot drift. This one is stdlib-only and hermetic (no external binary
+# to install), so unlike the check just above it there is no OS-dependent
+# reason to skip it in either place -- it mirrors check-exit-contract.py's
+# wiring below instead.
+echo "==> (c1) stat portability: $PY scripts/check-stat-portability.py"
+"$PY" scripts/check-stat-portability.py --self-test >/dev/null
+"$PY" scripts/check-stat-portability.py
+
 # ---- (c2) PowerShell static analysis ---------------------------------------
 # Runs the SAME canonical gate as the lint job's 'repo PowerShell' step, so the
 # local pre-push gate and CI cannot drift on .ps1 quality. Warn-skipped locally
@@ -1207,6 +1247,8 @@ echo "==> (e2b) hook activation: $PY scripts/check-hook-activation.py"
 "$PY" scripts/check-sessionstart-emit-shape.py
 "$PY" scripts/check-frozen-before-state.py --self-test >/dev/null
 "$PY" scripts/check-frozen-before-state.py
+"$PY" scripts/check-vendored-lib-in-sync.py --self-test >/dev/null
+"$PY" scripts/check-vendored-lib-in-sync.py
 "$PY" scripts/check-split-meta.py --self-test
 "$PY" scripts/check-hook-parity.py --self-test >/dev/null
 "$PY" scripts/check-hook-parity.py
@@ -1368,10 +1410,23 @@ echo "    OK - $unit_count scripts/ unit suite(s) passed"
 # fails the gate LOUD (the false-green class MYC-2922 closed for scripts/, MYC-2959
 # for hooks/+tests/). PY_DIRECT then runs the non-wrapped suites exactly once.
 PY_DIRECT=(
+  # SessionStart restart witness for the auto-updater's deferred deploy
+  # (MYC-4704 follow-up). Its ACTIVATION assertion is the only thing
+  # proving the witness is not dead code: it has no hooks.json entry of
+  # its own by design (SessionStart fan-out is at budget), so the fold
+  # into surface-deployed-hooks-behind.py is what wires it.
+  hooks/test_session_startup_stamp.py
   hooks/test_umbrella_map.py
   hooks/test_surface_stalled_git_operation.py
   hooks/test_memory_index.py
   hooks/test_session_start_context.py
+  # Cross-agent scratchpad clobber guard. Every subagent is handed the SAME
+  # scratchpad_dir as its parent (only agent_id differs), so two agents writing
+  # one basename silently destroy each other's file and the reader cannot tell.
+  # 19 legs: 6 that must DENY, 12 that must stay silent (self-rewrite, reads,
+  # off-scratchpad, bypass), and the shell-variable form that slipped past the
+  # guard's own first production run. Plain script, no pytest.
+  hooks/test_scratchpad_cross_agent_clobber.py
   tests/test_instinct.py
   tests/test_entity_disambiguator_clustering.py
   tests/test_graphify_stage_select_cache_key.py
@@ -1509,6 +1564,15 @@ PY_DIRECT=(
   # the hook's own os.environ). Scans this repo's own hooks/ for real and
   # fleet-tests every hook the fix touched -- see the file's own docstring.
   hooks/test_bypass_reachability_watchdog.py
+  # strip_folder_prefix() in graphify_canonicalize.py kept whatever follows
+  # the last "/", which is safe for a path-form wikilink but wrong for a
+  # non-English date or rate ("24/08/2026", "$49/mes") -- every dated note
+  # in a Spanish/Portuguese/French/German vault canonicalized onto the same
+  # node, manufacturing edges that appear in no source document (measured:
+  # 12 supernodes, 119 fabricated edges on one 8,858-node vault). Tests both
+  # shipped copies (scripts/ and skills/graphify/scripts/) so a fix to one
+  # cannot silently leave the other behind.
+  tests/test_graphify_canonicalize_slash_guard.py
 )
 dormant_py=()
 while IFS= read -r -d '' f; do
@@ -1552,4 +1616,4 @@ done
 echo "    OK - ${#PY_DIRECT[@]} hooks/+tests/ direct suite(s) passed; dormancy invariant clean"
 
 echo
-echo "All gates passed: py_compile ($count file(s)) + ${#INTEGRATION_TESTS[@]} integration tests + $unit_count scripts/ + ${#PY_DIRECT[@]} hooks/tests unit suite(s) + shellcheck [$shellcheck_note] + powershell [$pssa_note] + phase-doc python [$phasepy_note] + repo python [$ruffgate_note] + utf8 console guard [$utf8_note] + hook block-protocol [passed] + vault-root reads [passed] + home-hook deploy [passed] + subprocess decode [passed] + py3.9 annotation parity [passed] + ps1 encoding [passed]."
+echo "All gates passed: py_compile ($count file(s)) + ${#INTEGRATION_TESTS[@]} integration tests + $unit_count scripts/ + ${#PY_DIRECT[@]} hooks/tests unit suite(s) + shellcheck [$shellcheck_note] + stat portability [passed] + powershell [$pssa_note] + phase-doc python [$phasepy_note] + repo python [$ruffgate_note] + utf8 console guard [$utf8_note] + hook block-protocol [passed] + vault-root reads [passed] + home-hook deploy [passed] + subprocess decode [passed] + py3.9 annotation parity [passed] + ps1 encoding [passed]."
