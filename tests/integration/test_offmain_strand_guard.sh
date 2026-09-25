@@ -608,6 +608,49 @@ diff_index_failure_case_block(){
   rm -rf "$d"
 }
 
+# (u) the INITIAL staged-paths listing failing must REFUSE, not read as
+# "nothing is staged". `git diff --cached --name-only -z --no-renames` is the
+# one listing every later check depends on: if it fails, its output is empty,
+# and empty output is indistinguishable from a genuinely clean index -- so the
+# guard exits ALLOW before the artifact-matching loop ever runs, no matter what
+# is actually staged. The listing's own exit status is therefore checked
+# directly, and a failure refuses.
+# That refusal had NO coverage: deleting the check outright left the whole
+# suite green, because the (s)/(s2) orphan-branch cases only exercise the
+# OTHER half of the same fix (dropping the explicit `HEAD` argument), and on
+# an orphan branch with `HEAD` already gone the listing no longer fails at all.
+# Shim `git` so an invocation naming the exact subcommand `diff` exits nonzero
+# with no output, while everything else -- including `diff-index`, a DIFFERENT
+# exact argument, which is what keeps this distinct from (r) -- still runs for
+# real. A session artifact is staged, so an ALLOW here is a genuine stranding.
+# Mutation that turns this red: delete the `if [ "$?" -ne 0 ]` block that
+# follows the listing. Measured: with that block deleted the suite reports this
+# case, and only this case, as FAILED with "got '0' want 1".
+staged_listing_failure_case_block(){
+  local d; d="$(mktemp -d)"
+  local real_git; real_git="$(command -v git)"
+  mkdir -p "$d/shim"
+  printf '#!/bin/sh\nfor a in "$@"; do\n  if [ "$a" = "diff" ]; then exit 7; fi\ndone\nexec "%s" "$@"\n' \
+    "$real_git" > "$d/shim/git"
+  chmod +x "$d/shim/git"
+  (
+    cd "$d" || exit 99
+    git init -q -b main repo; cd repo || exit 99
+    git config user.email t@t; git config user.name t
+    echo seed > seed.txt; git add seed.txt; git commit -qm seed
+    git update-ref refs/remotes/origin/main main
+    git checkout -q -b feature
+    mkdir -p "Meta/Sessions"; echo "would strand on feature" > "Meta/Sessions/new.md"
+    git add "Meta/Sessions/new.md"
+    cp "$GUARD" guard.sh; chmod +x guard.sh
+    require_staged "Meta/Sessions/new.md"
+    PATH="$d/shim:$PATH" ./guard.sh; echo "EXIT=$?"
+  ) > "$d/out" 2>&1
+  local got; got="$(sed -n 's/^EXIT=//p' "$d/out")"
+  if [ "$got" = "1" ]; then pass "(u) staged-paths listing FAILING -> BLOCK, not read as nothing staged (exit $got)"; else fail "(u) staged-paths listing FAILING -> BLOCK, not read as nothing staged (got '$got' want 1)"; sed 's/^/    /' "$d/out"; fi
+  rm -rf "$d"
+}
+
 # (t) a BARE `mktemp` failure must not silently disable the merge carve-out.
 # Both scratch dirs this guard needs are allocated under $(git rev-parse
 # --git-dir) FIRST, with bare `mktemp -d` only as the fallback. The diff-index
@@ -782,6 +825,7 @@ new_artifacts_at_scale_case_block
 new_artifact_colon_prefixed_path_case_block
 diff_index_failure_case_block
 bare_mktemp_failure_keeps_carveout_case_allow
+staged_listing_failure_case_block
 orphan_branch_new_artifact_case_block
 orphan_branch_code_only_case_allow
 premerge_commit_wiring_blocks_topic_merge
