@@ -325,7 +325,8 @@ def leg_one_call_is_one_attempt_concurrent() -> None:
             data = payload(f"make -C build target-{rnd}", f"toolu_par_{rnd}")
             procs = [subprocess.Popen([sys.executable, str(HOOK)], stdin=subprocess.PIPE,
                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                      env=sb.env, text=True) for _ in range(2)]
+                                      env=sb.env, text=True, encoding="utf-8",
+                                      errors="replace") for _ in range(2)]
             for p in procs:
                 p.stdin.write(data)
                 p.stdin.close()
@@ -390,7 +391,8 @@ def leg_concurrent_calls_share_one_file_safely() -> None:
                 for _ in range(2):
                     p = subprocess.Popen([sys.executable, str(HOOK)], stdin=subprocess.PIPE,
                                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                         env=sb.env, text=True)
+                                         env=sb.env, text=True, encoding="utf-8",
+                                         errors="replace")
                     jobs.append((i, data, p))
             # Barrier: let every interpreter finish starting and block on stdin,
             # then release them together, so their read-modify-writes overlap.
@@ -537,7 +539,8 @@ def leg_fifo_at_state_path_does_not_hang() -> None:
         try:
             r = subprocess.run([sys.executable, str(HOOK)],
                                input=payload("make -C build all-targets", "toolu_fifo"),
-                               capture_output=True, text=True, env=sb.env, timeout=20)
+                               capture_output=True, text=True, encoding="utf-8",
+                               errors="replace", env=sb.env, timeout=20)
             check(name, r.returncode == 0, f"exit {r.returncode}: {r.stderr[-160:]!r}")
         except subprocess.TimeoutExpired:
             check(name, False, "still blocked on the FIFO after 20 s")
