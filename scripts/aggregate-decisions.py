@@ -48,6 +48,12 @@ File format (Decisions/ entries):
     - pattern: pending | {fill-in-later}
   Body is the decision entry (What / Why / Floor / Stakes / Speed / Next Step / ...).
 
+  Tolerated in practice, because session-close writes plenty of both:
+    - no decision_date → the date part of creationDate, then the
+      YYYY-MM-DD prefix of the filename.
+    - a first heading that is only a template label ("## What", "## Qué")
+      → the first sentence of the What section, then the filename slug.
+
 Determinism rules identical to aggregate-sessions.py: sorted filename
 descending → deterministic output → concurrent runs safe.
 """
@@ -62,6 +68,7 @@ import datetime as dt
 import os
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
 # --- VAULT_ROOT resolution ------------------------------------------------
@@ -203,14 +210,112 @@ def parse_frontmatter(content: str) -> dict:
     return out
 
 
+# Section labels of the What/Why/Floor/... template, in English and Spanish.
+# A heading that is only one of these names a section, not the decision, so it
+# can't serve as the title: with a "## Qué" template every entry in the TOC
+# read "Qué". Compared case- and accent-insensitively.
+GENERIC_HEADINGS = {
+    "what", "why", "floor", "stakes", "speed", "outcome", "pattern",
+    "next step", "context", "decision",
+    "que", "por que", "piso", "apuestas", "velocidad", "resultado", "patron",
+    "siguiente paso", "proximo paso", "contexto", "decision tomada",
+    "what was decided", "que se decidio",
+}
+WHAT_LABELS = ("what", "what was decided", "que", "que se decidio")
+TITLE_MAX_CHARS = 90
+
+
+def _fold(s: str) -> str:
+    """Lowercase, strip accents and trailing punctuation, for label matching."""
+    s = unicodedata.normalize("NFD", s.lower())
+    s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+    return s.strip().strip(":*_ ").strip()
+
+
+def _plain(md: str) -> str:
+    """Strip the inline markdown a title shouldn't carry: [[a|b]] → b,
+    [[a]] → a, **bold**, `code`, _italics_."""
+    md = re.sub(r"\[\[([^\]|]+)\|([^\]]+)\]\]", r"\2", md)
+    md = re.sub(r"\[\[([^\]]+)\]\]", r"\1", md)
+    md = re.sub(r"\*\*|__|`", "", md)
+    md = re.sub(r"(?<!\w)_([^_]+)_(?!\w)", r"\1", md)
+    return re.sub(r"\s+", " ", md).strip()
+
+
+def _first_sentence(text: str) -> str:
+    text = _plain(text)
+    m = re.search(r"(?<=[.!?])\s", text)
+    sentence = text[: m.start()] if m else text
+    if len(sentence) > TITLE_MAX_CHARS:
+        cut = sentence[:TITLE_MAX_CHARS].rsplit(" ", 1)[0]
+        sentence = cut.rstrip(",;:") + "…"
+    return sentence.rstrip(".")
+
+
 def extract_first_heading(body: str) -> str:
-    """Return the first '# ...' or '## ...' heading from the body, or ''."""
+    """Return the first '# ...' or '## ...' heading from the body that names
+    the decision itself (not a template section label), or ''.
+
+    Once a section label has been seen, later '##' headings are section
+    names too ("Cómo se aplica", "Nota de propagación"), so only an H1 can
+    still be the title."""
+    in_sections = False
     for line in body.split("\n"):
         s = line.strip()
         if s.startswith("# "):
-            return s[2:].strip()
-        if s.startswith("## "):
-            return s[3:].strip()
+            text, is_h1 = s[2:].strip(), True
+        elif s.startswith("## "):
+            text, is_h1 = s[3:].strip(), False
+        else:
+            continue
+        if _fold(text) in GENERIC_HEADINGS:
+            in_sections = True
+        elif is_h1 or not in_sections:
+            return text
+    return ""
+
+
+def extract_what(body: str) -> str:
+    """First sentence of the What/Qué section — either a '## Qué' heading
+    followed by a paragraph, or an inline '**Qué:** ...' line — or ''."""
+    lines = body.split("\n")
+    for i, line in enumerate(lines):
+        s = line.strip()
+        m = re.match(r"^\*\*([^*]+?):?\*\*:?\s*(.+)$", s)
+        if m and _fold(m.group(1)) in WHAT_LABELS:
+            return _first_sentence(m.group(2))
+        if s.startswith("#") and _fold(s.lstrip("#")) in WHAT_LABELS:
+            for nxt in lines[i + 1 :]:
+                t = nxt.strip()
+                if t.startswith("#"):
+                    break
+                if t:
+                    return _first_sentence(t.lstrip("-* "))
+    return ""
+
+
+def decision_title(body: str, path: Path) -> str:
+    return (
+        extract_first_heading(body)
+        or extract_what(body)
+        or re.sub(r"^\d{4}-\d{2}-\d{2}(T\d{2}-\d{2})?-", "", path.stem).replace("-", " ")
+    )
+
+
+def decision_date(fm: dict, path: Path) -> str:
+    """decision_date, else the date part of creationDate, else the date in
+    the filename (YYYY-MM-DDTHH-MM-slug.md). Session-close writes many
+    decisions with only creationDate; without the fallback they indexed as
+    ????-??-?? and, being undated, could never rotate to the archive."""
+    for candidate in (
+        fm.get("decision_date", ""),
+        fm.get("creationDate", "")[:10],
+        path.name[:10],
+    ):
+        try:
+            return dt.date.fromisoformat(candidate).isoformat()
+        except (ValueError, TypeError):
+            continue
     return ""
 
 
@@ -239,7 +344,7 @@ def split_inline_vs_archive(
             continue
         fm = parse_frontmatter(content)
         outcome = fm.get("outcome", "pending")
-        date_str = fm.get("decision_date", "")
+        date_str = decision_date(fm, f)
         try:
             d = dt.date.fromisoformat(date_str)
         except (ValueError, TypeError):
@@ -277,10 +382,10 @@ def build_toc(files: list[Path], inline_window_months: int) -> str:
             continue
         fm = parse_frontmatter(content)
         body = strip_frontmatter(content)
-        date = fm.get("decision_date") or "????-??-??"
+        date = decision_date(fm, f) or "????-??-??"
         outcome = fm.get("outcome", "pending")
         stakes = fm.get("stakes", "")
-        title = extract_first_heading(body) or f.stem
+        title = decision_title(body, f)
         markers = []
         if is_pending(outcome):
             markers.append("PENDING")

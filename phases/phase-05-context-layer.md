@@ -382,7 +382,7 @@ If the vault uses `/graphify` to build a knowledge graph, install the **graph-co
 
 Why: telling Claude in CLAUDE.md to "always read the graph first" works some of the time. Injecting a routing reminder AT the moment of the matching prompt — with the file's mtime so staleness is visible — is more reliable, especially in long sessions where the static reminder fires only once.
 
-Copy `scripts/graph-context-hook.sh` from this repo into `[VAULT_PATH]/⚙️ Meta/scripts/`, then **edit the CONFIG block at the top of the file**: set `VAULT_ROOT`, set `PRIMARY_GRAPH` and `PRIMARY_PATTERN` (regex of keywords for the main graph), and either configure `SECONDARY_GRAPH`/`SECONDARY_PATTERN` for a sub-folder graph (e.g. a separate work/team graph) or set `SECONDARY_GRAPH=""` if you only have one. Test with:
+Copy `scripts/graph-context-hook.sh` from this repo into `[VAULT_PATH]/⚙️ Meta/scripts/`, then **configure it from `~/.claude/settings.json` -> `env`**, not by editing the file: set `VAULT_ROOT`, `PRIMARY_GRAPH`, `PRIMARY_PATTERN`, `PRIMARY_LABEL`, `SECONDARY_GRAPH`, `SECONDARY_PATTERN`, `SECONDARY_LABEL`, and `STALE_DAYS` there (set `SECONDARY_GRAPH` to `""` if you only have one graph). Editing the CONFIG block at the top of the file also works, but `install-hooks-user-level.py` copies this script into the vault unconditionally on every auto-update (roughly every six days), so a direct edit is overwritten without warning; the env values are not touched by that copy. Test with:
 
 ```bash
 echo '{"hook_event_name":"UserPromptSubmit","prompt":"<your test phrase>"}' | bash "[VAULT_PATH]/⚙️ Meta/scripts/graph-context-hook.sh"

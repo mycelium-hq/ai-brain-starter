@@ -80,6 +80,18 @@ else
 fi
 
 # Trim the log file if it grows past 10 MB (keep last 5 MB)
-if [ -f "$LOG" ] && [ "$(stat -f %z "$LOG" 2>/dev/null || stat -c %s "$LOG" 2>/dev/null || echo 0)" -gt 10485760 ]; then
+# Byte size of $LOG, cross-platform. GNU/Linux `stat -c %s` first, then
+# BSD/macOS `stat -f %z`, validated -- see PORTABILITY.md #1. The old
+# BSD-first `||` chain left non-numeric text in the comparison on real GNU
+# coreutils: `[ "<garbage>" -gt N ]` prints "integer expression expected" to
+# stderr on every run once the log exists, and always compares false --
+# trimming silently never fired on Linux.
+_log_size=$(stat -c %s "$LOG" 2>/dev/null)                        # GNU/Linux
+case "$_log_size" in ''|*[!0-9]*) _log_size=$(stat -f %z "$LOG" 2>/dev/null) ;; esac  # BSD/macOS
+case "$_log_size" in ''|*[!0-9]*) _log_size="" ;; esac  # neither gave a plain integer -> unknown
+# Unknown size -> skip the trim rather than truncate on an unprovable read:
+# trimming discards log content, so acting on a bad read is strictly worse
+# than leaving the log alone until the next successful check.
+if [ -f "$LOG" ] && [ -n "$_log_size" ] && [ "$_log_size" -gt 10485760 ]; then
   tail -c 5242880 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
 fi

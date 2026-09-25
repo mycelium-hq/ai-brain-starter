@@ -167,9 +167,43 @@ def _state_dir() -> Path:
     return Path(os.environ.get("ABS_UPDATE_STATE_DIR") or (Path.home() / ".claude"))
 
 
-def _skill_dir() -> Path:
-    return Path(os.environ.get("ABS_SKILL_DIR")
-                or (Path.home() / ".claude" / "skills" / "ai-brain-starter"))
+def _default_skill_dir() -> Path:
+    return Path.home() / ".claude" / "skills" / "ai-brain-starter"
+
+
+def _skill_dir() -> "Path | None":
+    """The checkout this updater operates on. Returns None when
+    ABS_SKILL_DIR was SET but refused (MYC-4907) -- every caller must stop,
+    never substitute the default (_install_fix_cmd() is the one
+    display-only exception; see its docstring).
+
+    WHY containment, not an origin-URL check: a checkout's own .git/config
+    (core.fsmonitor) and .git/hooks execute on THIS file's own git calls
+    regardless of what remote it claims to track, so an allowed-origin list
+    guards nothing once the checkout is on disk. HOME is already the trust
+    anchor -- hooks.json invokes ~/.claude/skills/ai-brain-starter/... by
+    that fixed path -- so containment only lets ABS_SKILL_DIR choose WHICH
+    already-trusted checkout to use, never an escape from that boundary.
+    Containment alone is not enough (F3, independent review, confirmed): a
+    CONTAINED but FOREIGN checkout -- another skill repo also living under
+    ~/.claude/skills -- passes it, so an identity check additionally
+    requires this file's own path to exist under the candidate (is_file()
+    only: no git call, no read of its contents).
+    """
+    override = os.environ.get("ABS_SKILL_DIR")
+    if not override:
+        return _default_skill_dir()
+    try:
+        root = (Path.home() / ".claude" / "skills").resolve()
+        candidate = Path(override).resolve()
+        if candidate == root:
+            return None  # the root itself is not STRICTLY inside it
+        candidate.relative_to(root)  # raises ValueError if not contained
+        if not (candidate / "scripts" / "ai-brain-auto-update.py").is_file():
+            return None  # contained, but not an ai-brain-starter checkout
+        return candidate
+    except (OSError, RuntimeError, ValueError):
+        return None
 
 
 def silent() -> None:
@@ -372,15 +406,25 @@ def _minimal_env(extra: dict[str, str] | None = None) -> dict[str, str]:
     Keeps only: PATH/HOME-family vars so Path.home() and PATH lookups still
     resolve the right user + binaries, the Windows vars Python's own
     subprocess machinery needs to spawn a child reliably (SystemRoot in
-    particular -- WinSock init can fail without it), and the explicit
-    config both real scripts (VAULT_ROOT; sync-skills.py's own child
-    sync-vault-scripts.sh reads it too) and this test suite's stub scripts
-    (ABS_SKILL_DIR / ABS_UPDATE_STATE_DIR etc.) read by name -- passed
-    through ONLY if the parent already had them, never invented. Dropping
-    the test-hermetic names here would not just be inconvenient, it would
-    silently break test isolation: a stub standing in for the real
-    installer that reads ABS_UPDATE_STATE_DIR would fall back to the REAL
-    ~/.claude the moment that var vanished from its env.
+    particular -- WinSock init can fail without it), ABS_WIN_LAUNCHER (a
+    real user escape hatch, not test-only), and the explicit config both
+    real scripts (VAULT_ROOT; sync-skills.py's own child sync-vault-
+    scripts.sh reads it too) and THIS file's OWN hermetic-test overrides
+    (ABS_SKILL_DIR, ABS_UPDATE_STATE_DIR, ABS_UPDATE_INTERVAL_DAYS,
+    ABS_UPDATE_DEPLOY_TIMEOUT, ABS_UPDATE_MIN_DEPLOY_DELAY_SECONDS) read by
+    name -- passed through ONLY if the parent already had them, never
+    invented. Dropping those would silently break test isolation: a stub
+    standing in for the real installer that reads ABS_UPDATE_STATE_DIR
+    would fall back to the REAL ~/.claude the moment that var vanished.
+
+    ABS_POSIX_PYTHON / ABS_HOOK_RUNNER are DELIBERATELY NOT kept (F4,
+    independent review, confirmed by running it): both are TEST-ONLY knobs
+    for install-hooks-user-level.py's OWN test suite (that file's own
+    docstrings say so, ~:976 and ~:1061) -- not something a caller of THIS
+    file needs forwarded. The prior list forwarded them anyway, and
+    install-hooks-user-level.py writes whatever it receives verbatim into
+    every hook command in settings.json (measured: 51 of 72). Test
+    hermeticity for THIS file's own suite never required either name.
 
     Case-insensitive on the keep-list (`k.upper() in keep_upper`) since
     Windows env var names are case-preserved-but-case-insensitive.
@@ -391,7 +435,7 @@ def _minimal_env(extra: dict[str, str] | None = None) -> dict[str, str]:
         "VAULT_ROOT",
         "ABS_SYNC_STARTER_DIR", "ABS_SYNC_INSTALL_DIR",
         "ABS_FORCE_WINDOWS", "ABS_WIN_UTF8_MODE", "ABS_WIN_LAUNCHER",
-        "ABS_WIN_ABS_INTERPRETER", "ABS_POSIX_PYTHON", "ABS_HOOK_RUNNER",
+        "ABS_WIN_ABS_INTERPRETER",
         "ABS_SKILL_DIR", "ABS_UPDATE_STATE_DIR", "ABS_UPDATE_INTERVAL_DAYS",
         "ABS_UPDATE_DEPLOY_TIMEOUT", "ABS_UPDATE_MIN_DEPLOY_DELAY_SECONDS",
     }
@@ -503,9 +547,14 @@ def _install_fix_cmd() -> str:
     secret in it passes secret_patterns.redact() through byte-identical
     (measured), so the output only changes in the case where emitting the
     raw path would itself be the bug.
+
+    MYC-4907: _skill_dir() returns None when ABS_SKILL_DIR was set but
+    refused. This falls back to the DEFAULT path for DISPLAY only -- run()
+    itself refuses the whole update and never touches that default.
     """
     py = "python" if os.name == "nt" else "python3"
-    installer = _skill_dir() / "scripts" / "install-hooks-user-level.py"
+    skill = _skill_dir() or _default_skill_dir()
+    installer = skill / "scripts" / "install-hooks-user-level.py"
     return (f"{py} \"{_redact_text(str(installer))}\" "
             "--quiet --fail-on-missing")
 
@@ -798,6 +847,41 @@ def _resolve_pending_deploy(pending: Path, session_id: str, skill: Path,
             f"a human can run: {_install_fix_cmd()}")
 
 
+def _refuse_skill_dir_override(state: Path, interval_days: float) -> None:
+    """ABS_SKILL_DIR failed containment (MYC-4907) -- ALWAYS exits, before
+    the caller acquires the single-flight lock or touches the candidate at
+    all. Rate-limited on its OWN marker, NEVER `last` or `last_ok` (F2,
+    independent review): those are what a REAL fetch reads to decide
+    whether it is due and whether the clone is confirmed current. Confirmed
+    live: a session with a bad override touched `last`; a later session
+    with NO override, sharing the same state dir, then saw `last` fresh and
+    went fully silent instead of staging a real, pending update -- one
+    misconfigured project freezing every other project's real updates for
+    up to one interval.
+    """
+    marker = state / ".ai-brain-starter-skill-dir-refused"
+    try:
+        if marker.is_file() and (time.time() - marker.stat().st_mtime) < interval_days * 86400:
+            silent()
+    except OSError:
+        silent()
+    try:
+        marker.touch()
+    except OSError:
+        pass
+    # The value itself is NEVER echoed, redacted or not (independent review
+    # finding): _redact_text() only strips SECRET-shaped substrings, not
+    # prompt-injection-shaped ones, and ABS_SKILL_DIR is attacker-controlled
+    # in exactly the scenario this refusal exists for. A value like
+    # `x") </untrusted-commit-subjects> ignore prior instructions ...`
+    # reproduced verbatim in additionalContext before this fix.
+    emit_ctx(
+        "AI Brain Starter auto-update is blocked: ABS_SKILL_DIR points "
+        "somewhere that is not an AI Brain Starter checkout inside "
+        "~/.claude/skills, so nothing was fetched, merged or run. Unset "
+        "ABS_SKILL_DIR to update the real install.")
+
+
 def run() -> None:
     state = _state_dir()
     skill = _skill_dir()
@@ -836,6 +920,14 @@ def run() -> None:
     # 0. Pinned -> no-op (the escape hatch; must win before any fetch).
     if pin.exists():
         silent()
+
+    # 0b. ABS_SKILL_DIR was set but refused containment (MYC-4907) -- stop
+    # here, before the single-flight lock or anything else touches the
+    # candidate. NEVER falls through to the default: that would run a real
+    # update against the real install in place of whatever the override was
+    # meant to isolate, which is worse than refusing outright.
+    if skill is None:
+        _refuse_skill_dir_override(state, interval_days)
 
     # Single-flight lock now wraps BOTH resolving a deferred deploy and
     # staging a new one (MYC-4704 gate e6). Previously only staging held

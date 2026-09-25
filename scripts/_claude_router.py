@@ -47,6 +47,19 @@ import re
 import shutil
 import subprocess
 import sys
+
+# Windows cp1252-console safety (#313). MODULE scope, not `__main__`: this
+# module has no `__main__` at all and is reached only by import -- callers such
+# as scripts/nvidia_compare.py do `from _claude_router import call_claude_json`
+# and then print through it. A guard parked anywhere else would never run on
+# that path. errors="backslashreplace" because a bare
+# reconfigure(encoding="utf-8") RESETS errors to "strict" (measured: stderr
+# backslashreplace -> strict), trading a decode crash for an encode crash.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="backslashreplace")  # Python 3.7+
+    except (AttributeError, ValueError):
+        pass
 import tempfile
 import urllib.error
 import urllib.request

@@ -569,6 +569,27 @@ INTEGRATION_TESTS=(
   # it; this proves the helper still works and still keeps its hands off a PATH
   # that was already healthy.
   test_real_python_shim
+  # PR #682: graph-context-hook.sh's CONFIG now reads env overrides so a vault
+  # can set it from ~/.claude/settings.json instead of editing the file (which
+  # install-hooks-user-level.py overwrites on every auto-update). Proves an
+  # exported-empty SECONDARY_GRAPH disables the secondary branch (bare `-`,
+  # not `:-`), an unset one falls back to the default path, and PRIMARY_PATTERN
+  # replaces rather than extends the default keyword regex.
+  test_graph_context_hook_env
+  # PORTABILITY.md #1: the BSD-first `stat -f %m` mtime read broke
+  # check-claude-code-version.sh's cache-freshness check outright on real GNU
+  # coreutils (unbound-variable abort). Runs the real hook under
+  # lib/gnu_stat_shim.sh so the Linux code path is exercised deterministically
+  # from any host.
+  test_check_claude_code_version_cache_age
+  # Same bug class, vault-safe-commit.sh's non-PID lock-age check: a lock
+  # whose age cannot be proven must never be treated as stale and removed.
+  # Runs the real script under the same GNU-stat shim.
+  test_vault_safe_commit_lock_age
+  # Same bug class at a different `stat` format letter (%z, size, not %m,
+  # mtime): bootstrap.sh's own log-rotation check crashed outright on real
+  # GNU coreutils, on every run once ~/.claude/.bootstrap.log existed.
+  test_bootstrap_log_rotation_stat
 )
 # ---- Gate-coverage invariant -------------------------------------------------
 # The list above is an explicit allow-list, and allow-lists rot: a new
@@ -1045,6 +1066,17 @@ else
   echo "==> (c) shellcheck: $shellcheck_note"
   echo "    install: brew install shellcheck  (macOS)  /  sudo apt-get install -y shellcheck  (Debian/Ubuntu)"
 fi
+
+# ---- (c1) stat portability gate --------------------------------------
+# scripts/check-stat-portability.py is the single source of truth -
+# lint.yml's `lint` job runs the SAME script, so the laptop pre-push gate and
+# CI cannot drift. This one is stdlib-only and hermetic (no external binary
+# to install), so unlike the check just above it there is no OS-dependent
+# reason to skip it in either place -- it mirrors check-exit-contract.py's
+# wiring below instead.
+echo "==> (c1) stat portability: $PY scripts/check-stat-portability.py"
+"$PY" scripts/check-stat-portability.py --self-test >/dev/null
+"$PY" scripts/check-stat-portability.py
 
 # ---- (c2) PowerShell static analysis ---------------------------------------
 # Runs the SAME canonical gate as the lint job's 'repo PowerShell' step, so the
@@ -1584,4 +1616,4 @@ done
 echo "    OK - ${#PY_DIRECT[@]} hooks/+tests/ direct suite(s) passed; dormancy invariant clean"
 
 echo
-echo "All gates passed: py_compile ($count file(s)) + ${#INTEGRATION_TESTS[@]} integration tests + $unit_count scripts/ + ${#PY_DIRECT[@]} hooks/tests unit suite(s) + shellcheck [$shellcheck_note] + powershell [$pssa_note] + phase-doc python [$phasepy_note] + repo python [$ruffgate_note] + utf8 console guard [$utf8_note] + hook block-protocol [passed] + vault-root reads [passed] + home-hook deploy [passed] + subprocess decode [passed] + py3.9 annotation parity [passed] + ps1 encoding [passed]."
+echo "All gates passed: py_compile ($count file(s)) + ${#INTEGRATION_TESTS[@]} integration tests + $unit_count scripts/ + ${#PY_DIRECT[@]} hooks/tests unit suite(s) + shellcheck [$shellcheck_note] + stat portability [passed] + powershell [$pssa_note] + phase-doc python [$phasepy_note] + repo python [$ruffgate_note] + utf8 console guard [$utf8_note] + hook block-protocol [passed] + vault-root reads [passed] + home-hook deploy [passed] + subprocess decode [passed] + py3.9 annotation parity [passed] + ps1 encoding [passed]."
