@@ -287,7 +287,9 @@ _CONNECTION_STRING = [
         name="generic-url-credential",
         regex=re.compile(
             r"\b(?!postgres(?:ql)?://|rediss?://|mongodb(?:\+srv)?://)"
-            r"([A-Za-z][A-Za-z0-9+.\-]*://[^\s/:@]*:)([^@\s]+)(@)",
+            # {0,31}, not *: an unbounded scheme retries at every position of
+            # an "a.a.a." run, which made a 30 KB tool output take 39 s.
+            r"([A-Za-z][A-Za-z0-9+.\-]{0,31}://[^\s/:@]*:)([^@\s]+)(@)",
             re.ASCII | re.IGNORECASE,
         ),
         redaction=r"\1REDACTED url password\3",
