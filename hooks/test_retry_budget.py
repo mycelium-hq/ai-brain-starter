@@ -483,10 +483,10 @@ def leg_planted_link_is_neither_read_nor_written_through() -> None:
         target.write_text(steer, encoding="utf-8")
         os.symlink(target, sb.state_path)
         code, _ = run_hook(sb, probe, "toolu_link")
-        check(name, code == 0 and target.read_text(encoding="utf-8") == steer
+        check(name, code == 0 and target.read_text(encoding="utf-8", errors="replace") == steer
               and not sb.state_path.is_symlink(),
               f"exit {code} (2 = the planted attempts were read), target unchanged="
-              f"{target.read_text(encoding='utf-8') == steer}, "
+              f"{target.read_text(encoding='utf-8', errors='replace') == steer}, "
               f"state path is_symlink={sb.state_path.is_symlink()}")
     finally:
         sb.cleanup()
@@ -607,7 +607,7 @@ def leg_both_installers_one_attempt_per_call() -> None:
               f"exit {r.returncode}: {(r.stderr or r.stdout)[-400:]}")
         if r.returncode != 0:
             return
-        data = json.loads(settings.read_text(encoding="utf-8"))
+        data = json.loads(settings.read_text(encoding="utf-8", errors="replace"))
         # The second installer re-adds its own registration on every compile.
         group = next(g for g in data["hooks"]["PreToolUse"] if g.get("matcher") == "Bash")
         group["hooks"].append({"type": "command",
@@ -646,7 +646,7 @@ def leg_existing_install_upgrades_to_one_blocking_registration() -> None:
         if r.returncode != 0:
             check(name, False, f"installer exit {r.returncode}: {(r.stderr or r.stdout)[-400:]}")
             return
-        regs = bash_registrations(json.loads(settings.read_text(encoding="utf-8")))
+        regs = bash_registrations(json.loads(settings.read_text(encoding="utf-8", errors="replace")))
         check("D2 exactly one registration remains after the upgrade", len(regs) == 1,
               f"found {len(regs)}: {regs}")
         if len(regs) != 1:
@@ -697,7 +697,7 @@ def leg_installer_collapses_existing_copies_in_one_run() -> None:
             if r.returncode != 0:
                 check(f"D3 {label}", False, f"installer exit {r.returncode}: {(r.stderr or r.stdout)[-300:]}")
                 continue
-            data = json.loads(settings.read_text(encoding="utf-8"))
+            data = json.loads(settings.read_text(encoding="utf-8", errors="replace"))
             regs = bash_registrations(data)
             cmds = [h.get("command", "") for g in data["hooks"].get("PreToolUse", [])
                     for h in g.get("hooks", [])]
