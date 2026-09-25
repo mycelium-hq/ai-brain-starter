@@ -387,17 +387,27 @@ done
 # object, an index lock -- this file's header's own motivating case) is
 # "comparison FAILED": on that route the staged content may well be
 # byte-identical to the ref, the guard just never got to find out, so
-# claiming "this is not that [identical]" there would be a false cause. This
-# does not weaken the refusal itself -- every state below still exits 1.
+# claiming "this is not that [identical]" there would be a false cause.
+# "no scratch dir" is a THIRD state, and it is why this needs more than two:
+# when `_diffidx_dir` is empty both routes are gated out before any
+# `diff-index` is spawned, so folding that into "comparison FAILED" made the
+# refusal name a cause it had not checked -- and then hand the operator a
+# remedy (resolve the pathspec/object/lock) for a failure that was really
+# mktemp, which no amount of re-running fixes. Both routes share
+# `_diffidx_dir`, so this state is never mixed with "comparison FAILED": if
+# it is empty, neither route can have run at all. This does not weaken the
+# refusal itself -- every state below still exits 1.
 _origin_status="ref missing"
 if [ "${_have_origin_ref}" = "1" ]; then
   if [ "${_origin_route_ok}" = "1" ]; then _origin_status="ran, no match"
+  elif [ -z "${_diffidx_dir}" ]; then _origin_status="no scratch dir"
   else _origin_status="comparison FAILED"
   fi
 fi
 _mh_status="not applicable"
 if [ "${_merge_head_on_default}" = "1" ]; then
   if [ "${_mh_route_ok}" = "1" ]; then _mh_status="ran, no match"
+  elif [ -z "${_diffidx_dir}" ]; then _mh_status="no scratch dir"
   else _mh_status="comparison FAILED"
   fi
 fi
@@ -406,7 +416,12 @@ fi
   echo "pre-commit: REFUSED — checkout is on '${_cur}', not the default branch '${_def}'."
   echo "  You are staging session-close artifact(s) that must land on '${_def}', or they STRAND on"
   echo "  this topic branch (never reaching '${_def}'; local '${_def}' then diverges)."
-  if [ "${_origin_status}" = "comparison FAILED" ] || [ "${_mh_status}" = "comparison FAILED" ]; then
+  if [ "${_origin_status}" = "no scratch dir" ] || [ "${_mh_status}" = "no scratch dir" ]; then
+    echo "  (origin/${_def} route: ${_origin_status}; MERGE_HEAD route: ${_mh_status}. NO comparison ran: a scratch"
+    echo "  dir to hold its output could not be created, under \$(git rev-parse --git-dir) or at mktemp's own default"
+    echo "  location. Whether the staged content is identical to either ref is therefore UNKNOWN, and this refuses"
+    echo "  fail-closed on that unknown. Re-running changes nothing until one of those two directories is writable.)"
+  elif [ "${_origin_status}" = "comparison FAILED" ] || [ "${_mh_status}" = "comparison FAILED" ]; then
     echo "  (origin/${_def} route: ${_origin_status}; MERGE_HEAD route: ${_mh_status}. A FAILED comparison refuses"
     echo "  without knowing whether the content is identical to either — this is NOT a checked 'not identical', it"
     echo "  is fail-closed on an unknown. Re-run once whatever failed it — a huge pathspec, an unreadable object, an"
