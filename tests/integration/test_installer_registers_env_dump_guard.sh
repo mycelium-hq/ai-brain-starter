@@ -63,7 +63,11 @@ cp -R "$REPO_ROOT" "$TMP/.claude/skills/ai-brain-starter"
 SETTINGS="$TMP/.claude/settings.json"
 echo '{}' > "$SETTINGS"
 
-# Emits "<event>\t<command>" for each registered entry whose command contains $1.
+# Emits "<event>\t<matcher>\t<command>" for each registered entry whose
+# command contains $1. Matcher is included (not just the event) so a caller
+# can assert the ENTRY is actually gated to Bash, not merely that SOME
+# PreToolUse hook exists (which could be matcher-less or gated to a
+# different tool entirely).
 registered_entries() {
   "$PY" - "$SETTINGS" "$1" <<'PY'
 import json, sys
@@ -77,7 +81,7 @@ for event, blocks in hooks.items():
         for e in blk.get("hooks", []):
             cmd = e.get("command", "")
             if needle in cmd:
-                print(event + "\t" + cmd)
+                print(event + "\t" + str(blk.get("matcher")) + "\t" + cmd)
 PY
 }
 
@@ -98,11 +102,12 @@ fi
 
 ENTRIES="$(registered_entries "$GUARD")"
 
-echo "=== 1. registered on PreToolUse ==="
-if printf '%s\n' "$ENTRIES" | grep -q '^PreToolUse'; then
-  ok "1. $GUARD registered on PreToolUse"
+echo "=== 1. registered on PreToolUse with the Bash matcher ==="
+MATCHER="$(printf '%s\n' "$ENTRIES" | awk -F'\t' '$1=="PreToolUse"{print $2; exit}')"
+if [ "$MATCHER" = "Bash" ]; then
+  ok "1. $GUARD registered on PreToolUse with matcher Bash"
 else
-  bad "1. registration" "not registered on PreToolUse after a real install: ${ENTRIES:-<none>}"
+  bad "1. registration" "PreToolUse matcher is '${MATCHER:-<none>}', expected Bash: ${ENTRIES:-<none>}"
 fi
 
 echo "=== 2. the registered script exists at the path named ==="
@@ -113,7 +118,7 @@ else
 fi
 
 echo "=== 3. wired in the block-preserving form ==="
-CMD="$(printf '%s\n' "$ENTRIES" | head -1 | cut -f2-)"
+CMD="$(printf '%s\n' "$ENTRIES" | head -1 | cut -f3-)"
 if printf '%s' "$CMD" | grep -q 'if \[ -f ' && ! printf '%s' "$CMD" | grep -q '2>/dev/null ||'; then
   ok "3. uses the \`if [ -f ]\` form (exit 2 + stderr survive)"
 else
