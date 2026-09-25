@@ -3,7 +3,8 @@
 Claude Performance Self-Improvement System: Weekly Digest
 
 Reads Claude Code JSONL session data, computes effectiveness metrics,
-diagnoses problems, writes prescriptive to-dos. Zero external deps.
+diagnoses problems, writes prescriptive to-dos. No third-party deps; needs
+the skill's hooks/_lib (secret redaction, bounded reads).
 
 Usage:
     python3 claude_performance_digest.py [--days N] [--dry-run]
@@ -45,7 +46,7 @@ PROJECTS_ROOT = Path.home() / ".claude" / "projects"
 HOOKS_DIR = next(
     (d for d in (SCRIPT_DIR.parent / "hooks",
                  Path.home() / ".claude" / "skills" / "ai-brain-starter" / "hooks")
-     if (d / "_lib" / "safe_read.py").is_file()),
+     if all((d / "_lib" / f).is_file() for f in ("safe_read.py", "secret_patterns.py"))),
     SCRIPT_DIR.parent / "hooks",
 )
 sys.path.insert(0, str(HOOKS_DIR))
@@ -57,23 +58,22 @@ except Exception:  # pragma: no cover - _redact_text has the closed fallback
     _redact_secrets = None
 
 
-def _redact_text(raw: str) -> str:
+def _redact_text(raw: str) -> "str | None":
     """Redact secrets from tool-error text before it is truncated or persisted.
 
     Fails CLOSED: if the shared registry could not be imported, or redaction
-    itself raises, return a static placeholder instead of ever writing raw
-    text into a synced/committed file (weekly report, Claude To-dos.md, or
-    CLAUDE.md).
+    itself raises, return None and the caller records nothing, so no raw text
+    reaches a synced/committed file and no placeholder masquerades as a
+    recurring error.
     """
     if not raw:
         return raw
     if _redact_secrets is None:
-        return "(details withheld: secret-redaction unavailable)"
+        return None
     try:
-        redacted, _hits = _redact_secrets(raw)
-        return redacted
+        return _redact_secrets(raw)[0]
     except Exception:
-        return "(details withheld: secret-redaction failed)"
+        return None
 
 
 # ── Tool classification ──────────────────────────────────────────────
@@ -245,7 +245,10 @@ def analyze_session(jsonl_path):
                     raw_text = block.get("text", "") if isinstance(block.get("text"), str) else ""
                     # Redact HERE, before dict-key use/truncation: slicing
                     # first can cut a credential in half.
-                    text = _redact_text(raw_text)[:200]
+                    text = _redact_text(raw_text)
+                    if text is None:  # unredactable text is never recorded
+                        continue
+                    text = text[:200]
                     tool_id = block.get("tool_use_id", "")
                     tool_errors.append((tool_id, text))
 
@@ -559,7 +562,7 @@ def generate_report(sessions_data, agents_data, days):
 MEMORY_FILE = Path.home() / ".claude" / "CLAUDE.md"
 
 
-def _load_dedupe_sources(vault_root: Path) -> str:
+def _load_dedupe_sources(vault_root: Path) -> "str | None":
     """Collect text from all places a shipped rule might already live.
 
     Checks: ~/.claude/CLAUDE.md, vault CLAUDE.md, cross-session MEMORY.md
@@ -575,9 +578,14 @@ def _load_dedupe_sources(vault_root: Path) -> str:
                             (claude_home / "hooks", "*.py")):
         if folder.is_dir():
             paths.extend(folder.glob(pattern))
-    # Bounded reads: a cloud-synced or FIFO path can hang an unbounded read_text.
-    reads = (safe_read_text(p, errors="ignore") for p in paths)
-    return "\n".join(r.text for r in reads if r.ok and r.text)
+    # Bounded reads (a cloud-synced or FIFO path can hang read_text); resolve()
+    # because safe_read refuses a symlink, and a symlinked CLAUDE.md is common.
+    reads = [(p, safe_read_text(p.resolve(), errors="ignore")) for p in paths]
+    # An existing CLAUDE.md that cannot be read makes dedupe unreliable: return
+    # None so the caller writes no rule rather than risk a duplicate.
+    if any(p.name == "CLAUDE.md" and p.exists() and not r.ok for p, r in reads):
+        return None
+    return "\n".join(r.text for _, r in reads if r.ok and r.text)
 
 
 # Map prescription types to MEMORY.md rules (behavioral) vs to-dos (investigation)
@@ -606,6 +614,8 @@ def apply_prescriptions(prescriptions, prescription_types):
     written_types = []  # track which types were actually written (not deduped)
     for rx, rx_type in zip(prescriptions, prescription_types):
         if rx_type in BEHAVIORAL_RULES:
+            if dedupe_text is None:
+                continue
             rule_key = rx_type.lower().replace(" ", "_")
             tag = f"performance_{rule_key}"
             if tag in dedupe_text:

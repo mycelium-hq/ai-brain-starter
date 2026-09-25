@@ -67,10 +67,12 @@ sandbox_home "$TMP/home"
 PROJECT_DIR="$HOME/.claude/projects/testproj"
 mkdir -p "$PROJECT_DIR"
 
-# write_session <path> <error-text> — a minimal but REALISTIC session JSONL:
-# an assistant turn with one Bash tool_use, followed by the failing
-# tool_result. A real session always has the assistant turn before a
-# tool_result exists at all; a fixture with only the tool_result line drives
+# write_session <path> <error-text> — the record shape the digest's parser
+# READS: an assistant turn with one Bash tool_use, then a top-level
+# `tool_result` record. Current Claude Code transcripts carry errors inside a
+# `type:"user"` record's `content[]` instead, which the parser does not read
+# today (tracked separately), so this pins the redaction seam, not the parser.
+# The assistant turn stays because a fixture with only the tool_result line drives
 # generate_report()'s total_turns to 0 and hits an unrelated pre-existing
 # ZeroDivisionError in the Project Allocation section (line ~460) that has
 # nothing to do with redaction — this fixture shape avoids that path
@@ -172,6 +174,46 @@ else
   bad "(b) no to-do file written at all (\$TODO_FILE=$TODO_FILE) -- recurring-error threshold not reached"
   show_log_on_fail
 fi
+
+# --- (c) DEDUPE reads a symlinked CLAUDE.md, and refuses on an unreadable one -
+# safe_read refuses symlinks, so the dedupe must read the resolved target;
+# an existing CLAUDE.md it cannot read must stop rule writes (None), never
+# fall through to a duplicate rule.
+mkdir -p "$HOME/.claude"
+printf 'already shipped: performance_verbose_agents\n' > "$HOME/.claude/real-claude.md"
+ln -sf "$HOME/.claude/real-claude.md" "$HOME/.claude/CLAUDE.md"
+DEDUPE="$(python3 - "$DIGEST" "$TMP" <<'PY'
+import importlib.util, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("digest", sys.argv[1])
+mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+text = mod._load_dedupe_sources(Path(sys.argv[2]))
+print("NONE" if text is None else ("TAG" if "performance_verbose_agents" in text else "MISSING"))
+PY
+)"
+[ "$DEDUPE" = "TAG" ] && pass "(c.1) dedupe reads a symlinked CLAUDE.md" || bad "(c.1) dedupe on a symlinked CLAUDE.md returned $DEDUPE"
+chmod 000 "$HOME/.claude/real-claude.md"
+if [ -r "$HOME/.claude/real-claude.md" ]; then
+  # root, or a filesystem without POSIX modes (Windows): the fixture cannot
+  # make the file unreadable here, so this case cannot be measured on this host.
+  DEDUPE="SKIP"
+else
+DEDUPE="$(python3 - "$DIGEST" "$TMP" <<'PY'
+import importlib.util, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("digest", sys.argv[1])
+mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+text = mod._load_dedupe_sources(Path(sys.argv[2]))
+print("NONE" if text is None else "TEXT")
+PY
+)"
+fi
+chmod 644 "$HOME/.claude/real-claude.md"
+case "$DEDUPE" in
+  NONE) pass "(c.2) an unreadable CLAUDE.md stops rule writes" ;;
+  SKIP) echo "  SKIP  (c.2) chmod 000 does not revoke reads on this host (root or no POSIX modes)" ;;
+  *)    bad "(c.2) unreadable CLAUDE.md returned $DEDUPE, not None" ;;
+esac
 
 echo
 if [ "$fail" = "0" ]; then
