@@ -19,6 +19,14 @@ The other nine sites (`scripts/auto-snapshot.sh`'s log-trim check, `scripts/boot
 
 All eleven now try the matching GNU form first (`stat -c %Y` for mtime, `stat -c %s` for size) and check the result is a plain number before trusting it, falling back to the BSD form (also validated) only if that fails, the same pattern already used by `_close_lock_mtime` in `scripts/_session_close_guard.sh` (which gained a sibling, `_close_lock_size`, for the size case). `vault-safe-commit.sh` now calls both shared functions directly instead of carrying its own copies. A check, `scripts/check-stat-portability.py`, fails CI if this backwards pattern shows up again at any BSD `stat` format letter in any tracked shell script, not just `%m`.
 
+## 2026-09-24: graph routing never fired on Linux
+
+**Who this affects:** anyone running `graph-context-hook.sh` on Linux, or anywhere `stat` is the GNU version, with a graph that exists.
+
+The hook reads the graph file's age to warn when it is stale. It asked `stat -f %m` first, which is the macOS form. On Linux `stat -f` means "file system", so it printed text and still reported success, and the hook then crashed on that text and printed nothing. Routing silently never happened there.
+
+Now it asks the Linux form first, then the macOS form, checks that the answer is a number, and says "age unknown" instead of crashing if neither works. The test added with the graph-routing env overrides (#682) caught this the first time it ran on a Linux machine.
+
 ---
 
 ## 2026-09-23: the Decision Log index stops listing decisions as "????-??-?? — What"
@@ -30,6 +38,30 @@ The index at the top of `Decision Log.md` took the date from `decision_date` onl
 It wasn't only cosmetic. A decision with no date stays in the main log forever, so closed decisions without `decision_date` could never move to `Decision Log Archive.md`.
 
 Now, when `decision_date` is missing, the date comes from `creationDate`, and failing that from the date at the start of the filename. Headings that are just template labels (What, Why, Context, Qué, Por qué, Contexto…) are skipped. When nothing else is left, the title is the first sentence of the What section, stripped of bold and links and cut at about 90 characters. Decision files are not touched. The fix is entirely in how the index is built.
+
+---
+
+## 2026-09-19: the graph routing hook told you to customize it, then overwrote your customization
+
+**Who this affects:** anyone who set up `graph-context-hook.sh` and has only ONE graph — the default second graph points at `$VAULT_ROOT/Work/`, a folder most vaults do not have.
+
+The hook's own header says "CUSTOMIZE THIS SCRIPT for your vault" and lists four values to edit. But `install-hooks-user-level.py` treats it as a vault-content hook and copies it from the skill into the vault **unconditionally**, and the auto-update runs that roughly every six days. So the file asks you to edit it and then silently discards what you wrote.
+
+**What that looked like on one vault:** the local edit emptied `SECONDARY_GRAPH`, which is the documented way to say "I only have one graph" — the code already guards on it being empty. After an installer run the default came back, and every prompt containing *work*, *team*, *client*, *meeting*, *deadline* or *sprint* was injected with:
+
+> ⚠ LOST — this graph was built before but is GONE now ... rebuild it: /graphify --update on Work/
+
+A false alarm about a graph that never existed, plus an instruction to rebuild it, on every prompt of that family. The user had already moved the file out of the installer's reach once; the installer simply repointed `settings.json` back at the copy it manages, and the edited file sat there unused.
+
+**The fix:** every CONFIG value now reads an env override, so it can live in `~/.claude/settings.json` → `env`, which the installer does not touch — exactly how `VAULT_ROOT` already worked. One graph only:
+
+```json
+"env": { "SECONDARY_GRAPH": "" }
+```
+
+Note for anyone reading the diff: `SECONDARY_GRAPH` uses `${VAR-default}`, not `${VAR:-default}`. The bare `-` is the only spelling that honours an exported empty value; with `:-` the default would come back and re-enable the graph the user just turned off. The other values keep `:-` because emptying them is not a supported configuration.
+
+Nothing changes if you set no env vars: same defaults, same behaviour.
 
 ---
 

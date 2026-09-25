@@ -29,13 +29,26 @@ fi
 # re-reading 5 source files. Telling Claude this in CLAUDE.md helps; injecting
 # it as additionalContext at the moment of the matching prompt helps more.
 #
-# CUSTOMIZE THIS SCRIPT for your vault:
-#   1. Set VAULT_ROOT to your vault path
-#   2. Set PRIMARY_GRAPH / SECONDARY_GRAPH to your GRAPH_REPORT.md locations
-#      (delete SECONDARY_* if you only have one graph)
-#   3. Edit PRIMARY_PATTERN / SECONDARY_PATTERN regexes — list the keywords
-#      that should trigger the routing hint for each scope
-#   4. Edit the emit_context strings below to describe your scopes
+# CUSTOMIZE — prefer ~/.claude/settings.json -> env over editing this file.
+# install-hooks-user-level.py copies this script into the vault
+# UNCONDITIONALLY (the auto-update runs it roughly every 6 days), so an edit
+# made here is overwritten without warning; `env` survives, the way VAULT_ROOT
+# already does. Every CONFIG value below reads an env override:
+#
+#   "env": {
+#     "VAULT_ROOT":      "/path/to/vault",
+#     "SECONDARY_GRAPH": ""            // one graph only: turns the branch off
+#   }
+#
+#   1. VAULT_ROOT — your vault path
+#   2. PRIMARY_GRAPH / SECONDARY_GRAPH — your GRAPH_REPORT.md locations
+#      (set SECONDARY_GRAPH to "" if you only have one graph)
+#   3. PRIMARY_PATTERN / SECONDARY_PATTERN — the keyword regexes that trigger
+#      the routing hint for each scope
+#   4. PRIMARY_LABEL / SECONDARY_LABEL — how each scope is named in the hint
+#
+# The emit_context wording still lives in this file; only the values above are
+# overridable.
 #
 # DESIGN NOTES:
 #   - The hook does NOT pin specific god-node names. God-node names go stale
@@ -51,23 +64,34 @@ fi
 set -euo pipefail
 
 # ─── CONFIG ────────────────────────────────────────────────────────────────
-# Edit these for your vault:
+# Every value below can be set in ~/.claude/settings.json -> env, WITHOUT
+# editing this file. Editing it works too, but install-hooks-user-level.py
+# copies this script into the vault unconditionally, so a local edit is lost
+# the next time the installer runs; `env` is not touched by it. See the
+# CUSTOMIZE note in the header.
 
 VAULT_ROOT="${VAULT_ROOT:-$HOME/Documents/MyVault}"
 
 # Primary graph (e.g. main vault knowledge graph)
-PRIMARY_GRAPH="$VAULT_ROOT/graphify-out/GRAPH_REPORT.md"
-PRIMARY_LABEL="vault root"
-PRIMARY_PATTERN='\bjournal\b|\bnote\b|\bidea\b|\bproject\b|writing|reading'
+PRIMARY_GRAPH="${PRIMARY_GRAPH:-$VAULT_ROOT/graphify-out/GRAPH_REPORT.md}"
+PRIMARY_LABEL="${PRIMARY_LABEL:-vault root}"
+PRIMARY_PATTERN="${PRIMARY_PATTERN:-\bjournal\b|\bnote\b|\bidea\b|\bproject\b|writing|reading}"
 
 # Secondary graph (optional — e.g. separate work/team graph)
-# Set to empty string if you only have one graph.
-SECONDARY_GRAPH="$VAULT_ROOT/Work/⚙️ Meta/graphify-out/GRAPH_REPORT.md"
-SECONDARY_LABEL="Work/"
-SECONDARY_PATTERN='\bwork\b|\bteam\b|\bclient\b|meeting|deadline|sprint'
+# Set to empty string if you only have one graph: the guard below already
+# skips the whole secondary branch when this is empty.
+#
+# NOTE the bare `-` instead of `:-`. It is deliberate and it is the only
+# spelling that works here: `${VAR-default}` honours an EXPORTED EMPTY value,
+# `${VAR:-default}` would silently fall back to the default and re-enable a
+# graph the user just turned off. The other values use `:-` because emptying
+# them is not a supported configuration.
+SECONDARY_GRAPH="${SECONDARY_GRAPH-$VAULT_ROOT/Work/⚙️ Meta/graphify-out/GRAPH_REPORT.md}"
+SECONDARY_LABEL="${SECONDARY_LABEL:-Work/}"
+SECONDARY_PATTERN="${SECONDARY_PATTERN:-\bwork\b|\bteam\b|\bclient\b|meeting|deadline|sprint}"
 
 # Stale threshold (days). Reports older than this trigger a re-run warning.
-STALE_DAYS=14
+STALE_DAYS="${STALE_DAYS:-14}"
 
 # ─── IMPLEMENTATION ────────────────────────────────────────────────────────
 
@@ -115,8 +139,14 @@ freshness_note() {
     return
   fi
   local mtime now days
-  # Try macOS first, fall back to Linux
-  mtime=$(stat -f %m "$path" 2>/dev/null || stat -c %Y "$path" 2>/dev/null || echo 0)
+  # GNU first, then BSD, validating each result (scripts/PORTABILITY.md §1).
+  # GNU `stat -f` means --file-system, so `stat -f %m` on Linux exits 0 with
+  # non-numeric text. The old BSD-first `||` chain passed that text to the
+  # arithmetic below, and the hook died silently on Linux whenever a prompt
+  # matched a graph that exists.
+  mtime=$(stat -c %Y "$path" 2>/dev/null)
+  case "$mtime" in ''|*[!0-9]*) mtime=$(stat -f %m "$path" 2>/dev/null) ;; esac
+  case "$mtime" in ''|*[!0-9]*) printf "age unknown"; return ;; esac
   now=$(date +%s)
   days=$(( (now - mtime) / 86400 ))
   if [ "$days" -gt "$STALE_DAYS" ]; then

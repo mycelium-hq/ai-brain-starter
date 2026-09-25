@@ -569,6 +569,13 @@ INTEGRATION_TESTS=(
   # it; this proves the helper still works and still keeps its hands off a PATH
   # that was already healthy.
   test_real_python_shim
+  # PR #682: graph-context-hook.sh's CONFIG now reads env overrides so a vault
+  # can set it from ~/.claude/settings.json instead of editing the file (which
+  # install-hooks-user-level.py overwrites on every auto-update). Proves an
+  # exported-empty SECONDARY_GRAPH disables the secondary branch (bare `-`,
+  # not `:-`), an unset one falls back to the default path, and PRIMARY_PATTERN
+  # replaces rather than extends the default keyword regex.
+  test_graph_context_hook_env
   # PORTABILITY.md #1: the BSD-first `stat -f %m` mtime read broke
   # check-claude-code-version.sh's cache-freshness check outright on real GNU
   # coreutils (unbound-variable abort). Runs the real hook under
