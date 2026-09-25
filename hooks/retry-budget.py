@@ -164,7 +164,7 @@ def main():
         pass
 
     if count >= THRESHOLD_BLOCK:
-        preview = norm[:80] + ("…" if len(norm) > 80 else "")
+        preview = norm[:80] + ("\u2026" if len(norm) > 80 else "")
         print(
             "BLOCKED by retry-budget hook:\n"
             f"  This command has run {count} times in the last 30 minutes:\n"
