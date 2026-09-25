@@ -23,12 +23,11 @@
 #
 # <sha256-of-normalized-content> <tag> <repo-relative-path>
 
-# ---- SEV-A-write  (28 file(s)) ----
+# ---- SEV-A-write  (27 file(s)) ----
 b87ac14c241be51fb2427ac9a86ab8de4a5b161549f2ee0d445b6e9ca4f65550 SEV-A-write hooks/_lib/session_echo.test.py
 987aca2ae82229a42d29a8c89fed690e9de7e6fad4182dea564bc92557a81922 SEV-A-write hooks/auto-capture-public-ships.py
 a04ec6c84be6756813f4cde517ff379338b57ec9bf4c9c4172172951e62f91c3 SEV-A-write hooks/imessage-mcp-auto-export.py
 d293427274a02ef33d15ec50b17860aa305405adc9f372fde46a46454267becd SEV-A-write hooks/relocate-watch-surface.py
-95e98712d44f2ee71cdfb8ba3aa7a1fe21967160cd5b2bdaab20bd3d6869c10d SEV-A-write hooks/retry-budget.py
 34080a9b9cb9df80eafcde6e16e182a41680ec612e11bf3586f165d533ae6bcd SEV-A-write hooks/scan-prior-sessions-for-secrets.py
 28e5213af92f1d0e68a80ddd122d2793ac9db2e7d665f2270e5a08fdcbfb360f SEV-A-write hooks/test_live_session_reap.py
 79944fad14fe10762e356a505764960ab8c5ad8942656376a465dba19d5d7cd0 SEV-A-write hooks/test_relocation_orphan_reclaim.py

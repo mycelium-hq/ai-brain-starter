@@ -537,6 +537,14 @@ INTEGRATION_TESTS=(
   # python3_helper.sh) run with NO marker planted: an ALLOW there means the gate
   # stayed shut, not that a marker satisfied it.
   test_journal_guard_interpreter_write
+  # Same guard, the fix command it PRINTS (2026-09-24). Step 1 was the literal
+  # `python3 "⚙️ Meta/scripts/journal-preflight.py"`: a session PATH shim
+  # refuses `python3 <script>`, and the relative path resolves only from the
+  # vault root, so the one sanctioned way past the block could not run. The
+  # printed text is executed from `/` and must reach a sentinel-printing
+  # fixture, so a refusal or a wrong path cannot pass. 8 assertions fail on the
+  # pre-fix hook; both no-marker DENY controls still hold.
+  test_journal_guard_preflight_command
   # Close detector, whole-message anchoring + length gate (2026-08-16): the
   # shared pack tiers ran under re.MULTILINE, so every `$`-anchored sign-off
   # matched the end of ANY line and a 60-line handoff whose third line read
@@ -1427,6 +1435,16 @@ PY_DIRECT=(
   # off-scratchpad, bypass), and the shell-variable form that slipped past the
   # guard's own first production run. Plain script, no pytest.
   hooks/test_scratchpad_cross_agent_clobber.py
+  # retry-budget.py blocked work that was not a loop, two ways: its fingerprint
+  # hashed only the first 400 characters, so distinct commands opening with one
+  # long scratch path shared a budget, and a second installer's registration of
+  # the same script counted every Bash call twice. The hooks.json `|| true`
+  # wrapper also rewrote the exit-2 block into an allow, so under a POSIX shell
+  # this repo's own copy never blocked. Drives the hook, the registered
+  # hooks.json command and the real installer in a sandbox HOME; 25 of its 38
+  # checks fail against the pre-fix revision, and reverting any one fix turns
+  # its own checks red.
+  hooks/test_retry_budget.py
   tests/test_instinct.py
   tests/test_entity_disambiguator_clustering.py
   tests/test_graphify_stage_select_cache_key.py
