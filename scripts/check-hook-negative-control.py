@@ -121,7 +121,6 @@ NO_TEST_BASELINE: Set[str] = {
     "session-turn-counter",
     "snapshot-pending-work-on-stop",
     "list-wip-stashes-on-session-start",
-    "retry-budget",
     "permission-denied",
     "pre-compact-context",
     "migrate-to-user-level",

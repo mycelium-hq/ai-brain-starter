@@ -9,6 +9,18 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-09-25: the retry limit blocked work that was not a loop, and on most installs it could not block at all
+
+**Who this affects:** everyone. The retry-budget hook is wired on every install.
+
+The retry-budget hook stops Claude after the 3rd identical Bash command in 30 minutes, so a failing command gets surfaced to you instead of retried forever. Three problems made it wrong in both directions.
+
+It told commands apart by their first 400 characters only. Commands that start with a long folder path, which is common when Claude works from a scratch folder, looked identical even when everything after the path was different, so a 4th *different* step could be blocked as a loop. It now compares the whole command.
+
+On a machine where a second installer also registered the hook, every Bash command was counted twice, so the block came on the 3rd command instead of the 4th. The hook now counts each command once, however many times it is registered.
+
+And the way `hooks.json` registered it (`... || true`) quietly turned the hook's "block" answer into "allow", so an install carrying only this repo's copy never blocked anything. It is now registered in the same form as the other blocking hooks, and when the hook file is missing it stays out of the way instead of answering for the command.
+
 ## 2026-09-25: a Linux-only `stat` bug crashed both the version-check hook and the installer itself
 
 **Who this affects:** anyone running ai-brain-starter on Linux, or in CI on ubuntu. macOS was never affected.

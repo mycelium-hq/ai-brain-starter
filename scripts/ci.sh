@@ -1435,6 +1435,14 @@ PY_DIRECT=(
   # off-scratchpad, bypass), and the shell-variable form that slipped past the
   # guard's own first production run. Plain script, no pytest.
   hooks/test_scratchpad_cross_agent_clobber.py
+  # retry-budget.py blocked work that was not a loop, two ways: its fingerprint
+  # hashed only the first 400 characters, so distinct commands opening with one
+  # long scratch path shared a budget, and a second installer's registration of
+  # the same script counted every Bash call twice. The hooks.json `|| true`
+  # wrapper also rewrote the exit-2 block into an allow, so this repo's own copy
+  # never blocked. Drives the hook, the registered hooks.json command and the
+  # real installer in a sandbox HOME; 13 legs fail against the pre-fix revision.
+  hooks/test_retry_budget.py
   tests/test_instinct.py
   tests/test_entity_disambiguator_clustering.py
   tests/test_graphify_stage_select_cache_key.py
