@@ -88,19 +88,28 @@ _def="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | 
 # one listing every later check depends on, so its own failure REFUSES
 # rather than silently allowing.
 # The scratch dir is allocated under $(git rev-parse --git-dir) FIRST, falling
-# back to $TMPDIR (mktemp's own default) only if that fails. The git dir is on
-# the same filesystem git already writes objects/refs/index to, so it is
-# almost always writable whenever `git commit` can succeed at all — unlike
-# $TMPDIR/tmp, which macOS periodically reaps, and which can be full or
-# read-only independent of the repo. A mktemp failure here used to REFUSE
-# unconditionally, even with zero session artifacts staged — contradicting
-# this guard's own contract (header: "Off-branch code work is unaffected").
-# Measured real trigger: TMPDIR pointing at a reaped /var/folders dir, or /tmp
-# full/read-only — neither touches the git dir. Only if BOTH the git-dir and
-# the $TMPDIR attempt fail does the guard still refuse outright (fail closed —
-# a repo whose own .git dir cannot be written to has bigger problems than this
-# hook, and this is the one case too degraded to tell artifact-staged from
-# code-only apart).
+# back to bare `mktemp -d`'s own default location only if that fails. The git
+# dir is on the same filesystem git already writes objects/refs/index to, so it
+# is almost always writable whenever `git commit` can succeed at all. A mktemp
+# failure here used to REFUSE unconditionally, even with zero session artifacts
+# staged — contradicting this guard's own contract (header: "Off-branch code
+# work is unaffected").
+# WHICH attempt can actually fail, measured on Darwin 25.6.0 against
+# /usr/bin/mktemp: the TEMPLATED first one, `mktemp -d <dir>/guard-staged.XXXXXX`,
+# does — rc=1 "Permission denied" against a mode-555 dir, rc=1 "No such file or
+# directory" against an absent one. That is the state this fallback exists for.
+# The BARE second one is a different animal on macOS: it never consults $TMPDIR
+# at all, returning rc=0 and a /var/folders/…/T/tmp.* path with TMPDIR=/nonexistent,
+# with TMPDIR at a mode-555 dir, and with TMPDIR unset alike. So an earlier
+# version of this comment, which named "TMPDIR pointing at a reaped /var/folders
+# dir, or /tmp full/read-only" as the measured trigger, was wrong on both the
+# variable and the mechanism — corrected here rather than deleted, because the
+# fallback itself is real and the wrong reason is what would get copied.
+# Keep both attempts: they fail independently of each other, and a bare-mktemp
+# failure on its own is exactly what test (t) drives. Only if BOTH fail does the
+# guard still refuse outright (fail closed — a repo whose own .git dir cannot be
+# written to has bigger problems than this hook, and this is the one case too
+# degraded to tell artifact-staged from code-only apart).
 _gitdir="$(git rev-parse --git-dir 2>/dev/null)"
 
 # ONE allocation route, shared by BOTH scratch dirs this script needs (the
@@ -123,7 +132,7 @@ _alloc_scratch_dir() {
 
 _staged_dir="$(_alloc_scratch_dir)"
 if [ -z "${_staged_dir}" ]; then
-  echo "pre-commit: REFUSED — could not create a scratch dir to list staged paths (mktemp failed under both \$(git rev-parse --git-dir) and \$TMPDIR)." >&2
+  echo "pre-commit: REFUSED — could not create a scratch dir to list staged paths (mktemp failed both under \$(git rev-parse --git-dir) and at its own default location)." >&2
   echo "  Bypass: SESSION_ARTIFACT_BRANCH_BYPASS=1 git commit ...   (or git commit --no-verify)." >&2
   exit 1
 fi
