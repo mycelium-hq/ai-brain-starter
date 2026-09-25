@@ -744,3 +744,54 @@ def test_allows_cat_dot_env_example_template():
 
 def test_allows_python_dash_c_single_var_subscript():
     assert_allowed('python3 -c \'import os; print(os.environ["HOME"])\'')
+
+
+# ---------------------------------------------------------------------------
+# 17. Review item 11 -- robustness: isinstance checks on the payload shape
+# (null / list / string tool_input must not crash with rc=1), and a stderr
+# line when hooks/_lib fails to import (today that degrades silently).
+# ---------------------------------------------------------------------------
+
+def _run_raw(raw: str) -> subprocess.CompletedProcess:
+    env = dict(os.environ)
+    env.pop("ENV_DUMP_BYPASS", None)
+    return subprocess.run(
+        [sys.executable, str(HOOK)], input=raw,
+        capture_output=True, text=True, env=env,
+        encoding="utf-8", errors="replace", timeout=10,
+    )
+
+
+def test_json_null_payload_does_not_crash():
+    r = _run_raw("null")
+    assert r.returncode == 0, f"rc={r.returncode} (expected 0, not a crash) stderr={r.stderr}"
+    assert "Traceback" not in r.stderr
+
+
+def test_json_list_payload_does_not_crash():
+    r = _run_raw("[]")
+    assert r.returncode == 0, f"rc={r.returncode} (expected 0, not a crash) stderr={r.stderr}"
+    assert "Traceback" not in r.stderr
+
+
+def test_string_tool_input_does_not_crash():
+    r = _run_raw(json.dumps({"tool_name": "Bash", "tool_input": "env"}))
+    assert r.returncode == 0, f"rc={r.returncode} (expected 0, not a crash) stderr={r.stderr}"
+    assert "Traceback" not in r.stderr
+
+
+def test_lib_import_failure_warns_on_stderr(tmp_path):
+    # Copy ONLY the hook (no _lib/ beside it) so the shell_parse import
+    # fails at module load, then prove the degraded mode is now VISIBLE.
+    lone_hook = tmp_path / "block-env-dump.py"
+    lone_hook.write_text(HOOK.read_text())
+    env = dict(os.environ)
+    env.pop("ENV_DUMP_BYPASS", None)
+    payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": "env"}})
+    r = subprocess.run(
+        [sys.executable, str(lone_hook)], input=payload,
+        capture_output=True, text=True, env=env,
+        encoding="utf-8", errors="replace", timeout=10,
+    )
+    assert r.returncode == 0  # still fails open -- degraded, not fixed
+    assert r.stderr.strip() != "", "degraded _lib import must warn on stderr, not fail silently"
