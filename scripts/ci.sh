@@ -1441,8 +1441,9 @@ PY_DIRECT=(
   # the same script counted every Bash call twice. The hooks.json `|| true`
   # wrapper also rewrote the exit-2 block into an allow, so under a POSIX shell
   # this repo's own copy never blocked. Drives the hook, the registered
-  # hooks.json command and the real installer in a sandbox HOME; 13 legs fail
-  # against the pre-fix revision.
+  # hooks.json command and the real installer in a sandbox HOME; 25 of its 38
+  # checks fail against the pre-fix revision, and reverting any one fix turns
+  # its own checks red.
   hooks/test_retry_budget.py
   tests/test_instinct.py
   tests/test_entity_disambiguator_clustering.py
