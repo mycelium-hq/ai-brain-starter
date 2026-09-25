@@ -112,6 +112,26 @@ _def="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | 
 # degraded to tell artifact-staged from code-only apart).
 _gitdir="$(git rev-parse --git-dir 2>/dev/null)"
 
+# Sweep dead scratch dirs on the way in. Nothing reaps the git dir, so a
+# `guard-staged.*` left by a hook killed with SIGKILL (a trap cannot run) stays
+# there forever: invisible to `git status`, clean under `git fsck`, and never
+# noticed. While these lived under bare mktemp's default location the OS
+# eventually reclaimed them; under the git dir nothing will.
+# "Old enough to be dead" = mtime more than 24h ago, and the bound that matters
+# is the other direction — a CONCURRENT run must never be swept. Each run gets
+# its own `mktemp -d` dir and writes into it immediately, so a live run's dir
+# has an mtime of seconds ago; the whole guard is a fixed handful of `git`
+# spawns inside a commit that already holds the index lock, so no run of it
+# lasts hours, let alone a day. 24h is far past any live run and still bounds
+# accumulation to a day's worth. Deliberately narrow: `-maxdepth 1` (never
+# recurses into the git dir), `-type d` (a like-named FILE is left alone), and
+# the literal `guard-staged.` prefix both allocations use. Best-effort — every
+# failure here is swallowed, since a sweep must never become a refusal.
+if [ -n "${_gitdir}" ]; then
+  find "${_gitdir}" -maxdepth 1 -type d -name 'guard-staged.*' -mmin +1440 \
+    -exec rm -rf {} + >/dev/null 2>&1 || true
+fi
+
 # ONE allocation route, shared by BOTH scratch dirs this script needs (the
 # staged listing right below, and the diff-index outputs further down). The
 # sharing is the point, not tidiness: when only the listing got the git-dir-
