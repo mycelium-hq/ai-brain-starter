@@ -32,7 +32,9 @@ DETECTION, PRECISELY
 
 A line is a CANDIDATE if it is not a pure-comment line (first non-blank
 character is not `#`) and matches `stat -f ?%<letter>` (spaced or glued; any
-single letter). Each BSD letter maps to exactly one GNU file-format letter
+single letter), with or without a quote before the `%`. `stat -f "%Sm"`
+counts: an unquoted-only pattern missed the one real `%Sm` site this repo
+had. Each BSD letter maps to exactly one GNU file-format letter
 with the same meaning (BSD_TO_GNU_LETTER below); a BSD letter with no entry
 there is UNCONDITIONALLY a violation -- not because it is necessarily unsafe,
 but because this gate cannot yet verify that it is safe, and a silent pass on
@@ -79,7 +81,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-STAT_BSD_RE = re.compile(r"stat\s+-f\s?%([A-Za-z])")
+STAT_BSD_RE = re.compile(r"stat\s+-f\s?['\"]?%([A-Za-z])")
 
 # BSD `stat -f` custom-format letter -> the GNU `stat` file-format letter
 # with the same meaning. Deliberately an explicit table, not a wildcard: a
@@ -94,19 +96,10 @@ BSD_TO_GNU_LETTER = {
 # Known, already-tracked violations this gate must not block on. Every entry
 # names WHY and the condition under which it should be removed -- an
 # allowlist entry with no removal condition is a permanent hole, not an
-# exemption.
-EXEMPT = {
-    "scripts/graph-context-hook.sh": (
-        "pre-existing instance of this exact bug (measured on origin/main and "
-        "on PR #682's head, 2026-09-25: still the raw "
-        '`stat -f %m ... || stat -c %Y ... || echo 0` one-liner). Out of '
-        "scope for the PR that added this gate, which was explicitly told "
-        "not to touch this file because PR #682 "
-        "(fix/graph-context-env-overrides) owns it. Remove this entry once "
-        "#682 or a follow-up lands a GNU-first + validated read here -- "
-        "until then, this gate would otherwise ship red on main."
-    ),
-}
+# exemption. Empty: the one entry this gate shipped with
+# (scripts/graph-context-hook.sh) was fixed by PR #682, so that file now has
+# to pass like every other one.
+EXEMPT: dict[str, str] = {}
 
 
 def is_comment_only(line: str) -> bool:
@@ -117,7 +110,7 @@ def _gnu_re_for(letter: str) -> re.Pattern | None:
     gnu_letter = BSD_TO_GNU_LETTER.get(letter)
     if gnu_letter is None:
         return None
-    return re.compile(r"stat\s+-c\s?%" + re.escape(gnu_letter) + r"\b")
+    return re.compile(r"stat\s+-c\s?['\"]?%" + re.escape(gnu_letter) + r"\b")
 
 
 def find_violations_in_text(lines: list[str]) -> list[tuple[int, str]]:
@@ -258,6 +251,18 @@ _MISMATCHED_PAIR_SAMPLE = [
     "case \"$x\" in ''|*[!0-9]*) x=$(stat -f %m \"$1\" 2>/dev/null) ;; esac\n",
 ]
 
+# A quoted format must not slip past: scripts/bootstrap-restore.sh shipped
+# this exact BSD-first line for a display column, and a pattern that only
+# matched an unquoted `%` never saw it.
+_QUOTED_BSD_FIRST_SAMPLE = [
+    'if mtime_h=$(stat -f "%Sm" -t "%Y-%m-%d %H:%M" "$f" 2>/dev/null) || \\\n',
+]
+
+_QUOTED_REFERENCE_SAMPLE = [
+    "m=$(stat -c '%Y' \"$1\" 2>/dev/null)\n",
+    "case \"$m\" in ''|*[!0-9]*) m=$(stat -f '%m' \"$1\" 2>/dev/null) ;; esac\n",
+]
+
 
 def _assert(cond: bool, msg: str) -> None:
     if not cond:
@@ -308,11 +313,21 @@ def self_test() -> int:
         "did not flag a GNU attempt whose format letter does not match the "
         "BSD fallback's (a %s-then-%m mismatch is not a real safe pairing)",
     )
+    _assert(
+        len(find_violations_in_text(_QUOTED_BSD_FIRST_SAMPLE)) == 1,
+        "did not flag a BSD-first read whose format is quoted "
+        '(`stat -f "%Sm"` must not slip past an unquoted-only pattern)',
+    )
+    _assert(
+        len(find_violations_in_text(_QUOTED_REFERENCE_SAMPLE)) == 0,
+        "false-flagged the reference pattern written with quoted formats",
+    )
     print(
-        "OK: self-test -- 6 unsafe shapes flagged (same-line spaced/glued for "
+        "OK: self-test -- 7 unsafe shapes flagged (same-line spaced/glued for "
         "both %m and %z, BSD-first-then-validated, an unmapped format "
-        "letter, a mismatched GNU/BSD pair), the reference pattern for both "
-        "%m and %z and a documentation comment all pass clean."
+        "letter, a mismatched GNU/BSD pair, a quoted format), the reference "
+        "pattern for %m and %z (unquoted and quoted) and a documentation "
+        "comment all pass clean."
     )
     return 0
 

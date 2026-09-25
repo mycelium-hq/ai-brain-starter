@@ -183,10 +183,17 @@ for f in "${BACKUPS[@]}"; do
   size=$(stat -c %s "$f" 2>/dev/null)                        # GNU/Linux
   case "$size" in ''|*[!0-9]*) size=$(stat -f %z "$f" 2>/dev/null) ;; esac  # BSD/macOS
   case "$size" in ''|*[!0-9]*) size="?" ;; esac  # neither gave a plain integer -> unknown
-  if mtime_h=$(stat -f "%Sm" -t "%Y-%m-%d %H:%M" "$f" 2>/dev/null) || \
-     mtime_h=$(date -d "@$(stat -c %Y "$f" 2>/dev/null)" "+%Y-%m-%d %H:%M" 2>/dev/null); then :; else
-    mtime_h="?"
-  fi
+  # Modified time for display, cross-platform. Epoch via GNU `stat -c %Y`
+  # first, then BSD `stat -f %m`, validated (PORTABILITY.md #1), then
+  # formatted with GNU `date -d @N` or BSD `date -r N`. The old line asked BSD
+  # `stat -f "%Sm"` first; on Linux that prints file-system text and fails,
+  # and only its separate fallback assignment kept this column right.
+  mtime_e=$(stat -c %Y "$f" 2>/dev/null)                          # GNU/Linux
+  case "$mtime_e" in ''|*[!0-9]*) mtime_e=$(stat -f %m "$f" 2>/dev/null) ;; esac  # BSD/macOS
+  case "$mtime_e" in
+    ''|*[!0-9]*) mtime_h="?" ;;  # neither gave a plain integer -> unknown
+    *) mtime_h=$(date -d "@$mtime_e" "+%Y-%m-%d %H:%M" 2>/dev/null || date -r "$mtime_e" "+%Y-%m-%d %H:%M" 2>/dev/null || echo "?") ;;
+  esac
   printf "  - %s (%s bytes, %s)\n" "$f" "$size" "$mtime_h"
 done
 
