@@ -14,7 +14,12 @@
 # catches a session-close cascade, an auto-append, a manual commit, an agent, AND
 # a conflict-free `git merge` that git auto-commits without ever running
 # pre-commit. Off-branch code work is unaffected — it only blocks when a
-# session-close artifact is staged.
+# session-close artifact is staged. ONE exception, stated here rather than
+# only at the allocation block below: if BOTH scratch-dir routes fail, the
+# guard cannot list what is staged at all, so it refuses instead of guessing
+# — and a code-only commit refuses too. That state is too degraded to tell
+# artifact-staged from code-only apart, so it fails closed. An independent
+# review flagged that round 3 rewrote that block and left this line absolute.
 #
 # CARVE-OUT: a staged artifact is exempt when the STAGED tree already agrees with
 # the default branch's remote-tracking ref (refs/remotes/origin/<default>), or —

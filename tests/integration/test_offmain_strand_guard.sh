@@ -608,6 +608,60 @@ diff_index_failure_case_block(){
   rm -rf "$d"
 }
 
+# (v) the stale-scratch sweep must reap only DEAD dirs -- and must be covered
+# at all. Round 3 added a `find ... -exec rm -rf {} +` inside the git dir to
+# reap `guard-staged.*` left behind by a hook killed with SIGKILL, where a trap
+# cannot run. That block shipped with NO test: deleting it outright left the
+# whole suite green. That is exactly (u)'s defect class, reintroduced by the
+# very round that fixed (u), on the ONE block in this file that runs `rm -rf`
+# inside `.git`. Found by an independent review of round 3.
+#
+# Three of the four assertions are negative controls, because an over-eager
+# sweep is worse than no sweep: it would delete a CONCURRENT run's scratch dir
+# out from under it while that run is still using it.
+# Mutation that turns this red: delete the `if [ -n "${_gitdir}" ]; then find
+# ... fi` block. Measured: the suite then reports this case, and only this one.
+stale_scratch_sweep_case_block(){
+  local d; d="$(mktemp -d)"
+  # 25h old = past the 1440-minute floor; 1h old = a live peer run.
+  # BSD `date -v` first, GNU `date -d` fallback, so this holds on macOS and on
+  # the ubuntu runner alike.
+  local dead fresh
+  dead="$(date -v-25H +%Y%m%d%H%M 2>/dev/null || date -d '25 hours ago' +%Y%m%d%H%M)"
+  fresh="$(date -v-1H +%Y%m%d%H%M 2>/dev/null || date -d '1 hour ago' +%Y%m%d%H%M)"
+  (
+    cd "$d" || exit 99
+    git init -q -b main repo; cd repo || exit 99
+    git config user.email t@t; git config user.name t
+    echo seed > seed.txt; git add seed.txt; git commit -qm seed
+    git update-ref refs/remotes/origin/main main
+    git checkout -q -b feature
+    echo code > code.txt; git add code.txt   # code-only, so the guard ALLOWs
+    gd="$(git rev-parse --git-dir)"
+    mkdir -p "$gd/guard-staged.STALE" "$gd/guard-staged.FRESH" "$gd/other-staged.STALE"
+    : > "$gd/guard-staged.ASFILE"
+    touch -t "$dead" "$gd/guard-staged.STALE" "$gd/other-staged.STALE" "$gd/guard-staged.ASFILE"
+    touch -t "$fresh" "$gd/guard-staged.FRESH"
+    cp "$GUARD" guard.sh; chmod +x guard.sh
+    ./guard.sh >/dev/null 2>&1
+    # The one thing it must reap:
+    [ -e "$gd/guard-staged.STALE" ] && echo "BAD_STALE_KEPT"
+    # ...and three it must not touch:
+    [ -e "$gd/guard-staged.FRESH" ] || echo "BAD_FRESH_REAPED"
+    [ -e "$gd/guard-staged.ASFILE" ] || echo "BAD_FILE_REAPED"
+    [ -e "$gd/other-staged.STALE" ] || echo "BAD_PREFIX_IGNORED"
+    echo "SWEPT"
+  ) > "$d/out" 2>&1
+  local bad; bad="$(sed -n 's/^\(BAD_[A-Z_]*\)$/\1/p' "$d/out" | tr '\n' ' ')"
+  local ran; ran="$(sed -n 's/^SWEPT$/yes/p' "$d/out")"
+  if [ "$ran" = "yes" ] && [ -z "$bad" ]; then
+    pass "(v) stale scratch dirs reaped; a live run's dir, a like-named FILE and another prefix are all left alone"
+  else
+    fail "(v) stale-scratch sweep wrong (ran='$ran' violations='$bad')"; sed 's/^/    /' "$d/out"
+  fi
+  rm -rf "$d"
+}
+
 # (u) the INITIAL staged-paths listing failing must REFUSE, not read as
 # "nothing is staged". `git diff --cached --name-only -z --no-renames` is the
 # one listing every later check depends on: if it fails, its output is empty,
@@ -826,6 +880,7 @@ new_artifact_colon_prefixed_path_case_block
 diff_index_failure_case_block
 bare_mktemp_failure_keeps_carveout_case_allow
 staged_listing_failure_case_block
+stale_scratch_sweep_case_block
 orphan_branch_new_artifact_case_block
 orphan_branch_code_only_case_allow
 premerge_commit_wiring_blocks_topic_merge
