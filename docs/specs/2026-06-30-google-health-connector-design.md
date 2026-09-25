@@ -90,7 +90,7 @@ Google Cloud project + OAuth client + test-user setup, the env vars, **and the
 
 - **Base URL:** `https://health.googleapis.com/v4/`
 - **Token endpoint:** `https://oauth2.googleapis.com/token`
-- **OAuth client type:** Web Server; Authorized redirect URI `https://www.google.com`
+- **OAuth client type:** Web Server; Authorized redirect URI `https://developers.google.com/oauthplayground` (required by the OAuth Playground's "use your own OAuth credentials" flow, which the setup steps use; `https://www.google.com` fails with `redirect_uri_mismatch`)
 - **Env vars** (mirror Fitbit):
   - `GOOGLE_HEALTH_ACCESS_TOKEN` (short-lived, auto-refreshed)
   - `GOOGLE_HEALTH_REFRESH_TOKEN`

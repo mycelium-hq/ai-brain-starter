@@ -161,7 +161,7 @@ _GUIDES: dict[str, dict[str, Any]] = {
             "In APIs & Services > Library, search 'Google Health API' and click Enable",
             "In APIs & Services > OAuth consent screen: set up an External app, add yourself under Audience > Test users",
             "In the Data Access page, add the Google Health API scopes for the metrics you want (activity, heart rate, sleep, body — add all for full sync), then Update",
-            "In APIs & Services > Credentials > Create credentials > OAuth client ID: choose Web application; set Authorized redirect URI to https://www.google.com; save the Client ID + Client Secret",
+            "In APIs & Services > Credentials > Create credentials > OAuth client ID: choose Web application; set Authorized redirect URI to https://developers.google.com/oauthplayground (this MUST match the Playground's own registered URI -- the next step uses it with your own client ID, and Google rejects any other value with redirect_uri_mismatch); save the Client ID + Client Secret",
             "Run the OAuth flow once (OAuth Playground at https://developers.google.com/oauthplayground works: gear icon > use your own client ID/secret, authorize the Health scopes, exchange for tokens) to get an access_token + refresh_token",
             "IMPORTANT: publish the OAuth app to Production (OAuth consent screen > Publish app). In Testing status Google expires refresh tokens after 7 DAYS, which breaks daily auto-sync every week.",
         ],
