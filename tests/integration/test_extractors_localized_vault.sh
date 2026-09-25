@@ -256,3 +256,65 @@ if failed:
 print("PASS: Spanish vault — journals in 📓 Diarios are found, floor names (es+en) score on the 34-floor scale, "
       "es/rise types reach real extractors, a custom extractor beats an alias, and the engine has a floor baseline")
 PY
+
+# ── Regression: a note with MALFORMED UTF-8 is never rewritten ──────────────
+# process_file() is a read-modify-WRITE. When it moved onto the shared bounded
+# read (safe_read_text, obliged by scripts/check-cloud-safe-file-walkers.py),
+# passing errors="replace" would decode an undecodable byte to U+FFFD and then
+# write that replacement character back -- silently corrupting the user's note.
+# The pre-migration code used a strict open() and let the exception become
+# READ_ERR, leaving the file untouched.
+#
+# MEASURED, not assumed. On an identical planted note (a real prose sentence, so
+# the journal extractor actually emits and the write path is reached):
+#   errors="replace" -> "Wrote: 1", 0xFF GONE, U+FFFD written into the note
+#   strict decoding  -> "Wrote: 0", a READ_ERR, note byte-identical
+# An earlier, thinner fixture returned EXTRACTOR_SKIPPED and never reached the
+# write at all, which looked exactly like "no corruption". A fixture for this
+# bug MUST reach the write.
+#
+# The assertion deliberately matches READ_ERR + "decode" rather than one exact
+# string: a plain strict open() says "'utf-8' codec can't decode byte 0xff..."
+# and safe_read_text says "decode-error". Pinning either spelling would make
+# this test fail on a refactor that kept the property intact.
+MAL="$TMP/mal-vault"
+mkdir -p "$MAL/📓 Diarios"
+"$PY" - "$MAL" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1]) / "\U0001f4d3 Diarios" / "malformed.md"
+body = (b"Hoy fue un dia largo y aprendi algo importante sobre el trabajo con "
+        + b"\xff" + b" y sigo pensando en ello.\n")
+p.write_bytes("---\ntype: journal\ndate: 2026-09-24\n---\n\n".encode() + body)
+PY
+mal_before="$("$PY" -c "import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" "$MAL/📓 Diarios/malformed.md")"
+VAULT_ROOT="$MAL" VAULT_ROOT_FORCE=1 "$PY" "$STARTER/scripts/vault-metadata-extract.py" \
+  --progress-every 0 >"$TMP/mal.log" 2>&1 || true
+mal_after="$("$PY" -c "import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" "$MAL/📓 Diarios/malformed.md")"
+
+mal_fail=0
+if [ "$mal_before" != "$mal_after" ]; then
+  echo "FAIL: a malformed-UTF-8 note was REWRITTEN by extraction (data corruption)" >&2
+  mal_fail=1
+fi
+if ! grep -Eq "READ_ERR:.*([Dd]ecode|codec)" "$TMP/mal.log"; then
+  echo "FAIL: malformed note did not surface as a decode READ_ERR (silent skip?)" >&2
+  cat "$TMP/mal.log" >&2
+  mal_fail=1
+fi
+# The undecodable byte must still be on disk and no replacement char written.
+if ! "$PY" - "$MAL/📓 Diarios/malformed.md" <<'PY'
+import sys
+d = open(sys.argv[1], "rb").read()
+ok = b"\xff" in d and "�".encode() not in d
+print("ok" if ok else "FAIL: 0xFF present=%s U+FFFD written=%s" % (
+    b"\xff" in d, "�".encode() in d), file=sys.stderr if not ok else sys.stdout)
+sys.exit(0 if ok else 1)
+PY
+then
+  mal_fail=1
+fi
+if [ "$mal_fail" != 0 ]; then
+  echo "FAIL: malformed-note regression" >&2
+  exit 1
+fi
+echo "PASS: a malformed-UTF-8 note is reported as a decode READ_ERR and left byte-identical"

@@ -41,6 +41,18 @@ Now, when `decision_date` is missing, the date comes from `creationDate`, and fa
 
 ---
 
+## 2026-09-20: the generated Drift Audit frontmatter did not parse as YAML, and the script could silently audit the wrong vault
+
+**Who this affects:** anyone running `drift-detection.py`, and anyone with `VAULT_ROOT` exported machine-wide (a shell profile, or a Claude Code `settings.json` `env` block someone configured) who runs it from a vault other than the one `VAULT_ROOT` names.
+
+**Bug 1 — the frontmatter it wrote couldn't be parsed.** The generated `Meta/Drift Audit.md` carries a `purpose:` line built from the `--include` glob, e.g. `purpose: Multi-edit drift audit. ... Include: '*.md'.`. An unquoted YAML scalar containing `": "` is read as a nested mapping, so `yaml.safe_load` raised "mapping values are not allowed here" — the file was invisible to Dataview, metadata extractors, and any other frontmatter-reading tool, with nothing erroring to say so. The purpose line is now JSON-encoded (`json.dumps(..., ensure_ascii=False)`), which is valid YAML for every glob we tested, including one with an apostrophe or an astral-plane emoji (a real vault folder name, e.g. "📓 Journals") in it.
+
+**Bug 2 — a globally-exported `VAULT_ROOT` silently outranked the vault you were standing in.** The script read `os.environ.get("VAULT_ROOT") or os.getcwd()`: once `VAULT_ROOT` is set anywhere (a shell profile, or Claude Code's `env` block, which every hook subprocess inherits), it always wins, even when you `cd` into a different git-tracked vault and run the script there. Both the git history it scans and the `Meta/Drift Audit.md` it writes would resolve against the wrong vault, with no error. It now prefers the vault you're actually standing in — cwd, or an ancestor of cwd that already has a Meta folder, collapsing a vault worktree to its main vault first — and only falls back to `VAULT_ROOT` when cwd isn't inside an established vault at all (a plain code checkout, say), when the two already agree, or when you set `VAULT_ROOT_FORCE=1` — otherwise it warns and audits the vault you actually ran it from. `compress-vault-doc.py` resolves the vault the same way, so it can always find what `drift-detection.py` just wrote.
+
+Bug 2 surfaced while landing the fix for Bug 1, not from a user report — both ship together, with a regression test for each. Both bugs, and this second hardening pass on Bug 2's own fix (the worktree and non-vault-checkout cases), came from @juan-monsalve-mon's #683 plus an independent adversarial review of that PR before it landed.
+
+---
+
 ## 2026-09-19: the graph routing hook told you to customize it, then overwrote your customization
 
 **Who this affects:** anyone who set up `graph-context-hook.sh` and has only ONE graph — the default second graph points at `$VAULT_ROOT/Work/`, a folder most vaults do not have.
