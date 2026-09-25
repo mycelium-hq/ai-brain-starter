@@ -1220,6 +1220,9 @@ def merge_hooks(existing: dict, new_template: dict) -> tuple[dict, dict]:
             merged["hooks"][event] = []
 
         existing_groups = merged["hooks"][event]
+        # ids of the template entries written into this event, so the stale-copy
+        # sweep below can never remove one of them.
+        written_ids: set = set()
         # Collect all ABS-owned commands from new template (flattened)
         for new_group in new_groups:
             # A hook is identified by (matcher, command): the SAME command under two
@@ -1267,6 +1270,25 @@ def merge_hooks(existing: dict, new_template: dict) -> tuple[dict, dict]:
                         existing_groups.append(target_group)
                     target_group.setdefault("hooks", []).append(new_hook)
                     summary["added"].append(f"{event}: {cmd[:80]}")
+
+                # One registration per owned (script, args) under this matcher, and
+                # it is the one just written. Replacing the FIRST match leaves any
+                # other copy standing, and dedupe_owned_hooks() then keeps the LAST
+                # copy per group, which need not be the template's: a machine where
+                # a second installer also wires the script kept the OLD form and
+                # dropped the new one, and copies in two same-matcher groups were
+                # never collapsed at all.
+                written_ids.add(id(new_hook))
+                key = _owned_hook_key(cmd)
+                if key:
+                    for eg in existing_groups:
+                        if eg.get("matcher") != matcher:
+                            continue
+                        eg["hooks"] = [
+                            eh for eh in eg.get("hooks", [])
+                            if id(eh) in written_ids
+                            or _owned_hook_key(eh.get("command", "")) != key
+                        ]
 
         # Track non-touched non-ABS hooks as "kept"
         for eg in existing_groups:

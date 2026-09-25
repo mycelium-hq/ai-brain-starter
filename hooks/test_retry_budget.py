@@ -36,6 +36,7 @@ Exit 0 = all pass.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -43,6 +44,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -122,6 +124,17 @@ class Sandbox:
 
     def cleanup(self) -> None:
         shutil.rmtree(self.root, ignore_errors=True)
+
+
+def fingerprint(command: str) -> str:
+    """The hook's key for a command. Mirrors the hook on purpose so a leg can
+    plant state for a command; leg C5a proves the two still agree."""
+    norm = " ".join(command.split())
+    return hashlib.md5(norm.encode("utf-8", "surrogatepass")).hexdigest()[:12]
+
+
+def plant_state(sb: Sandbox, state: dict) -> None:
+    sb.state_path.write_text(json.dumps(state), encoding="utf-8")
 
 
 def payload(command: str, call_id: str | None) -> str:
@@ -211,6 +224,27 @@ def leg_fingerprint_covers_whole_command() -> None:
             sb.cleanup()
 
 
+def leg_fingerprint_sees_a_middle_difference() -> None:
+    # Every pair above differs only at its END, which a head+tail "fix" (hash
+    # the first N and last M characters) would also pass. Real commands often
+    # share a long head (a scratch path) AND a long tail (a log redirect) and
+    # differ only in a flag between them.
+    sb = Sandbox()
+    try:
+        head = long_prefix(600) + " --mode "
+        tail = " > /private/tmp/example-gate/" + "gate-output-" * 50 + ".log 2>&1"
+        a, b = head + "alpha" + tail, head + "bravo" + tail
+        assert len(tail) > 600 and " ".join(a.split()) == a and len(a) == len(b)
+        run_hook(sb, a, "toolu_mid_a")
+        run_hook(sb, b, "toolu_mid_b")
+        h = sb.histories()
+        check("A4 two long commands differing only in the middle get distinct fingerprints",
+              len(h) == 2 and sorted(len(v) for v in h.values()) == [1, 1],
+              f"attempts per fingerprint: {sorted(len(v) for v in h.values())}")
+    finally:
+        sb.cleanup()
+
+
 def leg_poll_loop_with_changing_tail_is_not_a_loop() -> None:
     sb = Sandbox()
     try:
@@ -233,6 +267,31 @@ def leg_whitespace_variants_still_share_a_budget() -> None:
         codes = [run_hook(sb, v, f"toolu_ws_{i}")[0] for i, v in enumerate(variants)]
         check("A3 whitespace-only variants of one command share one budget (4th blocks)",
               codes == [0, 0, 0, 2], f"exit codes {codes}")
+    finally:
+        sb.cleanup()
+
+
+def leg_short_command_exemption_is_measured_after_normalizing() -> None:
+    # "git status -sb" is 14 characters, under the 15-character exemption. The
+    # same command with its spacing reflowed is the same command, so it must
+    # stay exempt too.
+    sb = Sandbox()
+    try:
+        codes = [run_hook(sb, "git  status   -sb ", f"toolu_short_{i}")[0] for i in range(1, 6)]
+        check("A5 a short command padded with extra spaces is still exempt",
+              codes == [0] * 5 and sb.attempts() == 0,
+              f"exit codes {codes}, timestamps={sb.attempts()}")
+    finally:
+        sb.cleanup()
+
+
+def leg_lone_surrogate_is_counted_not_a_crash() -> None:
+    sb = Sandbox()
+    try:
+        code, err = run_hook(sb, "printf '%s' '\ud800' > example-output.txt", "toolu_surrogate")
+        check("A6 a command carrying a lone surrogate is counted, not a crash",
+              code == 0 and sb.attempts() == 1,
+              f"exit {code}, timestamps={sb.attempts()}, stderr {err[-160:]!r}")
     finally:
         sb.cleanup()
 
@@ -306,6 +365,48 @@ def leg_no_call_id_counts_every_invocation() -> None:
         sb.cleanup()
 
 
+def leg_concurrent_calls_share_one_file_safely() -> None:
+    # Subagents share their parent's session_id, so different calls race on one
+    # state file. Each command starts with 2 attempts, so its call is attempt 3:
+    # if a racing write wiped the call's record, its second registration would
+    # count attempt 4 and block, splitting the verdict. Three rounds.
+    name = "B5 eight calls x two registrations racing: every call counted once, pairs agree"
+    if not POSIX:
+        skip(name, "the parallel leg is exercised on the POSIX runner")
+        return
+    problem = ""
+    for rnd in range(3):
+        sb = Sandbox()
+        try:
+            cmds = [f"cargo build --package example-crate-{i} --release" for i in range(8)]
+            now = time.time()
+            plant_state(sb, {fingerprint(c): [now - 20, now - 10] for c in cmds})
+            jobs = []
+            for i, cmd in enumerate(cmds):
+                data = payload(cmd, f"toolu_mix_{rnd}_{i}")
+                for _ in range(2):
+                    p = subprocess.Popen([sys.executable, str(HOOK)], stdin=subprocess.PIPE,
+                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                         env=sb.env, text=True)
+                    jobs.append((i, data, p))
+            # Barrier: let every interpreter finish starting and block on stdin,
+            # then release them together, so their read-modify-writes overlap.
+            time.sleep(1.5)
+            for _, data, p in jobs:
+                p.stdin.write(data)
+                p.stdin.close()
+            codes: dict = {}
+            for i, _, p in jobs:
+                codes.setdefault(i, []).append(p.wait(timeout=60))
+            per_cmd = sorted(len(v) for v in sb.histories().values())
+            if per_cmd != [3] * len(cmds) or any(c != [0, 0] for c in codes.values()):
+                problem = f"round {rnd}: attempts per command {per_cmd}, exit codes {codes}"
+                break
+        finally:
+            sb.cleanup()
+    check(name, not problem, problem)
+
+
 # ------------------------------------------------------ the block still fires ---
 
 def leg_identical_command_blocks_on_fourth_call() -> None:
@@ -362,21 +463,128 @@ def leg_template_registration_absent_script_is_neutral() -> None:
         sb.cleanup()
 
 
-def leg_state_write_does_not_follow_a_planted_link() -> None:
-    name = "C4 the state write replaces a pre-planted link instead of writing through it"
+def leg_planted_link_is_neither_read_nor_written_through() -> None:
+    # The state path is predictable. A link planted there must not steer the
+    # count (its target claims 3 fresh attempts, so reading through it blocks
+    # the first call) and must not be written through.
+    name = "C4 a link planted at the state path neither steers the count nor is written through"
     if not POSIX:
         skip(name, "creating a symlink needs privileges on Windows")
         return
     sb = Sandbox()
     try:
-        sentinel = sb.root / "sentinel.txt"
-        sentinel.write_text("do not overwrite\n", encoding="utf-8")
-        os.symlink(sentinel, sb.state_path)
-        run_hook(sb, "echo planted-link-probe-command", "toolu_link")
-        check(name, sentinel.read_text(encoding="utf-8") == "do not overwrite\n"
+        probe = "echo planted-link-probe-command"
+        now = time.time()
+        steer = json.dumps({fingerprint(probe): [now - 3, now - 2, now - 1]})
+        target = sb.root / "planted-target.json"
+        target.write_text(steer, encoding="utf-8")
+        os.symlink(target, sb.state_path)
+        code, _ = run_hook(sb, probe, "toolu_link")
+        check(name, code == 0 and target.read_text(encoding="utf-8") == steer
               and not sb.state_path.is_symlink(),
-              f"sentinel now {sentinel.read_text(encoding='utf-8')[:80]!r}, "
+              f"exit {code} (2 = the planted attempts were read), target unchanged="
+              f"{target.read_text(encoding='utf-8') == steer}, "
               f"state path is_symlink={sb.state_path.is_symlink()}")
+    finally:
+        sb.cleanup()
+
+
+def leg_malformed_state_fails_open_and_repairs() -> None:
+    # The hook runs before every Bash call: a bad value anywhere in its file
+    # must not turn into a crash on every call, and the next write repairs it.
+    probe = "pytest -x tests/test_example.py"
+    key = fingerprint(probe)
+    sb = Sandbox()
+    try:
+        run_hook(sb, probe, "toolu_premise")
+        check("C5a premise: the test's fingerprint() matches the hook's key",
+              key in sb.histories(), f"hook keys {list(sb.histories())}, test key {key}")
+    finally:
+        sb.cleanup()
+    cases = {
+        "a number as this command's history": {key: 5},
+        "null as this command's history": {key: None},
+        "a 402-digit integer in another command's history": {"0123456789ab": [10 ** 401]},
+        "a 402-digit integer inside a counted call": {"_calls": {"toolu_old": [10 ** 401, 1]}},
+        "_calls that is not a dict": {"_calls": [1, 2, 3]},
+        "a top-level list": [1, 2, 3],
+    }
+    for label, state in cases.items():
+        sb = Sandbox()
+        try:
+            sb.state_path.write_text(json.dumps(state), encoding="utf-8")
+            c1, err = run_hook(sb, probe, "toolu_mal_1")
+            c2, _ = run_hook(sb, probe, "toolu_mal_2")
+            got = len(sb.histories().get(key, []))
+            check(f"C5 {label}: exit 0, and the next call counts from a repaired file",
+                  (c1, c2) == (0, 0) and got == 2,
+                  f"exit codes {(c1, c2)}, attempts for the command {got}, stderr {err[-200:]!r}")
+        finally:
+            sb.cleanup()
+
+
+def leg_fifo_at_state_path_does_not_hang() -> None:
+    name = "C6 a FIFO planted at the state path does not hang the hook"
+    if not POSIX or not hasattr(os, "mkfifo"):
+        skip(name, "needs mkfifo")
+        return
+    sb = Sandbox()
+    try:
+        os.mkfifo(sb.state_path)
+        try:
+            r = subprocess.run([sys.executable, str(HOOK)],
+                               input=payload("make -C build all-targets", "toolu_fifo"),
+                               capture_output=True, text=True, env=sb.env, timeout=20)
+            check(name, r.returncode == 0, f"exit {r.returncode}: {r.stderr[-160:]!r}")
+        except subprocess.TimeoutExpired:
+            check(name, False, "still blocked on the FIFO after 20 s")
+    finally:
+        sb.cleanup()
+
+
+def leg_infinite_and_future_attempts_expire() -> None:
+    # A planted Infinity, or a clock stepped backwards, must not pin a
+    # command's budget. json writes float("inf") as Infinity and reads it back.
+    sb = Sandbox()
+    try:
+        probe = "terraform plan -out example.plan"
+        now = time.time()
+        plant_state(sb, {fingerprint(probe): [float("inf"), now + 7200, now + 7200]})
+        code, _ = run_hook(sb, probe, "toolu_future")
+        got = len(sb.histories().get(fingerprint(probe), []))
+        check("C7 planted Infinity and far-future attempts do not count",
+              code == 0 and got == 1, f"exit {code}, attempts for the command {got}")
+    finally:
+        sb.cleanup()
+
+
+def leg_unreadable_script_is_a_no_op_not_a_block() -> None:
+    # `python3 <file it cannot read>` exits 2, which the harness treats as a
+    # BLOCK: a mode-000 script behind a bare `[ -f ]` guard would refuse every
+    # Bash call. The old `|| true` hid this; the if/else form must not expose it.
+    name = "C8 an unreadable script makes the registration a no-op, not a block"
+    if not POSIX:
+        skip(name, "hooks.json commands are POSIX shell; Windows rewrites them")
+        return
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
+        skip(name, "root can read a mode-000 file")
+        return
+    regs = bash_registrations(rendered_template())
+    if len(regs) != 1:
+        check(name, False, f"expected one registration, found {len(regs)}")
+        return
+    sb = Sandbox()
+    try:
+        sb.deploy_hook()
+        deployed = sb.home / ".claude" / "hooks" / HOOK.name
+        os.chmod(deployed, 0)
+        try:
+            code, out, err = run_registered(sb, regs[0], "git push origin main --dry-run",
+                                            "toolu_unreadable")
+        finally:
+            os.chmod(deployed, 0o644)
+        check(name, code == 0 and "permissionDecision" not in out,
+              f"exit {code}, stderr {err[-160:]!r}")
     finally:
         sb.cleanup()
 
@@ -448,6 +656,59 @@ def leg_existing_install_upgrades_to_one_blocking_registration() -> None:
         sb.cleanup()
 
 
+def leg_installer_collapses_existing_copies_in_one_run() -> None:
+    # A machine where two installers already wired the script holds BOTH forms.
+    # One install must leave exactly one registration, in the template's own
+    # form. The live shape that exposed this: the second installer's copy
+    # first, the old `|| true` copy last in the same group; the merge rewrote
+    # the first and the owned-hook dedupe then kept the LAST, i.e. the one
+    # that can never block.
+    if not POSIX:
+        skip("D3 installer layouts", "hooks.json commands are POSIX shell; Windows rewrites them")
+        return
+    py = sys.executable
+    second, old = SECOND_INSTALLER_FORM.format(py=py), OLD_TEMPLATE_FORM.format(py=py)
+    user_a = "echo '{}' # the user's own hook A"
+    user_b = "echo '{}' # the user's own hook B"
+    template_regs = bash_registrations(rendered_template())
+
+    def hook(c):
+        return {"type": "command", "command": c}
+
+    layouts = {
+        "second installer's copy first, old copy last, one group": [
+            {"matcher": "Bash", "hooks": [hook(user_a), hook(second), hook(user_b), hook(old)]}],
+        "old copy first, one group": [
+            {"matcher": "Bash", "hooks": [hook(old), hook(second)]}],
+        "the two copies in separate groups": [
+            {"matcher": "Bash", "hooks": [hook(second)]},
+            {"matcher": "Bash", "hooks": [hook(old), hook(user_a)]}],
+    }
+    for label, groups in layouts.items():
+        sb = Sandbox()
+        try:
+            settings = sb.home / ".claude" / "settings.json"
+            settings.parent.mkdir(parents=True, exist_ok=True)
+            settings.write_text(json.dumps({"hooks": {"PreToolUse": groups}}), encoding="utf-8")
+            r = run_installer(sb, settings)
+            if r.returncode != 0:
+                check(f"D3 {label}", False, f"installer exit {r.returncode}: {(r.stderr or r.stdout)[-300:]}")
+                continue
+            data = json.loads(settings.read_text(encoding="utf-8"))
+            regs = bash_registrations(data)
+            cmds = [h.get("command", "") for g in data["hooks"].get("PreToolUse", [])
+                    for h in g.get("hooks", [])]
+            users_kept = all(u in cmds for u in (user_a, user_b) if any(
+                h["command"] == u for g in groups for h in g["hooks"]))
+            codes = [run_registered(sb, reg, "git push origin main --dry-run", f"toolu_lay_{i}")[0]
+                     for i in range(1, 5) for reg in regs[:1]] if len(regs) == 1 else []
+            check(f"D3 {label}: one run leaves exactly the template's registration, and it blocks",
+                  regs == template_regs and users_kept and codes == [0, 0, 0, 2],
+                  f"registrations {regs}; user hooks kept={users_kept}; exit codes {codes}")
+        finally:
+            sb.cleanup()
+
+
 def main() -> int:
     for line in (sys.stdout, sys.stderr):
         try:
@@ -456,18 +717,27 @@ def main() -> int:
             pass
     print("retry-budget controls")
     leg_fingerprint_covers_whole_command()
+    leg_fingerprint_sees_a_middle_difference()
     leg_poll_loop_with_changing_tail_is_not_a_loop()
     leg_whitespace_variants_still_share_a_budget()
+    leg_short_command_exemption_is_measured_after_normalizing()
+    leg_lone_surrogate_is_counted_not_a_crash()
     leg_one_call_is_one_attempt_sequential()
     leg_one_call_is_one_attempt_concurrent()
     leg_duplicate_registration_reuses_the_verdict()
     leg_no_call_id_counts_every_invocation()
+    leg_concurrent_calls_share_one_file_safely()
     leg_identical_command_blocks_on_fourth_call()
     leg_template_registration_preserves_the_block()
     leg_template_registration_absent_script_is_neutral()
-    leg_state_write_does_not_follow_a_planted_link()
+    leg_planted_link_is_neither_read_nor_written_through()
+    leg_malformed_state_fails_open_and_repairs()
+    leg_fifo_at_state_path_does_not_hang()
+    leg_infinite_and_future_attempts_expire()
+    leg_unreadable_script_is_a_no_op_not_a_block()
     leg_both_installers_one_attempt_per_call()
     leg_existing_install_upgrades_to_one_blocking_registration()
+    leg_installer_collapses_existing_copies_in_one_run()
     if FAILURES:
         print(f"\n{len(FAILURES)} control(s) FAILED:")
         for f in FAILURES:
