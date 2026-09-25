@@ -161,19 +161,45 @@ fi
 # wrongly EXEMPT, even brand new. Same bug class as the re-parsed `ref:path`
 # quoting fix above, one layer over: it is not enough to stop re-parsing a
 # path as a revision string if the path is still re-parsed as a pathspec.
+#
+# Output goes to a REAL FILE, never `done < <(...)`: a process substitution
+# only ever exposes the trailing `read`'s own exit status, not the command
+# feeding it, so a `git diff-index` that FAILS (E2BIG on a huge pathspec, an
+# unreadable object, an index lock) produces empty output that is
+# indistinguishable from "genuinely nothing differs" — every candidate on
+# that route then read as exempt. `_origin_route_ok` / `_mh_route_ok` are 1
+# ONLY when the ref exists AND the comparison itself actually succeeded; a
+# failed comparison is gated out below exactly like a missing ref — it just
+# doesn't run (fail closed), it never grants an exemption.
+_diffidx_dir="$(mktemp -d 2>/dev/null)" || _diffidx_dir=""
+_cleanup_diffidx_dir() { [ -n "${_diffidx_dir}" ] && rm -rf "${_diffidx_dir}"; }
+trap _cleanup_diffidx_dir EXIT
+
+_origin_route_ok=0
 _changed_origin=()
-if [ "${_have_origin_ref}" = "1" ]; then
-  while IFS= read -r -d '' _c; do
-    _changed_origin+=("${_c}")
-  done < <(git --literal-pathspecs diff-index --cached -z --no-renames --name-only \
-             "${_origin_ref}" -- "${_artifact_paths[@]}" 2>/dev/null)
+if [ "${_have_origin_ref}" = "1" ] && [ -n "${_diffidx_dir}" ]; then
+  _origin_out="${_diffidx_dir}/origin.nul"
+  git --literal-pathspecs diff-index --cached -z --no-renames --name-only \
+      "${_origin_ref}" -- "${_artifact_paths[@]}" >"${_origin_out}" 2>/dev/null
+  if [ "$?" -eq 0 ]; then
+    _origin_route_ok=1
+    while IFS= read -r -d '' _c; do
+      _changed_origin+=("${_c}")
+    done < "${_origin_out}"
+  fi
 fi
+_mh_route_ok=0
 _changed_mergehead=()
-if [ "${_merge_head_on_default}" = "1" ]; then
-  while IFS= read -r -d '' _c; do
-    _changed_mergehead+=("${_c}")
-  done < <(git --literal-pathspecs diff-index --cached -z --no-renames --name-only \
-             MERGE_HEAD -- "${_artifact_paths[@]}" 2>/dev/null)
+if [ "${_merge_head_on_default}" = "1" ] && [ -n "${_diffidx_dir}" ]; then
+  _mh_out="${_diffidx_dir}/mergehead.nul"
+  git --literal-pathspecs diff-index --cached -z --no-renames --name-only \
+      MERGE_HEAD -- "${_artifact_paths[@]}" >"${_mh_out}" 2>/dev/null
+  if [ "$?" -eq 0 ]; then
+    _mh_route_ok=1
+    while IFS= read -r -d '' _c; do
+      _changed_mergehead+=("${_c}")
+    done < "${_mh_out}"
+  fi
 fi
 
 # Per-route shortcut: the diff-index call above was restricted to exactly the
@@ -191,14 +217,14 @@ fi
 # called once a route's changed-list is known non-empty, so that trap never
 # fires.
 _origin_all_exempt=0; _origin_none_exempt=0
-if [ "${_have_origin_ref}" = "1" ]; then
+if [ "${_origin_route_ok}" = "1" ]; then
   _n="${#_changed_origin[@]}"
   if [ "${_n}" -eq 0 ]; then _origin_all_exempt=1
   elif [ "${_n}" -ge "${_n_artifacts}" ]; then _origin_none_exempt=1
   fi
 fi
 _mh_all_exempt=0; _mh_none_exempt=0
-if [ "${_merge_head_on_default}" = "1" ]; then
+if [ "${_mh_route_ok}" = "1" ]; then
   _n="${#_changed_mergehead[@]}"
   if [ "${_n}" -eq 0 ]; then _mh_all_exempt=1
   elif [ "${_n}" -ge "${_n_artifacts}" ]; then _mh_none_exempt=1
@@ -224,7 +250,7 @@ for _path in "${_artifact_paths[@]}"; do
   _i=$((_i+1))
 
   _exempt=0
-  if [ "${_have_origin_ref}" = "1" ]; then
+  if [ "${_origin_route_ok}" = "1" ]; then
     if [ "${_origin_all_exempt}" = "1" ]; then
       _exempt=1
     elif [ "${_origin_none_exempt}" = "1" ]; then
@@ -233,7 +259,7 @@ for _path in "${_artifact_paths[@]}"; do
       _in_list "${_path}" "${_changed_origin[@]}" || _exempt=1
     fi
   fi
-  if [ "${_exempt}" = "0" ] && [ "${_merge_head_on_default}" = "1" ]; then
+  if [ "${_exempt}" = "0" ] && [ "${_mh_route_ok}" = "1" ]; then
     if [ "${_mh_all_exempt}" = "1" ]; then
       _exempt=1
     elif [ "${_mh_none_exempt}" = "1" ]; then
