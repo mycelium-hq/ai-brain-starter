@@ -87,9 +87,31 @@ _def="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | 
 # empty output indistinguishable from a genuinely clean index. This is the
 # one listing every later check depends on, so its own failure REFUSES
 # rather than silently allowing.
-_staged_dir="$(mktemp -d 2>/dev/null)" || _staged_dir=""
+# The scratch dir is allocated under $(git rev-parse --git-dir) FIRST, falling
+# back to $TMPDIR (mktemp's own default) only if that fails. The git dir is on
+# the same filesystem git already writes objects/refs/index to, so it is
+# almost always writable whenever `git commit` can succeed at all — unlike
+# $TMPDIR/tmp, which macOS periodically reaps, and which can be full or
+# read-only independent of the repo. A mktemp failure here used to REFUSE
+# unconditionally, even with zero session artifacts staged — contradicting
+# this guard's own contract (header: "Off-branch code work is unaffected").
+# Measured real trigger: TMPDIR pointing at a reaped /var/folders dir, or /tmp
+# full/read-only — neither touches the git dir. Only if BOTH the git-dir and
+# the $TMPDIR attempt fail does the guard still refuse outright (fail closed —
+# a repo whose own .git dir cannot be written to has bigger problems than this
+# hook, and this is the one case too degraded to tell artifact-staged from
+# code-only apart).
+_gitdir="$(git rev-parse --git-dir 2>/dev/null)"
+_staged_dir=""
+if [ -n "${_gitdir}" ]; then
+  _staged_dir="$(mktemp -d "${_gitdir}/guard-staged.XXXXXX" 2>/dev/null)" || _staged_dir=""
+fi
 if [ -z "${_staged_dir}" ]; then
-  echo "pre-commit: REFUSED — could not create a scratch dir to list staged paths (mktemp failed)." >&2
+  _staged_dir="$(mktemp -d 2>/dev/null)" || _staged_dir=""
+fi
+if [ -z "${_staged_dir}" ]; then
+  echo "pre-commit: REFUSED — could not create a scratch dir to list staged paths (mktemp failed under both \$(git rev-parse --git-dir) and \$TMPDIR)." >&2
+  echo "  Bypass: SESSION_ARTIFACT_BRANCH_BYPASS=1 git commit ...   (or git commit --no-verify)." >&2
   exit 1
 fi
 _cleanup_staged_dir() { [ -n "${_staged_dir}" ] && rm -rf "${_staged_dir}"; }
