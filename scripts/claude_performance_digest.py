@@ -458,7 +458,8 @@ def generate_report(sessions_data, agents_data, days):
     lines.append("| Project | Turns | % |")
     lines.append("|---------|-------|---|")
     for proj, count in project_turns.most_common():
-        pct = count / total_turns * 100
+        # A session with no assistant record still gets a row, so total_turns can be 0.
+        pct = count / total_turns * 100 if total_turns else 0
         lines.append(f"| {proj} | {count} | {pct:.0f}% |")
     lines.append("")
 

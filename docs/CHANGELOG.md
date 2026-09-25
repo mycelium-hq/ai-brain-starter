@@ -9,6 +9,14 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-09-25: the weekly performance digest crashed when no session in its window got a reply
+
+**Who this affects:** anyone who runs `scripts/claude_performance_digest.py` over a window in which not one session got an assistant reply. That is likeliest on a fresh install, or with a short `--days` window.
+
+The digest's Project Allocation table shows how your assistant turns split across projects. Every project with a session in the window gets a row, even when that session never got an answer. Each row's percentage was the project's turns divided by the total, and nothing checked that the total was above zero. So when every session in the window had zero replies, the run stopped with a "division by zero" error before it saved the weekly report or applied any of its prescriptions, and that week's digest produced nothing.
+
+A zero total now shows each project at 0% and the run carries on, saving the report and applying prescriptions as usual. The activity and model-mix tables next to it already handled this case. A new test runs the digest over sessions with no replies, where it must finish and save the report, and over a mix with one normal session, where the real percentages must stay the same.
+
 ## 2026-09-25: the retry limit blocked work that was not a loop, and on most installs it could not block at all
 
 **Who this affects:** everyone. The retry-budget hook is wired on every install.

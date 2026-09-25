@@ -568,6 +568,12 @@ INTEGRATION_TESTS=(
   # it); says SKIP and exits 0 when no interpreter has it, and the CI-only
   # bootstrap near the top of this script installs it so CI never takes that path.
   test_extractors_localized_vault
+  # claude_performance_digest.py divided each project's turns by total_turns
+  # unguarded, and a session with no assistant record still gets a row, so a
+  # window where no session had one crashed the weekly run before it wrote the
+  # report or its prescriptions. Carries a mixed-window control pinning that
+  # real percentages are unchanged.
+  test_claude_performance_digest_zero_turns
   # MYC-4285: a brew-less, non-interactive, non-corporate Mac hit the same
   # exit-0 the corporate profile was already built to route around, and never
   # reached the user-space Python/Node installers a few sections down.
