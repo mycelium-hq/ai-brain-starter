@@ -104,10 +104,13 @@ class Sandbox:
         self.state_path = self.tmp / f"claude-retry-budget-{SESSION}.json"
 
     def state(self) -> dict:
+        # A broken hook can leave any JSON here (a planted top-level list, for
+        # one); report that as "no attempts", never crash the whole suite.
         try:
-            return json.loads(self.state_path.read_text(encoding="utf-8"))
+            s = json.loads(self.state_path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return {}
+        return s if isinstance(s, dict) else {}
 
     def histories(self) -> dict:
         """fingerprint -> attempt timestamps. Anything else in the file is bookkeeping."""
