@@ -170,13 +170,13 @@ new_fixture() {
 run_upd() {
   if [ -n "${SID:-}" ]; then
     OUT="$(printf '{"session_id":"%s"}' "$SID" | \
-          HOME="$FAKE_HOME" \
+          HOME="$FAKE_HOME" USERPROFILE="$FAKE_HOME" \
           ABS_UPDATE_STATE_DIR="$1" ABS_SKILL_DIR="$2" ABS_UPDATE_INTERVAL_DAYS="${INTERVAL:-0}" \
           ABS_UPDATE_DEPLOY_TIMEOUT=30 ABS_UPDATE_MIN_DEPLOY_DELAY_SECONDS="${MINDELAY:-0}" \
           ABS_UPDATE_NON_INTERACTIVE="${NONINT:-}" \
           bash "$SCRIPT" 2>/dev/null)"
   else
-    OUT="$(HOME="$FAKE_HOME" \
+    OUT="$(HOME="$FAKE_HOME" USERPROFILE="$FAKE_HOME" \
           ABS_UPDATE_STATE_DIR="$1" ABS_SKILL_DIR="$2" ABS_UPDATE_INTERVAL_DAYS="${INTERVAL:-0}" \
           ABS_UPDATE_DEPLOY_TIMEOUT=30 ABS_UPDATE_MIN_DEPLOY_DELAY_SECONDS="${MINDELAY:-0}" \
           ABS_UPDATE_NON_INTERACTIVE="${NONINT:-}" \

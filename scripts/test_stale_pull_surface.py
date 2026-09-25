@@ -156,7 +156,7 @@ def run_updater(clone: Path, state: Path, session_id: str | None = None):
     ABS_UPDATE_MIN_DEPLOY_DELAY_SECONDS (set to 0 here -- this file tests
     the last_ok/staleness contract, not the elapsed-time gate, which
     test_ai_brain_auto_update.sh already covers on its own)."""
-    env = {**env0, "HOME": str(FAKE_HOME), "ABS_SKILL_DIR": str(clone),
+    env = {**env0, "HOME": str(FAKE_HOME), "USERPROFILE": str(FAKE_HOME), "ABS_SKILL_DIR": str(clone),
            "ABS_UPDATE_STATE_DIR": str(state),
            "ABS_UPDATE_INTERVAL_DAYS": "0", "ABS_UPDATE_MIN_DEPLOY_DELAY_SECONDS": "0"}
     kwargs = {}
