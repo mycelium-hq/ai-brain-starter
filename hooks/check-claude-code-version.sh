@@ -40,20 +40,33 @@ DIFF_BULLET_LIMIT=8               # max bullets to surface from the changelog di
 
 now=$(date +%s)
 if [[ -f "$CACHE_FILE" ]]; then
-  last=$(stat -f %m "$CACHE_FILE" 2>/dev/null || stat -c %Y "$CACHE_FILE" 2>/dev/null || echo 0)
-  age=$(( now - last ))
-  if (( age < CACHE_TTL_SEC )); then
-    # DATE the snapshot. A cached reading is byte-identical in shape to a live
-    # one, so replaying it bare lets a stale version number read as current --
-    # the reader has no way to tell. Stamp the age whenever it is old enough to
-    # matter, so a stale answer announces itself instead of impersonating a
-    # fresh one.
-    cat "$CACHE_FILE"
-    if [[ -s "$CACHE_FILE" ]] && (( age >= 3600 )); then
-      printf '[claude-code-version] (reading is %dh old; upstream ships ~daily, so the real head may already be newer)\n' "$(( age / 3600 ))"
+  # Epoch mtime of $CACHE_FILE, cross-platform. GNU/Linux `stat -c %Y` first,
+  # then BSD/macOS `stat -f %m`, validating each result is a plain integer
+  # before trusting it. GNU's `-f` flag means `--file-system`, so
+  # `stat -f %m FILE` on Linux does not fail the way a BSD-first `||` chain
+  # assumes -- it can hand back non-numeric text instead of a clean fallback,
+  # which then poisoned the `age` arithmetic below outright (unbound-variable
+  # abort under `set -u`, measured on GNU coreutils 9.4). See PORTABILITY.md #1.
+  last=$(stat -c %Y "$CACHE_FILE" 2>/dev/null)                       # GNU/Linux
+  case "$last" in ''|*[!0-9]*) last=$(stat -f %m "$CACHE_FILE" 2>/dev/null) ;; esac  # BSD/macOS
+  case "$last" in ''|*[!0-9]*) last="" ;; esac  # neither gave a plain integer -> unknown
+  if [[ -n "$last" ]]; then
+    age=$(( now - last ))
+    if (( age < CACHE_TTL_SEC )); then
+      # DATE the snapshot. A cached reading is byte-identical in shape to a live
+      # one, so replaying it bare lets a stale version number read as current --
+      # the reader has no way to tell. Stamp the age whenever it is old enough to
+      # matter, so a stale answer announces itself instead of impersonating a
+      # fresh one.
+      cat "$CACHE_FILE"
+      if [[ -s "$CACHE_FILE" ]] && (( age >= 3600 )); then
+        printf '[claude-code-version] (reading is %dh old; upstream ships ~daily, so the real head may already be newer)\n' "$(( age / 3600 ))"
+      fi
+      exit 0
     fi
-    exit 0
   fi
+  # else: mtime unreadable -> treat the cache as stale rather than trust an
+  # unprovable age. Fall through and refetch from the GitHub API below.
 fi
 
 # Need gh CLI; if missing, exit silently

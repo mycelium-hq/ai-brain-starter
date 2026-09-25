@@ -106,21 +106,30 @@ DEFAULT_BASELINE = REPO / "scripts" / "vault-root-read-baseline.txt"
 
 # Functions allowed to read the env var, and calls allowed to receive it.
 #
-#   _resolve_vault_root  scripts/aggregate-{decisions,sessions}.py,
-#                        scripts/decision-outcome-check.py -- prefers the
-#                        script's own vault, ignores a mismatched env var
-#                        unless VAULT_ROOT_FORCE=1.
-#   resolve_vault_root   hooks/_lib/vault_root.py -- cwd-derived detection
-#                        first, env var as fallback. Both the definition and a
-#                        call site passing the env var IN are sanctioned.
-#   vault_root_for       the per-file hook resolver
-#                        (hooks/validate-handoff-frontmatter.py): detection
-#                        from the TARGET FILE first, env var as fallback.
+#   _resolve_vault_root    scripts/aggregate-{decisions,sessions}.py,
+#                          scripts/decision-outcome-check.py -- prefers the
+#                          script's own vault, ignores a mismatched env var
+#                          unless VAULT_ROOT_FORCE=1.
+#   resolve_vault_root     hooks/_lib/vault_root.py -- cwd-derived detection
+#                          first, env var as fallback. Both the definition and
+#                          a call site passing the env var IN are sanctioned.
+#   vault_root_for         the per-file hook resolver
+#                          (hooks/validate-handoff-frontmatter.py): detection
+#                          from the TARGET FILE first, env var as fallback.
+#   resolve_cli_vault_root hooks/_lib/vault_root.py -- the standalone-CLI
+#                          resolver (scripts/drift-detection.py,
+#                          scripts/compress-vault-doc.py both call it, #683
+#                          review follow-up): cwd-derived detection first,
+#                          env var as fallback, same precedence as
+#                          resolve_vault_root but for a script's own
+#                          module-level VAULT_ROOT instead of the session-
+#                          close cascade's.
 SANCTIONED = frozenset({
     "_resolve_vault_root",
     "resolve_vault_root",
     "vault_root_for",
     "_vault_root_for",
+    "resolve_cli_vault_root",
 })
 
 ENV_VAR = "VAULT_ROOT"

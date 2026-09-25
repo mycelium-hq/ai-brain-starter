@@ -9,6 +9,74 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-09-25: a Linux-only `stat` bug crashed both the version-check hook and the installer itself
+
+**Who this affects:** anyone running ai-brain-starter on Linux, or in CI on ubuntu. macOS was never affected.
+
+Twelve sites across the repo read a file's modified time or size with a "try BSD's `stat -f` first, fall back to GNU's `stat -c`" pattern. That order is backwards on Linux: GNU's `-f` flag means "show filesystem info," not "custom format," so `stat -f %m FILE` (or `%z`, for size) does not fail the way the fallback assumed. On real GNU coreutils it can hand back non-numeric text instead of a clean error, and two sites fed that text straight into arithmetic: `hooks/check-claude-code-version.sh`'s cache-age check, and `bootstrap.sh`'s own log-rotation check. Both aborted with a bash "unbound variable" error on Linux. `bootstrap.sh`'s crash is the worse one: it happens on *every* run once `~/.claude/.bootstrap.log` exists from a prior run, in the one script every Linux user runs to install this project.
+
+The other ten sites (`scripts/auto-snapshot.sh`'s log-trim check, `scripts/bootstrap-restore.sh`'s backup-age filter and its size and modified-time columns, `scripts/diagnose.sh`'s journal-index freshness check, `hooks/rotate-logs.sh`'s rotation-size check, `scripts/vault-backup.sh`'s two size reads, and `scripts/vault-safe-commit.sh`'s stale-lock age and size checks) used differently-shaped versions of the same backwards order. Measured against real GNU coreutils, most of those didn't crash the same way, each had its own accidental reason not to (a `uname` gate that never reaches the BSD form on Linux, a glued option form that happens to fail cleanly, separate assignments that overwrite instead of concatenate), but none were safe by design, and a different coreutils build or a different `stat` implementation could change that without warning. `scripts/auto-snapshot.sh`'s log-trim silently never fired on Linux and printed a confusing "integer expression expected" error on every run once its log existed.
+
+All twelve now try the matching GNU form first (`stat -c %Y` for mtime, `stat -c %s` for size) and check the result is a plain number before trusting it, falling back to the BSD form (also validated) only if that fails, the same pattern already used by `_close_lock_mtime` in `scripts/_session_close_guard.sh` (which gained a sibling, `_close_lock_size`, for the size case). `vault-safe-commit.sh` now calls both shared functions directly instead of carrying its own copies. A check, `scripts/check-stat-portability.py`, fails CI if this backwards pattern shows up again at any BSD `stat` format letter in any tracked shell script, quoted or not, not just `%m`.
+
+## 2026-09-24: graph routing never fired on Linux
+
+**Who this affects:** anyone running `graph-context-hook.sh` on Linux, or anywhere `stat` is the GNU version, with a graph that exists.
+
+The hook reads the graph file's age to warn when it is stale. It asked `stat -f %m` first, which is the macOS form. On Linux `stat -f` means "file system", so it printed file-system text before failing, that text landed in the captured age next to the fallback's number, and the hook then crashed on it and printed nothing. Routing silently never happened there.
+
+Now it asks the Linux form first, then the macOS form, checks that the answer is a number, and says "age unknown" instead of crashing if neither works. The test added with the graph-routing env overrides (#682) caught this the first time it ran on a Linux machine.
+
+---
+
+## 2026-09-23: the Decision Log index stops listing decisions as "????-??-?? — What"
+
+**Who this affects:** anyone whose decision files have `creationDate` but no `decision_date`, or use a What/Why template with `## What` (or `## Qué`) as the first heading. Session-close writes plenty of both.
+
+The index at the top of `Decision Log.md` took the date from `decision_date` only and the title from the first heading in the file. On one 102-decision vault, 16 entries showed up as `????-??-??`, and 12 of those had the same title, "Qué". An index where a dozen rows read the same thing is no help for finding a decision.
+
+It wasn't only cosmetic. A decision with no date stays in the main log forever, so closed decisions without `decision_date` could never move to `Decision Log Archive.md`.
+
+Now, when `decision_date` is missing, the date comes from `creationDate`, and failing that from the date at the start of the filename. Headings that are just template labels (What, Why, Context, Qué, Por qué, Contexto…) are skipped. When nothing else is left, the title is the first sentence of the What section, stripped of bold and links and cut at about 90 characters. Decision files are not touched. The fix is entirely in how the index is built.
+
+---
+
+## 2026-09-20: the generated Drift Audit frontmatter did not parse as YAML, and the script could silently audit the wrong vault
+
+**Who this affects:** anyone running `drift-detection.py`, and anyone with `VAULT_ROOT` exported machine-wide (a shell profile, or a Claude Code `settings.json` `env` block someone configured) who runs it from a vault other than the one `VAULT_ROOT` names.
+
+**Bug 1 — the frontmatter it wrote couldn't be parsed.** The generated `Meta/Drift Audit.md` carries a `purpose:` line built from the `--include` glob, e.g. `purpose: Multi-edit drift audit. ... Include: '*.md'.`. An unquoted YAML scalar containing `": "` is read as a nested mapping, so `yaml.safe_load` raised "mapping values are not allowed here" — the file was invisible to Dataview, metadata extractors, and any other frontmatter-reading tool, with nothing erroring to say so. The purpose line is now JSON-encoded (`json.dumps(..., ensure_ascii=False)`), which is valid YAML for every glob we tested, including one with an apostrophe or an astral-plane emoji (a real vault folder name, e.g. "📓 Journals") in it.
+
+**Bug 2 — a globally-exported `VAULT_ROOT` silently outranked the vault you were standing in.** The script read `os.environ.get("VAULT_ROOT") or os.getcwd()`: once `VAULT_ROOT` is set anywhere (a shell profile, or Claude Code's `env` block, which every hook subprocess inherits), it always wins, even when you `cd` into a different git-tracked vault and run the script there. Both the git history it scans and the `Meta/Drift Audit.md` it writes would resolve against the wrong vault, with no error. It now prefers the vault you're actually standing in — cwd, or an ancestor of cwd that already has a Meta folder, collapsing a vault worktree to its main vault first — and only falls back to `VAULT_ROOT` when cwd isn't inside an established vault at all (a plain code checkout, say), when the two already agree, or when you set `VAULT_ROOT_FORCE=1` — otherwise it warns and audits the vault you actually ran it from. `compress-vault-doc.py` resolves the vault the same way, so it can always find what `drift-detection.py` just wrote.
+
+Bug 2 surfaced while landing the fix for Bug 1, not from a user report — both ship together, with a regression test for each. Both bugs, and this second hardening pass on Bug 2's own fix (the worktree and non-vault-checkout cases), came from @juan-monsalve-mon's #683 plus an independent adversarial review of that PR before it landed.
+
+---
+
+## 2026-09-19: the graph routing hook told you to customize it, then overwrote your customization
+
+**Who this affects:** anyone who set up `graph-context-hook.sh` and has only ONE graph — the default second graph points at `$VAULT_ROOT/Work/`, a folder most vaults do not have.
+
+The hook's own header says "CUSTOMIZE THIS SCRIPT for your vault" and lists four values to edit. But `install-hooks-user-level.py` treats it as a vault-content hook and copies it from the skill into the vault **unconditionally**, and the auto-update runs that roughly every six days. So the file asks you to edit it and then silently discards what you wrote.
+
+**What that looked like on one vault:** the local edit emptied `SECONDARY_GRAPH`, which is the documented way to say "I only have one graph" — the code already guards on it being empty. After an installer run the default came back, and every prompt containing *work*, *team*, *client*, *meeting*, *deadline* or *sprint* was injected with:
+
+> ⚠ LOST — this graph was built before but is GONE now ... rebuild it: /graphify --update on Work/
+
+A false alarm about a graph that never existed, plus an instruction to rebuild it, on every prompt of that family. The user had already moved the file out of the installer's reach once; the installer simply repointed `settings.json` back at the copy it manages, and the edited file sat there unused.
+
+**The fix:** every CONFIG value now reads an env override, so it can live in `~/.claude/settings.json` → `env`, which the installer does not touch — exactly how `VAULT_ROOT` already worked. One graph only:
+
+```json
+"env": { "SECONDARY_GRAPH": "" }
+```
+
+Note for anyone reading the diff: `SECONDARY_GRAPH` uses `${VAR-default}`, not `${VAR:-default}`. The bare `-` is the only spelling that honours an exported empty value; with `:-` the default would come back and re-enable the graph the user just turned off. The other values keep `:-` because emptying them is not a supported configuration.
+
+Nothing changes if you set no env vars: same defaults, same behaviour.
+
+---
+
 ## 2026-09-17: graphify's self-link guard missed accented filenames, and skipped files were invisible
 
 **Who this affects:** anyone running `graphify_apply_wikilinks.py` on a vault with accented filenames, notes that share a name across folders, or notes near the 1 MB read cap.
