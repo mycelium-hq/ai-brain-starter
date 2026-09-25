@@ -223,6 +223,37 @@ else
   bad "(j) redaction took ${ELAPSED}s on 30 KB of adversarial output"
 fi
 
+# --- (k) LEAK CONTROL: `tput sgr0` charset code and a gh CLI (gho_) token ---
+NPM3="npm_$(printf 'D%.0s' $(seq 1 36))"
+GHO="gho_$(printf 'E%.0s' $(seq 1 36))"
+rm -rf "$LEARN"
+run_hook "$(cat <<JSON
+{"tool_name":"Bash","cwd":"$VAULT","session_id":"s","tool_call_id":"bashK",
+ "tool_input":{"command":"gh api user"},
+ "tool_response":{"exitCode":1,"stdout":"token: $GHO","stderr":"\u001b(B\u001b[m$NPM3"}}
+JSON
+)"
+if [ "$(count_md)" = "1" ]; then
+  CAP="$(find "$LEARN" -name '*.md' | head -1)"
+  if grep -q "$NPM3" "$CAP" || grep -q "$GHO" "$CAP"; then
+    bad "(k) LEAK: a key after ESC(B, or a gho_ token, reached the capture"
+  else
+    pass "(k) keys after a charset code and gho_ tokens are redacted"
+  fi
+else
+  bad "(k) Bash exitCode!=0 was not captured ($(count_md) file(s))"
+fi
+
+# --- (j2) BOUNDED at the registry: every other consumer of the shared patterns
+# (scrubbers, scanners) redacts without this hook's windows, so the patterns
+# themselves must stay linear on a hostile "a://b:" run.
+REG_SECONDS="$(python3 -c "import sys, time; sys.path.insert(0, '$ROOT/hooks'); from _lib.secret_patterns import redact; t = time.time(); redact('a://b:' * 5000); print(int(time.time() - t))")"
+if [ "$REG_SECONDS" -lt 2 ]; then
+  pass "(j2) the shared registry redacts 30 KB of repeated URL fragments in ${REG_SECONDS}s"
+else
+  bad "(j2) the shared registry took ${REG_SECONDS}s on 30 KB of repeated URL fragments"
+fi
+
 echo
 if [ "$fail" = "0" ]; then
   echo "test_post_tool_use_learnings: all assertions passed"

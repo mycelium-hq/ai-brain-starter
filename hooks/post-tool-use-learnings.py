@@ -70,7 +70,7 @@ except Exception:
 REDACTION_UNAVAILABLE = "[redaction unavailable -- raw content omitted]"
 
 
-ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+ANSI_ESCAPE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|[()*+][0-9A-Za-z])")  # CSI + charset (tput sgr0)
 SECRET_SLACK = 4096  # longer than any secret shape, so none straddles the cut
 
 
@@ -91,7 +91,11 @@ def safe_redact(text: str, limit: int | None = None) -> str:
         redacted, _hits = _redact_secrets(ANSI_ESCAPE.sub("", window))
     except Exception:
         return REDACTION_UNAVAILABLE
-    return redacted if limit is None else redacted[:limit]
+    if limit is None:
+        return redacted
+    if len(text) > len(window):  # a token cut at the window edge is too short to match
+        redacted = re.sub(r"\S+\Z", "", redacted)
+    return redacted[:limit]
 
 
 def _redact_tree(value, limit: int):
@@ -104,8 +108,10 @@ def _redact_tree(value, limit: int):
         return safe_redact(value, limit)
     if isinstance(value, dict):
         return {safe_redact(str(k), limit): _redact_tree(v, limit) for k, v in value.items()}
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, (list, tuple, set, frozenset)):
         return [_redact_tree(v, limit) for v in value]
+    if isinstance(value, bytes):
+        return safe_redact(value.decode("utf-8", "replace"), limit)
     return value
 
 

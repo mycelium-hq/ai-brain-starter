@@ -56,6 +56,8 @@ try:  # Fails CLOSED: without the registry, raw error text is withheld.
     from _lib.secret_patterns import redact as _redact_secrets  # noqa: E402
 except Exception:  # pragma: no cover - _redact_text has the closed fallback
     _redact_secrets = None
+    print("performance-digest: secret redaction unavailable; tool-error text will not be recorded",
+          file=sys.stderr)
 
 
 def _redact_text(raw: str) -> "str | None":
@@ -580,12 +582,21 @@ def _load_dedupe_sources(vault_root: Path) -> "str | None":
             paths.extend(folder.glob(pattern))
     # Bounded reads (a cloud-synced or FIFO path can hang read_text); resolve()
     # because safe_read refuses a symlink, and a symlinked CLAUDE.md is common.
-    reads = [(p, safe_read_text(p.resolve(), errors="ignore")) for p in paths]
+    reads = [(p, _read_resolved(p)) for p in paths]
     # An existing CLAUDE.md that cannot be read makes dedupe unreliable: return
     # None so the caller writes no rule rather than risk a duplicate.
-    if any(p.name == "CLAUDE.md" and p.exists() and not r.ok for p, r in reads):
+    if any(p.name == "CLAUDE.md" and p.exists() and not (r and r.ok) for p, r in reads):
+        print("performance-digest: a CLAUDE.md could not be read; writing no rules this run",
+              file=sys.stderr)
         return None
-    return "\n".join(r.text for _, r in reads if r.ok and r.text)
+    return "\n".join(r.text for _, r in reads if r and r.ok and r.text)
+
+
+def _read_resolved(p: Path):
+    try:
+        return safe_read_text(p.resolve(), errors="ignore")
+    except (OSError, RuntimeError):  # a symlink loop raises RuntimeError on Python 3.9
+        return None
 
 
 # Map prescription types to MEMORY.md rules (behavioral) vs to-dos (investigation)

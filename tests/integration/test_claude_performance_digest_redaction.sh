@@ -215,6 +215,26 @@ case "$DEDUPE" in
   *)    bad "(c.2) unreadable CLAUDE.md returned $DEDUPE, not None" ;;
 esac
 
+# --- (c.3) a symlink-loop CLAUDE.md must not crash the dedupe (resolve()
+# raises RuntimeError on Python 3.9; the loop is treated as unreadable).
+rm -f "$HOME/.claude/CLAUDE.md" "$HOME/.claude/loop-a"
+ln -s "$HOME/.claude/loop-a" "$HOME/.claude/CLAUDE.md"
+ln -s "$HOME/.claude/CLAUDE.md" "$HOME/.claude/loop-a"
+LOOP="$(python3 - "$DIGEST" "$TMP" 2>&1 <<'PY'
+import importlib.util, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location("digest", sys.argv[1])
+mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+mod._load_dedupe_sources(Path(sys.argv[2]))
+print("NO-CRASH")
+PY
+)"
+rm -f "$HOME/.claude/CLAUDE.md" "$HOME/.claude/loop-a"
+case "$LOOP" in
+  *NO-CRASH*) pass "(c.3) a symlink-loop CLAUDE.md does not crash the dedupe" ;;
+  *)          bad "(c.3) a symlink-loop CLAUDE.md crashed the dedupe: ${LOOP##*$'\n'}" ;;
+esac
+
 echo
 if [ "$fail" = "0" ]; then
   echo "test_claude_performance_digest_redaction: all assertions passed"
