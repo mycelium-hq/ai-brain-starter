@@ -109,8 +109,9 @@
         "matcher": "Bash",
         "hooks": [
           {
+            "_comment": "BLOCKING gate (RETRY-LOOP). Blocks the 4th identical Bash command inside 30 minutes. Wired in the `if [ -f ]` form on purpose: it signals by EXIT CODE 2 with its prose on STDERR, and the `[ -f X ] && X || true` form it shipped in rewrote that exit into 0, so under a POSIX shell the gate never blocked anything (Windows installs route it through hook_runner.py, which propagates exit 2). The guard also requires `-r`: python exits 2 on a script it cannot read, and exit 2 is a block, so a mode-000 copy behind `[ -f ]` alone would refuse every Bash call. The absent/unreadable branch prints a neutral no-op and makes no permission decision: a missing loop-breaker should answer nothing for the call. The hook counts one attempt per tool_use_id, so a second installer wiring the same script cannot double-count a call. Bypass: prefix the command with RETRY_BUDGET_BYPASS=1.",
             "type": "command",
-            "command": "[ -f ~/.claude/hooks/retry-budget.py ] && [PYTHON] ~/.claude/hooks/retry-budget.py || true"
+            "command": "if [ -f ~/.claude/hooks/retry-budget.py ] && [ -r ~/.claude/hooks/retry-budget.py ]; then [PYTHON] ~/.claude/hooks/retry-budget.py; else echo '{\"continue\":true,\"suppressOutput\":true}'; fi"
           },
           {
             "type": "command",

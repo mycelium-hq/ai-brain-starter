@@ -63,8 +63,11 @@ def _build_backlink_index():
                     fm = yaml.safe_load(content[3:end]) or {}
                 except Exception:
                     fm = {}
+                raw_date_iso = fm.get("date_iso")
+                if hasattr(raw_date_iso, "isoformat"):
+                    raw_date_iso = raw_date_iso.isoformat()
                 file_date = (
-                    fm.get("date_iso")
+                    raw_date_iso
                     or iso_date_from(fm.get("creationDate"))
                 )
         if not file_date:

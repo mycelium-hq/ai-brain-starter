@@ -9,11 +9,35 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-09-25: the retry limit blocked work that was not a loop, and on most installs it could not block at all
+
+**Who this affects:** everyone. The retry-budget hook is wired on every install.
+
+The retry-budget hook stops Claude after the 3rd identical Bash command in 30 minutes, so a failing command gets surfaced to you instead of retried forever. Three problems made it wrong in both directions.
+
+It told commands apart by their first 400 characters only. Commands that start with a long folder path, which is common when Claude works from a scratch folder, looked identical even when everything after the path was different, so a 4th *different* step could be blocked as a loop. It now compares the whole command.
+
+On a machine where a second installer also registered the hook, every Bash command was counted twice, so the block came on the 3rd command instead of the 4th. The hook now counts each command once, however many times it is registered.
+
+And the way `hooks.json` registered it (`... || true`) quietly turned the hook's "block" answer into "allow", so on Mac and Linux an install carrying only this repo's copy never blocked anything. (Windows runs hooks through its own launcher, which kept the block, so it was not affected.)
+
+Two smaller things came with it. If the hook's small tracking file is damaged, or the hook file itself cannot be read, it now stays out of the way instead of erroring (or blocking) on every command. And a machine that already had the hook registered twice ends up with exactly one registration after a single update. It is now registered in the same form as the other blocking hooks, and when the hook file is missing it stays out of the way instead of answering for the command.
+
+## 2026-09-25: a Linux-only `stat` bug crashed both the version-check hook and the installer itself
+
+**Who this affects:** anyone running ai-brain-starter on Linux, or in CI on ubuntu. macOS was never affected.
+
+Twelve sites across the repo read a file's modified time or size with a "try BSD's `stat -f` first, fall back to GNU's `stat -c`" pattern. That order is backwards on Linux: GNU's `-f` flag means "show filesystem info," not "custom format," so `stat -f %m FILE` (or `%z`, for size) does not fail the way the fallback assumed. On real GNU coreutils it can hand back non-numeric text instead of a clean error, and two sites fed that text straight into arithmetic: `hooks/check-claude-code-version.sh`'s cache-age check, and `bootstrap.sh`'s own log-rotation check. Both aborted with a bash "unbound variable" error on Linux. `bootstrap.sh`'s crash is the worse one: it happens on *every* run once `~/.claude/.bootstrap.log` exists from a prior run, in the one script every Linux user runs to install this project.
+
+The other ten sites (`scripts/auto-snapshot.sh`'s log-trim check, `scripts/bootstrap-restore.sh`'s backup-age filter and its size and modified-time columns, `scripts/diagnose.sh`'s journal-index freshness check, `hooks/rotate-logs.sh`'s rotation-size check, `scripts/vault-backup.sh`'s two size reads, and `scripts/vault-safe-commit.sh`'s stale-lock age and size checks) used differently-shaped versions of the same backwards order. Measured against real GNU coreutils, most of those didn't crash the same way, each had its own accidental reason not to (a `uname` gate that never reaches the BSD form on Linux, a glued option form that happens to fail cleanly, separate assignments that overwrite instead of concatenate), but none were safe by design, and a different coreutils build or a different `stat` implementation could change that without warning. `scripts/auto-snapshot.sh`'s log-trim silently never fired on Linux and printed a confusing "integer expression expected" error on every run once its log existed.
+
+All twelve now try the matching GNU form first (`stat -c %Y` for mtime, `stat -c %s` for size) and check the result is a plain number before trusting it, falling back to the BSD form (also validated) only if that fails, the same pattern already used by `_close_lock_mtime` in `scripts/_session_close_guard.sh` (which gained a sibling, `_close_lock_size`, for the size case). `vault-safe-commit.sh` now calls both shared functions directly instead of carrying its own copies. A check, `scripts/check-stat-portability.py`, fails CI if this backwards pattern shows up again at any BSD `stat` format letter in any tracked shell script, quoted or not, not just `%m`.
+
 ## 2026-09-24: graph routing never fired on Linux
 
 **Who this affects:** anyone running `graph-context-hook.sh` on Linux, or anywhere `stat` is the GNU version, with a graph that exists.
 
-The hook reads the graph file's age to warn when it is stale. It asked `stat -f %m` first, which is the macOS form. On Linux `stat -f` means "file system", so it printed text and still reported success, and the hook then crashed on that text and printed nothing. Routing silently never happened there.
+The hook reads the graph file's age to warn when it is stale. It asked `stat -f %m` first, which is the macOS form. On Linux `stat -f` means "file system", so it printed file-system text before failing, that text landed in the captured age next to the fallback's number, and the hook then crashed on it and printed nothing. Routing silently never happened there.
 
 Now it asks the Linux form first, then the macOS form, checks that the answer is a number, and says "age unknown" instead of crashing if neither works. The test added with the graph-routing env overrides (#682) caught this the first time it ran on a Linux machine.
 

@@ -85,6 +85,7 @@ SKIP_PARTS = {
     "_review_alternate_drafts",
     "📥 Inbox", "Inbox",
     ".obsidian", ".git", "node_modules",
+    "graphify-out",
 }
 
 # A symlinked top-level folder is ANOTHER vault mounted inside this one (the

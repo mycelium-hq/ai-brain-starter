@@ -586,6 +586,18 @@ jobs:
       - name: shellcheck (.sh, -S warning)
         run: bash scripts/shellcheck.sh
 
+      # shellcheck does not catch the GNU-vs-BSD `stat` flag class above (it is
+      # a portability idiom, not a syntax or quoting defect) -- this gate
+      # does, for any BSD-first `stat -f %<letter>` read, quoted or not (the
+      # trap PORTABILITY.md #1 documents). scripts/check-stat-portability.py is the single
+      # source of truth - scripts/ci.sh runs the SAME script locally so the
+      # laptop pre-push gate and CI cannot drift.
+      - name: stat portability negative controls (a BSD-first chain must go RED)
+        run: python3 scripts/check-stat-portability.py --self-test
+
+      - name: stat portability (GNU-first + numeric-validated, or flagged)
+        run: python3 scripts/check-stat-portability.py
+
       # ---- PR-scoped ---------------------------------------------------------
 
       # Mirrors the maintainer's write-time hookify guard so that PRs from

@@ -140,9 +140,10 @@ freshness_note() {
   fi
   local mtime now days
   # GNU first, then BSD, validating each result (scripts/PORTABILITY.md §1).
-  # GNU `stat -f` means --file-system, so `stat -f %m` on Linux exits 0 with
-  # non-numeric text. The old BSD-first `||` chain passed that text to the
-  # arithmetic below, and the hook died silently on Linux whenever a prompt
+  # GNU `stat -f` means --file-system, so `stat -f %m FILE` on Linux prints
+  # file-system text and then fails. The old BSD-first `A || B` chain captured
+  # that text along with the fallback's number and passed the mix to the
+  # arithmetic below, so the hook died silently on Linux whenever a prompt
   # matched a graph that exists.
   mtime=$(stat -c %Y "$path" 2>/dev/null)
   case "$mtime" in ''|*[!0-9]*) mtime=$(stat -f %m "$path" 2>/dev/null) ;; esac

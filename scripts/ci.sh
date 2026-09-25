@@ -537,6 +537,14 @@ INTEGRATION_TESTS=(
   # python3_helper.sh) run with NO marker planted: an ALLOW there means the gate
   # stayed shut, not that a marker satisfied it.
   test_journal_guard_interpreter_write
+  # Same guard, the fix command it PRINTS (2026-09-24). Step 1 was the literal
+  # `python3 "⚙️ Meta/scripts/journal-preflight.py"`: a session PATH shim
+  # refuses `python3 <script>`, and the relative path resolves only from the
+  # vault root, so the one sanctioned way past the block could not run. The
+  # printed text is executed from `/` and must reach a sentinel-printing
+  # fixture, so a refusal or a wrong path cannot pass. 8 assertions fail on the
+  # pre-fix hook; both no-marker DENY controls still hold.
+  test_journal_guard_preflight_command
   # Close detector, whole-message anchoring + length gate (2026-08-16): the
   # shared pack tiers ran under re.MULTILINE, so every `$`-anchored sign-off
   # matched the end of ANY line and a 60-line handoff whose third line read
@@ -576,6 +584,20 @@ INTEGRATION_TESTS=(
   # not `:-`), an unset one falls back to the default path, and PRIMARY_PATTERN
   # replaces rather than extends the default keyword regex.
   test_graph_context_hook_env
+  # PORTABILITY.md #1: the BSD-first `stat -f %m` mtime read broke
+  # check-claude-code-version.sh's cache-freshness check outright on real GNU
+  # coreutils (unbound-variable abort). Runs the real hook under
+  # lib/gnu_stat_shim.sh so the Linux code path is exercised deterministically
+  # from any host.
+  test_check_claude_code_version_cache_age
+  # Same bug class, vault-safe-commit.sh's non-PID lock-age check: a lock
+  # whose age cannot be proven must never be treated as stale and removed.
+  # Runs the real script under the same GNU-stat shim.
+  test_vault_safe_commit_lock_age
+  # Same bug class at a different `stat` format letter (%z, size, not %m,
+  # mtime): bootstrap.sh's own log-rotation check crashed outright on real
+  # GNU coreutils, on every run once ~/.claude/.bootstrap.log existed.
+  test_bootstrap_log_rotation_stat
   # MYC-4635: recurring tool-error text reached Claude To-dos.md unredacted;
   # proves the digest redacts at capture, before truncation, and a benign
   # recurring error still survives byte-identical.
@@ -1057,6 +1079,17 @@ else
   echo "    install: brew install shellcheck  (macOS)  /  sudo apt-get install -y shellcheck  (Debian/Ubuntu)"
 fi
 
+# ---- (c1) stat portability gate --------------------------------------
+# scripts/check-stat-portability.py is the single source of truth -
+# lint.yml's `lint` job runs the SAME script, so the laptop pre-push gate and
+# CI cannot drift. This one is stdlib-only and hermetic (no external binary
+# to install), so unlike the check just above it there is no OS-dependent
+# reason to skip it in either place -- it mirrors check-exit-contract.py's
+# wiring below instead.
+echo "==> (c1) stat portability: $PY scripts/check-stat-portability.py"
+"$PY" scripts/check-stat-portability.py --self-test >/dev/null
+"$PY" scripts/check-stat-portability.py
+
 # ---- (c2) PowerShell static analysis ---------------------------------------
 # Runs the SAME canonical gate as the lint job's 'repo PowerShell' step, so the
 # local pre-push gate and CI cannot drift on .ps1 quality. Warn-skipped locally
@@ -1406,6 +1439,16 @@ PY_DIRECT=(
   # off-scratchpad, bypass), and the shell-variable form that slipped past the
   # guard's own first production run. Plain script, no pytest.
   hooks/test_scratchpad_cross_agent_clobber.py
+  # retry-budget.py blocked work that was not a loop, two ways: its fingerprint
+  # hashed only the first 400 characters, so distinct commands opening with one
+  # long scratch path shared a budget, and a second installer's registration of
+  # the same script counted every Bash call twice. The hooks.json `|| true`
+  # wrapper also rewrote the exit-2 block into an allow, so under a POSIX shell
+  # this repo's own copy never blocked. Drives the hook, the registered
+  # hooks.json command and the real installer in a sandbox HOME; 25 of its 38
+  # checks fail against the pre-fix revision, and reverting any one fix turns
+  # its own checks red.
+  hooks/test_retry_budget.py
   tests/test_instinct.py
   tests/test_entity_disambiguator_clustering.py
   tests/test_graphify_stage_select_cache_key.py
@@ -1595,4 +1638,4 @@ done
 echo "    OK - ${#PY_DIRECT[@]} hooks/+tests/ direct suite(s) passed; dormancy invariant clean"
 
 echo
-echo "All gates passed: py_compile ($count file(s)) + ${#INTEGRATION_TESTS[@]} integration tests + $unit_count scripts/ + ${#PY_DIRECT[@]} hooks/tests unit suite(s) + shellcheck [$shellcheck_note] + powershell [$pssa_note] + phase-doc python [$phasepy_note] + repo python [$ruffgate_note] + utf8 console guard [$utf8_note] + hook block-protocol [passed] + vault-root reads [passed] + home-hook deploy [passed] + subprocess decode [passed] + py3.9 annotation parity [passed] + ps1 encoding [passed]."
+echo "All gates passed: py_compile ($count file(s)) + ${#INTEGRATION_TESTS[@]} integration tests + $unit_count scripts/ + ${#PY_DIRECT[@]} hooks/tests unit suite(s) + shellcheck [$shellcheck_note] + stat portability [passed] + powershell [$pssa_note] + phase-doc python [$phasepy_note] + repo python [$ruffgate_note] + utf8 console guard [$utf8_note] + hook block-protocol [passed] + vault-root reads [passed] + home-hook deploy [passed] + subprocess decode [passed] + py3.9 annotation parity [passed] + ps1 encoding [passed]."

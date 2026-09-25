@@ -1407,9 +1407,11 @@ def relocate_moved_hooks(existing: dict, template: dict) -> tuple[dict, int]:
     return cleaned, removed
 
 
-def dedupe_owned_hooks(existing: dict) -> tuple[dict, int]:
-    """Collapse duplicate OWNED hooks that share the same (event, group, owned-script)
-    down to one, keeping the LAST occurrence (the freshest merge result).
+def dedupe_owned_hooks(existing: dict, preferred: frozenset = frozenset()) -> tuple[dict, int]:
+    """Collapse duplicate OWNED hooks that share the same (event, matcher, owned-script)
+    down to one, across every group carrying that matcher. The survivor is the copy
+    whose command is in `preferred` (the template's own rendered commands, i.e. the
+    freshest merge result), else the LAST occurrence.
 
     merge_hooks() REPLACES a template hook in place only when is_same_command matches; for
     an owned hook that match is by basename, but if a machine's stored command text drifts
@@ -1420,28 +1422,39 @@ def dedupe_owned_hooks(existing: dict) -> tuple[dict, int]:
     such duplicates on the next install. Non-owned (user) hooks and DISTINCT owned hooks
     are never touched — and one script wired twice with different ARGUMENTS is two
     distinct hooks, not a duplicate (see _owned_hook_key).
+
+    Why the preference and the cross-group scope: merge_hooks() rewrites the FIRST match,
+    so "keep the last" keeps a stale copy whenever one sits after it. Measured on a
+    machine where a second installer also wires retry-budget.py: one install left only
+    the old `|| true` copy, which can never block, and dropped the fresh template form;
+    two copies in separate groups with the same matcher were never collapsed at all.
     Groups emptied are dropped. Returns (cleaned, count_removed)."""
     cleaned = json.loads(json.dumps(existing))
     removed = 0
     if "hooks" not in cleaned:
         return cleaned, 0
     for event, groups in list(cleaned["hooks"].items()):
+        # Survivor per (matcher, owned key) across this event's groups. Only owned hooks
+        # (non-None key) are eligible; a user hook (None) is always kept.
+        survivor: dict = {}
+        for gi, g in enumerate(groups):
+            for hi, h in enumerate(g.get("hooks", [])):
+                key = _owned_hook_key(h.get("command", ""))
+                if not key:
+                    continue
+                slot = (g.get("matcher"), key)
+                cur = survivor.get(slot)
+                if (cur is None or h.get("command") in preferred
+                        or groups[cur[0]]["hooks"][cur[1]].get("command") not in preferred):
+                    survivor[slot] = (gi, hi)
         new_groups = []
-        for g in groups:
-            hooks = g.get("hooks", [])
-            # Last index per owned (script, args) key within THIS group. Only owned
-            # hooks (non-None key) are eligible; a user hook (None) is always kept.
-            last_idx: dict = {}
-            for i, h in enumerate(hooks):
-                key = _owned_hook_key(h.get("command", ""))
-                if key:
-                    last_idx[key] = i
+        for gi, g in enumerate(groups):
             kept = []
-            for i, h in enumerate(hooks):
+            for hi, h in enumerate(g.get("hooks", [])):
                 key = _owned_hook_key(h.get("command", ""))
-                if key and last_idx.get(key) != i:
+                if key and survivor.get((g.get("matcher"), key)) != (gi, hi):
                     removed += 1
-                    continue  # an earlier duplicate of an owned hook kept later in-group
+                    continue  # a duplicate of an owned hook kept elsewhere under this matcher
                 kept.append(h)
             if kept:
                 ng = dict(g)
@@ -2044,7 +2057,9 @@ def main() -> int:
     # Collapse duplicate owned-hook copies that an interpreter-path drift left behind
     # (a byte-changed command the owned-basename dedup recognizes only AFTER the hook is
     # owned, so merge replaced the first copy but a second stale one persisted).
-    merged, deduped_count = dedupe_owned_hooks(merged)
+    merged, deduped_count = dedupe_owned_hooks(merged, preferred=frozenset(
+        h.get("command", "") for groups in (template.get("hooks") or {}).values()
+        for g in groups for h in g.get("hooks", [])))
     # Collapse byte-identical copies regardless of ownership. dedupe_owned_hooks
     # above cannot see a hook the template no longer declares, which is exactly
     # the copy that accumulates forever (MYC-3876).
