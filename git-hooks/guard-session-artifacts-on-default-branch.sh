@@ -337,11 +337,42 @@ done
 [ "${_hit_count}" -gt 20 ] && _hit="${_hit}
     ... and $((_hit_count - 20)) more"
 
+# Per-route status for the message below, so it never asserts a cause it
+# never checked. A route with no usable ref/MERGE_HEAD at all is "ref
+# missing" / "not applicable" -- there was genuinely nothing to compare
+# against, so "not exempt" is trivially true. A route whose ref/MERGE_HEAD
+# DID exist but whose `diff-index` call itself FAILED (E2BIG, an unreadable
+# object, an index lock -- this file's header's own motivating case) is
+# "comparison FAILED": on that route the staged content may well be
+# byte-identical to the ref, the guard just never got to find out, so
+# claiming "this is not that [identical]" there would be a false cause. This
+# does not weaken the refusal itself -- every state below still exits 1.
+_origin_status="ref missing"
+if [ "${_have_origin_ref}" = "1" ]; then
+  if [ "${_origin_route_ok}" = "1" ]; then _origin_status="ran, no match"
+  else _origin_status="comparison FAILED"
+  fi
+fi
+_mh_status="not applicable"
+if [ "${_merge_head_on_default}" = "1" ]; then
+  if [ "${_mh_route_ok}" = "1" ]; then _mh_status="ran, no match"
+  else _mh_status="comparison FAILED"
+  fi
+fi
+
 {
   echo "pre-commit: REFUSED — checkout is on '${_cur}', not the default branch '${_def}'."
   echo "  You are staging session-close artifact(s) that must land on '${_def}', or they STRAND on"
   echo "  this topic branch (never reaching '${_def}'; local '${_def}' then diverges)."
-  echo "  (Content identical to origin/${_def}, or to a merged commit already on '${_def}', is exempt; this is not that.)"
+  if [ "${_origin_status}" = "comparison FAILED" ] || [ "${_mh_status}" = "comparison FAILED" ]; then
+    echo "  (origin/${_def} route: ${_origin_status}; MERGE_HEAD route: ${_mh_status}. A FAILED comparison refuses"
+    echo "  without knowing whether the content is identical to either — this is NOT a checked 'not identical', it"
+    echo "  is fail-closed on an unknown. Re-run once whatever failed it — a huge pathspec, an unreadable object, an"
+    echo "  index lock — is resolved.)"
+  else
+    echo "  (origin/${_def} route: ${_origin_status}; MERGE_HEAD route: ${_mh_status}. Content identical to either"
+    echo "  would be exempt; this is not that.)"
+  fi
   echo "  Refused path(s):${_hit}"
   echo "  Fix:    git checkout ${_def}    (then re-run the session close)."
   echo "  Bypass: SESSION_ARTIFACT_BRANCH_BYPASS=1 git commit ...   (or git commit --no-verify)."
