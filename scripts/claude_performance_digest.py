@@ -39,16 +39,10 @@ PERFORMANCE_DIR = VAULT_ROOT / "⚙️ Meta" / "Performance"
 TODO_FILE = VAULT_ROOT / "⚙️ Meta" / "Claude To-dos.md"
 PROJECTS_ROOT = Path.home() / ".claude" / "projects"
 
-# ── Secret redaction (MYC-4635) ──────────────────────────────────────
-# ONE canonical registry, hooks/_lib/secret_patterns.py, shared with the
-# hook-side scrub/scan/detect layers -- a second copy would rot the moment
-# the registry gains a pattern. scripts/ and hooks/ are siblings under this
-# repo's root and under the installed ~/.claude/skills/ai-brain-starter/
-# layout; this script is not in sync-vault-scripts.sh's VAULT_SCRIPTS
-# allow-list, so it only ever runs from one of those two checkouts, where
-# the relative sibling path always holds. Mirrors the idiom already used by
-# scripts/ai-brain-auto-update.py in this same directory. Fails CLOSED: a
-# broken import must never let raw tool-error text reach a persisted file.
+# Secret redaction (MYC-4635): shared hooks/_lib/secret_patterns.py registry.
+# scripts/ and hooks/ are siblings here and in the installed skill layout;
+# mirrors scripts/ai-brain-auto-update.py's import idiom. Fails CLOSED on a
+# broken import.
 try:
     sys.path.insert(0, str(SCRIPT_DIR.parent / "hooks" / "_lib"))
     from secret_patterns import redact as _redact_secrets
@@ -242,13 +236,8 @@ def analyze_session(jsonl_path):
             for block in content:
                 if block.get("is_error") or rec_type == "tool_error":
                     raw_text = block.get("text", "") if isinstance(block.get("text"), str) else ""
-                    # Redact ONCE, HERE, at the point of capture -- BEFORE this
-                    # text becomes an error_patterns dict key or is truncated
-                    # (MYC-4635). Slicing first can cut a credential in half so
-                    # the pattern no longer matches; redacting after it already
-                    # became a dict key would be too late for every downstream
-                    # consumer (the prescription string, Claude To-dos.md, and
-                    # the weekly report all read from this one captured value).
+                    # Redact HERE, before dict-key use/truncation: slicing
+                    # first can cut a credential in half.
                     text = _redact_text(raw_text)[:200]
                     tool_id = block.get("tool_use_id", "")
                     tool_errors.append((tool_id, text))

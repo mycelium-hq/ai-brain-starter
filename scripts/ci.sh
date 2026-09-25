@@ -576,6 +576,10 @@ INTEGRATION_TESTS=(
   # not `:-`), an unset one falls back to the default path, and PRIMARY_PATTERN
   # replaces rather than extends the default keyword regex.
   test_graph_context_hook_env
+  # MYC-4635: recurring tool-error text reached Claude To-dos.md unredacted;
+  # proves the digest redacts at capture, before truncation, and a benign
+  # recurring error still survives byte-identical.
+  test_claude_performance_digest_redaction
 )
 # ---- Gate-coverage invariant -------------------------------------------------
 # The list above is an explicit allow-list, and allow-lists rot: a new

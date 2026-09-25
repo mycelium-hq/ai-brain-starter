@@ -70,16 +70,8 @@ REDACTION_UNAVAILABLE = "[redaction unavailable -- raw content omitted]"
 
 
 def safe_redact(text: str) -> str:
-    """Redact secrets BEFORE the caller truncates or persists text.
-
-    MYC-4703: every string derived from tool input/output/error that can
-    reach the synced Meta/Learnings/ sink passes through the ONE shared
-    registry (hooks/_lib/secret_patterns.py) here, at the earliest point of
-    capture -- truncating first can cut a credential in half so the pattern
-    no longer matches, leaving a partial secret on disk.
-
-    Fails CLOSED: if the shared registry could not be imported, or redaction
-    itself raises, return a placeholder instead of ever writing raw text.
+    """Redact secrets BEFORE the caller truncates/persists (MYC-4703).
+    Fails CLOSED to a placeholder if the registry is unavailable or raises.
     """
     if not text:
         return text
@@ -163,9 +155,8 @@ def detect_failure(tool_response: dict, source_tool: str = "") -> tuple[bool, st
     if "exitCode" in tool_response:
         try:
             if int(tool_response.get("exitCode") or 0) != 0:
-                # Redact BEFORE truncating: a Bash command's stderr/stdout is
-                # where a leaked credential (e.g. argv, curl headers) lives,
-                # and slicing first can cut it in half so the pattern misses.
+                # Redact BEFORE truncating: slicing first can cut a
+                # credential (Bash argv, curl headers) in half.
                 stderr = safe_redact(tool_response.get("stderr") or "")[:500]
                 stdout = safe_redact(tool_response.get("stdout") or "")[:500]
                 return True, (stderr or stdout)
@@ -324,9 +315,7 @@ def write_learning(
         ],
     }
     if error_excerpt:
-        # error_excerpt is already redacted+truncated by detect_failure(); this
-        # second pass is idempotent defense-in-depth for any future caller that
-        # hands write_learning an excerpt straight from a tool payload.
+        # Idempotent defense-in-depth; detect_failure() already redacted this.
         frontmatter["error_excerpt"] = safe_redact(error_excerpt)[:500]
 
     # Agent/Task captures reach here only on a genuine isError failure or an
@@ -370,11 +359,6 @@ def write_learning(
             tool_input_text = json.dumps(tool_input, indent=2, ensure_ascii=False)
         except (TypeError, ValueError):
             tool_input_text = str(tool_input)
-        # Redact BEFORE truncating: Bash argv is where a credential (curl
-        # -H 'Authorization: Bearer ...', an embedded API key) actually lives,
-        # and this is the one path that was NEVER redacted before (only the
-        # Agent/Task body above was). Slicing first can cut a key in half so
-        # the pattern no longer matches.
         body_parts.append(safe_redact(tool_input_text)[:1500])
         body_parts.append("```")
         body_parts.append("")
