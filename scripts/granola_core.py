@@ -325,10 +325,14 @@ def _untrusted_guard_module():
     ]
     mod = None
     for candidate_dir in candidates:
-        script = candidate_dir / "connector_utils.py"
-        if not script.is_file():
-            continue
+        # is_file() is INSIDE the try: on /usr/bin/python3 3.9, stat-ing an
+        # unreadable directory raises PermissionError, which must be skipped
+        # like any other bad candidate, never abort the caller's write
+        # (MYC-4701 review, HIGH).
         try:
+            script = candidate_dir / "connector_utils.py"
+            if not script.is_file():
+                continue
             spec = importlib.util.spec_from_file_location("_abs_connector_utils", script)
             if spec is None or spec.loader is None:
                 continue

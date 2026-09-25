@@ -303,10 +303,14 @@ def _load_injection_scanner() -> Any:
     for candidate_dir in candidates:
         if candidate_dir is None:
             continue
-        script = candidate_dir / "audited_content_scan.py"
-        if not script.is_file():
-            continue
+        # is_file() is INSIDE the try now: on /usr/bin/python3 3.9, stat-ing
+        # an unreadable directory raises PermissionError, and that must be
+        # skipped like any other bad candidate, never propagate and abort
+        # the caller's write (MYC-4701 review, HIGH).
         try:
+            script = candidate_dir / "audited_content_scan.py"
+            if not script.is_file():
+                continue
             spec = importlib.util.spec_from_file_location("_audited_content_scan", script)
             if spec is None or spec.loader is None:
                 continue
@@ -344,7 +348,11 @@ def fence_untrusted(text: str, source: str) -> str:
     third-party content cannot pass as the real one.
     """
     raw = text or ""
-    nonce = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+    # surrogatepass: third-party text (scraped pages, VTT captions) can carry
+    # a lone UTF-16 surrogate half (e.g. a truncated 4-byte emoji). Plain
+    # "utf-8" raises UnicodeEncodeError on that and would abort the write
+    # before fencing even starts (MYC-4701 review, HIGH).
+    nonce = hashlib.sha256(raw.encode("utf-8", "surrogatepass")).hexdigest()[:16]
     safe_source = _SOURCE_SAFE_RE.sub("-", (source or "").lower()) or "unknown"
     inner = _MARKER_LOOKALIKE.sub("[untrusted-marker removed]", fence_text(raw))
     begin = _UNTRUSTED_BEGIN_TMPL.format(source=safe_source, nonce=nonce)
@@ -378,9 +386,16 @@ def guard_untrusted_body(
     unavailable` without touching the module-level cache); production
     callers never pass it.
     """
-    scanner = _load_injection_scanner() if _scanner is _UNSET else _scanner
     subject = scan_text if scan_text is not None else (text or "")
-    findings = scanner.scan_or_none(subject) if scanner is not None else None
+    try:
+        # Load AND scan are one try: neither may ever abort the caller's
+        # write. scan_or_none already fails closed to None on a bad registry,
+        # but this is the backstop for anything else -- a scanner module that
+        # raises when CALLED, not just when loaded (MYC-4701 review, HIGH).
+        scanner = _load_injection_scanner() if _scanner is _UNSET else _scanner
+        findings = scanner.scan_or_none(subject) if scanner is not None else None
+    except Exception:
+        findings = None
 
     if findings is None:
         status: str = "unavailable"
