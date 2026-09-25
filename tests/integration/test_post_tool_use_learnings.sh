@@ -254,6 +254,20 @@ else
   bad "(j2) the shared registry took ${REG_SECONDS}s on 30 KB of repeated URL fragments"
 fi
 
+# --- (j3) BOUNDED: dropping a token cut at the window edge stays linear -------
+# A long unbroken run followed by a space made a trailing-run regex quadratic
+# (3.7 s via stdout, 6.4 s via a <learning> note).
+RUN_A="$(printf 'a%.0s' $(seq 1 11000))"; RUN_B="$(printf 'b%.0s' $(seq 1 5000))"
+rm -rf "$LEARN"
+START=$(date +%s)
+run_hook "{\"tool_name\":\"Bash\",\"cwd\":\"$VAULT\",\"session_id\":\"s\",\"tool_call_id\":\"bashJ3\",\"tool_input\":{\"command\":\"x\"},\"tool_response\":{\"exitCode\":1,\"stdout\":\"$RUN_A $RUN_B\",\"stderr\":\"<learning>$RUN_A $RUN_B</learning>\"}}"
+ELAPSED=$(( $(date +%s) - START ))
+if [ "$ELAPSED" -lt 5 ]; then  # old code: 13 s; whole-second clock on a loaded box
+  pass "(j3) a long run cut at the window edge is dropped in ${ELAPSED}s"
+else
+  bad "(j3) dropping an edge-cut run took ${ELAPSED}s"
+fi
+
 echo
 if [ "$fail" = "0" ]; then
   echo "test_post_tool_use_learnings: all assertions passed"

@@ -94,7 +94,10 @@ def safe_redact(text: str, limit: int | None = None) -> str:
     if limit is None:
         return redacted
     if len(text) > len(window):  # a token cut at the window edge is too short to match
-        redacted = re.sub(r"\S+\Z", "", redacted)
+        end = len(redacted)  # linear scan back: a regex like \S+\Z is quadratic here
+        while end and not redacted[end - 1].isspace():
+            end -= 1
+        redacted = redacted[:end]
     return redacted[:limit]
 
 
