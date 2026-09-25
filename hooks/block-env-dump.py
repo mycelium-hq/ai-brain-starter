@@ -52,8 +52,16 @@ try:
         tokens,
     )
     _LIB_OK = True
-except Exception:
+except Exception as _lib_exc:
     _LIB_OK = False
+    print(
+        "[block-env-dump] WARNING: hooks/_lib import failed "
+        f"({type(_lib_exc).__name__}: {_lib_exc}); running DEGRADED -- only "
+        "the /proc/<pid>/environ check still runs, every per-verb check "
+        "(env/printenv/export/set/declare/ps/echo/gh/security/cat/docker/"
+        "python/node) is OFF until _lib is restored beside this hook",
+        file=sys.stderr,
+    )
 
 # Transparent wrappers to skip past when looking for the real command word.
 # `env` is EXCLUDED on purpose: it is also one of the commands this hook
@@ -553,12 +561,19 @@ def main() -> int:
     except Exception:
         return 0  # fail open: malformed stdin is not this hook's call to make
 
+    if not isinstance(payload, dict):
+        return 0  # fail open: `null`, `[]`, ... is not a shape to reason about
+
     tool = payload.get("tool_name") or payload.get("tool", "")
     if tool != "Bash":
         return 0
 
-    cmd = (payload.get("tool_input") or {}).get("command", "")
-    if not cmd:
+    tool_input = payload.get("tool_input")
+    if not isinstance(tool_input, dict):
+        return 0  # fail open: a string/list/int tool_input is malformed, not ours
+
+    cmd = tool_input.get("command", "")
+    if not isinstance(cmd, str) or not cmd:
         return 0
 
     if os.environ.get("ENV_DUMP_BYPASS") == "1":
