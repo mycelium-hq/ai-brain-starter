@@ -608,6 +608,48 @@ diff_index_failure_case_block(){
   rm -rf "$d"
 }
 
+# (t) a BARE `mktemp` failure must not silently disable the merge carve-out.
+# Both scratch dirs this guard needs are allocated under $(git rev-parse
+# --git-dir) FIRST, with bare `mktemp -d` only as the fallback. The diff-index
+# scratch dir used to skip that first attempt and call bare `mktemp` alone: when
+# the bare call failed, `_diffidx_dir` came back empty, BOTH exemption routes
+# were gated out on `[ -n "${_diffidx_dir}" ]`, and this merge -- main's OWN
+# unchanged artifact, which cannot strand anything -- was refused.
+# Shim `mktemp` so it fails ONLY when called with no template operand (the bare
+# form) and execs the real mktemp for a templated call, so the git-dir attempt
+# still works and only the bare route is down. This is the same merge as (a),
+# which is therefore this case's no-shim control: (a) ALLOWs, so this must too,
+# and any difference between them is the shim.
+# Mutation that turns this red: put bare `mktemp -d 2>/dev/null` back on the
+# `_diffidx_dir` line in place of `_alloc_scratch_dir`. Measured against the
+# pre-fix guard: EXIT=1 under the shim, EXIT=0 with no shim.
+bare_mktemp_failure_keeps_carveout_case_allow(){
+  local d; d="$(mktemp -d)"
+  local real_mktemp; real_mktemp="$(command -v mktemp)"
+  mkdir -p "$d/shim"
+  printf '#!/bin/sh\nfor a in "$@"; do\n  case "$a" in -*) ;; *) exec "%s" "$@" ;; esac\ndone\nexit 1\n' \
+    "$real_mktemp" > "$d/shim/mktemp"
+  chmod +x "$d/shim/mktemp"
+  (
+    cd "$d" || exit 99
+    git init -q -b main repo; cd repo || exit 99
+    git config user.email t@t; git config user.name t
+    echo seed > seed.txt; git add seed.txt; git commit -qm seed
+    mkdir -p "Meta/Sessions"; echo "seed-session" > "Meta/Sessions/a.md"
+    git add "Meta/Sessions/a.md"; git commit -qm "artifact on main"
+    git update-ref refs/remotes/origin/main main
+    git checkout -q -b feature HEAD~1
+    echo "feature work" > feature.txt; git add feature.txt; git commit -qm "feature work"
+    cp "$GUARD" guard.sh; chmod +x guard.sh
+    git merge --no-commit --no-ff origin/main >/dev/null 2>&1
+    require_staged "Meta/Sessions/a.md"
+    PATH="$d/shim:$PATH" ./guard.sh; echo "EXIT=$?"
+  ) > "$d/out" 2>&1
+  local got; got="$(sed -n 's/^EXIT=//p' "$d/out")"
+  if [ "$got" = "0" ]; then pass "(t) bare mktemp failing keeps the merge carve-out working (exit $got)"; else fail "(t) bare mktemp failing keeps the merge carve-out working (got '$got' want 0)"; sed 's/^/    /' "$d/out"; fi
+  rm -rf "$d"
+}
+
 # (s) a brand-new session artifact staged on an UNBORN branch (fresh
 # `git checkout --orphan`, zero commits on it yet) must still be caught. The
 # guard's initial staged-paths listing used to pass an explicit `HEAD`
@@ -739,6 +781,7 @@ merge_case_allow_main_own_deletion
 new_artifacts_at_scale_case_block
 new_artifact_colon_prefixed_path_case_block
 diff_index_failure_case_block
+bare_mktemp_failure_keeps_carveout_case_allow
 orphan_branch_new_artifact_case_block
 orphan_branch_code_only_case_allow
 premerge_commit_wiring_blocks_topic_merge
