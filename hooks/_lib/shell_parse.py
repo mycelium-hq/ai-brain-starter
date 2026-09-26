@@ -99,6 +99,9 @@ _WHITESPACE = " \t\r\n"          # shlex default `whitespace`
 _QUOTES = "'\""                  # shlex default `quotes`; only '"' is `escapedquotes`
 
 
+# Ported from CPython Lib/shlex.py shlex.read_token (PSF License Agreement v2;
+# notice in THIRD_PARTY_NOTICES.md): Copyright (c) 2001 Python Software
+# Foundation; All Rights Reserved.
 def _scan_tokens(seg):
     """Linear-time reproduction of `shlex.split(seg)` for the FIXED config
     `shlex.split` actually uses: POSIX mode, `whitespace_split=True`, no
