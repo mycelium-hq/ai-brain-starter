@@ -43,6 +43,7 @@ __all__ = [
     "leading_env_assigns",
     "segment_bypass_flags",
     "split_segments_with_seps",
+    "split_strict",
     "strip_heredoc_bodies",
     "strip_noncode",
     "tokens",
@@ -93,11 +94,172 @@ def expand_vars(value, variables):
     return out
 
 
+_SHLEX_MAX_CHARS = 16384
+
+_WHITESPACE = " \t\r\n"          # shlex default `whitespace`
+# A tuple, not a string: every use below is `X in _QUOTES` where X can be a
+# multi-character state name ("ws" / "word" / "esc"). Against the string
+# "'\"", `in` is SUBSTRING containment, which happens to agree with membership
+# for every value this code actually passes -- but only because no state name
+# is ever a substring of a 2-char string. A tuple makes it MEMBERSHIP by
+# construction, so that agreement is no longer something a future edit could
+# quietly depend on and get wrong.
+_QUOTES = ("'", '"')              # shlex default `quotes`; only '"' is `escapedquotes`
+
+
+# Ported from CPython Lib/shlex.py shlex.read_token (PSF License Agreement v2;
+# notice in THIRD_PARTY_NOTICES.md): Copyright (c) 2001 Python Software
+# Foundation; All Rights Reserved.
+def _scan_tokens(seg):
+    """Linear-time reproduction of `shlex.split(seg)` for the FIXED config
+    `shlex.split` actually uses: POSIX mode, `whitespace_split=True`, no
+    comments, no `punctuation_chars`. `tokens()` below only reaches this for
+    a segment longer than `_SHLEX_MAX_CHARS`; every ordinary command still
+    goes through the real `shlex.split`.
+
+    WHY THIS EXISTS. CPython's `shlex.read_token` (see its source for the
+    reference state machine this ports) builds each token with
+    `self.token += nextchar` where `self.token` is an INSTANCE ATTRIBUTE.
+    Every `+=` first LOADs that attribute onto the interpreter stack, so its
+    refcount is never 1 at the point of the append -- which disqualifies
+    CPython's in-place string-resize fast path and forces a full copy of the
+    token-so-far on every single character. Cost grows with the SQUARE of one
+    token's length, not the length of the command. Measured CPU time of one
+    `tokens("echo " + "a"*N)` call: N=50k 0.03s, 100k 0.14s, 200k 0.41s, 400k
+    1.43s -- and this runs inside several PreToolUse Bash hooks, on EVERY Bash
+    command, so one huge inline argument (a long diff, a base64 blob, a big
+    heredoc-free literal) stalls every Bash call in the session.
+
+    The fix is the same algorithm with the token built in a LIST and joined
+    once (`"".join(parts)`) instead of appended to a string attribute one
+    character at a time -- linear in the segment length, not the token
+    length. This function must keep matching `shlex.split` byte-for-byte
+    (including which inputs raise `ValueError`, and with the exact same
+    message text is NOT required, only the exact same token stream or the
+    exact same raise/no-raise split) -- see hooks/test_shell_parse_tokens.py
+    for the equivalence fuzz that pins this down. If shlex's own read_token
+    ever changes, port the change here too.
+
+    Escaping rules mirrored from read_token, for this config only:
+      - Outside quotes, `\\` makes the NEXT character literal (including a
+        quote char, `;`, `|`, `$`, whitespace, or another `\\`) and is itself
+        dropped.
+      - Inside `"..."` (the only `escapedquotes` entry), `\\` escapes only
+        `"` and `\\` itself; before any other character the backslash is KEPT
+        literally alongside that character.
+      - Inside `'...'`, `\\` has no special meaning at all -- it is just
+        another literal character.
+      - A quote closes on the next matching quote char; adjacent quoted and
+        unquoted pieces concatenate into ONE token (`a"b c"d` -> `ab cd`).
+      - `''` (or `""`) with nothing else on the segment yields one EMPTY
+        token, because `quoted` -- not the token buffer -- decides whether an
+        empty result still counts as a token.
+      - A `\\` with nothing after it (segment ends right there), or a quote
+        that never closes, is what `shlex.split` raises `ValueError` on;
+        `_scan_tokens` raises the same so `tokens()`'s existing fallback to
+        `seg.split()` still fires either way.
+    """
+    out = []
+    parts = []
+    quoted = False
+    state = "ws"          # "ws" (between tokens) | "word" | "'" | '"' | "esc"
+    escapedstate = "word"  # state to RETURN to once the escaped char is consumed
+    n = len(seg)
+    i = 0
+    while i <= n:                      # one extra pass with c=None models EOF
+        c = seg[i] if i < n else None
+        i += 1
+
+        if state == "ws":
+            if c is None:
+                break
+            elif c in _WHITESPACE:
+                pass                    # skip run of whitespace between tokens
+            elif c == "\\":
+                escapedstate = "word"
+                state = "esc"
+            elif c in _QUOTES:
+                state = c
+            else:
+                parts.append(c)
+                state = "word"
+
+        elif state in _QUOTES:
+            quoted = True
+            if c is None:
+                raise ValueError("No closing quotation")
+            if c == state:
+                state = "word"          # closing quote consumed, not appended
+            elif c == "\\" and state == '"':
+                escapedstate = state
+                state = "esc"
+            else:
+                parts.append(c)         # includes a literal `\` inside '...'
+
+        elif state == "esc":
+            if c is None:
+                raise ValueError("No escaped character")
+            # Inside quotes, only the quote char or `\` itself may be
+            # escaped; anything else keeps the backslash AND the character.
+            if escapedstate in _QUOTES and c != "\\" and c != escapedstate:
+                parts.append("\\")
+            parts.append(c)
+            state = escapedstate
+
+        else:  # state == "word"
+            if c is None:
+                break
+            elif c in _WHITESPACE:
+                state = "ws"
+                if parts or quoted:
+                    out.append("".join(parts))
+                    parts = []
+                    quoted = False
+                continue                # don't fall through to the shared flush below
+            elif c in _QUOTES:
+                state = c               # quote glues onto the same token
+            elif c == "\\":
+                escapedstate = "word"
+                state = "esc"
+            else:
+                parts.append(c)
+
+    if parts or quoted:
+        out.append("".join(parts))
+    return out
+
+
+def split_strict(seg):
+    """shlex tokens for one segment, behaving EXACTLY like `shlex.split(seg)` --
+    including RAISING `ValueError` on the same inputs (unclosed quote, trailing
+    backslash). Delegates to the real `shlex.split` for anything up to
+    `_SHLEX_MAX_CHARS`, so every normal command tokenizes byte-identically to
+    before this threshold existed, and to the linear-time `_scan_tokens` above
+    it -- see `_scan_tokens` for why that path exists.
+
+    This is the strict primitive `tokens()` builds its `seg.split()` fallback
+    on top of. Use `split_strict` directly (not `tokens`) when the caller's
+    OWN contract is "tell me you could not parse this" -- e.g. session-lock.py
+    treats an unparsable segment as an unresolved `None`, a real state distinct
+    from both "parsed to zero tokens" and "here is a best-effort guess" -- and
+    silently swapping in `tokens()`'s whitespace-split guess there would turn
+    an honest "I don't know" into a confident wrong answer.
+    """
+    if len(seg) <= _SHLEX_MAX_CHARS:
+        return shlex.split(seg)
+    return _scan_tokens(seg)
+
+
 def tokens(seg):
     """shlex tokens for one segment, falling back to a whitespace split when the
-    segment is not lexable on its own (an unbalanced quote from slicing)."""
+    segment is not lexable on its own (an unbalanced quote from slicing).
+
+    Delegates to `split_strict` (real `shlex.split` at or under
+    `_SHLEX_MAX_CHARS`, linear-time `_scan_tokens` above it) and catches
+    exactly the `ValueError` it can raise, same as always.
+    """
     try:
-        return shlex.split(seg)
+        return split_strict(seg)
     except ValueError:
         return seg.split()
 
