@@ -1317,6 +1317,68 @@ def test_allows_cat_herestring_literal_text():
 
 
 # ---------------------------------------------------------------------------
+# 27. Round 3 item 9 -- other interpreters' whole-env objects: ruby ENV,
+# perl %ENV, bun process.env/Bun.env, deno Deno.env.toObject(), and
+# launchctl export/getenv (no inline script, subcommand-based).
+# ---------------------------------------------------------------------------
+
+def test_denies_ruby_bare_env():
+    assert_denied("ruby -e 'p ENV'")
+
+
+def test_denies_ruby_env_to_h():
+    assert_denied("ruby -e 'puts ENV.to_h'")
+
+
+def test_denies_perl_env_variable_keyed_hash():
+    assert_denied("""perl -e 'print "$_=$ENV{$_}\\n" for keys %ENV'""")
+
+
+def test_denies_perl_dumper_backslash_percent_env():
+    assert_denied("perl -MData::Dumper -e 'print Dumper(\\%ENV)'")
+
+
+def test_denies_bun_process_env():
+    assert_denied("bun -e 'console.log(process.env)'")
+
+
+def test_denies_bun_dot_env():
+    assert_denied("bun -e 'console.log(Bun.env)'")
+
+
+def test_denies_deno_eval_to_object():
+    assert_denied("deno eval 'console.log(Deno.env.toObject())'")
+
+
+def test_denies_launchctl_export():
+    assert_denied("launchctl export")
+
+
+def test_denies_launchctl_getenv_secret_name():
+    assert_denied("launchctl getenv NVIDIA_API_KEY")
+
+
+def test_allows_ruby_env_subscript():
+    assert_allowed('ruby -e \'puts ENV["HOME"]\'')
+
+
+def test_allows_perl_env_literal_key():
+    assert_allowed("perl -e 'print $ENV{HOME}'")
+
+
+def test_allows_bun_process_env_dotted():
+    assert_allowed("bun -e 'console.log(process.env.HOME)'")
+
+
+def test_allows_launchctl_list():
+    assert_allowed("launchctl list")
+
+
+def test_allows_launchctl_getenv_ordinary_name():
+    assert_allowed("launchctl getenv PATH")
+
+
+# ---------------------------------------------------------------------------
 # Plain-script runner. globals() preserves definition order (CPython 3.7+
 # dict insertion order), so this walks every test_* function top-to-bottom
 # exactly as written above, with no hand-maintained list to drift out of

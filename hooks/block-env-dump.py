@@ -703,6 +703,30 @@ _HERESTRING_VAR_RE = re.compile(r"<<<\s*\"?\$([A-Za-z_][A-Za-z0-9_]*)\"?")
 # the identifier class below, so it never matches) is not.
 _AWK_ENVIRON_VAR_SUBSCRIPT_RE = re.compile(r"ENVIRON\[\s*[A-Za-z_]\w*\s*\]")
 
+# Other interpreters' whole-environment objects. Table-driven: each entry is
+# (basename, trigger(rest) -> bool, checker(text) -> bool); the per-segment
+# loop below tries each row once. Ruby's bare `ENV` (or `.to_h`) and bun's
+# bare `Bun.env` follow the same bare-vs-narrowed shape `_WHOLE_ENV_SCRIPT_RE`
+# already uses for os.environ/process.env; bun's `process.env` itself reuses
+# `_has_whole_env_dump` directly rather than a parallel pattern. Perl's %ENV
+# is dangerous as a hash REFERENCE (`\%ENV`, e.g. `Dumper(\%ENV)`) or via a
+# VARIABLE-keyed subscript (`$ENV{$_}`, the same for-loop-body shape as awk's
+# `ENVIRON[k]`) -- a literal-string key (`$ENV{HOME}`) is a single named
+# access and stays allowed. Deno's danger is the specific `.toObject()` call
+# that materializes the whole map; `Deno.env.get(...)` never matches it.
+_RUBY_ENV_WHOLE_RE = re.compile(r"\bENV\.to_h\b|\bENV\b(?!\s*[.\[])")
+_PERL_ENV_WHOLE_RE = re.compile(r"\\%ENV\b|\$ENV\{\s*\$\w+\s*\}")
+_BUN_ENV_WHOLE_RE = re.compile(r"Bun\.env\b(?!\s*[.\[])")
+_DENO_ENV_WHOLE_RE = re.compile(r"Deno\.env\.toObject\s*\(")
+
+_INTERPRETER_ENV_TABLE = (
+    ("ruby", lambda rest: "-e" in rest, lambda text: bool(_RUBY_ENV_WHOLE_RE.search(text))),
+    ("perl", lambda rest: "-e" in rest, lambda text: bool(_PERL_ENV_WHOLE_RE.search(text))),
+    ("bun", lambda rest: "-e" in rest,
+     lambda text: _has_whole_env_dump(text) or bool(_BUN_ENV_WHOLE_RE.search(text))),
+    ("deno", lambda rest: rest[:1] == ["eval"], lambda text: bool(_DENO_ENV_WHOLE_RE.search(text))),
+)
+
 
 def _jq_denied(text: str) -> bool:
     if _JQ_ENV_PIPE_DANGEROUS_RE.search(text):
@@ -839,6 +863,15 @@ def _deny_reason(command: str):
             return "`jq`'s `env` builtin / `$ENV` global expose the whole environment"
         if base == "awk" and _AWK_ENVIRON_VAR_SUBSCRIPT_RE.search(text):
             return "awk `ENVIRON[<var>]` (a for-in loop's shape) reads every variable's value"
+        for _iname, _trigger, _checker in _INTERPRETER_ENV_TABLE:
+            if base == _iname and _trigger(rest) and _checker(text):
+                return f"`{base}` prints the whole environment (ENV/%ENV/process.env/Deno.env)"
+        if base == "launchctl":
+            if rest[:1] == ["export"]:
+                return "`launchctl export` dumps the whole per-user environment"
+            if (rest[:1] == ["getenv"] and len(rest) > 1
+                    and _names_secret_var(rest[1])):
+                return "`launchctl getenv` of a secret-shaped name prints its value"
     return None
 
 
