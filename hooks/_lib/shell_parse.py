@@ -96,7 +96,14 @@ def expand_vars(value, variables):
 _SHLEX_MAX_CHARS = 16384
 
 _WHITESPACE = " \t\r\n"          # shlex default `whitespace`
-_QUOTES = "'\""                  # shlex default `quotes`; only '"' is `escapedquotes`
+# A tuple, not a string: every use below is `X in _QUOTES` where X can be a
+# multi-character state name ("ws" / "word" / "esc"). Against the string
+# "'\"", `in` is SUBSTRING containment, which happens to agree with membership
+# for every value this code actually passes -- but only because no state name
+# is ever a substring of a 2-char string. A tuple makes it MEMBERSHIP by
+# construction, so that agreement is no longer something a future edit could
+# quietly depend on and get wrong.
+_QUOTES = ("'", '"')              # shlex default `quotes`; only '"' is `escapedquotes`
 
 
 # Ported from CPython Lib/shlex.py shlex.read_token (PSF License Agreement v2;
