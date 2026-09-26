@@ -943,6 +943,59 @@ def test_allows_pgrep_fl_inside_command_substitution_residual():
 
 
 # ---------------------------------------------------------------------------
+# 19. Round 3 item 1 -- node inline print flags (-p/--print/-pe/--eval), not
+# just -e, must trigger the whole-process.env content check.
+# ---------------------------------------------------------------------------
+
+def test_denies_node_dash_p_process_env():
+    assert_denied("node -p process.env")
+
+
+def test_denies_node_dash_dash_print_process_env():
+    assert_denied("node --print process.env")
+
+
+def test_denies_node_dash_pe_process_env():
+    assert_denied("node -pe 'process.env'")
+
+
+def test_denies_node_dash_dash_eval_console_log():
+    assert_denied("node --eval 'console.log(process.env)'")
+
+
+def test_denies_node_dash_p_json_stringify():
+    assert_denied("node -p 'JSON.stringify(process.env)'")
+
+
+def test_denies_node_dash_p_spread():
+    assert_denied("node -p '({...process.env})'")
+
+
+def test_allows_node_dash_p_dotted_subscript():
+    assert_allowed("node -p process.env.HOME")
+
+
+def test_allows_node_dash_p_bracket_subscript():
+    assert_allowed("node -p 'process.env[\"HOME\"]'")
+
+
+def test_allows_node_dash_p_object_keys_length():
+    assert_allowed("node -p 'Object.keys(process.env).length'")
+
+
+def test_allows_node_dash_e_boolean_presence():
+    assert_allowed("node -e 'console.log(!!process.env.HOME)'")
+
+
+def test_allows_node_dash_p_in_membership():
+    assert_allowed('node -p \'"HOME" in process.env\'')
+
+
+def test_allows_node_dash_dash_version():
+    assert_allowed("node --version")
+
+
+# ---------------------------------------------------------------------------
 # Plain-script runner. globals() preserves definition order (CPython 3.7+
 # dict insertion order), so this walks every test_* function top-to-bottom
 # exactly as written above, with no hand-maintained list to drift out of

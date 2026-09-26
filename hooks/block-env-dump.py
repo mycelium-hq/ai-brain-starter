@@ -121,6 +121,25 @@ _ECHO_PRINTERS = {
 # process.env.FOO), which the negative lookahead excludes.
 _WHOLE_ENV_SCRIPT_RE = re.compile(r"os\.environ\b(?!\s*[.\[])|process\.env\b(?!\s*[.\[])")
 
+# node's inline-script flags that make `-e`'s WHOLE_ENV_SCRIPT_RE content
+# check apply: `-e`/`--eval` (run a script), `-p`/`--print` (run a script and
+# print its result), and the combined `-pe` (real node idiom: print + eval in
+# one flag). `--eval` and `--print` were previously invisible to this check
+# (only the exact token `-e` was tested), and `-p`/`--print`/`-pe` were not
+# checked at all.
+_NODE_INLINE_SCRIPT_FLAGS = {"-e", "--eval", "-p", "--print", "-pe", "-ep"}
+
+# A bare os.environ/process.env used as the right-hand side of an `in` test
+# (`"HOME" in process.env`), inside `len(...)` (`len(os.environ)`), or as the
+# sole argument to a names-only wrapper (`Object.keys(process.env)`, JS'
+# equivalent of `.keys()`) produces a boolean, a count, or a name list --
+# never a value -- exempt even though nothing narrows the reference itself
+# via `.`/`[`. Checked against the text immediately BEFORE the match
+# (Python's `re` lookbehind must be fixed-width, and "any amount of
+# whitespace" is not, so this is a plain preceding-text regex instead of a
+# lookbehind assertion).
+_ENV_MEMBERSHIP_OR_LEN_RE = re.compile(r"(\bin\s*|\blen\(\s*|\bObject\.keys\(\s*)$")
+
 # `env`'s own no-argument options. `-u NAME` is handled separately below (it
 # consumes the following token too).
 _ENV_OPT_NO_ARG = {"-i", "-0"}
@@ -506,6 +525,19 @@ def _pgrep_denied(rest: list) -> bool:
     return "l" in chars and "f" in chars
 
 
+def _has_whole_env_dump(text: str) -> bool:
+    """True iff `text` contains a genuine bare os.environ/process.env access
+    -- not narrowed by `.`/`[` (per `_WHOLE_ENV_SCRIPT_RE`'s own lookahead),
+    and not a membership test or a length check (per
+    `_ENV_MEMBERSHIP_OR_LEN_RE`), both of which produce a bool/int, never a
+    value."""
+    for m in _WHOLE_ENV_SCRIPT_RE.finditer(text):
+        if _ENV_MEMBERSHIP_OR_LEN_RE.search(text, 0, m.start()):
+            continue
+        return True
+    return False
+
+
 def _deny_reason(command: str):
     """Short reason string if `command` should be denied, else None."""
     if not command or not command.strip():
@@ -592,8 +624,8 @@ def _deny_reason(command: str):
                 and rest and os.path.basename(rest[-1]) == "env"):
             return f"`{base} exec ... env` dumps the container's environment"
         if (((base in ("python", "python3") and "-c" in rest)
-                or (base == "node" and "-e" in rest))
-                and _WHOLE_ENV_SCRIPT_RE.search(text)):
+                or (base == "node" and any(f in rest for f in _NODE_INLINE_SCRIPT_FLAGS)))
+                and _has_whole_env_dump(text)):
             return f"`{base}` prints the whole environment (os.environ/process.env)"
     return None
 
