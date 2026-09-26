@@ -723,7 +723,7 @@ def _pgrep_denied(rest: list) -> bool:
     return "l" in chars and "f" in chars
 
 
-_DOTENV_TEMPLATE_SUFFIXES = {"example", "sample", "template", "dist", "defaults"}
+_DOTENV_TEMPLATE_SUFFIXES = {"example", "sample", "template", "dist", "defaults", "tpl"}
 _DOTENV_VARIANT_RE = re.compile(r"\.?env\.(.+)$")
 
 
@@ -732,18 +732,19 @@ def _is_dotenv_secret_file(token: str) -> bool:
     checked-in template. Matches the pre-existing bare `.env`/`foo.env`
     shape (anything literally ending in `.env`), plus any `.env.<suffix>` or
     bare `env.<suffix>` variant (`.env.local`, `.env.production`,
-    `backend/.env.development`, `.env.test.local`) -- UNLESS <suffix> (its
-    first dotted component, so `.env.test.local` still counts on "test") is
-    a known template word (example/sample/template/dist/defaults), which
-    stays allowed with or without a leading dot (`.env.example`,
-    `env.example`)."""
+    `backend/.env.development`, `.env.test.local`) -- UNLESS the LAST
+    dotted component of <suffix> (so `.env.local.example`'s "example",
+    `.env.test.local`'s "local") is a known template word (example/
+    sample/template/dist/defaults/tpl), which stays allowed with or
+    without a leading dot (`.env.local.example`, `env.example`) and
+    regardless of how many environment-name components precede it."""
     if token.endswith(".env"):
         return True
     m = _DOTENV_VARIANT_RE.match(os.path.basename(token))
     if not m:
         return False
-    first_suffix = m.group(1).split(".", 1)[0]
-    return first_suffix not in _DOTENV_TEMPLATE_SUFFIXES
+    last_suffix = m.group(1).rsplit(".", 1)[-1]
+    return last_suffix not in _DOTENV_TEMPLATE_SUFFIXES
 
 
 # jq's `env` builtin and `$ENV` global both hand back the whole process
@@ -753,10 +754,24 @@ def _is_dotenv_secret_file(token: str) -> bool:
 # `|keys` yields names only (allowed); a narrowed `.NAME` access denies only
 # when NAME is secret-shaped, reusing `_names_secret_var` -- the same
 # single-value-but-that-value-IS-a-secret rule the echo/printf check applies.
-_JQ_ENV_REF_RE = re.compile(r"\benv\b|\$ENV\b")
-_JQ_ENV_PIPE_DANGEROUS_RE = re.compile(r"(?:\benv\b|\$ENV\b)\s*\|\s*(?:to_entries|tostream)\b")
-_JQ_ENV_PIPE_KEYS_RE = re.compile(r"(?:\benv\b|\$ENV\b)\s*\|\s*keys\b")
-_JQ_ENV_NARROWED_NAME_RE = re.compile(r"(?:\benv\.|\$ENV\.)([A-Za-z_][A-Za-z0-9_]*)")
+#
+# `env` is the BUILTIN only when NOT immediately preceded by `.` or an
+# identifier character (a PATH EXPRESSION field access: `.env`,
+# `.config.env` read a JSON field literally named "env", same as any other
+# field name) or `$` (a jq variable named `$env`, distinct from the
+# ALL-CAPS `$ENV` builtin, which stays the builtin unconditionally).
+# `."env"` (jq's own quoted-field syntax) puts a quote character between
+# the `.` and `env`, outside a single-character lookbehind's reach, so it
+# is stripped separately before every check below ever runs.
+_JQ_QUOTED_FIELD_ACCESS_RE = re.compile(r"""\.\s*["']env["']""")
+_JQ_ENV_REF_RE = re.compile(r"(?<![.\w$])env\b|\$ENV\b")
+_JQ_ENV_PIPE_DANGEROUS_RE = re.compile(
+    r"(?:(?<![.\w$])env\b|\$ENV\b)\s*\|\s*(?:to_entries|tostream)\b"
+)
+_JQ_ENV_PIPE_KEYS_RE = re.compile(r"(?:(?<![.\w$])env\b|\$ENV\b)\s*\|\s*keys\b")
+_JQ_ENV_NARROWED_NAME_RE = re.compile(
+    r"(?:(?<![.\w$])env\.|\$ENV\.)([A-Za-z_][A-Za-z0-9_]*)"
+)
 
 
 # A here-string (`<<<`) feeding a secret-shaped variable into one of the
@@ -801,6 +816,9 @@ _INTERPRETER_ENV_TABLE = (
 
 
 def _jq_denied(text: str) -> bool:
+    # `."env"`/`.'env'` is a quoted FIELD access, never the builtin --
+    # stripped before every other check so none of them can find it.
+    text = _JQ_QUOTED_FIELD_ACCESS_RE.sub("", text)
     if _JQ_ENV_PIPE_DANGEROUS_RE.search(text):
         return True
     if any(_names_secret_var(name) for name in _JQ_ENV_NARROWED_NAME_RE.findall(text)):

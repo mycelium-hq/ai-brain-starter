@@ -1726,6 +1726,25 @@ def test_allows_watch_dash_n_git_status():
 
 
 # ---------------------------------------------------------------------------
+# 33. Round 5 items 1-2 -- FALSE POSITIVES. `.env` in jq is a PATH
+# EXPRESSION reading a JSON field named "env", not the `env` builtin;
+# `.env.local.example`'s FINAL dot-component ("example") marks it a
+# template, not a real secrets file.
+# ---------------------------------------------------------------------------
+
+def test_allows_jq_dot_env_field_access():
+    assert_allowed("jq '.env' config.json")
+
+
+def test_allows_cat_pipe_jq_dot_env():
+    assert_allowed("cat package.json | jq .env")
+
+
+def test_allows_head_dot_env_local_dot_example():
+    assert_allowed("head -n 5 .env.local.example")
+
+
+# ---------------------------------------------------------------------------
 # Plain-script runner. globals() preserves definition order (CPython 3.7+
 # dict insertion order), so this walks every test_* function top-to-bottom
 # exactly as written above, with no hand-maintained list to drift out of
