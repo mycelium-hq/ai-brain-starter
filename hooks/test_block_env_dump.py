@@ -1285,6 +1285,38 @@ def test_allows_pgrep_long_list_name_alone():
 
 
 # ---------------------------------------------------------------------------
+# 26. Round 3 item 8 -- a here-string (`<<<`) feeding a secret-shaped
+# variable into a printer (the same set the echo/printf check already
+# reuses) prints its value into stdout exactly like `echo "$VAR" | cat`
+# does. A non-printer consumer (docker login --password-stdin) and an
+# ordinary or literal value stay allowed.
+# ---------------------------------------------------------------------------
+
+def test_denies_cat_herestring_secret_apikey():
+    assert_denied('cat <<< "$ANTHROPIC_API_KEY"')
+
+
+def test_denies_tee_herestring_secret_access_key():
+    assert_denied('tee <<< "$AWS_SECRET_ACCESS_KEY"')
+
+
+def test_denies_head_herestring_secret_token():
+    assert_denied('head <<< "$GITHUB_TOKEN"')
+
+
+def test_allows_docker_login_password_stdin_herestring():
+    assert_allowed('docker login -u x --password-stdin <<< "$TOKEN"')
+
+
+def test_allows_cat_herestring_ordinary_var():
+    assert_allowed('cat <<< "$HOME"')
+
+
+def test_allows_cat_herestring_literal_text():
+    assert_allowed('cat <<< "hello"')
+
+
+# ---------------------------------------------------------------------------
 # Plain-script runner. globals() preserves definition order (CPython 3.7+
 # dict insertion order), so this walks every test_* function top-to-bottom
 # exactly as written above, with no hand-maintained list to drift out of

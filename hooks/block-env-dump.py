@@ -687,6 +687,15 @@ _JQ_ENV_PIPE_KEYS_RE = re.compile(r"(?:\benv\b|\$ENV\b)\s*\|\s*keys\b")
 _JQ_ENV_NARROWED_NAME_RE = re.compile(r"(?:\benv\.|\$ENV\.)([A-Za-z_][A-Za-z0-9_]*)")
 
 
+# A here-string (`<<<`) feeding a secret-shaped variable into one of the
+# SAME printers the echo/printf check reuses (`_ECHO_PRINTERS`) puts its
+# value on stdout exactly like `echo "$VAR" | cat` does -- `cat <<<
+# "$TOKEN"` and `echo "$TOKEN" | cat` are the same leak through a different
+# shell feature. A non-printer consumer (`docker login --password-stdin`)
+# is not in `_ECHO_PRINTERS`, so it never reaches this check.
+_HERESTRING_VAR_RE = re.compile(r"<<<\s*\"?\$([A-Za-z_][A-Za-z0-9_]*)\"?")
+
+
 # awk's ENVIRON array holds the whole environment. A VARIABLE-keyed
 # subscript (`ENVIRON[k]`, the shape a `for (k in ENVIRON)` loop body uses
 # to read every value in turn) is a dump; a literal-string-keyed subscript
@@ -802,6 +811,15 @@ def _deny_reason(command: str):
             if _echo_reveals_secret(text, segs, idx):
                 return f"`{base}` expands a secret-shaped variable"
             continue
+        if base in _ECHO_PRINTERS:
+            # No `continue` here: `_ECHO_PRINTERS` includes "jq" and "awk",
+            # which have their OWN separate checks below (env/$ENV whole-
+            # object exposure; ENVIRON variable-keyed subscript) that must
+            # still run for those bases even when this here-string check
+            # does not match.
+            m = _HERESTRING_VAR_RE.search(text)
+            if m and _names_secret_var(m.group(1)):
+                return f"`{base} <<<` of a secret-shaped variable prints its value"
         if base == "gh" and rest[:2] == ["auth", "token"]:
             return "`gh auth token` prints the live auth token"
         if (base == "security" and "find-generic-password" in rest
