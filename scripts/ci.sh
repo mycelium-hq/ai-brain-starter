@@ -1601,6 +1601,12 @@ PY_DIRECT=(
   # shipped copies (scripts/ and skills/graphify/scripts/) so a fix to one
   # cannot silently leave the other behind.
   tests/test_graphify_canonicalize_slash_guard.py
+  # shell_parse.tokens() called shlex.split unconditionally, whose read_token
+  # builds each token via string-attribute concatenation -- O(n^2) in ONE
+  # token's length, measured at 1.43s for a 400k-char argument, inside a
+  # PreToolUse hook run on every Bash call. 20k-case equivalence fuzz plus a
+  # structural cost test that a 1M-char segment never reaches shlex.split.
+  hooks/test_shell_parse_tokens.py
 )
 dormant_py=()
 while IFS= read -r -d '' f; do
