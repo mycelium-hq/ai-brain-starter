@@ -131,14 +131,44 @@ _NODE_INLINE_SCRIPT_FLAGS = {"-e", "--eval", "-p", "--print", "-pe", "-ep"}
 
 # A bare os.environ/process.env used as the right-hand side of an `in` test
 # (`"HOME" in process.env`), inside `len(...)` (`len(os.environ)`), or as the
-# sole argument to a names-only wrapper (`Object.keys(process.env)`, JS'
-# equivalent of `.keys()`) produces a boolean, a count, or a name list --
-# never a value -- exempt even though nothing narrows the reference itself
-# via `.`/`[`. Checked against the text immediately BEFORE the match
+# sole argument to a names-only wrapper (`Object.keys(process.env)` in JS,
+# `list(os.environ)`/`sorted(os.environ)` in Python -- iterating a mapping
+# yields its KEYS, never its values) produces a boolean, a count, or a name
+# list -- never a value -- exempt even though nothing narrows the reference
+# itself via `.`/`[`. Checked against the text immediately BEFORE the match
 # (Python's `re` lookbehind must be fixed-width, and "any amount of
 # whitespace" is not, so this is a plain preceding-text regex instead of a
 # lookbehind assertion).
-_ENV_MEMBERSHIP_OR_LEN_RE = re.compile(r"(\bin\s*|\blen\(\s*|\bObject\.keys\(\s*)$")
+_ENV_MEMBERSHIP_OR_LEN_RE = re.compile(
+    r"(\bin\s*|\blen\(\s*|\bObject\.keys\(\s*|\b(?:list|sorted|tuple|set)\(\s*)$"
+)
+
+# Python `os.environ.items()` / `.values()` / `.copy()` -- each exposes every
+# VALUE (a full k=v pair, a bare value, or a live copy of the whole mapping),
+# unlike `.keys()` (names only, left off this list on purpose) or `.get()` /
+# `.setdefault()` (single-name). Matched independently of whatever narrows
+# `os.environ` from _WHOLE_ENV_SCRIPT_RE's point of view -- `.items()` reads
+# as "narrowed" to that check (something follows the `.`), but the exposure
+# is in the METHOD, not the missing narrowing.
+_ENV_VALUE_METHOD_RE = re.compile(r"os\.environ\.(items|values|copy)\s*\(")
+
+# `from os import environ` aliases the whole-mapping object to a bare name;
+# every check above is written against `os.environ` / `process.env`
+# literally, so without this the aliased form (`print(environ)`) is
+# invisible to all of them.
+_FROM_OS_IMPORT_ENVIRON_RE = re.compile(r"\bfrom\s+os\s+import\s+environ\b")
+_BARE_ENVIRON_TOKEN_RE = re.compile(r"(?<![.\w])environ\b")
+
+
+def _normalize_environ_alias(text: str) -> str:
+    """Rewrite every standalone `environ` token to `os.environ` when the
+    text imports it bare (`from os import environ`), so the existing
+    os.environ detection (bare-vs-narrowed, membership/len/names-only
+    exemptions, the value-method check) applies to the aliased name too
+    without a second, parallel set of patterns to keep in sync."""
+    if not _FROM_OS_IMPORT_ENVIRON_RE.search(text):
+        return text
+    return _BARE_ENVIRON_TOKEN_RE.sub("os.environ", text)
 
 # `env`'s own no-argument options. `-u NAME` is handled separately below (it
 # consumes the following token too).
@@ -526,11 +556,17 @@ def _pgrep_denied(rest: list) -> bool:
 
 
 def _has_whole_env_dump(text: str) -> bool:
-    """True iff `text` contains a genuine bare os.environ/process.env access
-    -- not narrowed by `.`/`[` (per `_WHOLE_ENV_SCRIPT_RE`'s own lookahead),
-    and not a membership test or a length check (per
-    `_ENV_MEMBERSHIP_OR_LEN_RE`), both of which produce a bool/int, never a
-    value."""
+    """True iff `text` contains a genuine whole-environment access: either
+    `os.environ.items()`/`.values()`/`.copy()` (each exposes every VALUE,
+    regardless of what narrows the bare-reference check below), or a bare
+    os.environ/process.env access -- not narrowed by `.`/`[` (per
+    `_WHOLE_ENV_SCRIPT_RE`'s own lookahead), and not a membership test,
+    length check, or names-only wrapper (per `_ENV_MEMBERSHIP_OR_LEN_RE`),
+    which produce a bool/int/name-list, never a value. `from os import
+    environ` is normalized to `os.environ` first so both checks see it."""
+    text = _normalize_environ_alias(text)
+    if _ENV_VALUE_METHOD_RE.search(text):
+        return True
     for m in _WHOLE_ENV_SCRIPT_RE.finditer(text):
         if _ENV_MEMBERSHIP_OR_LEN_RE.search(text, 0, m.start()):
             continue

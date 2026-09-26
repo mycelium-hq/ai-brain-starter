@@ -996,6 +996,72 @@ def test_allows_node_dash_dash_version():
 
 
 # ---------------------------------------------------------------------------
+# 20. Round 3 item 2 -- python whole-env idioms beyond bare os.environ:
+# .items()/.values()/.copy(), the {**os.environ} spread, and the
+# `from os import environ` bare-name alias. Single-name access, membership,
+# length, and names-only stay allowed.
+# ---------------------------------------------------------------------------
+
+def test_denies_python_items_list():
+    assert_denied("python3 -c 'import os; print(list(os.environ.items()))'")
+
+
+def test_denies_python_environ_copy():
+    assert_denied("python3 -c 'import os; print(os.environ.copy())'")
+
+
+def test_denies_python_values_list():
+    assert_denied("python3 -c 'import os; print(list(os.environ.values()))'")
+
+
+def test_denies_python_items_comprehension():
+    assert_denied(
+        'python3 -c \'import os; [print(f"{k}={v}") for k,v in os.environ.items()]\''
+    )
+
+
+def test_denies_python_dict_spread():
+    assert_denied("python3 -c 'import os; print({**os.environ})'")
+
+
+def test_denies_python_from_os_import_environ_bare_print():
+    assert_denied("python3 -c 'from os import environ; print(environ)'")
+
+
+def test_allows_python_in_membership_false_positive():
+    # Reviewer false positive: currently denies, must become allowed.
+    assert_allowed('python3 -c \'import os; print("KEY" in os.environ)\'')
+
+
+def test_allows_python_environ_get():
+    assert_allowed('python3 -c \'import os; print(os.environ.get("HOME"))\'')
+
+
+def test_allows_python_environ_subscript():
+    assert_allowed('python3 -c \'import os; print(os.environ["HOME"])\'')
+
+
+def test_allows_python_getenv():
+    assert_allowed('python3 -c \'import os; print(os.getenv("HOME"))\'')
+
+
+def test_allows_python_len_environ():
+    assert_allowed("python3 -c 'import os; print(len(os.environ))'")
+
+
+def test_allows_python_sorted_keys():
+    assert_allowed("python3 -c 'import os; print(sorted(os.environ.keys()))'")
+
+
+def test_allows_python_list_bare_environ():
+    assert_allowed("python3 -c 'import os; print(list(os.environ))'")
+
+
+def test_allows_python_setdefault():
+    assert_allowed("python3 -c 'import os; os.environ.setdefault(\"X\",\"1\")'")
+
+
+# ---------------------------------------------------------------------------
 # Plain-script runner. globals() preserves definition order (CPython 3.7+
 # dict insertion order), so this walks every test_* function top-to-bottom
 # exactly as written above, with no hand-maintained list to drift out of
