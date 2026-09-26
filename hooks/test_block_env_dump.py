@@ -1738,7 +1738,7 @@ def test_allows_watch_dash_n_git_status():
 # swallowed defs -- main() must fail LOUD instead of reporting a green
 # "0 passed, 0 failed" (or any N well under this) as success. Update this
 # number in the SAME change that adds or removes a test_* function.
-HARD_FLOOR = 269
+HARD_FLOOR = 324
 
 
 def main() -> int:
