@@ -1379,6 +1379,49 @@ def test_allows_launchctl_getenv_ordinary_name():
 
 
 # ---------------------------------------------------------------------------
+# 28. Round 3 item 10 -- one level of nested shell: bash -c/-lc, sh -c,
+# zsh -c, and eval re-run the full check on the inner program, depth
+# limited to 2 (this call is depth 1, the inner re-check is depth 2, no
+# third level).
+# ---------------------------------------------------------------------------
+
+def test_denies_bash_dash_c_env():
+    assert_denied("bash -c 'env'")
+
+
+def test_denies_sh_dash_c_printenv():
+    assert_denied('sh -c "printenv"')
+
+
+def test_denies_zsh_dash_c_pgrep_fl():
+    assert_denied("zsh -c 'pgrep -fl foo'")
+
+
+def test_denies_eval_env_pipe_sort():
+    assert_denied("eval 'env | sort'")
+
+
+def test_denies_bash_dash_lc_node_p_process_env():
+    assert_denied("bash -lc 'node -p process.env'")
+
+
+def test_allows_bash_dash_c_npm_test():
+    assert_allowed("bash -c 'npm test'")
+
+
+def test_allows_sh_dash_c_echo_hi():
+    assert_allowed('sh -c "echo hi"')
+
+
+def test_allows_bash_dash_c_env_pipe_cut():
+    assert_allowed("bash -c 'env | cut -d= -f1'")
+
+
+def test_allows_eval_command_substitution_ssh_agent():
+    assert_allowed('eval "$(ssh-agent -s)"')
+
+
+# ---------------------------------------------------------------------------
 # Plain-script runner. globals() preserves definition order (CPython 3.7+
 # dict insertion order), so this walks every test_* function top-to-bottom
 # exactly as written above, with no hand-maintained list to drift out of

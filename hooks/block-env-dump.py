@@ -760,8 +760,32 @@ def _has_whole_env_dump(text: str) -> bool:
     return False
 
 
-def _deny_reason(command: str):
-    """Short reason string if `command` should be denied, else None."""
+_NESTED_SHELL_NAMES = {"bash", "sh", "zsh"}
+_NESTED_SHELL_DEPTH_LIMIT = 2
+
+
+def _extract_dash_c_script(rest: list):
+    """The script argument of a `bash -c`/`bash -lc`/`sh -c`/`zsh -c`-shaped
+    invocation: real shells accept `-c` combined with other single-letter
+    startup flags (`-lc`, `-ic`), so this checks that 'c' appears somewhere
+    in the FIRST token's short-flag cluster, not that it equals `-c`
+    exactly. None when `rest` does not start with such a flag, or carries
+    nothing after it."""
+    if not rest:
+        return None
+    first = rest[0]
+    if first.startswith("-") and not first.startswith("--") and "c" in first[1:]:
+        return rest[1] if len(rest) > 1 else None
+    return None
+
+
+def _deny_reason(command: str, depth: int = 1):
+    """Short reason string if `command` should be denied, else None.
+
+    `depth` bounds ONE LEVEL of nested-shell re-checking (`bash -c`/`bash
+    -lc`/`sh -c`/`zsh -c`/`eval`): the top-level call is depth 1, a nested
+    program is checked at depth 2, and depth 2 does not recurse into a
+    third level even if ITS program also looks like a nested shell call."""
     if not command or not command.strip():
         return None
     cleaned = strip_noncode(strip_heredoc_bodies(command)) if _LIB_OK else command
@@ -872,6 +896,18 @@ def _deny_reason(command: str):
             if (rest[:1] == ["getenv"] and len(rest) > 1
                     and _names_secret_var(rest[1])):
                 return "`launchctl getenv` of a secret-shaped name prints its value"
+        if base in _NESTED_SHELL_NAMES and depth < _NESTED_SHELL_DEPTH_LIMIT:
+            script = _extract_dash_c_script(rest)
+            if script is not None:
+                inner_reason = _deny_reason(script, depth + 1)
+                if inner_reason:
+                    return inner_reason
+                continue
+        if base == "eval" and depth < _NESTED_SHELL_DEPTH_LIMIT and rest:
+            inner_reason = _deny_reason(" ".join(rest), depth + 1)
+            if inner_reason:
+                return inner_reason
+            continue
     return None
 
 
