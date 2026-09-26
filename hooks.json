@@ -142,6 +142,11 @@
             "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/block-claude-mcp-inline-secret.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/block-claude-mcp-inline-secret.py; else echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'; fi"
           },
           {
+            "_comment": "BLOCKING gate (MYC-4988). Blocks a Bash command that prints environment VALUES into the session transcript: bare env/printenv, bare export/set, declare/typeset with no operands or a -p flag, ps with an environment flag, a pgrep listing form combining -l with -f (or carrying -a/--list-full) that exposes a titled process's (npm, Node) leading environment strings, /proc/<pid>/environ, an echo/printf that expands a secret-shaped variable, and the remote secret-dump vocabulary (heroku config, fly secrets list, vercel env pull, etc). Presence/length checks (`[ -n \"${NAME:-}\" ]`, `echo ${#NAME}`) and the three value-stripping pipeline extractors (`env | cut -d= -f1`, `sed 's/=.*//'`, `awk -F= '{print $1}'`) stay allowed. Same `if [ -f ]` form as the gate above and for the same reason: it signals by EXIT CODE 2 with its remediation prose on STDERR, so the `2>/dev/null || echo <allow>` idiom would discard the message AND convert the block into an allow. Bypass: ENV_DUMP_BYPASS=1.",
+            "type": "command",
+            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/block-env-dump.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/block-env-dump.py; else echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'; fi"
+          },
+          {
             "type": "command",
             "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/block-skip-prefix-in-vault-write.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/block-skip-prefix-in-vault-write.py; else echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'; fi"
           },

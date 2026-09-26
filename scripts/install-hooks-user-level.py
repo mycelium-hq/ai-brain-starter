@@ -194,6 +194,13 @@ ABS_FINGERPRINTS = [
     # idiom would silently rewrite the block into an allow.
     "ai-brain-starter/hooks/block-claude-mcp-inline-secret.py",
     "ai-brain-starter/hooks/block-mcp-config-inline-secret.py",
+    # Environment-dump guard (MYC-4988). Blocks env/printenv/export/set/
+    # declare/ps/echo-of-a-secret-var/proc-environ/remote-secret-dump
+    # commands whose output is a live credential VALUE, which a session
+    # transcript persists permanently. Same reasoning as the pair above:
+    # a blocking gate shipped as a file and never registered protects no
+    # install.
+    "ai-brain-starter/hooks/block-env-dump.py",
     # Auto-remediation (the FIX side of the surfacing hooks):
     "ai-brain-starter/hooks/remediate-runaway-procs.py",
     # Write-time secret guard:
@@ -301,6 +308,9 @@ ABS_OWNED_BASENAMES = {
     # MCP secret-leak guards (MYC-3560): same basename-dedup reasoning as the
     # two gates above.
     "block-claude-mcp-inline-secret.py", "block-mcp-config-inline-secret.py",
+    # Environment-dump guard (MYC-4988): same basename-dedup reasoning as
+    # the two gates above.
+    "block-env-dump.py",
     "block-secret-in-note.py", "block-skip-prefix-in-vault-write.py",
     "context-budget-measure.py",
     "validate-handoff-frontmatter.py",

@@ -502,6 +502,13 @@ INTEGRATION_TESTS=(
   # and the shipped command actually BLOCKS a seeded secret while passing a
   # clean payload.
   test_installer_registers_mcp_secret_guards
+  # Environment-dump guard (MYC-4988): block-env-dump.py blocks env/printenv/
+  # export/set/declare/ps/echo-of-a-secret-var/proc-environ commands whose
+  # output is a live credential VALUE, which a session transcript persists
+  # permanently. Same registration-is-the-assertion proof as the two guards
+  # above: wired in the block-preserving form, and the shipped command
+  # actually BLOCKS a seeded `env` dump while passing a clean command.
+  test_installer_registers_env_dump_guard
   # Skip-prefix privacy guard: a `__SKIP` line is content the user told the
   # assistant NOT to persist, and a persisted line cannot be un-persisted (file
   # + git history + any index over the vault). Every assertion carries a
@@ -1601,6 +1608,10 @@ PY_DIRECT=(
   # shipped copies (scripts/ and skills/graphify/scripts/) so a fix to one
   # cannot silently leave the other behind.
   tests/test_graphify_canonicalize_slash_guard.py
+  # Proves block-env-dump.py (MYC-4988): drives the guard as a real
+  # subprocess with JSON on stdin, the same shape a PreToolUse call uses.
+  # Plain script, no pytest -- main() walks every test_* function itself.
+  hooks/test_block_env_dump.py
   # shell_parse.tokens() called shlex.split unconditionally, whose read_token
   # builds each token via string-attribute concatenation -- O(n^2) in ONE
   # token's length, measured at 1.43s for a 400k-char argument, inside a
