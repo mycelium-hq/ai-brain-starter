@@ -1745,6 +1745,118 @@ def test_allows_head_dot_env_local_dot_example():
 
 
 # ---------------------------------------------------------------------------
+# 34. Round 5 item 3 -- PIN the parent's whole probe set. Every one of these
+# was independently verified directly against the hook before writing its
+# test; none needed a further code change beyond items 1-2 above.
+# ---------------------------------------------------------------------------
+
+def test_allows_jq_dash_r_dot_env_dot_node_env():
+    assert_allowed("jq -r '.env.NODE_ENV' package.json")
+
+
+def test_allows_timeout_bash_dash_c_npm_test():
+    assert_allowed("timeout 60 bash -c 'npm test'")
+
+
+def test_allows_nice_dash_n_bash_dash_c_make():
+    assert_allowed("nice -n 10 bash -c 'make -j8'")
+
+
+def test_allows_xargs_dash_n1_echo_input_redirect():
+    assert_allowed("xargs -n1 echo < list.txt")
+
+
+def test_allows_watch_dash_n_quoted_git_status():
+    assert_allowed("watch -n 5 'git status'")
+
+
+def test_allows_sudo_dash_u_postgres_psql():
+    assert_allowed("sudo -u postgres psql -c 'select 1'")
+
+
+def test_allows_env_dash_u_debug_wrapping_node():
+    assert_allowed("env -u DEBUG node server.js")
+
+
+def test_allows_awk_field_one_with_file():
+    assert_allowed("awk '{print $1}' file.txt")
+
+
+def test_allows_bash_dash_c_echo_home():
+    assert_allowed("bash -c 'echo $HOME'")
+
+
+def test_allows_eval_command_substitution_direnv_hook():
+    assert_allowed('eval "$(direnv hook zsh)"')
+
+
+def test_allows_eval_command_substitution_pyenv_init():
+    assert_allowed('eval "$(pyenv init -)"')
+
+
+def test_allows_sh_dash_c_cd_and_ls():
+    assert_allowed("sh -c 'cd /tmp && ls'")
+
+
+def test_allows_git_commit_message_mentioning_this_fix():
+    assert_allowed(
+        'git commit -m "fix: jq env handling and os.environ.get(k) loops"'
+    )
+
+
+def test_allows_grep_for_process_env_string():
+    assert_allowed('grep -rn "process.env" src/')
+
+
+def test_allows_rg_for_os_environ_string():
+    assert_allowed("rg 'os.environ' -g '*.py'")
+
+
+def test_allows_echo_prose_mentioning_environ_get():
+    assert_allowed('echo "use os.environ.get(k) not the whole mapping"')
+
+
+def test_allows_cat_env_example_redirected_into_env():
+    assert_allowed("cat .env.example > .env")
+
+
+def test_allows_cp_dotenv_local_to_backup():
+    assert_allowed("cp .env.local .env.local.bak")
+
+
+def test_allows_tail_dash_f_log_file():
+    assert_allowed("tail -f logs/app.log")
+
+
+def test_allows_docker_compose_env_file_flag():
+    assert_allowed("docker compose --env-file .env.local up -d")
+
+
+def test_allows_npm_run_env_colon_check_script():
+    assert_allowed("npm run env:check")
+
+
+def test_allows_python_os_makedirs():
+    assert_allowed('python3 -c \'import os; os.makedirs("out", exist_ok=True)\'')
+
+
+def test_allows_node_require_local_build_script():
+    assert_allowed("node -e 'require(\"./build.js\")'")
+
+
+def test_denies_awk_dash_v_assigned_variable_key():
+    assert_denied("awk -v k=HOME 'BEGIN{print ENVIRON[k]}'")
+
+
+def test_denies_timeout_bash_dash_c_env():
+    assert_denied("timeout 5 bash -c 'env'")
+
+
+def test_denies_watch_dash_n_quoted_printenv():
+    assert_denied("watch -n 2 'printenv'")
+
+
+# ---------------------------------------------------------------------------
 # Plain-script runner. globals() preserves definition order (CPython 3.7+
 # dict insertion order), so this walks every test_* function top-to-bottom
 # exactly as written above, with no hand-maintained list to drift out of
