@@ -623,16 +623,25 @@ def _pgrep_denied(rest: list) -> bool:
     `-lf`, `-f -l`, `-afl`, `-lfi`, `-n -l -f` all leak, in any clustering or
     order, so every short-option cluster's letters are UNIONED before
     checking rather than inspected cluster-by-cluster. `-a` (Linux procps:
-    `--list-full`, the full command line unconditionally) denies on its own;
-    that long flag is the ONE double-dash form this checks -- any OTHER
-    long flag never counts, even if it happens to contain one of these
-    letters, mirroring `_ps_denied`'s long-flag exemption above. `pgrep -f X`
-    (PIDs only), `pgrep -l X` without `-f` (names only), `pgrep -P 123` and
+    `--list-full`, the full command line unconditionally) denies on its own.
+    Long forms feed the SAME union: `--list-full` denies outright,
+    `--list-name` counts as `l`, `--full` counts as `f` -- so
+    `--list-name --full` and `-l --full` deny exactly like `-lf` does. Any
+    OTHER long flag never counts, even if it happens to contain one of
+    these letters, mirroring `_ps_denied`'s long-flag exemption above.
+    `pgrep -f X` (PIDs only), `pgrep -l X` without `-f` (names only),
+    `pgrep --full X` or `--list-name X` alone, `pgrep -P 123` and
     `pgrep -x node` all stay allowed."""
     chars = set()
     for t in rest:
         if t == "--list-full":
             return True
+        if t == "--list-name":
+            chars.add("l")
+            continue
+        if t == "--full":
+            chars.add("f")
+            continue
         if t.startswith("--"):
             continue
         if t.startswith("-") and len(t) > 1:

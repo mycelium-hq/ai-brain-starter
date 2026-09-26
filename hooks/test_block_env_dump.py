@@ -1259,6 +1259,32 @@ def test_allows_awk_field_print_with_file():
 
 
 # ---------------------------------------------------------------------------
+# 25. Round 3 item 7 -- pgrep long options: --list-name maps to short `l`,
+# --full maps to short `f`, so they combine with each other and with the
+# short-flag union exactly like -l/-f do.
+# ---------------------------------------------------------------------------
+
+def test_denies_pgrep_long_list_name_and_long_full():
+    assert_denied("pgrep --list-name --full foo")
+
+
+def test_denies_pgrep_short_l_and_long_full():
+    assert_denied("pgrep -l --full foo")
+
+
+def test_denies_pgrep_short_f_and_long_list_name():
+    assert_denied("pgrep -f --list-name foo")
+
+
+def test_allows_pgrep_long_full_alone():
+    assert_allowed("pgrep --full foo")
+
+
+def test_allows_pgrep_long_list_name_alone():
+    assert_allowed("pgrep --list-name foo")
+
+
+# ---------------------------------------------------------------------------
 # Plain-script runner. globals() preserves definition order (CPython 3.7+
 # dict insertion order), so this walks every test_* function top-to-bottom
 # exactly as written above, with no hand-maintained list to drift out of
