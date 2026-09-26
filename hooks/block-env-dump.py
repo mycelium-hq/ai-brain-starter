@@ -65,10 +65,14 @@ except Exception as _lib_exc:
     )
 
 # Transparent wrappers to skip past when looking for the real command word.
-# `env` is EXCLUDED on purpose: it is also one of the commands this hook
-# inspects directly (a bare `env` dumps values; `env CMD` does not), so it
-# must stay visible as the resolved word instead of being skipped over.
-_SKIP_WRAPPERS = (WRAPPER_PREFIXES - {"env"}) if _LIB_OK else set()
+# `env` and `sudo` are EXCLUDED on purpose: `env` is also one of the
+# commands this hook inspects directly (a bare `env` dumps values; `env CMD`
+# does not); `sudo` takes its OWN flags (`-E`, `-H`, `-u USER`) that this
+# generic, flag-blind skip cannot consume, so `sudo -E env` left it stopped
+# on the literal token "-E" (matching nothing) instead of resolving through
+# to `env`. Both are peeled with full flag-awareness by
+# `_peel_local_wrappers` below instead.
+_SKIP_WRAPPERS = (WRAPPER_PREFIXES - {"env", "sudo"}) if _LIB_OK else set()
 
 # Shell keywords that precede a real command word without being one
 # themselves: `if env; then` / `while env; do` run env as their condition,
@@ -187,6 +191,19 @@ def _is_redirect_fd_prefix(prefix: str) -> bool:
     """True when `prefix` is an fd number or empty -- part of the operator
     itself (`2>`), never a real command/argument word."""
     return prefix == "" or prefix.isdigit()
+
+
+def _is_bare_redirect_token(tok: str) -> bool:
+    """True when `tok` is purely a redirect operator (`>`, `2>`, `>>`, `<`,
+    ...), with nothing real glued to it. Used by `_peel_local_wrappers` so a
+    wrapper's own redirect (`env > file`, `env 2>/dev/null`) is never
+    mistaken for "a real command follows" -- the bug this guards against:
+    without it, `env > /tmp/leak.txt` peeled `env` "through" to `>` as if
+    it were the wrapped command, and the bare-env dump went undetected."""
+    if "<" not in tok and ">" not in tok:
+        return False
+    m = _REDIR_TOKEN_RE.match(tok)
+    return bool(m) and _is_redirect_fd_prefix(m.group("prefix"))
 
 
 def _strip_redirect_tokens(toks: list) -> list:
@@ -327,6 +344,76 @@ def _skip_leading(toks: list) -> int:
             continue
         break
     return i
+
+
+_NICE_LIKE_WRAPPERS = {"nice", "ionice", "stdbuf"}
+
+
+def _peel_local_wrappers(toks: list) -> list:
+    """Resolve `timeout`/`nice`/`ionice`/`stdbuf`/`env`/`sudo` wrapper
+    layers -- implemented LOCALLY (not in hooks/_lib, which other hooks
+    share) since each has its own flag/argument shape a generic wrapper
+    skip cannot express. Runs in a loop so a chain (`sudo timeout 5 env`)
+    fully resolves. Returns `toks` unchanged when `toks[0]` is not one of
+    these six.
+
+    A wrapper with NOTHING left to wrap (`sudo` with no trailing command,
+    `env` after its own flags/assigns leave nothing) stops peeling AT that
+    wrapper's own token, deliberately -- for `env` specifically, this
+    means the existing `base == "env"` branch's own `_env_is_bare_dump`
+    re-derives the identical bare-dump verdict from the unchanged
+    remainder, rather than this function duplicating that judgment."""
+    i, n = 0, len(toks)
+    while i < n:
+        word = toks[i]
+        if word == "timeout":
+            j = i + 1
+            while j < n and toks[j].startswith("-"):
+                j += 1
+            if j < n:  # the DURATION positional
+                j += 1
+            if j >= n or _is_bare_redirect_token(toks[j]):
+                break
+            i = j
+            continue
+        if word in _NICE_LIKE_WRAPPERS:
+            j = i + 1
+            while j < n and toks[j].startswith("-"):
+                if word == "nice" and toks[j] == "-n" and j + 1 < n:
+                    j += 2
+                else:
+                    j += 1
+            if j >= n or _is_bare_redirect_token(toks[j]):
+                break
+            i = j
+            continue
+        if word == "sudo":
+            j = i + 1
+            while j < n and toks[j].startswith("-"):
+                if toks[j] == "-u" and j + 1 < n:
+                    j += 2
+                else:
+                    j += 1
+            if j >= n or _is_bare_redirect_token(toks[j]):
+                break  # bare `sudo`, nothing to wrap -- stop, resolved word is "sudo"
+            i = j
+            continue
+        if word == "env":
+            j = i + 1
+            while j < n:
+                t = toks[j]
+                if ENV_ASSIGN_RE.match(t) or t in _ENV_OPT_NO_ARG:
+                    j += 1
+                elif t == "-u" and j + 1 < n:
+                    j += 2
+                else:
+                    break
+            if j >= n or _is_bare_redirect_token(toks[j]):
+                break  # bare `env` (or only its own flags/assigns consumed)
+            i = j
+            continue
+        break
+    return toks[i:]
 
 
 def _env_is_bare_dump(rest: list) -> bool:
@@ -645,7 +732,8 @@ def _deny_reason(command: str):
         i = _skip_leading(toks)
         if i >= len(toks):
             continue
-        word, rest = toks[i], toks[i + 1:]
+        resolved = _peel_local_wrappers(toks[i:])
+        word, rest = resolved[0], resolved[1:]
         word, rest = _split_glued_redirect(word, rest)
         rest = _strip_redirect_tokens(rest)
         base = os.path.basename(word)

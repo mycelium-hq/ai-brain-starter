@@ -1168,6 +1168,70 @@ def test_allows_jq_dash_r_dot_version():
 
 
 # ---------------------------------------------------------------------------
+# 23. Round 3 item 5 -- wrapper resolution (timeout/nice/ionice/stdbuf/env/
+# sudo), implemented locally in this hook: check the WRAPPED command as if
+# it were the command. `sudo -E env` / `sudo -E pgrep -fl X` were a real gap
+# -- sudo's OWN flag (-E) was never skipped, so word resolution landed on
+# "-E" itself and matched nothing.
+# ---------------------------------------------------------------------------
+
+def test_denies_timeout_pgrep_fl():
+    assert_denied("timeout 5 pgrep -fl foo")
+
+
+def test_denies_timeout_env():
+    assert_denied("timeout 5 env")
+
+
+def test_denies_nice_pgrep_fl():
+    assert_denied("nice pgrep -fl foo")
+
+
+def test_denies_nice_dash_n_printenv():
+    assert_denied("nice -n 10 printenv")
+
+
+def test_denies_env_wrapping_pgrep_fl():
+    assert_denied("env pgrep -fl foo")
+
+
+def test_denies_env_dash_i_wrapping_printenv():
+    assert_denied("env -i PATH=/usr/bin printenv")
+
+
+def test_denies_sudo_dash_capital_e_env():
+    assert_denied("sudo -E env")
+
+
+def test_denies_sudo_dash_capital_e_pgrep_fl():
+    assert_denied("sudo -E pgrep -fl foo")
+
+
+def test_denies_stdbuf_glued_flag_env():
+    assert_denied("stdbuf -oL env")
+
+
+def test_allows_timeout_npm_test():
+    assert_allowed("timeout 60 npm test")
+
+
+def test_allows_nice_dash_n_make():
+    assert_allowed("nice -n 10 make")
+
+
+def test_allows_env_assign_wrapping_npm_build():
+    assert_allowed("env FOO=1 npm run build")
+
+
+def test_allows_env_dash_i_wrapping_ls():
+    assert_allowed("env -i PATH=/usr/bin ls")
+
+
+def test_allows_sudo_dash_capital_e_npm_install():
+    assert_allowed("sudo -E npm i -g x")
+
+
+# ---------------------------------------------------------------------------
 # Plain-script runner. globals() preserves definition order (CPython 3.7+
 # dict insertion order), so this walks every test_* function top-to-bottom
 # exactly as written above, with no hand-maintained list to drift out of
