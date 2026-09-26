@@ -31,13 +31,14 @@ existed before this fix; `_scan_tokens` and `_SHLEX_MAX_CHARS` did not. A
 top-level import of the new names would raise ImportError and crash the
 WHOLE file when run against the pre-fix module, hiding every test behind one
 opaque traceback. Reaching for `sp.<name>` from inside each test instead
-means a test that only needs `tokens()` (the cost and threshold tests) can
-actually RUN against the pre-fix module and show its TRUE behavior (the cost
-test fails on the CPU budget; the threshold test incidentally still passes,
-because the pre-fix code always called shlex.split for everything, which
-*is* what "still uses shlex for short commands" means) while a test that
-needs `_scan_tokens` directly (the two equivalence tests) fails with a clear
-per-test AttributeError instead of an import-time crash.
+means the one test that needs only `tokens()` and nothing else -- the cost
+test -- can actually RUN TO COMPLETION against the pre-fix module and show
+its TRUE behavior: it fails on the CPU-budget and call-count assertions
+(23s CPU and one real `shlex.split` call, measured), not on an import error.
+Every other test here also reaches `sp._scan_tokens` or `sp._SHLEX_MAX_CHARS`
+somewhere in its own body (directly, or in a fixture-sanity assert), so each
+of THOSE fails with a clear per-test `AttributeError` naming the missing
+attribute, instead of one opaque import-time crash for the whole file.
 
 Run: /usr/bin/python3 hooks/test_shell_parse_tokens.py   (Python 3.9, no pytest)
 Stdlib only.

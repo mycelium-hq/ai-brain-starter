@@ -227,12 +227,14 @@ def tokens(seg):
 
     Delegates to the real `shlex.split` for anything up to `_SHLEX_MAX_CHARS`,
     so every normal command tokenizes byte-identically to before this
-    threshold existed. Only a segment LONGER than that -- which means one
-    huge token, since ordinary command lines are nowhere near 16KB -- takes
-    the linear-time `_scan_tokens` path. See `_scan_tokens` for why: without
-    it, one long inline argument makes shlex's own per-character string-attr
-    concatenation cost grow with the SQUARE of that argument's length, and
-    this runs inside PreToolUse Bash hooks on every Bash command.
+    threshold existed. Only a segment LONGER than that -- rare for an
+    ordinary command line, whether that length comes from one huge token or
+    many small ones -- takes the linear-time `_scan_tokens` path. See
+    `_scan_tokens` for why: without it, shlex's own per-character
+    string-attr concatenation makes cost grow with the SQUARE of one long
+    TOKEN's length specifically (many short tokens stay cheap even on a long
+    command), and this runs inside PreToolUse Bash hooks on every Bash
+    command.
     """
     try:
         if len(seg) <= _SHLEX_MAX_CHARS:
