@@ -57,6 +57,14 @@ import sys
 import time
 from pathlib import Path
 
+# This suite prints non-ASCII fuzz cases and diffs; on a cp1252 Windows
+# console an unguarded print raises UnicodeEncodeError (ai-brain-starter#313).
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")  # Python 3.7+
+    except (AttributeError, ValueError):
+        pass
+
 HOOKS = Path(__file__).resolve().parent
 sys.path.insert(0, str(HOOKS))
 
