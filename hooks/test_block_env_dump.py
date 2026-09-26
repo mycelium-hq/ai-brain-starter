@@ -28,6 +28,14 @@ import sys
 import tempfile
 from pathlib import Path
 
+# This suite prints non-ASCII failure messages; on a cp1252 Windows console an
+# unguarded print raises UnicodeEncodeError (ai-brain-starter#313).
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")  # Python 3.7+
+    except (AttributeError, ValueError):
+        pass
+
 HOOK = Path(__file__).resolve().parent / "block-env-dump.py"
 
 
