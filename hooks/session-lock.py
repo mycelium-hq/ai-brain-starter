@@ -110,6 +110,22 @@ except Exception:
     def inline_bypass(command, var, value="1"):  # type: ignore
         return False
 
+# Same fail-open shape as inline_bypass above: a huge single token in `seg`
+# made a bare `shlex.split` cost grow with the SQUARE of that token's length
+# (CPython's shlex builds each token via string-attribute concatenation), and
+# this runs per segment on every git-mutation check. split_strict keeps
+# shlex.split's exact contract -- including raising ValueError, which the
+# call site below still turns into `tokens = None` -- while routing a segment
+# over 16KB through a linear-time scan instead. Degrade to the real
+# shlex.split directly if _lib is unavailable: that IS split_strict's own
+# behavior below the threshold, so a partial install only loses the
+# large-input protection, never correctness.
+try:
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "_lib"))
+    from shell_parse import split_strict
+except Exception:
+    split_strict = shlex.split  # type: ignore
+
 BYPASS_ENV = "SIBLING_SESSION_LOCK_BYPASS"
 WARN_WINDOW_SEC = 300       # a sibling is "live" if active within 5 min
 IDLE_EXPIRE_SEC = 1800      # prune entries idle > 30 min (stale-lock safety valve)
@@ -937,7 +953,7 @@ def _is_home_repo_git_mutation(command, cwd, main_root, index_probe=None):
         if not seg:
             continue
         try:
-            tokens = shlex.split(seg)
+            tokens = split_strict(seg)
         except ValueError:
             tokens = None
 
