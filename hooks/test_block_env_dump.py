@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""pytest suite for hooks/block-env-dump.py (MYC-4988).
+"""Test suite for hooks/block-env-dump.py (MYC-4988).
+
+Plain script: `python3 hooks/test_block_env_dump.py` runs it directly, with
+no pytest dependency (ci.sh's unit/type gate runs hooks/+tests/ suites this
+way, under a Python that has no pytest installed). Every case is still a
+parameterless `def test_*()`, so `pytest hooks/test_block_env_dump.py` also
+collects and runs the identical set -- either runner exercises the same
+cases against the same hook.
 
 Drives the hook as a REAL SUBPROCESS with JSON on stdin -- the same shape
 Claude Code uses to call a PreToolUse hook -- so these tests prove the
@@ -18,9 +25,8 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
-
-import pytest
 
 HOOK = Path(__file__).resolve().parent / "block-env-dump.py"
 
@@ -172,36 +178,35 @@ def test_builder_style_sed_as_first_stage_still_denies():
 # 4. ALLOWED -- the self-DoS control. Every one of these must keep passing.
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("command", [
-    "env FOO=1 python3 x.py",
-    "env -i PATH=/usr/bin ls",
-    "env -u FOO make",
-    "env | cut -d= -f1",
-    "env | cut -d'=' -f1",
-    'env | cut -d "=" -f 1',
-    "env | sed 's/=.*//'",
-    "env | awk -F= '{print $1}'",
-    "compgen -e",
-    '[ -n "${FOO_TOKEN:-}" ] && echo set',
-    "echo ${#FOO_TOKEN}",
-    "export FOO=bar",
-    "set -euo pipefail",
-    "set -- a b",
-    "declare -x FOO=bar",
-    "ps -p 123 -o pid=",
-    'grep -rn "printenv" hooks/',
-    'git commit -m "mention env | sort"',
-], ids=[
-    "env-runs-a-command", "env-dash-i", "env-dash-u",
-    "env-pipe-cut-glued", "env-pipe-cut-single-quoted", "env-pipe-cut-spaced",
-    "env-pipe-sed", "env-pipe-awk",
-    "compgen-dash-e", "presence-check", "length-form",
-    "export-with-value", "set-flags", "set-dashdash",
-    "declare-with-value", "ps-pid-lookup",
-    "grep-for-the-word-printenv", "commit-message-mentions-env-pipe-sort",
-])
-def test_allows_self_dos_control(command):
-    assert_allowed(command)
+def test_allows_self_dos_control():
+    # Every ALLOWED form the ticket names, looped rather than parametrized
+    # (this file runs as a plain script with no pytest) -- the trailing
+    # comment on each line is the former pytest `ids=` label, kept so a
+    # failure's command string plus this comment still identifies the case.
+    # assert_allowed() embeds the failing command in its own message, so a
+    # failure here still names exactly which command broke.
+    commands = [
+        "env FOO=1 python3 x.py",               # env-runs-a-command
+        "env -i PATH=/usr/bin ls",               # env-dash-i
+        "env -u FOO make",                       # env-dash-u
+        "env | cut -d= -f1",                     # env-pipe-cut-glued
+        "env | cut -d'=' -f1",                   # env-pipe-cut-single-quoted
+        'env | cut -d "=" -f 1',                 # env-pipe-cut-spaced
+        "env | sed 's/=.*//'",                   # env-pipe-sed
+        "env | awk -F= '{print $1}'",            # env-pipe-awk
+        "compgen -e",                            # compgen-dash-e
+        '[ -n "${FOO_TOKEN:-}" ] && echo set',   # presence-check
+        "echo ${#FOO_TOKEN}",                    # length-form
+        "export FOO=bar",                        # export-with-value
+        "set -euo pipefail",                     # set-flags
+        "set -- a b",                            # set-dashdash
+        "declare -x FOO=bar",                    # declare-with-value
+        "ps -p 123 -o pid=",                     # ps-pid-lookup
+        'grep -rn "printenv" hooks/',            # grep-for-the-word-printenv
+        'git commit -m "mention env | sort"',    # commit-message-mentions-env-pipe-sort
+    ]
+    for command in commands:
+        assert_allowed(command)
 
 
 def test_allows_names_only_pipeline_continuation():
@@ -780,21 +785,24 @@ def test_string_tool_input_does_not_crash():
     assert "Traceback" not in r.stderr
 
 
-def test_lib_import_failure_warns_on_stderr(tmp_path):
+def test_lib_import_failure_warns_on_stderr():
     # Copy ONLY the hook (no _lib/ beside it) so the shell_parse import
     # fails at module load, then prove the degraded mode is now VISIBLE.
-    lone_hook = tmp_path / "block-env-dump.py"
-    lone_hook.write_text(HOOK.read_text())
-    env = dict(os.environ)
-    env.pop("ENV_DUMP_BYPASS", None)
-    payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": "env"}})
-    r = subprocess.run(
-        [sys.executable, str(lone_hook)], input=payload,
-        capture_output=True, text=True, env=env,
-        encoding="utf-8", errors="replace", timeout=10,
-    )
-    assert r.returncode == 0  # still fails open -- degraded, not fixed
-    assert r.stderr.strip() != "", "degraded _lib import must warn on stderr, not fail silently"
+    # tempfile.TemporaryDirectory() in place of the pytest tmp_path fixture
+    # -- this file has no pytest dependency.
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        lone_hook = Path(tmp_dir) / "block-env-dump.py"
+        lone_hook.write_text(HOOK.read_text())
+        env = dict(os.environ)
+        env.pop("ENV_DUMP_BYPASS", None)
+        payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": "env"}})
+        r = subprocess.run(
+            [sys.executable, str(lone_hook)], input=payload,
+            capture_output=True, text=True, env=env,
+            encoding="utf-8", errors="replace", timeout=10,
+        )
+        assert r.returncode == 0  # still fails open -- degraded, not fixed
+        assert r.stderr.strip() != "", "degraded _lib import must warn on stderr, not fail silently"
 
 
 # ---------------------------------------------------------------------------
@@ -932,3 +940,51 @@ def test_allows_git_commit_message_mentioning_deny_pgrep_fl():
 
 def test_allows_pgrep_fl_inside_command_substitution_residual():
     assert_allowed('ps -p "$(pgrep -fl x)" -o pid=')
+
+
+# ---------------------------------------------------------------------------
+# Plain-script runner. globals() preserves definition order (CPython 3.7+
+# dict insertion order), so this walks every test_* function top-to-bottom
+# exactly as written above, with no hand-maintained list to drift out of
+# sync with the functions themselves.
+# ---------------------------------------------------------------------------
+
+# Today's test-function count (`grep -c '^def test_' hooks/test_block_env_dump.py`).
+# A HARD FLOOR, not a target: if collection silently finds fewer tests than
+# this -- a renamed test_* convention, a botched refactor, an import that
+# swallowed defs -- main() must fail LOUD instead of reporting a green
+# "0 passed, 0 failed" (or any N well under this) as success. Update this
+# number in the SAME change that adds or removes a test_* function.
+HARD_FLOOR = 162
+
+
+def main() -> int:
+    test_functions = [
+        (name, obj) for name, obj in globals().items()
+        if name.startswith("test_") and callable(obj)
+    ]
+
+    passed = 0
+    failures = []  # [(name, message), ...]
+    for name, fn in test_functions:
+        try:
+            fn()
+            passed += 1
+        except AssertionError as exc:
+            failures.append((name, str(exc)))
+        except Exception as exc:  # a crash is still a FAILURE, never a hang
+            failures.append((name, f"{type(exc).__name__}: {exc}"))
+
+    for name, message in failures:
+        print(f"FAIL {name}: {message}")
+
+    failed = len(failures)
+    print(f"{passed} passed, {failed} failed")
+
+    if failed > 0 or passed < HARD_FLOOR:
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
