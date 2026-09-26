@@ -555,6 +555,29 @@ def _pgrep_denied(rest: list) -> bool:
     return "l" in chars and "f" in chars
 
 
+_DOTENV_TEMPLATE_SUFFIXES = {"example", "sample", "template", "dist", "defaults"}
+_DOTENV_VARIANT_RE = re.compile(r"\.?env\.(.+)$")
+
+
+def _is_dotenv_secret_file(token: str) -> bool:
+    """True for a `.env`-family file that holds real runtime secrets, not a
+    checked-in template. Matches the pre-existing bare `.env`/`foo.env`
+    shape (anything literally ending in `.env`), plus any `.env.<suffix>` or
+    bare `env.<suffix>` variant (`.env.local`, `.env.production`,
+    `backend/.env.development`, `.env.test.local`) -- UNLESS <suffix> (its
+    first dotted component, so `.env.test.local` still counts on "test") is
+    a known template word (example/sample/template/dist/defaults), which
+    stays allowed with or without a leading dot (`.env.example`,
+    `env.example`)."""
+    if token.endswith(".env"):
+        return True
+    m = _DOTENV_VARIANT_RE.match(os.path.basename(token))
+    if not m:
+        return False
+    first_suffix = m.group(1).split(".", 1)[0]
+    return first_suffix not in _DOTENV_TEMPLATE_SUFFIXES
+
+
 def _has_whole_env_dump(text: str) -> bool:
     """True iff `text` contains a genuine whole-environment access: either
     `os.environ.items()`/`.values()`/`.copy()` (each exposes every VALUE,
@@ -654,7 +677,7 @@ def _deny_reason(command: str):
                 and any(f in rest for f in ("-w", "-g"))):
             return "`security find-generic-password -w/-g` prints the stored secret"
         if base in ("cat", "head", "tail") and any(
-                t.endswith(".env") for t in rest if not t.startswith("-")):
+                _is_dotenv_secret_file(t) for t in rest if not t.startswith("-")):
             return f"`{base}` of a .env file prints its secret values"
         if (base in ("docker", "kubectl", "podman") and "exec" in rest
                 and rest and os.path.basename(rest[-1]) == "env"):

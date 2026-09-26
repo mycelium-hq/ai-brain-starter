@@ -1062,6 +1062,60 @@ def test_allows_python_setdefault():
 
 
 # ---------------------------------------------------------------------------
+# 21. Round 3 item 3 -- dotenv variants for the existing cat/head/tail
+# reader set: .env.local/.env.production/etc are real runtime secrets;
+# .env.example/.env.sample/etc are checked-in templates.
+# ---------------------------------------------------------------------------
+
+def test_denies_cat_dot_env_local():
+    assert_denied("cat .env.local")
+
+
+def test_denies_head_dot_env_production():
+    assert_denied("head .env.production")
+
+
+def test_denies_tail_dot_env_development_nested_path():
+    assert_denied("tail -n 5 backend/.env.development")
+
+
+def test_denies_cat_dot_env_test_local():
+    assert_denied("cat .env.test.local")
+
+
+def test_still_denies_cat_bare_dot_env():
+    assert_denied("cat .env")
+
+
+def test_still_denies_cat_foo_dot_env():
+    assert_denied("cat foo.env")
+
+
+def test_allows_cat_dot_env_example():
+    assert_allowed("cat .env.example")
+
+
+def test_allows_cat_dot_env_sample():
+    assert_allowed("cat .env.sample")
+
+
+def test_allows_cat_dot_env_template():
+    assert_allowed("cat .env.template")
+
+
+def test_allows_cat_dot_env_dist():
+    assert_allowed("cat .env.dist")
+
+
+def test_allows_cat_dot_env_defaults():
+    assert_allowed("cat .env.defaults")
+
+
+def test_allows_cat_env_dot_example_no_leading_dot():
+    assert_allowed("cat env.example")
+
+
+# ---------------------------------------------------------------------------
 # Plain-script runner. globals() preserves definition order (CPython 3.7+
 # dict insertion order), so this walks every test_* function top-to-bottom
 # exactly as written above, with no hand-maintained list to drift out of
