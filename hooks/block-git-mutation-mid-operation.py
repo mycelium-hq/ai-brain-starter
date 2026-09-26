@@ -219,6 +219,26 @@ except Exception:  # pragma: no cover - telemetry is never load-bearing
     def log_fire(*_a, **_k):
         return
 
+# Route the two plain `shlex.split(x) / except ValueError: x.split()` parses
+# below (`_cd_targets`, `_git_invocations`) through the shared linear-time
+# tokenizer: a bare shlex.split costs the SQUARE of one token's length
+# (CPython builds each token via string-attribute concatenation), and this
+# hook parses every segment of every Bash command. Aliased to `shell_tokens`,
+# not `tokens`, because both call sites assign their OWN local named `tokens`
+# -- importing under that same name would make Python treat it as a local in
+# each function and raise UnboundLocalError on the very call that assigns it.
+# Fail-open to the historical inline parse if _lib is unavailable, same shape
+# as the telemetry import above.
+try:
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "_lib"))
+    from shell_parse import tokens as shell_tokens
+except Exception:  # pragma: no cover - degrade to the historical inline parse
+    def shell_tokens(seg):
+        try:
+            return shlex.split(seg)
+        except ValueError:
+            return seg.split()
+
 # Split a command into sequential segments on shell separators so each piece is
 # evaluated independently (mirrors session-lock.py / check-cd-outside-worktree.py).
 ENV_ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")

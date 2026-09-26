@@ -43,6 +43,7 @@ __all__ = [
     "leading_env_assigns",
     "segment_bypass_flags",
     "split_segments_with_seps",
+    "split_strict",
     "strip_heredoc_bodies",
     "strip_noncode",
     "tokens",
@@ -228,25 +229,37 @@ def _scan_tokens(seg):
     return out
 
 
+def split_strict(seg):
+    """shlex tokens for one segment, behaving EXACTLY like `shlex.split(seg)` --
+    including RAISING `ValueError` on the same inputs (unclosed quote, trailing
+    backslash). Delegates to the real `shlex.split` for anything up to
+    `_SHLEX_MAX_CHARS`, so every normal command tokenizes byte-identically to
+    before this threshold existed, and to the linear-time `_scan_tokens` above
+    it -- see `_scan_tokens` for why that path exists.
+
+    This is the strict primitive `tokens()` builds its `seg.split()` fallback
+    on top of. Use `split_strict` directly (not `tokens`) when the caller's
+    OWN contract is "tell me you could not parse this" -- e.g. session-lock.py
+    treats an unparsable segment as an unresolved `None`, a real state distinct
+    from both "parsed to zero tokens" and "here is a best-effort guess" -- and
+    silently swapping in `tokens()`'s whitespace-split guess there would turn
+    an honest "I don't know" into a confident wrong answer.
+    """
+    if len(seg) <= _SHLEX_MAX_CHARS:
+        return shlex.split(seg)
+    return _scan_tokens(seg)
+
+
 def tokens(seg):
     """shlex tokens for one segment, falling back to a whitespace split when the
     segment is not lexable on its own (an unbalanced quote from slicing).
 
-    Delegates to the real `shlex.split` for anything up to `_SHLEX_MAX_CHARS`,
-    so every normal command tokenizes byte-identically to before this
-    threshold existed. Only a segment LONGER than that -- rare for an
-    ordinary command line, whether that length comes from one huge token or
-    many small ones -- takes the linear-time `_scan_tokens` path. See
-    `_scan_tokens` for why: without it, shlex's own per-character
-    string-attr concatenation makes cost grow with the SQUARE of one long
-    TOKEN's length specifically (many short tokens stay cheap even on a long
-    command), and this runs inside PreToolUse Bash hooks on every Bash
-    command.
+    Delegates to `split_strict` (real `shlex.split` at or under
+    `_SHLEX_MAX_CHARS`, linear-time `_scan_tokens` above it) and catches
+    exactly the `ValueError` it can raise, same as always.
     """
     try:
-        if len(seg) <= _SHLEX_MAX_CHARS:
-            return shlex.split(seg)
-        return _scan_tokens(seg)
+        return split_strict(seg)
     except ValueError:
         return seg.split()
 
