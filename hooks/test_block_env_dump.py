@@ -800,7 +800,7 @@ def test_lib_import_failure_warns_on_stderr():
     # -- this file has no pytest dependency.
     with tempfile.TemporaryDirectory() as tmp_dir:
         lone_hook = Path(tmp_dir) / "block-env-dump.py"
-        lone_hook.write_text(HOOK.read_text())
+        lone_hook.write_text(HOOK.read_text(encoding="utf-8"), encoding="utf-8")
         env = dict(os.environ)
         env.pop("ENV_DUMP_BYPASS", None)
         payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": "env"}})
