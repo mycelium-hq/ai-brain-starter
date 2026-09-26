@@ -389,14 +389,26 @@ def _skip_leading(toks: list) -> int:
 
 _NICE_LIKE_WRAPPERS = {"nice", "ionice", "stdbuf"}
 
+# `watch`'s `-n SECONDS` (interval) takes an argument exactly like `nice`'s
+# `-n N`; every other watch flag (-d/-p/-t/-b/-e/-g/-c/-x/-w) is boolean.
+# `watch` is not installed on this machine (no `man watch`, no binary) --
+# handled from its documented GNU procps flag shape regardless.
+_DASH_N_TAKES_ARG_WRAPPERS = {"nice", "watch"}
+
+# xargs' argument-taking short flags, per `man xargs` on THIS machine
+# (BSD/macOS xargs(1)): -E eofstr, -I replstr, -J replstr, -L number,
+# -n number, -P maxprocs, -R replacements, -S replsize, -s size. Every
+# other flag (-0/-o/-p/-r/-t/-x) is boolean, no argument.
+_XARGS_ARG_FLAGS = {"-n", "-L", "-P", "-I", "-J", "-E", "-s", "-R", "-S"}
+
 
 def _peel_local_wrappers(toks: list) -> list:
-    """Resolve `timeout`/`nice`/`ionice`/`stdbuf`/`env`/`sudo` wrapper
-    layers -- implemented LOCALLY (not in hooks/_lib, which other hooks
-    share) since each has its own flag/argument shape a generic wrapper
-    skip cannot express. Runs in a loop so a chain (`sudo timeout 5 env`)
-    fully resolves. Returns `toks` unchanged when `toks[0]` is not one of
-    these six.
+    """Resolve `timeout`/`nice`/`ionice`/`stdbuf`/`watch`/`xargs`/`env`/
+    `sudo` wrapper layers -- implemented LOCALLY (not in hooks/_lib, which
+    other hooks share) since each has its own flag/argument shape a
+    generic wrapper skip cannot express. Runs in a loop so a chain (`sudo
+    timeout 5 env`) fully resolves. Returns `toks` unchanged when
+    `toks[0]` is not one of these eight.
 
     A wrapper with NOTHING left to wrap (`sudo` with no trailing command,
     `env` after its own flags/assigns leave nothing) stops peeling AT that
@@ -417,10 +429,21 @@ def _peel_local_wrappers(toks: list) -> list:
                 break
             i = j
             continue
-        if word in _NICE_LIKE_WRAPPERS:
+        if word in _NICE_LIKE_WRAPPERS or word == "watch":
             j = i + 1
             while j < n and toks[j].startswith("-"):
-                if word == "nice" and toks[j] == "-n" and j + 1 < n:
+                if word in _DASH_N_TAKES_ARG_WRAPPERS and toks[j] == "-n" and j + 1 < n:
+                    j += 2
+                else:
+                    j += 1
+            if j >= n or _is_bare_redirect_token(toks[j]):
+                break
+            i = j
+            continue
+        if word == "xargs":
+            j = i + 1
+            while j < n and toks[j].startswith("-"):
+                if toks[j] in _XARGS_ARG_FLAGS and j + 1 < n:
                     j += 2
                 else:
                     j += 1

@@ -1691,6 +1691,41 @@ def test_denies_xargs_input_redirect_proc_self_environ():
 
 
 # ---------------------------------------------------------------------------
+# 32. Round 4 item 5 -- watch and xargs join _peel_local_wrappers(). watch's
+# -n (interval seconds) takes a value like nice's -n; xargs' argument-taking
+# flags (per `man xargs` on this machine: -n -L -P -I -J -E -s -R -S) each
+# consume a following token, any other dash-prefixed flag does not.
+# ---------------------------------------------------------------------------
+
+def test_denies_watch_pgrep_fl():
+    assert_denied("watch pgrep -fl foo")
+
+
+def test_denies_watch_dash_n_env():
+    assert_denied("watch -n 2 env")
+
+
+def test_denies_echo_pipe_xargs_pgrep_fl():
+    assert_denied("echo foo | xargs pgrep -fl")
+
+
+def test_denies_xargs_dash_0_printenv_input_redirect():
+    assert_denied("xargs -0 printenv < f")
+
+
+def test_allows_echo_pipe_xargs_rm():
+    assert_allowed("echo a b | xargs rm")
+
+
+def test_allows_find_pipe_xargs_rm():
+    assert_allowed("find . -name '*.pyc' | xargs rm")
+
+
+def test_allows_watch_dash_n_git_status():
+    assert_allowed("watch -n 5 git status")
+
+
+# ---------------------------------------------------------------------------
 # Plain-script runner. globals() preserves definition order (CPython 3.7+
 # dict insertion order), so this walks every test_* function top-to-bottom
 # exactly as written above, with no hand-maintained list to drift out of
