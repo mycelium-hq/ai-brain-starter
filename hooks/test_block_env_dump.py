@@ -1232,6 +1232,33 @@ def test_allows_sudo_dash_capital_e_npm_install():
 
 
 # ---------------------------------------------------------------------------
+# 24. Round 3 item 6 -- awk's ENVIRON array. A VARIABLE-keyed subscript
+# (`ENVIRON[k]`, the shape a `for (k in ENVIRON)` loop body uses to read
+# every value) denies; a literal-string-keyed subscript (`ENVIRON["HOME"]`,
+# single named access) and ordinary field-splitting stay allowed.
+# ---------------------------------------------------------------------------
+
+def test_denies_awk_environ_for_in_with_concat():
+    assert_denied('awk \'BEGIN{for(k in ENVIRON) print k"="ENVIRON[k]}\'')
+
+
+def test_denies_awk_environ_for_in_value_only():
+    assert_denied("awk 'BEGIN{for (k in ENVIRON) print ENVIRON[k]}'")
+
+
+def test_allows_awk_environ_literal_key():
+    assert_allowed('awk \'BEGIN{print ENVIRON["HOME"]}\'')
+
+
+def test_allows_awk_field_split_dash_capital_f():
+    assert_allowed("awk -F= '{print $1}'")
+
+
+def test_allows_awk_field_print_with_file():
+    assert_allowed("awk '{print $2}' file.txt")
+
+
+# ---------------------------------------------------------------------------
 # Plain-script runner. globals() preserves definition order (CPython 3.7+
 # dict insertion order), so this walks every test_* function top-to-bottom
 # exactly as written above, with no hand-maintained list to drift out of

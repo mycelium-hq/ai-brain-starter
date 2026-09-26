@@ -678,6 +678,14 @@ _JQ_ENV_PIPE_KEYS_RE = re.compile(r"(?:\benv\b|\$ENV\b)\s*\|\s*keys\b")
 _JQ_ENV_NARROWED_NAME_RE = re.compile(r"(?:\benv\.|\$ENV\.)([A-Za-z_][A-Za-z0-9_]*)")
 
 
+# awk's ENVIRON array holds the whole environment. A VARIABLE-keyed
+# subscript (`ENVIRON[k]`, the shape a `for (k in ENVIRON)` loop body uses
+# to read every value in turn) is a dump; a literal-string-keyed subscript
+# (`ENVIRON["HOME"]`, single named access -- the quote character is not in
+# the identifier class below, so it never matches) is not.
+_AWK_ENVIRON_VAR_SUBSCRIPT_RE = re.compile(r"ENVIRON\[\s*[A-Za-z_]\w*\s*\]")
+
+
 def _jq_denied(text: str) -> bool:
     if _JQ_ENV_PIPE_DANGEROUS_RE.search(text):
         return True
@@ -802,6 +810,8 @@ def _deny_reason(command: str):
             return f"`{base}` prints the whole environment (os.environ/process.env)"
         if base == "jq" and _jq_denied(text):
             return "`jq`'s `env` builtin / `$ENV` global expose the whole environment"
+        if base == "awk" and _AWK_ENVIRON_VAR_SUBSCRIPT_RE.search(text):
+            return "awk `ENVIRON[<var>]` (a for-in loop's shape) reads every variable's value"
     return None
 
 
