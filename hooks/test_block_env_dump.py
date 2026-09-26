@@ -1460,7 +1460,7 @@ def test_still_denies_printenv_with_name():
 # swallowed defs -- main() must fail LOUD instead of reporting a green
 # "0 passed, 0 failed" (or any N well under this) as success. Update this
 # number in the SAME change that adds or removes a test_* function.
-HARD_FLOOR = 162
+HARD_FLOOR = 269
 
 
 def main() -> int:

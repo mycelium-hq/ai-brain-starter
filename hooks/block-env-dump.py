@@ -30,6 +30,24 @@ lesson of MYC-4626: a naive regex reads a dangerous command out of a quoted
 string, a comment, or a heredoc body and calls it code, or misses one
 hidden behind a heredoc.
 
+Out of scope, deliberately:
+  - Deliberate obfuscation that hides the command WORD itself from the
+    tokenizer's word-based dispatch: `P=pgrep; $P -fl foo` (the verb is a
+    variable expansion, never the literal string "pgrep"), `$(printf
+    '\x65\x6e\x76')` and similar build-the-command-as-a-string tricks. This
+    hook resolves a real command word per segment; it does not evaluate
+    shell expansions to discover what a variable or a substitution would
+    expand to at runtime.
+  - Secret-file readers beyond cat/head/tail (less, more, vim, code, an
+    editor opened directly on a `.env` file, a language's own file-read
+    call). That is a DIFFERENT guard's job (a secret-file-read guard, not
+    an environment-VALUE-in-a-command guard); folding it in here would
+    blur what this hook is responsible for.
+  - The shared tokenizer's (hooks/_lib/shell_parse.py) quadratic cost on
+    one huge token. That is a hooks/_lib issue shared by every tokenizing
+    Bash hook, not specific to this one -- fixed there, not duplicated
+    here.
+
 Bypass: ENV_DUMP_BYPASS=1, PER SEGMENT (inline `VAR=1 <cmd>` prefix, or
 `export VAR=1` which then carries to every LATER segment, matching real
 shell semantics) or session env (applies to the whole command).
