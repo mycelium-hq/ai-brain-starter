@@ -578,6 +578,32 @@ def _is_dotenv_secret_file(token: str) -> bool:
     return first_suffix not in _DOTENV_TEMPLATE_SUFFIXES
 
 
+# jq's `env` builtin and `$ENV` global both hand back the whole process
+# environment as one jq object -- structurally the same shape os.environ /
+# process.env are for python/node. `|to_entries`/`|tostream` flatten it into
+# k=v pairs unconditionally (denied outright, regardless of anything after);
+# `|keys` yields names only (allowed); a narrowed `.NAME` access denies only
+# when NAME is secret-shaped, reusing `_names_secret_var` -- the same
+# single-value-but-that-value-IS-a-secret rule the echo/printf check applies.
+_JQ_ENV_REF_RE = re.compile(r"\benv\b|\$ENV\b")
+_JQ_ENV_PIPE_DANGEROUS_RE = re.compile(r"(?:\benv\b|\$ENV\b)\s*\|\s*(?:to_entries|tostream)\b")
+_JQ_ENV_PIPE_KEYS_RE = re.compile(r"(?:\benv\b|\$ENV\b)\s*\|\s*keys\b")
+_JQ_ENV_NARROWED_NAME_RE = re.compile(r"(?:\benv\.|\$ENV\.)([A-Za-z_][A-Za-z0-9_]*)")
+
+
+def _jq_denied(text: str) -> bool:
+    if _JQ_ENV_PIPE_DANGEROUS_RE.search(text):
+        return True
+    if any(_names_secret_var(name) for name in _JQ_ENV_NARROWED_NAME_RE.findall(text)):
+        return True
+    # Strip narrowed-name and names-only-pipe occurrences (both already
+    # judged above), then any env/$ENV reference STILL standing is a bare
+    # whole-value reference.
+    scan = _JQ_ENV_NARROWED_NAME_RE.sub("", text)
+    scan = _JQ_ENV_PIPE_KEYS_RE.sub("", scan)
+    return bool(_JQ_ENV_REF_RE.search(scan))
+
+
 def _has_whole_env_dump(text: str) -> bool:
     """True iff `text` contains a genuine whole-environment access: either
     `os.environ.items()`/`.values()`/`.copy()` (each exposes every VALUE,
@@ -686,6 +712,8 @@ def _deny_reason(command: str):
                 or (base == "node" and any(f in rest for f in _NODE_INLINE_SCRIPT_FLAGS)))
                 and _has_whole_env_dump(text)):
             return f"`{base}` prints the whole environment (os.environ/process.env)"
+        if base == "jq" and _jq_denied(text):
+            return "`jq`'s `env` builtin / `$ENV` global expose the whole environment"
     return None
 
 

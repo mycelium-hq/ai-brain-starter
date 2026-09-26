@@ -1116,6 +1116,58 @@ def test_allows_cat_env_dot_example_no_leading_dot():
 
 
 # ---------------------------------------------------------------------------
+# 22. Round 3 item 4 -- jq's `env` builtin and `$ENV` global expose the whole
+# process environment the same way os.environ/process.env do. Narrowed
+# single-name access denies only when the name is secret-shaped (the same
+# rule echo/printf already use), matching the "single value, but that value
+# IS a secret" case rather than a bulk dump.
+# ---------------------------------------------------------------------------
+
+def test_denies_jq_bare_env():
+    assert_denied("jq -n env")
+
+
+def test_denies_jq_bare_dollar_env():
+    assert_denied("jq -n '$ENV'")
+
+
+def test_denies_jq_env_to_entries():
+    assert_denied('jq -rn \'env|to_entries[]|"\\(.key)=\\(.value)"\'')
+
+
+def test_denies_jq_env_tostream():
+    assert_denied("jq -n 'env|tostream'")
+
+
+def test_denies_jq_env_dot_secret_name():
+    assert_denied("jq -n 'env.ANTHROPIC_API_KEY'")
+
+
+def test_denies_jq_dollar_env_dot_secret_name():
+    assert_denied("jq -n '$ENV.GITHUB_TOKEN'")
+
+
+def test_allows_jq_env_pipe_keys():
+    assert_allowed("jq -n 'env|keys'")
+
+
+def test_allows_jq_env_dot_ordinary_name():
+    assert_allowed("jq -n 'env.HOME'")
+
+
+def test_allows_jq_dollar_env_dot_ordinary_name():
+    assert_allowed("jq -n '$ENV.HOME'")
+
+
+def test_allows_jq_dot_package_json():
+    assert_allowed("jq . package.json")
+
+
+def test_allows_jq_dash_r_dot_version():
+    assert_allowed("jq -r .version package.json")
+
+
+# ---------------------------------------------------------------------------
 # Plain-script runner. globals() preserves definition order (CPython 3.7+
 # dict insertion order), so this walks every test_* function top-to-bottom
 # exactly as written above, with no hand-maintained list to drift out of
