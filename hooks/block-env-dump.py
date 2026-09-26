@@ -151,18 +151,41 @@ _WHOLE_ENV_SCRIPT_RE = re.compile(r"os\.environ\b(?!\s*[.\[])|process\.env\b(?!\
 # checked at all.
 _NODE_INLINE_SCRIPT_FLAGS = {"-e", "--eval", "-p", "--print", "-pe", "-ep"}
 
-# A bare os.environ/process.env used as the right-hand side of an `in` test
-# (`"HOME" in process.env`), inside `len(...)` (`len(os.environ)`), or as the
-# sole argument to a names-only wrapper (`Object.keys(process.env)` in JS,
-# `list(os.environ)`/`sorted(os.environ)` in Python -- iterating a mapping
-# yields its KEYS, never its values) produces a boolean, a count, or a name
-# list -- never a value -- exempt even though nothing narrows the reference
-# itself via `.`/`[`. Checked against the text immediately BEFORE the match
-# (Python's `re` lookbehind must be fixed-width, and "any amount of
-# whitespace" is not, so this is a plain preceding-text regex instead of a
-# lookbehind assertion).
-_ENV_MEMBERSHIP_OR_LEN_RE = re.compile(
-    r"(\bin\s*|\blen\(\s*|\bObject\.keys\(\s*|\b(?:list|sorted|tuple|set)\(\s*)$"
+# A bare os.environ/process.env used as the right-hand side of an `in` TEST
+# (`"HOME" in process.env`) produces a boolean, never a value -- but this
+# exemption is scoped to a STRING-LITERAL left operand ONLY. `for k in
+# os.environ:` / `for (const k in process.env)` also end in `in\s*`, and
+# that is ITERATION, not membership -- round 4's regression (a reviewer's
+# evasion driver): the old, unscoped `\bin\s*$` exempted both alike, so a
+# for-in loop's bare env reference went undetected.
+_ENV_MEMBERSHIP_LITERAL_RE = re.compile(r"""(?:"[^"]*"|'[^']*')\s+in\s*$""")
+
+# `len(os.environ)` (a count) or the sole argument to a names-only wrapper
+# (`Object.keys(process.env)` in JS, `list(os.environ)`/`sorted(...)`/
+# `tuple(...)`/`set(...)` in Python -- iterating a mapping yields its KEYS,
+# never its values) produces an int or a name list, never a value -- exempt
+# even though nothing narrows the reference itself via `.`/`[`. Checked
+# against the text immediately BEFORE the match (Python's `re` lookbehind
+# must be fixed-width, and "any amount of whitespace" is not, so this is a
+# plain preceding-text regex instead of a lookbehind assertion).
+_ENV_LEN_OR_NAMES_ONLY_WRAP_RE = re.compile(
+    r"(\blen\(\s*|\bObject\.keys\(\s*|\b(?:list|sorted|tuple|set)\(\s*)$"
+)
+
+# A VARIABLE-keyed lookup -- `process.env[k]`, `os.environ[k]`,
+# `os.environ.get(k)`, `os.getenv(k)` -- denies unconditionally: the same
+# rule as awk's `ENVIRON[<var>]` (item 6) applied to node/python. Only a
+# quote character right after the opening bracket/paren (a STRING LITERAL
+# key: `process.env["HOME"]`, `os.environ.get("HOME")`) is exempt; a bare
+# identifier or expression key means the loop/comprehension that produced
+# it is reading every value in turn, which is exactly the shape
+# `Object.keys(...)`/`list(...)` being names-only on their OWN cannot see
+# -- round 4's regression, part 2.
+_ENV_VARIABLE_KEYED_RE = re.compile(
+    r"process\.env\[\s*(?!['\"])"
+    r"|os\.environ\[\s*(?!['\"])"
+    r"|os\.environ\.get\(\s*(?!['\"])"
+    r"|os\.getenv\(\s*(?!['\"])"
 )
 
 # Python `os.environ.items()` / `.values()` / `.copy()` -- each exposes every
@@ -769,18 +792,23 @@ def _jq_denied(text: str) -> bool:
 
 def _has_whole_env_dump(text: str) -> bool:
     """True iff `text` contains a genuine whole-environment access: either
-    `os.environ.items()`/`.values()`/`.copy()` (each exposes every VALUE,
-    regardless of what narrows the bare-reference check below), or a bare
-    os.environ/process.env access -- not narrowed by `.`/`[` (per
-    `_WHOLE_ENV_SCRIPT_RE`'s own lookahead), and not a membership test,
-    length check, or names-only wrapper (per `_ENV_MEMBERSHIP_OR_LEN_RE`),
-    which produce a bool/int/name-list, never a value. `from os import
-    environ` is normalized to `os.environ` first so both checks see it."""
+    `os.environ.items()`/`.values()`/`.copy()` (each exposes every VALUE
+    regardless of what narrows the bare-reference check below), a
+    VARIABLE-keyed lookup (`process.env[k]`, `os.environ.get(k)`, ...,
+    per `_ENV_VARIABLE_KEYED_RE`), or a bare os.environ/process.env access
+    -- not narrowed by `.`/`[` (per `_WHOLE_ENV_SCRIPT_RE`'s own
+    lookahead), and not a LITERAL-STRING membership test, a length check,
+    or a names-only wrapper (per `_ENV_MEMBERSHIP_LITERAL_RE` /
+    `_ENV_LEN_OR_NAMES_ONLY_WRAP_RE`), which produce a bool/int/name-list,
+    never a value. `from os import environ` is normalized to `os.environ`
+    first so every check above sees it."""
     text = _normalize_environ_alias(text)
-    if _ENV_VALUE_METHOD_RE.search(text):
+    if _ENV_VALUE_METHOD_RE.search(text) or _ENV_VARIABLE_KEYED_RE.search(text):
         return True
     for m in _WHOLE_ENV_SCRIPT_RE.finditer(text):
-        if _ENV_MEMBERSHIP_OR_LEN_RE.search(text, 0, m.start()):
+        preceding = text[:m.start()]
+        if (_ENV_MEMBERSHIP_LITERAL_RE.search(preceding)
+                or _ENV_LEN_OR_NAMES_ONLY_WRAP_RE.search(preceding)):
             continue
         return True
     return False

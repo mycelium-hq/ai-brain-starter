@@ -1448,6 +1448,98 @@ def test_still_denies_printenv_with_name():
 
 
 # ---------------------------------------------------------------------------
+# 30. Round 4 items 1-2 -- REGRESSION FIX. Round 3's `in`-membership and
+# names-only-wrap exemptions were too broad: `for k in os.environ` matched
+# the SAME `in\s*$` pattern as `"KEY" in os.environ`, and `Object.keys(X)`/
+# `list(X)` being names-only said nothing about the loop body then doing
+# `X[k]` with that same key. Two fixes: (1) the membership exemption now
+# requires a STRING LITERAL immediately before `in` -- `for … in …` is
+# iteration, never membership; (2) a VARIABLE-keyed lookup
+# (`process.env[k]`, `os.environ[k]`, `os.environ.get(k)`, `os.getenv(k)`)
+# denies unconditionally, the same awk-ENVIRON[k] rule from item 6 applied
+# to node/python -- a literal-string key stays allowed.
+# ---------------------------------------------------------------------------
+
+def test_denies_node_for_in_process_env_variable_subscript():
+    assert_denied(
+        "node -e 'for (const k in process.env) console.log(k, process.env[k])'"
+    )
+
+
+def test_denies_node_for_of_object_keys_then_variable_subscript():
+    assert_denied(
+        "node -e 'for (const k of Object.keys(process.env)) "
+        "console.log(k, process.env[k])'"
+    )
+
+
+def test_denies_python_for_in_os_environ_variable_subscript():
+    assert_denied(
+        "python3 -c 'import os\nfor k in os.environ: print(k, os.environ[k])'"
+    )
+
+
+def test_denies_python_list_comprehension_variable_subscript():
+    assert_denied(
+        "python3 -c 'import os; [print(k, os.environ[k]) for k in os.environ]'"
+    )
+
+
+def test_denies_python_dict_comprehension_variable_subscript():
+    assert_denied(
+        "python3 -c 'import os; print({k: os.environ[k] for k in os.environ})'"
+    )
+
+
+def test_denies_python_environ_get_variable_key():
+    assert_denied(
+        "python3 -c 'import os; [print(os.environ.get(k)) for k in os.environ]'"
+    )
+
+
+# --- keep allowed, re-pinned after the fix above -----------------------
+
+def test_allows_node_dash_p_in_membership_still():
+    assert_allowed('node -p \'"HOME" in process.env\'')
+
+
+def test_allows_node_dash_e_process_env_dotted_home():
+    assert_allowed("node -e 'console.log(process.env.HOME)'")
+
+
+def test_allows_node_dash_p_object_keys_length_still():
+    assert_allowed("node -p 'Object.keys(process.env).length'")
+
+
+def test_allows_python_in_membership_still():
+    assert_allowed('python3 -c \'import os; print("KEY" in os.environ)\'')
+
+
+def test_allows_python_environ_subscript_literal_still():
+    assert_allowed('python3 -c \'import os; print(os.environ["HOME"])\'')
+
+
+def test_allows_python_sorted_keys_still():
+    assert_allowed("python3 -c 'import os; print(sorted(os.environ.keys()))'")
+
+
+def test_allows_python_list_bare_environ_still():
+    assert_allowed("python3 -c 'import os; print(list(os.environ))'")
+
+
+def test_allows_python_len_environ_still():
+    assert_allowed("python3 -c 'import os; print(len(os.environ))'")
+
+
+def test_allows_python_environ_get_literal_still():
+    assert_allowed('python3 -c \'import os; print(os.environ.get("HOME"))\'')
+
+
+def test_allows_python_getenv_literal_still():
+    assert_allowed('python3 -c \'import os; print(os.getenv("HOME"))\'')
+
+
+# ---------------------------------------------------------------------------
 # Plain-script runner. globals() preserves definition order (CPython 3.7+
 # dict insertion order), so this walks every test_* function top-to-bottom
 # exactly as written above, with no hand-maintained list to drift out of
