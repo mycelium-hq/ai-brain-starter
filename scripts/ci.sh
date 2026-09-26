@@ -1608,6 +1608,10 @@ PY_DIRECT=(
   # shipped copies (scripts/ and skills/graphify/scripts/) so a fix to one
   # cannot silently leave the other behind.
   tests/test_graphify_canonicalize_slash_guard.py
+  # Proves block-env-dump.py (MYC-4988): drives the guard as a real
+  # subprocess with JSON on stdin, the same shape a PreToolUse call uses.
+  # Plain script, no pytest -- main() walks every test_* function itself.
+  hooks/test_block_env_dump.py
 )
 dormant_py=()
 while IFS= read -r -d '' f; do
