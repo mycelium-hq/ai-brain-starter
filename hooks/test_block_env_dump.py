@@ -1540,6 +1540,157 @@ def test_allows_python_getenv_literal_still():
 
 
 # ---------------------------------------------------------------------------
+# 31. Round 4 item 4 -- PIN CONFIRMED COVERAGE. The first reviewer confirmed
+# every one of these DENIED at 1d6413c; each was verified again directly
+# against the hook before writing these tests (no new fix here, only
+# regression-proofing for coverage that already works).
+# ---------------------------------------------------------------------------
+
+# --- pgrep: forms not yet pinned -----------------------------------------
+
+def test_denies_pgrep_bare_dash_a():
+    assert_denied("pgrep -a foo")
+
+
+def test_denies_command_pgrep_fl():
+    assert_denied("command pgrep -fl foo")
+
+
+def test_denies_exec_pgrep_fl():
+    assert_denied("exec pgrep -fl foo")
+
+
+def test_denies_builtin_pgrep_fl():
+    assert_denied("builtin pgrep -fl foo")
+
+
+def test_denies_time_pgrep_fl():
+    assert_denied("time pgrep -fl foo")
+
+
+def test_denies_nohup_pgrep_fl():
+    assert_denied("nohup pgrep -fl foo")
+
+
+def test_denies_pgrep_fl_in_parens():
+    assert_denied("(pgrep -fl foo)")
+
+
+def test_denies_pgrep_fl_in_brace_group():
+    assert_denied("{ pgrep -fl foo; }")
+
+
+def test_denies_echo_command_substitution_pgrep_fl():
+    assert_denied("echo $(pgrep -fl foo)")
+
+
+def test_denies_pgrep_backslash_escaped_p():
+    assert_denied("p\\grep -fl foo")
+
+
+# --- env family: forms not yet pinned ------------------------------------
+
+def test_denies_env_dash_u_path():
+    assert_denied("env -u PATH")
+
+
+def test_denies_env_glued_pipe_sort():
+    assert_denied("env|sort")
+
+
+def test_denies_env_glued_pipe_rg():
+    assert_denied("env|rg -i key")
+
+
+def test_denies_printenv_glued_pipe_head():
+    assert_denied("printenv|head")
+
+
+def test_denies_set_glued_pipe_grep():
+    assert_denied("set|grep X")
+
+
+def test_denies_export_glued_pipe_grep():
+    assert_denied("export|grep X")
+
+
+def test_denies_declare_dash_p_with_operand():
+    assert_denied("declare -p X")
+
+
+def test_denies_typeset_dash_x():
+    assert_denied("typeset -x")
+
+
+# --- echo: forms not yet pinned -------------------------------------------
+
+def test_denies_echo_quoted_anthropic_key():
+    assert_denied('echo "$ANTHROPIC_API_KEY"')
+
+
+def test_denies_echo_braced_openai_key():
+    assert_denied("echo ${OPENAI_API_KEY}")
+
+
+def test_denies_printf_format_arg_github_token():
+    assert_denied("printf '%s\\n' \"$GITHUB_TOKEN\"")
+
+
+# --- ps: forms not yet pinned ----------------------------------------------
+
+def test_denies_ps_dash_capital_e_combined_cluster():
+    assert_denied("ps -Eww")
+
+
+# --- python: forms not yet pinned ------------------------------------------
+
+def test_denies_python_json_dumps_dict_environ():
+    assert_denied("python3 -c 'import os, json; print(json.dumps(dict(os.environ)))'")
+
+
+def test_denies_python_local_alias_assignment_print():
+    assert_denied("python3 -c 'import os; environ=os.environ; print(environ)'")
+
+
+# --- node: forms not yet pinned ---------------------------------------------
+
+def test_denies_node_dash_e_console_log_process_env_bare():
+    assert_denied("node -e 'console.log(process.env)'")
+
+
+def test_denies_node_object_entries_process_env():
+    assert_denied("node -e 'console.log(Object.entries(process.env))'")
+
+
+# --- files: forms not yet pinned --------------------------------------------
+
+def test_denies_cat_dot_slash_dot_env():
+    assert_denied("cat ./.env")
+
+
+def test_denies_cat_config_dot_env():
+    assert_denied("cat config/.env")
+
+
+def test_denies_cat_home_relative_admin_env():
+    assert_denied("cat ~/.claude/concierge/admin.env")
+
+
+# --- /proc: forms not yet pinned --------------------------------------------
+
+def test_denies_cat_proc_glob_environ():
+    assert_denied("cat /proc/*/environ")
+
+
+def test_denies_od_dash_c_proc_self_environ():
+    assert_denied("od -c /proc/self/environ")
+
+
+def test_denies_xargs_input_redirect_proc_self_environ():
+    assert_denied("xargs -0 -n1 < /proc/self/environ")
+
+
+# ---------------------------------------------------------------------------
 # Plain-script runner. globals() preserves definition order (CPython 3.7+
 # dict insertion order), so this walks every test_* function top-to-bottom
 # exactly as written above, with no hand-maintained list to drift out of
