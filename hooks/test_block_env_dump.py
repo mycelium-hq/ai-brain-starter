@@ -795,3 +795,140 @@ def test_lib_import_failure_warns_on_stderr(tmp_path):
     )
     assert r.returncode == 0  # still fails open -- degraded, not fixed
     assert r.stderr.strip() != "", "degraded _lib import must warn on stderr, not fail silently"
+
+
+# ---------------------------------------------------------------------------
+# 18. New vector -- pgrep listing forms that leak a titled process's
+# environment. Measured on macOS with a clean-env canary: a process that
+# sets its own title (npm, Node) exposes its leading ENVIRONMENT strings to
+# `pgrep` whenever the short flags combine `l` (list name) with `f` (match
+# full command line), in any clustering/order, or when `-a`/`--list-full`
+# is present (Linux procps: unconditional full command line). PIDs-only
+# (`-f` alone), name-only (`-l` alone), and any other single-letter flag
+# stay allowed.
+# ---------------------------------------------------------------------------
+
+def test_denies_pgrep_glued_fl():
+    assert_denied("pgrep -fl X")
+
+
+def test_denies_pgrep_glued_lf():
+    assert_denied("pgrep -lf X")
+
+
+def test_denies_pgrep_separate_f_l():
+    assert_denied("pgrep -f -l X")
+
+
+def test_denies_pgrep_glued_afl():
+    assert_denied("pgrep -afl X")
+
+
+def test_denies_pgrep_glued_lfi():
+    assert_denied("pgrep -lfi X")
+
+
+def test_denies_pgrep_separate_n_l_f():
+    assert_denied("pgrep -n -l -f X")
+
+
+def test_denies_pgrep_lf_then_n():
+    # The exact witnessed leak shape: -lf clustered, -n as a separate flag.
+    assert_denied("pgrep -lf -n X")
+
+
+def test_denies_pgrep_dash_a_alone_with_f():
+    # -a in its own short-option cluster denies unconditionally (rule b),
+    # even though the only thing paired with it here is a bare -f: on Linux
+    # procps -a/--list-full means the full command line regardless of -l.
+    assert_denied("pgrep -a -f X")
+
+
+def test_denies_pgrep_list_full_long_flag():
+    assert_denied("pgrep --list-full X")
+
+
+def test_denies_pgrep_full_path():
+    assert_denied("/usr/bin/pgrep -fl X")
+
+
+def test_denies_sudo_pgrep_fl():
+    assert_denied("sudo pgrep -fl X")
+
+
+def test_denies_pgrep_fl_piped_to_head():
+    # Piping into a non-extractor (head just limits lines, it does not
+    # strip the value) must still deny -- same posture as bare `env` piped
+    # into anything other than the three proven value-stripping extractors.
+    assert_denied("pgrep -fl node | head")
+
+
+def test_denies_pgrep_fl_in_and_chain():
+    assert_denied("echo hi && pgrep -fl node")
+
+
+def test_denies_pgrep_fl_in_semicolon_chain():
+    assert_denied("true; pgrep -fl node")
+
+
+# --- allowed pgrep forms ----------------------------------------------------
+
+def test_allows_pgrep_dash_f_alone():
+    assert_allowed("pgrep -f X")
+
+
+def test_allows_pgrep_dash_f_piped_wc_l():
+    assert_allowed("pgrep -f X | wc -l")
+
+
+def test_allows_pgrep_dash_l_alone():
+    assert_allowed("pgrep -l X")
+
+
+def test_allows_pgrep_dash_x():
+    assert_allowed("pgrep -x node")
+
+
+def test_allows_pgrep_dash_n_dash_f():
+    assert_allowed("pgrep -n -f X")
+
+
+def test_allows_pgrep_dash_capital_p():
+    assert_allowed("pgrep -P 123")
+
+
+def test_allows_pkill_dash_f():
+    # A different command entirely -- pkill signals, it does not print.
+    assert_allowed("pkill -f X")
+
+
+# --- mentions of the dangerous forms in non-pgrep contexts stay allowed -----
+
+def test_allows_grep_mentioning_pgrep_fl():
+    assert_allowed('grep "pgrep -fl" notes.md')
+
+
+def test_allows_rg_mentioning_pgrep_fl():
+    assert_allowed("rg 'pgrep -fl'")
+
+
+def test_allows_echo_mentioning_pgrep_forms():
+    assert_allowed('echo "use pgrep -f, not pgrep -fl"')
+
+
+def test_allows_git_commit_message_mentioning_deny_pgrep_fl():
+    assert_allowed('git commit -m "deny pgrep -fl"')
+
+
+# --- known residual ----------------------------------------------------
+# A dangerous pgrep form hidden inside a command substitution embedded in
+# ANOTHER command's argument is not caught. The outer command's own
+# resolved verb is "ps"; shlex hands the whole quoted "$(...)" back as ONE
+# opaque argument token to that OUTER command, and this hook (like the rest
+# of the file) does no command-substitution parsing of its own -- descending
+# into $(...) would be new substitution-parsing scope this change does not
+# add. Pinned here so a future change to that scope decision is deliberate,
+# not a silent regression.
+
+def test_allows_pgrep_fl_inside_command_substitution_residual():
+    assert_allowed('ps -p "$(pgrep -fl x)" -o pid=')
