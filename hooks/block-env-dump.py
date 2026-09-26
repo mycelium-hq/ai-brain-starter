@@ -2,7 +2,8 @@
 """PreToolUse hook: block Bash commands that print environment VALUES.
 
 Pattern this prevents: `env`, `printenv`, bare `export`/`set`, `declare -p`,
-a `ps` invocation with an environment flag, `/proc/<pid>/environ`, or an
+a `ps` invocation with an environment flag, a `pgrep` listing form combining
+`-l` with `-f` (or carrying `-a`/`--list-full`), `/proc/<pid>/environ`, or an
 `echo $SECRET_VAR` put a live credential's VALUE into the session
 transcript (~/.claude/projects/.../*.jsonl), where it persists and leaks
 permanently -- a value in a transcript cannot be un-persisted. Unlike a
@@ -58,8 +59,8 @@ except Exception as _lib_exc:
         "[block-env-dump] WARNING: hooks/_lib import failed "
         f"({type(_lib_exc).__name__}: {_lib_exc}); running DEGRADED -- only "
         "the /proc/<pid>/environ check still runs, every per-verb check "
-        "(env/printenv/export/set/declare/ps/echo/gh/security/cat/docker/"
-        "python/node) is OFF until _lib is restored beside this hook",
+        "(env/printenv/export/set/declare/ps/pgrep/echo/gh/security/cat/"
+        "docker/python/node) is OFF until _lib is restored beside this hook",
         file=sys.stderr,
     )
 
@@ -477,6 +478,34 @@ def _ps_denied(rest: list) -> bool:
     return not first.startswith("-") and "e" in first
 
 
+def _pgrep_denied(rest: list) -> bool:
+    """True for a `pgrep` invocation whose flags print a MATCHED PROCESS'S
+    COMMAND LINE rather than just its PID/name. Measured on macOS with a
+    clean-env canary: a process that sets its own title (npm, Node) exposes
+    its leading ENVIRONMENT strings to `pgrep` whenever the short flags
+    combine `l` (list name) with `f` (match full command line) -- `-fl`,
+    `-lf`, `-f -l`, `-afl`, `-lfi`, `-n -l -f` all leak, in any clustering or
+    order, so every short-option cluster's letters are UNIONED before
+    checking rather than inspected cluster-by-cluster. `-a` (Linux procps:
+    `--list-full`, the full command line unconditionally) denies on its own;
+    that long flag is the ONE double-dash form this checks -- any OTHER
+    long flag never counts, even if it happens to contain one of these
+    letters, mirroring `_ps_denied`'s long-flag exemption above. `pgrep -f X`
+    (PIDs only), `pgrep -l X` without `-f` (names only), `pgrep -P 123` and
+    `pgrep -x node` all stay allowed."""
+    chars = set()
+    for t in rest:
+        if t == "--list-full":
+            return True
+        if t.startswith("--"):
+            continue
+        if t.startswith("-") and len(t) > 1:
+            chars.update(t[1:])
+    if "a" in chars:
+        return True
+    return "l" in chars and "f" in chars
+
+
 def _deny_reason(command: str):
     """Short reason string if `command` should be denied, else None."""
     if not command or not command.strip():
@@ -532,6 +561,20 @@ def _deny_reason(command: str):
         if base == "ps":
             if _ps_denied(rest):
                 return "`ps` with an environment flag exposes process environ blocks"
+            continue
+        if base == "pgrep":
+            if _pgrep_denied(rest):
+                return (
+                    "on macOS, `pgrep` with both -l and -f prints each matched "
+                    "process's command line. For any process that set its "
+                    "title (npm, Node), that includes its leading environment "
+                    "variables, so live credentials land in the transcript. "
+                    "Name the safe forms: PIDs `pgrep -f '<pattern>'`; count "
+                    "`pgrep -f '<pattern>' | wc -l` (macOS pgrep has NO -c "
+                    "flag, so never suggest `pgrep -c`); one process "
+                    "`ps -o pid=,etime=,comm= -p <pid>`; a process's cwd "
+                    "`lsof -a -d cwd -p <pid> -Fn`."
+                )
             continue
         if base in ("echo", "printf"):
             if _echo_reveals_secret(text, segs, idx):
