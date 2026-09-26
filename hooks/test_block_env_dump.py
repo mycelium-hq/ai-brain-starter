@@ -1422,6 +1422,32 @@ def test_allows_eval_command_substitution_ssh_agent():
 
 
 # ---------------------------------------------------------------------------
+# 29. Round 3 item 11 -- printenv gets the same names-only-extractor and
+# presence-consumer allowance the env branch already has, plus a new
+# count-only consumer (`wc -l`) both branches can use.
+# ---------------------------------------------------------------------------
+
+def test_allows_printenv_pipe_cut():
+    assert_allowed("printenv | cut -d= -f1")
+
+
+def test_allows_printenv_pipe_wc_l():
+    assert_allowed("printenv | wc -l")
+
+
+def test_still_denies_bare_printenv():
+    assert_denied("printenv")
+
+
+def test_still_denies_printenv_pipe_head():
+    assert_denied("printenv | head")
+
+
+def test_still_denies_printenv_with_name():
+    assert_denied("printenv NAME")
+
+
+# ---------------------------------------------------------------------------
 # Plain-script runner. globals() preserves definition order (CPython 3.7+
 # dict insertion order), so this walks every test_* function top-to-bottom
 # exactly as written above, with no hand-maintained list to drift out of

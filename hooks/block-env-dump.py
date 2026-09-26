@@ -503,6 +503,14 @@ def _is_presence_consumer(toks: list) -> bool:
     return bool(toks) and toks[0] == "grep" and any(t in ("-q", "-c") for t in toks[1:])
 
 
+def _is_count_only_consumer(toks: list) -> bool:
+    """True for `wc -l`: consumes the whole piped stream but only ever
+    prints a LINE COUNT, never a name or a value. Exact-match, like the
+    other extractors above, so a wider `wc` invocation cannot slip past
+    it."""
+    return toks == ["wc", "-l"]
+
+
 def _names_secret_var(name: str) -> bool:
     """Only an ALL-UPPERCASE name counts (`$key` is exempt, `$KEY` is not).
     Secret if it contains a password/secret/token/apikey/credential SUBSTRING
@@ -820,10 +828,17 @@ def _deny_reason(command: str, depth: int = 1):
             nxt = segs[idx + 1] if idx + 1 < len(segs) else None
             if nxt and nxt[0] == "|":
                 nxt_toks = tokens(nxt[1].strip())
-                if _is_names_only_extractor(nxt_toks) or _is_presence_consumer(nxt_toks):
-                    continue  # provably strips values, or never prints one
+                if (_is_names_only_extractor(nxt_toks) or _is_presence_consumer(nxt_toks)
+                        or _is_count_only_consumer(nxt_toks)):
+                    continue  # provably strips values, counts, or never prints one
             return "bare `env` prints every variable's value"
         if base == "printenv":
+            nxt = segs[idx + 1] if idx + 1 < len(segs) else None
+            if nxt and nxt[0] == "|":
+                nxt_toks = tokens(nxt[1].strip())
+                if (_is_names_only_extractor(nxt_toks) or _is_presence_consumer(nxt_toks)
+                        or _is_count_only_consumer(nxt_toks)):
+                    continue  # provably strips values, counts, or never prints one
             return "`printenv` prints one or every variable's value"
         if base == "export":
             if not rest or rest == ["-p"]:
