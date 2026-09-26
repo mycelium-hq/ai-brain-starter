@@ -337,10 +337,23 @@ def test_threshold_short_command_still_uses_real_shlex():
 # --------------------------------------------------------------------------
 
 def test_threshold_boundary_exact_16384_vs_16385():
-    at_threshold = "a" * sp._SHLEX_MAX_CHARS
-    over_threshold = "a" * (sp._SHLEX_MAX_CHARS + 1)
-    assert len(at_threshold) == sp._SHLEX_MAX_CHARS
-    assert len(over_threshold) == sp._SHLEX_MAX_CHARS + 1
+    # Hardcoded to the literal 16384/16385, NEVER derived from
+    # sp._SHLEX_MAX_CHARS: the point of this test is to catch a mutation to
+    # _SHLEX_MAX_CHARS ITSELF (e.g. it becomes 0 or 10**7). A fixture sized
+    # from sp._SHLEX_MAX_CHARS cannot see that class of mutant at all -- it
+    # just relocates the boundary and tests around wherever the mutant put
+    # it. Measured the hard way: under a `_SHLEX_MAX_CHARS = 10**7` mutant, a
+    # fixture derived from it built a 10,000,000-char single token and ran it
+    # through the REAL shlex.split (since 10,000,000 <= 10,000,000), which is
+    # exactly the quadratic blowup this whole fix exists to remove -- an
+    # unbounded hang instead of a fast, clear failure.
+    assert sp._SHLEX_MAX_CHARS == 16384, (
+        "this test pins the documented threshold VALUE as a literal; if 16384 "
+        "is genuinely no longer correct, update the literals below (never "
+        "derive them from sp._SHLEX_MAX_CHARS, or a wrong-VALUE mutant becomes "
+        "undetectable again)")
+    at_threshold = "a" * 16384
+    over_threshold = "a" * 16385
 
     problems = []
 
@@ -350,9 +363,9 @@ def test_threshold_boundary_exact_16384_vs_16385():
         len(at_threshold), len(calls_at)))
     if len(calls_at) != 1:
         problems.append(
-            "at exactly _SHLEX_MAX_CHARS ({} chars) shlex.split was called {} time(s), "
-            "expected exactly 1 (a `<=` -> `<` mutant would call it 0 here)".format(
-                sp._SHLEX_MAX_CHARS, len(calls_at)))
+            "at exactly 16384 chars, shlex.split was called {} time(s), expected "
+            "exactly 1 (a `<=` -> `<` mutant, or a shrunk _SHLEX_MAX_CHARS, would "
+            "call it 0 here)".format(len(calls_at)))
     if result_at != [at_threshold]:
         problems.append("at-threshold segment tokenized wrong: got {} token(s), want 1"
                          .format(len(result_at)))
@@ -363,9 +376,9 @@ def test_threshold_boundary_exact_16384_vs_16385():
         len(over_threshold), len(calls_over)))
     if len(calls_over) != 0:
         problems.append(
-            "at _SHLEX_MAX_CHARS+1 ({} chars) shlex.split was called {} time(s), expected "
-            "exactly 0 (a mutant widening the threshold, e.g. `<` -> `<=` alone with no "
-            "matching change, would call it here)".format(len(over_threshold), len(calls_over)))
+            "at 16385 chars, shlex.split was called {} time(s), expected exactly 0 "
+            "(a mutant widening the threshold -- e.g. `<` -> `<=` alone, or a grown "
+            "_SHLEX_MAX_CHARS -- would call it here)".format(len(calls_over)))
     if result_over != [over_threshold]:
         problems.append("over-threshold segment tokenized wrong: got {} token(s), want 1"
                          .format(len(result_over)))
