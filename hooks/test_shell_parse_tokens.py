@@ -17,25 +17,30 @@ module), so one huge inline argument stalls every Bash call in the session.
 THE FIX under test. `_scan_tokens(seg)` is a linear-time reimplementation of
 the exact state machine `shlex.split` runs (POSIX, `whitespace_split=True`,
 no comments, no `punctuation_chars`), built with a list buffer instead of
-string-attribute concatenation. `tokens()` still calls the real
-`shlex.split` for any segment up to `_SHLEX_MAX_CHARS` (16384 chars) -- so
-every ordinary command is byte-identical to before -- and only reaches
-`_scan_tokens` above that threshold. Both paths keep the pre-existing
-`except ValueError: return seg.split()` fallback.
+string-attribute concatenation. `split_strict(seg)` routes through it above
+`_SHLEX_MAX_CHARS` (16384 chars) the same way, and through the real
+`shlex.split` at or under it -- so every ordinary command is byte-identical
+to before -- but keeps `shlex.split`'s exact contract, INCLUDING raising
+`ValueError`. `tokens()` is `split_strict` plus the pre-existing
+`except ValueError: return seg.split()` fallback. `session-lock.py` and
+`block-git-mutation-mid-operation.py` (the latter via a `shell_tokens`
+alias, to avoid shadowing a same-named local variable) call `split_strict`
+directly where their own contract needs to see the `ValueError`, not have it
+swallowed into a guess.
 
 WHY THE MODULE IMPORT IS AT THE TOP BUT THE NEW NAMES ARE NOT. This file is
 imported once, then every test reaches into `sp.tokens` / `sp._scan_tokens` /
-`sp._SHLEX_MAX_CHARS` from inside its own body, rather than via a top-level
-`from _lib.shell_parse import _scan_tokens, _SHLEX_MAX_CHARS`. `tokens()`
-existed before this fix; `_scan_tokens` and `_SHLEX_MAX_CHARS` did not. A
-top-level import of the new names would raise ImportError and crash the
-WHOLE file when run against the pre-fix module, hiding every test behind one
-opaque traceback. Reaching for `sp.<name>` from inside each test instead
-means the one test that needs only `tokens()` and nothing else -- the cost
-test -- can actually RUN TO COMPLETION against the pre-fix module and show
-its TRUE behavior: it fails on the CPU-budget and call-count assertions
-(23s CPU and one real `shlex.split` call, measured), not on an import error.
-Every other test here also reaches `sp._scan_tokens` or `sp._SHLEX_MAX_CHARS`
+`sp.split_strict` / `sp._SHLEX_MAX_CHARS` from inside its own body, rather
+than via a top-level `from _lib.shell_parse import ...` of the new names.
+`tokens()` existed before this fix; the rest did not. A top-level import of
+the new names would raise ImportError and crash the WHOLE file when run
+against the pre-fix module, hiding every test behind one opaque traceback.
+Reaching for `sp.<name>` from inside each test instead means the one test
+that needs only `tokens()` and nothing else -- the cost test -- can actually
+RUN TO COMPLETION against the pre-fix module and show its TRUE behavior: it
+fails on the CPU-budget and call-count assertions (23s CPU and one real
+`shlex.split` call, measured), not on an import error. Every other test here
+also reaches `sp._scan_tokens`, `sp.split_strict`, or `sp._SHLEX_MAX_CHARS`
 somewhere in its own body (directly, or in a fixture-sanity assert), so each
 of THOSE fails with a clear per-test `AttributeError` naming the missing
 attribute, instead of one opaque import-time crash for the whole file.
@@ -409,6 +414,80 @@ def test_fallback_unclosed_quote_over_threshold_uses_plain_split():
 
 
 # --------------------------------------------------------------------------
+# g. SPLIT_STRICT: the public strict primitive session-lock.py and
+#    block-git-mutation-mid-operation.py now call directly (the latter via a
+#    `shell_tokens` alias) in place of a bare `shlex.split`. Must match
+#    `shlex.split`'s contract EXACTLY, including RAISING ValueError on the
+#    same inputs -- unlike `tokens()`, which swallows that into a
+#    `seg.split()` guess -- and must get the same linear-time treatment above
+#    `_SHLEX_MAX_CHARS` that `tokens()` does.
+# --------------------------------------------------------------------------
+
+_SPLIT_STRICT_COST_SEGMENT = "echo " + "a" * 1_000_000
+
+
+def test_split_strict_cost_huge_segment_skips_shlex():
+    with _counting_shlex_split() as calls:
+        t0 = time.process_time()
+        result = sp.split_strict(_SPLIT_STRICT_COST_SEGMENT)
+        elapsed = time.process_time() - t0
+
+    print("    [split_strict cost] {:.4f}s CPU for a {}-char segment, shlex.split call "
+          "count={}".format(elapsed, len(_SPLIT_STRICT_COST_SEGMENT), len(calls)))
+
+    problems = []
+    if len(calls) != 0:
+        problems.append(
+            "shlex.split was called {} time(s), expected 0 -- split_strict() must route "
+            "a {}-char segment through _scan_tokens too, the same as tokens() does"
+            .format(len(calls), len(_SPLIT_STRICT_COST_SEGMENT)))
+    expected = ["echo", "a" * 1_000_000]
+    if result != expected:
+        problems.append("wrong tokens: got {} token(s), want {} token(s)"
+                         .format(len(result), len(expected)))
+    if elapsed >= _COST_CPU_BUDGET_SECONDS:
+        problems.append("{:.4f}s CPU >= the {:.1f}s budget".format(
+            elapsed, _COST_CPU_BUDGET_SECONDS))
+    if problems:
+        raise AssertionError("; ".join(problems))
+
+
+def test_split_strict_equivalence_and_valueerror_parity():
+    failures = []
+    for seg, label in _EDGE_CASES:
+        try:
+            want = shlex.split(seg)
+            want_err = None
+        except ValueError as exc:
+            want = None
+            want_err = str(exc) or exc.__class__.__name__
+        try:
+            got = sp.split_strict(seg)
+            got_err = None
+        except ValueError as exc:
+            got = None
+            got_err = str(exc) or exc.__class__.__name__
+
+        if want_err is None and got_err is None:
+            ok = want == got
+        elif want_err is not None and got_err is not None:
+            ok = True    # both raised -- ValueError PARITY holds
+        else:
+            ok = False   # one raised, the other did not -- a real contract break
+        print("    [split_strict] {:4} {!r:14} {}".format("ok" if ok else "FAIL", seg, label))
+        if not ok:
+            failures.append((label, seg, want, want_err, got, got_err))
+
+    if failures:
+        label, seg, want, want_err, got, got_err = failures[0]
+        raise AssertionError(
+            "{} of {} case(s) broke split_strict's shlex.split contract. FIRST BREAK "
+            "({}) seg={!r}\n        shlex.split   -> tokens={!r} err={!r}\n"
+            "        split_strict  -> tokens={!r} err={!r}".format(
+                len(failures), len(_EDGE_CASES), label, seg, want, want_err, got, got_err))
+
+
+# --------------------------------------------------------------------------
 # Plain-script runner: scripts/ci.sh invokes this file directly, with no
 # pytest available (PY_DIRECT). EXPECTED_TEST_COUNT is a HARD FLOOR: if a
 # test silently stops being discovered (renamed away from `test_`, deleted,
@@ -417,7 +496,7 @@ def test_fallback_unclosed_quote_over_threshold_uses_plain_split():
 # this suite exists to avoid becoming an instance of.
 # --------------------------------------------------------------------------
 
-EXPECTED_TEST_COUNT = 6
+EXPECTED_TEST_COUNT = 8
 
 if __name__ == "__main__":
     checks = [
