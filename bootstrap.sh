@@ -788,19 +788,31 @@ PY
       -H "content-type: application/json" \
       -d "$QM_PAYLOAD" 2>/dev/null)"
     set -e
+    # Field order is reused|resent|token, untrusted token LAST, and the
+    # token is hex-validated here (never emitted at all if it doesn't
+    # match) -- belt and suspenders. `read` with 3 target vars dumps every
+    # extra "|"-delimited chunk into the LAST variable, so if token were
+    # first and unvalidated, a token shaped like "abc|1|def" would shift
+    # "1" into the reused slot regardless of the server's real reused
+    # value -- the split happens before any regex could validate it. With
+    # the flags first (never containing "|", they are script-computed "0"
+    # or "1") and the token last and pre-validated, neither failure mode
+    # is reachable.
     QM_PARSED="$(printf '%s' "${QM_RESP:-}" | "$PY" -c '
-import json, sys
+import json, re, sys
 try:
     d = json.load(sys.stdin)
 except Exception:
     d = {}
 ok = bool(d.get("ok"))
 token = d.get("token","") if ok else ""
+if not re.match(r"^[a-f0-9]{32}$", token):
+    token = ""
 reused = "1" if (ok and d.get("reused") is True) else "0"
 resent = "1" if (ok and d.get("resent") is True) else "0"
-print("%s|%s|%s" % (token, reused, resent))
+print("%s|%s|%s" % (reused, resent, token))
 ' 2>/dev/null)"
-    IFS='|' read -r QM_TOKEN QM_REUSED QM_RESENT <<< "$QM_PARSED"
+    IFS='|' read -r QM_REUSED QM_RESENT QM_TOKEN <<< "$QM_PARSED"
     # A resubmit for an email that already has a live token comes back
     # {ok:true, reused:true, resent:<bool>} with NO token -- the endpoint is
     # public/unauthenticated and never re-hands out an existing token. This
