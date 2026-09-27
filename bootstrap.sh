@@ -788,15 +788,34 @@ PY
       -H "content-type: application/json" \
       -d "$QM_PAYLOAD" 2>/dev/null)"
     set -e
-    QM_TOKEN="$(printf '%s' "${QM_RESP:-}" | "$PY" -c '
+    QM_PARSED="$(printf '%s' "${QM_RESP:-}" | "$PY" -c '
 import json, sys
 try:
     d = json.load(sys.stdin)
-    print(d.get("token","") if d.get("ok") else "")
 except Exception:
-    print("")
+    d = {}
+ok = bool(d.get("ok"))
+token = d.get("token","") if ok else ""
+reused = "1" if (ok and d.get("reused") is True) else "0"
+resent = "1" if (ok and d.get("resent") is True) else "0"
+print("%s|%s|%s" % (token, reused, resent))
 ' 2>/dev/null)"
-    if [[ -z "$QM_TOKEN" || ! "$QM_TOKEN" =~ ^[a-f0-9]{32}$ ]]; then
+    IFS='|' read -r QM_TOKEN QM_REUSED QM_RESENT <<< "$QM_PARSED"
+    # A resubmit for an email that already has a live token comes back
+    # {ok:true, reused:true, resent:<bool>} with NO token -- the endpoint is
+    # public/unauthenticated and never re-hands out an existing token. This
+    # is not a failure: warn and continue tokenless, same as a fresh install
+    # with no email offered at all. Never err() here (see FAILED list below)
+    # and never retry the mint.
+    if [[ "$QM_REUSED" == "1" ]]; then
+      if [[ "$QM_RESENT" == "1" ]]; then
+        warn "$(t "You already started an install with this email. I sent the link to your inbox again." \
+                  "Ya empezaste una instalación con este email. Te reenvié el link a tu bandeja de entrada.")"
+      else
+        warn "$(t "You already started an install with this email. The link is in your inbox from last time." \
+                  "Ya empezaste una instalación con este email. El link está en tu bandeja de entrada de la última vez.")"
+      fi
+    elif [[ -z "$QM_TOKEN" || ! "$QM_TOKEN" =~ ^[a-f0-9]{32}$ ]]; then
       err "$(t "Inline mint failed. Falling back to form." \
               "Falló la generación inline. Caemos al formulario.")"
     else
