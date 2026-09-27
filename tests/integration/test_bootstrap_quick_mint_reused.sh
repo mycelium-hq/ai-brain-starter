@@ -25,7 +25,11 @@
 #      the failure path it wasn't meant to touch.
 #   6. Bonus: Spanish copy -- LANG_CODE=es prints the ES lines for both
 #      reused cases.
-#   7. NEGATIVE CONTROL: the identical harness against the frozen ffddd85
+#   7. Pipe-injection (independent review finding, MYC-5093): a
+#      reused=false reply whose (untrusted, server-controlled) token
+#      contains the literal substring "|1|" must not shift a field and
+#      wrongly trigger the reused/warn branch.
+#   8. NEGATIVE CONTROL: the identical harness against the frozen ffddd85
 #      (pre-fix) fixture must fail the way the bug actually failed -- err()
 #      called once, TOKEN empty, no "reused" copy -- proving this test would
 #      have caught the original bug, not just exercised dead code.
@@ -192,9 +196,31 @@ echo "$OUT6" | grep -qF 'Ya empezaste una instalación con este email. El link e
   || fail "6: LANG_CODE=es did not print the Spanish not-resent copy. Output:
 $OUT6"
 
-echo "PASS: bootstrap.sh recognizes reused/resent, warns (never errs), leaves TOKEN empty, and the token/failure/ES paths are unchanged (6 checks)"
+# ── 7. pipe-injection: an untrusted token containing "|1|" must not shift
+# into the reused field (independent review, MYC-5093). The pre-fix-for-this
+# check baseline is 80cafaf9 (already committed), which emits
+# "token|reused|resent" with the token UNvalidated and first -- bash `read`
+# with 3 target vars dumps every extra "|"-delimited chunk into the LAST
+# variable, so a token shaped "abc|1|def" pushes "1" into the reused slot
+# and "def|0|0" into the resent slot, regardless of the server's real
+# reused:false. ──
+S7="$TMP/s7-pipe"; mkdir -p "$S7"
+build_curl_stub "$S7" '{"ok":true,"reused":false,"resent":false,"token":"abc|1|def"}'
+OUT7="$(run_scenario "$S7" en "$HARNESS")"
+if echo "$OUT7" | grep -qF 'already started an install'; then
+  fail "7: a token containing '|1|' shifted a field and wrongly triggered the reused/warn branch even though the server said reused:false. Output:
+$OUT7"
+fi
+echo "$OUT7" | grep -qF 'Inline mint failed. Falling back to form.' \
+  || fail "7: a token containing '|1|' with reused:false should fall through to the pre-existing no-token err() (the token itself is not 32-hex, pipe chars included). Output:
+$OUT7"
+echo "$OUT7" | grep -q '^RESULT_TOKEN=$' \
+  || fail "7: a malformed/pipe-containing token was not rejected -- it must never reach TOKEN. Output:
+$OUT7"
 
-# ── 7. NEGATIVE CONTROL: the identical harness against the frozen ffddd85
+echo "PASS: bootstrap.sh recognizes reused/resent, warns (never errs), leaves TOKEN empty, and the token/failure/ES/pipe-injection paths are unchanged (7 checks)"
+
+# ── 8. NEGATIVE CONTROL: the identical harness against the frozen ffddd85
 # (pre-fix) fixture must fail the way the bug actually failed. ──
 #
 # Provenance, not merely difference (same reasoning as
@@ -202,7 +228,7 @@ echo "PASS: bootstrap.sh recognizes reused/resent, warns (never errs), leaves TO
 # would make this control compare the fix against itself and pass for the
 # wrong reason.
 if [ "$(cksum < "$FIXTURE")" = "$(cksum < "$BOOTSTRAP")" ]; then
-  fail "7 (negative control): the pre-fix fixture is byte-identical to $BOOTSTRAP, so this control cannot fail. Restore a genuine pre-fix snapshot."
+  fail "8 (negative control): the pre-fix fixture is byte-identical to $BOOTSTRAP, so this control cannot fail. Restore a genuine pre-fix snapshot."
 fi
 # What makes this fixture pre-fix is precisely that QM_REUSED/QM_RESENT did
 # not exist until this fix. If a future maintainer "refreshes" the fixture
@@ -210,24 +236,24 @@ fi
 # assertion catches it -- pointing at the fixture, not sending the next
 # person to debug bootstrap.sh for a bug that isn't there.
 if grep -q 'QM_REUSED\|QM_RESENT' "$FIXTURE"; then
-  fail "7 (negative control): the pre-fix fixture already contains QM_REUSED/QM_RESENT, which did not exist until this fix. It was probably regenerated from post-fix source. It must stay a frozen snapshot of ffddd85, never a re-extraction from HEAD."
+  fail "8 (negative control): the pre-fix fixture already contains QM_REUSED/QM_RESENT, which did not exist until this fix. It was probably regenerated from post-fix source. It must stay a frozen snapshot of ffddd85, never a re-extraction from HEAD."
 fi
 
 PRE_HARNESS="$TMP/pre-harness.sh"
 build_harness "$FIXTURE" "$PRE_HARNESS"
-S7="$TMP/s7"; mkdir -p "$S7"
-build_curl_stub "$S7" '{"ok":true,"reused":true,"resent":true,"sideEffects":{"welcomeEmailSent":true}}'
-PRE_OUT="$(run_scenario "$S7" en "$PRE_HARNESS")"
+S8="$TMP/s8"; mkdir -p "$S8"
+build_curl_stub "$S8" '{"ok":true,"reused":true,"resent":true,"sideEffects":{"welcomeEmailSent":true}}'
+PRE_OUT="$(run_scenario "$S8" en "$PRE_HARNESS")"
 echo "$PRE_OUT" | grep -qF 'Inline mint failed. Falling back to form.' \
-  || fail "7 (negative control): the pre-fix source was expected to call err(\"Inline mint failed...\") on a reused reply -- this harness would NOT have caught the original bug. Output:
+  || fail "8 (negative control): the pre-fix source was expected to call err(\"Inline mint failed...\") on a reused reply -- this harness would NOT have caught the original bug. Output:
 $PRE_OUT"
 echo "$PRE_OUT" | grep -q '^RESULT_FAILED_COUNT=1$' \
-  || fail "7 (negative control): the pre-fix source was expected to land the reused reply on the FAILED list exactly once. Output:
+  || fail "8 (negative control): the pre-fix source was expected to land the reused reply on the FAILED list exactly once. Output:
 $PRE_OUT"
 if echo "$PRE_OUT" | grep -qF 'already started an install'; then
-  fail "7 (negative control): the pre-fix source printed the NEW reused copy -- it should have no idea what 'reused' means. Output:
+  fail "8 (negative control): the pre-fix source printed the NEW reused copy -- it should have no idea what 'reused' means. Output:
 $PRE_OUT"
 fi
 
 echo "PASS: negative control confirmed against the frozen pre-fix fixture (ffddd85) -- a reused reply called err() and landed on the FAILED list, exactly as the original bug did"
-echo "PASS: test_bootstrap_quick_mint_reused (7 checks, negative control on the main scenario)"
+echo "PASS: test_bootstrap_quick_mint_reused (8 checks, negative control on the main scenario)"
