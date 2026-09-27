@@ -203,6 +203,13 @@ if ($env:EMAIL_GATE_BYPASS -ne "1" -and -not $DryRun -and -not (Test-Path $email
     # Inline path: EMAIL+NAME passed as env vars (typically by Claude Code
     # after asking the user inline). POST to quick-mint to get a token
     # without making the user leave the chat.
+    # ai-brain:quick-mint:start
+    # Everything between these two markers is extracted VERBATIM and
+    # dot-sourced by tests/integration/test_bootstrap_ps1_quick_mint_reused.ps1,
+    # so it must stay a self-contained unit: it reads $env:EMAIL, $env:NAME,
+    # $env:LANG_HINT and $installApiBase from its enclosing scope and calls
+    # the bootstrap-only helpers Log/Warn/Ok/Err/T, which that test stubs
+    # (same pattern as test_bootstrap_ps1_slash_commands.ps1).
     if (-not $env:TOKEN -and $env:EMAIL -and $env:NAME) {
         $qmLang = if ($env:LANG_HINT) { $env:LANG_HINT } else { "en" }
         if ($qmLang -ne "en" -and $qmLang -ne "es") { $qmLang = "en" }
@@ -219,7 +226,21 @@ if ($env:EMAIL_GATE_BYPASS -ne "1" -and -not $DryRun -and -not (Test-Path $email
             } | ConvertTo-Json -Compress
             $qmResp = Invoke-RestMethod -Uri "$installApiBase/api/install/quick-mint" `
                 -Method Post -ContentType "application/json" -Body $qmBody -TimeoutSec 12 -ErrorAction Stop
-            if ($qmResp.ok -and $qmResp.token -match '^[a-f0-9]{32}$') {
+            # A resubmit for an email that already has a live token comes back
+            # {ok:true, reused:true, resent:<bool>} with NO token -- the endpoint
+            # is public/unauthenticated and never re-hands out an existing
+            # token. This is not a failure: warn and continue tokenless, same
+            # as a fresh install with no email offered at all. Never Err()
+            # here (it lands on $script:Failed) and never retry the mint.
+            if ($qmResp.ok -and $qmResp.reused -eq $true) {
+                if ($qmResp.resent -eq $true) {
+                    Warn (T "You already started an install with this email. I sent the link to your inbox again." `
+                           "Ya empezaste una instalación con este email. Te reenvié el link a tu bandeja de entrada.")
+                } else {
+                    Warn (T "You already started an install with this email. The link is in your inbox from last time." `
+                           "Ya empezaste una instalación con este email. El link está en tu bandeja de entrada de la última vez.")
+                }
+            } elseif ($qmResp.ok -and $qmResp.token -match '^[a-f0-9]{32}$') {
                 Ok (T "Token minted inline. No browser needed." `
                       "Token generado en línea. Sin navegador.")
                 $env:TOKEN = $qmResp.token
@@ -232,6 +253,7 @@ if ($env:EMAIL_GATE_BYPASS -ne "1" -and -not $DryRun -and -not (Test-Path $email
                   "Falló mint inline: $_. Caemos al formulario.")
         }
     }
+    # ai-brain:quick-mint:end
 
     # If a token was provided (web-form path) or minted inline above,
     # validate it. On ANY failure here, warn and continue tokenless. The
