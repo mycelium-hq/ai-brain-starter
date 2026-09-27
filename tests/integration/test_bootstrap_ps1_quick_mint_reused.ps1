@@ -30,6 +30,12 @@
 #      (pre-fix) fixture must fail the way the bug actually failed -- Err
 #      called once, no Warn, no reused handling -- proving this test would
 #      have caught the original bug, not just exercised dead code.
+#   8. Strict boolean read (independent review finding, MYC-5093): a reply
+#      built by round-tripping raw JSON through ConvertFrom-Json (never a
+#      PSCustomObject literal -- see Run-ScenarioJson) with reused:1 or
+#      reused:"true" must NOT take the warn branch, because neither an
+#      Int64 nor a String is a [bool]. Only a genuine JSON boolean true
+#      does. Same strictness for resent.
 #
 # Self-contained; no network (Invoke-RestMethod is shadowed by a local
 # function so the block's unqualified call resolves to the stub, never the
@@ -137,6 +143,19 @@ try {
         . $BlockFile
     }
 
+    # Run-ScenarioJson BLOCKFILE JSONTEXT LANGCODE -> same as Run-Scenario, but
+    # builds the mocked reply by round-tripping raw JSON TEXT through
+    # ConvertFrom-Json, so it genuinely exercises PowerShell's JSON
+    # deserialization type coercion (a [PSCustomObject] literal built directly
+    # in this test, as every scenario below Run-Scenario uses, never routes
+    # through that deserializer and so cannot catch a type-coercion bug in
+    # either direction -- this is what independent review flagged as
+    # uncovered).
+    function Run-ScenarioJson($BlockFile, [string]$JsonText, [string]$LangCode = "en") {
+        $response = $JsonText | ConvertFrom-Json
+        Run-Scenario $BlockFile $response $LangCode
+    }
+
     Write-Host "B. reused + resent=true -> Warn (never Err), TOKEN stays unset"
     Run-Scenario $blockFile ([PSCustomObject]@{ ok = $true; reused = $true; resent = $true; sideEffects = @{ welcomeEmailSent = $true } })
     Check ($script:LastWarn -eq "You already started an install with this email. I sent the link to your inbox again.") "exact resent copy printed (got: $($script:LastWarn))"
@@ -173,6 +192,26 @@ try {
     Check ($script:LastErr -eq "Inline mint returned no token. Falling back.") "pre-fix source prints the OLD no-token copy, with no idea what 'reused' means (got: $($script:LastErr))"
     Check ($null -eq $script:LastWarn) "pre-fix source never warns on a reused reply (got: $($script:LastWarn))"
     Check (-not $env:TOKEN) "pre-fix source leaves TOKEN unset on a reused reply"
+
+    Write-Host "H. strict boolean read: a JSON non-bool reused/resent must NOT take the warn branch (independent review, MYC-5093)"
+    Run-ScenarioJson $blockFile '{"ok":true,"reused":1}'
+    Check ($null -eq $script:LastWarn) "reused:1 (JSON number, not a real boolean) does not Warn (got: $($script:LastWarn))"
+    Check ($script:ErrCount -eq 1) "reused:1 falls through to the pre-existing no-token Err path instead (got $($script:ErrCount) Err calls)"
+    Check ($script:LastErr -eq "Inline mint returned no token. Falling back.") "the exact pre-existing no-token copy prints (got: $($script:LastErr))"
+    Check (-not $env:TOKEN) "TOKEN stays unset"
+
+    Run-ScenarioJson $blockFile '{"ok":true,"reused":"true"}'
+    Check ($null -eq $script:LastWarn) "reused:`"true`" (JSON string, not a real boolean) does not Warn (got: $($script:LastWarn))"
+    Check ($script:ErrCount -eq 1) "reused:`"true`" falls through to the pre-existing no-token Err path instead (got $($script:ErrCount) Err calls)"
+    Check (-not $env:TOKEN) "TOKEN stays unset"
+
+    Run-ScenarioJson $blockFile '{"ok":true,"reused":true,"resent":true}'
+    Check ($script:LastWarn -eq "You already started an install with this email. I sent the link to your inbox again.") "reused:true, resent:true (real JSON booleans, round-tripped through ConvertFrom-Json) DOES Warn with the resent copy (got: $($script:LastWarn))"
+    Check ($script:ErrCount -eq 0) "Err was never called (got $($script:ErrCount))"
+
+    Run-ScenarioJson $blockFile '{"ok":true,"reused":true,"resent":1}'
+    Check ($script:LastWarn -eq "You already started an install with this email. The link is in your inbox from last time.") "reused:true (real bool) but resent:1 (JSON number, not a real boolean) reads as NOT resent -- falls to the not-resent copy (got: $($script:LastWarn))"
+    Check ($script:ErrCount -eq 0) "Err was never called (got $($script:ErrCount))"
 
     Write-Host ""
     if ($script:Failures -gt 0) {
