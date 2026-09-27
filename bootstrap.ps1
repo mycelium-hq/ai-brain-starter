@@ -232,8 +232,14 @@ if ($env:EMAIL_GATE_BYPASS -ne "1" -and -not $DryRun -and -not (Test-Path $email
             # token. This is not a failure: warn and continue tokenless, same
             # as a fresh install with no email offered at all. Never Err()
             # here (it lands on $script:Failed) and never retry the mint.
-            if ($qmResp.ok -and $qmResp.reused -eq $true) {
-                if ($qmResp.resent -eq $true) {
+            # Strict boolean read, matching the .sh side's Python `is True`:
+            # `-eq $true` alone is not type-strict here -- PowerShell coerces
+            # both sides, so a JSON number 1 or the JSON string "true" would
+            # both satisfy `-eq $true` even though neither is a real JSON
+            # boolean. `-is [bool]` rejects both; only a genuine
+            # ConvertFrom-Json boolean passes.
+            if ($qmResp.ok -and ($qmResp.reused -is [bool]) -and $qmResp.reused) {
+                if (($qmResp.resent -is [bool]) -and $qmResp.resent) {
                     Warn (T "You already started an install with this email. I sent the link to your inbox again." `
                            "Ya empezaste una instalación con este email. Te reenvié el link a tu bandeja de entrada.")
                 } else {
