@@ -32,15 +32,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 # Guarded (MYC-4701): _shared may be missing on a fresh install (bootstrap.sh's
-# per-skill copy list omits it -- N10) or a deployed copy may predate these
-# names. Either way this degrades to injection_scan: unavailable instead of
+# per-skill copy list omits it -- N10) or a deployed copy may predate this
+# name. Either way this degrades to injection_scan: unavailable instead of
 # crashing the whole ingest on import.
 try:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "_shared"))
-    from connector_utils import guard_untrusted_body, trust_frontmatter_lines
+    from connector_utils import guard_untrusted_body
 except ImportError:
-    guard_untrusted_body = None
-    trust_frontmatter_lines = None
+    def guard_untrusted_body(text, source, scan_text=None):
+        return text, {"content_trust": "untrusted", "injection_scan": "unavailable", "injection_flags": []}
 
 VTT_TIMING_RE = re.compile(r"\d{2}:\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}:\d{2}\.\d{3}.*")
 VTT_HEADER_RE = re.compile(r"^(WEBVTT|Kind:|Language:|NOTE\s|X-TIMESTAMP-MAP)", re.MULTILINE)
@@ -292,22 +292,17 @@ def main() -> int:
         f"Source: {args.url}\n"
     )
 
-    if guard_untrusted_body is not None:
-        # scan_text covers the TITLE too (not just captions): a video's
-        # title is as third-party as its captions, and `body` alone omits it
-        # whenever a real transcript exists. Uses the RAW per-cue lines, not
-        # the sentence-joined `transcript`: a cue with no closing
-        # punctuation can otherwise land mid-sentence and dodge a
-        # line-anchored pattern the raw cue would still trip (M2).
-        body, trust = guard_untrusted_body(
-            body, "youtube", scan_text="\n".join([title, raw_cues or transcript])
-        )
-    else:
-        trust = {"content_trust": "untrusted", "injection_scan": "unavailable", "injection_flags": []}
-        sys.stderr.write(
-            "ingest-youtube: injection scanner unavailable; writing "
-            "content_trust=untrusted, injection_scan=unavailable\n"
-        )
+    # scan_text covers the TITLE too (not just captions): a video's title is
+    # as third-party as its captions, and `body` alone omits it whenever a
+    # real transcript exists. Uses the RAW per-cue lines, not the
+    # sentence-joined `transcript`: a cue with no closing punctuation can
+    # otherwise land mid-sentence and dodge a line-anchored pattern the raw
+    # cue would still trip (M2). (Unavailable scanner: the degraded stub
+    # above reports it, no separate stderr line -- the summary print below
+    # already says "Injection scan: unavailable.")
+    body, trust = guard_untrusted_body(
+        body, "youtube", scan_text="\n".join([title, raw_cues or transcript])
+    )
 
     fm = {
         "type": "external-input",
