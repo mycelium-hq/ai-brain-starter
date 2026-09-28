@@ -1621,6 +1621,16 @@ PY_DIRECT=(
   # PreToolUse hook run on every Bash call. 20k-case equivalence fuzz plus a
   # structural cost test that a 1M-char segment never reaches shlex.split.
   hooks/test_shell_parse_tokens.py
+  # heavy-command-admission.py: a-k controls incl. a real leak-control leg
+  # (plants a process whose argv+env carry a fake credential, drives real
+  # pgrep against it under a forced-critical reading, asserts the token
+  # never reaches stdout/stderr/either log) and a negative control (every
+  # threshold neutered in a scratch, never-committed copy; the b/c/d
+  # scenarios then wrongly allow, proving the real thresholds are
+  # load-bearing). Built after ~10 concurrent sessions each running a
+  # heavy command pushed one Mac's swap to 19.4 GB and it rebooted
+  # (2026-09-26).
+  hooks/test_heavy_command_admission.py
 )
 dormant_py=()
 while IFS= read -r -d '' f; do
