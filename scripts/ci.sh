@@ -303,6 +303,9 @@ INTEGRATION_TESTS=(
   # installed git, so the one prerequisite a locked-down laptop cannot get was
   # also the one nothing provided.
   test_bootstrap_ps1_git_install
+  # A quick-mint "reused" reply is a warning, not a failure, on both installers.
+  test_bootstrap_quick_mint_reused
+  test_bootstrap_ps1_quick_mint_reused
   test_preflight_git_and_it_request
   test_remediate_runaway_procs
   test_surface_unniced_launchagents
