@@ -153,6 +153,11 @@
           {
             "type": "command",
             "command": "[ -f ~/.claude/hooks/block-scratchpad-cross-agent-clobber.py ] && [PYTHON] ~/.claude/hooks/block-scratchpad-cross-agent-clobber.py || true"
+          },
+          {
+            "_comment": "BLOCKING gate. Refuses a heavy build/test command (next build, verify, full tsc, unscoped vitest, playwright, cargo) when the machine is already under memory pressure (macOS pressure level or swap-vs-RAM; Linux MemAvailable) or the same class is already at its running cap. Built after ~10 concurrent agent sessions on one Mac each ran a heavy command simultaneously (2026-09-26), pushed swap to 19.4 GB on a 24 GB machine, and the Mac rebooted mid-session. Same `if [ -f ]` form as the gates above and for the same reason: it signals by EXIT CODE 2 with its remediation prose on STDERR, so `2>/dev/null || echo <allow>` would discard the message AND convert the block into an allow. Fails open on any read error. Bypass: HEAVY_ADMISSION_OVERRIDE=1.",
+            "type": "command",
+            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/heavy-command-admission.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/heavy-command-admission.py; else echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'; fi"
           }
         ]
       },
