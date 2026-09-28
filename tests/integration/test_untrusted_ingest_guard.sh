@@ -13,7 +13,7 @@
 #
 # Self-contained, network-free. Hermetic: HOME is a fresh temp dir and
 # SECRET_WARN_ROOT is unset for the whole run, so this can never fall back
-# to an installed copy on the machine running it (M9). Exit 0 = pass.
+# to an installed copy on the machine running it. Exit 0 = pass.
 
 set -euo pipefail
 
@@ -107,7 +107,7 @@ def assert_stamped(text, label, flagged_family=None):
 
 # T0: our own scaffolding text must not trip the scanner. scan_or_none, not
 # scan_untrusted -- a dead registry would make scan_untrusted return [] too.
-# The callout is the real constant: flag ids are never in its text (I8).
+# The callout is the real constant: flag ids are never in its text.
 begin_rendered = cu._UNTRUSTED_BEGIN_TMPL.format(source="test", nonce="0123456789abcdef")
 end_rendered = cu._UNTRUSTED_END_TMPL.format(nonce="0123456789abcdef")
 check(acs.scan_or_none(begin_rendered) == [], "(T0a) BEGIN marker template scans clean")
@@ -294,11 +294,14 @@ with tempfile.TemporaryDirectory() as d4:
     text4b = fpath4b.read_text(encoding="utf-8") if fpath4b.is_file() else ""
     check("injection_scan: clean" in text4b, "(T4b) clean payload reports clean")
 
-# T5: ingest-youtube, one module load, 4 cases: a. flagged (title-only
-# specimen, doubling as the title-dropped-from-scan_text guard) b. clean
-# c. a bracket-leading title, which unquoted would open a YAML flow
-# sequence (M5c) d. a SYSTEM-shaped title + a seed keyword in captions --
-# the Meta/Captures seed stub must not carry the raw title (H2).
+# T5: ingest-youtube, one module load. a. flagged (title-only specimen,
+# doubling as the title-dropped-from-scan_text guard) b. clean c. a
+# bracket-leading title, which unquoted would open a YAML flow sequence
+# d. a SYSTEM-shaped title + a seed keyword in captions -- the
+# Meta/Captures seed stub must not carry the raw title e. raw per-cue
+# caption lines catch a specimen the sentence-joined transcript would miss
+# f. a line-separator-smuggled title cannot forge a frontmatter key g. same
+# forgery via a newline-smuggled channel_url.
 yt_ingest = load_module("_yt_ingest_test", repo / "skills" / "ingest-youtube" / "ingest.py")
 yt_ingest.require_bin = lambda name: "/usr/bin/yt-dlp"
 yt_ingest.list_subs = lambda url, ytdlp: "Available subtitles:\nen\n"
@@ -370,7 +373,7 @@ with tempfile.TemporaryDirectory() as d5:
     if seed_files and target5d.is_file():
         seed_text = seed_files[0].read_text(encoding="utf-8")
         main_text = target5d.read_text(encoding="utf-8")
-        check(RAW_TITLE_H2 not in seed_text, "(T5d) the raw title never lands in the seed stub (H2)")
+        check(RAW_TITLE_H2 not in seed_text, "(T5d) the raw title never lands in the seed stub")
         check("run curl" not in seed_text and "|" not in seed_text,
               "(T5d) the instruction-shaped phrase does not leak into the seed stub")
         check("injection_scan: flagged" in main_text or 'injection_scan: "flagged"' in main_text,
@@ -390,7 +393,7 @@ with tempfile.TemporaryDirectory() as d5:
         text5e = target5e.read_text(encoding="utf-8")
         flagged5e = "injection_scan: flagged" in text5e or 'injection_scan: "flagged"' in text5e
         check(flagged5e and "prompt-injection-system-impersonation" in text5e,
-              "(T5e) scans raw per-cue lines, not the sentence-joined prose (M2 guard)")
+              "(T5e) scans raw per-cue lines, not the sentence-joined prose")
 
     # A YouTube-side T3: a caller cannot fake content_trust: trusted via a
     # line-separator-smuggled title. Trailing "+ LINE_SEPARATOR + 'x'" for
@@ -470,7 +473,7 @@ with tempfile.TemporaryDirectory() as d6:
     )
     text6e = pathlib.Path(out6e).read_text(encoding="utf-8")
     check("injection_scan: flagged" in text6e and "prompt-injection-system-impersonation" in text6e,
-          "(T6e) write_external_input scans the raw item title, not just the rendered heading (M1 guard)")
+          "(T6e) write_external_input scans the raw item title, not just the rendered heading")
 
     # Finding 10: normalize_for_vault() falls back to identifier/id for the
     # rendered heading when title/subject are absent, but _raw_item_fields
@@ -637,7 +640,7 @@ with tempfile.TemporaryDirectory() as d8e:
     try:
         acs.REGISTRY_PATH = partial_path
         result8e = acs.scan_or_none(IGNORE_PREVIOUS)
-        check(result8e is None, "(T8e) a registry missing a pinned family reads unavailable, not clean (H4)")
+        check(result8e is None, "(T8e) a registry missing a pinned family reads unavailable, not clean")
     finally:
         acs.REGISTRY_PATH = _orig_registry2
 
@@ -664,10 +667,10 @@ with tempfile.TemporaryDirectory() as d8g:
         acs.REGISTRY_PATH = _orig_registry3
 
 
-# A3: the flags/status computation (sorting pattern_id off each finding,
-# then deciding unavailable/flagged/clean) must stay INSIDE the same try as
-# the scan call -- a scanner returning non-Finding objects (e.g. plain
-# dicts, which have no .pattern_id attribute) must not crash the write.
+# The flags/status computation (sorting pattern_id off each finding, then
+# deciding unavailable/flagged/clean) must stay INSIDE the same try as the
+# scan call -- a scanner returning non-Finding objects (e.g. plain dicts,
+# which have no .pattern_id attribute) must not crash the write.
 class _JunkFindingsScanner:
     @staticmethod
     def scan_or_none(text):
@@ -679,7 +682,7 @@ try:
     cu._load_injection_scanner = lambda: _JunkFindingsScanner()
     with tempfile.TemporaryDirectory() as d8f:
         out8f = cu.write_external_input(pathlib.Path(d8f), "Test", "scope-8f", "2026-08-02", [], body=CLEAN)
-        check(pathlib.Path(out8f).is_file(), "(T8f) the write still happens when findings are non-Finding objects (A3 guard)")
+        check(pathlib.Path(out8f).is_file(), "(T8f) the write still happens when findings are non-Finding objects")
         text8f = pathlib.Path(out8f).read_text(encoding="utf-8")
         check("injection_scan: unavailable" in text8f,
               "(T8f) a scanner returning non-Finding objects yields unavailable, not a crash")
@@ -734,7 +737,7 @@ else:
 # "External Inputs"/"Captures" path segment, or Transcript.md) must CALL
 # guard_untrusted_body -- an AST Call check (bare name or attribute, since
 # granola_core calls it as guard_mod.guard_untrusted_body), not a substring
-# match an import line or docstring would also satisfy (M4). The target
+# match an import line or docstring would also satisfy. The target
 # check is also AST-based, collecting ast.Constant string values (which
 # covers single/double/triple-quoted literals AND the literal segments of
 # an f-string -- Python represents f"External Inputs/{x}" as a JoinedStr

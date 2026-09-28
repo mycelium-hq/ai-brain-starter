@@ -304,15 +304,10 @@ def save_state(state_file: Path, state: dict) -> None:
 def _untrusted_guard_module():
     """Load skills/_shared/connector_utils.py for guard_untrusted_body /
     trust_frontmatter_lines. Cached for the life of the process, including
-    a None result.
-
-    Returns None -- never raises -- when `_shared` is missing (bootstrap.sh's
-    per-skill copy list omits it) or a stale deployed copy lacks the names.
-    Callers then skip fencing but still stamp the 3 unavailable trust lines
-    by hand: a transcript is always written, never dropped, on a degraded
-    install (N10, N5). Unlike the scanner's own loader, this module has no
-    dataclass, so it does not need registering in sys.modules before exec
-    (O3, measured).
+    a None result. Returns None -- never raises -- when `_shared` is
+    unreachable or a stale copy lacks the names; the caller then skips
+    fencing but still stamps the 3 unavailable trust lines by hand, so a
+    transcript is always written, never dropped, on a degraded install.
     """
     candidates = [
         Path(__file__).resolve().parent.parent / "skills" / "_shared",
@@ -320,10 +315,6 @@ def _untrusted_guard_module():
         Path.home() / ".claude" / "skills" / "_shared",
     ]
     for candidate_dir in candidates:
-        # One try per candidate: a missing file, an unreadable directory (on
-        # /usr/bin/python3 3.9, stat-ing one raises PermissionError), or any
-        # other bad candidate is skipped the same way, never propagated to
-        # abort the caller's write.
         try:
             spec = importlib.util.spec_from_file_location(
                 "_abs_connector_utils", candidate_dir / "connector_utils.py"
@@ -368,11 +359,11 @@ def write_transcript_md(
     The title, summary, and transcript are third-party content (other meeting
     participants wrote them, not the operator): always stamped
     `content_trust: untrusted`, and fenced too whenever `_shared` is
-    reachable (I5 -- the degraded path below has no local fencing logic to
-    fall back to). The scan runs on the RAW per-utterance text, not the
+    reachable (the degraded path below has no local fencing logic to fall
+    back to). The scan runs on the RAW per-utterance text, not the
     rendered `` `mm:ss` **Speaker**: `` markdown -- that prefix pushes a
     line like "System: ..." off the start of its line and defeats a
-    line-anchored pattern that the raw utterance would still trip (N1)."""
+    line-anchored pattern that the raw utterance would still trip."""
     # Loaded up front (not at its previous call site below), because the
     # title must be sanitized before it is used to build the filename --
     # well before the point where this module previously first asked
@@ -412,7 +403,7 @@ def write_transcript_md(
         # U+2028/U+2029/U+0085/\v/\f -- then sanitize (a lone surrogate or a
         # C1/noncharacter would otherwise abort the write or the YAML parse,
         # same as the title above), then render as a JSON string literal,
-        # which is always valid YAML double-quoted syntax too (M5).
+        # which is always valid YAML double-quoted syntax too.
         flat = sanitize(" ".join(str(v).splitlines()))
         fm.append(f"{k}: {json.dumps(flat, ensure_ascii=False)}")
 

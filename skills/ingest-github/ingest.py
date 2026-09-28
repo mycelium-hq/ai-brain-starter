@@ -52,7 +52,7 @@ from connector_utils import (
 # but still stamp content_trust: untrusted, injection_scan: unavailable --
 # never a dropped or crashed write.
 try:
-    from connector_utils import guard_untrusted_body, trust_frontmatter_lines
+    from connector_utils import guard_untrusted_body, trust_frontmatter_lines, _raw_item_fields
 except ImportError:
     def guard_untrusted_body(text, source, scan_text=None):
         return text, {"content_trust": "untrusted", "injection_scan": "unavailable", "injection_flags": []}
@@ -63,6 +63,15 @@ except ImportError:
             f"injection_scan: {trust['injection_scan']}",
             "injection_flags: [" + ", ".join(trust["injection_flags"]) + "]",
         ]
+
+    def _raw_item_fields(items):
+        parts = []
+        for item in items or []:
+            for key in ("title", "subject", "author", "body", "body_text", "description", "identifier", "id"):
+                v = item.get(key)
+                if v:
+                    parts.append(str(v))
+        return "\n".join(parts)
 
 BODY_EXCERPT_LIMIT = 800
 
@@ -191,18 +200,13 @@ def build_frontmatter(
 
 
 def _raw_scan_text(prs: list, issues: list, commits: list) -> str:
-    """Raw title/author/subject/body fields for injection scanning -- NOT the
-    formatted body. A rendered '### #7 Title' heading pushes the title off
-    the start of its line and defeats a line-anchored pattern the raw title
-    would still trip."""
-    parts: list[str] = []
-    for pr in prs:
-        parts += [str(pr.get("title", "")), str(pr.get("author", "")), str(pr.get("body", ""))]
-    for issue in issues:
-        parts += [str(issue.get("title", "")), str(issue.get("author", "")), str(issue.get("body", ""))]
-    for commit in commits:
-        parts += [str(commit.get("subject", "")), str(commit.get("author", "")), str(commit.get("body", ""))]
-    return "\n".join(p for p in parts if p)
+    """Raw title/subject/author/body fields for injection scanning -- NOT
+    the formatted body. A rendered '### #7 Title' heading pushes the title
+    off the start of its line and defeats a line-anchored pattern the raw
+    title would still trip. Reuses connector_utils._raw_item_fields: PRs
+    and issues carry `title`, commits carry `subject`, all three carry
+    `author` and `body`, which is exactly the key set it already scans."""
+    return _raw_item_fields(prs + issues + commits)
 
 
 def write_vault_file(payload: dict, body: str, frontmatter: str) -> Path:

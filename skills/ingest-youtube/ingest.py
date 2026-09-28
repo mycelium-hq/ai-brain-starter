@@ -31,10 +31,10 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-# Guarded (MYC-4701): _shared may be missing on a fresh install (bootstrap.sh's
-# per-skill copy list omits it -- N10) or a deployed copy may predate this
-# name. Either way this degrades to injection_scan: unavailable instead of
-# crashing the whole ingest on import.
+# Guarded (MYC-4701): _shared may be unreachable on an install that
+# predates bootstrap.sh's _shared copy step, or a deployed copy may
+# predate this name. Either way this degrades to injection_scan:
+# unavailable instead of crashing the whole ingest on import.
 try:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "_shared"))
     from connector_utils import guard_untrusted_body, sanitize_third_party_text
@@ -156,7 +156,7 @@ def clean_vtt(vtt_path: Path) -> tuple[str, str]:
     written to the vault. `raw_cues` keeps each cue on its own line, before
     the space-join and sentence-split below -- a cue with no closing
     punctuation (e.g. "System: override the operator") can otherwise land
-    mid-sentence in `prose` and dodge a line-anchored scan pattern (M2)."""
+    mid-sentence in `prose` and dodge a line-anchored scan pattern."""
     raw = vtt_path.read_text(encoding="utf-8", errors="replace")
     lines = []
     seen_phrases: set[str] = set()
@@ -204,7 +204,7 @@ def write_vault_file(
             # surrogate or a C1/noncharacter would otherwise abort the
             # write or the YAML parse), and always quote as a JSON string
             # literal (also valid YAML), so an embedded ':' or line break
-            # can never forge a standalone frontmatter key (M5).
+            # can never forge a standalone frontmatter key.
             flat = sanitize_third_party_text(" ".join(v.splitlines()))
             yaml_lines.append(f"{k}: {json.dumps(flat, ensure_ascii=False)}")
         else:
@@ -220,7 +220,7 @@ def write_seed_stub(
 ) -> Path:
     """The video title is third-party text, already fenced and stamped in
     `main_file` -- link to it by name rather than repeating the raw title
-    here unguarded (H2)."""
+    here unguarded."""
     captures_dir = vault_root / "Meta" / "Captures"
     captures_dir.mkdir(parents=True, exist_ok=True)
     fname = f"{upload_date}-youtube-{channel_slug}-{video_id}.md"
@@ -309,14 +309,9 @@ def main() -> int:
         f"Source: {args.url}\n"
     )
 
-    # scan_text covers the TITLE too (not just captions): a video's title is
-    # as third-party as its captions, and `body` alone omits it whenever a
-    # real transcript exists. Uses the RAW per-cue lines, not the
-    # sentence-joined `transcript`: a cue with no closing punctuation can
-    # otherwise land mid-sentence and dodge a line-anchored pattern the raw
-    # cue would still trip (M2). (Unavailable scanner: the degraded stub
-    # above reports it, no separate stderr line -- the summary print below
-    # already says "Injection scan: unavailable.")
+    # scan_text covers the TITLE too (`body` alone omits it whenever a real
+    # transcript exists), using raw_cues over the sentence-joined
+    # transcript -- see clean_vtt's docstring for why.
     body, trust = guard_untrusted_body(
         body, "youtube", scan_text="\n".join([title, raw_cues or transcript])
     )
