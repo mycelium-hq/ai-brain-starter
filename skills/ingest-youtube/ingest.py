@@ -259,10 +259,11 @@ def main() -> int:
 
     meta = fetch_metadata(args.url, ytdlp)
     video_id = meta.get("id", "unknown")
-    # Sanitized immediately: a lone surrogate or a C1/noncharacter in a
-    # scraped title would otherwise abort the eventual write or make the
-    # frontmatter unreadable by any YAML parser.
-    title = sanitize_third_party_text(meta.get("title", "Untitled"))
+    # Not sanitized here: slugify() below already scrubs every non-alnum
+    # character for the filename, and write_vault_file()'s frontmatter loop
+    # sanitizes title/channel again right before they become YAML scalars --
+    # this raw value is never itself written anywhere unguarded.
+    title = meta.get("title", "Untitled")
     channel = meta.get("channel") or meta.get("uploader") or "unknown-channel"
     channel_slug = slugify(channel)
     video_slug = slugify(title)
