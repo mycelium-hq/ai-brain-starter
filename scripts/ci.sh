@@ -618,6 +618,11 @@ INTEGRATION_TESTS=(
   # proves the digest redacts at capture, before truncation, and a benign
   # recurring error still survives byte-identical.
   test_claude_performance_digest_redaction
+  # MYC-4623: the WebFetch revalidation cache served a repo-planted entry as
+  # the page on a 304. Proves entries live outside every project tree, only
+  # untracked entries carrying this machine's digest are served, and the
+  # cache is bounded.
+  test_sdd_cache_out_of_tree
 )
 # ---- Gate-coverage invariant -------------------------------------------------
 # The list above is an explicit allow-list, and allow-lists rot: a new

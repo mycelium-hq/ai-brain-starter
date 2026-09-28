@@ -13,47 +13,88 @@
 # so the key is URL-only and the original prompt is surfaced in the hit
 # message so the next agent can tell if the earlier reading still applies.
 #
-# Dependencies: jq, curl, shasum (or sha256sum).
+# Which entries can be served (MYC-4623). The upstream read
+# <project>/.claude/sdd-cache/, so a cloned repo could ship an entry with a
+# far-future Last-Modified; a static origin answers If-Modified-Since with 304
+# for any date after its file's mtime, and the planted text reached the agent
+# as the page. Now an entry is served only if ALL of these hold:
+#   - it lives under ~/.claude/.cache/sdd-cache/<repo-key>/ (see the post hook);
+#     the old in-project directory is never read
+#   - it is a regular file, not a symlink
+#   - git does not track it (tracked means it arrived with a checkout)
+#   - its `tag` matches the digest keyed with this machine's
+#     ~/.claude/.cache/sdd-cache/.key, i.e. the post hook here wrote it
+#   - its `url` is the URL being fetched
 #
-# Cherry-picked verbatim from addyosmani/agent-skills (MIT) 2026-05-26.
+# Debug logging: SDD_CACHE_DEBUG=1 only, written to the cache root.
+#
+# Dependencies: jq, curl, shasum (or sha256sum). Missing any -> fetch proceeds.
+#
+# Adapted from addyosmani/agent-skills (MIT), cherry-picked 2026-05-26. The
+# location and the integrity checks are local changes.
 
 set -euo pipefail
+umask 077
 
 # Graceful degradation: if any dependency is missing, let the fetch through.
 command -v jq   >/dev/null 2>&1 || exit 0
 command -v curl >/dev/null 2>&1 || exit 0
 command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1 || exit 0
+[ -n "${HOME:-}" ] || exit 0
 
 if [ -t 0 ]; then INPUT="{}"; else INPUT=$(cat); fi
 
-# Debug logging: active when SDD_CACHE_DEBUG=1 is set, or when a sentinel
-# file exists at .claude/sdd-cache/.debug. Toggle with `touch` / `rm`.
-dbg() {
-  local dir="${CLAUDE_PROJECT_DIR:-$PWD}/.claude/sdd-cache"
-  [ "${SDD_CACHE_DEBUG:-0}" = "1" ] || [ -f "$dir/.debug" ] || return 0
-  mkdir -p "$dir"
-  printf '%s [pre]  %s\n' "$(date -u +%FT%TZ)" "$*" >> "$dir/.debug.log"
+# ---- identical in sdd-cache-post.sh: keep these helpers in step -------------
+sha256_hex() {
+  if command -v shasum >/dev/null 2>&1; then shasum -a 256; else sha256sum; fi | cut -c1-64
 }
+CACHE_ROOT="$HOME/.claude/.cache/sdd-cache"
+KEY_FILE="$CACHE_ROOT/.key"
+repo_key() {
+  local dir="${CLAUDE_PROJECT_DIR:-$PWD}" id=""
+  id=$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
+  [ -n "$id" ] || id="$dir"
+  printf '%s' "$id" | sha256_hex | cut -c1-16
+}
+entry_digest() {  # $1 = key file; stdin = entry JSON. Digest of the entry minus its tag.
+  { cat "$1"; printf '\n'; jq -cS 'del(.tag)'; } | sha256_hex
+}
+dbg() {
+  [ "${SDD_CACHE_DEBUG:-0}" = "1" ] || return 0
+  { mkdir -p "$CACHE_ROOT" \
+    && printf '%s [pre]  %s\n' "$(date -u +%FT%TZ)" "$*" >> "$CACHE_ROOT/.debug.log"; } 2>/dev/null || true
+}
+# ------------------------------------------------------------------------------
+
 dbg "fired"
 
 URL=$(printf '%s' "$INPUT" | jq -r '.tool_input.url // empty' 2>/dev/null || true)
 if [ -z "$URL" ]; then dbg "no url in tool_input, exit"; exit 0; fi
 dbg "url=$URL"
 
-# Cache key is sha256(URL), truncated to 128 bits.
-hash_key() {
-  if command -v shasum >/dev/null 2>&1; then
-    printf '%s' "$1" | shasum -a 256 | cut -c1-32
-  else
-    printf '%s' "$1" | sha256sum | cut -c1-32
-  fi
-}
+CACHE_DIR="$CACHE_ROOT/$(repo_key)"
+CACHE_FILE="$CACHE_DIR/$(printf '%s' "$URL" | sha256_hex | cut -c1-32).json"
 
-CACHE_DIR="${CLAUDE_PROJECT_DIR:-$PWD}/.claude/sdd-cache"
-CACHE_FILE="$CACHE_DIR/$(hash_key "$URL").json"
+if [ ! -f "$CACHE_FILE" ] || [ -L "$CACHE_FILE" ]; then
+  dbg "no cache file at $CACHE_FILE, exit"; exit 0
+fi
+if [ ! -s "$KEY_FILE" ] || [ -L "$KEY_FILE" ]; then
+  dbg "no machine key, nothing can be verified, exit"; exit 0
+fi
+if git -C "$CACHE_DIR" ls-files --error-unmatch -- "$(basename "$CACHE_FILE")" >/dev/null 2>&1; then
+  dbg "entry is tracked by git, refusing"; exit 0
+fi
 
-if [ ! -f "$CACHE_FILE" ]; then dbg "no cache file at $CACHE_FILE, exit"; exit 0; fi
-dbg "cache file exists: $CACHE_FILE"
+STORED_TAG=$(jq -r '.tag // empty' "$CACHE_FILE" 2>/dev/null || true)
+WANT_TAG=$(entry_digest "$KEY_FILE" < "$CACHE_FILE" 2>/dev/null || true)
+if [ -z "$STORED_TAG" ] || [ "${#WANT_TAG}" -ne 64 ] || [ "$STORED_TAG" != "$WANT_TAG" ]; then
+  dbg "integrity tag missing or wrong, refusing"; exit 0
+fi
+ENTRY_URL=$(jq -r '.url // empty' "$CACHE_FILE" 2>/dev/null || true)
+if [ "$ENTRY_URL" != "$URL" ]; then
+  dbg "entry is for a different url, refusing"; exit 0
+fi
+dbg "cache file verified: $CACHE_FILE"
 
 FETCHED_AT=$(jq -r '.fetched_at // 0' "$CACHE_FILE" 2>/dev/null || echo 0)
 ORIGINAL_PROMPT=$(jq -r '.prompt // empty' "$CACHE_FILE" 2>/dev/null || true)
@@ -85,6 +126,8 @@ fi
 CONTENT=$(jq -r '.content // empty' "$CACHE_FILE" 2>/dev/null || true)
 if [ -z "$CONTENT" ]; then dbg "cache file has empty content field, bypass"; exit 0; fi
 dbg "cache HIT, blocking WebFetch with ${#CONTENT} bytes of cached content"
+# A served entry counts as recently used, so the post hook's eviction keeps it.
+touch "$CACHE_FILE" 2>/dev/null || true
 
 VERIFIED_AT_ISO=$(date -u -r "$FETCHED_AT" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
               || date -u -d "@$FETCHED_AT" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
