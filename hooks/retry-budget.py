@@ -51,8 +51,12 @@ import glob
 import tempfile
 
 try:
-    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "_lib"))
-    from heavy_admission import admit as _heavy_admit
+    # HOME_HOOKS_LIB_DEPS / check-home-hook-deploy.py's static import scan
+    # only recognizes the `_lib.<mod>` dotted form (AST-matched), so this
+    # imports that way rather than inserting hooks/_lib itself onto sys.path
+    # -- the pattern block-scratchpad-cross-agent-clobber.py already uses.
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from _lib.heavy_admission import admit as _heavy_admit
 except Exception:  # pragma: no cover - a broken heavy_admission must never block
     def _heavy_admit(_command):
         return 0
