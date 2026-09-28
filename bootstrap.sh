@@ -1763,9 +1763,32 @@ if [[ -L "$shared_dst" ]]; then
 elif [[ -d "$shared_dst/.git" ]]; then
   log "_shared has its own .git/ directory — detected as YOUR FORK, skipping entirely"
 elif [[ -d "$shared_src" ]]; then
-  do_cmd "sync _shared → $shared_dst" mkdir -p "$shared_dst"
-  do_cmd "" cp -R "$shared_src/." "$shared_dst/"
-  [[ $DRY_RUN -eq 0 ]] && ok "_shared: synced"
+  if [[ $DRY_RUN -eq 1 ]]; then
+    dry "would sync _shared → $shared_dst (with backup-before-overwrite)"
+  else
+    mkdir -p "$shared_dst"
+    # File-by-file sync with backup-before-overwrite (mirrors the sub-skill loop above)
+    STAMP="$(date +%Y-%m-%d-%H%M)"
+    SHARED_BACKED_UP=0
+    SHARED_CREATED=0
+    while IFS= read -r srcfile; do
+      rel="${srcfile#$shared_src/}"
+      dstfile="$shared_dst/$rel"
+      mkdir -p "$(dirname "$dstfile")"
+      if [[ -f "$dstfile" ]]; then
+        if ! cmp -s "$srcfile" "$dstfile"; then
+          cp "$dstfile" "$dstfile.bak-$STAMP"
+          BACKUPS+=("$dstfile.bak-$STAMP")
+          cp "$srcfile" "$dstfile"
+          SHARED_BACKED_UP=$((SHARED_BACKED_UP + 1))
+        fi
+      else
+        cp "$srcfile" "$dstfile"
+        SHARED_CREATED=$((SHARED_CREATED + 1))
+      fi
+    done < <(find "$shared_src" -type f)
+    ok "_shared: $SHARED_CREATED new, $SHARED_BACKED_UP backed up"
+  fi
 fi
 
 # Summary of what was protected this section
