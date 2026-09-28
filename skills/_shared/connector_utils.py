@@ -174,6 +174,20 @@ def entity_ids_for(source_type: str, ids: list[Any]) -> dict[str, list[Any] | st
     return {source_type: cleaned}
 
 
+def _raw_item_fields(items: list[dict[str, Any]]) -> str:
+    """Raw title/subject/body/description fields for injection scanning --
+    not the rendered markdown a line-anchored pattern could miss (M1, same
+    bug class as N1: a rendered `## {title}` heading pushes the title off
+    the start of its own line)."""
+    parts: list[str] = []
+    for item in items or []:
+        for key in ("title", "subject", "body", "body_text", "description"):
+            v = item.get(key)
+            if v:
+                parts.append(str(v))
+    return "\n".join(parts)
+
+
 def write_external_input(
     vault_root: Path | str,
     source: str,
@@ -204,7 +218,9 @@ def write_external_input(
     The body is always fenced and stamped `content_trust: untrusted` +
     `injection_scan` + `injection_flags` via guard_untrusted_body (MYC-4701).
     The stamp is applied AFTER `frontmatter_extra` is folded in, so a caller
-    cannot override it by supplying its own `content_trust` key.
+    cannot override it by supplying its own `content_trust` key. The scan
+    itself runs on the raw item fields, not the rendered markdown a
+    line-anchored pattern could miss (M1, same bug class as N1).
     """
     src_dir = Path(vault_root) / "External Inputs" / source / scope
     src_dir.mkdir(parents=True, exist_ok=True)
@@ -228,7 +244,10 @@ def write_external_input(
     )
     if not rendered_body.strip():
         rendered_body = "_No items in scope._\n"
-    rendered_body, trust = guard_untrusted_body(rendered_body, source.lower())
+    scan_text = _raw_item_fields(items)
+    if body is not None:
+        scan_text = f"{scan_text}\n{body}" if scan_text else body
+    rendered_body, trust = guard_untrusted_body(rendered_body, source.lower(), scan_text=scan_text)
     fm.update(trust)  # after frontmatter_extra: a caller cannot override trust
     if not rendered_body.endswith("\n"):
         rendered_body += "\n"

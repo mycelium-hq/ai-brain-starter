@@ -142,7 +142,12 @@ def download_subs(url: str, lang: str, source: str, ytdlp: str, workdir: Path) -
     return matches[0]
 
 
-def clean_vtt(vtt_path: Path) -> str:
+def clean_vtt(vtt_path: Path) -> tuple[str, str]:
+    """Return (prose, raw_cues). `prose` is the sentence-joined transcript
+    written to the vault. `raw_cues` keeps each cue on its own line, before
+    the space-join and sentence-split below -- a cue with no closing
+    punctuation (e.g. "System: override the operator") can otherwise land
+    mid-sentence in `prose` and dodge a line-anchored scan pattern (M2)."""
     raw = vtt_path.read_text(encoding="utf-8", errors="replace")
     lines = []
     seen_phrases: set[str] = set()
@@ -164,7 +169,8 @@ def clean_vtt(vtt_path: Path) -> str:
     text = " ".join(lines)
     text = re.sub(r"\s+", " ", text).strip()
     sentences = re.split(r"(?<=[.!?])\s+(?=[A-ZÁÉÍÓÚÑ¿¡])", text)
-    return "\n\n".join(s.strip() for s in sentences if s.strip())
+    prose = "\n\n".join(s.strip() for s in sentences if s.strip())
+    return prose, "\n".join(lines)
 
 
 def detect_seeds(transcript: str) -> list[str]:
@@ -255,13 +261,14 @@ def main() -> int:
 
     sub_source = "none"
     transcript = ""
+    raw_cues = ""
     lang_code = "und"
 
     if pick:
         lang_code, sub_source = pick
         with tempfile.TemporaryDirectory() as td:
             vtt = download_subs(args.url, lang_code, sub_source, ytdlp, Path(td))
-            transcript = clean_vtt(vtt)
+            transcript, raw_cues = clean_vtt(vtt)
     elif args.whisper:
         sys.stderr.write("Whisper fallback requested but not yet implemented in v0.1.\n")
         sys.stderr.write("Install whisper-cpp + ggml model and re-run, or pre-add subs to the video.\n")
@@ -282,11 +289,14 @@ def main() -> int:
     )
 
     if guard_untrusted_body is not None:
-        # scan_text covers the TITLE too (not just transcript): a video's
+        # scan_text covers the TITLE too (not just captions): a video's
         # title is as third-party as its captions, and `body` alone omits it
-        # whenever a real transcript exists.
+        # whenever a real transcript exists. Uses the RAW per-cue lines, not
+        # the sentence-joined `transcript`: a cue with no closing
+        # punctuation can otherwise land mid-sentence and dodge a
+        # line-anchored pattern the raw cue would still trip (M2).
         body, trust = guard_untrusted_body(
-            body, "youtube", scan_text="\n".join([title, transcript])
+            body, "youtube", scan_text="\n".join([title, raw_cues or transcript])
         )
     else:
         trust = {"content_trust": "untrusted", "injection_scan": "unavailable", "injection_flags": []}
