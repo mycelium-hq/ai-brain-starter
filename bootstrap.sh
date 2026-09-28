@@ -1749,6 +1749,25 @@ if [[ ${#SKILLS_TO_SYNC[@]} -gt 0 ]]; then
   fi
 fi
 
+# _shared ships the guard helpers ingest-github/ingest-youtube import
+# (guard_untrusted_body/fence_untrusted). It carries no SKILL.md, so it is
+# deliberately outside the named "for sub in ...; do" list above (and that
+# list's own parity guard, scripts/test_bootstrap_install_parity.py, which
+# requires every listed name to ship one). Without this, a fresh per-skill
+# install never lands a sibling _shared dir, so every third-party write
+# from those two skills silently degrades to injection_scan: unavailable.
+shared_src="$SKILL_DIR/skills/_shared"
+shared_dst="$HOME/.claude/skills/_shared"
+if [[ -L "$shared_dst" ]]; then
+  warn "_shared is a SYMLINK — bootstrap will NOT write through it"
+elif [[ -d "$shared_dst/.git" ]]; then
+  log "_shared has its own .git/ directory — detected as YOUR FORK, skipping entirely"
+elif [[ -d "$shared_src" ]]; then
+  do_cmd "sync _shared → $shared_dst" mkdir -p "$shared_dst"
+  do_cmd "" cp -R "$shared_src/." "$shared_dst/"
+  [[ $DRY_RUN -eq 0 ]] && ok "_shared: synced"
+fi
+
 # Summary of what was protected this section
 [[ ${#SKILL_FORKS[@]} -gt 0 ]] && log "Forks preserved untouched: ${SKILL_FORKS[*]}"
 [[ ${#SKILL_SYMLINKS[@]} -gt 0 ]] && log "Symlinks preserved untouched: ${#SKILL_SYMLINKS[@]} skill(s)"

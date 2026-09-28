@@ -1367,6 +1367,36 @@ foreach ($sub in @("graphify", "cierre-de-llamada", "meeting-todos", "patterns",
     }
 }
 
+# _shared ships the guard helpers ingest-github/ingest-youtube import
+# (guard_untrusted_body/fence_untrusted). It carries no SKILL.md, so it is
+# deliberately outside the named "foreach ($sub in @(...))" list above (and
+# that list's own parity guard, scripts/test_bootstrap_install_parity.py,
+# which requires every listed name to ship one). Without this, a fresh
+# per-skill install never lands a sibling _shared dir, so every
+# third-party write from those two skills silently degrades to
+# injection_scan: unavailable.
+$sharedSrc = "$SkillDir\skills\_shared"
+$sharedDst = "$env:USERPROFILE\.claude\skills\_shared"
+if ((Test-Path $sharedDst) -and ((Get-Item $sharedDst -ErrorAction SilentlyContinue).Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+    Warn "_shared is a SYMLINK - bootstrap will NOT write through it"
+} elseif (Test-Path "$sharedDst\.git") {
+    Log "_shared has its own .git directory - detected as YOUR FORK, skipping entirely"
+} elseif (Test-Path $sharedSrc) {
+    if ($DryRun) {
+        Dry "would sync _shared from $sharedSrc to $sharedDst"
+    } else {
+        New-Item -ItemType Directory -Force -Path $sharedDst | Out-Null
+        Get-ChildItem -Recurse -File $sharedSrc | ForEach-Object {
+            $rel = $_.FullName.Substring($sharedSrc.Length + 1)
+            $dstFile = Join-Path $sharedDst $rel
+            $dstParent = Split-Path $dstFile -Parent
+            if (-not (Test-Path $dstParent)) { New-Item -ItemType Directory -Force -Path $dstParent | Out-Null }
+            Copy-Item -Force $_.FullName $dstFile
+        }
+        Ok "_shared: synced"
+    }
+}
+
 # ─── Slash commands ───────────────────────────────────────────────────────────
 # Install commands/*.md into ~/.claude/commands/.
 #
