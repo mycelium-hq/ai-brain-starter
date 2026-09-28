@@ -436,23 +436,23 @@ def guard_untrusted_body(
     """
     subject = scan_text if scan_text is not None else (text or "")
     try:
-        # Load AND scan are one try: neither may ever abort the caller's
-        # write. scan_or_none already fails closed to None on a bad registry,
-        # but this is the backstop for anything else -- a scanner module that
-        # raises when CALLED, not just when loaded (MYC-4701 review, HIGH).
+        # Load, scan, AND read the result are all one try: nothing here may
+        # ever abort the caller's write, including a scanner that returns
+        # something not shaped like a list of Finding (MYC-4701 review,
+        # HIGH) -- reading .pattern_id off it belongs inside the same try
+        # that already covers a scanner raising when loaded or called.
         scanner = _load_injection_scanner() if _scanner is _UNSET else _scanner
         findings = scanner.scan_or_none(subject) if scanner is not None else None
+        if findings is None:
+            status: str = "unavailable"
+            flags: list[str] = []
+        elif findings:
+            status = "flagged"
+            flags = sorted({f.pattern_id for f in findings})
+        else:
+            status, flags = "clean", []
     except Exception:
-        findings = None
-
-    if findings is None:
-        status: str = "unavailable"
-        flags: list[str] = []
-    elif findings:
-        status = "flagged"
-        flags = sorted({f.pattern_id for f in findings})
-    else:
-        status, flags = "clean", []
+        status, flags = "unavailable", []
 
     fenced = fence_untrusted(text, source)
     if status == "flagged":
