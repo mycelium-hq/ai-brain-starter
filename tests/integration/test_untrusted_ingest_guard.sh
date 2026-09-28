@@ -548,6 +548,38 @@ cross_line_prose = "This marks the upload as untrusted.\n\n## Content\n\nThe new
 check(cu._neutralize_marker_lookalikes(cross_line_prose) == cross_line_prose,
       "(T7-neutralize) 'untrusted.' and '## Content' on separate paragraphs stay byte-identical")
 
+# Finding 7: an ASCII-only body skips the skeleton build (NFKC/Cf-strip/
+# lookalike-fold are no-ops on ASCII) and runs the regex directly instead
+# -- proven here by spying on unicodedata.normalize, the call the slow
+# path makes once per character and the fast path never makes at all.
+_orig_normalize = cu.unicodedata.normalize
+_normalize_call_count = [0]
+
+
+def _counting_normalize(*a, **kw):
+    _normalize_call_count[0] += 1
+    return _orig_normalize(*a, **kw)
+
+
+try:
+    cu.unicodedata.normalize = _counting_normalize
+    ascii_body = "This body is untrusted content and pure ASCII throughout."
+    ascii_result = cu._neutralize_marker_lookalikes(ascii_body)
+    check(_normalize_call_count[0] == 0,
+          "(T7-fastpath) an ASCII-only body never calls unicodedata.normalize (fast path taken)")
+    check("[untrusted-marker removed]" in ascii_result,
+          "(T7-fastpath) the ASCII-only body is still neutralized correctly via the fast path")
+finally:
+    cu.unicodedata.normalize = _orig_normalize
+
+# Finding 5: Greek small omicron (U+03BF) folds to "o" -- "content" spelled
+# with a Latin c but the o replaced by Greek omicron was in the fix list's
+# own "Cyrillic/Greek" scope but missing from the fold table.
+GREEK_OMICRON = chr(0x03BF)
+omicron_specimen = "untrusted c" + GREEK_OMICRON + "ntent"
+check("[untrusted-marker removed]" in cu._neutralize_marker_lookalikes(omicron_specimen),
+      "(T7-neutralize) Greek omicron in c%sntent is neutralized" % GREEK_OMICRON)
+
 # T8: unknown is never clean. No test seam on guard_untrusted_body:
 # monkeypatch the loader itself (its lru_cache lives on the ORIGINAL
 # object, so restoring it in `finally` leaves other tests' caching untouched).
@@ -798,7 +830,7 @@ with tempfile.TemporaryDirectory() as d11:
 # alone does not escape any of these (JSON only requires escaping
 # U+0000-U+001F), and PyYAML's reader rejects them even inside a quoted
 # scalar. Checked on a YouTube title and a Granola attendee.
-UNSAFE_SCALAR = "Bad\x80Title\x7fWith￾Chars"
+UNSAFE_SCALAR = "Bad\x80Title\x7fWith" + chr(0xFFFE) + "Chars"
 
 with tempfile.TemporaryDirectory() as d12yt:
     vault12yt = pathlib.Path(d12yt)

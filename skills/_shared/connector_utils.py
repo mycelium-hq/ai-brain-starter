@@ -290,7 +290,7 @@ _UNTRUSTED_END_TMPL = "<!-- END UNTRUSTED CONTENT id={nonce} -->"
 # the stream, even inside a quoted scalar, so wrapping the value in
 # json.dumps() does not help. Every third-party scalar that ends up in a
 # filename or a frontmatter value goes through this first.
-_UNSAFE_SCALAR_RE = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f￾￿]")
+_UNSAFE_SCALAR_RE = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f" + chr(0xFFFE) + chr(0xFFFF) + "]")
 
 
 def sanitize_third_party_text(value: str) -> str:
@@ -303,7 +303,7 @@ def sanitize_third_party_text(value: str) -> str:
     if not value:
         return value
     cleaned = value.encode("utf-8", "surrogatepass").decode("utf-8", "replace")
-    return _UNSAFE_SCALAR_RE.sub("�", cleaned)
+    return _UNSAFE_SCALAR_RE.sub(chr(0xFFFD), cleaned)
 
 
 # Bounded to 8 chars and newline-excluded: an unbounded, line-crossing gap
@@ -315,42 +315,82 @@ _UNTRUSTED_MARKER_RE = re.compile(r"untrusted(?:[^\w\n]|_){0,8}content")
 # UNTRUSTEDCONTENT, folded so that spelling of a forgery reads the same as
 # the real word. NFKC (below) already folds fullwidth/math/enclosed
 # variants to ASCII; this table is only for letters that are already valid,
-# independent code points in their own script, so NFKC leaves them alone.
+# independent code points in their own script, so NFKC leaves them alone --
+# with one wrinkle: GREEK (CAPITAL) LUNATE SIGMA SYMBOL U+03F2/U+03F9
+# (visually a "c"/"C") each have a compatibility decomposition of their
+# OWN, to GREEK SMALL LETTER FINAL SIGMA / GREEK CAPITAL LETTER SIGMA
+# (U+03C2/U+03A3) -- NFKC runs before this table is consulted, so the keys
+# here are the POST-NFKC targets, not U+03F2/U+03F9 themselves.
 _LOOKALIKE_FOLD = str.maketrans({
     "Е": "e", "е": "e", "Т": "t", "т": "t", "О": "o", "о": "o",
     "С": "c", "с": "c", "Ѕ": "s", "ѕ": "s",
     "Ε": "e", "Τ": "t", "Ο": "o", "Ν": "n",
+    chr(0x03BF): "o",  # GREEK SMALL LETTER OMICRON
+    chr(0x03C2): "c",  # GREEK SMALL LETTER FINAL SIGMA (NFKC target of U+03F2)
+    chr(0x03A3): "c",  # GREEK CAPITAL LETTER SIGMA (NFKC target of U+03F9)
+    chr(0x0501): "d",  # CYRILLIC SMALL LETTER KOMI DE
 })
 
-# unicodedata.category == "Cf" already covers most invisible/format
-# characters (zero-width space, BOM, tag characters); these two are added
-# explicitly rather than assumed.
-_INVISIBLE_EXTRA = {"᠎", "﻿"}
+# Default-ignorable code points that are NOT category "Cf" (so the check
+# below misses them without this set) but render blank or combine onto the
+# previous character: Mongolian/Khmer free-variation marks, Hangul fillers
+# (category Lo, not Cf/Mn), and the variation-selector blocks.
+_DEFAULT_IGNORABLE_EXTRA = frozenset(
+    chr(c) for c in (
+        0x034F,  # COMBINING GRAPHEME JOINER
+        0x115F, 0x1160,  # HANGUL CHOSEONG/JUNGSEONG FILLER
+        0x17B4, 0x17B5,  # KHMER VOWEL INHERENT AQ/AA
+        0x180B, 0x180C, 0x180D,  # MONGOLIAN FREE VARIATION SELECTOR 1-3
+        0x3164,  # HANGUL FILLER
+        0xFFA0,  # HALFWIDTH HANGUL FILLER
+        *range(0xFE00, 0xFE10),  # VARIATION SELECTOR-1 to -16
+        *range(0xE0100, 0xE01F0),  # VARIATION SELECTOR-17 to -256
+    )
+)
 
 
 def _neutralize_marker_lookalikes(text: str) -> str:
-    """Replace every spelling of "untrusted content" in TEXT with the
-    placeholder, however it is disguised: fullwidth, zero-width-padded,
-    Cyrillic/Greek lookalike letters, or any punctuation/whitespace gap
-    between the two words. Detects by PROPERTY, not by a list of spellings,
-    and needs no adjacent BEGIN/END -- builds a lowercase, NFKC-normalized,
-    invisible-stripped, lookalike-folded skeleton of TEXT with an index back
-    to each kept character's position in TEXT, searches the skeleton, then
-    replaces the matching ORIGINAL span. The gap and letter classes in the
-    search pattern are disjoint, so this stays linear time regardless of gap
-    width.
+    """Replace known disguised spellings of "untrusted content" in TEXT
+    with the placeholder: fullwidth, zero-width/default-ignorable padding,
+    Cyrillic/Greek lookalike letters in the fold table above, or any
+    punctuation/whitespace gap between the two words. Detects by PROPERTY,
+    not by a list of literal spellings, and needs no adjacent BEGIN/END --
+    but is not exhaustive (defense in depth only; the id-paired nonce is
+    what actually closes the fence). Builds a lowercase, NFKC-normalized,
+    invisible-stripped, lookalike-folded skeleton of TEXT with an index
+    back to each kept character's position in TEXT, searches the skeleton,
+    then replaces the matching ORIGINAL span. The gap and letter classes in
+    the search pattern are disjoint, so this stays linear time regardless
+    of gap width.
+
+    An ASCII-only TEXT skips the skeleton build: NFKC, the invisible-strip,
+    and the lookalike-fold are all no-ops on plain ASCII, so the regex runs
+    directly on `text.lower()` (an ASCII .lower() never changes length, so
+    the match's own indices are already valid offsets into TEXT).
     """
+    if text.isascii():
+        out: list[str] = []
+        cursor = 0
+        for m in _UNTRUSTED_MARKER_RE.finditer(text.lower()):
+            out.append(text[cursor:m.start()])
+            out.append("[untrusted-marker removed]")
+            cursor = m.end()
+        if not out:
+            return text
+        out.append(text[cursor:])
+        return "".join(out)
+
     skeleton: list[str] = []
     offsets: list[int] = []
     for i, ch in enumerate(text):
         for nch in unicodedata.normalize("NFKC", ch):
-            if nch in _INVISIBLE_EXTRA or unicodedata.category(nch) == "Cf":
+            if nch in _DEFAULT_IGNORABLE_EXTRA or unicodedata.category(nch) == "Cf":
                 continue
             for fch in nch.translate(_LOOKALIKE_FOLD).lower():
                 skeleton.append(fch)
                 offsets.append(i)
 
-    out: list[str] = []
+    out = []
     cursor = 0
     for m in _UNTRUSTED_MARKER_RE.finditer("".join(skeleton)):
         start, end = offsets[m.start()], offsets[m.end() - 1] + 1
