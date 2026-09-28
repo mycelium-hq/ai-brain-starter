@@ -18,7 +18,7 @@ Secondary helpers extracted from duplication across the 6 skills:
   - split_frontmatter, render_frontmatter
   - now_iso, today_iso, date_range_strs
 
-Untrusted third-party content -- mark, fence, best-effort scan (MYC-4701):
+Untrusted third-party content -- mark, fence, best-effort scan:
   - guard_untrusted_body, fence_untrusted, trust_frontmatter_lines
 
 Stdlib + PyYAML only.
@@ -218,7 +218,7 @@ def write_external_input(
     future skills that want a one-call contract.
 
     The body is always fenced and stamped `content_trust: untrusted` +
-    `injection_scan` + `injection_flags` via guard_untrusted_body (MYC-4701).
+    `injection_scan` + `injection_flags` via guard_untrusted_body.
     The stamp is applied AFTER `frontmatter_extra` is folded in, so a caller
     cannot override it by supplying its own `content_trust` key. The scan
     itself runs on the raw item fields, not the rendered markdown a
