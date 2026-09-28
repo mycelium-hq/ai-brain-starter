@@ -501,6 +501,13 @@ plain_prose = "This is a perfectly ordinary sentence about shipping code on Frid
 check(cu._neutralize_marker_lookalikes(plain_prose) == plain_prose,
       "(T7-neutralize) plain prose without the marker phrase stays byte-identical")
 
+# Finding 6: the gap between "untrusted" and "content" is bounded and
+# newline-excluded -- an unbounded, line-crossing gap used to rewrite this
+# exact shape, deleting the heading.
+cross_line_prose = "This marks the upload as untrusted.\n\n## Content\n\nThe new flow"
+check(cu._neutralize_marker_lookalikes(cross_line_prose) == cross_line_prose,
+      "(T7-neutralize) 'untrusted.' and '## Content' on separate paragraphs stay byte-identical")
+
 # T8: unknown is never clean. No test seam on guard_untrusted_body:
 # monkeypatch the loader itself (its lru_cache lives on the ORIGINAL
 # object, so restoring it in `finally` leaves other tests' caching untouched).

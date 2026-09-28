@@ -304,7 +304,10 @@ def sanitize_third_party_text(value: str) -> str:
     return _UNSAFE_SCALAR_RE.sub("�", cleaned)
 
 
-_UNTRUSTED_MARKER_RE = re.compile(r"untrusted[\W_]*content")
+# Bounded to 8 chars and newline-excluded: an unbounded, line-crossing gap
+# (the previous [\W_]*) rewrote benign text like "...as untrusted.\n\n##
+# Content\n\nThe new flow", deleting the heading. This stays linear.
+_UNTRUSTED_MARKER_RE = re.compile(r"untrusted(?:[^\w\n]|_){0,8}content")
 
 # Cyrillic/Greek letters that are visually identical to a Latin letter in
 # UNTRUSTEDCONTENT, folded so that spelling of a forgery reads the same as
