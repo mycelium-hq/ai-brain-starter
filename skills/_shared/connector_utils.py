@@ -30,6 +30,7 @@ import importlib.util
 import os
 import re
 import sys
+import unicodedata
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -264,26 +265,58 @@ _UNTRUSTED_BEGIN_TMPL = (
 _UNTRUSTED_END_TMPL = "<!-- END UNTRUSTED CONTENT id={nonce} -->"
 
 
-def _letter_class(ch: str) -> str:
-    """`ch` plus its fullwidth compatibility twin (U+FF00 block is a fixed
-    +0xFEE0 offset from ASCII). Matching both, per letter, catches a marker
-    spelled in fullwidth form WITHOUT transforming the surrounding text --
-    unlike a global Unicode-normalize pass, which would also fold legitimate
-    fullwidth CJK punctuation elsewhere in third-party prose."""
-    return "[" + re.escape(ch + chr(ord(ch) + 0xFEE0)) + "]"
+_UNTRUSTED_MARKER_RE = re.compile(r"untrusted[\W_]*content")
+
+# Cyrillic/Greek letters that are visually identical to a Latin letter in
+# UNTRUSTEDCONTENT, folded so that spelling of a forgery reads the same as
+# the real word. NFKC (below) already folds fullwidth/math/enclosed
+# variants to ASCII; this table is only for letters that are already valid,
+# independent code points in their own script, so NFKC leaves them alone.
+_LOOKALIKE_FOLD = str.maketrans({
+    "Е": "e", "е": "e", "Т": "t", "т": "t", "О": "o", "о": "o",
+    "С": "c", "с": "c", "Ѕ": "s", "ѕ": "s",
+    "Ε": "e", "Τ": "t", "Ο": "o", "Ν": "n",
+})
+
+# unicodedata.category == "Cf" already covers most invisible/format
+# characters (zero-width space, BOM, tag characters); these two are added
+# explicitly rather than assumed.
+_INVISIBLE_EXTRA = {"᠎", "﻿"}
 
 
-# Fuzzy match on "BEGIN/END UNTRUSTED CONTENT" -- up to 8 non-word/invisible
-# characters tolerated between each letter (catches zero-width padding; \W
-# already matches zero-width/format characters, a wider count is all that
-# was missing), each letter also accepting its fullwidth twin. Requires an
-# adjacent BEGIN/END so ordinary prose ("sanitize untrusted content",
-# "UNTRUSTED_CONTENT=1") is never touched -- only text shaped like an actual
-# marker is neutralized, and only that tight span, not its surroundings.
-_GAP = r"[\W_]{0,8}"
-_MARKER_LOOKALIKE = re.compile(
-    "(?i)(?:BEGIN|END)" + _GAP + _GAP.join(_letter_class(c) for c in "UNTRUSTEDCONTENT")
-)
+def _neutralize_marker_lookalikes(text: str) -> str:
+    """Replace every spelling of "untrusted content" in TEXT with the
+    placeholder, however it is disguised: fullwidth, zero-width-padded,
+    Cyrillic/Greek lookalike letters, or any punctuation/whitespace gap
+    between the two words. Detects by PROPERTY, not by a list of spellings,
+    and needs no adjacent BEGIN/END -- builds a lowercase, NFKC-normalized,
+    invisible-stripped, lookalike-folded skeleton of TEXT with an index back
+    to each kept character's position in TEXT, searches the skeleton, then
+    replaces the matching ORIGINAL span. The gap and letter classes in the
+    search pattern are disjoint, so this stays linear time regardless of gap
+    width.
+    """
+    skeleton: list[str] = []
+    offsets: list[int] = []
+    for i, ch in enumerate(text):
+        for nch in unicodedata.normalize("NFKC", ch):
+            if nch in _INVISIBLE_EXTRA or unicodedata.category(nch) == "Cf":
+                continue
+            for fch in nch.translate(_LOOKALIKE_FOLD).lower():
+                skeleton.append(fch)
+                offsets.append(i)
+
+    out: list[str] = []
+    cursor = 0
+    for m in _UNTRUSTED_MARKER_RE.finditer("".join(skeleton)):
+        start, end = offsets[m.start()], offsets[m.end() - 1] + 1
+        out.append(text[cursor:start])
+        out.append("[untrusted-marker removed]")
+        cursor = end
+    if not out:
+        return text
+    out.append(text[cursor:])
+    return "".join(out)
 
 _SOURCE_SAFE_RE = re.compile(r"[^a-z0-9_-]+")
 
@@ -369,7 +402,7 @@ def fence_untrusted(text: str, source: str) -> str:
     # before fencing even starts (MYC-4701 review, HIGH).
     nonce = hashlib.sha256(raw.encode("utf-8", "surrogatepass")).hexdigest()[:16]
     safe_source = _SOURCE_SAFE_RE.sub("-", (source or "").lower()) or "unknown"
-    inner = _MARKER_LOOKALIKE.sub("[untrusted-marker removed]", fence_text(raw))
+    inner = _neutralize_marker_lookalikes(fence_text(raw))
     begin = _UNTRUSTED_BEGIN_TMPL.format(source=safe_source, nonce=nonce)
     end = _UNTRUSTED_END_TMPL.format(nonce=nonce)
     return f"{begin}\n{inner}\n{end}"
