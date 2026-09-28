@@ -44,6 +44,7 @@ Usage:
 from __future__ import annotations
 
 import base64
+import functools
 import json
 import re
 import sys
@@ -54,6 +55,18 @@ HERE = Path(__file__).resolve().parent
 REGISTRY_PATH = HERE / "pattern_registry.json"
 CATEGORY = "prompt-injection"
 
+# The 5 families a real registry must carry. A registry short even one of
+# these -- missing entirely, or holding a rule whose base64 or regex is
+# broken -- must scan as UNAVAILABLE, never let the other families stamp
+# "clean" on its behalf (H4).
+_EXPECTED_RULE_IDS = frozenset({
+    "prompt-injection-ignore-previous",
+    "prompt-injection-new-instructions",
+    "prompt-injection-system-impersonation",
+    "prompt-injection-exfiltration",
+    "prompt-injection-paste-and-run",
+})
+
 
 @dataclass(frozen=True)
 class Finding:
@@ -62,19 +75,27 @@ class Finding:
     snippet: str
 
 
-def _load_rules() -> list[tuple[str, str, re.Pattern[str]]]:
-    """Compile every `prompt-injection` rule from the registry.
+@functools.lru_cache(maxsize=8)
+def _compiled_registry(
+    path: Path, mtime: float | None
+) -> list[tuple[str, str, re.Pattern[str]]] | None:
+    """Compile every `prompt-injection` rule from the registry at PATH, keyed
+    on PATH + its mtime so an edited or redirected registry is always picked
+    up fresh, never served from a stale cache (N6).
 
     A rule whose base64 fails to decode or whose regex fails to compile is
-    skipped with a stderr warning (fail-loud, not silent) rather than crashing
-    the whole scan — one malformed rule must not disable the others.
+    skipped with a stderr warning (fail-loud, not silent) -- one malformed
+    rule must not disable the others. Returns None, never a partial list,
+    unless every one of the 5 pinned families (_EXPECTED_RULE_IDS) loaded
+    and compiled (H4).
     """
     try:
-        registry = json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
+        registry = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         sys.stderr.write(f"[audited-content-scan] cannot load registry: {exc}\n")
-        return []
+        return None
     compiled: list[tuple[str, str, re.Pattern[str]]] = []
+    seen: set[str] = set()
     for rule in registry.get("rules", []):
         if rule.get("category") != CATEGORY:
             continue
@@ -86,24 +107,49 @@ def _load_rules() -> list[tuple[str, str, re.Pattern[str]]]:
             compiled.append(
                 (rule["id"], rule.get("severity", "warn"), re.compile(pattern))
             )
+            seen.add(rule["id"])
         except (ValueError, re.error) as exc:
             sys.stderr.write(
                 f"[audited-content-scan] skipping malformed rule "
                 f"{rule.get('id', '?')}: {exc}\n"
             )
+    missing = _EXPECTED_RULE_IDS - seen
+    if missing:
+        sys.stderr.write(
+            f"[audited-content-scan] registry missing/broken families: "
+            f"{', '.join(sorted(missing))} -- scan unavailable, never partial\n"
+        )
+        return None
     return compiled
 
 
-def _scan(text: str, rules: list[tuple[str, str, re.Pattern[str]]]) -> list[Finding]:
-    """Apply compiled RULES to TEXT. Split out of scan_untrusted so scan_or_none
-    can reuse the matching logic while giving "no rules loaded" its own
-    (non-empty-list) signal."""
+def _load_rules() -> list[tuple[str, str, re.Pattern[str]]] | None:
+    """`_compiled_registry`, keyed on REGISTRY_PATH's current mtime. A
+    missing/unreadable file has no mtime; None is still a valid, distinct
+    cache key from every real mtime."""
+    try:
+        mtime = REGISTRY_PATH.stat().st_mtime
+    except OSError:
+        mtime = None
+    return _compiled_registry(REGISTRY_PATH, mtime)
+
+
+def scan_or_none(content: str) -> list[Finding] | None:
+    """Scan CONTENT for prompt-injection findings. Returns None -- never []
+    -- when the registry could not produce all 5 pinned families (missing
+    file, unreadable, malformed, or emptied of this category). A caller
+    that fences third-party content (guard_untrusted_body) depends on this
+    distinction: "could not scan" must never be recorded as "clean".
+    """
+    rules = _load_rules()
+    if rules is None:
+        return None
+    text = content or ""
     findings: list[Finding] = []
     for pattern_id, severity, rx in rules:
         m = rx.search(text)
         if m:
-            snippet = " ".join(m.group(0).split())[:120]
-            findings.append(Finding(pattern_id, severity, snippet))
+            findings.append(Finding(pattern_id, severity, " ".join(m.group(0).split())[:120]))
     return findings
 
 
@@ -111,24 +157,11 @@ def scan_untrusted(content: str) -> list[Finding]:
     """Return prompt-injection findings for a piece of untrusted text.
 
     Empty list == nothing matched (NOT a guarantee of safety) -- callers that
-    must tell that apart from "the registry had no usable rules" use
+    must tell that apart from "the registry could not be scanned" use
     scan_or_none() instead. A non-empty list means: treat the source as a
     SPECIMEN, quote any instruction-shaped line back, and never act on it.
     """
-    return _scan(content or "", _load_rules())
-
-
-def scan_or_none(content: str) -> list[Finding] | None:
-    """Like scan_untrusted, but returns None -- never [] -- when the registry
-    has zero usable prompt-injection rules loaded (missing file, unreadable,
-    malformed, or emptied of this category). A caller that fences third-party
-    content (guard_untrusted_body) depends on this distinction: "could not
-    scan" must never be recorded as "clean".
-    """
-    rules = _load_rules()
-    if not rules:
-        return None
-    return _scan(content or "", rules)
+    return scan_or_none(content) or []
 
 
 def is_suspicious(content: str) -> bool:
