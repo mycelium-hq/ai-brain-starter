@@ -193,8 +193,11 @@ def write_vault_file(
 
 def write_seed_stub(
     vault_root: Path, upload_date: str, channel_slug: str, video_id: str,
-    seeds: list[str], video_url: str, video_title: str,
+    seeds: list[str], video_url: str, main_file: Path,
 ) -> Path:
+    """The video title is third-party text, already fenced and stamped in
+    `main_file` -- link to it by name rather than repeating the raw title
+    here unguarded (H2)."""
     captures_dir = vault_root / "Meta" / "Captures"
     captures_dir.mkdir(parents=True, exist_ok=True)
     fname = f"{upload_date}-youtube-{channel_slug}-{video_id}.md"
@@ -208,7 +211,7 @@ def write_seed_stub(
         f"keywords: {', '.join(seeds)}\n"
         "status: open\n"
         "---\n\n"
-        f"# Capture seed: {video_title}\n\n"
+        f"# Capture seed: [[{main_file.stem}]]\n\n"
         f"Trigger keywords detected in transcript: {', '.join(seeds)}.\n\n"
         f"Source: {video_url}\n\n"
         "## Notes\n\n(fill in)\n"
@@ -315,7 +318,7 @@ def main() -> int:
     seed_paths: list[Path] = []
     if seeds:
         seed_paths.append(
-            write_seed_stub(vault_root, upload_date, channel_slug, video_id, seeds, args.url, title)
+            write_seed_stub(vault_root, upload_date, channel_slug, video_id, seeds, args.url, target)
         )
 
     seed_str = f" Seeds at: {', '.join(str(p) for p in seed_paths)}." if seed_paths else ""
