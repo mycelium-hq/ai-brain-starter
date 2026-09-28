@@ -512,6 +512,14 @@ INTEGRATION_TESTS=(
   # above: wired in the block-preserving form, and the shipped command
   # actually BLOCKS a seeded `env` dump while passing a clean command.
   test_installer_registers_env_dump_guard
+  # Heavy-command admission (MYC-5053), folded into retry-budget.py: proves
+  # a fresh install ships the FLAT-deployed hook AND its _lib/heavy_admission.py
+  # + _lib/shell_parse.py dependencies (a HOME_HOOKS_LIB_DEPS omission left
+  # this dark on a real install even though every in-worktree test passed),
+  # wires it in the block-preserving `if [ -f ] && [ -r ]` form, and that the
+  # SHIPPED command denies `next build` while a planted process is at cap and
+  # allows a clean command.
+  test_installer_registers_heavy_admission
   # Skip-prefix privacy guard: a `__SKIP` line is content the user told the
   # assistant NOT to persist, and a persisted line cannot be un-persisted (file
   # + git history + any index over the vault). Every assertion carries a
@@ -1621,6 +1629,16 @@ PY_DIRECT=(
   # PreToolUse hook run on every Bash call. 20k-case equivalence fuzz plus a
   # structural cost test that a 1M-char segment never reaches shlex.split.
   hooks/test_shell_parse_tokens.py
+  # heavy_admission.py (MYC-5053), folded into retry-budget.py: must-admit
+  # (16 strings, forced critical memory AND forced at-cap) and must-detect
+  # (15 strings) lists, real planted-process pgrep-anchor controls (a VS
+  # Code tsserver argv, a tsx watch argv and a zsh -c wrapper all count 0;
+  # a real next-build-shaped argv counts 1), a leak control against the
+  # child hook's real fds plus a positive control (a pgrep -lf mutant must
+  # leak), and two negative-control mutants on scratch copies (neutered
+  # thresholds wrongly allow a real deny; widened detection wrongly denies
+  # a must-admit string).
+  hooks/test_heavy_admission.py
 )
 dormant_py=()
 while IFS= read -r -d '' f; do
