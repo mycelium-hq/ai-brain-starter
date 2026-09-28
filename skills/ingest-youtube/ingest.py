@@ -196,13 +196,15 @@ def write_vault_file(
     target = target_dir / f"{upload_date}-{video_slug}.md"
     yaml_lines = ["---"]
     for k, v in frontmatter.items():
-        if k in ("title", "channel") and isinstance(v, str):
-            # Third-party text: flatten every line break str.splitlines()
-            # recognises (not just \n), sanitize (a lone surrogate or a
-            # C1/noncharacter would otherwise abort the write or the YAML
-            # parse), and always quote as a JSON string literal (also
-            # valid YAML), so an embedded ':' or line break can never
-            # forge a standalone frontmatter key (M5).
+        if isinstance(v, str):
+            # Every string value, not just title/channel -- restores
+            # main's coverage (which quoted any string containing ':' or
+            # '\n') and goes further: flatten every line break
+            # str.splitlines() recognises (not just \n), sanitize (a lone
+            # surrogate or a C1/noncharacter would otherwise abort the
+            # write or the YAML parse), and always quote as a JSON string
+            # literal (also valid YAML), so an embedded ':' or line break
+            # can never forge a standalone frontmatter key (M5).
             flat = sanitize_third_party_text(" ".join(v.splitlines()))
             yaml_lines.append(f"{k}: {json.dumps(flat, ensure_ascii=False)}")
         else:
