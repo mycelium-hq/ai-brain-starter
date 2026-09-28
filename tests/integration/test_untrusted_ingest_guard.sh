@@ -569,6 +569,109 @@ for relpath in ls_out:
               "(T10) %s writes a guarded target and CALLS guard_untrusted_body" % relpath)
 check(checked_any, "(T10) the wiring check itself examined at least one file (not vacuously true)")
 
+# T11 (finding 1): a lone UTF-16 surrogate half in one note's title must not
+# abort the whole launchd run. Real entrypoint (like T1), two notes, the
+# surrogate-titled one FIRST in iteration order (dict insertion order) so a
+# pre-fix crash on note 1 leaves note 2 unwritten too -- proving the run
+# recovers, not just that one isolated call does.
+NOTES_BY_ID_T11 = {
+    "note_surrogate": {
+        "id": "note_surrogate", "title": "Sync \ud83d",
+        "created_at": "2026-11-01T10:00:00Z",
+        "web_url": "https://granola.ai/note_surrogate",
+        "summary_markdown": "",
+        "transcript": [{"text": CLEAN, "speaker": {"source": "them"},
+                         "start_time": "2026-11-01T10:00:05Z"}],
+    },
+    "note_normal": {
+        "id": "note_normal", "title": "Normal Meeting",
+        "created_at": "2026-11-02T10:00:00Z",
+        "web_url": "https://granola.ai/note_normal",
+        "summary_markdown": "",
+        "transcript": [{"text": CLEAN, "speaker": {"source": "them"},
+                         "start_time": "2026-11-02T10:00:05Z"}],
+    },
+}
+
+
+def _fake_list_notes_t11(key, created_after, user_agent=None):
+    return [{"id": nid} for nid in NOTES_BY_ID_T11]
+
+
+def _fake_api_get_t11(path, key, retries=4, user_agent=None):
+    m = re.search(r"/notes/([^/?]+)", path)
+    return NOTES_BY_ID_T11[m.group(1)]
+
+
+core.list_notes = _fake_list_notes_t11
+core.api_get = _fake_api_get_t11
+
+with tempfile.TemporaryDirectory() as d11:
+    vault11 = pathlib.Path(d11)
+    old_argv = sys.argv
+    sys.argv = ["granola_sync.py", "--vault-root", str(vault11), "--meeting-dir", "Meeting Notes"]
+    buf11 = io.StringIO()
+    try:
+        with redirect_stdout(buf11):
+            runpy.run_path(str(repo / "scripts" / "granola_sync.py"), run_name="__main__")
+    finally:
+        sys.argv = old_argv
+
+    meeting_dir11 = vault11 / "Meeting Notes"
+    written11 = sorted(meeting_dir11.glob("*.md")) if meeting_dir11.is_dir() else []
+    check(len(written11) == 2,
+          "(T11) a lone surrogate in one note's title does not abort the run -- both notes written (got %d)" % len(written11))
+    surrogate_file11 = next((fp for fp in written11 if "�" in fp.read_text(encoding="utf-8")), None)
+    check(surrogate_file11 is not None,
+          "(T11) the surrogate note's own file shows the replacement char, not a crash")
+
+# T12 (finding 2): a C1 control (\x80), DEL (\x7f), or the U+FFFE
+# noncharacter inside a third-party frontmatter scalar must not make the
+# whole frontmatter unreadable by PyYAML -- json.dumps(ensure_ascii=False)
+# alone does not escape any of these (JSON only requires escaping
+# U+0000-U+001F), and PyYAML's reader rejects them even inside a quoted
+# scalar. Checked on a YouTube title and a Granola attendee.
+UNSAFE_SCALAR = "Bad\x80Title\x7fWith￾Chars"
+
+with tempfile.TemporaryDirectory() as d12yt:
+    vault12yt = pathlib.Path(d12yt)
+    rc12 = _run_yt("vid_unsafe", {"id": "vid_unsafe", "title": UNSAFE_SCALAR, "channel": "YT Channel",
+                                   "upload_date": "20261201", "duration": 1},
+                    "Hello there.", vault=vault12yt)
+    check(rc12 == 0, "(T12-yt) exit 0 with an unsafe scalar char in the title")
+    target12yt = vault12yt / "External Inputs" / "YouTube" / "yt-channel" / "2026-12-01-bad-title-with-chars.md"
+    check(target12yt.is_file(), "(T12-yt) file written")
+    if target12yt.is_file():
+        meta12yt, _ = cu.split_frontmatter(target12yt.read_text(encoding="utf-8"))
+        check(meta12yt.get("content_trust") == "untrusted",
+              "(T12-yt) PyYAML parses the frontmatter and content_trust: untrusted survives (got %r)" % meta12yt.get("content_trust"))
+
+with tempfile.TemporaryDirectory() as d12g:
+    note12 = {
+        "id": "note_t12", "title": "T12 Meeting",
+        "created_at": "2026-12-02T10:00:00Z",
+        "web_url": "https://granola.ai/note_t12",
+        "summary_markdown": "",
+        "transcript": [{"text": CLEAN, "speaker": {"source": "them"}, "start_time": "2026-12-02T10:00:05Z"}],
+    }
+    fp12g, _ = core.write_transcript_md(
+        note12, pathlib.Path(d12g), dry_run=False,
+        extra_frontmatter={"external_attendees": "Eve " + UNSAFE_SCALAR},
+    )
+    meta12g, _ = cu.split_frontmatter(fp12g.read_text(encoding="utf-8"))
+    check(meta12g.get("content_trust") == "untrusted",
+          "(T12-granola) an unsafe attendee value does not break the YAML parse; content_trust: untrusted survives (got %r)" % meta12g.get("content_trust"))
+
+# T13 (finding 2, second half): split_frontmatter must split on a `---`
+# DELIMITER LINE, not any `---` substring -- a value containing " --- "
+# must not be mistaken for the closing delimiter and truncate or empty the
+# frontmatter.
+rendered13 = cu.render_frontmatter({"content_trust": "untrusted", "title": "Part 1 --- The Beginning"})
+meta13, _ = cu.split_frontmatter(rendered13 + "body text\n")
+check(meta13.get("title") == "Part 1 --- The Beginning",
+      "(T13) a value containing ' --- ' round-trips through split_frontmatter (got %r)" % meta13.get("title"))
+check(meta13.get("content_trust") == "untrusted", "(T13) content_trust survives alongside it")
+
 sys.exit(1 if fails else 0)
 PY
 

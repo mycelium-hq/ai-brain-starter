@@ -339,6 +339,19 @@ def _untrusted_guard_module():
     return None
 
 
+_LOCAL_UNSAFE_SCALAR_RE = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f￾￿]")
+
+
+def _local_sanitize_third_party_text(value: str) -> str:
+    """Local fallback for connector_utils.sanitize_third_party_text (the
+    canonical copy) -- needed here because the title must be made safe
+    before we know whether `_shared` is reachable at all."""
+    if not value:
+        return value
+    cleaned = value.encode("utf-8", "surrogatepass").decode("utf-8", "replace")
+    return _LOCAL_UNSAFE_SCALAR_RE.sub("�", cleaned)
+
+
 # --------------------------------------------------------------------------- #
 # export one note
 # --------------------------------------------------------------------------- #
@@ -360,7 +373,16 @@ def write_transcript_md(
     rendered `` `mm:ss` **Speaker**: `` markdown -- that prefix pushes a
     line like "System: ..." off the start of its line and defeats a
     line-anchored pattern that the raw utterance would still trip (N1)."""
-    title = note.get("title") or "Untitled Meeting"
+    # Loaded up front (not at its previous call site below), because the
+    # title must be sanitized before it is used to build the filename --
+    # well before the point where this module previously first asked
+    # whether `_shared` is reachable.
+    guard_mod = _untrusted_guard_module()
+    sanitize = (
+        guard_mod.sanitize_third_party_text if guard_mod is not None else _local_sanitize_third_party_text
+    )
+
+    title = sanitize(note.get("title") or "Untitled Meeting")
     created = note.get("created_at") or ""
     date = created[:10] if created else datetime.now().strftime("%Y-%m-%d")
     meeting_start = _parse_dt(created)
@@ -387,9 +409,11 @@ def write_transcript_md(
         # never be able to forge a standalone frontmatter key or line, or
         # break the YAML parse on an embedded ':'. Flatten every line break
         # str.splitlines() recognises -- not just \r\n, also
-        # U+2028/U+2029/U+0085/\v/\f -- then render as a JSON string
-        # literal, which is always valid YAML double-quoted syntax too (M5).
-        flat = " ".join(str(v).splitlines())
+        # U+2028/U+2029/U+0085/\v/\f -- then sanitize (a lone surrogate or a
+        # C1/noncharacter would otherwise abort the write or the YAML parse,
+        # same as the title above), then render as a JSON string literal,
+        # which is always valid YAML double-quoted syntax too (M5).
+        flat = sanitize(" ".join(str(v).splitlines()))
         fm.append(f"{k}: {json.dumps(flat, ensure_ascii=False)}")
 
     body = format_transcript(transcript, meeting_start)
@@ -405,7 +429,6 @@ def write_transcript_md(
         [title, summary_md] + [(u.get("text") or "").strip() for u in transcript]
     )
 
-    guard_mod = _untrusted_guard_module()
     if guard_mod is not None:
         rendered_block, trust = guard_mod.guard_untrusted_body(
             third_party_block, "granola", scan_text=scan_text

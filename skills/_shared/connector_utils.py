@@ -280,6 +280,30 @@ _UNTRUSTED_BEGIN_TMPL = (
 _UNTRUSTED_END_TMPL = "<!-- END UNTRUSTED CONTENT id={nonce} -->"
 
 
+# A single character can abort a write (a lone UTF-16 surrogate half -- e.g.
+# a truncated 4-byte emoji from a scraped page, VTT caption, or API field --
+# raises UnicodeEncodeError under plain "utf-8") or make the emitted
+# frontmatter unreadable by any YAML parser (a C1 control or a noncharacter,
+# both common in cp1252 mojibake): PyYAML's reader rejects them anywhere in
+# the stream, even inside a quoted scalar, so wrapping the value in
+# json.dumps() does not help. Every third-party scalar that ends up in a
+# filename or a frontmatter value goes through this first.
+_UNSAFE_SCALAR_RE = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f￾￿]")
+
+
+def sanitize_third_party_text(value: str) -> str:
+    """Make any third-party string safe to encode as UTF-8 (for a filename
+    or a file write) and safe to embed as a YAML scalar. Two independent
+    repairs, both always applied: a lone surrogate is replaced via an
+    encode/decode roundtrip, then any remaining C0/C1 control (other than
+    tab/newline/CR) or U+FFFE/U+FFFF is replaced with U+FFFD.
+    """
+    if not value:
+        return value
+    cleaned = value.encode("utf-8", "surrogatepass").decode("utf-8", "replace")
+    return _UNSAFE_SCALAR_RE.sub("�", cleaned)
+
+
 _UNTRUSTED_MARKER_RE = re.compile(r"untrusted[\W_]*content")
 
 # Cyrillic/Greek letters that are visually identical to a Latin letter in
@@ -527,16 +551,24 @@ def render_frontmatter(meta: dict[str, Any]) -> str:
     return f"---\n{body}\n---\n\n"
 
 
+_FRONTMATTER_DELIM_RE = re.compile(r"(?m)^---[ \t]*$")
+
+
 def split_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     """Split a markdown file's YAML frontmatter from its body. Returns
     ({}, text) when there is no frontmatter or when the YAML is malformed.
     Requires PyYAML. Used by synth-* skills only.
+
+    Splits on a `---` DELIMITER LINE (the whole line, only whitespace
+    allowed around it), not on any `---` substring -- a frontmatter value
+    that happens to contain " --- " (e.g. a title like "Part 1 --- The
+    Beginning") must not be mistaken for the closing delimiter.
     """
     if yaml is None:
         return {}, text
     if not text.startswith("---"):
         return {}, text
-    parts = text.split("---", 2)
+    parts = _FRONTMATTER_DELIM_RE.split(text, 2)
     if len(parts) < 3:
         return {}, text
     try:

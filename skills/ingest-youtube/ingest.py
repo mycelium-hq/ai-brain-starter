@@ -37,10 +37,19 @@ from pathlib import Path
 # crashing the whole ingest on import.
 try:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "_shared"))
-    from connector_utils import guard_untrusted_body
+    from connector_utils import guard_untrusted_body, sanitize_third_party_text
 except ImportError:
     def guard_untrusted_body(text, source, scan_text=None):
         return text, {"content_trust": "untrusted", "injection_scan": "unavailable", "injection_flags": []}
+
+    _LOCAL_UNSAFE_SCALAR_RE = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f￾￿]")
+
+    def sanitize_third_party_text(value):
+        """Local fallback (canonical copy: skills/_shared/connector_utils.py)."""
+        if not value:
+            return value
+        cleaned = value.encode("utf-8", "surrogatepass").decode("utf-8", "replace")
+        return _LOCAL_UNSAFE_SCALAR_RE.sub("�", cleaned)
 
 VTT_TIMING_RE = re.compile(r"\d{2}:\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}:\d{2}\.\d{3}.*")
 VTT_HEADER_RE = re.compile(r"^(WEBVTT|Kind:|Language:|NOTE\s|X-TIMESTAMP-MAP)", re.MULTILINE)
@@ -189,10 +198,12 @@ def write_vault_file(
     for k, v in frontmatter.items():
         if k in ("title", "channel") and isinstance(v, str):
             # Third-party text: flatten every line break str.splitlines()
-            # recognises (not just \n) and always quote as a JSON string
-            # literal (also valid YAML), so an embedded ':' or line break
-            # can never forge a standalone frontmatter key (M5).
-            flat = " ".join(v.splitlines())
+            # recognises (not just \n), sanitize (a lone surrogate or a
+            # C1/noncharacter would otherwise abort the write or the YAML
+            # parse), and always quote as a JSON string literal (also
+            # valid YAML), so an embedded ':' or line break can never
+            # forge a standalone frontmatter key (M5).
+            flat = sanitize_third_party_text(" ".join(v.splitlines()))
             yaml_lines.append(f"{k}: {json.dumps(flat, ensure_ascii=False)}")
         else:
             yaml_lines.append(f"{k}: {v}")
@@ -248,7 +259,10 @@ def main() -> int:
 
     meta = fetch_metadata(args.url, ytdlp)
     video_id = meta.get("id", "unknown")
-    title = meta.get("title", "Untitled")
+    # Sanitized immediately: a lone surrogate or a C1/noncharacter in a
+    # scraped title would otherwise abort the eventual write or make the
+    # frontmatter unreadable by any YAML parser.
+    title = sanitize_third_party_text(meta.get("title", "Untitled"))
     channel = meta.get("channel") or meta.get("uploader") or "unknown-channel"
     channel_slug = slugify(channel)
     video_slug = slugify(title)
