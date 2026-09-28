@@ -730,15 +730,62 @@ if t_n > 0.005:
 else:
     check(t_2n < 1.0, "(T9) even the 2x payload scans in under 1s (n itself too fast to time reliably: %.4fs)" % t_2n)
 
-# T10: every tracked .py file that WRITES a guarded surface (a quoted
-# "External Inputs"/"Captures" segment, or Transcript.md) must CALL
+# T10: every tracked .py file that WRITES a guarded surface (an
+# "External Inputs"/"Captures" path segment, or Transcript.md) must CALL
 # guard_untrusted_body -- an AST Call check (bare name or attribute, since
 # granola_core calls it as guard_mod.guard_untrusted_body), not a substring
-# match an import line or docstring would also satisfy (M4).
+# match an import line or docstring would also satisfy (M4). The target
+# check is also AST-based, collecting ast.Constant string values (which
+# covers single/double/triple-quoted literals AND the literal segments of
+# an f-string -- Python represents f"External Inputs/{x}" as a JoinedStr
+# containing a Constant "External Inputs/" plus a FormattedValue), so a
+# writer spelled with different quoting is still examined, not just the
+# one quote style a raw source-substring match would recognise
+# (finding 11). "External Inputs"/"Captures" are scoped to a path-join
+# ('/') operand whose value, split on '/', has a segment that EQUALS the
+# target -- the shape the real writers and the reviewer's own planted
+# example use. Unscoped substring containment also matches plain prose (a
+# docstring, argparse help text) AND an unrelated same-substring path
+# segment actually used elsewhere in this repo ("Session Captures.md",
+# "Passive Captures" -- neither is the Meta/Captures/ directory this guard
+# is about): measured against this repo's real file set, unscoped
+# substring containment produced 6 false positives, and scoping to a
+# path-join operand alone (without the exact-segment check) still left 3.
+# "Transcript.md" never had a quote-style problem (the original check
+# already searched bare text) and isn't a path-join operand here (it is
+# built inside safe_filename()'s f-string, whose return value is joined by
+# the caller), so it keeps the simple unscoped substring check.
 def _writes_guarded_target(src):
     if "write_text(" not in src and ".write(" not in src:
         return False
-    return '"External Inputs"' in src or '"Captures"' in src or "Transcript.md" in src
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return False
+
+    def _literal_parts(node):
+        """Every literal string a node resolves to: a bare Constant, or
+        the literal (non-interpolated) segments of an f-string."""
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            yield node.value
+        elif isinstance(node, ast.JoinedStr):
+            for part in node.values:
+                if isinstance(part, ast.Constant) and isinstance(part.value, str):
+                    yield part.value
+
+    def _has_target_segment(s, target):
+        return target in (seg.strip() for seg in s.split("/"))
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            if "Transcript.md" in node.value:
+                return True
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+            for operand in (node.left, node.right):
+                for s in _literal_parts(operand):
+                    if _has_target_segment(s, "External Inputs") or _has_target_segment(s, "Captures"):
+                        return True
+    return False
 
 
 def _calls_guard(src):
@@ -754,6 +801,30 @@ def _calls_guard(src):
             if isinstance(f, ast.Attribute) and f.attr == "guard_untrusted_body":
                 return True
     return False
+
+
+# Finding 11: a writer spelled with a different quote style than the one
+# raw-source-substring matching would recognise must still be examined.
+# Unit-tests the two helpers directly on hand-built sources (never touches
+# git ls-files -- an untracked planted file wouldn't be seen by T10 below
+# anyway).
+_planted_single_quoted = (
+    "from connector_utils import guard_untrusted_body\n"
+    "def write(vault):\n"
+    "    (vault / 'External Inputs' / 'Foo').write_text('x')\n"
+)
+check(_writes_guarded_target(_planted_single_quoted),
+      "(T10-ast) single-quoted 'External Inputs' is still recognised as a guarded target")
+check(not _calls_guard(_planted_single_quoted),
+      "(T10-ast) the guard is imported but never called in this planted source (sanity check)")
+
+_planted_fstring = (
+    "from connector_utils import guard_untrusted_body\n"
+    "def write(vault, name):\n"
+    "    (vault / f'External Inputs/{name}').write_text('x')\n"
+)
+check(_writes_guarded_target(_planted_fstring),
+      "(T10-ast) an f-string's literal 'External Inputs/' segment is still recognised as a guarded target")
 
 
 ls_out = subprocess.run(
