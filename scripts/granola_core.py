@@ -399,11 +399,14 @@ def write_transcript_md(
         f"utterances: {n_utt}",
     ]
     for k, v in (extra_frontmatter or {}).items():
-        # A newline in a caller-supplied value (e.g. an attendee's display
-        # name) would otherwise inject a bogus frontmatter key on the next
-        # line -- flatten to spaces before it ever reaches the file.
-        safe_v = str(v).replace("\r", " ").replace("\n", " ")
-        fm.append(f"{k}: {safe_v}")
+        # A caller-supplied value (e.g. an attendee's display name) must
+        # never be able to forge a standalone frontmatter key or line, or
+        # break the YAML parse on an embedded ':'. Flatten every line break
+        # str.splitlines() recognises -- not just \r\n, also
+        # U+2028/U+2029/U+0085/\v/\f -- then render as a JSON string
+        # literal, which is always valid YAML double-quoted syntax too (M5).
+        flat = " ".join(str(v).splitlines())
+        fm.append(f"{k}: {json.dumps(flat, ensure_ascii=False)}")
 
     body = format_transcript(transcript, meeting_start)
     third_party_block = f"# {' '.join(title.split())}\n\n"

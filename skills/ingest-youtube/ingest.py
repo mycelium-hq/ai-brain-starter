@@ -187,9 +187,13 @@ def write_vault_file(
     target = target_dir / f"{upload_date}-{video_slug}.md"
     yaml_lines = ["---"]
     for k, v in frontmatter.items():
-        if isinstance(v, str) and ("\n" in v or ":" in v):
-            v = v.replace('"', '\\"')
-            yaml_lines.append(f'{k}: "{v}"')
+        if k in ("title", "channel") and isinstance(v, str):
+            # Third-party text: flatten every line break str.splitlines()
+            # recognises (not just \n) and always quote as a JSON string
+            # literal (also valid YAML), so an embedded ':' or line break
+            # can never forge a standalone frontmatter key (M5).
+            flat = " ".join(v.splitlines())
+            yaml_lines.append(f"{k}: {json.dumps(flat, ensure_ascii=False)}")
         else:
             yaml_lines.append(f"{k}: {v}")
     yaml_lines.append("---")
