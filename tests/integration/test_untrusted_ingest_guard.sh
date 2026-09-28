@@ -472,6 +472,20 @@ with tempfile.TemporaryDirectory() as d6:
     check("injection_scan: flagged" in text6e and "prompt-injection-system-impersonation" in text6e,
           "(T6e) write_external_input scans the raw item title, not just the rendered heading (M1 guard)")
 
+    # Finding 10: normalize_for_vault() falls back to identifier/id for the
+    # rendered heading when title/subject are absent, but _raw_item_fields
+    # only scanned title/subject/body/body_text/description -- an item
+    # whose only identifying field is `identifier` rendered its heading
+    # unscanned.
+    out6f = cu.write_external_input(
+        vault6, "Test", "scope-f", "2026-06-06",
+        [{"identifier": SYSTEM_IMPERSONATION, "body": "fine"}],
+    )
+    text6f = pathlib.Path(out6f).read_text(encoding="utf-8")
+    check("## " + SYSTEM_IMPERSONATION in text6f, "(T6f) the identifier becomes the rendered heading")
+    check("injection_scan: flagged" in text6f and "prompt-injection-system-impersonation" in text6f,
+          "(T6f) write_external_input scans an item's raw identifier field too (finding 10)")
+
 # T7: envelope forgery -- a forged END, a marker split by a zero-width
 # space, and a triple backtick, all in one body. Plus the A1 neutralizer
 # shapes: fullwidth, zero-width-padded, Cyrillic lookalikes, a marker with

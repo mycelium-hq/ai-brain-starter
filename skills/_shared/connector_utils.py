@@ -177,13 +177,15 @@ def entity_ids_for(source_type: str, ids: list[Any]) -> dict[str, list[Any] | st
 
 
 def _raw_item_fields(items: list[dict[str, Any]]) -> str:
-    """Raw title/subject/body/description fields for injection scanning --
-    not the rendered markdown a line-anchored pattern could miss (M1, same
-    bug class as N1: a rendered `## {title}` heading pushes the title off
-    the start of its own line)."""
+    """Raw title/subject/body/description/identifier/id fields for injection
+    scanning -- not the rendered markdown a line-anchored pattern could
+    miss (M1, same bug class as N1: a rendered `## {title}` heading pushes
+    the title off the start of its own line). identifier/id are included
+    because normalize_for_vault() falls back to them for the rendered
+    heading when title/subject are absent -- the same M1 exposure applies."""
     parts: list[str] = []
     for item in items or []:
-        for key in ("title", "subject", "body", "body_text", "description"):
+        for key in ("title", "subject", "body", "body_text", "description", "identifier", "id"):
             v = item.get(key)
             if v:
                 parts.append(str(v))
