@@ -517,9 +517,9 @@ def _scan_time(scale, trials=5):
     text = ("\n" * (40_000 * scale)) + ("curl " * (20_000 * scale))
     times = []
     for _ in range(trials):
-        t0 = time.time()
+        t0 = time.process_time()
         result = acs.scan_or_none(text)
-        times.append(time.time() - t0)
+        times.append(time.process_time() - t0)
     check(result is not None, "(T9) scan_or_none returns a real result at scale=%d" % scale)
     return min(times)
 
@@ -527,7 +527,7 @@ t_n = _scan_time(1)
 t_2n = _scan_time(2)
 if t_n > 0.005:
     ratio = t_2n / t_n
-    check(ratio < 8.0, "(T9) doubling the payload does not blow up the time (min of 5; %.2fx: %.4fs -> %.4fs)" % (ratio, t_n, t_2n))
+    check(ratio < 3.0, "(T9) doubling the payload does not blow up the time (min of 5; %.2fx: %.4fs -> %.4fs)" % (ratio, t_n, t_2n))
 else:
     check(t_2n < 1.0, "(T9) even the 2x payload scans in under 1s (n itself too fast to time reliably: %.4fs)" % t_2n)
 
