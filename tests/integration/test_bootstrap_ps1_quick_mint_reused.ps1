@@ -1,4 +1,4 @@
-# Regression test for bootstrap.ps1's quick-mint "reused" reply handling
+﻿# Regression test for bootstrap.ps1's quick-mint "reused" reply handling
 # (MYC-5093).
 #
 # Bug: POST /api/install/quick-mint answers a resubmit for an email that
