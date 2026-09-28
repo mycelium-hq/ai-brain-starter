@@ -609,6 +609,28 @@ with tempfile.TemporaryDirectory() as d8e:
     finally:
         acs.REGISTRY_PATH = _orig_registry2
 
+# Finding 8(a): a registry carrying all 5 pinned families PLUS an EXTRA
+# (6th) prompt-injection rule whose regex fails to compile must also read
+# unavailable, not silently skip the broken rule and scan with the other
+# 5 -- text only the 6th rule would have matched must not read clean.
+with tempfile.TemporaryDirectory() as d8g:
+    all_families = [r for r in real_registry["rules"] if r.get("category") == "prompt-injection"]
+    broken_rule = {
+        "id": "prompt-injection-extra-broken", "category": "prompt-injection",
+        "severity": "warn", "regex_b64": "not-valid-base64!!!",
+        "applies_to": ["audited-content"],
+    }
+    broken_extra_path = pathlib.Path(d8g) / "broken_extra_registry.json"
+    broken_extra_path.write_text(json.dumps({"rules": all_families + [broken_rule]}), encoding="utf-8")
+    _orig_registry3 = acs.REGISTRY_PATH
+    try:
+        acs.REGISTRY_PATH = broken_extra_path
+        result8g = acs.scan_or_none(IGNORE_PREVIOUS)
+        check(result8g is None,
+              "(T8g) a broken EXTRA prompt-injection rule (not one of the 5 pinned) still reads unavailable, not partial")
+    finally:
+        acs.REGISTRY_PATH = _orig_registry3
+
 
 # A3: the flags/status computation (sorting pattern_id off each finding,
 # then deciding unavailable/flagged/clean) must stay INSIDE the same try as
@@ -631,6 +653,27 @@ try:
               "(T8f) a scanner returning non-Finding objects yields unavailable, not a crash")
 finally:
     cu._load_injection_scanner = _orig_loader3
+
+# Finding 8(b): a scanner returning falsy junk (False/0/""/{}) must read
+# unavailable, not clean -- `findings or []` alone treats any falsy value
+# as "no findings", indistinguishable from a real empty scan result.
+class _FalsyJunkScanner:
+    @staticmethod
+    def scan_or_none(text):
+        return {}
+
+
+_orig_loader4 = cu._load_injection_scanner
+try:
+    cu._load_injection_scanner = lambda: _FalsyJunkScanner()
+    with tempfile.TemporaryDirectory() as d8h:
+        out8h = cu.write_external_input(pathlib.Path(d8h), "Test", "scope-8h", "2026-08-03", [], body=CLEAN)
+        check(pathlib.Path(out8h).is_file(), "(T8h) the write still happens when the scanner returns falsy junk")
+        text8h = pathlib.Path(out8h).read_text(encoding="utf-8")
+        check("injection_scan: unavailable" in text8h,
+              "(T8h) a scanner returning falsy junk ({}) yields unavailable, not clean")
+finally:
+    cu._load_injection_scanner = _orig_loader4
 
 # T9: the ReDoS fix stays linear time. n vs 2n, bounded RATIO not a
 # wall-clock ceiling (survives machine load); fastest of 5 trials per scale

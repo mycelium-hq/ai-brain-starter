@@ -466,8 +466,15 @@ def guard_untrusted_body(
         # ever abort the caller's write.
         scanner = _load_injection_scanner()
         findings = scanner.scan_or_none(subject) if scanner is not None else None
-        flags = sorted({f.pattern_id for f in findings or []})
-        status = "unavailable" if findings is None else "flagged" if flags else "clean"
+        if not isinstance(findings, list):
+            # Anything other than a real list -- None (scanner unavailable
+            # or missing), or falsy junk like False/0/""/{} that
+            # `findings or []` alone would silently read as "clean" --
+            # means the scan did not really run.
+            status, flags = "unavailable", []
+        else:
+            flags = sorted({f.pattern_id for f in findings})
+            status = "flagged" if flags else "clean"
     except Exception:
         status, flags = "unavailable", []
 

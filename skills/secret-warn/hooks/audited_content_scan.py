@@ -83,11 +83,11 @@ def _compiled_registry(
     on PATH + its mtime so an edited or redirected registry is always picked
     up fresh, never served from a stale cache (N6).
 
-    A rule whose base64 fails to decode or whose regex fails to compile is
-    skipped with a stderr warning (fail-loud, not silent) -- one malformed
-    rule must not disable the others. Returns None, never a partial list,
-    unless every one of the 5 pinned families (_EXPECTED_RULE_IDS) loaded
-    and compiled (H4).
+    Returns None, never a partial list, unless every one of the 5 pinned
+    families (_EXPECTED_RULE_IDS) loaded and compiled (H4) AND every OTHER
+    prompt-injection rule in the registry also compiled cleanly -- a broken
+    extra (6th+) rule reads unavailable too, not silently skipped, because
+    text only that rule would have matched must not read `clean`.
     """
     try:
         registry = json.loads(path.read_text(encoding="utf-8"))
@@ -96,6 +96,7 @@ def _compiled_registry(
         return None
     compiled: list[tuple[str, str, re.Pattern[str]]] = []
     seen: set[str] = set()
+    broken: list[str] = []
     for rule in registry.get("rules", []):
         if rule.get("category") != CATEGORY:
             continue
@@ -109,6 +110,7 @@ def _compiled_registry(
             )
             seen.add(rule["id"])
         except (ValueError, re.error) as exc:
+            broken.append(str(rule.get("id", "?")))
             sys.stderr.write(
                 f"[audited-content-scan] skipping malformed rule "
                 f"{rule.get('id', '?')}: {exc}\n"
@@ -118,6 +120,12 @@ def _compiled_registry(
         sys.stderr.write(
             f"[audited-content-scan] registry missing/broken families: "
             f"{', '.join(sorted(missing))} -- scan unavailable, never partial\n"
+        )
+        return None
+    if broken:
+        sys.stderr.write(
+            f"[audited-content-scan] registry has malformed prompt-injection "
+            f"rule(s) {', '.join(broken)} -- scan unavailable, never partial\n"
         )
         return None
     return compiled
