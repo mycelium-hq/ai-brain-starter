@@ -414,12 +414,14 @@ def fence_untrusted(text: str, source: str) -> str:
     already present in TEXT is neutralized first, so a forged END inside
     third-party content cannot pass as the real one.
     """
-    raw = text or ""
-    # surrogatepass: third-party text (scraped pages, VTT captions) can carry
-    # a lone UTF-16 surrogate half (e.g. a truncated 4-byte emoji). Plain
-    # "utf-8" raises UnicodeEncodeError on that and would abort the write
-    # before fencing even starts (MYC-4701 review, HIGH).
-    nonce = hashlib.sha256(raw.encode("utf-8", "surrogatepass")).hexdigest()[:16]
+    # Sanitize once, up front: third-party text (scraped pages, VTT
+    # captions) can carry a lone UTF-16 surrogate half (e.g. a truncated
+    # 4-byte emoji). Plain "utf-8" raises UnicodeEncodeError on that, and
+    # the eventual write uses plain "utf-8" too -- replacing it here, before
+    # either the hash or the write, is what actually keeps the write from
+    # aborting (MYC-4701 review, HIGH).
+    raw = (text or "").encode("utf-8", "surrogatepass").decode("utf-8", "replace")
+    nonce = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
     safe_source = _SOURCE_SAFE_RE.sub("-", (source or "").lower()) or "unknown"
     inner = _neutralize_marker_lookalikes(fence_text(raw))
     begin = _UNTRUSTED_BEGIN_TMPL.format(source=safe_source, nonce=nonce)
