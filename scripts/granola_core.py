@@ -339,7 +339,7 @@ def _untrusted_guard_module():
     return None
 
 
-_LOCAL_UNSAFE_SCALAR_RE = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f￾￿]")
+_LOCAL_UNSAFE_SCALAR_RE = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f" + chr(0xFFFE) + chr(0xFFFF) + "]")
 
 
 def _local_sanitize_third_party_text(value: str) -> str:
@@ -349,7 +349,7 @@ def _local_sanitize_third_party_text(value: str) -> str:
     if not value:
         return value
     cleaned = value.encode("utf-8", "surrogatepass").decode("utf-8", "replace")
-    return _LOCAL_UNSAFE_SCALAR_RE.sub("�", cleaned)
+    return _LOCAL_UNSAFE_SCALAR_RE.sub(chr(0xFFFD), cleaned)
 
 
 # --------------------------------------------------------------------------- #

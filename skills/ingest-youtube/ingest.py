@@ -42,14 +42,14 @@ except ImportError:
     def guard_untrusted_body(text, source, scan_text=None):
         return text, {"content_trust": "untrusted", "injection_scan": "unavailable", "injection_flags": []}
 
-    _LOCAL_UNSAFE_SCALAR_RE = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f￾￿]")
+    _LOCAL_UNSAFE_SCALAR_RE = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f" + chr(0xFFFE) + chr(0xFFFF) + "]")
 
     def sanitize_third_party_text(value):
         """Local fallback (canonical copy: skills/_shared/connector_utils.py)."""
         if not value:
             return value
         cleaned = value.encode("utf-8", "surrogatepass").decode("utf-8", "replace")
-        return _LOCAL_UNSAFE_SCALAR_RE.sub("�", cleaned)
+        return _LOCAL_UNSAFE_SCALAR_RE.sub(chr(0xFFFD), cleaned)
 
 VTT_TIMING_RE = re.compile(r"\d{2}:\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}:\d{2}\.\d{3}.*")
 VTT_HEADER_RE = re.compile(r"^(WEBVTT|Kind:|Language:|NOTE\s|X-TIMESTAMP-MAP)", re.MULTILINE)
