@@ -201,14 +201,6 @@ ABS_FINGERPRINTS = [
     # a blocking gate shipped as a file and never registered protects no
     # install.
     "ai-brain-starter/hooks/block-env-dump.py",
-    # Heavy-command memory-admission guard. Refuses next build / verify /
-    # full tsc / unscoped vitest / playwright / cargo when the machine is
-    # already under memory pressure or the same class is at its running
-    # cap -- built after ~10 concurrent sessions each running a heavy
-    # command pushed swap to 19.4 GB on a 24 GB Mac and it rebooted
-    # (2026-09-26). Same shipped-but-never-registered risk as the gates
-    # above.
-    "ai-brain-starter/hooks/heavy-command-admission.py",
     # Auto-remediation (the FIX side of the surfacing hooks):
     "ai-brain-starter/hooks/remediate-runaway-procs.py",
     # Write-time secret guard:
@@ -319,9 +311,6 @@ ABS_OWNED_BASENAMES = {
     # Environment-dump guard (MYC-4988): same basename-dedup reasoning as
     # the two gates above.
     "block-env-dump.py",
-    # Heavy-command memory-admission guard: same basename-dedup reasoning
-    # as the gates above.
-    "heavy-command-admission.py",
     "block-secret-in-note.py", "block-skip-prefix-in-vault-write.py",
     "context-budget-measure.py",
     "validate-handoff-frontmatter.py",
