@@ -33,6 +33,12 @@ What counts as one attempt:
 Pattern inspired by Devin 2.0 ("ask user for help if CI does not pass
 after the third attempt") and Cursor 2.0 ("don't loop more than 3 times
 to fix linter errors").
+
+Also runs heavy_admission.admit() (MYC-5053) on the same parsed command,
+independent of RETRY_BUDGET_BYPASS -- its own bypass is HEAVY_ADMISSION_
+BYPASS=1, so each bypass switches off only its own check. Import and call
+are each wrapped in their own try/except: a broken heavy_admission must
+never break retry-budget's own behaviour, and must never itself block.
 """
 import json
 import sys
@@ -43,6 +49,13 @@ import time
 import hashlib
 import glob
 import tempfile
+
+try:
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "_lib"))
+    from heavy_admission import admit as _heavy_admit
+except Exception:  # pragma: no cover - a broken heavy_admission must never block
+    def _heavy_admit(_command):
+        return 0
 
 THRESHOLD_BLOCK = 4       # 4th+ attempt blocks (3 attempts allowed)
 WINDOW_SEC = 30 * 60
@@ -201,6 +214,14 @@ def _run():
     command = tool_input.get("command", "") if isinstance(tool_input, dict) else ""
     if not isinstance(command, str):
         sys.exit(0)
+
+    try:
+        heavy_code = _heavy_admit(command)
+    except Exception:
+        heavy_code = 0
+    if heavy_code:
+        sys.exit(heavy_code)
+
     norm = " ".join(command.split())
     if len(norm) < MIN_CMD_LEN:
         sys.exit(0)
