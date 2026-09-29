@@ -273,15 +273,16 @@ def _tool(name: str) -> str:
     subprocess, which a relative or empty PATH entry (reached via THIS
     PROCESS's own cwd -- never a `-C`, which only git itself interprets,
     after this resolution has already run) could resolve to a planted
-    binary. POSIX only: win32's shutil.which prepends os.curdir unless
-    NoDefaultCurrentDirectoryInExePath is set, so an absolute-only PATH
-    filter alone does not close this on Windows. Missing -> raises, so
-    admit()'s catch-all fails OPEN the same VISIBLE way every other internal
-    error does."""
+    binary. Cross-platform, incl. win32: shutil.which's win32 branch
+    additionally searches os.curdir unless NoDefaultCurrentDirectoryInExePath
+    is set, so the result is accepted only when os.path.isabs() too -- a
+    curdir hit is relative and is rejected the same as a miss. Missing ->
+    raises, so admit()'s catch-all fails OPEN the same VISIBLE way every
+    other internal error does."""
     if name not in _TOOL_CACHE:
         abs_only = os.pathsep.join(d for d in os.environ.get("PATH", "").split(os.pathsep) if os.path.isabs(d))
         found = shutil.which(name, path=abs_only)
-        if found is None:
+        if found is None or not os.path.isabs(found):
             raise FileNotFoundError(f"{name!r} not found on an absolute PATH entry")
         _TOOL_CACHE[name] = found
     return _TOOL_CACHE[name]
