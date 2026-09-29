@@ -66,7 +66,9 @@ _TIMEOUT_WORDS = {"timeout", "gtimeout"}
 _TIMEOUT_VALUE_FLAGS = {"-s", "--signal", "-k", "--kill-after"}  # timeout's other flags are boolean
 _SHELLS = {"bash", "sh", "zsh"}
 # Reserved words in FRONT of a real command word: `{ next build; }`, `do next build`.
-_RESERVED_WORDS = {"{", "(", "if", "then", "elif", "else", "do", "while", "until", "!"}
+# No `(`: split_segments_with_seps reports it as sep_before, never inside a
+# segment's own text, so it can never reach t[0] here.
+_RESERVED_WORDS = {"{", "if", "then", "elif", "else", "do", "while", "until", "!"}
 _CARGO_VERBS = {"build", "test", "check", "clippy", "nextest", "b", "t", "c"}
 _CARGO_SKIP_FLAGS = ("--locked", "--offline", "--frozen")
 _VITEST_VALUE_FLAGS = {"--config", "-c", "--pool", "--maxWorkers", "--shard",
