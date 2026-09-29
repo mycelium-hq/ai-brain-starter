@@ -433,7 +433,12 @@ def write_transcript_md(
         # No envelope when the guard module itself is unavailable -- there is
         # no local fencing logic to fall back to -- but the 3 trust lines are
         # still stamped by hand so "unavailable" is never silently "clean".
-        rendered_block = third_party_block
+        # The block still needs the same surrogate round-trip
+        # fence_untrusted would have done (finding 4): title is sanitized
+        # above, but summary_md and the per-utterance transcript text are
+        # not, and a lone surrogate in either would otherwise abort the
+        # write.
+        rendered_block = third_party_block.encode("utf-8", "surrogatepass").decode("utf-8", "replace")
         trust = {"content_trust": "untrusted", "injection_scan": "unavailable", "injection_flags": []}
         fm += ["content_trust: untrusted", "injection_scan: unavailable", "injection_flags: []"]
     fm.append("---")

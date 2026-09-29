@@ -1025,6 +1025,94 @@ with tempfile.TemporaryDirectory() as isolated_root14, tempfile.TemporaryDirecto
         sys.modules.pop("_isolated_granola_core_t14", None)
         sys.modules.pop("_stale_real_connector_utils", None)
 
+# T15 (finding 4): on ingest-youtube's DEGRADED path (real connector_utils
+# unreachable), a title with a lone UTF-16 surrogate half must not abort
+# the write when there is no transcript -- the raw title lands straight in
+# the no-caption stub body, and the degraded guard_untrusted_body must
+# still round-trip it. Forces the degraded path by corrupting the import
+# target text, not by fighting sys.modules -- connector_utils is already
+# cached globally under its real name by this point in the run.
+yt_source15 = (repo / "skills" / "ingest-youtube" / "ingest.py").read_text(encoding="utf-8")
+FORCE_DEGRADE_MARKER = "from connector_utils import guard_untrusted_body, sanitize_third_party_text"
+if FORCE_DEGRADE_MARKER not in yt_source15:
+    fails.append("(T15 setup) import line moved -- update FORCE_DEGRADE_MARKER")
+else:
+    degraded_yt_source = yt_source15.replace(
+        FORCE_DEGRADE_MARKER, "raise ImportError('T15: forced degraded path')"
+    )
+    with tempfile.TemporaryDirectory() as isolated_dir15:
+        degraded_yt_path = pathlib.Path(isolated_dir15) / "ingest.py"
+        degraded_yt_path.write_text(degraded_yt_source, encoding="utf-8")
+        degraded_yt = load_module("_degraded_yt_ingest_t15", degraded_yt_path)
+        check(degraded_yt.guard_untrusted_body("x", "y") == (
+                  "x", {"content_trust": "untrusted", "injection_scan": "unavailable", "injection_flags": []}),
+              "(T15 setup) the degraded stub, not the real guard_untrusted_body, is in play")
+
+        degraded_yt.require_bin = lambda name: "/usr/bin/yt-dlp"
+        degraded_yt.list_subs = lambda url, ytdlp: "Available subtitles:\nen\n"
+        degraded_yt.pick_lang = lambda prefs, manual, auto: None  # no pick -> no-caption stub body
+        degraded_yt.fetch_metadata = lambda url, ytdlp: {
+            "id": "vid_degraded_surrogate", "title": "Eve \ud83d", "channel": "YT Channel",
+            "upload_date": "20261210", "duration": 1,
+        }
+        with tempfile.TemporaryDirectory() as vault15:
+            vault15 = pathlib.Path(vault15)
+            old_argv = sys.argv
+            sys.argv = ["ingest.py", "https://youtube.com/watch?v=vid_degraded_surrogate", "--vault", str(vault15)]
+            buf15 = io.StringIO()
+            try:
+                with redirect_stdout(buf15):
+                    rc15 = degraded_yt.main()
+            finally:
+                sys.argv = old_argv
+                sys.modules.pop("_degraded_yt_ingest_t15", None)
+            check(rc15 == 0,
+                  "(T15) exit 0 on the degraded path with a lone surrogate in the title, no captions")
+            matches15 = list((vault15 / "External Inputs" / "YouTube" / "yt-channel").glob("2026-12-10-*.md"))
+            check(len(matches15) == 1, "(T15) file written despite the degraded path + lone surrogate")
+            if matches15:
+                text15 = matches15[0].read_text(encoding="utf-8")
+                check("�" in text15, "(T15) the lone surrogate was replaced, not left to crash the write")
+
+# T16 (finding 4): on granola_core's degraded path (no _shared reachable,
+# same isolation as T2), a lone UTF-16 surrogate half in an utterance or
+# the summary -- not the title, which T2/T11 already cover -- must not
+# abort the write either.
+with tempfile.TemporaryDirectory() as isolated_dir16, tempfile.TemporaryDirectory() as fake_home16:
+    isolated_dir16 = pathlib.Path(isolated_dir16)
+    fake_home16 = pathlib.Path(fake_home16)
+    copied_core_path16 = isolated_dir16 / "granola_core.py"
+    copied_core_path16.write_text(
+        (repo / "scripts" / "granola_core.py").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    old_home16 = os.environ.get("HOME")
+    os.environ["HOME"] = str(fake_home16)
+    try:
+        isolated_core16 = load_module("_isolated_granola_core_t16", copied_core_path16)
+        note16 = {
+            "id": "surrogate_utterance", "title": "T16 Meeting",
+            "created_at": "2026-02-03T10:00:00Z",
+            "web_url": "https://granola.ai/surrogate_utterance",
+            "summary_markdown": "Summary with a stray half \ud83d here.",
+            "transcript": [{"text": "Utterance with a stray half \ud83d too.",
+                             "speaker": {"source": "them"}, "start_time": "2026-02-03T10:00:05Z"}],
+        }
+        with tempfile.TemporaryDirectory() as md16:
+            fp16, _msg16 = isolated_core16.write_transcript_md(note16, pathlib.Path(md16), dry_run=False)
+            check(fp16 is not None and fp16.is_file(),
+                  "(T16) a lone surrogate in an utterance/summary does not abort the write on the degraded path")
+            if fp16 is not None and fp16.is_file():
+                text16 = fp16.read_text(encoding="utf-8")
+                check(text16.count("�") >= 2,
+                      "(T16) both the summary's and the utterance's lone surrogate were replaced (got %d)"
+                      % text16.count("�"))
+    finally:
+        if old_home16 is not None:
+            os.environ["HOME"] = old_home16
+        else:
+            os.environ.pop("HOME", None)
+        sys.modules.pop("_isolated_granola_core_t16", None)
+
 sys.exit(1 if fails else 0)
 PY
 

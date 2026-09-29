@@ -40,7 +40,11 @@ try:
     from connector_utils import guard_untrusted_body, sanitize_third_party_text
 except ImportError:
     def guard_untrusted_body(text, source, scan_text=None):
-        return text, {"content_trust": "untrusted", "injection_scan": "unavailable", "injection_flags": []}
+        # No envelope on this degraded path -- but still round-trip the
+        # same surrogate/C1 sanitize fence_untrusted would have done, so a
+        # lone surrogate elsewhere in the body doesn't abort the write.
+        safe = (text or "").encode("utf-8", "surrogatepass").decode("utf-8", "replace")
+        return safe, {"content_trust": "untrusted", "injection_scan": "unavailable", "injection_flags": []}
 
     _LOCAL_UNSAFE_SCALAR_RE = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f" + chr(0xFFFE) + chr(0xFFFF) + "]")
 
@@ -273,11 +277,14 @@ def main() -> int:
 
     meta = fetch_metadata(args.url, ytdlp)
     video_id = meta.get("id", "unknown")
-    # Not sanitized here: slugify() below already scrubs every non-alnum
-    # character for the filename, and write_vault_file()'s frontmatter loop
-    # sanitizes title/channel again right before they become YAML scalars --
-    # this raw value is never itself written anywhere unguarded.
-    title = meta.get("title", "Untitled")
+    # Sanitized immediately: a lone surrogate or a C1/noncharacter in a
+    # scraped title would otherwise abort the eventual write or make the
+    # frontmatter unreadable by any YAML parser. Not redundant with
+    # write_vault_file()'s per-key sanitize (finding 4): when there is no
+    # transcript, the raw title is embedded straight into the stub body
+    # below, before guard_untrusted_body ever sees it, and the degraded
+    # (no _shared) guard_untrusted_body does not sanitize its input.
+    title = sanitize_third_party_text(meta.get("title", "Untitled"))
     channel = meta.get("channel") or meta.get("uploader") or "unknown-channel"
     channel_slug = slugify(channel)
     video_slug = slugify(title)
