@@ -332,6 +332,17 @@ def leg_git_push() -> None:
               mod.admit("git -c foo.bar=baz push", heavy) == 2)
         check("G git --no-pager push still finds push",
               mod.admit("git --no-pager push", heavy) == 2)
+        # F1: a generic rule (skip any `-...` token, plus one extra token
+        # after 7 value-taking options) replaces the named-option list, so an
+        # option this file has never heard of doesn't stop the scan.
+        check("G git --no-advice push (an UNKNOWN global bool) still finds push",
+              mod.admit("git --no-advice push", heavy) == 2)
+        # git needs its config-env value to name a REAL env var (else it
+        # exits 128 "missing environment variable"), so HOME, always set.
+        check("G git --config-env=foo.bar=HOME push (glued value) still finds push",
+              mod.admit("git --config-env=foo.bar=HOME push", heavy) == 2)
+        check("G git --config-env foo.bar=HOME push (split value) still finds push",
+              mod.admit("git --config-env foo.bar=HOME push", heavy) == 2)
 
         rel_hp = _repo_hooks_path(tmp, "hookspath-rel", "custom-hooks", {"custom-hooks/pre-push": "exec pnpm verify\n"})
         check("G a repo-local camelCase hooksPath (RELATIVE) resolves to its heavy hook",
