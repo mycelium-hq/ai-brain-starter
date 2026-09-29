@@ -66,6 +66,7 @@ import sys
 import tempfile
 import time
 from contextlib import contextmanager, redirect_stdout
+from datetime import date as _date_cls
 
 repo = pathlib.Path(sys.argv[1])
 sys.path.insert(0, str(repo / "scripts"))
@@ -485,6 +486,35 @@ with tempfile.TemporaryDirectory() as d5:
         check(meta5g.get("content_trust") == "untrusted",
               "(T5g) a newline-smuggled channel_url cannot fake content_trust: trusted "
               "(got %r)" % meta5g.get("content_trust"))
+        # (B5) a genuine 8-digit upload_date is still rendered bare and
+        # still parses as a real YAML date, not a quoted string.
+        check(isinstance(meta5g.get("upload_date"), _date_cls),
+              "(T5g) a valid upload_date still parses as a date (got %r)" % meta5g.get("upload_date"))
+
+    # T5h (B5): upload_date is sliced straight from yt-dlp metadata --
+    # third-party text, not program-controlled. The old `len(...) == 8`
+    # check accepted ANY 8-char value, digits or not: "\nabc: vv" is 8
+    # chars, hyphenated into "\nabc-: -vv", and rendered bare (upload_date
+    # was in _BARE_STR_KEYS) that is a standalone `abc-` line PyYAML reads
+    # as a second top-level key -- a forged key, and with the frontmatter
+    # still (accidentally) parseable. re.fullmatch(r"\d{8}", ...) rejects
+    # it; the value is preserved and quoted instead of forging anything.
+    rc5h = _run_yt("vid_baddate", {"id": "vid_baddate", "title": "Bad Date Video", "channel": "YT Channel",
+                                    "upload_date": "\nabc: vv", "duration": 1},
+                    "Hello.", vault=vault5)
+    check(rc5h == 0, "(T5h) exit 0 with a malformed upload_date")
+    matches5h = list((vault5 / "External Inputs" / "YouTube" / "yt-channel").glob("*-bad-date-video.md"))
+    check(len(matches5h) == 1, "(T5h) file written despite a malformed upload_date")
+    if matches5h:
+        text5h = matches5h[0].read_text(encoding="utf-8")
+        meta5h, _ = cu.split_frontmatter(text5h)
+        check("abc" not in meta5h,
+              "(T5h) the malformed upload_date forges no standalone frontmatter key (got keys %r)" % sorted(meta5h))
+        check(meta5h.get("content_trust") == "untrusted",
+              "(T5h) content_trust survives alongside a malformed upload_date (got %r)" % meta5h.get("content_trust"))
+        check(isinstance(meta5h.get("upload_date"), str) and "abc" in meta5h.get("upload_date", ""),
+              "(T5h) the malformed value is preserved (quoted), not silently replaced (got %r)"
+              % meta5h.get("upload_date"))
 
 # T6: write_external_input.
 with tempfile.TemporaryDirectory() as d6:

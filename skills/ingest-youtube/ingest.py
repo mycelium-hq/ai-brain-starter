@@ -191,20 +191,25 @@ def detect_seeds(transcript: str) -> list[str]:
     return [kw for kw in SEED_KEYWORDS if kw in low]
 
 
-# Program-controlled, never third-party free text: upload_date is a
-# computed YYYY-MM-DD (bare on origin/main, so PyYAML reads it as a
-# date), and content_trust/injection_scan are a closed enum -- rendered
-# bare like trust_frontmatter_lines does for the other three writers.
-_BARE_STR_KEYS = frozenset({"upload_date", "content_trust", "injection_scan"})
+# content_trust/injection_scan are a closed enum, never third-party text --
+# rendered bare like trust_frontmatter_lines does for the other three
+# writers. upload_date is NOT in this set: it is sliced straight from
+# yt-dlp metadata (a third-party field), so it gets its own bare-only-when-
+# safe check below instead of an unconditional bare render.
+_BARE_STR_KEYS = frozenset({"content_trust", "injection_scan"})
+_SAFE_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
 def write_vault_file(
-    vault_root: Path, channel_slug: str, upload_date: str,
+    vault_root: Path, channel_slug: str, filename_date: str,
     video_slug: str, frontmatter: dict, body: str,
 ) -> Path:
+    """filename_date is a caller-proven-safe digits-and-hyphens date for the
+    PATH only -- frontmatter["upload_date"] (rendered below) may be a
+    different, preserved-but-quoted raw value; see B5."""
     target_dir = vault_root / "External Inputs" / "YouTube" / channel_slug
     target_dir.mkdir(parents=True, exist_ok=True)
-    target = target_dir / f"{upload_date}-{video_slug}.md"
+    target = target_dir / f"{filename_date}-{video_slug}.md"
     yaml_lines = ["---"]
     for k, v in frontmatter.items():
         if isinstance(v, list):
@@ -212,6 +217,12 @@ def write_vault_file(
             # third-party text -- bare YAML flow sequence, matching
             # trust_frontmatter_lines.
             yaml_lines.append(f"{k}: [" + ", ".join(str(i) for i in v) + "]")
+        elif k == "upload_date" and isinstance(v, str) and _SAFE_DATE_RE.fullmatch(v):
+            # Bare only when it is PROVEN to be just digits and hyphens in
+            # this exact shape (a real 8-digit yt-dlp date, hyphenated
+            # below, or the local now()-computed fallback) -- never on the
+            # raw yt-dlp value's say-so. PyYAML then reads it as a `date`.
+            yaml_lines.append(f"{k}: {v}")
         elif isinstance(v, str) and k not in _BARE_STR_KEYS:
             # Every OTHER string value -- restores main's coverage (which
             # quoted any string containing ':' or '\n') and goes further:
@@ -231,15 +242,15 @@ def write_vault_file(
 
 
 def write_seed_stub(
-    vault_root: Path, upload_date: str, channel_slug: str, video_id: str,
+    vault_root: Path, filename_date: str, channel_slug: str, video_id: str,
     seeds: list[str], video_url: str, main_file: Path,
 ) -> Path:
     """The video title is third-party text, already fenced and stamped in
     `main_file` -- link to it by name rather than repeating the raw title
-    here unguarded."""
+    here unguarded. filename_date: see write_vault_file (B5)."""
     captures_dir = vault_root / "Meta" / "Captures"
     captures_dir.mkdir(parents=True, exist_ok=True)
-    fname = f"{upload_date}-youtube-{channel_slug}-{video_id}.md"
+    fname = f"{filename_date}-youtube-{channel_slug}-{video_id}.md"
     target = captures_dir / fname
     body = (
         "---\n"
@@ -288,12 +299,23 @@ def main() -> int:
     channel = meta.get("channel") or meta.get("uploader") or "unknown-channel"
     channel_slug = slugify(channel)
     video_slug = slugify(title)
-    upload_date_raw = meta.get("upload_date", "")
-    upload_date = (
-        f"{upload_date_raw[:4]}-{upload_date_raw[4:6]}-{upload_date_raw[6:8]}"
-        if len(upload_date_raw) == 8 else
-        datetime.now().strftime("%Y-%m-%d")
-    )
+    # yt-dlp's upload_date is third-party text, not a program-controlled
+    # value: `len(...) == 8` accepted anything 8 CHARS long, digits or not,
+    # so e.g. "\nabc: vv" (8 chars, zero digits) hyphenated into
+    # "\nabc-: -vv" and forged a standalone `abc-` frontmatter key when
+    # rendered bare. re.fullmatch requires all 8 to be digits.
+    upload_date_raw = meta.get("upload_date") or ""
+    if re.fullmatch(r"\d{8}", upload_date_raw):
+        upload_date = f"{upload_date_raw[:4]}-{upload_date_raw[4:6]}-{upload_date_raw[6:8]}"
+    else:
+        # Preserve the raw value for the frontmatter rather than silently
+        # replacing real (if oddly-shaped) metadata with a fabricated
+        # date -- write_vault_file's per-key branch quotes it safely (B5)
+        # since it is no longer in _BARE_STR_KEYS.
+        upload_date = upload_date_raw or datetime.now().strftime("%Y-%m-%d")
+    # The FILENAME needs a provably safe shape regardless of what
+    # upload_date ends up holding for the frontmatter.
+    filename_date = upload_date if _SAFE_DATE_RE.fullmatch(upload_date) else datetime.now().strftime("%Y-%m-%d")
 
     listing = list_subs(args.url, ytdlp)
     manual, auto = parse_available_subs(listing)
@@ -354,11 +376,14 @@ def main() -> int:
         "injection_flags": trust["injection_flags"],
     }
 
-    target = write_vault_file(vault_root, channel_slug, upload_date, video_slug, fm, body)
+    # filename_date, not upload_date: the frontmatter value can now be a
+    # preserved-but-quoted raw string (B5), and neither filename may embed
+    # anything other than the proven-safe digits-and-hyphens shape.
+    target = write_vault_file(vault_root, channel_slug, filename_date, video_slug, fm, body)
     seed_paths: list[Path] = []
     if seeds:
         seed_paths.append(
-            write_seed_stub(vault_root, upload_date, channel_slug, video_id, seeds, args.url, target)
+            write_seed_stub(vault_root, filename_date, channel_slug, video_id, seeds, args.url, target)
         )
 
     seed_str = f" Seeds at: {', '.join(str(p) for p in seed_paths)}." if seed_paths else ""
