@@ -1192,6 +1192,20 @@ else:
     check(body13b == "\nbody",
           "(T13b) the body after the closing CRLF delimiter is intact (got %r)" % body13b)
 
+# T13c (N5): the OPENING delimiter must be recognised only at offset 0,
+# with the same exact shape as an internal delimiter line. "---foo" is a
+# real first line (satisfies text.startswith("---")) but is NOT a
+# delimiter line (no _FRONTMATTER_DELIM_RE match -- "foo" follows the
+# "---" directly, not a line end) -- the two LATER, genuine delimiter-
+# shaped lines must not be mistaken for a frontmatter block that was
+# never actually opened.
+if cu.yaml is None:
+    check(False, "(T13c) PyYAML missing -- cannot verify the offset-0 delimiter anchor")
+else:
+    meta13c, _ = cu.split_frontmatter("---foo\nk: v\n---\r\nx: 1\n---\r\ntail")
+    check(meta13c == {},
+          "(T13c) a non-delimiter first line yields no meta, not body text read as meta (got %r)" % meta13c)
+
 # T14: a stale skills/_shared/connector_utils.py -- one taken
 # between the two MYC-4701 batches, with guard_untrusted_body and
 # trust_frontmatter_lines but not yet sanitize_third_party_text -- must not

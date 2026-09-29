@@ -631,10 +631,18 @@ def split_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     delimiter. `---` must be the first thing on the line (no leading
     whitespace); only trailing space/tab and an optional CRLF `\r` are
     allowed after it.
+
+    The OPENING delimiter is recognised only at offset 0, with the exact
+    same shape as an internal delimiter line (not merely `text.startswith
+    ("---")`, which a first line like "---foo" also satisfies without
+    being a real delimiter -- that first "line" then never matches
+    _FRONTMATTER_DELIM_RE's own scan, so the split silently keys off two
+    LATER, unrelated delimiter-shaped lines instead and returns body text
+    read as meta) (N5).
     """
     if yaml is None:
         return {}, text
-    if not text.startswith("---"):
+    if not _FRONTMATTER_DELIM_RE.match(text):
         return {}, text
     parts = _FRONTMATTER_DELIM_RE.split(text, 2)
     if len(parts) < 3:
