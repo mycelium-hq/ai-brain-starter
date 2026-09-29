@@ -239,9 +239,8 @@ def write_vault_file(
             # Bare only when it is a REAL calendar date in this exact
             # shape (a real 8-digit yt-dlp date, hyphenated below, or the
             # local now()-computed fallback) -- never on shape alone.
-            # PyYAML reads a bare match via its own strptime-backed date
-            # resolver, so an impossible date like 2026-13-99 would raise
-            # for every downstream reader instead of just this one.
+            # PyYAML loads a bare YYYY-MM-DD as a date, so an impossible
+            # one like 2026-13-99 would raise in every downstream reader.
             yaml_lines.append(f"{k}: {v}")
         elif isinstance(v, str) and k not in _BARE_STR_KEYS:
             # Every OTHER string value -- restores main's coverage (which
