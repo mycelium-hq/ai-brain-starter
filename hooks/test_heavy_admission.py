@@ -540,6 +540,72 @@ def leg_pathprobe() -> None:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+# ------------------------------------------ W: win32 curdir pathprobe ---
+def leg_win32_pathprobe() -> None:
+    """SECURITY, Windows companion to leg P: _tool()'s absolute-PATH filter
+    is POSIX-only. shutil.which's win32 branch additionally searches
+    os.curdir -- CPython 3.9 unconditionally (shutil.py:1419-1425), 3.12+ via
+    _winapi.NeedCurrentDirectoryForExePath (shutil.py:1603-1607) -- unless
+    NoDefaultCurrentDirectoryInExePath is set. A repo shipping `git.EXE` at
+    its root would get it resolved, and pre-fix RUN, by _tool('git') before
+    any approval. Simulates win32 the way probe_win.r7.py does: sys.platform
+    patched AFTER import. _winapi is also faked (a no-op on 3.9, where the
+    branch never touches it) so the same probe reproduces under whatever
+    interpreter runs this suite, never a real Windows box."""
+    class _FakeWinapi:
+        @staticmethod
+        def NeedCurrentDirectoryForExePath(cmd):
+            return True
+
+    tmp = Path(tempfile.mkdtemp(prefix="heavy-admission-win32-"))
+    marker = tmp / "marker"
+    (tmp / "git.EXE").write_text(f'#!/bin/sh\necho hit >> "{marker}"\n', encoding="utf-8")
+    (tmp / "git.EXE").chmod(0o755)
+
+    mod = _load("heavy_admission_win32")
+    prior_cwd = os.getcwd()
+    prior_platform = sys.platform
+    prior_winapi = getattr(shutil, "_winapi", None)
+    prior_pathext = os.environ.get("PATHEXT")
+    prior_path = os.environ.get("PATH")
+    os.chdir(tmp)
+    os.environ["PATHEXT"] = ".EXE"
+    os.environ["PATH"] = "/usr/bin"  # absolute-only; no real entry has a git.EXE
+    sys.platform = "win32"
+    shutil._winapi = _FakeWinapi()
+    try:
+        resolved, raised = None, False
+        try:
+            resolved = mod._tool("git")
+        except Exception:
+            raised = True
+        check("W _tool('git') under simulated win32, absolute-only PATH, a planted cwd "
+              "git.EXE never returns a relative path",
+              raised or os.path.isabs(resolved), f"resolved={resolved!r} raised={raised}")
+        check("W _tool('git') resolves to unavailable (raises) rather than the planted relative path",
+              raised, f"resolved={resolved!r}")
+
+        marker.unlink(missing_ok=True)
+        rc, out, _fires = _admit(mod, "git push", str(tmp))
+        check("W the guard admits with its existing visible 'unmeasured' note under simulated win32",
+              rc == 0 and "unmeasured (FileNotFoundError)" in out, f"rc={rc} out={out[:300]!r}")
+        check("W the planted cwd git.EXE never ran pre-approval under simulated win32",
+              not marker.exists(), "marker file appeared: a planted binary executed pre-approval")
+    finally:
+        sys.platform = prior_platform
+        shutil._winapi = prior_winapi
+        os.chdir(prior_cwd)
+        if prior_pathext is None:
+            os.environ.pop("PATHEXT", None)
+        else:
+            os.environ["PATHEXT"] = prior_pathext
+        if prior_path is None:
+            os.environ.pop("PATH", None)
+        else:
+            os.environ["PATH"] = prior_path
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 # ------------------------------------------- F: forwarded-prefix argv leak ---
 def leg_forwarded_prefix_leak() -> None:
     """SECURITY (step 4, LOW): only -C/--git-dir/--work-tree/-c core.hooksPath=
@@ -722,7 +788,7 @@ def leg_hook_level_via_retry_budget() -> None:
 def main() -> int:
     print("heavy_admission controls")
     for leg in (leg_corpora, leg_decision, leg_counting, leg_git_push, leg_pathprobe,
-                leg_forwarded_prefix_leak, leg_fifo_hook, leg_leak_control,
+                leg_win32_pathprobe, leg_forwarded_prefix_leak, leg_fifo_hook, leg_leak_control,
                 leg_negative_controls, leg_hook_level_via_retry_budget):
         leg()
     if FAILURES:
