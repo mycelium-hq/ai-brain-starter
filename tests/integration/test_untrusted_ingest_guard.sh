@@ -43,7 +43,11 @@ trap 'rm -rf "$HERMETIC_HOME"' EXIT
 # is a no-op through ci.sh and a fallback for a direct standalone run.
 : "${PYTHONUSERBASE:=$(python3 -m site --user-base)}"
 export PYTHONUSERBASE
-export HOME="$HERMETIC_HOME"
+# sandbox_home, not a bare `export HOME=`: it sets USERPROFILE alongside HOME,
+# which ntpath.expanduser (Windows Python) reads instead of HOME, and neutralises
+# HOMEDRIVE/HOMEPATH so nothing falls back to the real profile.
+. "$REPO_ROOT/tests/integration/lib/sandbox_home.sh"
+sandbox_home "$HERMETIC_HOME"
 unset SECRET_WARN_ROOT || true
 
 python3 - "$REPO_ROOT" <<'PY'
@@ -220,8 +224,12 @@ with tempfile.TemporaryDirectory() as isolated_dir, tempfile.TemporaryDirectory(
     copied_core_path.write_text(
         (repo / "scripts" / "granola_core.py").read_text(encoding="utf-8"), encoding="utf-8"
     )
+    # HOME and USERPROFILE are already the same sandboxed value here (the
+    # shell-level sandbox_home call above sets both), so one saved value
+    # correctly restores both.
     old_home = os.environ.get("HOME")
     os.environ["HOME"] = str(fake_home)
+    os.environ["USERPROFILE"] = str(fake_home)
     try:
         isolated_core = load_module("_isolated_granola_core_t2", copied_core_path)
         note2 = {
@@ -242,8 +250,10 @@ with tempfile.TemporaryDirectory() as isolated_dir, tempfile.TemporaryDirectory(
     finally:
         if old_home is not None:
             os.environ["HOME"] = old_home
+            os.environ["USERPROFILE"] = old_home
         else:
             os.environ.pop("HOME", None)
+            os.environ.pop("USERPROFILE", None)
         sys.modules.pop("_isolated_granola_core_t2", None)
 
 # T3: a caller cannot fake content_trust: trusted via extra_frontmatter.
@@ -1070,6 +1080,7 @@ with tempfile.TemporaryDirectory() as isolated_root14, tempfile.TemporaryDirecto
 
     old_home14 = os.environ.get("HOME")
     os.environ["HOME"] = str(fake_home14)
+    os.environ["USERPROFILE"] = str(fake_home14)
     try:
         isolated_core14 = load_module("_isolated_granola_core_t14", copied_core_path14)
         note14 = {
@@ -1092,8 +1103,10 @@ with tempfile.TemporaryDirectory() as isolated_root14, tempfile.TemporaryDirecto
     finally:
         if old_home14 is not None:
             os.environ["HOME"] = old_home14
+            os.environ["USERPROFILE"] = old_home14
         else:
             os.environ.pop("HOME", None)
+            os.environ.pop("USERPROFILE", None)
         sys.modules.pop("_isolated_granola_core_t14", None)
         sys.modules.pop("_stale_real_connector_utils", None)
 
@@ -1159,6 +1172,7 @@ with tempfile.TemporaryDirectory() as isolated_dir16, tempfile.TemporaryDirector
     )
     old_home16 = os.environ.get("HOME")
     os.environ["HOME"] = str(fake_home16)
+    os.environ["USERPROFILE"] = str(fake_home16)
     try:
         isolated_core16 = load_module("_isolated_granola_core_t16", copied_core_path16)
         note16 = {
@@ -1181,8 +1195,10 @@ with tempfile.TemporaryDirectory() as isolated_dir16, tempfile.TemporaryDirector
     finally:
         if old_home16 is not None:
             os.environ["HOME"] = old_home16
+            os.environ["USERPROFILE"] = old_home16
         else:
             os.environ.pop("HOME", None)
+            os.environ.pop("USERPROFILE", None)
         sys.modules.pop("_isolated_granola_core_t16", None)
 
 sys.exit(1 if fails else 0)
