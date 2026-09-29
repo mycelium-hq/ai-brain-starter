@@ -15,8 +15,9 @@
 #   2. Benign use wrote third-party page bodies into the working tree, where
 #      session commits swept them up (34 entries landed in one team repo).
 # Cases T10 and T15-T22 come from two independent adversarial reviews of the
-# first version of the fix, and T23-T28 (plus the planted legs of T15 and the
-# no-directory half of T11) from a third review of the second; each names the
+# first version of the fix, T23-T28 (plus the planted legs of T15 and the
+# no-directory half of T11) from a third review of the second, and T28-T44
+# (the global cap moved to T45, still last) from a fourth; each names the
 # defect it pins.
 #
 # Hermetic: `curl` is a PATH stub (no network), HOME is a sandbox, and the
@@ -59,6 +60,18 @@ git -C "$PROJECT" -c user.email=t@t -c user.name=t commit -q --allow-empty -m se
 BIN="$TMPROOT/bin"; mkdir -p "$BIN"
 cat > "$BIN/curl" <<'STUB'
 #!/usr/bin/env bash
+# STUB_ARGV_LOG: append this call's arguments (to check the hooks' flags).
+if [ -n "${STUB_ARGV_LOG:-}" ]; then printf '%s\n' "$*" >> "$STUB_ARGV_LOG"; fi
+# Like real curl under --proto '=https': a plain-http URL fails before any
+# request, printing nothing. The URL is the last argument in both hooks.
+proto=""; prev=""; url=""
+for a in "$@"; do
+  if [ "$prev" = "--proto" ]; then proto="$a"; fi
+  prev="$a"; url="$a"
+done
+if [ "$proto" = "=https" ]; then
+  case "$url" in https://*) ;; *) exit 1 ;; esac
+fi
 for a in "$@"; do
   if [ "$a" = "%{http_code}" ]; then
     if [ -n "${STUB_SWAP_FILE:-}" ] && [ -f "$STUB_SWAP_FILE" ]; then
@@ -71,9 +84,24 @@ done
 printf 'HTTP/1.1 200 OK\r\n'
 if [ -n "${STUB_ETAG:-}" ]; then printf 'ETag: %s\r\n' "$STUB_ETAG"; fi
 if [ -n "${STUB_LASTMOD:-}" ]; then printf 'Last-Modified: %s\r\n' "$STUB_LASTMOD"; fi
+# STUB_HEADER_PAD: one huge header AFTER the validators, so a parser that stops
+# at its first match leaves most of it unread.
+if [ -n "${STUB_HEADER_PAD:-}" ]; then
+  printf 'X-Pad: %s\r\n' "$(head -c "$STUB_HEADER_PAD" /dev/zero | tr '\0' 'a')"
+fi
 printf '\r\n'
 STUB
 chmod +x "$BIN/curl"
+
+# GNU ls quotes every name when QUOTING_STYLE is set, even into a pipe; BSD ls
+# ignores the variable. This stand-in does what GNU ls does, so T44 can fail on
+# any host. With the variable unset it is the real ls.
+cat > "$BIN/ls" <<'STUB'
+#!/usr/bin/env bash
+REAL=/bin/ls; [ -x "$REAL" ] || REAL=/usr/bin/ls
+if [ -n "${QUOTING_STYLE:-}" ]; then "$REAL" "$@" | sed "s/.*/'&'/"; else exec "$REAL" "$@"; fi
+STUB
+chmod +x "$BIN/ls"
 
 sha_hex() {
   if command -v shasum >/dev/null 2>&1; then shasum -a 256 | cut -c1-64; else sha256sum | cut -c1-64; fi
@@ -99,6 +127,17 @@ run_post() {
     '{tool_name:"WebFetch",tool_input:{url:$u,prompt:"what does it say"},tool_response:{result:.,code:200}}' \
     | run_sandboxed "$SBX" env -u XDG_CACHE_HOME -u SDD_CACHE_DEBUG PATH="$BIN:$PATH" \
         CLAUDE_PROJECT_DIR="$proj" bash "$POST" >/dev/null 2>&1
+}
+
+# post_env PROJECT_DIR URL CONTENT [NAME=VALUE...] -> the post hook, with
+# extra environment for this one run.
+post_env() {
+  local proj="$1" url="$2" content="$3"
+  shift 3
+  printf '%s' "$content" | jq -Rs --arg u "$url" \
+    '{tool_name:"WebFetch",tool_input:{url:$u,prompt:"p"},tool_response:{result:.}}' \
+    | run_sandboxed "$SBX" env -u XDG_CACHE_HOME -u SDD_CACHE_DEBUG PATH="$BIN:$PATH" \
+        CLAUDE_PROJECT_DIR="$proj" "$@" bash "$POST" >/dev/null 2>&1
 }
 
 # The one cache file for URL, wherever the hook put it under the sandbox root.
@@ -466,15 +505,26 @@ else
 fi
 
 # ---- T20. Temp files a killed run abandoned are swept -----------------------
-: > "$PDIR/.tmp.stale20"; touch -t 202601010000 "$PDIR/.tmp.stale20"
-: > "$PDIR/.tmp.fresh20"
+# Names follow mktemp's shape (.tmp. plus six characters): the sweep matches
+# nothing else.
+# In every project's directory, not only the one being written: a project that
+# never fetches again would otherwise keep its temp, and with it a directory
+# that is never empty, forever. Its emptied directory goes in the same run.
+: > "$PDIR/.tmp.old020"; touch -t 202601010000 "$PDIR/.tmp.old020"
+: > "$PDIR/.tmp.new020"
+IDLE20="$CACHE_ROOT/0000000000000020"; BUSY20="$CACHE_ROOT/0000000000000021"
+mkdir -p "$IDLE20" "$BUSY20"
+: > "$IDLE20/.tmp.old020"; touch -t 202601010000 "$IDLE20/.tmp.old020"
+: > "$BUSY20/.tmp.new020"
 STUB_ETAG='"v20"' run_post "https://docs.example.test/sweep-20" "SWEEP-20"
-if [ ! -e "$PDIR/.tmp.stale20" ] && [ -e "$PDIR/.tmp.fresh20" ]; then
-  ok "T20: an abandoned temp file older than 10 minutes is swept; a fresh one (another run's) is left alone"
+t20="$([ -e "$PDIR/.tmp.old020" ] && echo y || echo n)$([ -e "$PDIR/.tmp.new020" ] && echo y || echo n)"
+t20="$t20$([ -e "$IDLE20" ] && echo y || echo n)$([ -e "$BUSY20/.tmp.new020" ] && echo y || echo n)"
+if [ "$t20" = nyny ]; then
+  ok "T20: abandoned temps older than 10 minutes are swept in every project's directory (the emptied one removed); fresh ones (another run's) are left alone"
 else
-  no "T20: stale temp kept=$([ -e "$PDIR/.tmp.stale20" ] && echo y || echo n), fresh temp kept=$([ -e "$PDIR/.tmp.fresh20" ] && echo y || echo n)"
+  no "T20: kept? [stale here, fresh here, idle project's dir, fresh elsewhere] = $t20 (want nyny)"
 fi
-rm -f "$PDIR/.tmp.fresh20"
+rm -f "$PDIR/.tmp.new020"; rm -rf "$IDLE20" "$BUSY20"
 
 # ---- T21. The tracked check is case-insensitive where the disk is -----------
 # Review finding: on a case-folding disk an entry tracked as `ABC….json` is
@@ -496,7 +546,7 @@ if [ -e "$TMPROOT/caseprobe" ]; then
   rc=$(STUB_STATUS=304 run_pre "$URL21")
   rm -rf "$SBX/.git"
   # Eviction deletes only the lower-case hex names the hook writes, so this
-  # hand-made upper-case one would outlive every cap (T28 counts it).
+  # hand-made upper-case one would outlive every cap (T45 counts it).
   rm -f "$E21UP"
   if [ "$tracked21" != "${E21UP#"$SBX"/}" ]; then
     no "T21: precondition not created -- the index holds '${tracked21:-nothing}', not the upper-case entry"
@@ -655,22 +705,353 @@ fi
 # The live key is backdated too, so a sweep pattern that also matched `.key`
 # itself would delete it here.
 K27="$([ -f "$CACHE_ROOT/.key" ] && sha_hex < "$CACHE_ROOT/.key")"
-: > "$CACHE_ROOT/.key.stale27"; touch -t 202601010000 "$CACHE_ROOT/.key.stale27"
-: > "$CACHE_ROOT/.key.fresh27"
+: > "$CACHE_ROOT/.key.old027"; touch -t 202601010000 "$CACHE_ROOT/.key.old027"
+: > "$CACHE_ROOT/.key.new027"
 touch -t 202601010000 "$CACHE_ROOT/.key"
 STUB_ETAG='"v27"' run_post "https://docs.example.test/keysweep-27" "KEYSWEEP-27"
 K27_AFTER="$([ -f "$CACHE_ROOT/.key" ] && sha_hex < "$CACHE_ROOT/.key")"
 if [ -z "$(entry_for "https://docs.example.test/keysweep-27")" ]; then
   no "T27: the post run wrote no entry, so it never reached the sweep"
-elif [ ! -e "$CACHE_ROOT/.key.stale27" ] && [ -e "$CACHE_ROOT/.key.fresh27" ] \
+elif [ ! -e "$CACHE_ROOT/.key.old027" ] && [ -e "$CACHE_ROOT/.key.new027" ] \
      && [ -n "$K27" ] && [ "$K27_AFTER" = "$K27" ]; then
   ok "T27: an abandoned key temp older than 10 minutes is swept; a fresh one and the (old) key itself are kept"
 else
-  no "T27: stale key temp kept=$([ -e "$CACHE_ROOT/.key.stale27" ] && echo y || echo n), fresh kept=$([ -e "$CACHE_ROOT/.key.fresh27" ] && echo y || echo n), key unchanged=$([ -n "$K27" ] && [ "$K27_AFTER" = "$K27" ] && echo y || echo n)"
+  no "T27: stale key temp kept=$([ -e "$CACHE_ROOT/.key.old027" ] && echo y || echo n), fresh kept=$([ -e "$CACHE_ROOT/.key.new027" ] && echo y || echo n), key unchanged=$([ -n "$K27" ] && [ "$K27_AFTER" = "$K27" ] && echo y || echo n)"
 fi
-rm -f "$CACHE_ROOT/.key.fresh27"
+rm -f "$CACHE_ROOT/.key.new027"
 
-# ---- T28. One bound across every project; emptied directories go ------------
+# ---- T28. A broken hash tool never blocks a fetch -----------------------------
+# Review finding: a shasum that exists but fails (perl exits 2 when it cannot
+# load a module, e.g. a stale PERL5OPT) made `set -e` end the pre hook with
+# status 2, Claude Code's BLOCK signal: every WebFetch was refused, cached or
+# not. Anything unhandled now lets the fetch through.
+BROKEN="$TMPROOT/broken-bin"; mkdir -p "$BROKEN"
+for tool in shasum sha256sum; do
+  printf '#!/bin/sh\necho "cannot load module" >&2\nexit 2\n' > "$BROKEN/$tool"
+  chmod +x "$BROKEN/$tool"
+done
+URL28C="https://docs.example.test/keysweep-27"
+c28=$(is_served "$URL28C" KEYSWEEP-27)
+t28() {  # HOOK URL -> the hook's exit code with the broken tools first on PATH
+  jq -nc --arg u "$2" '{tool_name:"WebFetch",tool_input:{url:$u,prompt:"p"},tool_response:{result:"BROKEN-28"}}' \
+    | run_sandboxed "$SBX" env -u XDG_CACHE_HOME -u SDD_CACHE_DEBUG PATH="$BROKEN:$BIN:$PATH" \
+        STUB_STATUS=304 STUB_ETAG='"v28"' CLAUDE_PROJECT_DIR="$PROJECT" bash "$1" >/dev/null 2>&1
+  echo $?
+}
+r28="$(t28 "$PRE" "$URL28C") $(t28 "$PRE" https://docs.example.test/uncached-28) $(t28 "$POST" https://docs.example.test/post-28)"
+if [ "$c28" != y ]; then
+  no "T28: control not served with a working hash tool, so the cached leg proves nothing"
+elif [ "$r28" = "0 0 0" ] && [ -z "$(entry_for https://docs.example.test/post-28)" ]; then
+  ok "T28: a failing hash tool never becomes exit 2; both hooks let the fetch through (cached and uncached pre, post)"
+else
+  no "T28: exit codes [pre on a cached URL, pre uncached, post] = $r28 (want 0 0 0)"
+fi
+
+# ---- T29. The post hook never writes through a symlinked cache root ----------
+# Review finding: T23 pins the pre side; on the post side a symlinked root
+# would carry the key and every entry to wherever it points.
+SBX_MAIN="$SBX"; SBX="$TMPROOT/home29"; mkdir -p "$SBX/.claude/.cache" "$TMPROOT/elsewhere29"
+ln -s "$TMPROOT/elsewhere29" "$SBX/.claude/.cache/sdd-cache"
+STUB_ETAG='"v29"' run_post "https://docs.example.test/root-29" "ROOT-29"
+SBX="$SBX_MAIN"
+if [ -z "$(ls -A "$TMPROOT/elsewhere29")" ]; then
+  ok "T29: the post hook writes nothing (no key, no entry) through a symlinked cache root"
+else
+  no "T29: written through the symlinked root: $(ls -A "$TMPROOT/elsewhere29" | tr '\n' ' ')"
+fi
+
+# ---- T30. An entry path that is a directory is never written into ------------
+# Review finding: without the regular-file check, `mv -f tmp <dir>` moves the
+# entry INTO a directory planted at the entry's name, or behind a symlink to one.
+URL30="https://docs.example.test/dir-30"; D30="$PDIR/$(url_sha "$URL30").json"
+URL30L="https://docs.example.test/link-30"; L30="$PDIR/$(url_sha "$URL30L").json"
+mkdir -p "$D30" "$TMPROOT/outside30"
+ln -s "$TMPROOT/outside30" "$L30"
+STUB_ETAG='"v30"' run_post "$URL30" "DIR-30"
+STUB_ETAG='"v30l"' run_post "$URL30L" "LINK-30"
+if [ -z "$(ls -A "$D30")" ] && [ -z "$(ls -A "$TMPROOT/outside30")" ]; then
+  ok "T30: an entry path that is a directory, or a symlink to one, is never moved into"
+else
+  no "T30: moved into (dir: $(ls -A "$D30" | tr '\n' ' '), behind the link: $(ls -A "$TMPROOT/outside30" | tr '\n' ' '))"
+fi
+rm -rf "$D30"; rm -f "$L30"
+
+# ---- T31. Plain http is never stored, and never revalidated into a hit -------
+# Review finding: both hooks pass --proto '=https', and deleting either left the
+# suite green. The stub now fails plain http the way curl does under that flag.
+URL31="http://docs.example.test/plain-31"
+STUB_ETAG='"v31"' run_post "$URL31" "PLAIN-31"
+stored31=$([ -n "$(entry_for "$URL31")" ] && echo y || echo n)
+URL31P="http://docs.example.test/planted-31"; URL31S="https://docs.example.test/planted-31s"
+plant "$URL31P" "PLANTED-31" "$(head -c 64 "$CACHE_ROOT/.key")"
+plant "$URL31S" "PLANTED-31S" "$(head -c 64 "$CACHE_ROOT/.key")"
+served31=$(is_served "$URL31P" PLANTED-31)
+c31=$(is_served "$URL31S" PLANTED-31S)
+rm -f "$PDIR/$(url_sha "$URL31P").json" "$PDIR/$(url_sha "$URL31S").json"
+if [ "$c31" != y ]; then
+  no "T31: control (the same entry over https) not served, so the http leg proves nothing"
+elif [ "$stored31$served31" = nn ]; then
+  ok "T31: a plain-http page is never cached, and a genuine entry for one is never served on a 304"
+else
+  no "T31: plain http stored=$stored31 served=$served31"
+fi
+
+# ---- T32. Session GIT_* variables cannot redirect or disarm the tracked check -
+# Review finding: with GIT_DIR or GIT_INDEX_FILE pointing elsewhere, git answers
+# for another repository; GIT_LITERAL_PATHSPECS=1 makes ':(top,icase)...' a
+# literal name that never matches. Each read as "untracked", and served.
+URL32="https://docs.example.test/env-32"
+STUB_ETAG='"v32"' run_post "$URL32" "ENV-32"
+E32="$(entry_for "$URL32")"
+git -c init.defaultBranch=main init -q "$SBX"
+c32=$(is_served "$URL32" ENV-32)
+git -C "$SBX" add -f -- "${E32#"$SBX"/}"
+s32() {  # NAME=VALUE... -> y when the tracked entry was served anyway
+  local rc
+  jq -nc --arg u "$URL32" '{tool_name:"WebFetch",tool_input:{url:$u,prompt:"p"}}' \
+    | run_sandboxed "$SBX" env -u XDG_CACHE_HOME -u SDD_CACHE_DEBUG PATH="$BIN:$PATH" STUB_STATUS=304 \
+        CLAUDE_PROJECT_DIR="$PROJECT" "$@" bash "$PRE" >/dev/null 2>"$TMPROOT/pre.err"
+  rc=$?
+  if [ "$rc" = 2 ] && grep -q ENV-32 "$TMPROOT/pre.err"; then echo y; else echo n; fi
+}
+r32="$(s32 GIT_DIR="$OTHER/.git" GIT_WORK_TREE="$OTHER")$(s32 GIT_INDEX_FILE="$TMPROOT/no-such-index-32")$(s32 GIT_LITERAL_PATHSPECS=1)"
+rm -rf "$SBX/.git"
+if [ "$c32" != y ]; then
+  no "T32: control not served while untracked, so the refusals prove nothing"
+elif [ "$r32" = nnn ]; then
+  ok "T32: GIT_DIR, GIT_INDEX_FILE and GIT_LITERAL_PATHSPECS in the session cannot make a tracked entry servable"
+else
+  no "T32: served with [GIT_DIR, GIT_INDEX_FILE, GIT_LITERAL_PATHSPECS] = $r32"
+fi
+
+# ---- T33. A served entry counts as recently used ------------------------------
+# Review finding: the pre hook touches what it serves so eviction keeps what is
+# used; deleting that `touch` left the suite green.
+P33="$TMPROOT/project33"; mkdir -p "$P33"
+post_env "$P33" https://docs.example.test/lru-a LRU-A STUB_ETAG='"a"' SDD_CACHE_MAX_ENTRIES=2; sleep 1
+post_env "$P33" https://docs.example.test/lru-b LRU-B STUB_ETAG='"b"' SDD_CACHE_MAX_ENTRIES=2; sleep 1
+served33=$(is_served https://docs.example.test/lru-a LRU-A "$P33"); sleep 1
+post_env "$P33" https://docs.example.test/lru-c LRU-C STUB_ETAG='"c"' SDD_CACHE_MAX_ENTRIES=2
+have() { [ -n "$(entry_for "$1")" ] && echo y || echo n; }
+r33="$served33$(have https://docs.example.test/lru-a)$(have https://docs.example.test/lru-b)$(have https://docs.example.test/lru-c)"
+if [ "$r33" = yyny ]; then
+  ok "T33: an entry served after a newer one was written outlives it at the cap (served, kept A, evicted B, kept C)"
+else
+  no "T33: [served A, kept A, kept B, kept C] = $r33 (want yyny)"
+fi
+
+# ---- T34. A key that is a symlink is not a key --------------------------------
+# Review finding: read_key refuses a symlinked .key; dropping that check left
+# the suite green.
+SBX_MAIN="$SBX"; SBX="$TMPROOT/home34"; mkdir -p "$SBX"
+R34="$SBX/.claude/.cache/sdd-cache"; URL34="https://docs.example.test/key-34"
+STUB_ETAG='"v34"' run_post "$URL34" "KEY-34"
+c34=$(is_served "$URL34" KEY-34)
+cp "$R34/.key" "$TMPROOT/key34.copy"; rm -f "$R34/.key"; ln -s "$TMPROOT/key34.copy" "$R34/.key"
+s34=$(is_served "$URL34" KEY-34)
+STUB_ETAG='"v34b"' run_post "https://docs.example.test/key-34b" "KEY-34B"
+w34=$([ -n "$(find "$R34" -type f -name "$(url_sha https://docs.example.test/key-34b).json")" ] && echo y || echo n)
+SBX="$SBX_MAIN"
+if [ "$c34" != y ]; then
+  no "T34: control not served with a real key, so the symlink leg proves nothing"
+elif [ "$s34$w34" = nn ]; then
+  ok "T34: with .key replaced by a symlink (even to the right bytes) nothing is served or written"
+else
+  no "T34: symlinked key: served=$s34 wrote=$w34"
+fi
+
+# ---- T35. The old in-project location is never read, even for a valid entry --
+# Review finding: T1's planted entry has no tag, so a pre hook that still read
+# <project>/.claude/sdd-cache/ but kept the tag check passed it. This one
+# carries the digest this machine would give it; moved to where the hook does
+# read, the same bytes are served (control), so only the location stops them.
+URL35="https://docs.example.test/inproject-35"; F35="$(url_sha "$URL35").json"
+mkdir -p "$PROJECT/.claude/sdd-cache"
+body35=$(jq -n --arg url "$URL35" \
+  '{url:$url, prompt:"p", etag:"\"v35\"", last_modified:"", content:"INPROJECT-35", fetched_at:0}')
+tag35=$(printf '%s' "$body35" | tag_with "$(head -c 64 "$CACHE_ROOT/.key")" "${PDIR##*/}")
+printf '%s' "$body35" | jq --arg tag "$tag35" '. + {tag:$tag}' > "$PROJECT/.claude/sdd-cache/$F35"
+s35=$(is_served "$URL35" INPROJECT-35)
+mv "$PROJECT/.claude/sdd-cache/$F35" "$PDIR/$F35"
+c35=$(is_served "$URL35" INPROJECT-35)
+rm -rf "$PROJECT/.claude"; rm -f "$PDIR/$F35"
+if [ "$c35" != y ]; then
+  no "T35: control not served from the cache dir, so the in-project leg proves nothing"
+elif [ "$s35" = n ]; then
+  ok "T35: a genuinely tagged entry inside the project tree is never served; only the out-of-tree cache is read"
+else
+  no "T35: an entry in <project>/.claude/sdd-cache was served"
+fi
+
+# ---- T36. The tracked check follows ~/.claude into a dotfiles checkout -------
+# Review finding: GNU stow's default layout makes ~/.claude a symlink into a
+# dotfiles repository. git discovers along the physical path, but the walk that
+# decides whether to ask git went up the logical one, found no .git, and a
+# tracked entry was served.
+SBX_MAIN="$SBX"; SBX="$TMPROOT/home36"; mkdir -p "$SBX"
+DOT36="$TMPROOT/dotfiles36"; git -c init.defaultBranch=main init -q "$DOT36"; mkdir -p "$DOT36/.claude"
+ln -s "$DOT36/.claude" "$SBX/.claude"
+URL36="https://docs.example.test/stow-36"
+STUB_ETAG='"v36"' run_post "$URL36" "STOW-36"
+E36="$(find "$DOT36/.claude/.cache/sdd-cache" -type f -name "$(url_sha "$URL36").json" 2>/dev/null | head -1)"
+c36=$(is_served "$URL36" STOW-36)
+[ -n "$E36" ] && git -C "$DOT36" add -f -- "${E36#"$DOT36"/}"
+t36="$(git -C "$DOT36" ls-files)"
+s36=$(is_served "$URL36" STOW-36)
+SBX="$SBX_MAIN"
+if [ -z "$E36" ] || [ "$t36" != "${E36#"$DOT36"/}" ]; then
+  no "T36: precondition not created (entry: ${E36:-none}, index: ${t36:-nothing})"
+elif [ "$c36" != y ]; then
+  no "T36: control not served while untracked, so the refusal proves nothing"
+elif [ "$s36" = n ]; then
+  ok "T36: with ~/.claude a symlink into a dotfiles repo, an entry that repo tracks is refused"
+else
+  no "T36: entry tracked by the dotfiles repo behind a symlinked ~/.claude was served"
+fi
+
+# ---- T37. A .gitignore without `*` is repaired ------------------------------
+# Review finding: the root's .gitignore was written only when missing. One left
+# empty (a full disk, or a kill between create and write) stayed empty for
+# good, and the key and entries showed in a versioned home.
+SBX_MAIN="$SBX"; SBX="$TMPROOT/home37"; mkdir -p "$SBX/.claude/.cache/sdd-cache"
+git -c init.defaultBranch=main init -q "$SBX"
+: > "$SBX/.claude/.cache/sdd-cache/.gitignore"
+STUB_ETAG='"v37"' run_post "https://docs.example.test/gitignore-37" "GI-37"
+g37="$(cat "$SBX/.claude/.cache/sdd-cache/.gitignore")"
+v37="$(git -C "$SBX" status --porcelain --untracked-files=all | grep -c '\.claude/' || true)"
+w37="$(find "$SBX/.claude/.cache/sdd-cache" -name '*.json' | wc -l | tr -d ' ')"
+SBX="$SBX_MAIN"
+if [ "$g37" = "*" ] && [ "$v37" = 0 ] && [ "$w37" -ge 1 ]; then
+  ok "T37: an empty .gitignore in the root is rewritten to \`*\` before anything lands, and nothing shows in the home repo"
+else
+  no "T37: .gitignore='$g37' paths visible=$v37 entries written=$w37"
+fi
+
+# ---- T38. curl reads no ~/.curlrc and globs nothing -------------------------
+# Review finding: without `-g`, a URL like ...?id=[1-40] turned one HEAD into
+# forty requests; without a leading `-q`, an `insecure` or proxy line in
+# ~/.curlrc changed who answered the revalidation.
+LOG38="$TMPROOT/curl-argv-38"; : > "$LOG38"
+STUB_ARGV_LOG="$LOG38" STUB_ETAG='"v38"' run_post "https://docs.example.test/flags-38" "FLAGS-38"
+STUB_ARGV_LOG="$LOG38" STUB_STATUS=304 run_pre "https://docs.example.test/flags-38" >/dev/null
+n38="$(wc -l < "$LOG38" | tr -d ' ')"
+bad38="$(grep -vc -- '^-q .* -g ' "$LOG38" || true)"
+if [ "$n38" -ge 2 ] && [ "$bad38" = 0 ]; then
+  ok "T38: every curl call in both hooks starts with -q and disables globbing (-g)"
+else
+  no "T38: $n38 curl call(s), $bad38 without a leading -q and a -g: $(head -2 "$LOG38" | tr '\n' '|')"
+fi
+
+# ---- T39. Only the hooks' own file names are ever deleted ---------------------
+# Review finding: the eviction filters matched any name that merely STARTED
+# with a hex digit (sdd-cache/backup/config.json went at a cap of 1), and the
+# sweeps matched any `.key.*` or `.tmp.*` (a `.key.bak` went too). A home of
+# its own, since this case evicts at a cap of one.
+SBX_MAIN="$SBX"; SBX="$TMPROOT/home39"; mkdir -p "$SBX"
+R39="$SBX/.claude/.cache/sdd-cache"
+STUB_ETAG='"v39a"' run_post "https://docs.example.test/shape-39a" "SHAPE-39A"
+P39="$(proj_dir "$PROJECT" "$R39")"
+mkdir -p "$R39/backup" "$R39/backup-empty"
+for f in "$R39/backup/config.json" "$P39/abc.json" "$R39/.key.bak" "$P39/.tmp.bak"; do
+  : > "$f"; touch -t 202601010000 "$f"
+done
+sleep 1
+post_env "$PROJECT" https://docs.example.test/shape-39b SHAPE-39B STUB_ETAG='"v39b"' \
+  SDD_CACHE_MAX_ENTRIES=1 SDD_CACHE_MAX_TOTAL=1
+kept39=""
+for f in "$R39/backup/config.json" "$P39/abc.json" "$R39/.key.bak" "$P39/.tmp.bak"; do
+  kept39="$kept39$([ -e "$f" ] && echo y || echo n)"
+done
+kept39="$kept39$([ -d "$R39/backup-empty" ] && echo y || echo n)"
+gone39=$([ -z "$(find "$R39" -name "$(url_sha https://docs.example.test/shape-39a).json")" ] && echo y || echo n)
+SBX="$SBX_MAIN"
+if [ "$gone39" != y ]; then
+  no "T39: control: the older genuine entry survived a cap of 1, so eviction never ran"
+elif [ "$kept39" = yyyyy ]; then
+  ok "T39: eviction and sweeps delete only the hooks' own names (config.json, abc.json, .key.bak, .tmp.bak, an empty backup dir all kept)"
+else
+  no "T39: kept [backup/config.json, abc.json, .key.bak, .tmp.bak, backup-empty/] = $kept39 (want yyyyy)"
+fi
+
+# ---- T40. A cap with a leading zero is decimal -------------------------------
+# Review finding: the arithmetic read 010 as octal (8), and 08 is no number at
+# all in base 8: the expansion failed and per-project eviction silently stopped.
+P40="$TMPROOT/project40"; P40B="$TMPROOT/project40b"; mkdir -p "$P40" "$P40B"
+for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+  post_env "$P40" "https://docs.example.test/decimal-$i" "D-$i" STUB_ETAG="\"d$i\"" SDD_CACHE_MAX_ENTRIES=010
+done
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  post_env "$P40B" "https://docs.example.test/decimal-b$i" "DB-$i" STUB_ETAG="\"db$i\"" SDD_CACHE_MAX_ENTRIES=08
+done
+n40a="$(find "$(proj_dir "$P40")" -type f -name '*.json' | wc -l | tr -d ' ')"
+n40b="$(find "$(proj_dir "$P40B")" -type f -name '*.json' | wc -l | tr -d ' ')"
+if [ "$n40a" = 10 ] && [ "$n40b" = 8 ]; then
+  ok "T40: SDD_CACHE_MAX_ENTRIES=010 keeps 10 and =08 keeps 8 (decimal, never octal)"
+else
+  no "T40: kept $n40a at 010 (want 10) and $n40b at 08 (want 8)"
+fi
+
+# ---- T41. A response with very large headers is still cached -----------------
+# Review finding: the header parsers read from a pipe into an awk that exits at
+# its first match; the writer then died of SIGPIPE, pipefail made that the
+# hook's status (141), and nothing was cached.
+URL41="https://docs.example.test/bigheaders-41"
+STUB_HEADER_PAD=300000 STUB_ETAG='"v41"' run_post "$URL41" "BIGHEAD-41"
+if [ -n "$(entry_for "$URL41")" ]; then
+  ok "T41: a page whose response carries 300 KB of headers after its ETag is still cached"
+else
+  no "T41: nothing cached behind 300 KB of headers"
+fi
+
+# ---- T42. `link/..` in the project path means the physical parent -------------
+# Review finding: a logical `cd` folds `a/link/..` back to `a`, so a different
+# directory reached that way shared a's cache.
+mkdir -p "$TMPROOT/elsewhere42/sub"
+ln -s "$TMPROOT/elsewhere42/sub" "$PROJECT/link42"
+URL42="https://docs.example.test/physical-42"
+STUB_ETAG='"v42"' run_post "$URL42" "PHYS-42"
+c42=$(is_served "$URL42" PHYS-42)
+s42=$(is_served "$URL42" PHYS-42 "$PROJECT/link42/..")
+rm -f "$PROJECT/link42"
+if [ "$c42" != y ]; then
+  no "T42: control not served for the project itself"
+elif [ "$s42" = n ]; then
+  ok "T42: <project>/link/.. is the link target's parent, a different project, and never sees the entry"
+else
+  no "T42: <project>/link/.. was served the project's entry"
+fi
+
+# ---- T43. The entry just written survives its own eviction pass -------------
+# Review finding: after the clock steps back, older entries carry future mtimes,
+# so `ls -t` ranked each new entry oldest and its own run evicted it.
+P43="$TMPROOT/project43"; mkdir -p "$P43"
+STUB_ETAG='"v43a"' run_post "https://docs.example.test/future-43a" "FUT-43A" "$P43"
+touch -t 209901010000 "$(entry_for https://docs.example.test/future-43a)"
+post_env "$P43" https://docs.example.test/future-43b FUT-43B STUB_ETAG='"v43b"' SDD_CACHE_MAX_ENTRIES=1
+r43="$(have https://docs.example.test/future-43b)$(have https://docs.example.test/future-43a)"
+if [ "$r43" = yn ]; then
+  ok "T43: at a cap of 1, the new entry is kept and the future-dated older one evicted"
+else
+  no "T43: [new kept, future-dated kept] = $r43 (want yn)"
+fi
+
+# ---- T44. QUOTING_STYLE cannot switch eviction off ---------------------------
+# Review finding: GNU ls honours QUOTING_STYLE even into a pipe, a quoted line
+# matches no entry name, and both caps silently stopped. BSD ls ignores the
+# variable, so the stub ls above plays GNU's part on every host.
+P44="$TMPROOT/project44"; mkdir -p "$P44"
+for i in 1 2 3; do
+  post_env "$P44" "https://docs.example.test/quoted-$i" "Q-$i" STUB_ETAG="\"q$i\"" \
+    SDD_CACHE_MAX_ENTRIES=1 QUOTING_STYLE=shell-always
+done
+n44="$(find "$(proj_dir "$P44")" -type f -name '*.json' | wc -l | tr -d ' ')"
+if [ "$n44" = 1 ]; then
+  ok "T44: with QUOTING_STYLE=shell-always set, the per-project cap still holds"
+else
+  no "T44: $n44 entries at a cap of 1 with QUOTING_STYLE set"
+fi
+
+# ---- T45. One bound across every project; emptied directories go ------------
 # Review finding: one directory per project directory, eviction only inside the
 # current one, and nothing reclaimed the directories of deleted projects, so a
 # worktree-per-session workflow grew the cache without limit. LAST case on
@@ -700,9 +1081,9 @@ dirs28="$([ -e "$(proj_dir "$TMPROOT/p28a")" ] && echo y || echo n)$([ -e "$PDIR
 if [ "$total28" = 3 ] && [ "$kept28" = yyy ] && [ "$gone28" = nn ] && [ "$dirs28" = nn ] \
    && [ -e "$OUT28/0123456789abcdef0123456789abcdef.json" ] \
    && [ -f "$CACHE_ROOT/.key" ] && [ -f "$CACHE_ROOT/.gitignore" ]; then
-  ok "T28: the whole root holds at most SDD_CACHE_MAX_TOTAL entries (newest kept), emptied project dirs are removed, nothing is evicted through a symlinked dir"
+  ok "T45: the whole root holds at most SDD_CACHE_MAX_TOTAL entries (newest kept), emptied project dirs are removed, nothing is evicted through a symlinked dir"
 else
-  no "T28: left in the root: [$(find "$CACHE_ROOT" -mindepth 2 -maxdepth 2 | sed "s|^$CACHE_ROOT/||" | tr '\n' ' ')]; total=$total28 (want 3), newest c2/c1/b1 kept=$kept28, oldest a2/a1 kept=$gone28, emptied dirs p28a/main kept=$dirs28, symlinked-dir entry kept=$([ -e "$OUT28/0123456789abcdef0123456789abcdef.json" ] && echo y || echo n), key=$([ -f "$CACHE_ROOT/.key" ] && echo y || echo n), gitignore=$([ -f "$CACHE_ROOT/.gitignore" ] && echo y || echo n)"
+  no "T45: left in the root: [$(find "$CACHE_ROOT" -mindepth 2 -maxdepth 2 | sed "s|^$CACHE_ROOT/||" | tr '\n' ' ')]; total=$total28 (want 3), newest c2/c1/b1 kept=$kept28, oldest a2/a1 kept=$gone28, emptied dirs p28a/main kept=$dirs28, symlinked-dir entry kept=$([ -e "$OUT28/0123456789abcdef0123456789abcdef.json" ] && echo y || echo n), key=$([ -f "$CACHE_ROOT/.key" ] && echo y || echo n), gitignore=$([ -f "$CACHE_ROOT/.gitignore" ] && echo y || echo n)"
 fi
 
 echo "---"

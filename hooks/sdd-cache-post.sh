@@ -28,8 +28,9 @@
 #
 # Bounded: at most SDD_CACHE_MAX_ENTRIES (default 256) entries per project and
 # SDD_CACHE_MAX_TOTAL (default 1024) across all projects; the least recently
-# written or served are evicted, emptied project directories are removed, and
-# temp files abandoned by a killed run are swept after 10 minutes.
+# written or served are evicted (never the entry the same run wrote), emptied
+# project directories are removed, and temp files abandoned by a killed run are
+# swept after 10 minutes, in every project's directory.
 #
 # Debug logging: SDD_CACHE_DEBUG=1 only. (The upstream also honoured a `.debug`
 # file inside the project's cache dir, a switch any cloned repo could flip to
@@ -43,6 +44,10 @@
 
 set -euo pipefail
 umask 077
+# `set -e` exits with the failing command's own status, and a non-zero exit here
+# reports this hook as failed on a fetch that worked. Anything nobody handled
+# ends the hook quietly instead: at worst, nothing is cached.
+trap 'exit 0' ERR
 
 command -v jq   >/dev/null 2>&1 || exit 0
 command -v curl >/dev/null 2>&1 || exit 0
@@ -58,7 +63,8 @@ sha256_hex() {
 }
 CACHE_ROOT="$HOME/.claude/.cache/sdd-cache"
 KEY_FILE="$CACHE_ROOT/.key"
-# One cache directory per project directory, named from its canonical path.
+# One cache directory per project directory, named from its canonical path:
+# `cd -P`, so `a/link/..` is the link target's parent, never `a` read lexically.
 # Deliberately NOT derived from git: git metadata lives inside the project, so
 # the project could choose its key. An unpacked archive's .git/commondir can
 # name another repo's git dir, an enclosing repo (a versioned home) lumps
@@ -66,7 +72,7 @@ KEY_FILE="$CACHE_ROOT/.key"
 # those was reproduced sharing one cache across unrelated projects.
 project_key() {
   local dir="${CLAUDE_PROJECT_DIR:-$PWD}" canon=""
-  canon=$(cd "$dir" 2>/dev/null && pwd -P) || canon=""
+  canon=$(cd -P "$dir" 2>/dev/null && pwd -P) || canon=""
   [ -n "$canon" ] || canon="$dir"
   printf '%s' "$canon" | sha256_hex | cut -c1-16
 }
@@ -89,13 +95,22 @@ entry_digest() {
 }
 # The root: never a symlink, 0700, and carrying a `*` .gitignore BEFORE anything
 # else (the key, an entry, a debug log) is written into it, so no repository
-# that contains ~/.claude can pick any of it up. Non-zero when unusable.
+# that contains ~/.claude can pick any of it up. A .gitignore that is missing,
+# is not exactly `*` (an empty one is what a full disk or a kill mid-write
+# leaves), or is a symlink is rewritten through a temp and a rename, so it is
+# never observed half-written. Non-zero when the root is unusable.
 ensure_root() {
+  local gi="$CACHE_ROOT/.gitignore" tmp=""
   [ -L "$CACHE_ROOT" ] && return 1
   mkdir -p "$CACHE_ROOT" 2>/dev/null || return 1
   chmod 700 "$CACHE_ROOT" 2>/dev/null || true
-  if [ ! -e "$CACHE_ROOT/.gitignore" ] && [ ! -L "$CACHE_ROOT/.gitignore" ]; then
-    printf '*\n' > "$CACHE_ROOT/.gitignore" 2>/dev/null || true
+  [ -d "$gi" ] && return 1
+  if [ -L "$gi" ] || [ "$(cat -- "$gi" 2>/dev/null || true)" != "*" ]; then
+    tmp=$(mktemp "$CACHE_ROOT/.gitignore.XXXXXX" 2>/dev/null) || return 1
+    if ! { printf '*\n' > "$tmp" && mv -f -- "$tmp" "$gi"; } 2>/dev/null; then
+      rm -f -- "$tmp"
+      return 1
+    fi
   fi
   return 0
 }
@@ -154,20 +169,23 @@ CACHE_FILE="$CACHE_DIR/$(printf '%s' "$URL" | sha256_hex | cut -c1-32).json"
 # http to https, and a plaintext HEAD would let the network choose the
 # validators). Follow redirects so they match the URL the agent actually talked
 # to. Strip CR so awk's paragraph mode recognises blank separators between
-# response blocks on a redirect chain.
-HEAD_OUT=$(curl -sI -L --max-time 5 --proto '=https' --proto-redir '=https' "$URL" 2>/dev/null | tr -d '\r' || true)
+# response blocks on a redirect chain. `-q` (first, or curl ignores it) keeps
+# ~/.curlrc out; `-g` stops URL globbing, which turns `[1-40]` into forty HEADs.
+HEAD_OUT=$(curl -q -sI -g -L --max-time 5 --proto '=https' --proto-redir '=https' "$URL" 2>/dev/null | tr -d '\r' || true)
 
 # Take only the final response's headers (last paragraph) to avoid picking
-# up validators from intermediate 301/302 hops.
-FINAL_HEADERS=$(printf '%s' "$HEAD_OUT" | awk '
+# up validators from intermediate 301/302 hops. Here-strings, not pipes: an awk
+# that exits at the first match closes a pipe early, the writer then dies of
+# SIGPIPE, and with pipefail a large response ended the hook (status 141).
+FINAL_HEADERS=$(awk '
   BEGIN { RS = ""; last = "" }
   { last = $0 }
   END { print last }
-')
+' <<< "$HEAD_OUT")
 
 extract_header() {
   local name="$1"
-  printf '%s' "$FINAL_HEADERS" | awk -v h="$name" '
+  awk -v h="$name" '
     BEGIN { FS = ":" }
     tolower($1) == tolower(h) {
       sub(/^[^:]*:[ \t]*/, "")
@@ -175,7 +193,7 @@ extract_header() {
       print
       exit
     }
-  '
+  ' <<< "$FINAL_HEADERS"
 }
 
 ETAG=$(extract_header "ETag")
@@ -228,6 +246,7 @@ if [ -n "$ENTRY" ]; then
 fi
 if [ "${#TAG}" -ne 64 ]; then dbg "jq or digest failed, nothing written"; exit 0; fi
 
+WROTE=0
 TMP=$(mktemp "$CACHE_DIR/.tmp.XXXXXX" 2>/dev/null) || TMP=""
 if [ -z "$TMP" ]; then dbg "mktemp failed, nothing written"; exit 0; fi
 if printf '%s' "$ENTRY" | jq --arg tag "$TAG" '. + {tag: $tag}' > "$TMP" 2>/dev/null \
@@ -237,6 +256,7 @@ then
   # Only ever onto a regular file or nothing: `mv` onto a directory (or a
   # symlink to one) would move the entry into it.
   mv -f -- "$TMP" "$CACHE_FILE"
+  WROTE=1
   dbg "wrote cache file $CACHE_FILE"
 else
   rm -f -- "$TMP"
@@ -244,19 +264,38 @@ else
 fi
 
 # Evict past the bound: newest (written or served) first, everything past the
-# cap goes. `ls -t` is the one portable mtime sort (BSD and GNU stat disagree).
-# `-d` lists a directory operand as itself rather than its contents, and every
-# path is checked to be a regular file directly inside the cache dir before it
-# is removed.
-MAX="${SDD_CACHE_MAX_ENTRIES:-256}"
-case "$MAX" in ''|*[!0-9]*) MAX=256 ;; esac
-[ "$MAX" -ge 1 ] || MAX=256
-# shellcheck disable=SC2012
-ls -1td -- "$CACHE_DIR"/*.json 2>/dev/null \
-  | tail -n +"$((MAX + 1))" \
+# cap goes. `ls -t` is the one portable mtime sort (BSD and GNU stat disagree);
+# QUOTING_STYLE and CLICOLOR_FORCE are dropped, since GNU ls quotes (and BSD ls
+# colours) even into a pipe when told to, and a quoted line matches no name
+# below. `-d` lists a directory operand as itself rather than its contents.
+# Only exact names are removed (16 hex digits per project directory, 32 per
+# entry) and only regular files, never through a symlink. The entry this run
+# just wrote is never a candidate: it holds one of the slots, so older entries
+# stamped in the future (a clock stepped back) cannot evict it. Caps are
+# decimal: `010` is ten, and `08` is not an arithmetic error that disables
+# eviction.
+H='[0-9a-f]'
+HEX16="$H$H$H$H$H$H$H$H$H$H$H$H$H$H$H$H"
+HEX32="$HEX16$HEX16"
+cap() {  # $1 = value, $2 = default -> a decimal count of at least 1
+  local v="$1"
+  case "$v" in ''|*[!0-9]*) v="$2" ;; esac
+  v=$((10#$v))
+  [ "$v" -ge 1 ] || v="$2"
+  printf '%s' "$v"
+}
+by_age() {  # newest first, the entry this run wrote left out
+  # shellcheck disable=SC2012
+  env -u QUOTING_STYLE -u CLICOLOR_FORCE ls -1td -- "$@" 2>/dev/null \
+    | { if [ "$WROTE" = 1 ]; then grep -vxF -- "$CACHE_FILE" || true; else cat; fi; }
+}
+MAX=$(cap "${SDD_CACHE_MAX_ENTRIES:-}" 256)
+by_age "$CACHE_DIR"/*.json \
+  | tail -n +"$((MAX - WROTE + 1))" \
   | while IFS= read -r old; do
+      # shellcheck disable=SC2254  # the hex pattern is meant to glob
       case "$old" in
-        "$CACHE_DIR"/[0-9a-f]*.json)
+        "$CACHE_DIR"/$HEX32.json)
           if [ -f "$old" ] && [ ! -L "$old" ]; then rm -f -- "$old"; fi ;;
       esac
     done || true
@@ -264,25 +303,27 @@ ls -1td -- "$CACHE_DIR"/*.json 2>/dev/null \
 # The same bound across EVERY project: one directory per project directory,
 # and a worktree per session creates many that are never used again, so a
 # per-project cap alone lets the root grow without limit. Oldest entries go
-# first, whole-root; directories left empty are removed.
-TOTAL="${SDD_CACHE_MAX_TOTAL:-1024}"
-case "$TOTAL" in ''|*[!0-9]*) TOTAL=1024 ;; esac
-[ "$TOTAL" -ge 1 ] || TOTAL=1024
-# shellcheck disable=SC2012
-ls -1td -- "$CACHE_ROOT"/*/*.json 2>/dev/null \
-  | tail -n +"$((TOTAL + 1))" \
+# first, whole-root; directories left empty are removed below.
+TOTAL=$(cap "${SDD_CACHE_MAX_TOTAL:-}" 1024)
+by_age "$CACHE_ROOT"/*/*.json \
+  | tail -n +"$((TOTAL - WROTE + 1))" \
   | while IFS= read -r old; do
+      # shellcheck disable=SC2254  # the hex patterns are meant to glob
       case "$old" in
-        "$CACHE_ROOT"/[0-9a-f]*/[0-9a-f]*.json)
+        "$CACHE_ROOT"/$HEX16/$HEX32.json)
           if [ -f "$old" ] && [ ! -L "$old" ] && [ ! -L "${old%/*}" ]; then rm -f -- "$old"; fi ;;
       esac
     done || true
-find "$CACHE_ROOT" -mindepth 1 -maxdepth 1 -type d -empty -exec rmdir -- {} + 2>/dev/null || true
 
 # Temp files a killed run abandoned are never counted by the caps above: entry
-# temps in this project's directory, and key temps (a second hard link to the
-# live key, once `ln` has run) in the root.
-find "$CACHE_DIR" -maxdepth 1 -type f -name '.tmp.*' -mmin +10 -exec rm -f -- {} + 2>/dev/null || true
-find "$CACHE_ROOT" -maxdepth 1 -type f -name '.key.*' -mmin +10 -exec rm -f -- {} + 2>/dev/null || true
+# temps in EVERY project's directory (a project that never fetches again would
+# otherwise keep its temp, and with it its directory, forever), and key temps
+# (a second hard link to the live key, once `ln` has run) and .gitignore
+# temps in the root. Only mktemp's own shape (six characters after the dot), so
+# a `.key.bak` someone keeps there is not touched. `find` does not descend a
+# symlinked project directory. Then the project directories left empty go.
+find "$CACHE_ROOT" -mindepth 2 -maxdepth 2 -type f -name '.tmp.??????' -mmin +10 -exec rm -f -- {} + 2>/dev/null || true
+find "$CACHE_ROOT" -maxdepth 1 -type f \( -name '.key.??????' -o -name '.gitignore.??????' \) -mmin +10 -exec rm -f -- {} + 2>/dev/null || true
+find "$CACHE_ROOT" -mindepth 1 -maxdepth 1 -type d -empty -name "$HEX16" -exec rmdir -- {} + 2>/dev/null || true
 
 exit 0

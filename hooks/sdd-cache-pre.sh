@@ -37,6 +37,11 @@
 
 set -euo pipefail
 umask 077
+# Exit 2 is Claude Code's BLOCK signal for a PreToolUse hook, and `set -e` exits
+# with the failing command's own status: a broken shasum (perl exits 2 when it
+# cannot load a module) blocked every WebFetch. Anything nobody handled lets
+# the fetch through instead. The one intended exit 2, a cache hit, is `exit`.
+trap 'exit 0' ERR
 
 # Graceful degradation: if any dependency is missing, let the fetch through.
 command -v jq   >/dev/null 2>&1 || exit 0
@@ -53,7 +58,8 @@ sha256_hex() {
 }
 CACHE_ROOT="$HOME/.claude/.cache/sdd-cache"
 KEY_FILE="$CACHE_ROOT/.key"
-# One cache directory per project directory, named from its canonical path.
+# One cache directory per project directory, named from its canonical path:
+# `cd -P`, so `a/link/..` is the link target's parent, never `a` read lexically.
 # Deliberately NOT derived from git: git metadata lives inside the project, so
 # the project could choose its key. An unpacked archive's .git/commondir can
 # name another repo's git dir, an enclosing repo (a versioned home) lumps
@@ -61,7 +67,7 @@ KEY_FILE="$CACHE_ROOT/.key"
 # those was reproduced sharing one cache across unrelated projects.
 project_key() {
   local dir="${CLAUDE_PROJECT_DIR:-$PWD}" canon=""
-  canon=$(cd "$dir" 2>/dev/null && pwd -P) || canon=""
+  canon=$(cd -P "$dir" 2>/dev/null && pwd -P) || canon=""
   [ -n "$canon" ] || canon="$dir"
   printf '%s' "$canon" | sha256_hex | cut -c1-16
 }
@@ -84,13 +90,22 @@ entry_digest() {
 }
 # The root: never a symlink, 0700, and carrying a `*` .gitignore BEFORE anything
 # else (the key, an entry, a debug log) is written into it, so no repository
-# that contains ~/.claude can pick any of it up. Non-zero when unusable.
+# that contains ~/.claude can pick any of it up. A .gitignore that is missing,
+# is not exactly `*` (an empty one is what a full disk or a kill mid-write
+# leaves), or is a symlink is rewritten through a temp and a rename, so it is
+# never observed half-written. Non-zero when the root is unusable.
 ensure_root() {
+  local gi="$CACHE_ROOT/.gitignore" tmp=""
   [ -L "$CACHE_ROOT" ] && return 1
   mkdir -p "$CACHE_ROOT" 2>/dev/null || return 1
   chmod 700 "$CACHE_ROOT" 2>/dev/null || true
-  if [ ! -e "$CACHE_ROOT/.gitignore" ] && [ ! -L "$CACHE_ROOT/.gitignore" ]; then
-    printf '*\n' > "$CACHE_ROOT/.gitignore" 2>/dev/null || true
+  [ -d "$gi" ] && return 1
+  if [ -L "$gi" ] || [ "$(cat -- "$gi" 2>/dev/null || true)" != "*" ]; then
+    tmp=$(mktemp "$CACHE_ROOT/.gitignore.XXXXXX" 2>/dev/null) || return 1
+    if ! { printf '*\n' > "$tmp" && mv -f -- "$tmp" "$gi"; } 2>/dev/null; then
+      rm -f -- "$tmp"
+      return 1
+    fi
   fi
   return 0
 }
@@ -101,11 +116,13 @@ dbg() {
 }
 # ------------------------------------------------------------------------------
 
-# 0 when $1 or one of its ancestors holds a .git entry (a work tree git would
-# discover from there). Absolute paths only; anything else counts as "no".
+# 0 when $1's PHYSICAL path, or one of its ancestors, holds a .git entry: git
+# discovers along the physical path, so a ~/.claude symlinked into a dotfiles
+# checkout is inside that checkout, and the walk must see it too. A path that
+# cannot be resolved counts as "no".
 in_git_tree() {
-  local d="$1"
-  case "$d" in /*) ;; *) return 1 ;; esac
+  local d=""
+  d=$(cd -P "$1" 2>/dev/null && pwd -P) || return 1
   while :; do
     [ -e "$d/.git" ] && return 0
     [ "$d" = "/" ] && return 1
@@ -116,18 +133,25 @@ in_git_tree() {
 # repository is there and git could not answer (fail closed). 1 = untracked.
 # The WHOLE path is folded from the work-tree top, not just the file name: on
 # a case-folding disk a checkout can track the entry under an upper-case
-# directory. The session's GIT_* location variables are scrubbed so they cannot
-# point the check at some other repository. A repository git cannot discover
+# directory. (git folds ASCII only. A repository that tracks a Unicode-folded
+# variant of this path would have to live in HOME itself, and whoever controls
+# that controls ~/.claude/settings.json and so every hook: out of model.) The
+# session's GIT_* location and pathspec variables are scrubbed, so they can
+# neither point the check at another repository nor turn the pathspec magic
+# off: GIT_LITERAL_PATHSPECS=1 makes ':(top,icase)...' a literal name that
+# never matches, which reads as "untracked". A repository git cannot discover
 # from here (a bare `--git-dir` dotfiles setup) is out of reach by
 # construction; the root's `*` .gitignore means entries get into one only by
 # an explicit `add -f`.
+GIT_SCRUB=(-u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR
+  -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES -u GIT_NAMESPACE
+  -u GIT_LITERAL_PATHSPECS -u GIT_GLOB_PATHSPECS -u GIT_NOGLOB_PATHSPECS
+  -u GIT_ICASE_PATHSPECS)
 tracked_or_undecidable() {
   local dir="$1" name="$2" prefix="" rc=0
   in_git_tree "$dir" || return 1
-  prefix=$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR \
-    git -C "$dir" rev-parse --show-prefix 2>/dev/null) || return 0
-  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR \
-    git -C "$dir" ls-files --error-unmatch -- ":(top,icase)${prefix}${name}" \
+  prefix=$(env "${GIT_SCRUB[@]}" git -C "$dir" rev-parse --show-prefix 2>/dev/null) || return 0
+  env "${GIT_SCRUB[@]}" git -C "$dir" ls-files --error-unmatch -- ":(top,icase)${prefix}${name}" \
     >/dev/null 2>&1 || rc=$?
   [ "$rc" -eq 1 ] && return 1
   return 0
@@ -185,8 +209,10 @@ HEADERS=()
 [ -n "$LAST_MOD" ] && HEADERS+=(-H "If-Modified-Since: $LAST_MOD")
 
 # https only, as WebFetch itself upgrades to it: over plaintext the network
-# could answer 304 and pin a stale entry.
-STATUS=$(curl -sI -o /dev/null -w "%{http_code}" \
+# could answer 304 and pin a stale entry. `-q` (first, or curl ignores it) keeps
+# ~/.curlrc out, where an `insecure` or proxy line would change who answers;
+# `-g` stops URL globbing, which turns `[1-40]` into forty requests.
+STATUS=$(curl -q -sI -g -o /dev/null -w "%{http_code}" \
   --max-time 5 -L --proto '=https' --proto-redir '=https' \
   "${HEADERS[@]}" \
   "$URL" 2>/dev/null || echo "000")
