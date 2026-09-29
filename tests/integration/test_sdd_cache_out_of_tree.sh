@@ -17,9 +17,9 @@
 # Cases T10 and T15-T22 come from two independent adversarial reviews of the
 # first version of the fix, T23-T28 (plus the planted legs of T15 and the
 # no-directory half of T11) from a third review of the second, T28-T44 from a
-# fourth, T45-T46 plus legs of T37, T39 and T44 from a fifth, and T47-T48
-# from a sixth (the global cap is T49, still last); each names the defect it
-# pins.
+# fourth, T45-T46 plus legs of T37, T39 and T44 from a fifth, T47-T48 from a
+# sixth, and T49 from a seventh (the global cap is T50, still last); each names
+# the defect it pins.
 #
 # Hermetic: `curl` is a PATH stub (no network), HOME is a sandbox, and the
 # test runs from its own temp dir so nothing it spawns can write into the
@@ -68,8 +68,9 @@ cat > "$BIN/curl" <<'STUB'
 #!/usr/bin/env bash
 # STUB_ARGV_LOG: append this call's arguments (to check the hooks' flags).
 if [ -n "${STUB_ARGV_LOG:-}" ]; then printf '%s\n' "$*" >> "$STUB_ARGV_LOG"; fi
-# STUB_LOCALE_LOG: append the LC_ALL this call ran under (empty when unset).
-if [ -n "${STUB_LOCALE_LOG:-}" ]; then printf '%s\n' "${LC_ALL:-}" >> "$STUB_LOCALE_LOG"; fi
+# STUB_LOCALE_LOG: append the LC_ALL this call ran under: `<unset>` when it has
+# none, an empty line when it is set to the empty string.
+if [ -n "${STUB_LOCALE_LOG:-}" ]; then printf '%s\n' "${LC_ALL-<unset>}" >> "$STUB_LOCALE_LOG"; fi
 # Like real curl under --proto '=https': a plain-http URL fails before any
 # request, printing nothing. The URL is the last argument in both hooks.
 proto=""; prev=""; url=""
@@ -554,7 +555,7 @@ if [ -e "$TMPROOT/caseprobe" ]; then
   rc=$(STUB_STATUS=304 run_pre "$URL21")
   rm -rf "$SBX/.git"
   # Eviction deletes only the lower-case hex names the hook writes, so this
-  # hand-made upper-case one would outlive every cap (T49 counts it).
+  # hand-made upper-case one would outlive every cap (T50 counts it).
   rm -f "$E21UP"
   if [ "$tracked21" != "${E21UP#"$SBX"/}" ]; then
     no "T21: precondition not created -- the index holds '${tracked21:-nothing}', not the upper-case entry"
@@ -1127,7 +1128,8 @@ fi
 # Review finding: `export LC_ALL=C` reached curl too. curl takes its character
 # set from the environment, and a libidn2 build (Linux) converts a non-ASCII
 # host name from it; in the C locale that set is ASCII, so such a URL was never
-# cached. A caller with no LC_ALL passes none on.
+# cached. A caller with no LC_ALL hands curl an empty one, which setlocale
+# treats as unset (LC_CTYPE and LANG then apply, as they did before).
 LOG47="$TMPROOT/curl-locale-47"; : > "$LOG47"
 URL47="https://docs.example.test/locale-47"
 post_env "$PROJECT" "$URL47" "LOCALE-47" STUB_ETAG='"v47"' STUB_LOCALE_LOG="$LOG47" LC_ALL=en_US.UTF-8
@@ -1141,9 +1143,9 @@ printf '%s' "LOCALE-47B" \
       STUB_ETAG='"v47b"' STUB_LOCALE_LOG="$LOG47" CLAUDE_PROJECT_DIR="$PROJECT" bash "$POST" >/dev/null 2>&1
 seen47="$(tr '\n' '|' < "$LOG47")"
 if [ "$rc47" = 2 ] && [ "$seen47" = "en_US.UTF-8|en_US.UTF-8||" ]; then
-  ok "T47: curl runs under the caller's LC_ALL in both hooks, and under none when the caller has none"
+  ok "T47: curl runs under the caller's LC_ALL in both hooks, and under an empty one when the caller has none"
 else
-  no "T47: pre exit $rc47; LC_ALL seen by curl [post, pre, post with none] = '$seen47' (want 'en_US.UTF-8|en_US.UTF-8||')"
+  no "T47: pre exit $rc47; LC_ALL seen by curl [post, pre, post with none] = '$seen47' (want 'en_US.UTF-8|en_US.UTF-8||', the last one empty, not <unset>)"
 fi
 
 # ---- T48. A backslash in the home path cannot evict the entry just written --
@@ -1165,7 +1167,34 @@ else
   no "T48: $n48 entries at a cap of 1; the entry just written present: $last48"
 fi
 
-# ---- T49. One bound across every project; emptied directories go ------------
+# ---- T49. An entry this run did not write is counted like any other --------
+# Review finding: nothing pinned `WROTE` in the exclusion. Left out even when
+# this run wrote nothing, an older entry for the same URL (still at the path
+# this run would have written) escaped the count, and a project kept one entry
+# over its cap. The run fails to write because its last jq fails.
+SBX_MAIN="$SBX"; SBX="$TMPROOT/home49"; mkdir -p "$SBX"
+R49="$SBX/.claude/.cache/sdd-cache"
+URL49A="https://docs.example.test/unwritten-49a"
+STUB_ETAG='"v49a"' run_post "$URL49A" "UNWRITTEN-49A"
+STUB_ETAG='"v49b"' run_post "https://docs.example.test/unwritten-49b" "UNWRITTEN-49B"
+P49="$(proj_dir "$PROJECT" "$R49")"
+touch -t 202601010000 "$P49/$(url_sha "$URL49A").json"
+JQ49="$TMPROOT/jq-fails-on-tag"; mkdir -p "$JQ49"
+printf '#!/usr/bin/env bash\nfor a in "$@"; do [ "$a" = tag ] && exit 1; done\nexec %q "$@"\n' \
+  "$(command -v jq)" > "$JQ49/jq"
+chmod +x "$JQ49/jq"
+post_env "$PROJECT" "$URL49A" "UNWRITTEN-49A-AGAIN" STUB_ETAG='"v49c"' \
+  SDD_CACHE_MAX_ENTRIES=1 PATH="$JQ49:$BIN:$PATH"
+n49="$(find "$P49" -type f -name '*.json' | wc -l | tr -d ' ')"
+kept49="$([ -f "$P49/$(url_sha "https://docs.example.test/unwritten-49b").json" ] && echo y || echo n)"
+SBX="$SBX_MAIN"
+if [ "$n49" = 1 ] && [ "$kept49" = y ]; then
+  ok "T49: a run that writes nothing still counts the entry at its own path, and a cap of 1 holds"
+else
+  no "T49: $n49 entries at a cap of 1 after a run that wrote nothing (newest kept: $kept49)"
+fi
+
+# ---- T50. One bound across every project; emptied directories go ------------
 # Review finding: one directory per project directory, eviction only inside the
 # current one, and nothing reclaimed the directories of deleted projects, so a
 # worktree-per-session workflow grew the cache without limit. LAST case on
@@ -1195,9 +1224,9 @@ dirs28="$([ -e "$(proj_dir "$TMPROOT/p28a")" ] && echo y || echo n)$([ -e "$PDIR
 if [ "$total28" = 3 ] && [ "$kept28" = yyy ] && [ "$gone28" = nn ] && [ "$dirs28" = nn ] \
    && [ -e "$OUT28/0123456789abcdef0123456789abcdef.json" ] \
    && [ -f "$CACHE_ROOT/.key" ] && [ -f "$CACHE_ROOT/.gitignore" ]; then
-  ok "T49: the whole root holds at most SDD_CACHE_MAX_TOTAL entries (newest kept), emptied project dirs are removed, nothing is evicted through a symlinked dir"
+  ok "T50: the whole root holds at most SDD_CACHE_MAX_TOTAL entries (newest kept), emptied project dirs are removed, nothing is evicted through a symlinked dir"
 else
-  no "T49: left in the root: [$(find "$CACHE_ROOT" -mindepth 2 -maxdepth 2 | sed "s|^$CACHE_ROOT/||" | tr '\n' ' ')]; total=$total28 (want 3), newest c2/c1/b1 kept=$kept28, oldest a2/a1 kept=$gone28, emptied dirs p28a/main kept=$dirs28, symlinked-dir entry kept=$([ -e "$OUT28/0123456789abcdef0123456789abcdef.json" ] && echo y || echo n), key=$([ -f "$CACHE_ROOT/.key" ] && echo y || echo n), gitignore=$([ -f "$CACHE_ROOT/.gitignore" ] && echo y || echo n)"
+  no "T50: left in the root: [$(find "$CACHE_ROOT" -mindepth 2 -maxdepth 2 | sed "s|^$CACHE_ROOT/||" | tr '\n' ' ')]; total=$total28 (want 3), newest c2/c1/b1 kept=$kept28, oldest a2/a1 kept=$gone28, emptied dirs p28a/main kept=$dirs28, symlinked-dir entry kept=$([ -e "$OUT28/0123456789abcdef0123456789abcdef.json" ] && echo y || echo n), key=$([ -f "$CACHE_ROOT/.key" ] && echo y || echo n), gitignore=$([ -f "$CACHE_ROOT/.gitignore" ] && echo y || echo n)"
 fi
 
 echo "---"

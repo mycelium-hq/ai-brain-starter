@@ -309,7 +309,7 @@ by_age() {  # newest first, the entry this run wrote left out
   # escape sequences such as a `\t` in the path.
   # shellcheck disable=SC2012
   env -u QUOTING_STYLE -u CLICOLOR_FORCE ls -1td -- "$@" 2>/dev/null \
-    | SDD_SKIP=$skip awk '$0 != ENVIRON["SDD_SKIP"]'
+    | SDD_OWN_ENTRY=$skip awk '$0 != ENVIRON["SDD_OWN_ENTRY"]'
 }
 MAX=$(cap "${SDD_CACHE_MAX_ENTRIES:-}" 256)
 by_age "$CACHE_DIR"/*.json \
