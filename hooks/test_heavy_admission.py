@@ -480,9 +480,35 @@ def leg_pathprobe() -> None:
                                   "cwd": str(tmp), "tool_use_id": "toolu_pathprobe"})
             subprocess.run([sys.executable, str(RETRY_BUDGET)], input=payload, capture_output=True,
                            text=True, encoding="utf-8", errors="replace", env=env, timeout=30)
-            check(f"P a git/ps/sysctl planted via a {tag} PATH entry, reached through the "
-                  "command's own `cd`, never ran",
+            check(f"P git planted via a {tag} PATH entry, reached through the command's own "
+                  "`cd` (git alone: ps/sysctl are never chdir'd there, so this shape never "
+                  "reaches them -- see the hook-process-cwd case below), never ran",
                   not marker.exists(), "marker file appeared: a planted binary executed pre-approval")
+
+        # finding 2 (LOW): the cases above are all reached via a `cd`/-C the
+        # COMMAND TEXT chose. A planted git/ps/sysctl in the HOOK PROCESS's
+        # OWN starting cwd -- set by whatever launches the hook, never by the
+        # command text -- is a distinct surface (r6a's "same class" MEDIUM):
+        # closed in code by _tool()'s absolute-only PATH filter, which is
+        # cwd-independent by construction, but nothing exercised it before
+        # this case (a mutant reverting _tool() to a bare name passed the
+        # whole suite). No `cd`/-C anywhere in either command below; only the
+        # subprocess's own `cwd=` reaches `evil`.
+        cwd_marker = tmp / "marker-cwd"
+        for command, payload_cwd in (("next build", str(tmp)), ("git push", str(evil))):
+            cwd_marker.unlink(missing_ok=True)
+            plant(evil, cwd_marker)
+            env = {**os.environ, "HOME": str(home), "USERPROFILE": str(home), "TMPDIR": str(home),
+                   "PATH": "." + os.pathsep + os.environ.get("PATH", "")}
+            payload = json.dumps({"session_id": "heavy-admission-pathprobe-cwd", "hook_event_name": "PreToolUse",
+                                  "tool_name": "Bash", "tool_input": {"command": command},
+                                  "cwd": payload_cwd, "tool_use_id": f"toolu_pathprobe_cwd_{len(command)}"})
+            subprocess.run([sys.executable, str(RETRY_BUDGET)], input=payload, capture_output=True,
+                           text=True, encoding="utf-8", errors="replace", env=env,
+                           cwd=str(evil), timeout=30)
+            check(f"P git/ps/sysctl planted in the HOOK PROCESS's own cwd (never chosen by "
+                  f"the command text), reached via a '.' PATH entry, never ran ({command!r})",
+                  not cwd_marker.exists(), "marker file appeared: a planted binary executed pre-approval")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
