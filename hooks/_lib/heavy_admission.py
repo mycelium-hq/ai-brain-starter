@@ -216,18 +216,22 @@ def _classify(t: list[str]):
 _HEAVY_HOOK_MARKERS = ("pnpm verify", "npm run verify", "pnpm test", "vitest",
                        "tsc", "eslint .", "turbo", "ci-test")
 # Generic rule (F1), not a named-option list: every leading `-...` token is a
-# global option; these 7 also take a value (glued with `=`, or the next
-# token). Matches git's own scan on 136,995 real agent git segments, 0
-# disagreements -- including an option this file has never heard of.
+# global option, EXCEPT -h/--help/-v/--version -- there git itself stops the
+# scan and dispatches to help/version instead of the given subcommand. These
+# 8 also take a value (glued with `=`, or the next token). r6b measured
+# 136,995 real agent git segments against this module's PREVIOUS (named-
+# option) parser, 0 disagreements -- agreement with the old code, not a check
+# against git itself.
 _GIT_GLOBAL_VALUE = {"-c", "-C", "--git-dir", "--work-tree", "--namespace",
-                     "--super-prefix", "--config-env"}
+                     "--super-prefix", "--config-env", "--attr-source"}
+_GIT_STOP_SCAN = {"-h", "--help", "-v", "--version"}  # git dispatches to help/version, never a subcommand
 
 def _parse_git_prefix(rest: list[str]) -> tuple[list[str], list[str]]:
     """(global options, subcommand argv) of a `git` argv. A FILTERED subset of
     the options (_forwarded_prefix) is later forwarded to the real rev-parse,
     so a `-c core.hooksPath=` or `-C` on the push is honoured."""
     i = 0
-    while i < len(rest) and rest[i].startswith("-"):
+    while i < len(rest) and rest[i].startswith("-") and rest[i] not in _GIT_STOP_SCAN:
         tok = rest[i]; i += 1
         if tok.split("=", 1)[0] in _GIT_GLOBAL_VALUE and "=" not in tok:
             i += 1

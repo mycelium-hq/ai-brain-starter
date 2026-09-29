@@ -374,8 +374,9 @@ def leg_git_push() -> None:
         check("G git --no-pager push still finds push",
               mod.admit("git --no-pager push", heavy) == 2)
         # F1: a generic rule (skip any `-...` token, plus one extra token
-        # after 7 value-taking options) replaces the named-option list, so an
-        # option this file has never heard of doesn't stop the scan.
+        # after 8 value-taking options, stopping at -h/--help/-v/--version)
+        # replaces the named-option list, so an option this file has never
+        # heard of doesn't stop the scan.
         check("G git --no-advice push (an UNKNOWN global bool) still finds push",
               mod.admit("git --no-advice push", heavy) == 2)
         # git needs its config-env value to name a REAL env var (else it
@@ -384,6 +385,18 @@ def leg_git_push() -> None:
               mod.admit("git --config-env=foo.bar=HOME push", heavy) == 2)
         check("G git --config-env foo.bar=HOME push (split value) still finds push",
               mod.admit("git --config-env foo.bar=HOME push", heavy) == 2)
+        # finding 3 (LOW): real git stops its global-option scan at
+        # -h/--help/-v/--version and dispatches to help/version instead of the
+        # given subcommand -- none of these four push, so the guard must not
+        # false-DENY them as one.
+        for opt in ("--help", "-h", "--version", "-v"):
+            check(f"G git {opt} push dispatches to help/version, never a push (no false DENY)",
+                  mod.admit(f"git {opt} push", heavy) == 0)
+        # --attr-source takes a value and was missing from _GIT_GLOBAL_VALUE,
+        # so its value (HEAD) was misread as the subcommand and the push was
+        # never even seen (a false ADMIT of a heavy push).
+        check("G git --attr-source HEAD push (an 8th value-taking option) still finds push",
+              mod.admit("git --attr-source HEAD push", heavy) == 2)
 
         rel_hp = _repo_hooks_path(tmp, "hookspath-rel", "custom-hooks", {"custom-hooks/pre-push": "exec pnpm verify\n"})
         check("G a repo-local camelCase hooksPath (RELATIVE) resolves to its heavy hook",
