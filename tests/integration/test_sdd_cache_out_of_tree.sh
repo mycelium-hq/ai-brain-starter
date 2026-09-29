@@ -16,14 +16,19 @@
 #      session commits swept them up (34 entries landed in one team repo).
 # Cases T10 and T15-T22 come from two independent adversarial reviews of the
 # first version of the fix, T23-T28 (plus the planted legs of T15 and the
-# no-directory half of T11) from a third review of the second, and T28-T44
-# (the global cap moved to T45, still last) from a fourth; each names the
-# defect it pins.
+# no-directory half of T11) from a third review of the second, T28-T44 from a
+# fourth, and T45-T46 plus legs of T37, T39 and T44 from a fifth (the global
+# cap is T47, still last); each names the defect it pins.
 #
 # Hermetic: `curl` is a PATH stub (no network), HOME is a sandbox, and the
 # test runs from its own temp dir so nothing it spawns can write into the
 # caller's working directory.
 set -uo pipefail
+# Hermetic against a caller's git: run from a git hook, GIT_DIR / GIT_WORK_TREE
+# point every plain `git` call below at the caller's repository.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY \
+  GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_NAMESPACE GIT_CEILING_DIRECTORIES \
+  GIT_LITERAL_PATHSPECS GIT_GLOB_PATHSPECS GIT_NOGLOB_PATHSPECS GIT_ICASE_PATHSPECS
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PRE="$REPO_ROOT/hooks/sdd-cache-pre.sh"
@@ -546,7 +551,7 @@ if [ -e "$TMPROOT/caseprobe" ]; then
   rc=$(STUB_STATUS=304 run_pre "$URL21")
   rm -rf "$SBX/.git"
   # Eviction deletes only the lower-case hex names the hook writes, so this
-  # hand-made upper-case one would outlive every cap (T45 counts it).
+  # hand-made upper-case one would outlive every cap (T47 counts it).
   rm -f "$E21UP"
   if [ "$tracked21" != "${E21UP#"$SBX"/}" ]; then
     no "T21: precondition not created -- the index holds '${tracked21:-nothing}', not the upper-case entry"
@@ -921,10 +926,24 @@ g37="$(cat "$SBX/.claude/.cache/sdd-cache/.gitignore")"
 v37="$(git -C "$SBX" status --porcelain --untracked-files=all | grep -c '\.claude/' || true)"
 w37="$(find "$SBX/.claude/.cache/sdd-cache" -name '*.json' | wc -l | tr -d ' ')"
 SBX="$SBX_MAIN"
-if [ "$g37" = "*" ] && [ "$v37" = 0 ] && [ "$w37" -ge 1 ]; then
-  ok "T37: an empty .gitignore in the root is rewritten to \`*\` before anything lands, and nothing shows in the home repo"
+# A .gitignore that is a SYMLINK (git will not follow it) is replaced by a
+# regular file; one that is a DIRECTORY makes the root unusable: nothing lands.
+SBX_MAIN="$SBX"; SBX="$TMPROOT/home37b"; mkdir -p "$SBX/.claude/.cache/sdd-cache"
+git -c init.defaultBranch=main init -q "$SBX"
+printf '*\n' > "$TMPROOT/gitignore37-target"
+ln -s "$TMPROOT/gitignore37-target" "$SBX/.claude/.cache/sdd-cache/.gitignore"
+STUB_ETAG='"v37b"' run_post "https://docs.example.test/gitignore-37b" "GI-37B"
+l37="$([ -L "$SBX/.claude/.cache/sdd-cache/.gitignore" ] && echo link || echo file)"
+v37b="$(git -C "$SBX" status --porcelain --untracked-files=all 2>/dev/null | grep -c '\.claude/' || true)"
+SBX="$TMPROOT/home37c"; mkdir -p "$SBX/.claude/.cache/sdd-cache/.gitignore"
+STUB_ETAG='"v37c"' run_post "https://docs.example.test/gitignore-37c" "GI-37C"
+w37c="$(find "$SBX/.claude/.cache/sdd-cache" -type f | wc -l | tr -d ' ')"
+SBX="$SBX_MAIN"
+if [ "$g37" = "*" ] && [ "$v37" = 0 ] && [ "$w37" -ge 1 ] && [ "$l37" = file ] && [ "$v37b" = 0 ] \
+   && [ "$w37c" = 0 ]; then
+  ok "T37: an empty or symlinked .gitignore is rewritten as a regular \`*\` before anything lands (nothing shows in the home repo); a .gitignore directory means nothing is written"
 else
-  no "T37: .gitignore='$g37' paths visible=$v37 entries written=$w37"
+  no "T37: empty .gitignore -> '$g37', visible=$v37, written=$w37; symlinked -> $l37, visible=$v37b; directory -> files written=$w37c"
 fi
 
 # ---- T38. curl reads no ~/.curlrc and globs nothing -------------------------
@@ -951,26 +970,30 @@ SBX_MAIN="$SBX"; SBX="$TMPROOT/home39"; mkdir -p "$SBX"
 R39="$SBX/.claude/.cache/sdd-cache"
 STUB_ETAG='"v39a"' run_post "https://docs.example.test/shape-39a" "SHAPE-39A"
 P39="$(proj_dir "$PROJECT" "$R39")"
-mkdir -p "$R39/backup" "$R39/backup-empty"
-for f in "$R39/backup/config.json" "$P39/abc.json" "$R39/.key.bak" "$P39/.tmp.bak"; do
+mkdir -p "$R39/backup" "$R39/backup-empty" "$R39/ABCDE0123456789A" "$R39/DDDD0000EEEE1111"
+# Upper-case hex: under a UTF-8 locale bash and BSD find match [0-9a-f]
+# against A-E too, so the post hook runs under one here.
+UP39="$P39/ABCDE0123456789ABCDE0123456789AB.json"
+IN39="$R39/DDDD0000EEEE1111/0123456789abcdef0123456789abcdef.json"
+for f in "$R39/backup/config.json" "$P39/abc.json" "$R39/.key.bak" "$P39/.tmp.bak" "$UP39" "$IN39"; do
   : > "$f"; touch -t 202601010000 "$f"
 done
 sleep 1
 post_env "$PROJECT" https://docs.example.test/shape-39b SHAPE-39B STUB_ETAG='"v39b"' \
-  SDD_CACHE_MAX_ENTRIES=1 SDD_CACHE_MAX_TOTAL=1
+  SDD_CACHE_MAX_ENTRIES=1 SDD_CACHE_MAX_TOTAL=1 LC_ALL=en_US.UTF-8
 kept39=""
-for f in "$R39/backup/config.json" "$P39/abc.json" "$R39/.key.bak" "$P39/.tmp.bak"; do
+for f in "$R39/backup/config.json" "$P39/abc.json" "$R39/.key.bak" "$P39/.tmp.bak" "$UP39" "$IN39"; do
   kept39="$kept39$([ -e "$f" ] && echo y || echo n)"
 done
-kept39="$kept39$([ -d "$R39/backup-empty" ] && echo y || echo n)"
+kept39="$kept39$([ -d "$R39/backup-empty" ] && echo y || echo n)$([ -d "$R39/ABCDE0123456789A" ] && echo y || echo n)"
 gone39=$([ -z "$(find "$R39" -name "$(url_sha https://docs.example.test/shape-39a).json")" ] && echo y || echo n)
 SBX="$SBX_MAIN"
 if [ "$gone39" != y ]; then
   no "T39: control: the older genuine entry survived a cap of 1, so eviction never ran"
-elif [ "$kept39" = yyyyy ]; then
-  ok "T39: eviction and sweeps delete only the hooks' own names (config.json, abc.json, .key.bak, .tmp.bak, an empty backup dir all kept)"
+elif [ "$kept39" = yyyyyyyy ]; then
+  ok "T39: eviction and sweeps delete only the hooks' own lower-case hex names, under a UTF-8 locale too (8 look-alikes kept)"
 else
-  no "T39: kept [backup/config.json, abc.json, .key.bak, .tmp.bak, backup-empty/] = $kept39 (want yyyyy)"
+  no "T39: kept [backup/config.json, abc.json, .key.bak, .tmp.bak, UPPER.json, entry in UPPER dir, backup-empty/, empty UPPER dir] = $kept39 (want yyyyyyyy)"
 fi
 
 # ---- T40. A cap with a leading zero is decimal -------------------------------
@@ -1035,7 +1058,7 @@ else
   no "T43: [new kept, future-dated kept] = $r43 (want yn)"
 fi
 
-# ---- T44. QUOTING_STYLE cannot switch eviction off ---------------------------
+# ---- T44. QUOTING_STYLE and GREP_OPTIONS cannot switch eviction off ---------
 # Review finding: GNU ls honours QUOTING_STYLE even into a pipe, a quoted line
 # matches no entry name, and both caps silently stopped. BSD ls ignores the
 # variable, so the stub ls above plays GNU's part on every host.
@@ -1045,13 +1068,59 @@ for i in 1 2 3; do
     SDD_CACHE_MAX_ENTRIES=1 QUOTING_STYLE=shell-always
 done
 n44="$(find "$(proj_dir "$P44")" -type f -name '*.json' | wc -l | tr -d ' ')"
-if [ "$n44" = 1 ]; then
-  ok "T44: with QUOTING_STYLE=shell-always set, the per-project cap still holds"
+# BSD grep honours GREP_OPTIONS: with -z the old exclusion step made each run
+# evict the entry it had just written, with -c it disabled the cap.
+P44G="$TMPROOT/project44g"; mkdir -p "$P44G"
+for opt in -z -c; do
+  for i in 1 2 3; do
+    post_env "$P44G" "https://docs.example.test/grep$opt-$i" "G$opt-$i" STUB_ETAG="\"g$i\"" \
+      SDD_CACHE_MAX_ENTRIES=1 GREP_OPTIONS="$opt"
+  done
+done
+n44g="$(find "$(proj_dir "$P44G")" -type f -name '*.json' | wc -l | tr -d ' ')"
+last44="$([ -n "$(entry_for "https://docs.example.test/grep-c-3")" ] && echo y || echo n)"
+if [ "$n44" = 1 ] && [ "$n44g" = 1 ] && [ "$last44" = y ]; then
+  ok "T44: with QUOTING_STYLE or GREP_OPTIONS set, the cap still holds and the entry just written is the one kept"
 else
-  no "T44: $n44 entries at a cap of 1 with QUOTING_STYLE set"
+  no "T44: entries at a cap of 1: $n44 with QUOTING_STYLE, $n44g with GREP_OPTIONS (last written kept: $last44)"
 fi
 
-# ---- T45. One bound across every project; emptied directories go ------------
+# ---- T45. A failing dirname cannot hang the pre hook -------------------------
+# Review finding: the tracked check walked up with `dirname`; one that failed
+# returned "", which never equals "/", and the hook never exited. The walk is
+# parameter expansion now. A hard time limit turns a hang into a failure.
+URL45="https://docs.example.test/dirname-45"
+STUB_ETAG='"v45"' run_post "$URL45" "DIRNAME-45"
+NODIR="$TMPROOT/no-dirname-bin"; mkdir -p "$NODIR"
+printf '#!/bin/sh\nexit 1\n' > "$NODIR/dirname"; chmod +x "$NODIR/dirname"
+rc45=$(jq -nc --arg u "$URL45" '{tool_name:"WebFetch",tool_input:{url:$u,prompt:"p"}}' \
+  | run_sandboxed "$SBX" env -u XDG_CACHE_HOME -u SDD_CACHE_DEBUG PATH="$NODIR:$BIN:$PATH" STUB_STATUS=304 \
+      CLAUDE_PROJECT_DIR="$PROJECT" perl -e 'alarm 20; exec @ARGV' bash "$PRE" >/dev/null 2>"$TMPROOT/pre.err"; echo $?)
+if [ "$rc45" = 2 ] && grep -q DIRNAME-45 "$TMPROOT/pre.err"; then
+  ok "T45: with dirname failing, the pre hook still finishes (and serves the verified entry)"
+else
+  no "T45: pre hook exit $rc45 with a failing dirname (142 = killed by the 20 s limit)"
+fi
+
+# ---- T46. A trailing newline in the project path is part of its key ----------
+# Review finding: $(cd -P ... && pwd -P) strips trailing newlines, so a
+# directory named "p<LF>" had the key of its sibling "p" and was served p's
+# entries.
+P46="$TMPROOT/p46"; P46N="$TMPROOT/p46"$'\n'
+mkdir -p "$P46" "$P46N"
+URL46="https://docs.example.test/newline-46"
+STUB_ETAG='"v46"' run_post "$URL46" "NEWLINE-46" "$P46"
+c46=$(is_served "$URL46" NEWLINE-46 "$P46")
+s46=$(is_served "$URL46" NEWLINE-46 "$P46N")
+if [ "$c46" != y ]; then
+  no "T46: control not served in the project that wrote it"
+elif [ "$s46" = n ]; then
+  ok "T46: a project directory whose name ends in a newline does not share its sibling's cache"
+else
+  no "T46: 'p46<LF>' was served p46's entry"
+fi
+
+# ---- T47. One bound across every project; emptied directories go ------------
 # Review finding: one directory per project directory, eviction only inside the
 # current one, and nothing reclaimed the directories of deleted projects, so a
 # worktree-per-session workflow grew the cache without limit. LAST case on
@@ -1081,9 +1150,9 @@ dirs28="$([ -e "$(proj_dir "$TMPROOT/p28a")" ] && echo y || echo n)$([ -e "$PDIR
 if [ "$total28" = 3 ] && [ "$kept28" = yyy ] && [ "$gone28" = nn ] && [ "$dirs28" = nn ] \
    && [ -e "$OUT28/0123456789abcdef0123456789abcdef.json" ] \
    && [ -f "$CACHE_ROOT/.key" ] && [ -f "$CACHE_ROOT/.gitignore" ]; then
-  ok "T45: the whole root holds at most SDD_CACHE_MAX_TOTAL entries (newest kept), emptied project dirs are removed, nothing is evicted through a symlinked dir"
+  ok "T47: the whole root holds at most SDD_CACHE_MAX_TOTAL entries (newest kept), emptied project dirs are removed, nothing is evicted through a symlinked dir"
 else
-  no "T45: left in the root: [$(find "$CACHE_ROOT" -mindepth 2 -maxdepth 2 | sed "s|^$CACHE_ROOT/||" | tr '\n' ' ')]; total=$total28 (want 3), newest c2/c1/b1 kept=$kept28, oldest a2/a1 kept=$gone28, emptied dirs p28a/main kept=$dirs28, symlinked-dir entry kept=$([ -e "$OUT28/0123456789abcdef0123456789abcdef.json" ] && echo y || echo n), key=$([ -f "$CACHE_ROOT/.key" ] && echo y || echo n), gitignore=$([ -f "$CACHE_ROOT/.gitignore" ] && echo y || echo n)"
+  no "T47: left in the root: [$(find "$CACHE_ROOT" -mindepth 2 -maxdepth 2 | sed "s|^$CACHE_ROOT/||" | tr '\n' ' ')]; total=$total28 (want 3), newest c2/c1/b1 kept=$kept28, oldest a2/a1 kept=$gone28, emptied dirs p28a/main kept=$dirs28, symlinked-dir entry kept=$([ -e "$OUT28/0123456789abcdef0123456789abcdef.json" ] && echo y || echo n), key=$([ -f "$CACHE_ROOT/.key" ] && echo y || echo n), gitignore=$([ -f "$CACHE_ROOT/.gitignore" ] && echo y || echo n)"
 fi
 
 echo "---"

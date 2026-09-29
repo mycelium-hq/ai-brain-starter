@@ -48,6 +48,14 @@ umask 077
 # reports this hook as failed on a fetch that worked. Anything nobody handled
 # ends the hook quietly instead: at worst, nothing is cached.
 trap 'exit 0' ERR
+# Everything these hooks parse (case patterns, ls, find, awk, git) runs in a
+# known environment. The C locale, so [0-9a-f] is ten digits and six letters
+# and nothing else (under a UTF-8 locale bash and BSD find also match A-E, and
+# cleanup deleted names the hook never wrote). No CDPATH, which sends `cd`
+# elsewhere and makes it print where it went. No GREP_OPTIONS, QUOTING_STYLE or
+# colour switches, which change what a tool prints into a pipe.
+export LC_ALL=C
+unset CDPATH GREP_OPTIONS GREP_COLOR GREP_COLORS QUOTING_STYLE CLICOLOR CLICOLOR_FORCE LS_COLORS
 
 command -v jq   >/dev/null 2>&1 || exit 0
 command -v curl >/dev/null 2>&1 || exit 0
@@ -72,7 +80,10 @@ KEY_FILE="$CACHE_ROOT/.key"
 # those was reproduced sharing one cache across unrelated projects.
 project_key() {
   local dir="${CLAUDE_PROJECT_DIR:-$PWD}" canon=""
-  canon=$(cd -P "$dir" 2>/dev/null && pwd -P) || canon=""
+  # The trailing `x` keeps any newline the path itself ends with: $(...)
+  # strips trailing newlines, which gave "p<LF>" the key of its sibling "p".
+  canon=$(cd -P "$dir" 2>/dev/null && pwd -P && echo x) || canon=""
+  canon=${canon%x}; canon=${canon%$'\n'}
   [ -n "$canon" ] || canon="$dir"
   printf '%s' "$canon" | sha256_hex | cut -c1-16
 }
@@ -285,9 +296,15 @@ cap() {  # $1 = value, $2 = default -> a decimal count of at least 1
   printf '%s' "$v"
 }
 by_age() {  # newest first, the entry this run wrote left out
+  local line
   # shellcheck disable=SC2012
   env -u QUOTING_STYLE -u CLICOLOR_FORCE ls -1td -- "$@" 2>/dev/null \
-    | { if [ "$WROTE" = 1 ]; then grep -vxF -- "$CACHE_FILE" || true; else cat; fi; }
+    | while IFS= read -r line; do
+        # A plain comparison, not grep: BSD grep honours GREP_OPTIONS, and
+        # `-z` there made each run evict the entry it had just written.
+        if [ "$WROTE" = 1 ] && [ "$line" = "$CACHE_FILE" ]; then continue; fi
+        printf '%s\n' "$line"
+      done
 }
 MAX=$(cap "${SDD_CACHE_MAX_ENTRIES:-}" 256)
 by_age "$CACHE_DIR"/*.json \

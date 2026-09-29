@@ -42,6 +42,14 @@ umask 077
 # cannot load a module) blocked every WebFetch. Anything nobody handled lets
 # the fetch through instead. The one intended exit 2, a cache hit, is `exit`.
 trap 'exit 0' ERR
+# Everything these hooks parse (case patterns, ls, find, awk, git) runs in a
+# known environment. The C locale, so [0-9a-f] is ten digits and six letters
+# and nothing else (under a UTF-8 locale bash and BSD find also match A-E, and
+# cleanup deleted names the hook never wrote). No CDPATH, which sends `cd`
+# elsewhere and makes it print where it went. No GREP_OPTIONS, QUOTING_STYLE or
+# colour switches, which change what a tool prints into a pipe.
+export LC_ALL=C
+unset CDPATH GREP_OPTIONS GREP_COLOR GREP_COLORS QUOTING_STYLE CLICOLOR CLICOLOR_FORCE LS_COLORS
 
 # Graceful degradation: if any dependency is missing, let the fetch through.
 command -v jq   >/dev/null 2>&1 || exit 0
@@ -67,7 +75,10 @@ KEY_FILE="$CACHE_ROOT/.key"
 # those was reproduced sharing one cache across unrelated projects.
 project_key() {
   local dir="${CLAUDE_PROJECT_DIR:-$PWD}" canon=""
-  canon=$(cd -P "$dir" 2>/dev/null && pwd -P) || canon=""
+  # The trailing `x` keeps any newline the path itself ends with: $(...)
+  # strips trailing newlines, which gave "p<LF>" the key of its sibling "p".
+  canon=$(cd -P "$dir" 2>/dev/null && pwd -P && echo x) || canon=""
+  canon=${canon%x}; canon=${canon%$'\n'}
   [ -n "$canon" ] || canon="$dir"
   printf '%s' "$canon" | sha256_hex | cut -c1-16
 }
@@ -122,11 +133,15 @@ dbg() {
 # cannot be resolved counts as "no".
 in_git_tree() {
   local d=""
-  d=$(cd -P "$1" 2>/dev/null && pwd -P) || return 1
+  d=$(cd -P "$1" 2>/dev/null && pwd -P && echo x) || return 1
+  d=${d%x}; d=${d%$'\n'}
+  # Parent by parameter expansion, not `dirname`: a dirname that failed once
+  # returned "" and the walk never reached "/" (the hook never exited).
   while :; do
     [ -e "$d/.git" ] && return 0
     [ "$d" = "/" ] && return 1
-    d=$(dirname "$d")
+    d=${d%/*}
+    [ -n "$d" ] || d=/
   done
 }
 # 0 = refuse: the entry is tracked by a repository containing the cache, or a
