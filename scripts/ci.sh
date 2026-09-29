@@ -1630,14 +1630,15 @@ PY_DIRECT=(
   # structural cost test that a 1M-char segment never reaches shlex.split.
   hooks/test_shell_parse_tokens.py
   # heavy_admission.py (MYC-5053), folded into retry-budget.py: must-admit
-  # (16 strings, forced critical memory AND forced at-cap) and must-detect
-  # (15 strings) lists, real planted-process pgrep-anchor controls (a VS
-  # Code tsserver argv, a tsx watch argv and a zsh -c wrapper all count 0;
-  # a real next-build-shaped argv counts 1), a leak control against the
-  # child hook's real fds plus a positive control (a pgrep -lf mutant must
-  # leak), and two negative-control mutants on scratch copies (neutered
-  # thresholds wrongly allow a real deny; widened detection wrongly denies
-  # a must-admit string).
+  # (16 strings) and must-detect (45 strings, incl. the pnpm-exec/local-bin,
+  # env -u/-i, bash -e -c and glued-redirect gaps found in review) lists;
+  # real and synthetic ps-snapshot controls (root-invocation-only counting,
+  # a real shell plant, node/bun script resolution); a git-push-as-verify
+  # leg against real .git/hooks/pre-push files; a leak control (a real
+  # secret-bearing process, checked against admit()'s own stdout/stderr/
+  # telemetry) with a positive control (ps -ww -o args= on that same pid
+  # DOES retrieve it); and negative-control mutants (neutered thresholds,
+  # widened detection, a deleted shell filter) that must each flip a verdict.
   hooks/test_heavy_admission.py
 )
 dormant_py=()
