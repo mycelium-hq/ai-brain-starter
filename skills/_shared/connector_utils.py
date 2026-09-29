@@ -339,14 +339,20 @@ _LOOKALIKE_FOLD = str.maketrans({
 # below misses them without this set) but render blank or combine onto the
 # previous character: Mongolian/Khmer free-variation marks, Hangul fillers
 # (category Lo, not Cf/Mn), and the variation-selector blocks.
+#
+# U+3164 (HANGUL FILLER) and U+FFA0 (HALFWIDTH HANGUL FILLER) are
+# deliberately NOT listed: both NFKC-decompose to U+1160 (HANGUL JUNGSEONG
+# FILLER, already covered below), and _neutralize_marker_lookalikes runs
+# NFKC before ever consulting this set -- so a raw U+3164 or U+FFA0 input
+# character has already become U+1160 by the time this set is checked.
+# Listing either is unreachable dead code (verified against unicodedata
+# 13.0.0 and 16.0.0) (N6).
 _DEFAULT_IGNORABLE_EXTRA = frozenset(
     chr(c) for c in (
         0x034F,  # COMBINING GRAPHEME JOINER
         0x115F, 0x1160,  # HANGUL CHOSEONG/JUNGSEONG FILLER
         0x17B4, 0x17B5,  # KHMER VOWEL INHERENT AQ/AA
         0x180B, 0x180C, 0x180D,  # MONGOLIAN FREE VARIATION SELECTOR 1-3
-        0x3164,  # HANGUL FILLER
-        0xFFA0,  # HALFWIDTH HANGUL FILLER
         *range(0xFE00, 0xFE10),  # VARIATION SELECTOR-1 to -16
         *range(0xE0100, 0xE01F0),  # VARIATION SELECTOR-17 to -256
     )

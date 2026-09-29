@@ -707,10 +707,14 @@ vs16_specimen = "UNTR" + VS16 + "USTED CONTENT"
 check("[untrusted-marker removed]" in cu._neutralize_marker_lookalikes(vs16_specimen),
       "(T7-neutralize) VS16 inside UNTRUSTED is neutralized")
 
-HANGUL_FILLER = chr(0x3164)  # HANGUL FILLER -- a _DEFAULT_IGNORABLE_EXTRA entry
+# U+3164 has no _DEFAULT_IGNORABLE_EXTRA entry of its own (N6: removed as
+# unreachable) -- NFKC decomposes it to U+1160 (HANGUL JUNGSEONG FILLER,
+# still in the set) BEFORE this set is ever consulted, so this specimen
+# pins the U+1160 entry via that fold, not a U+3164-specific one.
+HANGUL_FILLER = chr(0x3164)  # HANGUL FILLER -- NFKC-decomposes to U+1160
 hangul_gap_specimen = "untrusted" + HANGUL_FILLER + "content"
 check("[untrusted-marker removed]" in cu._neutralize_marker_lookalikes(hangul_gap_specimen),
-      "(T7-neutralize) a U+3164 gap between untrusted and content is neutralized")
+      "(T7-neutralize) a Hangul filler gap (U+3164, NFKC-folds to U+1160) between untrusted and content is neutralized")
 
 GREEK_LUNATE_SIGMA = chr(0x03F2)  # NFKC-decomposes to U+03C2, the fold table's key
 lunate_sigma_specimen = "untrusted " + GREEK_LUNATE_SIGMA + "ontent"
