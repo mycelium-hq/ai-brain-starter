@@ -1,22 +1,29 @@
 """_lib/heavy_admission.py -- admission check for a heavy build/test command,
 folded into retry-budget.py's PreToolUse(Bash) hook (MYC-5053) instead of its
-own slot: ADR-0004's Bash fan-out was already at budget, and the prior
-raise's own rationale said the next addition should fold in, not raise again.
+own slot: ADR-0004's Bash fan-out was already at budget.
 
-Incident (2026-09-26): concurrent agent sessions on one Mac each ran nested
-builders -- two `next build`s, full-project `tsc --noEmit`, several `vitest
-run`s, cargo -- and pushed swap to 19.4 GB on a 24 GB machine; it rebooted,
-killing every session's work. This is the refusal at the tool boundary.
+Incident (2026-09-26): concurrent agent sessions on one Mac each running
+nested agents -- two `next build`s, full-project `tsc --noEmit`, vitest runs
+from several builders -- pushed swap to 19.4 GB on a 24 GB machine; it
+rebooted, killing every session's work. This is the refusal at the tool
+boundary.
 
-Detection resolves real argv tokens (shell_parse), past env assigns,
-wrappers and package-manager scoping flags -- never a raw substring, so a
-heavy phrase in a commit message is not a heavy command. Counting matches
-running processes with `pgrep -f` (PIDs only, argv never read), anchored on
-a path/word boundary so "tsc" cannot match "tsconfig".
+Detection resolves real argv tokens (shell_parse) to a FIXPOINT -- wrappers,
+env assigns, package-manager scope flags, exec/dlx -- never a raw substring,
+so `pnpm -C x exec tsc` and `pnpm tsc` classify like bare `tsc`, and a heavy
+phrase in a commit message is not a heavy command.
 
-Memory is read first: critical denies WITHOUT counting, so a stalled pgrep
-can never discard a genuinely critical reading; a failed count instead
-raises, reaching the same visible fail-open as any other internal error.
+Counting reads ONE process snapshot (`ps -A`), never `pgrep`: a matched
+process's argv is tokenized and classified with the SAME rules detection
+uses, then discarded (never printed, logged or stored). Only the ROOT
+invocation of a class counts; shells and this hook's own ancestors never do.
+
+Memory is read first: critical denies WITHOUT counting, so a stalled
+snapshot can never discard a genuinely critical reading. Any internal error
+admits VISIBLY (additionalContext + log_fire), never silently.
+
+`git push` classifies as `verify` only when the target repo's OWN pre-push
+hook runs a heavy verifier -- read from disk, never by spawning git.
 
 Bypass: HEAVY_ADMISSION_BYPASS=1, inline (cmd_env.inline_bypass) or session
 env -- logged only when it actually suppressed a deny.
@@ -27,14 +34,15 @@ import json
 import os
 import re
 import sys
-from pathlib import Path
 
 try:
-    from shell_parse import ENV_ASSIGN_RE, split_segments_with_seps, strip_heredoc_bodies, strip_noncode, tokens
+    from shell_parse import (ENV_ASSIGN_RE, WRAPPER_PREFIXES, cwd_candidates,
+        split_segments_with_seps, strip_heredoc_bodies, strip_noncode, tokens)
     from cmd_env import inline_bypass
     from guard_telemetry import log_fire
 except ImportError:
-    from _lib.shell_parse import ENV_ASSIGN_RE, split_segments_with_seps, strip_heredoc_bodies, strip_noncode, tokens
+    from _lib.shell_parse import (ENV_ASSIGN_RE, WRAPPER_PREFIXES, cwd_candidates,
+        split_segments_with_seps, strip_heredoc_bodies, strip_noncode, tokens)
     from _lib.cmd_env import inline_bypass
     from _lib.guard_telemetry import log_fire
 
@@ -51,101 +59,140 @@ MEMORYSTATUS_LEVEL_CRITICAL = 10
 MEM_AVAILABLE_OVER_TOTAL_CRITICAL = 0.10
 
 CLASS_CAPS = {"build": 1, "verify": 1, "test_suite": 1, "tsc_full": 1, "playwright": 1, "cargo": 2}
-_HINTS = {
-    "build": "wait for the running build, or scope it to one workspace",
-    "verify": "wait for the running verify",
-    "test_suite": "run one file: `vitest run <file>`",
+_HINTS = {  # only where a narrower command is actually admitted; every other
+    "test_suite": "run one file: `vitest run <file>`",  # class just says "wait".
     "tsc_full": "narrow the project: `tsc -p <one tsconfig>`",
-    "playwright": "wait for the running run, or pass one spec file",
-    "cargo": "wait for the running cargo job, or narrow with `-p <crate>`",
 }
 
-# ---- detection: real argv tokens, never a raw substring ---------------------
-_BARE_SKIP = {"nohup", "time", "env", "command", "exec", "npx", "bunx"}
+# ---- detection: real argv tokens resolved to a FIXPOINT, never a substring --
+_BARE_SKIP = WRAPPER_PREFIXES | {"npx", "bunx"}
 _TWO_WORD_SKIP = {("pnpm", "exec"), ("pnpm", "dlx"), ("yarn", "dlx")}
-_PM_SCOPE_VALUE = {"-C", "--dir", "--filter", "-F", "--prefix", "-w", "--workspace"}
+_KNOWN_BINS = {"next", "tsc", "vitest", "playwright", "turbo", "tauri"}
+_PM_SCOPE_VALUE = {"-C", "--dir", "--filter", "-F", "--prefix", "--workspace"}
+_PM_SCOPE_BOOL = {"-w", "--workspace-root", "-r", "--recursive"}
+_ENV_FLAG_VALUE = {"-u", "--unset"}
+_ENV_FLAG_BOOL = {"-i", "--ignore-environment"}
+_TIMEOUT_WORDS = {"timeout", "gtimeout"}
 _SHELLS = {"bash", "sh", "zsh"}
 _CARGO_VERBS = {"build", "test", "check", "clippy", "nextest", "b", "t", "c"}
-_VITEST_VALUE_FLAGS = {"--reporter", "-t", "--project"}
+_CARGO_SKIP_FLAGS = ("--locked", "--offline", "--frozen")
+_VITEST_VALUE_FLAGS = {"--config", "-c", "--pool", "--maxWorkers", "--shard",
+                       "--bail", "--reporter", "-t", "--project", "--dir",
+                       "--root", "--environment"}
 _TSC_DEFAULT_PROJECTS = {".", "./", "tsconfig.json", "./tsconfig.json"}
 _REDIR_RE = re.compile(r"^\d*(&?(?:>>|<<|>|<))(.*)$")
+_INLINE_REDIR_RE = re.compile(r"\d*&?(?:>>|<<|>|<)")
 
-def _skip_n(t: list[str], want: int) -> list[str]:
-    """Drop each token `want(tok, has_next)` says to consume (1 or 2)."""
-    out, i, n = [], 0, len(t)
-    while i < n:
-        k = want(t[i], i + 1 < n)
-        if k:
-            i += k
-        else:
-            out.append(t[i]); i += 1
-    return out
+def _basename(p: str) -> str:
+    return p.replace("\\", "/").rsplit("/", 1)[-1]
 
-def _pm_scope(tok: str, has_next: bool) -> int:
-    """pnpm/npm -C/--dir/--filter/-F/--prefix/-w/--workspace(=val), -r/
-    --recursive, wherever they sit -- a trailing flag reads like a leading one."""
-    if tok.split("=", 1)[0] in _PM_SCOPE_VALUE:
-        return 1 if "=" in tok else (2 if has_next else 1)
-    return 1 if tok in ("-r", "--recursive") else 0
-
-def _redir(tok: str, has_next: bool) -> int:
-    """`>`,`>>`,`<`,`2>`,`2>&1`,`&>`: shlex has no redirect notion, so `2>&1`
-    survives as one token and a bare `>` is followed by a separate target."""
-    if "<" not in tok and ">" not in tok:
-        return 0
-    m = _REDIR_RE.match(tok)
-    if not m:
-        return 0
-    return 1 if (m.group(2) or not has_next) else 2
-
-def _skip_wrappers(t: list[str]) -> list[str]:
-    """nice [-n N] / nohup / time / env / timeout N / command / exec / npx /
-    bunx / `pnpm exec|dlx` / `yarn dlx` -- past the real command word."""
-    while t:
-        w = t[0]
-        if w in _BARE_SKIP:
-            t = t[1:]
-        elif w == "nice":
-            t = t[3:] if t[1:2] == ["-n"] else t[1:]
-        elif w == "timeout":
-            j = 1
-            while t[j:j + 1] and t[j].startswith("-"):
-                j += 1
-            t = t[j + 1:]
-        elif tuple(t[:2]) in _TWO_WORD_SKIP:
-            t = t[2:]
+def _skip_env_invocation(t: list[str]) -> list[str]:
+    """Past a leading `env`'s OWN flags/assigns (`-u NAME`, `-i`, `NAME=val`,
+    any mix) to the real command word."""
+    i = 0
+    while i < len(t):
+        if t[i] in _ENV_FLAG_VALUE:
+            i += 2
+        elif t[i] in _ENV_FLAG_BOOL:
+            i += 1
+        elif ENV_ASSIGN_RE.match(t[i]):
+            i += 1
         else:
             break
-    return t
+    return t[i:]
+
+def _strip_rest(t: list[str], pm: bool) -> tuple[list[str], bool]:
+    """One left-to-right pass dropping, ANYWHERE past t[0]: redirects (a bare
+    `>`/`<<`/... plus its separate target, a self-contained `2>&1`, or a
+    GLUED one -- `build>/tmp/b.log` is one shlex token, word fused to
+    operator) and, when PM (t[0] is pnpm/npm), scope flags -- `-C`/`--dir`/
+    `--filter`/`-F`/`--prefix`/`--workspace` (value) and `-w`/
+    `--workspace-root`/`-r`/`--recursive` (boolean; `-w` is NOT a value)."""
+    out, i, n, changed = [t[0]], 1, len(t), False
+    while i < n:
+        tok, has_next = t[i], i + 1 < n
+        m = _INLINE_REDIR_RE.search(tok)
+        if m and m.start() > 0:
+            out.append(tok[:m.start()]); changed = True; i += 1; continue
+        rm = _REDIR_RE.match(tok)
+        if rm:
+            changed = True; i += 1 if (rm.group(2) or not has_next) else 2; continue
+        key = tok.split("=", 1)[0]
+        if pm and key in _PM_SCOPE_VALUE:
+            i += 1 if "=" in tok else (2 if has_next else 1)
+            changed = True
+        elif pm and tok in _PM_SCOPE_BOOL:
+            i += 1
+            changed = True
+        else:
+            out.append(tok); i += 1
+    return out, changed
+
+def _strip_once(t: list[str]) -> tuple[list[str], bool]:
+    """One step; the caller repeats to a FIXPOINT so order never matters."""
+    if not t:
+        return t, False
+    w = t[0]
+    if ENV_ASSIGN_RE.match(w):
+        return t[1:], True
+    if w == "env":
+        return _skip_env_invocation(t[1:]), True
+    if w in _BARE_SKIP:
+        nxt = t[1:]
+        if w == "time" and nxt[:1] == ["-p"]:
+            nxt = nxt[1:]
+        elif w == "npx" and nxt[:1] and nxt[0] in ("-y", "--yes"):
+            nxt = nxt[1:]
+        return nxt, True
+    if w == "nice":
+        return (t[3:] if t[1:2] == ["-n"] else t[1:]), True
+    if w in _TIMEOUT_WORDS:
+        j = 1
+        while t[j:j + 1] and t[j].startswith("-"):
+            j += 1
+        return t[j + 1:], True
+    if tuple(t[:2]) in _TWO_WORD_SKIP:
+        return t[2:], True
+    if w in ("pnpm", "yarn") and t[1:2] and t[1] in _KNOWN_BINS:
+        return t[1:], True  # a local-bin invocation is exec's equivalent
+    if t[:2] == ["yarn", "workspace"] and len(t) > 2:
+        return ["yarn"] + t[3:], True
+    return _strip_rest(t, pm=w in ("pnpm", "npm"))
+
+def _resolve_segment(t: list[str]) -> list[str]:
+    while True:
+        t, changed = _strip_once(t)
+        if not changed:
+            return t
 
 def _dash_c_script(rest: list[str]):
-    if rest and rest[0].startswith("-") and not rest[0].startswith("--") and "c" in rest[0][1:]:
-        return rest[1] if len(rest) > 1 else None
+    """`sh|bash|zsh [flags] -c '<script>'`'s script -- skips leading flags
+    (`-e`, `-o pipefail`, `-lc`, `--login`) so `-c` need not be first."""
+    i = 0
+    while i < len(rest):
+        tok = rest[i]
+        if not tok.startswith("-"):
+            return None
+        if not tok.startswith("--") and "c" in tok[1:]:
+            return rest[i + 1] if i + 1 < len(rest) else None
+        if tok == "-o":
+            i += 2
+            continue
+        i += 1
     return None
 
 def _after_run(r: list[str]) -> list[str]:
     return r[1:] if r[:1] == ["run"] else r
 
 def _vitest_unscoped(tail: list[str]) -> bool:
-    """A surviving positional (not a flag) means the run is scoped."""
-    i, n = 0, len(tail)
-    while i < n:
-        if tail[i] in _VITEST_VALUE_FLAGS:
-            i += 2
-        elif tail[i].startswith("-"):
-            i += 1
-        else:
+    """True unless a positional (a file or filter) survives the flags."""
+    it = iter(tail)
+    for tok in it:
+        if tok in _VITEST_VALUE_FLAGS:
+            next(it, None)
+        elif not tok.startswith("-"):
             return False
     return True
-
-def _test_tail(head: str, rest: list[str]):
-    if head == "vitest":
-        return _after_run(rest)
-    if head in ("npm", "pnpm", "yarn"):
-        r = _after_run(rest)
-        if r[:1] in (["test"], ["vitest"]):
-            return _after_run(r[1:])
-    return None
 
 def _tsc_is_full(rest: list[str]) -> bool:
     if not ({"--noEmit", "-b", "--build"} & set(rest)):
@@ -158,121 +205,193 @@ def _tsc_is_full(rest: list[str]) -> bool:
     return True
 
 def _classify(t: list[str]):
-    """First matching class for one RESOLVED segment's tokens, or None."""
+    """Class of one RESOLVED segment/argv, or None. `head` is the BASENAME
+    of the command word, so `~/.cargo/bin/cargo` classifies like `cargo`."""
     if not t:
         return None
-    head, rest = t[0], t[1:]
+    head, rest = _basename(t[0]), t[1:]
     r = _after_run(rest)
-    if (head in ("next", "npm", "pnpm", "yarn", "turbo") and r[:1] == ["build"]) or (
-            head == "pnpm" and rest[:1] == ["turbo"] and rest[1:2] == ["build"]):
+    pm = head in ("npm", "pnpm", "yarn")
+    if (pm or head in ("next", "turbo", "tauri")) and r[:1] == ["build"]:
         return "build"
     if head in ("npm", "pnpm") and r[:1] == ["verify"]:
         return "verify"
-    if head in ("npm", "pnpm", "yarn") and r[:1] == ["typecheck"]:
+    if (pm and r[:1] == ["typecheck"]) or (head == "tsc" and _tsc_is_full(rest)):
         return "tsc_full"
-    if head == "tsc" and _tsc_is_full(rest):
-        return "tsc_full"
-    tail = _test_tail(head, rest)
-    if tail is not None and _vitest_unscoped(tail):
+    if (head == "vitest" and _vitest_unscoped(r)) or (
+            pm and r[:1] in (["test"], ["vitest"]) and _vitest_unscoped(_after_run(r[1:]))):
         return "test_suite"
     if head == "playwright" and rest[:1] == ["test"]:
         return "playwright"
-    if head == "cargo" and rest[:1] and rest[0] in _CARGO_VERBS:
-        return "cargo"
+    if head == "cargo":
+        cr = rest
+        while cr[:1] and cr[0] in _CARGO_SKIP_FLAGS:
+            cr = cr[1:]
+        if cr[:1] and cr[0] in _CARGO_VERBS:
+            return "cargo"
     return None
 
-def detect_class(command: str, _depth: int = 0):
+# ---- `git push` -> class `verify`, iff the repo's own pre-push hook is heavy
+_HEAVY_HOOK_MARKERS = ("pnpm verify", "npm run verify", "pnpm test", "vitest",
+                       "tsc", "eslint .", "turbo", "ci-test")
+_HOOKSPATH_RE = re.compile(r"(?m)^\s*hookspath\s*=\s*(.+?)\s*$")
+
+def _pre_push_hook_file(repo: str):
+    # .git/hooks/pre-push, core.hooksPath's copy, or .husky/pre-push --
+    # whichever this repo uses. Handles a worktree's .git FILE (gitdir: ...).
+    git_path = os.path.join(repo, ".git")
+    gitdir = git_path
+    if os.path.isfile(git_path):
+        first = open(git_path, encoding="utf-8", errors="replace").readline()
+        if not first.startswith("gitdir:"):
+            return None
+        gitdir = first.split(":", 1)[1].strip()
+        gitdir = gitdir if os.path.isabs(gitdir) else os.path.normpath(os.path.join(repo, gitdir))
+    config = os.path.join(gitdir, "config")
+    m = _HOOKSPATH_RE.search(open(config, encoding="utf-8", errors="replace").read()) \
+        if os.path.isfile(config) else None
+    if m:
+        base = m.group(1) if os.path.isabs(m.group(1)) else os.path.join(repo, m.group(1))
+        return os.path.join(base, "pre-push")
+    husky = os.path.join(repo, ".husky", "pre-push")
+    return husky if os.path.isfile(husky) else os.path.join(gitdir, "hooks", "pre-push")
+
+def _repo_push_is_heavy(repo: str) -> bool:
+    # Best-effort: any resolution/read failure -> not classified (admit).
+    try:
+        hook = _pre_push_hook_file(repo)
+        head = (open(hook, encoding="utf-8", errors="replace").read(65536)
+                if hook and os.path.isfile(hook) else "")
+    except OSError:
+        return False
+    return any(marker in head for marker in _HEAVY_HOOK_MARKERS)
+
+def _resolve_repo(override, segs_upto, cwd):
+    if override:
+        base = cwd or os.getcwd()
+        return override if os.path.isabs(override) else os.path.normpath(os.path.join(base, override))
+    if cwd is None:
+        return None
+    cwds, _vars = cwd_candidates(segs_upto, cwd)
+    return next(iter(cwds)) if len(cwds) == 1 else None
+
+def detect_class(command: str, cwd: str | None = None, _depth: int = 0):
     """First matching class in COMMAND, resolved per shell segment, or None.
-    Recurses one level into `bash|sh|zsh -c "<string>"`."""
+    Recurses one level into `bash|sh|zsh -c "<script>"`."""
     cleaned = strip_noncode(strip_heredoc_bodies(command))
-    for _sep, seg in split_segments_with_seps(cleaned):
-        t = tokens(seg.strip())
-        while t and ENV_ASSIGN_RE.match(t[0]):
-            t = t[1:]
-        t = _skip_wrappers(t)
-        if t[:2] == ["yarn", "workspace"] and len(t) > 2:
-            t = ["yarn"] + t[3:]
-        elif t[:1] and t[0] in ("pnpm", "npm"):
-            t = _skip_n(t, _pm_scope)
-        t = _skip_n(t, _redir)
+    segs = split_segments_with_seps(cleaned)
+    for idx, (_sep, seg) in enumerate(segs):
+        t = _resolve_segment(tokens(seg.strip()))
         if not t:
             continue
+        if t[:1] == ["git"] and (t[1:2] == ["push"] or (t[1:2] == ["-C"] and t[3:4] == ["push"])):
+            override = t[2] if t[1] == "-C" else None
+            rest = t[4:] if override else t[2:]
+            if "--no-verify" not in rest:
+                repo = _resolve_repo(override, segs[:idx + 1], cwd)
+                if repo and _repo_push_is_heavy(repo):
+                    return "verify"
+            continue
         cls = _classify(t)
+        if not cls and _depth < 1 and t[0] in _SHELLS:
+            script = _dash_c_script(t[1:])
+            cls = script and detect_class(script, cwd, _depth + 1)
         if cls:
             return cls
-        if _depth < 1 and t[0] in _SHELLS:
-            script = _dash_c_script(t[1:])
-            if script:
-                inner = detect_class(script, _depth + 1)
-                if inner:
-                    return inner
     return None
 
 
-# ---- counting running work: PIDs only, never argv/env -----------------------
-def _anchored(*phrases: str) -> str:
-    return "|".join(rf"(^|/){p}( |$)" for p in phrases)
-
-_BUILD_VERBS = ("next", "npm run", "pnpm run", "pnpm", "yarn", "yarn run", "turbo", "turbo run", "pnpm turbo")
-_VERIFY_VERBS = ("npm run", "pnpm run", "pnpm")
-_PGREP_PATTERN = {
-    "build": _anchored(*(f"{v} build" for v in _BUILD_VERBS)),
-    "verify": _anchored(*(f"{v} verify" for v in _VERIFY_VERBS)),
-    "test_suite": _anchored("vitest run", "vitest"),
-    "tsc_full": _anchored("tsc"),
-    "playwright": _anchored("playwright test"),
-    "cargo": _anchored(*(f"cargo {v}" for v in _CARGO_VERBS)),
-}
+# ---- counting: ONE process snapshot, classified like detection, never pgrep -
 _SHELL_COMM = {"sh", "bash", "zsh", "dash", "fish"}
+_NODE_RUNNERS = {"node", "bun"}
+_SCRIPT_TOOL_SUFFIX = (
+    ("next/dist/bin/next", "next"), ("vitest/vitest.mjs", "vitest"),
+    ("typescript/bin/tsc", "tsc"), ("@playwright/test/cli.js", "playwright"),
+)
 
-def _run(argv: list[str], timeout: float = 2) -> str:
+def _resolve_runner(t: list[str]) -> list[str]:
+    """`node|bun <script> ...` -> the LOGICAL command it is really running,
+    so a real process is classified with the exact rules detection uses."""
+    if len(t) < 2 or _basename(t[0]) not in _NODE_RUNNERS:
+        return t
+    script = t[1].replace("\\", "/")
+    for suffix, tool in _SCRIPT_TOOL_SUFFIX:
+        if script.endswith(suffix):
+            return [tool] + t[2:]
+    if script.endswith("pnpm.cjs"):
+        return ["pnpm"] + t[2:]
+    if "node_modules/.bin/" in script:
+        return [_basename(script)] + t[2:]
+    return t
+
+def _read_snapshot() -> dict[int, tuple[int, str, list[str]]]:
+    # One `ps -A` call: {pid: (ppid, ucomm, argv_tokens)}. `args` is split
+    # and DISCARDED right here -- never retained, printed or logged.
     import subprocess  # lazy: paid only once a class is actually detected
-    return subprocess.run(argv, capture_output=True, text=True, timeout=timeout).stdout
+    out = subprocess.run(["ps", "-A", "-o", "pid=,ppid=,ucomm=,args="],
+                         capture_output=True, text=True, timeout=4, check=True).stdout
+    rows = {}
+    for line in out.splitlines():
+        parts = line.split(None, 3)
+        if len(parts) < 3 or not (parts[0].isdigit() and parts[1].isdigit()):
+            continue
+        rows[int(parts[0])] = (int(parts[1]), parts[2], parts[3].split() if len(parts) > 3 else [])
+    return rows
 
-def _ancestor_pids() -> set[int]:
-    pids, pid, seen = set(), os.getppid(), set()
-    while pid > 1 and pid not in seen:
-        seen.add(pid)
+def _hook_ancestors(snapshot: dict) -> set[int]:
+    pids, pid = set(), os.getppid()
+    while pid in snapshot and pid not in pids:
         pids.add(pid)
-        nxt = _run(["ps", "-o", "ppid=", "-p", str(pid)]).strip()
-        pid = int(nxt) if nxt.isdigit() else 0
+        pid = snapshot[pid][0]
     return pids
 
-def _count_running(cls: str) -> int:
-    """COUNT only (bare PIDs; a matched process's argv is never read). Drops
-    the hook's own ancestors and any PID whose process NAME is a shell."""
-    ancestors = _ancestor_pids()
-    pids = [p for p in _run(["pgrep", "-f", _PGREP_PATTERN[cls]]).split() if int(p) not in ancestors]
-    return sum(1 for p in pids
-               if _run(["ps", "-o", "comm=", "-p", p]).strip().rsplit("/", 1)[-1] not in _SHELL_COMM)
+def _is_root(pid: int, matched: set[int], snapshot: dict) -> bool:
+    seen, cur = set(), snapshot[pid][0]
+    while cur in snapshot and cur not in seen:
+        if cur in matched:
+            return False
+        seen.add(cur)
+        cur = snapshot[cur][0]
+    return True
+
+def _count_running(cls: str, snapshot: dict) -> int:
+    # ROOT invocations of CLS only: an ancestor chain already holding a
+    # same-class match means this one doesn't count (one `pnpm run build`
+    # counts 1, not once per spawned child). Shells and this hook's own
+    # ancestors -- from this SAME snapshot -- never count.
+    hook_anc = _hook_ancestors(snapshot)
+    matched = {pid for pid, (_ppid, ucomm, argv) in snapshot.items()
+               if pid not in hook_anc and ucomm not in _SHELL_COMM
+               and argv and _classify(_resolve_segment(_resolve_runner(argv))) == cls}
+    return sum(1 for pid in matched if _is_root(pid, matched, snapshot))
 
 
 # ---- memory: critical denies WITHOUT counting --------------------------------
 _SWAP_USED_RE = re.compile(r"used\s*=\s*([\d.]+)([MG])")
 _MEMINFO_RE = re.compile(r"^(MemTotal|MemAvailable):\s*(\d+)", re.MULTILINE)
 
+def _run(argv: list[str], timeout: float = 2) -> str:
+    import subprocess  # lazy: paid only once a class is actually detected
+    return subprocess.run(argv, capture_output=True, text=True, timeout=timeout, check=True).stdout
+
 def _parse_swap_used(text: str) -> float:
     m = _SWAP_USED_RE.search(text)
     if not m:
-        raise ValueError(f"unrecognized vm.swapusage output: {text!r}")
+        raise ValueError("unrecognized vm.swapusage output")
     return float(m.group(1)) * (2 ** 30 if m.group(2) == "G" else 2 ** 20)
-
-def _parse_meminfo(text: str) -> dict:
-    return {k: int(v) for k, v in _MEMINFO_RE.findall(text)}
 
 def read_signal() -> dict:
     if sys.platform == "darwin":
-        return {
-            "platform": "darwin",
-            "pressure_level": int(_run(["sysctl", "-n", "kern.memorystatus_vm_pressure_level"])),
-            "memorystatus_level": int(_run(["sysctl", "-n", "kern.memorystatus_level"])),
-            "swap_used": _parse_swap_used(_run(["sysctl", "-n", "vm.swapusage"])),
-            "ram": float(_run(["sysctl", "-n", "hw.memsize"])),
-        }
+        level, ms, swap_txt, ram = _run(["sysctl", "-n",
+            "kern.memorystatus_vm_pressure_level", "kern.memorystatus_level",
+            "vm.swapusage", "hw.memsize"]).splitlines()
+        return {"platform": "darwin", "pressure_level": int(level),
+                "memorystatus_level": int(ms), "swap_used": _parse_swap_used(swap_txt),
+                "ram": float(ram)}
     if sys.platform.startswith("linux"):
-        return {"platform": "linux",
-                **_parse_meminfo(Path("/proc/meminfo").read_text(encoding="utf-8", errors="replace"))}
-    return {"platform": "other"}  # incl. Windows: no pgrep there either
+        with open("/proc/meminfo", encoding="utf-8", errors="replace") as fh:
+            return {"platform": "linux", **{k: int(v) for k, v in _MEMINFO_RE.findall(fh.read())}}
+    return {"platform": "other"}  # incl. Windows: no snapshot counting there either
 
 def _memory_critical(sig: dict) -> tuple[bool, str]:
     if sig["platform"] == "darwin":
@@ -293,31 +412,27 @@ def _memory_critical(sig: dict) -> tuple[bool, str]:
 
 
 # ---- dispatch -----------------------------------------------------------------
-def _note_unmeasured(kind: str) -> None:
-    print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
-        "additionalContext": f"[heavy-admission] unmeasured ({kind}) -- admitted"}}))
-    log_fire(HOOK_NAME, status="error", detail=kind)
-
-def admit(command: str) -> int:
-    """0 = allow, 2 = deny. retry-budget.py's own try/except around the call
-    is a second, outer safety net -- every error here already fails open."""
+def admit(command: str, cwd: str | None = None) -> int:
+    """0 = allow, 2 = deny. Every error admits, visibly. `cwd` is the
+    payload's cwd, used only to resolve a bare `git push`'s repo."""
     try:
-        cls = detect_class(command)
+        cls = detect_class(command, cwd)
         if cls is None:
             return 0
         sig = read_signal()
         if sig["platform"] not in ("darwin", "linux"):
             return 0  # Windows and unmeasured platforms: allow silently, not an error
         critical, reading = _memory_critical(sig)
-        running = None
         if critical:
-            headline = "machine memory is critical"
+            # Counting was SKIPPED, so there is no "the running" job to name.
+            headline, hint = "machine memory is critical", "wait for machine memory to recover"
         else:
-            running = _count_running(cls)
+            running = _count_running(cls, _read_snapshot())
             cap = CLASS_CAPS[cls]
             if running < cap:
                 return 0
             headline = f"a {cls} is already running ({running} of cap {cap})"
+            hint = _HINTS.get(cls, "wait for the running one to finish")
         if os.environ.get(BYPASS_VAR) == "1" or inline_bypass(command, BYPASS_VAR):
             log_fire(HOOK_NAME, status="bypassed", cls=cls, reason=headline)
             return 0
@@ -325,12 +440,16 @@ def admit(command: str) -> int:
             "BLOCKED by heavy-command-admission (folded into retry-budget):\n"
             f"  {headline}.\n"
             f"  Reading: {reading}.\n"
-            f"  {_HINTS.get(cls, 'wait for the running one to finish')}.\n"
+            f"  {hint}.\n"
             f"  Bypass: prefix with {BYPASS_VAR}=1.",
             file=sys.stderr,
         )
         log_fire(HOOK_NAME, status="blocked", cls=cls, reason=headline)
         return 2
     except Exception as exc:
-        _note_unmeasured(type(exc).__name__)
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
+            "additionalContext": f"[heavy-admission] unmeasured ({type(exc).__name__}) -- admitted"}}))
+        # "warned", not "blocked"/"bypassed"/"fired": guard_telemetry's own
+        # taxonomy (see its module docstring) has no "error" status.
+        log_fire(HOOK_NAME, status="warned", detail=type(exc).__name__)
         return 0
