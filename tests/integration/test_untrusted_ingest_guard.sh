@@ -550,6 +550,52 @@ with tempfile.TemporaryDirectory() as d5:
     check("injection_flags: [prompt-injection-system-impersonation]" in text5a_lines,
           "(T5i) YouTube writes injection_flags bare, not quoted")
 
+    # T5j (Fix 1): upload_date is THIRD-PARTY text -- an 8-digit shape check
+    # alone accepts a value that is 8 digits but not a real calendar day
+    # (month 13 here). yaml.safe_load raises ValueError on that rendered
+    # bare (as a `date`), crashing every reader of the note. Preserved and
+    # quoted is correct; the file must still write and still be readable.
+    rc5j = _run_yt("vid_badmonth", {"id": "vid_badmonth", "title": "Bad Month Video", "channel": "YT Channel",
+                                     "upload_date": "20261399", "duration": 1},
+                    "Hello.", vault=vault5)
+    check(rc5j == 0, "(T5j) exit 0 with an out-of-range month")
+    matches5j = list((vault5 / "External Inputs" / "YouTube" / "yt-channel").glob("*-bad-month-video.md"))
+    check(len(matches5j) == 1, "(T5j) file written despite month 13")
+    if matches5j:
+        # split_frontmatter must not raise -- a bare invalid date would
+        # abort yaml.safe_load for every reader, this helper included.
+        meta5j, _ = cu.split_frontmatter(matches5j[0].read_text(encoding="utf-8"))
+        check(meta5j.get("upload_date") == "20261399",
+              "(T5j) the invalid date is preserved as a quoted string (got %r)" % meta5j.get("upload_date"))
+        check(set(meta5j) == EXPECTED_T5H_KEYS,
+              "(T5j) no standalone frontmatter key is forged (got keys %r)" % sorted(meta5j))
+        check(all(k in meta5j for k in ("content_trust", "injection_scan", "injection_flags")),
+              "(T5j) the three trust keys are present (got keys %r)" % sorted(meta5j))
+
+    # T5k: same class, a day that does not exist (Feb 30) rather than a
+    # month that does not exist.
+    rc5k = _run_yt("vid_badday", {"id": "vid_badday", "title": "Bad Day Video", "channel": "YT Channel",
+                                   "upload_date": "20260230", "duration": 1},
+                    "Hello.", vault=vault5)
+    check(rc5k == 0, "(T5k) exit 0 with Feb 30")
+    matches5k = list((vault5 / "External Inputs" / "YouTube" / "yt-channel").glob("*-bad-day-video.md"))
+    check(len(matches5k) == 1, "(T5k) file written despite Feb 30")
+    if matches5k:
+        meta5k, _ = cu.split_frontmatter(matches5k[0].read_text(encoding="utf-8"))
+        check(meta5k.get("upload_date") == "20260230",
+              "(T5k) the invalid date is preserved as a quoted string (got %r)" % meta5k.get("upload_date"))
+        check(set(meta5k) == EXPECTED_T5H_KEYS,
+              "(T5k) no standalone frontmatter key is forged (got keys %r)" % sorted(meta5k))
+        check(all(k in meta5k for k in ("content_trust", "injection_scan", "injection_flags")),
+              "(T5k) the three trust keys are present (got keys %r)" % sorted(meta5k))
+
+    # T5l: a genuine 8-digit upload_date (T5a's "20260501") still parses as
+    # a real `date`, not a quoted string -- Fix 1 only tightens the
+    # bare-render gate, it does not regress the valid-date path.
+    meta5l, _ = cu.split_frontmatter(target5a.read_text(encoding="utf-8"))
+    check(isinstance(meta5l.get("upload_date"), _date_cls),
+          "(T5l) a valid 8-digit upload_date still parses as a date (got %r)" % meta5l.get("upload_date"))
+
 # T6: write_external_input.
 with tempfile.TemporaryDirectory() as d6:
     vault6 = pathlib.Path(d6)

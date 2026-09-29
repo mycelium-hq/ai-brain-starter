@@ -200,6 +200,22 @@ def detect_seeds(transcript: str) -> list[str]:
 # safe check below instead of an unconditional bare render.
 _BARE_STR_KEYS = frozenset({"content_trust", "injection_scan"})
 _SAFE_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+_RAW_DATE_SHAPE_RE = re.compile(r"\d{8}")
+
+
+def _is_real_calendar_date(value: str, fmt: str) -> bool:
+    """True only when VALUE has FMT's digit shape (fmt is "%Y%m%d" or
+    "%Y-%m-%d") AND datetime.strptime(value, fmt) succeeds. The shape check
+    still matters because strptime alone accepts some non-8-digit-wide
+    forms (e.g. a single-digit month)."""
+    shape_re = _RAW_DATE_SHAPE_RE if fmt == "%Y%m%d" else _SAFE_DATE_RE
+    if not shape_re.fullmatch(value):
+        return False
+    try:
+        datetime.strptime(value, fmt)
+    except ValueError:
+        return False
+    return True
 
 
 def write_vault_file(
@@ -219,11 +235,13 @@ def write_vault_file(
             # third-party text -- bare YAML flow sequence, matching
             # trust_frontmatter_lines.
             yaml_lines.append(f"{k}: [" + ", ".join(str(i) for i in v) + "]")
-        elif k == "upload_date" and isinstance(v, str) and _SAFE_DATE_RE.fullmatch(v):
-            # Bare only when it is PROVEN to be just digits and hyphens in
-            # this exact shape (a real 8-digit yt-dlp date, hyphenated
-            # below, or the local now()-computed fallback) -- never on the
-            # raw yt-dlp value's say-so. PyYAML then reads it as a `date`.
+        elif k == "upload_date" and isinstance(v, str) and _is_real_calendar_date(v, "%Y-%m-%d"):
+            # Bare only when it is a REAL calendar date in this exact
+            # shape (a real 8-digit yt-dlp date, hyphenated below, or the
+            # local now()-computed fallback) -- never on shape alone.
+            # PyYAML reads a bare match via its own strptime-backed date
+            # resolver, so an impossible date like 2026-13-99 would raise
+            # for every downstream reader instead of just this one.
             yaml_lines.append(f"{k}: {v}")
         elif isinstance(v, str) and k not in _BARE_STR_KEYS:
             # Every OTHER string value -- restores main's coverage (which
@@ -307,9 +325,11 @@ def main() -> int:
     # value: `len(...) == 8` accepted anything 8 CHARS long, digits or not,
     # so e.g. "\nabc: vv" (8 chars, zero digits) hyphenated into
     # "\nabc-: -vv" and forged a standalone `abc-` frontmatter key when
-    # rendered bare. re.fullmatch requires all 8 to be digits.
+    # rendered bare. All-digit shape isn't enough either -- an impossible
+    # date like "20261399" is 8 digits but not a real day, and yaml.safe_load
+    # raises on it rendered bare, so this must be a REAL calendar date.
     upload_date_raw = meta.get("upload_date") or ""
-    if re.fullmatch(r"\d{8}", upload_date_raw):
+    if _is_real_calendar_date(upload_date_raw, "%Y%m%d"):
         upload_date = f"{upload_date_raw[:4]}-{upload_date_raw[4:6]}-{upload_date_raw[6:8]}"
     else:
         # Preserve the raw value for the frontmatter rather than silently
