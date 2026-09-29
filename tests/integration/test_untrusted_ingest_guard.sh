@@ -1059,6 +1059,19 @@ else:
           "(T13) a value containing ' --- ' round-trips through split_frontmatter (got %r)" % meta13.get("title"))
     check(meta13.get("content_trust") == "untrusted", "(T13) content_trust survives alongside it")
 
+# T13b (finding 8): a `---` delimiter line ending in \r (a raw CRLF file
+# passed directly, not through Path.read_text()'s universal-newline
+# translation) must still be recognised as the delimiter, not left as part
+# of the line so the whole block reads as unparsed.
+if cu.yaml is None:
+    check(False, "(T13b) PyYAML missing -- cannot verify CRLF frontmatter split")
+else:
+    meta13b, body13b = cu.split_frontmatter("---\r\nhand_edited: true\r\n---\r\nbody")
+    check(meta13b.get("hand_edited") is True,
+          "(T13b) a raw CRLF frontmatter block passed directly still parses (got %r)" % meta13b)
+    check(body13b == "\nbody",
+          "(T13b) the body after the closing CRLF delimiter is intact (got %r)" % body13b)
+
 # T14 (finding 3): a stale skills/_shared/connector_utils.py -- one taken
 # between the two MYC-4701 batches, with guard_untrusted_body and
 # trust_frontmatter_lines but not yet sanitize_third_party_text -- must not

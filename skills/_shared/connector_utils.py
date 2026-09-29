@@ -606,7 +606,7 @@ def render_frontmatter(meta: dict[str, Any]) -> str:
     return f"---\n{body}\n---\n\n"
 
 
-_FRONTMATTER_DELIM_RE = re.compile(r"(?m)^---[ \t]*$")
+_FRONTMATTER_DELIM_RE = re.compile(r"(?m)^---[ \t]*\r?$")
 
 
 def split_frontmatter(text: str) -> tuple[dict[str, Any], str]:
