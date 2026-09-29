@@ -155,14 +155,19 @@ def _dash_c_script(rest: list[str]):
 def _after_run(r: list[str]) -> list[str]:
     return r[1:] if r[:1] == ["run"] else r
 
-_VITEST_WATCH_WORDS = {"--watch", "watch", "dev"}  # a watcher is never a full run
+# A watcher (tsc -w/--watch, vitest --watch/watch/dev) does a FULL pass
+# FIRST -- same incident risk, so it stays DETECTED here -- then sits
+# resident; _is_watcher below exempts a MATCHED row from COUNTING only, so
+# an idle one never holds the class's slot forever (step 5).
+_VITEST_WATCH_WORDS = {"--watch", "watch", "dev"}
 
 def _vitest_unscoped(tail: list[str]) -> bool:
-    """True unless a positional (a file or filter) survives the flags."""
+    """True unless a positional (a file or filter) survives the flags. A
+    watch word is a boolean mode flag here, not a positional."""
     it = iter(tail)
     for tok in it:
         if tok in _VITEST_WATCH_WORDS:
-            return False
+            continue
         if tok in _VITEST_VALUE_FLAGS:
             next(it, None)
         elif not tok.startswith("-"):
@@ -170,8 +175,6 @@ def _vitest_unscoped(tail: list[str]) -> bool:
     return True
 
 def _tsc_is_full(rest: list[str]) -> bool:
-    if {"--watch", "-w"} & set(rest):
-        return False  # a watcher is never a full run
     if not rest:
         return True  # bare `tsc`: compiles per the local tsconfig, i.e. the whole project
     if not ({"--noEmit", "-b", "--build"} & set(rest)):
@@ -367,14 +370,39 @@ def _ancestors(pid: int, snapshot: dict) -> set[int]:
         pid = snapshot[pid][0]
     return seen
 
+def _is_watcher(t: list[str]) -> bool:
+    """True if the RESOLVED argv T is a watcher: tsc -w/--watch, or vitest's
+    (bare or pm-wrapped) own --watch/watch/dev. It already did a full pass
+    -- exempts a MATCHED row from COUNTING only; detection still classifies
+    these (_tsc_is_full/_vitest_unscoped) so a NEW one is refused same as any
+    other heavy command."""
+    if not t:
+        return False
+    head, rest = _basename(t[0]), t[1:]
+    if head == "tsc":
+        return bool({"--watch", "-w"} & set(rest))
+    r = _after_run(rest)
+    if head == "vitest":
+        return bool(_VITEST_WATCH_WORDS & set(r))
+    if head in ("npm", "pnpm", "yarn") and r[:1] in (["test"], ["vitest"]):
+        return bool(_VITEST_WATCH_WORDS & set(_after_run(r[1:])))
+    return False
+
 def _count_running(cls: str, snapshot: dict) -> int:
     # ROOT invocations of CLS only: a match with a same-class match among its
     # ancestors doesn't count (one `pnpm run build` counts 1, not once per
-    # spawned child). This hook's own ancestors never count.
+    # spawned child). This hook's own ancestors never count. A watcher row
+    # (_is_watcher) never counts either -- it is still DETECTED, so a NEW one
+    # is refused same as any other heavy command; only an EXISTING, already-
+    # resident one must not hold the class's slot forever.
     hook_anc = _ancestors(os.getppid(), snapshot)
-    matched = {pid for pid, (_ppid, argv) in snapshot.items()
-               if pid not in hook_anc
-               and argv and _classify(_resolve_segment(_resolve_runner(argv))) == cls}
+    matched = set()
+    for pid, (_ppid, argv) in snapshot.items():
+        if pid in hook_anc or not argv:
+            continue
+        t = _resolve_segment(_resolve_runner(argv))
+        if _classify(t) == cls and not _is_watcher(t):
+            matched.add(pid)
     return sum(1 for pid in matched if not (_ancestors(snapshot[pid][0], snapshot) & matched))
 
 

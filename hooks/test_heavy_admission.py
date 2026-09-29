@@ -84,13 +84,6 @@ MUST_ADMIT = [
     'tsc -p apps/x/tsconfig.json --noEmit',
     'vitest run src/a.test.ts',
     'pnpm vitest run src/a.test.ts 2>&1 | tail -5',
-    # step 5: a watcher is never a full run -----------------------------
-    'tsc -b -w',
-    'tsc --noEmit --watch',
-    'vitest --watch',
-    'pnpm vitest --watch',
-    'vitest watch',
-    'vitest dev',
 ]
 MUST_DETECT = [
     ('pnpm vitest run 2>&1 | tail -40', 'test_suite'),
@@ -156,6 +149,14 @@ MUST_DETECT = [
     ('for x in a b c; do next build; done', 'build'),
     ('{ next build; }', 'build'),
     ('if true; then pnpm run build; fi', 'build'),
+    # step 5: a watcher did a FULL pass first -- still DETECTED as heavy;
+    # only COUNTING exempts an already-running one (leg_counting/leg_decision).
+    ('tsc -b -w', 'tsc_full'),
+    ('tsc --noEmit --watch', 'tsc_full'),
+    ('vitest --watch', 'test_suite'),
+    ('pnpm vitest --watch', 'test_suite'),
+    ('vitest watch', 'test_suite'),
+    ('vitest dev', 'test_suite'),
 ]
 
 
@@ -183,6 +184,10 @@ def leg_decision() -> None:
     mod.read_signal = lambda: CRITICAL
     mod._count_running = lambda cls, snap: (_ for _ in ()).throw(RuntimeError("must not count"))
     check("A critical memory denies WITHOUT counting", _admit(mod, "next build")[0] == 2)
+    # step 5: a watcher is still DETECTED -- critical memory denies a NEW one
+    # too (never silently admitted just because it will "only" sit resident).
+    check("A a watcher (tsc --noEmit --watch) is STILL DETECTED: critical memory denies it too",
+          _admit(mod, "tsc --noEmit --watch")[0] == 2)
 
     mod = _load("heavy_admission_a_error")
     mod.read_signal = _raise_sig
@@ -247,6 +252,21 @@ def leg_counting() -> None:
     check("M a build's own spawned child doesn't count again", count("build", tree) == 1)
     check("M this hook's own ancestor chain is excluded even if it matches",
           count("build", {os.getppid(): (1, ["pnpm", "run", "build"])}) == 0)
+
+    # step 5: a watcher did a full pass first (same heavy class) but then
+    # sits resident -- it stays DETECTED (MUST_DETECT above) but is EXEMPT
+    # from counting, so an idle one never holds the class's slot forever.
+    check("M a tsc -b -w row counts 0 for tsc_full (detected, but a watcher)",
+          count("tsc_full", {113: (1, ["tsc", "-b", "-w"])}) == 0)
+    check("M a vitest --watch row counts 0 for test_suite",
+          count("test_suite", {114: (1, ["vitest", "--watch"])}) == 0)
+    check("M a vitest watch (subcommand form) row counts 0 for test_suite",
+          count("test_suite", {115: (1, ["vitest", "watch"])}) == 0)
+    mod2 = _load("heavy_admission_m_watcher_admit")
+    mod2.read_signal = lambda: IDLE
+    mod2._read_snapshot = lambda: {116: (1, ["tsc", "-b", "-w"])}  # a planted watcher row
+    check("M with a planted `tsc -b -w` row in the snapshot, `pnpm typecheck` still admits",
+          mod2.admit("pnpm typecheck") == 0)
 
     # Real, unmodified plants: _read_snapshot()'s own ps parse, end to end, next
     # to a foreign process whose argv carries a raw non-UTF-8 byte (0xE9).
