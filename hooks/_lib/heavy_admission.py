@@ -156,10 +156,14 @@ def _dash_c_script(rest: list[str]):
 def _after_run(r: list[str]) -> list[str]:
     return r[1:] if r[:1] == ["run"] else r
 
+_VITEST_WATCH_WORDS = {"--watch", "watch", "dev"}  # a watcher is never a full run
+
 def _vitest_unscoped(tail: list[str]) -> bool:
     """True unless a positional (a file or filter) survives the flags."""
     it = iter(tail)
     for tok in it:
+        if tok in _VITEST_WATCH_WORDS:
+            return False
         if tok in _VITEST_VALUE_FLAGS:
             next(it, None)
         elif not tok.startswith("-"):
@@ -167,6 +171,10 @@ def _vitest_unscoped(tail: list[str]) -> bool:
     return True
 
 def _tsc_is_full(rest: list[str]) -> bool:
+    if {"--watch", "-w"} & set(rest):
+        return False  # a watcher is never a full run
+    if not rest:
+        return True  # bare `tsc`: compiles per the local tsconfig, i.e. the whole project
     if not ({"--noEmit", "-b", "--build"} & set(rest)):
         return False
     for i, tok in enumerate(rest):

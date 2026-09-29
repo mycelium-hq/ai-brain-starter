@@ -79,6 +79,13 @@ MUST_ADMIT = [
     'tsc -p apps/x/tsconfig.json --noEmit',
     'vitest run src/a.test.ts',
     'pnpm vitest run src/a.test.ts 2>&1 | tail -5',
+    # step 5: a watcher is never a full run -----------------------------
+    'tsc -b -w',
+    'tsc --noEmit --watch',
+    'vitest --watch',
+    'pnpm vitest --watch',
+    'vitest watch',
+    'vitest dev',
 ]
 MUST_DETECT = [
     ('pnpm vitest run 2>&1 | tail -40', 'test_suite'),
