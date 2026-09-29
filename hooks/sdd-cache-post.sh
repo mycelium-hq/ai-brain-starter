@@ -54,6 +54,10 @@ trap 'exit 0' ERR
 # cleanup deleted names the hook never wrote). No CDPATH, which sends `cd`
 # elsewhere and makes it print where it went. No GREP_OPTIONS, QUOTING_STYLE or
 # colour switches, which change what a tool prints into a pipe.
+# curl alone keeps the caller's LC_ALL: it takes its character set from the
+# environment, and a libidn2 build (Linux) converts a non-ASCII host name from
+# that set, which in the C locale is ASCII, so such a URL was never cached.
+SDD_CALLER_LC_ALL=${LC_ALL-}
 export LC_ALL=C
 unset CDPATH GREP_OPTIONS GREP_COLOR GREP_COLORS QUOTING_STYLE CLICOLOR CLICOLOR_FORCE LS_COLORS
 
@@ -182,7 +186,7 @@ CACHE_FILE="$CACHE_DIR/$(printf '%s' "$URL" | sha256_hex | cut -c1-32).json"
 # to. Strip CR so awk's paragraph mode recognises blank separators between
 # response blocks on a redirect chain. `-q` (first, or curl ignores it) keeps
 # ~/.curlrc out; `-g` stops URL globbing, which turns `[1-40]` into forty HEADs.
-HEAD_OUT=$(curl -q -sI -g -L --max-time 5 --proto '=https' --proto-redir '=https' "$URL" 2>/dev/null | tr -d '\r' || true)
+HEAD_OUT=$(env LC_ALL="$SDD_CALLER_LC_ALL" curl -q -sI -g -L --max-time 5 --proto '=https' --proto-redir '=https' "$URL" 2>/dev/null | tr -d '\r' || true)
 
 # Take only the final response's headers (last paragraph) to avoid picking
 # up validators from intermediate 301/302 hops. Here-strings, not pipes: an awk
@@ -296,15 +300,16 @@ cap() {  # $1 = value, $2 = default -> a decimal count of at least 1
   printf '%s' "$v"
 }
 by_age() {  # newest first, the entry this run wrote left out
-  local line
+  local skip=""
+  if [ "$WROTE" = 1 ]; then skip=$CACHE_FILE; fi
+  # awk drops the one line equal to that entry. Not grep: BSD grep honours
+  # GREP_OPTIONS, and `-z` there made each run evict the entry it had just
+  # written. Not a shell loop: about seven times slower than awk at the
+  # 1024-entry cap, on every fetch. ENVIRON, not `awk -v`, which rewrites
+  # escape sequences such as a `\t` in the path.
   # shellcheck disable=SC2012
   env -u QUOTING_STYLE -u CLICOLOR_FORCE ls -1td -- "$@" 2>/dev/null \
-    | while IFS= read -r line; do
-        # A plain comparison, not grep: BSD grep honours GREP_OPTIONS, and
-        # `-z` there made each run evict the entry it had just written.
-        if [ "$WROTE" = 1 ] && [ "$line" = "$CACHE_FILE" ]; then continue; fi
-        printf '%s\n' "$line"
-      done
+    | SDD_SKIP=$skip awk '$0 != ENVIRON["SDD_SKIP"]'
 }
 MAX=$(cap "${SDD_CACHE_MAX_ENTRIES:-}" 256)
 by_age "$CACHE_DIR"/*.json \

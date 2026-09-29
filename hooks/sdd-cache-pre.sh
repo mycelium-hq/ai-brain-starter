@@ -48,6 +48,10 @@ trap 'exit 0' ERR
 # cleanup deleted names the hook never wrote). No CDPATH, which sends `cd`
 # elsewhere and makes it print where it went. No GREP_OPTIONS, QUOTING_STYLE or
 # colour switches, which change what a tool prints into a pipe.
+# curl alone keeps the caller's LC_ALL: it takes its character set from the
+# environment, and a libidn2 build (Linux) converts a non-ASCII host name from
+# that set, which in the C locale is ASCII, so such a URL was never cached.
+SDD_CALLER_LC_ALL=${LC_ALL-}
 export LC_ALL=C
 unset CDPATH GREP_OPTIONS GREP_COLOR GREP_COLORS QUOTING_STYLE CLICOLOR CLICOLOR_FORCE LS_COLORS
 
@@ -227,7 +231,7 @@ HEADERS=()
 # could answer 304 and pin a stale entry. `-q` (first, or curl ignores it) keeps
 # ~/.curlrc out, where an `insecure` or proxy line would change who answers;
 # `-g` stops URL globbing, which turns `[1-40]` into forty requests.
-STATUS=$(curl -q -sI -g -o /dev/null -w "%{http_code}" \
+STATUS=$(env LC_ALL="$SDD_CALLER_LC_ALL" curl -q -sI -g -o /dev/null -w "%{http_code}" \
   --max-time 5 -L --proto '=https' --proto-redir '=https' \
   "${HEADERS[@]}" \
   "$URL" 2>/dev/null || echo "000")

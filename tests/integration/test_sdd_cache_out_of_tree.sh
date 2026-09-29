@@ -17,8 +17,9 @@
 # Cases T10 and T15-T22 come from two independent adversarial reviews of the
 # first version of the fix, T23-T28 (plus the planted legs of T15 and the
 # no-directory half of T11) from a third review of the second, T28-T44 from a
-# fourth, and T45-T46 plus legs of T37, T39 and T44 from a fifth (the global
-# cap is T47, still last); each names the defect it pins.
+# fourth, T45-T46 plus legs of T37, T39 and T44 from a fifth, and T47-T48
+# from a sixth (the global cap is T49, still last); each names the defect it
+# pins.
 #
 # Hermetic: `curl` is a PATH stub (no network), HOME is a sandbox, and the
 # test runs from its own temp dir so nothing it spawns can write into the
@@ -67,6 +68,8 @@ cat > "$BIN/curl" <<'STUB'
 #!/usr/bin/env bash
 # STUB_ARGV_LOG: append this call's arguments (to check the hooks' flags).
 if [ -n "${STUB_ARGV_LOG:-}" ]; then printf '%s\n' "$*" >> "$STUB_ARGV_LOG"; fi
+# STUB_LOCALE_LOG: append the LC_ALL this call ran under (empty when unset).
+if [ -n "${STUB_LOCALE_LOG:-}" ]; then printf '%s\n' "${LC_ALL:-}" >> "$STUB_LOCALE_LOG"; fi
 # Like real curl under --proto '=https': a plain-http URL fails before any
 # request, printing nothing. The URL is the last argument in both hooks.
 proto=""; prev=""; url=""
@@ -551,7 +554,7 @@ if [ -e "$TMPROOT/caseprobe" ]; then
   rc=$(STUB_STATUS=304 run_pre "$URL21")
   rm -rf "$SBX/.git"
   # Eviction deletes only the lower-case hex names the hook writes, so this
-  # hand-made upper-case one would outlive every cap (T47 counts it).
+  # hand-made upper-case one would outlive every cap (T49 counts it).
   rm -f "$E21UP"
   if [ "$tracked21" != "${E21UP#"$SBX"/}" ]; then
     no "T21: precondition not created -- the index holds '${tracked21:-nothing}', not the upper-case entry"
@@ -1120,7 +1123,49 @@ else
   no "T46: 'p46<LF>' was served p46's entry"
 fi
 
-# ---- T47. One bound across every project; emptied directories go ------------
+# ---- T47. curl keeps the caller's locale; everything else runs in C --------
+# Review finding: `export LC_ALL=C` reached curl too. curl takes its character
+# set from the environment, and a libidn2 build (Linux) converts a non-ASCII
+# host name from it; in the C locale that set is ASCII, so such a URL was never
+# cached. A caller with no LC_ALL passes none on.
+LOG47="$TMPROOT/curl-locale-47"; : > "$LOG47"
+URL47="https://docs.example.test/locale-47"
+post_env "$PROJECT" "$URL47" "LOCALE-47" STUB_ETAG='"v47"' STUB_LOCALE_LOG="$LOG47" LC_ALL=en_US.UTF-8
+rc47=$(jq -nc --arg u "$URL47" '{tool_name:"WebFetch",tool_input:{url:$u,prompt:"p"}}' \
+  | run_sandboxed "$SBX" env -u XDG_CACHE_HOME -u SDD_CACHE_DEBUG PATH="$BIN:$PATH" STUB_STATUS=304 \
+      STUB_LOCALE_LOG="$LOG47" LC_ALL=en_US.UTF-8 CLAUDE_PROJECT_DIR="$PROJECT" bash "$PRE" \
+      >/dev/null 2>"$TMPROOT/pre.err"; echo $?)
+printf '%s' "LOCALE-47B" \
+  | jq -Rs '{tool_name:"WebFetch",tool_input:{url:"https://docs.example.test/locale-47b",prompt:"p"},tool_response:{result:.}}' \
+  | run_sandboxed "$SBX" env -u XDG_CACHE_HOME -u SDD_CACHE_DEBUG -u LC_ALL PATH="$BIN:$PATH" \
+      STUB_ETAG='"v47b"' STUB_LOCALE_LOG="$LOG47" CLAUDE_PROJECT_DIR="$PROJECT" bash "$POST" >/dev/null 2>&1
+seen47="$(tr '\n' '|' < "$LOG47")"
+if [ "$rc47" = 2 ] && [ "$seen47" = "en_US.UTF-8|en_US.UTF-8||" ]; then
+  ok "T47: curl runs under the caller's LC_ALL in both hooks, and under none when the caller has none"
+else
+  no "T47: pre exit $rc47; LC_ALL seen by curl [post, pre, post with none] = '$seen47' (want 'en_US.UTF-8|en_US.UTF-8||')"
+fi
+
+# ---- T48. A backslash in the home path cannot evict the entry just written --
+# The eviction pass leaves out the entry this run wrote by comparing paths in
+# awk. Passed with `awk -v`, a `\t` in the path turned into a tab, nothing
+# matched, and at a cap of 1 each run evicted its own entry.
+SBX_MAIN="$SBX"; SBX="$TMPROOT/home48\\tback"; mkdir -p "$SBX"
+for i in 1 2; do
+  post_env "$PROJECT" "https://docs.example.test/backslash-48-$i" "BACKSLASH-48-$i" \
+    STUB_ETAG="\"b$i\"" SDD_CACHE_MAX_ENTRIES=1
+done
+n48="$(find "$SBX/.claude/.cache/sdd-cache" -type f -name '*.json' | wc -l | tr -d ' ')"
+last48="$(find "$SBX/.claude/.cache/sdd-cache" -type f \
+  -name "$(url_sha "https://docs.example.test/backslash-48-2").json" | wc -l | tr -d ' ')"
+SBX="$SBX_MAIN"
+if [ "$n48" = 1 ] && [ "$last48" = 1 ]; then
+  ok "T48: under a home whose path holds a backslash, a cap of 1 keeps the entry just written"
+else
+  no "T48: $n48 entries at a cap of 1; the entry just written present: $last48"
+fi
+
+# ---- T49. One bound across every project; emptied directories go ------------
 # Review finding: one directory per project directory, eviction only inside the
 # current one, and nothing reclaimed the directories of deleted projects, so a
 # worktree-per-session workflow grew the cache without limit. LAST case on
@@ -1150,9 +1195,9 @@ dirs28="$([ -e "$(proj_dir "$TMPROOT/p28a")" ] && echo y || echo n)$([ -e "$PDIR
 if [ "$total28" = 3 ] && [ "$kept28" = yyy ] && [ "$gone28" = nn ] && [ "$dirs28" = nn ] \
    && [ -e "$OUT28/0123456789abcdef0123456789abcdef.json" ] \
    && [ -f "$CACHE_ROOT/.key" ] && [ -f "$CACHE_ROOT/.gitignore" ]; then
-  ok "T47: the whole root holds at most SDD_CACHE_MAX_TOTAL entries (newest kept), emptied project dirs are removed, nothing is evicted through a symlinked dir"
+  ok "T49: the whole root holds at most SDD_CACHE_MAX_TOTAL entries (newest kept), emptied project dirs are removed, nothing is evicted through a symlinked dir"
 else
-  no "T47: left in the root: [$(find "$CACHE_ROOT" -mindepth 2 -maxdepth 2 | sed "s|^$CACHE_ROOT/||" | tr '\n' ' ')]; total=$total28 (want 3), newest c2/c1/b1 kept=$kept28, oldest a2/a1 kept=$gone28, emptied dirs p28a/main kept=$dirs28, symlinked-dir entry kept=$([ -e "$OUT28/0123456789abcdef0123456789abcdef.json" ] && echo y || echo n), key=$([ -f "$CACHE_ROOT/.key" ] && echo y || echo n), gitignore=$([ -f "$CACHE_ROOT/.gitignore" ] && echo y || echo n)"
+  no "T49: left in the root: [$(find "$CACHE_ROOT" -mindepth 2 -maxdepth 2 | sed "s|^$CACHE_ROOT/||" | tr '\n' ' ')]; total=$total28 (want 3), newest c2/c1/b1 kept=$kept28, oldest a2/a1 kept=$gone28, emptied dirs p28a/main kept=$dirs28, symlinked-dir entry kept=$([ -e "$OUT28/0123456789abcdef0123456789abcdef.json" ] && echo y || echo n), key=$([ -f "$CACHE_ROOT/.key" ] && echo y || echo n), gitignore=$([ -f "$CACHE_ROOT/.gitignore" ] && echo y || echo n)"
 fi
 
 echo "---"
