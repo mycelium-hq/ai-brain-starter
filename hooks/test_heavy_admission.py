@@ -389,6 +389,63 @@ def leg_git_push() -> None:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+# --------------------------------------------- P: pre-approval PATH pathprobe ---
+def leg_pathprobe() -> None:
+    """SECURITY (step 3): git, ps and sysctl were spawned by BARE NAME, and git
+    additionally got cwd= set to a directory the COMMAND TEXT can choose (a
+    `cd`). A relative or empty PATH entry, reached from that directory, let a
+    planted binary there run BEFORE the user approves the command. Drives the
+    REAL retry-budget.py end to end; proves interception via a marker file
+    (never by output shape -- git delegates to the real binary after
+    logging, ps/sysctl return the same fixed idle shape leg H's stub uses)."""
+    real_git = shutil.which("git")
+    if real_git is None:
+        print("  SKIP: no git on PATH -- cannot build the pathprobe's delegating wrapper")
+        return
+    tmp = Path(tempfile.mkdtemp(prefix="heavy-admission-pathprobe-"))
+    try:
+        evil = tmp / "evil-repo"
+        subprocess.run(["git", "init", "-q", str(evil)], check=True)
+        hook = evil / ".git" / "hooks" / "pre-push"
+        hook.write_text("#!/bin/sh\nexec pnpm verify\n", encoding="utf-8")
+        hook.chmod(0o755)
+        nested = evil / "node_modules" / ".bin"
+        nested.mkdir(parents=True)
+        home = tmp / "home"
+        home.mkdir()
+
+        def plant(d: Path, marker: Path) -> None:
+            (d / "git").write_text(
+                f'#!/bin/sh\necho hit >> "{marker}"\nexec "{real_git}" "$@"\n', encoding="utf-8")
+            (d / "ps").write_text(f'#!/bin/sh\necho hit >> "{marker}"\n', encoding="utf-8")
+            (d / "sysctl").write_text(
+                f'#!/bin/sh\necho hit >> "{marker}"\n'
+                'printf "1\\n57\\ntotal = 0.00M  used = 0.00M  free = 0.00M\\n17179869184\\n"\n',
+                encoding="utf-8")
+            for name in ("git", "ps", "sysctl"):
+                (d / name).chmod(0o755)
+
+        for tag, path_prefix, plant_dir in (
+            ("relative (node_modules/.bin)", "node_modules/.bin" + os.pathsep, nested),
+            ("empty", os.pathsep, evil),
+        ):
+            marker = tmp / f"marker-{tag.split()[0]}"
+            marker.unlink(missing_ok=True)
+            plant(plant_dir, marker)
+            env = {**os.environ, "HOME": str(home), "USERPROFILE": str(home), "TMPDIR": str(home),
+                   "PATH": path_prefix + os.environ.get("PATH", "")}
+            payload = json.dumps({"session_id": "heavy-admission-pathprobe", "hook_event_name": "PreToolUse",
+                                  "tool_name": "Bash", "tool_input": {"command": f"cd {evil} && git push"},
+                                  "cwd": str(tmp), "tool_use_id": "toolu_pathprobe"})
+            subprocess.run([sys.executable, str(RETRY_BUDGET)], input=payload, capture_output=True,
+                           text=True, encoding="utf-8", errors="replace", env=env, timeout=30)
+            check(f"P a git/ps/sysctl planted via a {tag} PATH entry, reached through the "
+                  "command's own `cd`, never ran",
+                  not marker.exists(), "marker file appeared: a planted binary executed pre-approval")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 # --------------------------------------------------- L: leak + positive control ---
 _LEAK_TOKEN = "ghp_" + "A" * 36
 
@@ -476,7 +533,7 @@ def leg_hook_level_via_retry_budget() -> None:
 
 def main() -> int:
     print("heavy_admission controls")
-    for leg in (leg_corpora, leg_decision, leg_counting, leg_git_push, leg_leak_control,
+    for leg in (leg_corpora, leg_decision, leg_counting, leg_git_push, leg_pathprobe, leg_leak_control,
                 leg_negative_controls, leg_hook_level_via_retry_budget):
         leg()
     if FAILURES:

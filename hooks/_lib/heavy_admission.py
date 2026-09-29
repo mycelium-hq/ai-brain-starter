@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import stat
 import sys
 
@@ -225,12 +226,32 @@ def _parse_git_prefix(rest: list[str]) -> tuple[list[str], list[str]]:
             i += 1
     return rest[:i], rest[i:]
 
+_TOOL_CACHE: dict[str, str] = {}
+
+def _tool(name: str) -> str:
+    """NAME resolved to an absolute path from ABSOLUTE PATH entries only, once
+    per process, before any approval decision -- never a bare name handed to
+    subprocess, which a relative or empty PATH entry (reached via this
+    process's own cwd, or a -C the COMMAND TEXT chose) could resolve to a
+    planted binary. Missing -> raises, so admit()'s catch-all fails OPEN the
+    same VISIBLE way every other internal error does."""
+    if name not in _TOOL_CACHE:
+        abs_only = os.pathsep.join(d for d in os.environ.get("PATH", "").split(os.pathsep) if os.path.isabs(d))
+        found = shutil.which(name, path=abs_only)
+        if found is None:
+            raise FileNotFoundError(f"{name!r} not found on an absolute PATH entry")
+        _TOOL_CACHE[name] = found
+    return _TOOL_CACHE[name]
+
 def _pre_push_hook_file(prefix: list[str], cwd: str):
     # git's own answer (hooksPath at any scope, worktree commondir, the push's own
-    # PREFIX); a husky v9 `.husky/_/` shim defers to `.husky/<hook>`. No chdir into a missing CWD.
+    # PREFIX); a husky v9 `.husky/_/` shim defers to `.husky/<hook>`. -C, never
+    # cwd=: a chdir'd subprocess resolves a bare/relative PATH entry against the
+    # NEW cwd, which the command text (a `cd`/-C) can choose -- see _tool().
     real_cwd = cwd if cwd and os.path.isdir(cwd) else None
-    hook = _run(["git", *prefix, "rev-parse", "--path-format=absolute",
-                 "--git-path", "hooks/pre-push"], cwd=real_cwd, timeout=4).strip()
+    argv = [_tool("git"), *prefix] + (["-C", real_cwd] if real_cwd else [])
+    argv += ["rev-parse", "--path-format=absolute", "--git-path", "hooks/pre-push"]
+    hook = _run(argv, timeout=4).strip()
     shim_dir = os.path.dirname(hook)
     return os.path.join(os.path.dirname(shim_dir), "pre-push") if shim_dir.endswith("/.husky/_") else hook
 
@@ -306,7 +327,7 @@ def _read_snapshot() -> dict[int, tuple[int, list[str]]]:
     # One `ps -A` call: {pid: (ppid, argv_tokens)}. The tokens live only in
     # this dict, for one admit() call -- never printed, logged or stored.
     rows = {}
-    for line in _run(["ps", "-A", "-o", "pid=,ppid=,args="], timeout=4).splitlines():
+    for line in _run([_tool("ps"), "-A", "-o", "pid=,ppid=,args="], timeout=4).splitlines():
         parts = line.split(None, 2)
         if len(parts) < 2 or not (parts[0].isdigit() and parts[1].isdigit()):
             continue
@@ -336,13 +357,15 @@ def _count_running(cls: str, snapshot: dict) -> int:
 _SWAP_USED_RE = re.compile(r"used\s*=\s*([\d.]+)([MG])")
 _MEMINFO_RE = re.compile(r"^(MemTotal|MemAvailable):\s*(\d+)", re.MULTILINE)
 
-def _run(argv: list[str], timeout: float = 2, cwd: str | None = None) -> str:
+def _run(argv: list[str], timeout: float = 2) -> str:
     import subprocess  # lazy: paid only once a class is actually detected
     # utf-8 + replace, never the locale: one foreign non-UTF-8 argv byte must not
     # raise and blind the whole snapshot. The text is only classified, never shown.
+    # No cwd= (see _tool()/_pre_push_hook_file: a directory the COMMAND TEXT
+    # chose, combined with a bare argv[0], is exactly the pre-approval-exec hole).
     return subprocess.run(argv, capture_output=True, text=True,
                           encoding="utf-8", errors="replace",
-                          timeout=timeout, check=True, cwd=cwd).stdout
+                          timeout=timeout, check=True).stdout
 
 def _parse_swap_used(text: str) -> float:
     m = _SWAP_USED_RE.search(text)
@@ -352,7 +375,7 @@ def _parse_swap_used(text: str) -> float:
 
 def read_signal() -> dict:
     if sys.platform == "darwin":
-        level, ms, swap_txt, ram = _run(["sysctl", "-n",
+        level, ms, swap_txt, ram = _run([_tool("sysctl"), "-n",
             "kern.memorystatus_vm_pressure_level", "kern.memorystatus_level",
             "vm.swapusage", "hw.memsize"]).splitlines()
         return {"platform": "darwin", "pressure_level": int(level),
