@@ -517,8 +517,18 @@ def guard_untrusted_body(
             # means the scan did not really run.
             status, flags = "unavailable", []
         else:
-            flags = sorted({f.pattern_id for f in findings})
-            status = "flagged" if flags else "clean"
+            ids = {f.pattern_id for f in findings}
+            if any(not isinstance(i, str) for i in ids):
+                # A non-str id would crash trust_frontmatter_lines's
+                # ", ".join(flags) OUTSIDE this try (round-2 finding 5's
+                # residual): the registry loader validates ids for its own
+                # rules (6703441), but a scanner need not be backed by that
+                # registry at all. Same rule as an unreadable scan result:
+                # untrusted structured data reads unavailable, never partial.
+                status, flags = "unavailable", []
+            else:
+                flags = sorted(ids)
+                status = "flagged" if flags else "clean"
     except Exception:
         status, flags = "unavailable", []
 

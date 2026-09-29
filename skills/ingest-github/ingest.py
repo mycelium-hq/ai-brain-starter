@@ -61,7 +61,12 @@ except ImportError:
         return [
             f"content_trust: {trust['content_trust']}",
             f"injection_scan: {trust['injection_scan']}",
-            "injection_flags: [" + ", ".join(trust["injection_flags"]) + "]",
+            # str()-coerced: this degraded stub's own guard_untrusted_body
+            # above always returns [], but connector_utils.py's real
+            # trust_frontmatter_lines does the same bare ", ".join(flags) --
+            # belt-and-braces here too so this local copy cannot regress
+            # into the same non-str-id crash independently (N1).
+            "injection_flags: [" + ", ".join(str(i) for i in trust["injection_flags"]) + "]",
         ]
 
     def _raw_item_fields(items):

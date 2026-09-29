@@ -67,6 +67,7 @@ import tempfile
 import time
 from contextlib import contextmanager, redirect_stdout
 from datetime import date as _date_cls
+from types import SimpleNamespace
 
 repo = pathlib.Path(sys.argv[1])
 sys.path.insert(0, str(repo / "scripts"))
@@ -817,6 +818,78 @@ with tempfile.TemporaryDirectory() as d8j:
         result8j = acs.scan_or_none("some text with zebra-canary right in it")
         check(result8j is None,
               "(T8j) an extra rule with a non-str id reads unavailable, not a downstream TypeError")
+
+# A THIRD shape, bypassing the registry entirely (N1): a scanner
+# returning genuine Finding-shaped objects -- a real .pattern_id
+# attribute, just the wrong type -- must also read unavailable. T8j
+# proved the PRODUCER (the registry loader) rejects a non-str id; a
+# scanner need not be backed by that registry at all, so this proves
+# the CONSUMER (guard_untrusted_body) does not trust one either. Drives
+# both writers the repro names: Granola and GitHub.
+class _NonStrIdFindingScanner:
+    @staticmethod
+    def scan_or_none(text):
+        return [SimpleNamespace(pattern_id=7)]
+
+
+@contextmanager
+def _granola_scanner_returning(value):
+    """granola_core reaches connector_utils through _untrusted_guard_module(),
+    which importlib-loads its OWN fresh copy under the internal name
+    "_abs_connector_utils" (see granola_core.py) -- a different module
+    object from `cu` (this script's `import connector_utils as cu`), even
+    though both come from the same file. Patching cu._load_injection_scanner
+    has no effect on Granola's write path; this patches the SAME cached
+    instance write_transcript_md actually calls."""
+    guard_mod = core._untrusted_guard_module()
+    orig = guard_mod._load_injection_scanner
+    guard_mod._load_injection_scanner = lambda: value
+    try:
+        yield
+    finally:
+        guard_mod._load_injection_scanner = orig
+
+
+with _granola_scanner_returning(_NonStrIdFindingScanner()):
+    with tempfile.TemporaryDirectory() as d8k:
+        note8k = {
+            "id": "n_8k", "title": "T8k Meeting", "created_at": "2026-08-04T10:00:00Z",
+            "web_url": "https://granola.ai/n_8k", "summary_markdown": "",
+            "transcript": [{"text": CLEAN, "speaker": {"source": "them"},
+                             "start_time": "2026-08-04T10:00:05Z"}],
+        }
+        fp8k, _msg8k = core.write_transcript_md(note8k, pathlib.Path(d8k), dry_run=False)
+        check(fp8k is not None and fp8k.is_file(),
+              "(T8k-granola) the write still happens when a Finding has a non-str pattern_id")
+        if fp8k is not None and fp8k.is_file():
+            text8k = fp8k.read_text(encoding="utf-8")
+            check("injection_scan: unavailable" in text8k,
+                  "(T8k-granola) a non-str pattern_id yields unavailable, not a downstream TypeError")
+
+# ingest-github's `from connector_utils import ...` binds the SAME function
+# objects as `cu` (both resolve through sys.modules["connector_utils"],
+# already cached to the real module by this script's own top-level import
+# before gh_ingest was ever loaded at T4) -- unlike Granola, above, `cu`'s
+# own patch is the right one here.
+with _scanner_returning(_NonStrIdFindingScanner()):
+    with tempfile.TemporaryDirectory() as d8k2:
+        payload8k2 = {
+            "repo": "acme/widgets", "vault_root": d8k2, "target_date": "2026-08-04",
+            "pull_requests": [{
+                "number": 201, "title": "Non-str id repro", "author": "a",
+                "merged_at": "2026-01-01T00:00:00Z", "url": "u", "body": CLEAN,
+            }],
+        }
+        buf8k2 = io.StringIO()
+        with redirect_stdout(buf8k2):
+            rc8k2 = gh_ingest.run_from_payload(payload8k2)
+        check(rc8k2 == 0, "(T8k-github) the write still happens when a Finding has a non-str pattern_id")
+        fpath8k2 = pathlib.Path(d8k2) / "External Inputs" / "GitHub" / "acme-widgets" / "2026-08-04.md"
+        check(fpath8k2.is_file(), "(T8k-github) file written")
+        if fpath8k2.is_file():
+            text8k2 = fpath8k2.read_text(encoding="utf-8")
+            check("injection_scan: unavailable" in text8k2,
+                  "(T8k-github) a non-str pattern_id yields unavailable, not a downstream TypeError")
 
 
 # The flags/status computation (sorting pattern_id off each finding, then
