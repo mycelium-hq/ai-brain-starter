@@ -2,31 +2,25 @@
 folded into retry-budget.py's PreToolUse(Bash) hook (MYC-5053) instead of its
 own slot: ADR-0004's Bash fan-out was already at budget.
 
-Incident (2026-09-26): concurrent agent sessions on one Mac each running
-nested agents -- two `next build`s, full-project `tsc --noEmit`, vitest runs
-from several builders -- pushed swap to 19.4 GB on a 24 GB machine; it
-rebooted, killing every session's work. This is the refusal at the tool
-boundary.
+Incident (2026-09-26): ~10 agent sessions on one 24 GB Mac -- two `next
+build`s, full-project `tsc --noEmit`, vitest runs from several builders --
+pushed swap to 19.4 GB and the machine rebooted. This is the refusal at the
+tool boundary.
 
-Detection resolves real argv tokens (shell_parse) to a FIXPOINT -- wrappers,
-env assigns, package-manager scope flags, exec/dlx -- never a raw substring,
-so `pnpm -C x exec tsc` and `pnpm tsc` classify like bare `tsc`, and a heavy
-phrase in a commit message is not a heavy command.
+Detection resolves shell_parse tokens to a FIXPOINT (wrappers, env assigns,
+package-manager scope flags, exec/dlx), never a raw substring, so a heavy
+phrase in a commit message is not a heavy command. Counting reads ONE `ps -A`
+snapshot and runs each process's whitespace-split argv through the same
+_resolve_segment/_classify rules; argv is never printed or logged. Only ROOT
+invocations count; shells and this hook's own ancestors never do. Memory is
+read first: critical denies WITHOUT counting. An exception that propagates to
+admit() admits VISIBLY (additionalContext + log_fire).
 
-Counting reads ONE process snapshot (`ps -A`), never `pgrep`: a matched
-process's argv is tokenized and classified with the SAME rules detection
-uses, then discarded (never printed, logged or stored). Only the ROOT
-invocation of a class counts; shells and this hook's own ancestors never do.
+`git push` counts as `verify` when the repo's pre-push hook file, read from
+disk, contains a heavy-verifier marker.
 
-Memory is read first: critical denies WITHOUT counting, so a stalled
-snapshot can never discard a genuinely critical reading. Any internal error
-admits VISIBLY (additionalContext + log_fire), never silently.
-
-`git push` classifies as `verify` only when the target repo's OWN pre-push
-hook runs a heavy verifier -- read from disk, never by spawning git.
-
-Bypass: HEAVY_ADMISSION_BYPASS=1, inline (cmd_env.inline_bypass) or session
-env -- logged only when it actually suppressed a deny.
+Bypass: HEAVY_ADMISSION_BYPASS=1, inline or session env -- logged only when
+it actually suppressed a deny.
 """
 from __future__ import annotations
 
@@ -70,8 +64,7 @@ _TWO_WORD_SKIP = {("pnpm", "exec"), ("pnpm", "dlx"), ("yarn", "dlx")}
 _KNOWN_BINS = {"next", "tsc", "vitest", "playwright", "turbo", "tauri"}
 _PM_SCOPE_VALUE = {"-C", "--dir", "--filter", "-F", "--prefix", "--workspace"}
 _PM_SCOPE_BOOL = {"-w", "--workspace-root", "-r", "--recursive"}
-_ENV_FLAG_VALUE = {"-u", "--unset"}
-_ENV_FLAG_BOOL = {"-i", "--ignore-environment"}
+_ENV_FLAGS = {"-u": 2, "--unset": 2, "-i": 1, "--ignore-environment": 1}  # -> tokens consumed
 _TIMEOUT_WORDS = {"timeout", "gtimeout"}
 _SHELLS = {"bash", "sh", "zsh"}
 _CARGO_VERBS = {"build", "test", "check", "clippy", "nextest", "b", "t", "c"}
@@ -86,47 +79,27 @@ _INLINE_REDIR_RE = re.compile(r"\d*&?(?:>>|<<|>|<)")
 def _basename(p: str) -> str:
     return p.replace("\\", "/").rsplit("/", 1)[-1]
 
-def _skip_env_invocation(t: list[str]) -> list[str]:
-    """Past a leading `env`'s OWN flags/assigns (`-u NAME`, `-i`, `NAME=val`,
-    any mix) to the real command word."""
-    i = 0
-    while i < len(t):
-        if t[i] in _ENV_FLAG_VALUE:
-            i += 2
-        elif t[i] in _ENV_FLAG_BOOL:
-            i += 1
-        elif ENV_ASSIGN_RE.match(t[i]):
-            i += 1
-        else:
-            break
-    return t[i:]
-
 def _strip_rest(t: list[str], pm: bool) -> tuple[list[str], bool]:
-    """One left-to-right pass dropping, ANYWHERE past t[0]: redirects (a bare
-    `>`/`<<`/... plus its separate target, a self-contained `2>&1`, or a
-    GLUED one -- `build>/tmp/b.log` is one shlex token, word fused to
-    operator) and, when PM (t[0] is pnpm/npm), scope flags -- `-C`/`--dir`/
-    `--filter`/`-F`/`--prefix`/`--workspace` (value) and `-w`/
-    `--workspace-root`/`-r`/`--recursive` (boolean; `-w` is NOT a value)."""
-    out, i, n, changed = [t[0]], 1, len(t), False
+    """Drop, past t[0]: redirects -- bare `>` plus its target, self-contained
+    `2>&1`, or GLUED (`build>/tmp/b.log` is one token) -- and, when PM, the
+    scope flags (`-C`/`--filter`/... take a value; `-w`/`-r` do not)."""
+    out, i, n = [t[0]], 1, len(t)
     while i < n:
         tok, has_next = t[i], i + 1 < n
         m = _INLINE_REDIR_RE.search(tok)
         if m and m.start() > 0:
-            out.append(tok[:m.start()]); changed = True; i += 1; continue
+            out.append(tok[:m.start()]); i += 1; continue
         rm = _REDIR_RE.match(tok)
         if rm:
-            changed = True; i += 1 if (rm.group(2) or not has_next) else 2; continue
+            i += 1 if (rm.group(2) or not has_next) else 2; continue
         key = tok.split("=", 1)[0]
         if pm and key in _PM_SCOPE_VALUE:
             i += 1 if "=" in tok else (2 if has_next else 1)
-            changed = True
         elif pm and tok in _PM_SCOPE_BOOL:
             i += 1
-            changed = True
         else:
             out.append(tok); i += 1
-    return out, changed
+    return out, out != t
 
 def _strip_once(t: list[str]) -> tuple[list[str], bool]:
     """One step; the caller repeats to a FIXPOINT so order never matters."""
@@ -135,15 +108,14 @@ def _strip_once(t: list[str]) -> tuple[list[str], bool]:
     w = t[0]
     if ENV_ASSIGN_RE.match(w):
         return t[1:], True
-    if w == "env":
-        return _skip_env_invocation(t[1:]), True
-    if w in _BARE_SKIP:
-        nxt = t[1:]
-        if w == "time" and nxt[:1] == ["-p"]:
-            nxt = nxt[1:]
-        elif w == "npx" and nxt[:1] and nxt[0] in ("-y", "--yes"):
-            nxt = nxt[1:]
-        return nxt, True
+    if w == "env":  # past env's own `-u NAME` / `-i` / `NAME=val`, any mix
+        i = 1
+        while i < len(t) and (t[i] in _ENV_FLAGS or ENV_ASSIGN_RE.match(t[i])):
+            i += _ENV_FLAGS.get(t[i], 1)
+        return t[i:], True
+    if w in _BARE_SKIP:  # `time -p` and `npx -y` also drop their flag
+        flag = (w == "time" and t[1:2] == ["-p"]) or (w == "npx" and t[1:2] in (["-y"], ["--yes"]))
+        return t[2 if flag else 1:], True
     if w == "nice":
         return (t[3:] if t[1:2] == ["-n"] else t[1:]), True
     if w in _TIMEOUT_WORDS:
@@ -175,10 +147,7 @@ def _dash_c_script(rest: list[str]):
             return None
         if not tok.startswith("--") and "c" in tok[1:]:
             return rest[i + 1] if i + 1 < len(rest) else None
-        if tok == "-o":
-            i += 2
-            continue
-        i += 1
+        i += 2 if tok == "-o" else 1
     return None
 
 def _after_run(r: list[str]) -> list[str]:
@@ -223,48 +192,28 @@ def _classify(t: list[str]):
         return "test_suite"
     if head == "playwright" and rest[:1] == ["test"]:
         return "playwright"
-    if head == "cargo":
-        cr = rest
-        while cr[:1] and cr[0] in _CARGO_SKIP_FLAGS:
-            cr = cr[1:]
-        if cr[:1] and cr[0] in _CARGO_VERBS:
-            return "cargo"
+    if head == "cargo" and next((x for x in rest if x not in _CARGO_SKIP_FLAGS), None) in _CARGO_VERBS:
+        return "cargo"
     return None
 
 # ---- `git push` -> class `verify`, iff the repo's own pre-push hook is heavy
 _HEAVY_HOOK_MARKERS = ("pnpm verify", "npm run verify", "pnpm test", "vitest",
                        "tsc", "eslint .", "turbo", "ci-test")
-_HOOKSPATH_RE = re.compile(r"(?m)^\s*hookspath\s*=\s*(.+?)\s*$")
 
 def _pre_push_hook_file(repo: str):
-    # .git/hooks/pre-push, core.hooksPath's copy, or .husky/pre-push --
-    # whichever this repo uses. Handles a worktree's .git FILE (gitdir: ...).
-    git_path = os.path.join(repo, ".git")
-    gitdir = git_path
-    if os.path.isfile(git_path):
-        first = open(git_path, encoding="utf-8", errors="replace").readline()
-        if not first.startswith("gitdir:"):
-            return None
-        gitdir = first.split(":", 1)[1].strip()
-        gitdir = gitdir if os.path.isabs(gitdir) else os.path.normpath(os.path.join(repo, gitdir))
-    config = os.path.join(gitdir, "config")
-    m = _HOOKSPATH_RE.search(open(config, encoding="utf-8", errors="replace").read()) \
-        if os.path.isfile(config) else None
-    if m:
-        base = m.group(1) if os.path.isabs(m.group(1)) else os.path.join(repo, m.group(1))
-        return os.path.join(base, "pre-push")
-    husky = os.path.join(repo, ".husky", "pre-push")
-    return husky if os.path.isfile(husky) else os.path.join(gitdir, "hooks", "pre-push")
+    # git's own answer (core.hooksPath at any scope, worktree commondir); a
+    # husky v9 `.husky/_/` shim defers to the real `.husky/<hook>` one level up.
+    hook = _run(["git", "-C", repo, "rev-parse", "--path-format=absolute",
+                 "--git-path", "hooks/pre-push"]).strip()
+    shim_dir = os.path.dirname(hook)
+    return os.path.join(os.path.dirname(shim_dir), "pre-push") if shim_dir.endswith("/.husky/_") else hook
 
 def _repo_push_is_heavy(repo: str) -> bool:
-    # Best-effort: any resolution/read failure -> not classified (admit).
-    try:
-        hook = _pre_push_hook_file(repo)
-        head = (open(hook, encoding="utf-8", errors="replace").read(65536)
-                if hook and os.path.isfile(hook) else "")
-    except OSError:
+    hook = _pre_push_hook_file(repo) if os.path.isdir(repo) else ""
+    if not os.path.isfile(hook):
         return False
-    return any(marker in head for marker in _HEAVY_HOOK_MARKERS)
+    with open(hook, encoding="utf-8", errors="replace") as fh:
+        return any(marker in fh.read(65536) for marker in _HEAVY_HOOK_MARKERS)
 
 def _resolve_repo(override, segs_upto, cwd):
     if override:
@@ -311,59 +260,46 @@ _SCRIPT_TOOL_SUFFIX = (
 
 def _resolve_runner(t: list[str]) -> list[str]:
     """`node|bun <script> ...` -> the LOGICAL command it is really running,
-    so a real process is classified with the exact rules detection uses."""
+    so a real process goes through the same rules detection uses."""
     if len(t) < 2 or _basename(t[0]) not in _NODE_RUNNERS:
         return t
     script = t[1].replace("\\", "/")
     for suffix, tool in _SCRIPT_TOOL_SUFFIX:
         if script.endswith(suffix):
             return [tool] + t[2:]
-    if script.endswith("pnpm.cjs"):
-        return ["pnpm"] + t[2:]
-    if "node_modules/.bin/" in script:
-        return [_basename(script)] + t[2:]
+    name = _basename(script).split(".", 1)[0]  # pnpm.cjs, corepack bin/pnpm + pnpm.js, .bin/<tool>
+    if name == "pnpm" or "node_modules/.bin/" in script:
+        return [name] + t[2:]
     return t
 
 def _read_snapshot() -> dict[int, tuple[int, str, list[str]]]:
-    # One `ps -A` call: {pid: (ppid, ucomm, argv_tokens)}. `args` is split
-    # and DISCARDED right here -- never retained, printed or logged.
-    import subprocess  # lazy: paid only once a class is actually detected
-    out = subprocess.run(["ps", "-A", "-o", "pid=,ppid=,ucomm=,args="],
-                         capture_output=True, text=True, timeout=4, check=True).stdout
+    # One `ps -A` call: {pid: (ppid, ucomm, argv_tokens)}. The tokens live only
+    # in this dict, for one admit() call -- never printed, logged or stored.
     rows = {}
-    for line in out.splitlines():
+    for line in _run(["ps", "-A", "-o", "pid=,ppid=,ucomm=,args="], timeout=4).splitlines():
         parts = line.split(None, 3)
         if len(parts) < 3 or not (parts[0].isdigit() and parts[1].isdigit()):
             continue
         rows[int(parts[0])] = (int(parts[1]), parts[2], parts[3].split() if len(parts) > 3 else [])
     return rows
 
-def _hook_ancestors(snapshot: dict) -> set[int]:
-    pids, pid = set(), os.getppid()
-    while pid in snapshot and pid not in pids:
-        pids.add(pid)
+def _ancestors(pid: int, snapshot: dict) -> set[int]:
+    """PID and every ancestor of it present in SNAPSHOT (cycle-safe)."""
+    seen = set()
+    while pid in snapshot and pid not in seen:
+        seen.add(pid)
         pid = snapshot[pid][0]
-    return pids
-
-def _is_root(pid: int, matched: set[int], snapshot: dict) -> bool:
-    seen, cur = set(), snapshot[pid][0]
-    while cur in snapshot and cur not in seen:
-        if cur in matched:
-            return False
-        seen.add(cur)
-        cur = snapshot[cur][0]
-    return True
+    return seen
 
 def _count_running(cls: str, snapshot: dict) -> int:
-    # ROOT invocations of CLS only: an ancestor chain already holding a
-    # same-class match means this one doesn't count (one `pnpm run build`
-    # counts 1, not once per spawned child). Shells and this hook's own
-    # ancestors -- from this SAME snapshot -- never count.
-    hook_anc = _hook_ancestors(snapshot)
+    # ROOT invocations of CLS only: a match with a same-class match among its
+    # ancestors doesn't count (one `pnpm run build` counts 1, not once per
+    # spawned child). Shells and this hook's own ancestors never count.
+    hook_anc = _ancestors(os.getppid(), snapshot)
     matched = {pid for pid, (_ppid, ucomm, argv) in snapshot.items()
                if pid not in hook_anc and ucomm not in _SHELL_COMM
                and argv and _classify(_resolve_segment(_resolve_runner(argv))) == cls}
-    return sum(1 for pid in matched if _is_root(pid, matched, snapshot))
+    return sum(1 for pid in matched if not (_ancestors(snapshot[pid][0], snapshot) & matched))
 
 
 # ---- memory: critical denies WITHOUT counting --------------------------------
@@ -413,8 +349,8 @@ def _memory_critical(sig: dict) -> tuple[bool, str]:
 
 # ---- dispatch -----------------------------------------------------------------
 def admit(command: str, cwd: str | None = None) -> int:
-    """0 = allow, 2 = deny. Every error admits, visibly. `cwd` is the
-    payload's cwd, used only to resolve a bare `git push`'s repo."""
+    """0 = allow, 2 = deny; an exception that propagates here admits, visibly.
+    `cwd` is the payload's cwd, used only to resolve a `git push`'s repo."""
     try:
         cls = detect_class(command, cwd)
         if cls is None:

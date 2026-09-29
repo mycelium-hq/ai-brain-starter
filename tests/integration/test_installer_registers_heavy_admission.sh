@@ -1,27 +1,17 @@
 #!/usr/bin/env bash
 # Fresh-install smoke for heavy_admission.py, folded into retry-budget.py
-# (MYC-5053). retry-budget.py's own registration is pinned by
-# hooks/test_retry_budget.py (C2, C8, D2, D3); what this adds is its _lib
-# dependency closure, which the installer deploys FLAT to ~/.claude/hooks/ and
-# check-home-hook-deploy.py cannot see past the first import.
-#
-# Asserts, by running the REAL installer against a sandboxed HOME:
-#   1. retry-budget.py is registered on PreToolUse(Bash) (premise for 3-4).
-#   2. heavy_admission.py's whole import closure ships flat beside it. On a
-#      miss this NAMES every missing file, not just "something's missing".
-#   3. END-TO-END: with a REAL process running at a path ending
-#      .../next/dist/bin/next, the registered command DENIES `next build`
-#      (rc=2). Any missing dependency lands here too, as rc=0 (the import
-#      falls back to a no-op).
-#   4. END-TO-END negative control: the same command allows `ls -la` (rc=0).
-#
-# Step 3 plants a tiny binary COMPILED with cc, not a python interpreter with
-# extra argv appended: the classifier reads a process's own argv[0], and a
-# python process's argv[0] is python, never "next", regardless of what
-# trailing arguments it was started with. Skips step 3 (not the whole file)
-# when no C compiler is present.
-#
-# Stdlib python3 + bash. No network. Tmpdir and planted process removed on exit.
+# (MYC-5053). The installer deploys hooks FLAT to ~/.claude/hooks/ and
+# check-home-hook-deploy.py cannot see past a hook's first import, so this runs
+# the REAL installer against a sandboxed HOME and asserts:
+#   1. retry-budget.py is registered on PreToolUse(Bash) (premise for 3-4);
+#   2. heavy_admission.py's whole _lib import closure ships beside it, naming
+#      every missing file;
+#   3. END-TO-END: with a REAL process whose argv is `.../next/dist/bin/next
+#      build` (perl renamed via bash `exec -a`), the registered command DENIES
+#      `next build` (rc=2) -- a missing dependency lands here as rc=0;
+#   4. negative control: the same command allows `ls -la` (rc=0).
+# Stdlib python3 + bash + perl (step 3 skips without perl, or off darwin/linux).
+# No network. Tmpdir and plant removed on exit.
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -93,25 +83,17 @@ run_registered() {  # run_registered COMMAND_STRING
   echo $?
 }
 
-CC="$(command -v cc || command -v gcc || true)"
-if [ -n "$CC" ]; then
-  mkdir -p "$TMP/plant/next/dist/bin"
-  cat > "$TMP/plant/sleeper.c" <<'C'
-#include <unistd.h>
-int main(void) { sleep(30); return 0; }
-C
-  "$CC" -o "$TMP/plant/next/dist/bin/next" "$TMP/plant/sleeper.c" 2>/dev/null
-fi
-if [ -x "$TMP/plant/next/dist/bin/next" ]; then
+if command -v perl >/dev/null 2>&1 && case "$(uname -s)" in Darwin|Linux) true ;; *) false ;; esac; then
   echo "=== 3. END-TO-END: a REAL next-build-shaped process + the registered command DENIES ==="
-  "$TMP/plant/next/dist/bin/next" build >/dev/null 2>&1 &
+  mkdir -p "$TMP/plant" && echo 'sleep 30;' > "$TMP/plant/build"
+  bash -c 'cd "$1" && exec -a "$1/next/dist/bin/next" perl build' _ "$TMP/plant" >/dev/null 2>&1 &
   PLANT_PID=$!
   sleep 1
   rc="$(run_registered 'next build')"
   [ "$rc" = "2" ] && ok "3. shipped wiring DENIES \`next build\` at cap (rc=2)" || bad "3. end-to-end deny" "rc=$rc, expected 2"
   kill "$PLANT_PID" >/dev/null 2>&1; wait "$PLANT_PID" 2>/dev/null; PLANT_PID=""
 else
-  echo "SKIP 3: no C compiler available to build the plant"
+  echo "SKIP 3: needs perl on darwin/linux (the module admits by design elsewhere)"
 fi
 
 echo "=== 4. END-TO-END negative control: a clean Bash command is allowed ==="
