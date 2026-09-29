@@ -108,9 +108,12 @@ def count_pairs(text):
 def assert_stamped(text, label, flagged_family=None):
     """Common per-writer shape: content_trust stamped, exactly one BEGIN/END
     pair, and either flagged with the right family id or clean. Parses the
-    frontmatter rather than testing raw substrings -- every writer renders
-    these 3 keys bare, so a wrong type or a quoted regression on any one
-    of them shows up here as a parsed-value mismatch."""
+    frontmatter rather than testing raw substrings, so a WRONG TYPE on any
+    of these 3 keys shows up here as a parsed-value mismatch. A quoted
+    regression does NOT: YAML parses `untrusted` and `"untrusted"` to the
+    identical string. YouTube is the only writer with its own per-key
+    bare/quoted branch for these keys (write_vault_file's _BARE_STR_KEYS),
+    so it alone also gets a literal-line bareness check (T5i, N3)."""
     meta, _ = cu.split_frontmatter(text)
     check(meta.get("content_trust") == "untrusted",
           "(%s) content_trust stamped (got %r)" % (label, meta.get("content_trust")))
@@ -526,6 +529,21 @@ with tempfile.TemporaryDirectory() as d5:
               "(T5h) the malformed value is preserved (quoted), not silently replaced (got %r)"
               % meta5h.get("upload_date"))
 
+    # T5i (N3): YouTube is the only writer with its own bare/quoted branch
+    # for the 3 trust keys (write_vault_file's _BARE_STR_KEYS) -- a quoted
+    # regression on any of them would parse identical through
+    # split_frontmatter (assert_stamped's own docstring says so), so pin
+    # bareness directly as a literal line instead. Reuses T5a's flagged
+    # file so injection_scan/injection_flags are exercised in their
+    # non-default ("flagged") shape, not just "clean".
+    text5a_lines = target5a.read_text(encoding="utf-8").splitlines()
+    check("content_trust: untrusted" in text5a_lines,
+          "(T5i) YouTube writes content_trust bare, not quoted")
+    check("injection_scan: flagged" in text5a_lines,
+          "(T5i) YouTube writes injection_scan bare, not quoted")
+    check("injection_flags: [prompt-injection-system-impersonation]" in text5a_lines,
+          "(T5i) YouTube writes injection_flags bare, not quoted")
+
 # T6: write_external_input.
 with tempfile.TemporaryDirectory() as d6:
     vault6 = pathlib.Path(d6)
@@ -698,6 +716,19 @@ GREEK_LUNATE_SIGMA = chr(0x03F2)  # NFKC-decomposes to U+03C2, the fold table's 
 lunate_sigma_specimen = "untrusted " + GREEK_LUNATE_SIGMA + "ontent"
 check("[untrusted-marker removed]" in cu._neutralize_marker_lookalikes(lunate_sigma_specimen),
       "(T7-neutralize) Greek lunate sigma in %sontent is neutralized" % GREEK_LUNATE_SIGMA)
+
+# N3: two more _LOOKALIKE_FOLD entries were unpinned -- both correctly
+# neutralized, but no specimen exercised either, so removing either entry
+# stayed GREEN.
+GREEK_CAPITAL_LUNATE_SIGMA = chr(0x03F9)  # NFKC-decomposes to U+03A3, the fold table's key (visually "C")
+capital_lunate_specimen = "untrusted " + GREEK_CAPITAL_LUNATE_SIGMA + "ontent"
+check("[untrusted-marker removed]" in cu._neutralize_marker_lookalikes(capital_lunate_specimen),
+      "(T7-neutralize) Greek capital lunate sigma in %sontent is neutralized" % GREEK_CAPITAL_LUNATE_SIGMA)
+
+CYRILLIC_KOMI_DE = chr(0x0501)  # CYRILLIC SMALL LETTER KOMI DE -- visually "d"
+komi_de_specimen = "untruste" + CYRILLIC_KOMI_DE + " content"
+check("[untrusted-marker removed]" in cu._neutralize_marker_lookalikes(komi_de_specimen),
+      "(T7-neutralize) Cyrillic komi de in untruste%s is neutralized" % CYRILLIC_KOMI_DE)
 
 # T8: unknown is never clean. No test seam on guard_untrusted_body:
 # monkeypatch the loader itself (its lru_cache lives on the ORIGINAL
