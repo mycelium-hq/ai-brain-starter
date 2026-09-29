@@ -26,9 +26,10 @@
 # project can ever be served. An unreadable or malformed key turns the cache
 # off rather than weakening the digest.
 #
-# Bounded: at most SDD_CACHE_MAX_ENTRIES (default 256) entries per project;
-# the least recently written or served are evicted, and temp files abandoned
-# by a killed run are swept after 10 minutes.
+# Bounded: at most SDD_CACHE_MAX_ENTRIES (default 256) entries per project and
+# SDD_CACHE_MAX_TOTAL (default 1024) across all projects; the least recently
+# written or served are evicted, emptied project directories are removed, and
+# temp files abandoned by a killed run are swept after 10 minutes.
 #
 # Debug logging: SDD_CACHE_DEBUG=1 only. (The upstream also honoured a `.debug`
 # file inside the project's cache dir, a switch any cloned repo could flip to
@@ -50,6 +51,7 @@ command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1 || exi
 
 if [ -t 0 ]; then INPUT="{}"; else INPUT=$(cat); fi
 
+HOOK_TAG="post"
 # ---- identical in sdd-cache-pre.sh: keep these helpers in step --------------
 sha256_hex() {
   if command -v shasum >/dev/null 2>&1; then shasum -a 256; else sha256sum; fi | cut -c1-64
@@ -85,11 +87,22 @@ read_key() {
 entry_digest() {
   { printf '%s\n%s\n' "$1" "$2"; jq -cS 'del(.tag)'; } | sha256_hex
 }
+# The root: never a symlink, 0700, and carrying a `*` .gitignore BEFORE anything
+# else (the key, an entry, a debug log) is written into it, so no repository
+# that contains ~/.claude can pick any of it up. Non-zero when unusable.
+ensure_root() {
+  [ -L "$CACHE_ROOT" ] && return 1
+  mkdir -p "$CACHE_ROOT" 2>/dev/null || return 1
+  chmod 700 "$CACHE_ROOT" 2>/dev/null || true
+  if [ ! -e "$CACHE_ROOT/.gitignore" ] && [ ! -L "$CACHE_ROOT/.gitignore" ]; then
+    printf '*\n' > "$CACHE_ROOT/.gitignore" 2>/dev/null || true
+  fi
+  return 0
+}
 dbg() {
   [ "${SDD_CACHE_DEBUG:-0}" = "1" ] || return 0
-  [ -L "$CACHE_ROOT" ] && return 0
-  { mkdir -p "$CACHE_ROOT" \
-    && printf '%s [post] %s\n' "$(date -u +%FT%TZ)" "$*" >> "$CACHE_ROOT/.debug.log"; } 2>/dev/null || true
+  ensure_root || return 0
+  printf '%s [%s] %s\n' "$(date -u +%FT%TZ)" "$HOOK_TAG" "$*" >> "$CACHE_ROOT/.debug.log" 2>/dev/null || true
 }
 # ------------------------------------------------------------------------------
 
@@ -133,16 +146,8 @@ PKEY=$(project_key)
 CACHE_DIR="$CACHE_ROOT/$PKEY"
 # Every write below goes through these two directories; a symlink at either
 # would carry the writes (and the eviction's deletes) somewhere else.
-[ -L "$CACHE_ROOT" ] && exit 0
-mkdir -p "$CACHE_ROOT"
+ensure_root || exit 0
 [ -L "$CACHE_DIR" ] && exit 0
-mkdir -p "$CACHE_DIR"
-# A root created by an earlier version (or by hand) may be group/world
-# readable; entries and the key must not be.
-chmod 700 "$CACHE_ROOT" "$CACHE_DIR" 2>/dev/null || true
-if [ ! -e "$CACHE_ROOT/.gitignore" ] && [ ! -L "$CACHE_ROOT/.gitignore" ]; then
-  printf '*\n' > "$CACHE_ROOT/.gitignore" 2>/dev/null || true
-fi
 CACHE_FILE="$CACHE_DIR/$(printf '%s' "$URL" | sha256_hex | cut -c1-32).json"
 
 # Capture validators from the origin, over https only (WebFetch itself upgrades
@@ -198,6 +203,14 @@ fi
 KEY=$(read_key)
 if [ -z "$KEY" ]; then dbg "no usable machine key, not caching"; exit 0; fi
 
+# The project's directory is created only now that there is something to put
+# in it, so a fetch that stores nothing leaves no directory behind. One created
+# by an earlier version (or by hand) may be group/world readable; entries must
+# not be.
+[ -L "$CACHE_DIR" ] && exit 0
+mkdir -p "$CACHE_DIR" 2>/dev/null || exit 0
+chmod 700 "$CACHE_DIR" 2>/dev/null || true
+
 # Build the entry in memory; the page body goes to jq on stdin, never argv
 # (Linux caps a single argument at 128 KiB, and argv is visible to `ps`).
 NOW=$(date +%s)
@@ -248,7 +261,28 @@ ls -1td -- "$CACHE_DIR"/*.json 2>/dev/null \
       esac
     done || true
 
-# Temp files a killed run abandoned are never counted by the cap above.
+# The same bound across EVERY project: one directory per project directory,
+# and a worktree per session creates many that are never used again, so a
+# per-project cap alone lets the root grow without limit. Oldest entries go
+# first, whole-root; directories left empty are removed.
+TOTAL="${SDD_CACHE_MAX_TOTAL:-1024}"
+case "$TOTAL" in ''|*[!0-9]*) TOTAL=1024 ;; esac
+[ "$TOTAL" -ge 1 ] || TOTAL=1024
+# shellcheck disable=SC2012
+ls -1td -- "$CACHE_ROOT"/*/*.json 2>/dev/null \
+  | tail -n +"$((TOTAL + 1))" \
+  | while IFS= read -r old; do
+      case "$old" in
+        "$CACHE_ROOT"/[0-9a-f]*/[0-9a-f]*.json)
+          if [ -f "$old" ] && [ ! -L "$old" ] && [ ! -L "${old%/*}" ]; then rm -f -- "$old"; fi ;;
+      esac
+    done || true
+find "$CACHE_ROOT" -mindepth 1 -maxdepth 1 -type d -empty -exec rmdir -- {} + 2>/dev/null || true
+
+# Temp files a killed run abandoned are never counted by the caps above: entry
+# temps in this project's directory, and key temps (a second hard link to the
+# live key, once `ln` has run) in the root.
 find "$CACHE_DIR" -maxdepth 1 -type f -name '.tmp.*' -mmin +10 -exec rm -f -- {} + 2>/dev/null || true
+find "$CACHE_ROOT" -maxdepth 1 -type f -name '.key.*' -mmin +10 -exec rm -f -- {} + 2>/dev/null || true
 
 exit 0

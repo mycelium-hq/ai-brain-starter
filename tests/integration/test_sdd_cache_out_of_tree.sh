@@ -15,7 +15,9 @@
 #   2. Benign use wrote third-party page bodies into the working tree, where
 #      session commits swept them up (34 entries landed in one team repo).
 # Cases T10 and T15-T22 come from two independent adversarial reviews of the
-# first version of the fix; each names the defect it pins.
+# first version of the fix, and T23-T28 (plus the planted legs of T15 and the
+# no-directory half of T11) from a third review of the second; each names the
+# defect it pins.
 #
 # Hermetic: `curl` is a PATH stub (no network), HOME is a sandbox, and the
 # test runs from its own temp dir so nothing it spawns can write into the
@@ -101,6 +103,14 @@ run_post() {
 
 # The one cache file for URL, wherever the hook put it under the sandbox root.
 entry_for() { find "$CACHE_ROOT" -type f -name "$(url_sha "$1").json" 2>/dev/null | head -1; }
+
+# is_served URL MARKER [PROJECT_DIR] -> y when the pre hook, told the origin
+# answered 304, blocked the fetch and handed back MARKER; n otherwise.
+is_served() {
+  local rc
+  rc=$(STUB_STATUS=304 run_pre "$1" "${3:-$PROJECT}")
+  if [ "$rc" = 2 ] && grep -q "$2" "$TMPROOT/pre.err"; then echo y; else echo n; fi
+}
 
 echo "== sdd-cache: out of the project tree, machine-written entries only =="
 
@@ -255,12 +265,16 @@ else
 fi
 
 # ---- T11. No validator from the origin -> nothing is stored ----------------
+# A project of its own, so "no directory was created for it" is observable
+# (review finding: one directory per project, and a fetch that stored nothing
+# still made one).
 URL11="https://docs.example.test/novalidator"
-run_post "$URL11" "NOVAL-11"
-if [ -z "$(entry_for "$URL11")" ]; then
-  ok "T11: a response with neither ETag nor Last-Modified is not cached (it could never be revalidated)"
+PROJ11="$TMPROOT/project11"; mkdir -p "$PROJ11"
+run_post "$URL11" "NOVAL-11" "$PROJ11"
+if [ -z "$(entry_for "$URL11")" ] && [ ! -e "$(proj_dir "$PROJ11")" ]; then
+  ok "T11: a response with neither ETag nor Last-Modified is not cached (it could never be revalidated) and leaves no directory"
 else
-  no "T11: entry stored without a validator"
+  no "T11: stored without a validator (entry: $([ -n "$(entry_for "$URL11")" ] && echo present || echo absent), project dir: $([ -e "$(proj_dir "$PROJ11")" ] && echo created || echo absent))"
 fi
 
 # ---- T12. Not a 304 -> the real fetch proceeds ------------------------------
@@ -305,6 +319,7 @@ if [ -n "$E14" ]; then
   else
     no "T14: symlinked entry served (rc=$rc)"
   fi
+  rm -f "$E14"
 else
   no "T14: post hook wrote no entry for $URL14"
 fi
@@ -313,33 +328,64 @@ fi
 # Review finding: with `.key` unreadable, a failed `cat` inside `$(entry_digest)`
 # was masked by jq's exit status, so the "digest" became sha256 of the entry
 # alone -- computable by anyone -- and such entries were written AND served.
+# A second review found this case could not fail: an entry tagged with the REAL
+# key never verifies against a broken one, so a pre hook that used whatever the
+# key file held (or nothing) still passed. Entries are now planted tagged with
+# exactly the digest such a hook would compute, and a control tagged with the
+# real key proves this harness computes digests the way the hooks do.
 URL15="https://docs.example.test/key-15"
 URL15B="https://docs.example.test/key-15b"
+URL15C="https://docs.example.test/key-15-control"
+URL15K="https://docs.example.test/key-15-keyless"
+URL15M="https://docs.example.test/key-15-malformed"
+# tag_with KEY PKEY < entry -> the digest the hooks compute (entry_digest).
+tag_with() { { printf '%s\n%s\n' "$1" "$2"; jq -cS 'del(.tag)'; } | sha_hex; }
+# plant URL CONTENT KEY -> an entry in the main project's cache, tagged with KEY.
+plant() {
+  local body tag
+  body=$(jq -n --arg url "$1" --arg c "$2" \
+    '{url:$url, prompt:"p", etag:"\"vp\"", last_modified:"", content:$c, fetched_at:0}')
+  tag=$(printf '%s' "$body" | tag_with "$3" "${PDIR##*/}")
+  printf '%s' "$body" | jq --arg tag "$tag" '. + {tag:$tag}' > "$PDIR/$(url_sha "$1").json"
+}
 STUB_ETAG='"v15"' run_post "$URL15" "KEYED-15"
 if [ -z "$(entry_for "$URL15")" ]; then
   no "T15: post hook wrote no entry for $URL15"
 else
+  plant "$URL15C" "CONTROL-15" "$(head -c 64 "$CACHE_ROOT/.key")"
+  s_control=$(is_served "$URL15C" CONTROL-15)
+  plant "$URL15K" "KEYLESS-15" ""
   cp "$CACHE_ROOT/.key" "$TMPROOT/key.bak"
   if [ "$(id -u)" = 0 ]; then
-    echo "  NOTE: T15a skipped -- root reads a 0000 file, so 'unreadable' cannot be simulated"
-    s_unreadable=n; w_unreadable=n
+    echo "  NOTE: T15 unreadable-key legs skipped -- root reads a 0000 file"
+    s_unreadable=n; s_keyless=n; w_unreadable=n
   else
     chmod 000 "$CACHE_ROOT/.key"
-    rc=$(STUB_STATUS=304 run_pre "$URL15")
-    s_unreadable=$([ "$rc" = 2 ] && echo y || echo n)
+    s_unreadable=$(is_served "$URL15" KEYED-15)
+    s_keyless=$(is_served "$URL15K" KEYLESS-15)
     STUB_ETAG='"v15b"' run_post "$URL15B" "UNKEYED-15B"
     w_unreadable=$([ -n "$(entry_for "$URL15B")" ] && echo y || echo n)
     chmod 600 "$CACHE_ROOT/.key"
   fi
-  printf 'not-a-hex-key' > "$CACHE_ROOT/.key"
-  rc=$(STUB_STATUS=304 run_pre "$URL15")
-  s_malformed=$([ "$rc" = 2 ] && echo y || echo n)
+  : > "$CACHE_ROOT/.key"
+  s_empty=$(is_served "$URL15K" KEYLESS-15)
+  # Not hex, 64 chars of not-hex, and hex that is too short: each must be
+  # refused by itself, so dropping any one check in read_key fails a leg.
+  s_malformed=""
+  for bad in 'not-a-hex-key' "$(head -c 64 /dev/zero | tr '\0' 'g')" 'abc123'; do
+    printf '%s' "$bad" > "$CACHE_ROOT/.key"
+    plant "$URL15M" "MALFORMED-15" "$bad"
+    s_malformed="$s_malformed$(is_served "$URL15M" MALFORMED-15)$(is_served "$URL15" KEYED-15)"
+  done
   cp "$TMPROOT/key.bak" "$CACHE_ROOT/.key"; chmod 600 "$CACHE_ROOT/.key"
-  if [ "$s_unreadable" = n ] && [ "$w_unreadable" = n ] && [ "$s_malformed" = n ]; then
-    ok "T15: an unreadable or malformed key serves nothing and writes nothing"
+  if [ "$s_control" != y ]; then
+    no "T15: control not served -- this harness's digest does not match the hooks', so the other legs prove nothing"
+  elif [ "$s_unreadable$s_keyless$w_unreadable$s_empty" = nnnn ] && [ "$s_malformed" = nnnnnn ]; then
+    ok "T15: an unreadable, empty or malformed key serves nothing and writes nothing, including entries tagged with the digest that key would give"
   else
-    no "T15: key failure degraded the digest (served with unreadable key=$s_unreadable, wrote with unreadable key=$w_unreadable, served with malformed key=$s_malformed)"
+    no "T15: key failure degraded the digest (unreadable: served=$s_unreadable keyless-served=$s_keyless wrote=$w_unreadable; empty key keyless-served=$s_empty; malformed legs [planted,genuine]x3=$s_malformed)"
   fi
+  rm -f "$PDIR/$(url_sha "$URL15C").json" "$PDIR/$(url_sha "$URL15K").json" "$PDIR/$(url_sha "$URL15M").json"
 fi
 
 # ---- T16. A versioned home cannot sweep the cache into a commit -------------
@@ -449,6 +495,9 @@ if [ -e "$TMPROOT/caseprobe" ]; then
   tracked21="$(git -C "$SBX" ls-files)"
   rc=$(STUB_STATUS=304 run_pre "$URL21")
   rm -rf "$SBX/.git"
+  # Eviction deletes only the lower-case hex names the hook writes, so this
+  # hand-made upper-case one would outlive every cap (T28 counts it).
+  rm -f "$E21UP"
   if [ "$tracked21" != "${E21UP#"$SBX"/}" ]; then
     no "T21: precondition not created -- the index holds '${tracked21:-nothing}', not the upper-case entry"
   elif [ "$rc" = "0" ] && ! grep -q 'CASE-21' "$TMPROOT/pre.err"; then
@@ -471,6 +520,189 @@ if [ "$rc" = "2" ] && grep -q 'END-OF-BIG-22' "$TMPROOT/pre.err"; then
   ok "T22: a 1.2 MB page is cached and served intact"
 else
   no "T22: large page not cached or not served (rc=$rc, entry: $([ -n "$(entry_for "$URL22")" ] && echo present || echo absent))"
+fi
+
+# ---- T23. The pre hook refuses a symlinked cache directory or root ----------
+# Review finding: T17 pins the post side only, and a pre hook without its two
+# symlink checks passed every case. A genuine entry is served through the real
+# directory (control), then refused once its project directory -- or, in a
+# home of its own, the whole root -- is a symlink to where the entries now are.
+URL23="https://docs.example.test/linkdir-23"
+PROJ23="$TMPROOT/project23"; mkdir -p "$PROJ23"
+STUB_ETAG='"v23"' run_post "$URL23" "LINKDIR-23" "$PROJ23"
+D23="$(proj_dir "$PROJ23")"
+c_dir=$(is_served "$URL23" LINKDIR-23 "$PROJ23")
+mv "$D23" "$TMPROOT/real23" && ln -s "$TMPROOT/real23" "$D23"
+s_dir=$(is_served "$URL23" LINKDIR-23 "$PROJ23")
+rm -f "$D23"
+SBX_MAIN="$SBX"; SBX="$TMPROOT/home23"; mkdir -p "$SBX"
+URL23R="https://docs.example.test/linkroot-23"
+STUB_ETAG='"v23r"' run_post "$URL23R" "LINKROOT-23"
+c_root=$(is_served "$URL23R" LINKROOT-23)
+mv "$SBX/.claude/.cache/sdd-cache" "$TMPROOT/realroot23" \
+  && ln -s "$TMPROOT/realroot23" "$SBX/.claude/.cache/sdd-cache"
+s_root=$(is_served "$URL23R" LINKROOT-23)
+SBX="$SBX_MAIN"
+if [ "$c_dir$c_root" != yy ]; then
+  no "T23: control not served (real dir: $c_dir, real root: $c_root), so the refusals prove nothing"
+elif [ "$s_dir$s_root" = nn ]; then
+  ok "T23: the pre hook serves nothing through a symlinked project cache dir or a symlinked cache root"
+else
+  no "T23: served through a symlink (project dir: $s_dir, root: $s_root)"
+fi
+
+# ---- T24. The tracked check folds the directory part of the path too --------
+# Review finding: `git -C <cache dir> ls-files ':(icase)<name>'` folds only the
+# name; git compares the prefix it derives from the cwd case-sensitively. A
+# checkout tracking the entry under the upper-case form of its project-key
+# directory -- the same directory, on a case-folding disk -- was served. The
+# index entry is written directly, so the case holds on any disk; the fold is
+# unconditional, which on a case-sensitive disk costs at most a cache miss.
+PROJ24=""
+for n in 1 2 3 4 5 6 7 8; do
+  mkdir -p "$TMPROOT/project24-$n"
+  case "$(basename "$(proj_dir "$TMPROOT/project24-$n")")" in
+    *[a-f]*) PROJ24="$TMPROOT/project24-$n"; break ;;
+  esac
+done
+URL24="https://docs.example.test/case-dir-24"
+STUB_ETAG='"v24"' run_post "$URL24" "CASEDIR-24" "$PROJ24"
+E24="$(entry_for "$URL24")"
+D24="$(basename "$(dirname "${E24:-x/x}")")"
+D24UP="$(printf '%s' "$D24" | tr 'a-f' 'A-F')"
+REL24=".claude/.cache/sdd-cache/$D24UP/$(basename "${E24:-x}")"
+git -c init.defaultBranch=main init -q "$SBX"
+c24=$(is_served "$URL24" CASEDIR-24 "$PROJ24")
+BLOB24="$(git -C "$SBX" hash-object -w -- "${E24:-/nonexistent}" 2>/dev/null || true)"
+git -C "$SBX" update-index --add --cacheinfo "100644,$BLOB24,$REL24" 2>/dev/null
+tracked24="$(git -C "$SBX" ls-files)"
+s24=$(is_served "$URL24" CASEDIR-24 "$PROJ24")
+rm -rf "$SBX/.git"
+if [ -z "$PROJ24" ] || [ -z "$E24" ] || [ "$D24UP" = "$D24" ] || [ "$tracked24" != "$REL24" ]; then
+  no "T24: precondition not created (index holds '${tracked24:-nothing}', wanted '$REL24')"
+elif [ "$c24" != y ]; then
+  no "T24: control not served while untracked, so the refusal proves nothing"
+elif [ "$s24" = n ]; then
+  ok "T24: an entry tracked under the upper-case form of its project directory is refused"
+else
+  no "T24: entry tracked under an upper-case directory was served"
+fi
+
+# ---- T25. A repository around the cache that git cannot read fails closed ----
+# Review finding: any non-zero exit from the tracked check meant "untracked",
+# so a tracked entry was served whenever git errored instead of answering. Two
+# ways git fails: it refuses to open the repository at all (an extension it
+# does not know), or it opens it but cannot read the index. The entry here is
+# untracked, so only the fail-closed rule can refuse it; the healthy-repo
+# control serves it.
+URL25="https://docs.example.test/broken-repo-25"
+STUB_ETAG='"v25"' run_post "$URL25" "BROKEN-25"
+E25="$(entry_for "$URL25")"
+git -c init.defaultBranch=main init -q "$SBX"
+c25=$(is_served "$URL25" BROKEN-25)
+git config --file "$SBX/.git/config" core.repositoryformatversion 1
+git config --file "$SBX/.git/config" extensions.t25unknown true
+pre25a=$(git -C "$(dirname "${E25:-.}")" rev-parse --show-prefix >/dev/null 2>&1; echo $?)
+s25a=$(is_served "$URL25" BROKEN-25)
+git config --file "$SBX/.git/config" --unset extensions.t25unknown
+git config --file "$SBX/.git/config" core.repositoryformatversion 0
+printf 'not-an-index' > "$SBX/.git/index"
+pre25b=$(git -C "$(dirname "${E25:-.}")" rev-parse --show-prefix >/dev/null 2>&1; echo $?)
+pre25c=$(git -C "$SBX" ls-files >/dev/null 2>&1; echo $?)
+s25b=$(is_served "$URL25" BROKEN-25)
+rm -rf "$SBX/.git"
+if [ -z "$E25" ] || [ "$pre25a" = 0 ] || [ "$pre25b" != 0 ] || [ "$pre25c" = 0 ] || [ "$pre25c" = 1 ]; then
+  no "T25: precondition not created (unknown extension: rev-parse rc=$pre25a, want non-zero; bad index: rev-parse rc=$pre25b, want 0, ls-files rc=$pre25c, want an error)"
+elif [ "$c25" != y ]; then
+  no "T25: control not served in a healthy repo, so the refusals prove nothing"
+elif [ "$s25a$s25b" = nn ]; then
+  ok "T25: when git cannot read the repository around the cache, or its index, the entry is refused"
+else
+  no "T25: served while git could not answer (unreadable repo: $s25a, unreadable index: $s25b)"
+fi
+
+# ---- T26. Debug logging never shows up in a versioned home ------------------
+# Review finding: with SDD_CACHE_DEBUG=1 the first log line was written before
+# the root's `*` .gitignore existed, and a run that exits early never reached
+# the .gitignore write, so a versioned home showed `?? .../.debug.log` -- a file
+# holding signed URLs. Each early exit of each hook, in a fresh versioned home.
+# d26 NAME HOOK INPUT -> "log written,.gitignore present,paths the home repo sees"
+d26() {
+  local h="$TMPROOT/home26-$1"
+  mkdir -p "$h"; git -c init.defaultBranch=main init -q "$h"
+  printf '%s' "$3" | run_sandboxed "$h" env -u XDG_CACHE_HOME PATH="$BIN:$PATH" SDD_CACHE_DEBUG=1 \
+    CLAUDE_PROJECT_DIR="$PROJECT" bash "$2" >/dev/null 2>&1
+  printf '%s,%s,%s' \
+    "$([ -s "$h/.claude/.cache/sdd-cache/.debug.log" ] && echo y || echo n)" \
+    "$([ -f "$h/.claude/.cache/sdd-cache/.gitignore" ] && echo y || echo n)" \
+    "$(git -C "$h" status --porcelain --untracked-files=all | grep -c '\.claude/' || true)"
+}
+IN26='{"tool_name":"WebFetch","tool_input":{"url":"https://docs.example.test/debug-26?sig=T26TOKEN","prompt":"p"},"tool_response":{"result":"DEBUG-26"}}'
+IN26NOURL='{"tool_name":"WebFetch","tool_input":{}}'
+r26="pre/no-url=$(d26 pre-nourl "$PRE" "$IN26NOURL")"
+r26="$r26 pre/no-entry=$(d26 pre-miss "$PRE" "$IN26")"
+r26="$r26 post/no-url=$(d26 post-nourl "$POST" "$IN26NOURL")"
+r26="$r26 post/no-validator=$(d26 post-noval "$POST" "$IN26")"
+if [ "$r26" = "pre/no-url=y,y,0 pre/no-entry=y,y,0 post/no-url=y,y,0 post/no-validator=y,y,0" ]; then
+  ok "T26: with debug on, every early exit of both hooks writes its log behind the root's .gitignore"
+else
+  no "T26: debug log visible or not written (per run: log written, .gitignore present, paths visible): $r26"
+fi
+
+# ---- T27. Key temps a killed run abandoned are swept; the key is not --------
+# Review finding: a run killed between `mktemp` and `rm` leaves `.key.XXXXXX`,
+# which after `ln` is a second hard link to the live key, and nothing swept it.
+# The live key is backdated too, so a sweep pattern that also matched `.key`
+# itself would delete it here.
+K27="$([ -f "$CACHE_ROOT/.key" ] && sha_hex < "$CACHE_ROOT/.key")"
+: > "$CACHE_ROOT/.key.stale27"; touch -t 202601010000 "$CACHE_ROOT/.key.stale27"
+: > "$CACHE_ROOT/.key.fresh27"
+touch -t 202601010000 "$CACHE_ROOT/.key"
+STUB_ETAG='"v27"' run_post "https://docs.example.test/keysweep-27" "KEYSWEEP-27"
+K27_AFTER="$([ -f "$CACHE_ROOT/.key" ] && sha_hex < "$CACHE_ROOT/.key")"
+if [ -z "$(entry_for "https://docs.example.test/keysweep-27")" ]; then
+  no "T27: the post run wrote no entry, so it never reached the sweep"
+elif [ ! -e "$CACHE_ROOT/.key.stale27" ] && [ -e "$CACHE_ROOT/.key.fresh27" ] \
+     && [ -n "$K27" ] && [ "$K27_AFTER" = "$K27" ]; then
+  ok "T27: an abandoned key temp older than 10 minutes is swept; a fresh one and the (old) key itself are kept"
+else
+  no "T27: stale key temp kept=$([ -e "$CACHE_ROOT/.key.stale27" ] && echo y || echo n), fresh kept=$([ -e "$CACHE_ROOT/.key.fresh27" ] && echo y || echo n), key unchanged=$([ -n "$K27" ] && [ "$K27_AFTER" = "$K27" ] && echo y || echo n)"
+fi
+rm -f "$CACHE_ROOT/.key.fresh27"
+
+# ---- T28. One bound across every project; emptied directories go ------------
+# Review finding: one directory per project directory, eviction only inside the
+# current one, and nothing reclaimed the directories of deleted projects, so a
+# worktree-per-session workflow grew the cache without limit. LAST case on
+# purpose: it evicts all but the newest entries in the whole sandbox root.
+# A project directory that is a symlink is never evicted through, even when the
+# entry behind it is the oldest in the root.
+OUT28="$TMPROOT/outside28"; mkdir -p "$OUT28"
+: > "$OUT28/0123456789abcdef0123456789abcdef.json"
+touch -t 202601010000 "$OUT28/0123456789abcdef0123456789abcdef.json"
+ln -s "$OUT28" "$CACHE_ROOT/fedcba9876543210"
+post28() { # PROJECT_DIR NAME
+  mkdir -p "$1"
+  printf 'BODY-%s' "$2" | jq -Rs --arg u "https://docs.example.test/t28-$2" \
+    '{tool_name:"WebFetch",tool_input:{url:$u,prompt:"p"},tool_response:{result:.}}' \
+    | run_sandboxed "$SBX" env -u XDG_CACHE_HOME -u SDD_CACHE_DEBUG PATH="$BIN:$PATH" STUB_ETAG="\"$2\"" \
+        SDD_CACHE_MAX_TOTAL=3 CLAUDE_PROJECT_DIR="$1" bash "$POST" >/dev/null 2>&1
+  sleep 1   # mtime resolution: make "newest" unambiguous
+}
+post28 "$TMPROOT/p28a" a1; post28 "$TMPROOT/p28a" a2
+post28 "$TMPROOT/p28b" b1
+post28 "$TMPROOT/p28c" c1; post28 "$TMPROOT/p28c" c2
+total28="$(find "$CACHE_ROOT" -mindepth 2 -maxdepth 2 -type f -name '*.json' | wc -l | tr -d ' ')"
+have28() { [ -n "$(entry_for "https://docs.example.test/t28-$1")" ] && echo y || echo n; }
+kept28="$(have28 c2)$(have28 c1)$(have28 b1)"
+gone28="$(have28 a2)$(have28 a1)"
+dirs28="$([ -e "$(proj_dir "$TMPROOT/p28a")" ] && echo y || echo n)$([ -e "$PDIR" ] && echo y || echo n)"
+if [ "$total28" = 3 ] && [ "$kept28" = yyy ] && [ "$gone28" = nn ] && [ "$dirs28" = nn ] \
+   && [ -e "$OUT28/0123456789abcdef0123456789abcdef.json" ] \
+   && [ -f "$CACHE_ROOT/.key" ] && [ -f "$CACHE_ROOT/.gitignore" ]; then
+  ok "T28: the whole root holds at most SDD_CACHE_MAX_TOTAL entries (newest kept), emptied project dirs are removed, nothing is evicted through a symlinked dir"
+else
+  no "T28: left in the root: [$(find "$CACHE_ROOT" -mindepth 2 -maxdepth 2 | sed "s|^$CACHE_ROOT/||" | tr '\n' ' ')]; total=$total28 (want 3), newest c2/c1/b1 kept=$kept28, oldest a2/a1 kept=$gone28, emptied dirs p28a/main kept=$dirs28, symlinked-dir entry kept=$([ -e "$OUT28/0123456789abcdef0123456789abcdef.json" ] && echo y || echo n), key=$([ -f "$CACHE_ROOT/.key" ] && echo y || echo n), gitignore=$([ -f "$CACHE_ROOT/.gitignore" ] && echo y || echo n)"
 fi
 
 echo "---"

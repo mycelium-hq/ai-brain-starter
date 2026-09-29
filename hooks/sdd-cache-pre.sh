@@ -46,6 +46,7 @@ command -v shasum >/dev/null 2>&1 || command -v sha256sum >/dev/null 2>&1 || exi
 
 if [ -t 0 ]; then INPUT="{}"; else INPUT=$(cat); fi
 
+HOOK_TAG="pre"
 # ---- identical in sdd-cache-post.sh: keep these helpers in step -------------
 sha256_hex() {
   if command -v shasum >/dev/null 2>&1; then shasum -a 256; else sha256sum; fi | cut -c1-64
@@ -81,13 +82,56 @@ read_key() {
 entry_digest() {
   { printf '%s\n%s\n' "$1" "$2"; jq -cS 'del(.tag)'; } | sha256_hex
 }
+# The root: never a symlink, 0700, and carrying a `*` .gitignore BEFORE anything
+# else (the key, an entry, a debug log) is written into it, so no repository
+# that contains ~/.claude can pick any of it up. Non-zero when unusable.
+ensure_root() {
+  [ -L "$CACHE_ROOT" ] && return 1
+  mkdir -p "$CACHE_ROOT" 2>/dev/null || return 1
+  chmod 700 "$CACHE_ROOT" 2>/dev/null || true
+  if [ ! -e "$CACHE_ROOT/.gitignore" ] && [ ! -L "$CACHE_ROOT/.gitignore" ]; then
+    printf '*\n' > "$CACHE_ROOT/.gitignore" 2>/dev/null || true
+  fi
+  return 0
+}
 dbg() {
   [ "${SDD_CACHE_DEBUG:-0}" = "1" ] || return 0
-  [ -L "$CACHE_ROOT" ] && return 0
-  { mkdir -p "$CACHE_ROOT" \
-    && printf '%s [pre]  %s\n' "$(date -u +%FT%TZ)" "$*" >> "$CACHE_ROOT/.debug.log"; } 2>/dev/null || true
+  ensure_root || return 0
+  printf '%s [%s] %s\n' "$(date -u +%FT%TZ)" "$HOOK_TAG" "$*" >> "$CACHE_ROOT/.debug.log" 2>/dev/null || true
 }
 # ------------------------------------------------------------------------------
+
+# 0 when $1 or one of its ancestors holds a .git entry (a work tree git would
+# discover from there). Absolute paths only; anything else counts as "no".
+in_git_tree() {
+  local d="$1"
+  case "$d" in /*) ;; *) return 1 ;; esac
+  while :; do
+    [ -e "$d/.git" ] && return 0
+    [ "$d" = "/" ] && return 1
+    d=$(dirname "$d")
+  done
+}
+# 0 = refuse: the entry is tracked by a repository containing the cache, or a
+# repository is there and git could not answer (fail closed). 1 = untracked.
+# The WHOLE path is folded from the work-tree top, not just the file name: on
+# a case-folding disk a checkout can track the entry under an upper-case
+# directory. The session's GIT_* location variables are scrubbed so they cannot
+# point the check at some other repository. A repository git cannot discover
+# from here (a bare `--git-dir` dotfiles setup) is out of reach by
+# construction; the root's `*` .gitignore means entries get into one only by
+# an explicit `add -f`.
+tracked_or_undecidable() {
+  local dir="$1" name="$2" prefix="" rc=0
+  in_git_tree "$dir" || return 1
+  prefix=$(env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR \
+    git -C "$dir" rev-parse --show-prefix 2>/dev/null) || return 0
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR \
+    git -C "$dir" ls-files --error-unmatch -- ":(top,icase)${prefix}${name}" \
+    >/dev/null 2>&1 || rc=$?
+  [ "$rc" -eq 1 ] && return 1
+  return 0
+}
 
 dbg "fired"
 
@@ -104,9 +148,8 @@ if [ -L "$CACHE_ROOT" ] || [ -L "$CACHE_DIR" ] || [ -L "$CACHE_FILE" ] || [ ! -f
 fi
 KEY=$(read_key)
 if [ -z "$KEY" ]; then dbg "no usable machine key, nothing can be verified, exit"; exit 0; fi
-# Case-insensitive, so a tracked `ABC….json` still counts on a case-folding disk.
-if git -C "$CACHE_DIR" ls-files --error-unmatch -- ":(icase)${CACHE_FILE##*/}" >/dev/null 2>&1; then
-  dbg "entry is tracked by git, refusing"; exit 0
+if tracked_or_undecidable "$CACHE_DIR" "${CACHE_FILE##*/}"; then
+  dbg "entry is tracked by git (or a repo around the cache cannot be read), refusing"; exit 0
 fi
 
 # Read the entry ONCE. Everything verified and everything served below comes
