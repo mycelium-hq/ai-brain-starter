@@ -1635,9 +1635,9 @@ PY_DIRECT=(
   hooks/test_shell_parse_tokens.py
   # heavy_admission.py, folded into retry-budget.py: must-admit/must-detect
   # corpora; real and synthetic ps-snapshot counting (root-invocation-only,
-  # node/bun script resolution, a real Next 16 process.title rewrite, a real
-  # corepack-shape pnpm plant); a git-push-as-verify leg asking a real git
-  # for the pre-push hook it would actually run (hooksPath, worktrees,
+  # node/bun script resolution, a real Next 16 process.title rewrite, a
+  # captured corepack-shape pnpm row); a git-push-as-verify leg asking a real
+  # git for the pre-push hook it would actually run (hooksPath, worktrees,
   # husky v9); a leak control with a positive control (ps -ww -o args=
   # DOES retrieve the token) proving the check isn't vacuous; and
   # negative-control mutants that must each flip a verdict.

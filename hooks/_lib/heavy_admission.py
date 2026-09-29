@@ -245,7 +245,11 @@ def _forwarded_prefix(prefix: list[str]) -> list[str]:
     and -c core.hooksPath=. Every OTHER -c is dropped -- forwarding one
     verbatim would put its value (a credential: `-c http.extraHeader=
     <secret>`) into a NEW process's argv, visible to any local `ps` reader,
-    before the user has approved anything."""
+    before the user has approved anything. Known gap: --config-env=core.
+    hooksPath=<var> also changes the hook, but is dropped like any other -c/
+    --config-env -- rev-parse then resolves the repo's DEFAULT hooksPath
+    instead, which can false-DENY a push whose --config-env points at a
+    LIGHT one."""
     out, i, n = [], 0, len(prefix)
     while i < n:
         tok = prefix[i]
@@ -266,10 +270,14 @@ _TOOL_CACHE: dict[str, str] = {}
 def _tool(name: str) -> str:
     """NAME resolved to an absolute path from ABSOLUTE PATH entries only, once
     per process, before any approval decision -- never a bare name handed to
-    subprocess, which a relative or empty PATH entry (reached via this
-    process's own cwd, or a -C the COMMAND TEXT chose) could resolve to a
-    planted binary. Missing -> raises, so admit()'s catch-all fails OPEN the
-    same VISIBLE way every other internal error does."""
+    subprocess, which a relative or empty PATH entry (reached via THIS
+    PROCESS's own cwd -- never a `-C`, which only git itself interprets,
+    after this resolution has already run) could resolve to a planted
+    binary. POSIX only: win32's shutil.which prepends os.curdir unless
+    NoDefaultCurrentDirectoryInExePath is set, so an absolute-only PATH
+    filter alone does not close this on Windows. Missing -> raises, so
+    admit()'s catch-all fails OPEN the same VISIBLE way every other internal
+    error does."""
     if name not in _TOOL_CACHE:
         abs_only = os.pathsep.join(d for d in os.environ.get("PATH", "").split(os.pathsep) if os.path.isabs(d))
         found = shutil.which(name, path=abs_only)
