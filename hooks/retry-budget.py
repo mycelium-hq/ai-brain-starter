@@ -56,9 +56,8 @@ import tempfile
 try:
     # HOME_HOOKS_LIB_DEPS / check-home-hook-deploy.py's static import scan
     # (AST-matched) recognizes `from _lib.<mod> import x`, `import _lib.<mod>`
-    # and `from _lib import <mod>`; this uses the first form -- the pattern
-    # block-scratchpad-cross-agent-clobber.py already uses. What it does NOT
-    # see is an import made after putting `_lib` itself on sys.path, or a
+    # and `from _lib import <mod>` -- this uses the first form. What it does
+    # NOT see is an import made after putting `_lib` itself on sys.path, or a
     # `_lib` module's own imports (heavy_admission -> shell_parse), which is
     # why shell_parse.py is separately listed in install-hooks-user-level.py's
     # HOME_HOOKS_LIB_DEPS (not defined in this file).
