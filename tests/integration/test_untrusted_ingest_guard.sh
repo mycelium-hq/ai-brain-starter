@@ -1313,6 +1313,71 @@ with tempfile.TemporaryDirectory() as isolated_dir16, tempfile.TemporaryDirector
             os.environ.pop("USERPROFILE", None)
         sys.modules.pop("_isolated_granola_core_t16", None)
 
+# T17 (N2): ingest-github's degraded (_shared unreachable) path must
+# round-trip a lone surrogate the way the Granola/YouTube siblings do
+# (T11/T15/T16) -- round-2 finding 4's class, third degraded path, was
+# never swept for this writer. Forces the ImportError branch with a
+# synthetic stale _shared: it re-exports the 8 names that predate
+# MYC-4701 (unchanged since before this branch) but omits
+# guard_untrusted_body/trust_frontmatter_lines/_raw_item_fields -- the
+# same shape origin/main's connector_utils.py has (the review's own
+# repro). Built this way, not a literal git-history read, so the test
+# stays hermetic and network-free.
+with tempfile.TemporaryDirectory() as isolated_root17:
+    isolated_root17 = pathlib.Path(isolated_root17)
+    (isolated_root17 / "skills" / "ingest-github").mkdir(parents=True)
+    (isolated_root17 / "skills" / "_shared").mkdir(parents=True)
+    pre_4701_names = ("date_range_strs", "excerpt", "now_iso", "slug_repo",
+                       "to_local_str", "today_iso", "yaml_escape", "yaml_int_array")
+    stale_shim17 = (
+        "import importlib.util\n"
+        "_spec = importlib.util.spec_from_file_location(\n"
+        "    '_stale_real_connector_utils_t17', %r)\n"
+        "_real = importlib.util.module_from_spec(_spec)\n"
+        "_spec.loader.exec_module(_real)\n"
+        + "".join("%s = _real.%s\n" % (name, name) for name in pre_4701_names)
+    ) % str(repo / "skills" / "_shared" / "connector_utils.py")
+    (isolated_root17 / "skills" / "_shared" / "connector_utils.py").write_text(stale_shim17, encoding="utf-8")
+    copied_gh_ingest_path = isolated_root17 / "skills" / "ingest-github" / "ingest.py"
+    copied_gh_ingest_path.write_text(
+        (repo / "skills" / "ingest-github" / "ingest.py").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    # sys.modules["connector_utils"] is already cached to the REAL module
+    # (this script's own top-level `import connector_utils as cu`) -- a
+    # bare `from connector_utils import ...` (ingest-github's own import
+    # style, unlike granola_core's importlib-by-path) hits that cache
+    # before ever consulting sys.path, so the isolated copy's own
+    # sys.path.insert would be silently ignored without this pop.
+    _real_connector_utils_module = sys.modules.pop("connector_utils", None)
+    try:
+        isolated_gh_ingest = load_module("_isolated_gh_ingest_t17", copied_gh_ingest_path)
+        try:
+            with tempfile.TemporaryDirectory() as vault17:
+                payload17 = {
+                    "repo": "acme/widgets", "vault_root": vault17, "target_date": "2026-08-05",
+                    "pull_requests": [{
+                        "number": 301, "title": "Surrogate repro", "author": "a",
+                        "merged_at": "2026-01-01T00:00:00Z", "url": "u",
+                        "body": "x \ud83d y",
+                    }],
+                }
+                buf17 = io.StringIO()
+                with redirect_stdout(buf17):
+                    rc17 = isolated_gh_ingest.run_from_payload(payload17)
+                check(rc17 == 0,
+                      "(T17) a lone surrogate in a PR body does not abort the write on the stale-_shared degraded path")
+                fpath17 = pathlib.Path(vault17) / "External Inputs" / "GitHub" / "acme-widgets" / "2026-08-05.md"
+                check(fpath17.is_file(), "(T17) file written despite the degraded path + lone surrogate")
+                if fpath17.is_file():
+                    text17 = fpath17.read_text(encoding="utf-8")
+                    check("�" in text17, "(T17) the lone surrogate was replaced, not left to crash the write")
+        finally:
+            sys.modules.pop("_isolated_gh_ingest_t17", None)
+            sys.modules.pop("_stale_real_connector_utils_t17", None)
+    finally:
+        if _real_connector_utils_module is not None:
+            sys.modules["connector_utils"] = _real_connector_utils_module
+
 sys.exit(1 if fails else 0)
 PY
 

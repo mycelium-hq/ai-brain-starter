@@ -55,7 +55,14 @@ try:
     from connector_utils import guard_untrusted_body, trust_frontmatter_lines, _raw_item_fields
 except ImportError:
     def guard_untrusted_body(text, source, scan_text=None):
-        return text, {"content_trust": "untrusted", "injection_scan": "unavailable", "injection_flags": []}
+        # No envelope on this degraded path -- but still round-trip a lone
+        # UTF-16 surrogate half (matches the ingest-youtube sibling,
+        # 3153b9e), so that alone doesn't abort the write. A stale _shared
+        # returned `text` unmodified here; a PR/issue/commit body with a
+        # lone surrogate then raised UnicodeEncodeError at write_vault_file's
+        # plain "utf-8" write, with no file written (N2).
+        safe = (text or "").encode("utf-8", "surrogatepass").decode("utf-8", "replace")
+        return safe, {"content_trust": "untrusted", "injection_scan": "unavailable", "injection_flags": []}
 
     def trust_frontmatter_lines(trust):
         return [
