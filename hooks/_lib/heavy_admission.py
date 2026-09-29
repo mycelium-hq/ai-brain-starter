@@ -16,10 +16,8 @@ invocations count; shells and this hook's own ancestors never do. Memory is
 read first: critical denies WITHOUT counting. An exception that propagates to
 admit() admits VISIBLY (additionalContext + log_fire).
 
-`git push` counts as `verify` when the pre-push hook git ITSELF would run
-for that push -- its path asked of a real `git rev-parse --git-path`, never
-regexed off `.git/config` -- has content, read from disk, containing a
-heavy-verifier marker.
+`git push` counts as `verify` when the pre-push hook git itself would run
+(asked of `git rev-parse --git-path`) contains a heavy-verifier marker.
 
 Bypass: HEAVY_ADMISSION_BYPASS=1, inline or session env -- logged only when
 it actually suppressed a deny.
@@ -52,12 +50,9 @@ MEMORYSTATUS_LEVEL_CRITICAL = 10
 MEM_AVAILABLE_OVER_TOTAL_CRITICAL = 0.10
 
 CLASS_CAPS = {"build": 1, "verify": 1, "test_suite": 1, "tsc_full": 1, "playwright": 1, "cargo": 2}
-_HINTS = {  # only where a narrower command is UNIVERSALLY admitted (never
-    "test_suite": "run one file: `vitest run <file>`",  # refused again); every
-}  # other class falls back to the generic "wait" below. No tsc_full entry:
-# `tsc -p <narrower tsconfig>` only exists in a monorepo with more than one
-# tsconfig -- in a single-tsconfig repo it is refused again at the SAME cap
-# (measured: `tsc -p tsconfig.json --noEmit` is still the default project).
+# Only a hint that is never refused again: no tsc_full one, since in a one-
+# tsconfig repo `tsc -p tsconfig.json` IS the default project.
+_HINTS = {"test_suite": "run one file: `vitest run <file>`"}
 
 # ---- detection: real argv tokens resolved to a FIXPOINT, never a substring --
 _BARE_SKIP = WRAPPER_PREFIXES | {"npx", "bunx"}
@@ -67,11 +62,9 @@ _PM_SCOPE_VALUE = {"-C", "--dir", "--filter", "-F", "--prefix", "--workspace"}
 _PM_SCOPE_BOOL = {"-w", "--workspace-root", "-r", "--recursive"}
 _ENV_FLAGS = {"-u": 2, "--unset": 2, "-i": 1, "--ignore-environment": 1}  # -> tokens consumed
 _TIMEOUT_WORDS = {"timeout", "gtimeout"}
-_TIMEOUT_VALUE_FLAGS = {"-s", "--signal", "-k", "--kill-after"}  # the rest (--preserve-status,
-_SHELLS = {"bash", "sh", "zsh"}                                  # --foreground, ...) are boolean
-# Reserved words that can sit in FRONT of a real command word without being
-# one themselves, so it must still be found past them (`{ next build; }`,
-# `for ...; do next build; done`). "time" is already a WRAPPER_PREFIX.
+_TIMEOUT_VALUE_FLAGS = {"-s", "--signal", "-k", "--kill-after"}  # timeout's other flags are boolean
+_SHELLS = {"bash", "sh", "zsh"}
+# Reserved words in FRONT of a real command word: `{ next build; }`, `do next build`.
 _RESERVED_WORDS = {"{", "(", "if", "then", "elif", "else", "do", "while", "until", "!"}
 _CARGO_VERBS = {"build", "test", "check", "clippy", "nextest", "b", "t", "c"}
 _CARGO_SKIP_FLAGS = ("--locked", "--offline", "--frozen")
@@ -215,40 +208,24 @@ def _classify(t: list[str]):
 # ---- `git push` -> class `verify`, iff the repo's own pre-push hook is heavy
 _HEAVY_HOOK_MARKERS = ("pnpm verify", "npm run verify", "pnpm test", "vitest",
                        "tsc", "eslint .", "turbo", "ci-test")
-# Git global options that can sit BEFORE the subcommand. -c/-C/--git-dir/
-# --work-tree/--namespace/--super-prefix take a value; the rest are boolean.
+# Git global options before the subcommand; _GIT_GLOBAL_ARG ones take a value.
 _GIT_GLOBAL_ARG = {"-c", "-C", "--git-dir", "--work-tree", "--namespace", "--super-prefix"}
 _GIT_GLOBAL_ARG_GLUED = ("--git-dir=", "--work-tree=", "--namespace=", "--super-prefix=")
 _GIT_GLOBAL_BOOL = {"--no-pager", "-p", "--paginate", "--bare", "--literal-pathspecs",
                     "--no-optional-locks", "--no-replace-objects"}
 
 def _parse_git_prefix(rest: list[str]) -> tuple[list[str], list[str]]:
-    """REST is argv AFTER the `git` command word. Returns (prefix, subcmd):
-    PREFIX is every global option, forwarded VERBATIM to a fresh `git` asking
-    about the same repo/config -- so an inline `-c core.hooksPath=` or `-C`
-    on the REAL push is honoured resolving ITS hook too, not just whatever
-    this machine's ambient config says."""
-    i, prefix = 0, []
-    while i < len(rest):
-        tok = rest[i]
-        if tok in _GIT_GLOBAL_ARG:
-            if i + 1 >= len(rest):
-                return prefix, []  # dangling flag, no subcommand to find
-            prefix += [tok, rest[i + 1]]; i += 2
-        elif tok in _GIT_GLOBAL_BOOL or tok.startswith(_GIT_GLOBAL_ARG_GLUED):
-            prefix.append(tok); i += 1
-        else:
-            break
-    return prefix, rest[i:]
+    """(global options, subcommand argv) of a `git` argv; the options are later
+    forwarded verbatim, so a `-c core.hooksPath=` or `-C` on the push is honoured."""
+    i = 0
+    while i < len(rest) and (rest[i] in _GIT_GLOBAL_ARG or rest[i] in _GIT_GLOBAL_BOOL
+                             or rest[i].startswith(_GIT_GLOBAL_ARG_GLUED)):
+        i += 2 if rest[i] in _GIT_GLOBAL_ARG else 1
+    return rest[:i], rest[i:]
 
 def _pre_push_hook_file(prefix: list[str], cwd: str):
-    # git's OWN answer -- core.hooksPath at any scope (local, global,
-    # worktree), the worktree commondir, and any -c/-C/--git-dir/--work-tree
-    # carried on the REAL push itself (PREFIX, forwarded verbatim). A husky
-    # v9 `.husky/_/` shim defers to the real `.husky/<hook>` one level up.
-    # CWD is a real, existing directory or None: a bogus/unresolvable payload
-    # cwd must never turn into an OS-level chdir error ahead of an absolute
-    # -C/--git-dir in PREFIX, which would resolve the repo just fine anyway.
+    # git's own answer (hooksPath at any scope, worktree commondir, the push's own
+    # PREFIX); a husky v9 `.husky/_/` shim defers to `.husky/<hook>`. No chdir into a missing CWD.
     real_cwd = cwd if cwd and os.path.isdir(cwd) else None
     hook = _run(["git", *prefix, "rev-parse", "--path-format=absolute",
                  "--git-path", "hooks/pre-push"], cwd=real_cwd, timeout=4).strip()
@@ -257,35 +234,22 @@ def _pre_push_hook_file(prefix: list[str], cwd: str):
 
 def _repo_push_is_heavy(prefix: list[str], cwd: str) -> bool:
     hook = _pre_push_hook_file(prefix, cwd)
-    if not hook or not os.path.exists(hook):
-        return False  # no pre-push hook at all: a DECIDED light (silent admit)
-    if not stat.S_ISREG(os.stat(hook).st_mode):
-        # A directory, FIFO, etc. at the hook path: never open() it (a FIFO
-        # blocks). Raising here reaches admit()'s catch-all -- admits WITH
-        # the note, never a silent "light".
+    if not os.path.exists(hook):
+        return False  # no pre-push hook at all: a decided light
+    if not stat.S_ISREG(os.stat(hook).st_mode):  # a dir/FIFO: never open() it; admit WITH the note
         raise OSError(f"pre-push hook is not a regular file: {hook}")
     with open(hook, encoding="utf-8", errors="replace") as fh:  # unreadable -> raises, same note
         return any(marker in fh.read(65536) for marker in _HEAVY_HOOK_MARKERS)
 
 def _shell_scope_segs(segs, idx):
-    """The slice of SEGS, up to and including IDX, that shares idx's OWN
-    subshell scope as ITS top level -- so a `cd` inside the SAME `( ... )` as
-    idx (`(cd heavy && git push)`) is visible to cwd_candidates, which
-    otherwise treats anything inside unclosed parens as invisible (that
-    function's OWN contract: a subshell's cd is invisible to the PARENT,
-    which idx is not, when idx is a sibling inside the same parens)."""
-    start, depth = 0, 0
-    for i in range(idx, -1, -1):
-        sep = segs[i][0]
-        if sep == ")":
-            depth += 1
-        elif sep == "(":
-            if depth == 0:
-                start = i
-                break
-            depth -= 1
-    inner = segs[start:idx + 1]
-    return [("", inner[0][1])] + inner[1:] if start > 0 else inner
+    """SEGS up to IDX, re-rooted at the `(` opening idx's own subshell, so
+    cwd_candidates sees a `cd` inside the SAME parens: `(cd X && git push)`."""
+    depth = 0
+    for i in range(idx, 0, -1):
+        depth += {")": 1, "(": -1}.get(segs[i][0], 0)
+        if depth < 0:
+            return [("", segs[i][1])] + segs[i + 1:idx + 1]
+    return segs[:idx + 1]
 
 def detect_class(command: str, cwd: str | None = None, _depth: int = 0):
     """First matching class in COMMAND, resolved per shell segment, or None.
@@ -323,11 +287,7 @@ _SCRIPT_TOOL_SUFFIX = (
 def _resolve_runner(t: list[str]) -> list[str]:
     """`node|bun <script> ...` -> the LOGICAL command it is really running,
     so a real process goes through the same rules detection uses."""
-    if t[:1] and t[0].startswith("next-build"):
-        # Next 16's own `nextBuild()` sets process.title = "next-build (vX)"
-        # as its first statement; on macOS that overwrites the argv memory
-        # region, so a real `next build`'s snapshot row IS this shape, not
-        # `node .../next/dist/bin/next build` (captured 2026-09-29, v16.3.2).
+    if t[:1] and t[0].startswith("next-build"):  # Next 16's process.title overwrites argv
         return ["next", "build"]
     if len(t) < 2 or _basename(t[0]) not in _NODE_RUNNERS:
         return t
@@ -362,11 +322,7 @@ def _ancestors(pid: int, snapshot: dict) -> set[int]:
 def _count_running(cls: str, snapshot: dict) -> int:
     # ROOT invocations of CLS only: a match with a same-class match among its
     # ancestors doesn't count (one `pnpm run build` counts 1, not once per
-    # spawned child). This hook's own ancestors never count. (A shell-ucomm
-    # filter used to live here too; _classify already rejects every
-    # shell-headed argv on its own, and the filter's only live effect was an
-    # UNDER-count on a torn `ps` read, where ucomm is sampled pre-exec and
-    # argv post-exec.)
+    # spawned child). This hook's own ancestors never count.
     hook_anc = _ancestors(os.getppid(), snapshot)
     matched = {pid for pid, (_ppid, argv) in snapshot.items()
                if pid not in hook_anc
@@ -380,13 +336,8 @@ _MEMINFO_RE = re.compile(r"^(MemTotal|MemAvailable):\s*(\d+)", re.MULTILINE)
 
 def _run(argv: list[str], timeout: float = 2, cwd: str | None = None) -> str:
     import subprocess  # lazy: paid only once a class is actually detected
-    # encoding="utf-8" (never the LOCALE encoding: a non-UTF-8 Windows console
-    # raises UnicodeDecodeError on any vault path) + errors="replace": a
-    # foreign process's non-UTF-8 argv byte (macOS `ps` emits raw bytes under
-    # any UTF-8 locale) must decode as U+FFFD and keep every OTHER row
-    # parseable, never raise and disable counting machine-wide until that one
-    # process exits. The text is only ever classified, never displayed, so a
-    # replacement character costs nothing.
+    # utf-8 + replace, never the locale: one foreign non-UTF-8 argv byte must not
+    # raise and blind the whole snapshot. The text is only classified, never shown.
     return subprocess.run(argv, capture_output=True, text=True,
                           encoding="utf-8", errors="replace",
                           timeout=timeout, check=True, cwd=cwd).stdout
@@ -430,9 +381,7 @@ def _memory_critical(sig: dict) -> tuple[bool, str]:
 
 # ---- dispatch -----------------------------------------------------------------
 def _guard_deps():
-    # Lazy: cmd_env/guard_telemetry are only needed on a deny, a bypass or an
-    # error -- paying their import cost on every CLEAN Bash call (the common
-    # case, which returns at the `cls is None` check above) is pure waste.
+    # Lazy: only a deny, a bypass or an error needs these, never a clean call.
     try:
         from cmd_env import inline_bypass
         from guard_telemetry import log_fire
@@ -443,9 +392,7 @@ def _guard_deps():
 
 def admit(command: str, cwd: str | None = None) -> int:
     """0 = allow, 2 = deny; an exception that propagates here admits, visibly.
-    `cwd` is the payload's cwd, used only to resolve a `git push`'s repo --
-    including a RELATIVE `-C <path>`/`--git-dir=`/`--work-tree=` on the push
-    itself, not only a bare `git push`."""
+    `cwd` is the payload's cwd; it resolves only a `git push` (and its relative -C)."""
     try:
         cls = detect_class(command, cwd)
         if cls is None:
@@ -481,10 +428,8 @@ def admit(command: str, cwd: str | None = None) -> int:
     except Exception as exc:
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
             "additionalContext": f"[heavy-admission] unmeasured ({type(exc).__name__}) -- admitted"}}))
-        # "warned", not "blocked"/"bypassed"/"fired": guard_telemetry's own
-        # taxonomy (see its module docstring) has no "error" status. Telemetry
-        # is best-effort here: a missing/broken guard_telemetry must never
-        # stop the admit-and-warn above from completing.
+        # "warned": guard_telemetry's taxonomy has no "error". Best-effort: a
+        # broken guard_telemetry must never stop the admit-and-warn above.
         try:
             _guard_deps()[1](HOOK_NAME, status="warned", detail=type(exc).__name__)
         except Exception:
