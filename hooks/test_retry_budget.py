@@ -757,7 +757,7 @@ def leg_heavy_admission_telemetry_stays_in_the_sandbox() -> None:
                                              "cwd": str(repo), "tool_use_id": "toolu_telemetry_sandbox"}))
         recs = []
         if fires_log.exists():
-            for ln in fires_log.read_text(encoding="utf-8").splitlines():
+            for ln in fires_log.read_text(encoding="utf-8", errors="replace").splitlines():
                 try:
                     recs.append(json.loads(ln))
                 except ValueError:
