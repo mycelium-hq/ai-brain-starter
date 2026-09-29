@@ -11,6 +11,7 @@ Run: python3 hooks/test_heavy_admission.py
 """
 from __future__ import annotations
 
+import atexit
 import contextlib
 import importlib.util
 import io
@@ -23,7 +24,9 @@ import tempfile
 import time
 from pathlib import Path
 
-os.environ["GUARD_FIRES_LOG"] = os.path.join(tempfile.mkdtemp(prefix="heavy-admission-telemetry-"), "fires.jsonl")
+_TELEMETRY_DIR = tempfile.mkdtemp(prefix="heavy-admission-telemetry-")
+atexit.register(shutil.rmtree, _TELEMETRY_DIR, ignore_errors=True)  # 324 of these leaked pre-fix
+os.environ["GUARD_FIRES_LOG"] = os.path.join(_TELEMETRY_DIR, "fires.jsonl")
 os.environ.pop("HEAVY_ADMISSION_BYPASS", None)  # an ambient bypass would pass A/N for the wrong reason
 # ^ BEFORE the first module load: guard_telemetry binds LOG_PATH at its own
 # first import, so without this every run appends to the REAL guard-fires.jsonl.
@@ -53,7 +56,11 @@ def _admit(mod, command: str, cwd=None):
     (rc, output, statuses). Call mod.admit() directly to exercise the REAL
     telemetry write instead."""
     fires, out, err = [], io.StringIO(), io.StringIO()
-    mod.log_fire = lambda name, status="fired", **ctx: fires.append(status)
+    # log_fire/inline_bypass are lazily imported (via _guard_deps()) inside
+    # admit() itself, so patching a module-level mod.log_fire has nothing to
+    # intercept. Keep the REAL inline_bypass; wrap only log_fire.
+    real_deps = mod._guard_deps
+    mod._guard_deps = lambda: (real_deps()[0], lambda name, status="fired", **ctx: fires.append(status))
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
         rc = mod.admit(command, cwd)
     return rc, out.getvalue() + err.getvalue(), fires

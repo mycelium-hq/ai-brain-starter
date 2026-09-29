@@ -33,13 +33,9 @@ import sys
 try:
     from shell_parse import (ENV_ASSIGN_RE, WRAPPER_PREFIXES, cwd_candidates,
         split_segments_with_seps, strip_heredoc_bodies, strip_noncode, tokens)
-    from cmd_env import inline_bypass
-    from guard_telemetry import log_fire
 except ImportError:
     from _lib.shell_parse import (ENV_ASSIGN_RE, WRAPPER_PREFIXES, cwd_candidates,
         split_segments_with_seps, strip_heredoc_bodies, strip_noncode, tokens)
-    from _lib.cmd_env import inline_bypass
-    from _lib.guard_telemetry import log_fire
 
 BYPASS_VAR = "HEAVY_ADMISSION_BYPASS"
 HOOK_NAME = "heavy-admission"
@@ -426,6 +422,18 @@ def _memory_critical(sig: dict) -> tuple[bool, str]:
 
 
 # ---- dispatch -----------------------------------------------------------------
+def _guard_deps():
+    # Lazy: cmd_env/guard_telemetry are only needed on a deny, a bypass or an
+    # error -- paying their import cost on every CLEAN Bash call (the common
+    # case, which returns at the `cls is None` check above) is pure waste.
+    try:
+        from cmd_env import inline_bypass
+        from guard_telemetry import log_fire
+    except ImportError:
+        from _lib.cmd_env import inline_bypass
+        from _lib.guard_telemetry import log_fire
+    return inline_bypass, log_fire
+
 def admit(command: str, cwd: str | None = None) -> int:
     """0 = allow, 2 = deny; an exception that propagates here admits, visibly.
     `cwd` is the payload's cwd, used only to resolve a `git push`'s repo."""
@@ -447,6 +455,7 @@ def admit(command: str, cwd: str | None = None) -> int:
                 return 0
             headline = f"a {cls} is already running ({running} of cap {cap})"
             hint = _HINTS.get(cls, "wait for the running one to finish")
+        inline_bypass, log_fire = _guard_deps()
         if os.environ.get(BYPASS_VAR) == "1" or inline_bypass(command, BYPASS_VAR):
             log_fire(HOOK_NAME, status="bypassed", cls=cls, reason=headline)
             return 0
@@ -464,6 +473,11 @@ def admit(command: str, cwd: str | None = None) -> int:
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
             "additionalContext": f"[heavy-admission] unmeasured ({type(exc).__name__}) -- admitted"}}))
         # "warned", not "blocked"/"bypassed"/"fired": guard_telemetry's own
-        # taxonomy (see its module docstring) has no "error" status.
-        log_fire(HOOK_NAME, status="warned", detail=type(exc).__name__)
+        # taxonomy (see its module docstring) has no "error" status. Telemetry
+        # is best-effort here: a missing/broken guard_telemetry must never
+        # stop the admit-and-warn above from completing.
+        try:
+            _guard_deps()[1](HOOK_NAME, status="warned", detail=type(exc).__name__)
+        except Exception:
+            pass
         return 0
