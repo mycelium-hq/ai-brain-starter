@@ -224,7 +224,7 @@ def write_vault_file(
 ) -> Path:
     """filename_date is a caller-proven-safe digits-and-hyphens date for the
     PATH only -- frontmatter["upload_date"] (rendered below) may be a
-    different, preserved-but-quoted raw value; see B5."""
+    different, preserved-but-quoted raw value."""
     target_dir = vault_root / "External Inputs" / "YouTube" / channel_slug
     target_dir.mkdir(parents=True, exist_ok=True)
     target = target_dir / f"{filename_date}-{video_slug}.md"
@@ -267,7 +267,7 @@ def write_seed_stub(
 ) -> Path:
     """The video title is third-party text, already fenced and stamped in
     `main_file` -- link to it by name rather than repeating the raw title
-    here unguarded. filename_date: see write_vault_file (B5)."""
+    here unguarded. filename_date: see write_vault_file's docstring."""
     captures_dir = vault_root / "Meta" / "Captures"
     captures_dir.mkdir(parents=True, exist_ok=True)
     fname = f"{filename_date}-youtube-{channel_slug}-{video_id}.md"
@@ -313,8 +313,8 @@ def main() -> int:
     # guard_untrusted_body ever runs, since with no transcript the raw
     # title is embedded straight into the stub body below. For a lone
     # surrogate specifically this is now belt-and-braces, not the only
-    # fix -- the degraded (no _shared) guard_untrusted_body round-trips
-    # surrogates too (3153b9e), and write_vault_file()'s per-key sanitize
+    # fix -- the degraded (no _shared) guard_untrusted_body above also
+    # round-trips surrogates, and write_vault_file()'s per-key sanitize
     # covers the frontmatter title regardless. Still the only place that
     # strips a C1 control before it reaches the stub body.
     title = sanitize_third_party_text(meta.get("title", "Untitled"))
@@ -334,7 +334,7 @@ def main() -> int:
     else:
         # Preserve the raw value for the frontmatter rather than silently
         # replacing real (if oddly-shaped) metadata with a fabricated
-        # date -- write_vault_file's per-key branch quotes it safely (B5)
+        # date -- write_vault_file's per-key branch quotes it safely,
         # since it is no longer in _BARE_STR_KEYS.
         upload_date = upload_date_raw or datetime.now().strftime("%Y-%m-%d")
     # The FILENAME needs a provably safe shape regardless of what
@@ -401,7 +401,7 @@ def main() -> int:
     }
 
     # filename_date, not upload_date: the frontmatter value can now be a
-    # preserved-but-quoted raw string (B5), and neither filename may embed
+    # preserved-but-quoted raw string, and neither filename may embed
     # anything other than the proven-safe digits-and-hyphens shape.
     target = write_vault_file(vault_root, channel_slug, filename_date, video_slug, fm, body)
     seed_paths: list[Path] = []

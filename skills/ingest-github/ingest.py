@@ -56,11 +56,11 @@ try:
 except ImportError:
     def guard_untrusted_body(text, source, scan_text=None):
         # No envelope on this degraded path -- but still round-trip a lone
-        # UTF-16 surrogate half (matches the ingest-youtube sibling,
-        # 3153b9e), so that alone doesn't abort the write. A stale _shared
-        # returned `text` unmodified here; a PR/issue/commit body with a
-        # lone surrogate then raised UnicodeEncodeError at write_vault_file's
-        # plain "utf-8" write, with no file written (N2).
+        # UTF-16 surrogate half (matches the ingest-youtube sibling's own
+        # degraded-path fallback), so that alone doesn't abort the write.
+        # A stale _shared returned `text` unmodified here; a PR/issue/commit
+        # body with a lone surrogate then raised UnicodeEncodeError at
+        # write_vault_file's plain "utf-8" write, with no file written.
         safe = (text or "").encode("utf-8", "surrogatepass").decode("utf-8", "replace")
         return safe, {"content_trust": "untrusted", "injection_scan": "unavailable", "injection_flags": []}
 
@@ -72,7 +72,7 @@ except ImportError:
             # above always returns [], but connector_utils.py's real
             # trust_frontmatter_lines does the same bare ", ".join(flags) --
             # belt-and-braces here too so this local copy cannot regress
-            # into the same non-str-id crash independently (N1).
+            # into the same non-str-id crash independently.
             "injection_flags: [" + ", ".join(str(i) for i in trust["injection_flags"]) + "]",
         ]
 

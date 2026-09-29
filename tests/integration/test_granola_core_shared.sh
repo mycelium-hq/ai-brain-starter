@@ -88,7 +88,7 @@ with tempfile.TemporaryDirectory() as d:
     )
     body2 = fp2.read_text(encoding="utf-8")
     # granola_core.py renders extra_frontmatter values as JSON-quoted
-    # scalars (d122a6d, so an embedded ':' or line break can never forge a
+    # scalars (so an embedded ':' or line break can never forge a
     # frontmatter key), not the bare line this used to assert.
     check('external_attendees: "Dana <dana@example.com>"' in body2,
           "(2e) extra_frontmatter injects external_attendees (personal-exporter mode)")

@@ -113,11 +113,11 @@ def assert_stamped(text, label, flagged_family=None):
     regression does NOT: YAML parses `untrusted` and `"untrusted"` to the
     identical string. YouTube is the only writer with its own per-key
     bare/quoted branch for these keys (write_vault_file's _BARE_STR_KEYS),
-    so it alone also gets a literal-line bareness check (T5i, N3)."""
+    so it alone also gets a literal-line bareness check (T5i)."""
     if cu.yaml is None:
         # split_frontmatter silently returns ({}, text) with no PyYAML,
         # which otherwise surfaces as 4 checks each failing with a bare
-        # "(got None)" -- indistinguishable from a real stamping bug (N7).
+        # "(got None)" -- indistinguishable from a real stamping bug.
         check(False, "(%s) content_trust stamped (PyYAML missing -- cannot verify)" % label)
         return
     meta, _ = cu.split_frontmatter(text)
@@ -496,12 +496,12 @@ with tempfile.TemporaryDirectory() as d5:
         check(meta5g.get("content_trust") == "untrusted",
               "(T5g) a newline-smuggled channel_url cannot fake content_trust: trusted "
               "(got %r)" % meta5g.get("content_trust"))
-        # (B5) a genuine 8-digit upload_date is still rendered bare and
+        # A genuine 8-digit upload_date is still rendered bare and
         # still parses as a real YAML date, not a quoted string.
         check(isinstance(meta5g.get("upload_date"), _date_cls),
               "(T5g) a valid upload_date still parses as a date (got %r)" % meta5g.get("upload_date"))
 
-    # T5h (B5): upload_date is sliced straight from yt-dlp metadata --
+    # T5h: upload_date is sliced straight from yt-dlp metadata --
     # third-party text, not program-controlled. The old `len(...) == 8`
     # check accepted ANY 8-char value, digits or not: "\nabc: vv" is 8
     # chars, hyphenated into "\nabc-: -vv", and rendered bare (upload_date
@@ -535,7 +535,7 @@ with tempfile.TemporaryDirectory() as d5:
               "(T5h) the malformed value is preserved (quoted), not silently replaced (got %r)"
               % meta5h.get("upload_date"))
 
-    # T5i (N3): YouTube is the only writer with its own bare/quoted branch
+    # T5i: YouTube is the only writer with its own bare/quoted branch
     # for the 3 trust keys (write_vault_file's _BARE_STR_KEYS) -- a quoted
     # regression on any of them would parse identical through
     # split_frontmatter (assert_stamped's own docstring says so), so pin
@@ -759,10 +759,11 @@ vs16_specimen = "UNTR" + VS16 + "USTED CONTENT"
 check("[untrusted-marker removed]" in cu._neutralize_marker_lookalikes(vs16_specimen),
       "(T7-neutralize) VS16 inside UNTRUSTED is neutralized")
 
-# U+3164 has no _DEFAULT_IGNORABLE_EXTRA entry of its own (N6: removed as
-# unreachable) -- NFKC decomposes it to U+1160 (HANGUL JUNGSEONG FILLER,
-# still in the set) BEFORE this set is ever consulted, so this specimen
-# pins the U+1160 entry via that fold, not a U+3164-specific one.
+# U+3164 has no _DEFAULT_IGNORABLE_EXTRA entry of its own -- it is
+# unreachable dead code, since NFKC decomposes it to U+1160 (HANGUL
+# JUNGSEONG FILLER, already in the set) BEFORE this set is ever
+# consulted, so this specimen pins the U+1160 entry via that fold, not
+# a U+3164-specific one.
 HANGUL_FILLER = chr(0x3164)  # HANGUL FILLER -- NFKC-decomposes to U+1160
 hangul_gap_specimen = "untrusted" + HANGUL_FILLER + "content"
 check("[untrusted-marker removed]" in cu._neutralize_marker_lookalikes(hangul_gap_specimen),
@@ -773,7 +774,7 @@ lunate_sigma_specimen = "untrusted " + GREEK_LUNATE_SIGMA + "ontent"
 check("[untrusted-marker removed]" in cu._neutralize_marker_lookalikes(lunate_sigma_specimen),
       "(T7-neutralize) Greek lunate sigma in %sontent is neutralized" % GREEK_LUNATE_SIGMA)
 
-# N3: two more _LOOKALIKE_FOLD entries were unpinned -- both correctly
+# Two more _LOOKALIKE_FOLD entries were unpinned -- both correctly
 # neutralized, but no specimen exercised either, so removing either entry
 # stayed GREEN.
 GREEK_CAPITAL_LUNATE_SIGMA = chr(0x03F9)  # NFKC-decomposes to U+03A3, the fold table's key (visually "C")
@@ -906,7 +907,7 @@ with tempfile.TemporaryDirectory() as d8j:
         check(result8j is None,
               "(T8j) an extra rule with a non-str id reads unavailable, not a downstream TypeError")
 
-# A THIRD shape, bypassing the registry entirely (N1): a scanner
+# A THIRD shape, bypassing the registry entirely: a scanner
 # returning genuine Finding-shaped objects -- a real .pattern_id
 # attribute, just the wrong type -- must also read unavailable. T8j
 # proved the PRODUCER (the registry loader) rejects a non-str id; a
@@ -1248,7 +1249,7 @@ else:
     check(body13b == "\nbody",
           "(T13b) the body after the closing CRLF delimiter is intact (got %r)" % body13b)
 
-# T13c (N5): the OPENING delimiter must be recognised only at offset 0,
+# T13c: the OPENING delimiter must be recognised only at offset 0,
 # with the same exact shape as an internal delimiter line. "---foo" is a
 # real first line (satisfies text.startswith("---")) but is NOT a
 # delimiter line (no _FRONTMATTER_DELIM_RE match -- "foo" follows the
@@ -1417,16 +1418,16 @@ with tempfile.TemporaryDirectory() as isolated_dir16, tempfile.TemporaryDirector
             os.environ.pop("USERPROFILE", None)
         sys.modules.pop("_isolated_granola_core_t16", None)
 
-# T17 (N2): ingest-github's degraded (_shared unreachable) path must
+# T17: ingest-github's degraded (_shared unreachable) path must
 # round-trip a lone surrogate the way the Granola/YouTube siblings do
-# (T11/T15/T16) -- round-2 finding 4's class, third degraded path, was
-# never swept for this writer. Forces the ImportError branch with a
+# (T11/T15/T16) -- the same class of gap, a third degraded path never
+# swept for this writer. Forces the ImportError branch with a
 # synthetic stale _shared: it re-exports the 8 names that predate
 # MYC-4701 (unchanged since before this branch) but omits
 # guard_untrusted_body/trust_frontmatter_lines/_raw_item_fields -- the
-# same shape origin/main's connector_utils.py has (the review's own
-# repro). Built this way, not a literal git-history read, so the test
-# stays hermetic and network-free.
+# same shape origin/main's connector_utils.py has. Built this way, not
+# a literal git-history read, so the test stays hermetic and
+# network-free.
 with tempfile.TemporaryDirectory() as isolated_root17:
     isolated_root17 = pathlib.Path(isolated_root17)
     (isolated_root17 / "skills" / "ingest-github").mkdir(parents=True)
