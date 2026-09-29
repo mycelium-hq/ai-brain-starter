@@ -32,9 +32,17 @@ done
 HERMETIC_HOME="$(mktemp -d)"
 trap 'rm -rf "$HERMETIC_HOME"' EXIT
 # A `pip install --user` PyYAML (how the ci job's setup-python 3.9 gets it,
-# scripts/ci.sh) lives under the real HOME. Pin the user-site base before
-# HOME goes hermetic, so PyYAML stays importable for T12/T13.
-export PYTHONUSERBASE="$(python3 -m site --user-base)"
+# scripts/ci.sh) lives under the real HOME. scripts/ci.sh -- the caller --
+# pins PYTHONUSERBASE while HOME is still real and exports it, so by the
+# time this suite runs under run_sandboxed it is already inherited: an
+# exported var is passed through to the sandboxed child even though HOME/
+# USERPROFILE are overridden. Computing it here AFTER HOME goes hermetic
+# would be too late and inert -- it would resolve against the decoy HOME,
+# not the real one PyYAML was installed under. `:=` only assigns (and only
+# then runs the command substitution) when the var is still unset, so this
+# is a no-op through ci.sh and a fallback for a direct standalone run.
+: "${PYTHONUSERBASE:=$(python3 -m site --user-base)}"
+export PYTHONUSERBASE
 export HOME="$HERMETIC_HOME"
 unset SECRET_WARN_ROOT || true
 

@@ -213,6 +213,21 @@ if [ -n "${GITHUB_ACTIONS:-}" ] && ! python3 -c "import yaml" >/dev/null 2>&1; t
     || echo "    (PyYAML install failed; test_extractors_localized_vault will SKIP)"
 fi
 
+# PYTHONUSERBASE, pinned HERE (the caller) while HOME is still real, not in
+# any one suite: run_sandboxed (below) execs each suite with HOME/USERPROFILE
+# swapped to a per-suite decoy, but exported vars already in ci.sh's own
+# environment are inherited unchanged by that child process. A suite that
+# computed `python3 -m site --user-base` itself would compute it AFTER its
+# own decoy HOME was already in effect -- too late, and inert, since
+# run_sandboxed's HOME swap happens before the suite script's first line
+# runs. Only guarded by GITHUB_ACTIONS: that is the one case where PyYAML
+# was just installed --user under the real HOME above; elsewhere yaml (if
+# importable at all) lives outside user-site and this pin is a no-op.
+if [ -n "${GITHUB_ACTIONS:-}" ]; then
+  PYTHONUSERBASE="$(python3 -m site --user-base)"
+  export PYTHONUSERBASE
+fi
+
 # ---- (a) Python syntax gate ------------------------------------------------
 if command -v python3.9 >/dev/null 2>&1; then
   PY=python3.9
