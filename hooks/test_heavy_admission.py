@@ -499,6 +499,67 @@ def leg_forwarded_prefix_leak() -> None:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+# ------------------------------------------------- I: irregular hook file ---
+def _mkrepo(base: Path, name: str) -> Path:
+    repo = base / name
+    (repo / ".git" / "hooks").mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    return repo
+
+def leg_fifo_hook() -> None:
+    """A FIFO or a directory at the pre-push hook path must admit WITH the
+    visible note (never a silent light, never a crash) and must never hang.
+    Driven through the REAL retry-budget.py as an EXTERNAL subprocess, so a
+    genuine hang is caught by subprocess.run's own timeout from OUTSIDE the
+    hung process -- an in-process signal-based bound doesn't work here: it
+    was tried first, and the raised TimeoutError was silently absorbed by
+    admit()'s own broad `except Exception` into just another 'unmeasured
+    (TimeoutError) -- admitted', indistinguishable from the fixed code
+    (measured against a scratch revert of the S_ISREG guard)."""
+    home = Path(tempfile.mkdtemp(prefix="heavy-admission-fifo-home-"))
+    stub = home / "bin"
+    stub.mkdir()
+    for name, body in (("ps", ""), ("sysctl", "printf '1\\n57\\ntotal = 0.00M  used = 0.00M  free = 0.00M\\n17179869184\\n'")):
+        (stub / name).write_text(f"#!/bin/sh\n{body}\n", encoding="utf-8")
+        (stub / name).chmod(0o755)
+    env = {**os.environ, "HOME": str(home), "USERPROFILE": str(home), "TMPDIR": str(home),
+           "GIT_CONFIG_GLOBAL": os.devnull, "PATH": f"{stub}{os.pathsep}{os.environ.get('PATH', '')}"}
+
+    def hook_admit(command: str, cwd: str, call_id: str):
+        payload = json.dumps({"session_id": "heavy-admission-fifo", "hook_event_name": "PreToolUse",
+                              "tool_name": "Bash", "tool_input": {"command": command}, "cwd": cwd,
+                              "tool_use_id": call_id})
+        return subprocess.run([sys.executable, str(RETRY_BUDGET)], input=payload, capture_output=True,
+                              text=True, encoding="utf-8", errors="replace", env=env, timeout=15)
+
+    tmp = Path(tempfile.mkdtemp(prefix="heavy-admission-fifo-"))
+    try:
+        fifo_repo = _mkrepo(tmp, "fifo-repo")
+        fifo_hook = fifo_repo / ".git" / "hooks" / "pre-push"
+        os.mkfifo(fifo_hook)  # never opened by the code under test, or by this test
+        try:
+            r = hook_admit("git push", str(fifo_repo), "toolu_fifo_hook")
+        except subprocess.TimeoutExpired:
+            check("I a FIFO pre-push hook never hangs", False, "subprocess TIMED OUT")
+        else:
+            check("I a FIFO pre-push hook admits WITH the visible note, and never hangs",
+                  r.returncode == 0 and "[heavy-admission] unmeasured" in r.stdout,
+                  f"rc={r.returncode} out={r.stdout[:200]!r}")
+
+        dir_repo = _mkrepo(tmp, "dir-repo")
+        dir_hook = dir_repo / ".git" / "hooks" / "pre-push"
+        dir_hook.mkdir()
+        r = hook_admit("git push", str(dir_repo), "toolu_dir_hook")
+        check("I a DIRECTORY at the pre-push hook path admits WITH the visible note",
+              r.returncode == 0 and "[heavy-admission] unmeasured" in r.stdout,
+              f"rc={r.returncode} out={r.stdout[:200]!r}")
+    finally:
+        # rmtree unlinks the FIFO dirent without opening it -- nothing was
+        # ever opened, so there is nothing to explicitly close first.
+        shutil.rmtree(tmp, ignore_errors=True)
+        shutil.rmtree(home, ignore_errors=True)
+
+
 # --------------------------------------------------- L: leak + positive control ---
 _LEAK_TOKEN = "ghp_" + "A" * 36
 
@@ -587,7 +648,7 @@ def leg_hook_level_via_retry_budget() -> None:
 def main() -> int:
     print("heavy_admission controls")
     for leg in (leg_corpora, leg_decision, leg_counting, leg_git_push, leg_pathprobe,
-                leg_forwarded_prefix_leak, leg_leak_control,
+                leg_forwarded_prefix_leak, leg_fifo_hook, leg_leak_control,
                 leg_negative_controls, leg_hook_level_via_retry_budget):
         leg()
     if FAILURES:
