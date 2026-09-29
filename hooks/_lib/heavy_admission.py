@@ -60,7 +60,7 @@ _HINTS = {  # only where a narrower command is actually admitted; every other
 
 # ---- detection: real argv tokens resolved to a FIXPOINT, never a substring --
 _BARE_SKIP = WRAPPER_PREFIXES | {"npx", "bunx"}
-_TWO_WORD_SKIP = {("pnpm", "exec"), ("pnpm", "dlx"), ("yarn", "dlx")}
+_TWO_WORD_SKIP = {("pnpm", "exec"), ("pnpm", "dlx"), ("yarn", "dlx"), ("npm", "exec")}
 _KNOWN_BINS = {"next", "tsc", "vitest", "playwright", "turbo", "tauri"}
 _PM_SCOPE_VALUE = {"-C", "--dir", "--filter", "-F", "--prefix", "--workspace"}
 _PM_SCOPE_BOOL = {"-w", "--workspace-root", "-r", "--recursive"}
@@ -79,10 +79,11 @@ _INLINE_REDIR_RE = re.compile(r"\d*&?(?:>>|<<|>|<)")
 def _basename(p: str) -> str:
     return p.replace("\\", "/").rsplit("/", 1)[-1]
 
-def _strip_rest(t: list[str], pm: bool) -> tuple[list[str], bool]:
+def _strip_rest(t: list[str], pm: str) -> tuple[list[str], bool]:
     """Drop, past t[0]: redirects -- bare `>` plus its target, self-contained
-    `2>&1`, or GLUED (`build>/tmp/b.log` is one token) -- and, when PM, the
-    scope flags (`-C`/`--filter`/... take a value; `-w`/`-r` do not)."""
+    `2>&1`, or GLUED (`build>/tmp/b.log` is one token) -- and, when PM ("pnpm"
+    /"npm"/""), the scope flags (`-C`/`--filter`/... take a value; pnpm's
+    `-w`/`-r` do not -- but npm's OWN `-w`/`--workspace` DOES take a value)."""
     out, i, n = [t[0]], 1, len(t)
     while i < n:
         tok, has_next = t[i], i + 1 < n
@@ -93,9 +94,10 @@ def _strip_rest(t: list[str], pm: bool) -> tuple[list[str], bool]:
         if rm:
             i += 1 if (rm.group(2) or not has_next) else 2; continue
         key = tok.split("=", 1)[0]
-        if pm and key in _PM_SCOPE_VALUE:
+        npm_w = pm == "npm" and key in ("-w", "--workspace")
+        if pm and (key in _PM_SCOPE_VALUE or npm_w):
             i += 1 if "=" in tok else (2 if has_next else 1)
-        elif pm and tok in _PM_SCOPE_BOOL:
+        elif pm and tok in _PM_SCOPE_BOOL and not npm_w:
             i += 1
         else:
             out.append(tok); i += 1
@@ -129,7 +131,7 @@ def _strip_once(t: list[str]) -> tuple[list[str], bool]:
         return t[1:], True  # a local-bin invocation is exec's equivalent
     if t[:2] == ["yarn", "workspace"] and len(t) > 2:
         return ["yarn"] + t[3:], True
-    return _strip_rest(t, pm=w in ("pnpm", "npm"))
+    return _strip_rest(t, pm=w if w in ("pnpm", "npm") else "")
 
 def _resolve_segment(t: list[str]) -> list[str]:
     while True:

@@ -127,6 +127,11 @@ MUST_DETECT = [
     ('cargo --locked build', 'cargo'),
     ('time -p cargo build', 'cargo'),
     ('gtimeout 900 cargo build', 'cargo'),
+    # step 3: real package managers -----------------------------------------
+    ('npm exec next build', 'build'),
+    ('npm -w apps/web run build', 'build'),
+    ('npm --workspace apps/web run build', 'build'),
+    ('npm run build -w apps/web', 'build'),
 ]
 
 
@@ -204,6 +209,13 @@ def leg_counting() -> None:
     # shape, never `node .../next/dist/bin/next build`.
     check("M a captured Next 16.3.2 title row ['next-build','(v16.3.2)'] counts as build",
           count("build", {109: (1, "next-build", ["next-build", "(v16.3.2)"])}) == 1)
+    # Captured 2026-09-29: real pnpm here runs in-process via corepack's node
+    # shim, so the OWN pid's argv is `node .../bin/pnpm verify`, never a
+    # separate `pnpm` process. npm's own title IS `npm run verify` (no shim).
+    check("M a captured corepack pnpm row ['node','.../bin/pnpm','verify'] counts as verify",
+          count("verify", {110: (1, "node", ["node", "/x/.pnpm/bin/pnpm", "verify"])}) == 1)
+    check("M a captured npm row ['npm','run','verify'] counts as verify",
+          count("verify", {111: (1, "npm", ["npm", "run", "verify"])}) == 1)
     # ROOT invocations only: a pnpm process and the build it spawned -> one build.
     tree = {201: (1, "node", ["pnpm", "run", "build"]), 202: (201, "node", ["node", "/x/next/dist/bin/next", "build"])}
     check("M a build's own spawned child doesn't count again", count("build", tree) == 1)
@@ -246,6 +258,32 @@ def leg_counting() -> None:
                   str(row))
         finally:
             titled.kill(); titled.wait(timeout=5)
+
+    # LIVE plant of a real corepack-shape process: a real file at a path
+    # ENDING in "bin/pnpm" (a tiny bash script -- it just sleeps), invoked as
+    # `bash <that file> verify` with argv[0] renamed to "node" via bash's own
+    # `exec -a` (portable; no node dependency for this shape). A python
+    # interpreter does NOT work here: macOS framework python3 builds (both
+    # Homebrew's and CommandLineTools') re-exec themselves internally and
+    # silently DISCARD an `exec -a`-renamed argv[0] (measured 2026-09-29);
+    # bash runs the script in the same process and keeps it.
+    pnpm_home = Path(tempfile.mkdtemp(prefix="heavy-admission-corepack-"))
+    fake_pnpm = pnpm_home / "bin" / "pnpm"
+    fake_pnpm.parent.mkdir()
+    fake_pnpm.write_text("#!/bin/bash\nsleep 30\n", encoding="utf-8")
+    fake_pnpm.chmod(0o755)
+    corepack = subprocess.Popen(
+        ["bash", "-c", f'exec -a node bash "{fake_pnpm}" verify'],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        time.sleep(0.5)
+        row = mod._read_snapshot().get(corepack.pid)
+        check("M a LIVE corepack-shape plant (node .../bin/pnpm verify) counts as verify",
+              row is not None and mod._classify(mod._resolve_segment(mod._resolve_runner(row[2]))) == "verify",
+              str(row))
+    finally:
+        corepack.kill(); corepack.wait(timeout=5)
+        shutil.rmtree(pnpm_home, ignore_errors=True)
 
 
 # ------------------------------------------------------------- G: git push ---
