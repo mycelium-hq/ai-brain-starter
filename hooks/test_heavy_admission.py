@@ -292,6 +292,23 @@ def leg_counting() -> None:
         corepack.kill(); corepack.wait(timeout=5)
         shutil.rmtree(pnpm_home, ignore_errors=True)
 
+    # step 6: a foreign process with a raw non-UTF-8 argv byte (0xE9, via
+    # surrogateescape) must not raise and must not blind the snapshot to
+    # every OTHER row (MEDIUM-2: a strict decode disabled counting machine-
+    # wide until that one process exited).
+    foreign = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)", "argv_byte_\udce9"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    idle2 = _sleeper()
+    try:
+        time.sleep(0.5)
+        snap = mod._read_snapshot()
+        check("R a foreign non-UTF-8 argv byte does not raise, and other rows still parse",
+              foreign.pid in snap and idle2.pid in snap, f"{len(snap)} rows")
+    finally:
+        for p in (foreign, idle2):
+            p.kill(); p.wait(timeout=5)
+
 
 # ------------------------------------------------------------- G: git push ---
 def _repo_with_hook(base: Path, content: str | None) -> str:
