@@ -40,6 +40,7 @@ unset SECRET_WARN_ROOT || true
 
 python3 - "$REPO_ROOT" <<'PY'
 import ast
+import base64
 import importlib.util
 import io
 import json
@@ -677,6 +678,48 @@ with tempfile.TemporaryDirectory() as d8g:
               "(T8g) a broken EXTRA prompt-injection rule (not one of the 5 pinned) still reads unavailable, not partial")
     finally:
         acs.REGISTRY_PATH = _orig_registry3
+
+# Finding 5: an extra rule with a missing/empty regex_b64 was silently
+# `continue`d -- never added to compiled, never counted broken -- so the
+# registry still loaded fine and text only that rule would have matched
+# read clean. Same real-world shape as the finding: an author used
+# "regex" instead of "regex_b64".
+with tempfile.TemporaryDirectory() as d8i:
+    missing_regex_rule = {
+        "id": "pi-extra", "category": "prompt-injection", "regex": "zebra-canary",
+        "applies_to": ["audited-content"],
+    }
+    missing_regex_path = pathlib.Path(d8i) / "missing_regex_registry.json"
+    missing_regex_path.write_text(json.dumps({"rules": all_families + [missing_regex_rule]}), encoding="utf-8")
+    _orig_registry_i = acs.REGISTRY_PATH
+    try:
+        acs.REGISTRY_PATH = missing_regex_path
+        result8i = acs.scan_or_none("some text with zebra-canary right in it")
+        check(result8i is None,
+              "(T8i) an extra rule with a missing regex_b64 reads unavailable, not silently dropped")
+    finally:
+        acs.REGISTRY_PATH = _orig_registry_i
+
+# Finding 5 (second shape): an extra rule with a non-str id compiled fine
+# here, but connector_utils.py's trust_frontmatter_lines later does
+# ", ".join(flags) OUTSIDE guard_untrusted_body's try -- a non-str
+# pattern_id in that list raises TypeError and aborts the write.
+with tempfile.TemporaryDirectory() as d8j:
+    nonstr_id_rule = {
+        "id": 7, "category": "prompt-injection",
+        "regex_b64": base64.b64encode(b"zebra-canary").decode("ascii"),
+        "applies_to": ["audited-content"],
+    }
+    nonstr_id_path = pathlib.Path(d8j) / "nonstr_id_registry.json"
+    nonstr_id_path.write_text(json.dumps({"rules": all_families + [nonstr_id_rule]}), encoding="utf-8")
+    _orig_registry_j = acs.REGISTRY_PATH
+    try:
+        acs.REGISTRY_PATH = nonstr_id_path
+        result8j = acs.scan_or_none("some text with zebra-canary right in it")
+        check(result8j is None,
+              "(T8j) an extra rule with a non-str id reads unavailable, not a downstream TypeError")
+    finally:
+        acs.REGISTRY_PATH = _orig_registry_j
 
 
 # The flags/status computation (sorting pattern_id off each finding, then

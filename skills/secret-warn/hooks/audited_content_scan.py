@@ -94,8 +94,20 @@ def _compiled_registry(
     for rule in registry.get("rules", []):
         if rule.get("category") != CATEGORY:
             continue
+        rid = rule.get("id")
         raw = rule.get("regex_b64")
-        if not raw:
+        if not raw or not isinstance(rid, str):
+            # A missing/empty regex_b64 -- or an id that is not a str, which
+            # a later `", ".join(flags)` (connector_utils.py's
+            # trust_frontmatter_lines, outside this function's try) cannot
+            # render -- counts as broken, same as a decode/compile failure
+            # below. Never a silent `continue`: text only this rule would
+            # have matched must not read clean.
+            broken.append(str(rid) if rid is not None else "?")
+            sys.stderr.write(
+                f"[audited-content-scan] skipping malformed rule "
+                f"{rid if rid is not None else '?'}: missing/empty regex_b64 or non-str id\n"
+            )
             continue
         try:
             pattern = base64.b64decode(raw).decode("utf-8")
