@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import stat
 import sys
 
 try:
@@ -201,30 +202,77 @@ def _classify(t: list[str]):
 # ---- `git push` -> class `verify`, iff the repo's own pre-push hook is heavy
 _HEAVY_HOOK_MARKERS = ("pnpm verify", "npm run verify", "pnpm test", "vitest",
                        "tsc", "eslint .", "turbo", "ci-test")
+# Git global options that can sit BEFORE the subcommand. -c/-C/--git-dir/
+# --work-tree/--namespace/--super-prefix take a value; the rest are boolean.
+_GIT_GLOBAL_ARG = {"-c", "-C", "--git-dir", "--work-tree", "--namespace", "--super-prefix"}
+_GIT_GLOBAL_ARG_GLUED = ("--git-dir=", "--work-tree=", "--namespace=", "--super-prefix=")
+_GIT_GLOBAL_BOOL = {"--no-pager", "-p", "--paginate", "--bare", "--literal-pathspecs",
+                    "--no-optional-locks", "--no-replace-objects"}
 
-def _pre_push_hook_file(repo: str):
-    # git's own answer (core.hooksPath at any scope, worktree commondir); a
-    # husky v9 `.husky/_/` shim defers to the real `.husky/<hook>` one level up.
-    hook = _run(["git", "-C", repo, "rev-parse", "--path-format=absolute",
-                 "--git-path", "hooks/pre-push"]).strip()
+def _parse_git_prefix(rest: list[str]) -> tuple[list[str], list[str]]:
+    """REST is argv AFTER the `git` command word. Returns (prefix, subcmd):
+    PREFIX is every global option, forwarded VERBATIM to a fresh `git` asking
+    about the same repo/config -- so an inline `-c core.hooksPath=` or `-C`
+    on the REAL push is honoured resolving ITS hook too, not just whatever
+    this machine's ambient config says."""
+    i, prefix = 0, []
+    while i < len(rest):
+        tok = rest[i]
+        if tok in _GIT_GLOBAL_ARG:
+            if i + 1 >= len(rest):
+                return prefix, []  # dangling flag, no subcommand to find
+            prefix += [tok, rest[i + 1]]; i += 2
+        elif tok in _GIT_GLOBAL_BOOL or tok.startswith(_GIT_GLOBAL_ARG_GLUED):
+            prefix.append(tok); i += 1
+        else:
+            break
+    return prefix, rest[i:]
+
+def _pre_push_hook_file(prefix: list[str], cwd: str):
+    # git's OWN answer -- core.hooksPath at any scope (local, global,
+    # worktree), the worktree commondir, and any -c/-C/--git-dir/--work-tree
+    # carried on the REAL push itself (PREFIX, forwarded verbatim). A husky
+    # v9 `.husky/_/` shim defers to the real `.husky/<hook>` one level up.
+    # CWD is a real, existing directory or None: a bogus/unresolvable payload
+    # cwd must never turn into an OS-level chdir error ahead of an absolute
+    # -C/--git-dir in PREFIX, which would resolve the repo just fine anyway.
+    real_cwd = cwd if cwd and os.path.isdir(cwd) else None
+    hook = _run(["git", *prefix, "rev-parse", "--path-format=absolute",
+                 "--git-path", "hooks/pre-push"], cwd=real_cwd, timeout=4).strip()
     shim_dir = os.path.dirname(hook)
     return os.path.join(os.path.dirname(shim_dir), "pre-push") if shim_dir.endswith("/.husky/_") else hook
 
-def _repo_push_is_heavy(repo: str) -> bool:
-    hook = _pre_push_hook_file(repo) if os.path.isdir(repo) else ""
-    if not os.path.isfile(hook):
-        return False
-    with open(hook, encoding="utf-8", errors="replace") as fh:
+def _repo_push_is_heavy(prefix: list[str], cwd: str) -> bool:
+    hook = _pre_push_hook_file(prefix, cwd)
+    if not hook or not os.path.exists(hook):
+        return False  # no pre-push hook at all: a DECIDED light (silent admit)
+    if not stat.S_ISREG(os.stat(hook).st_mode):
+        # A directory, FIFO, etc. at the hook path: never open() it (a FIFO
+        # blocks). Raising here reaches admit()'s catch-all -- admits WITH
+        # the note, never a silent "light".
+        raise OSError(f"pre-push hook is not a regular file: {hook}")
+    with open(hook, encoding="utf-8", errors="replace") as fh:  # unreadable -> raises, same note
         return any(marker in fh.read(65536) for marker in _HEAVY_HOOK_MARKERS)
 
-def _resolve_repo(override, segs_upto, cwd):
-    if override:
-        base = cwd or os.getcwd()
-        return override if os.path.isabs(override) else os.path.normpath(os.path.join(base, override))
-    if cwd is None:
-        return None
-    cwds, _vars = cwd_candidates(segs_upto, cwd)
-    return next(iter(cwds)) if len(cwds) == 1 else None
+def _shell_scope_segs(segs, idx):
+    """The slice of SEGS, up to and including IDX, that shares idx's OWN
+    subshell scope as ITS top level -- so a `cd` inside the SAME `( ... )` as
+    idx (`(cd heavy && git push)`) is visible to cwd_candidates, which
+    otherwise treats anything inside unclosed parens as invisible (that
+    function's OWN contract: a subshell's cd is invisible to the PARENT,
+    which idx is not, when idx is a sibling inside the same parens)."""
+    start, depth = 0, 0
+    for i in range(idx, -1, -1):
+        sep = segs[i][0]
+        if sep == ")":
+            depth += 1
+        elif sep == "(":
+            if depth == 0:
+                start = i
+                break
+            depth -= 1
+    inner = segs[start:idx + 1]
+    return [("", inner[0][1])] + inner[1:] if start > 0 else inner
 
 def detect_class(command: str, cwd: str | None = None, _depth: int = 0):
     """First matching class in COMMAND, resolved per shell segment, or None.
@@ -235,14 +283,14 @@ def detect_class(command: str, cwd: str | None = None, _depth: int = 0):
         t = _resolve_segment(tokens(seg.strip()))
         if not t:
             continue
-        if t[:1] == ["git"] and (t[1:2] == ["push"] or (t[1:2] == ["-C"] and t[3:4] == ["push"])):
-            override = t[2] if t[1] == "-C" else None
-            rest = t[4:] if override else t[2:]
-            if "--no-verify" not in rest:
-                repo = _resolve_repo(override, segs[:idx + 1], cwd)
-                if repo and _repo_push_is_heavy(repo):
-                    return "verify"
-            continue
+        if _basename(t[0]) == "git":
+            prefix, sub = _parse_git_prefix(t[1:])
+            if sub[:1] == ["push"]:
+                if "--no-verify" not in sub[1:] and cwd is not None:
+                    cwds, _vars = cwd_candidates(_shell_scope_segs(segs, idx), cwd)
+                    if len(cwds) == 1 and _repo_push_is_heavy(prefix, next(iter(cwds))):
+                        return "verify"
+                continue
         cls = _classify(t)
         if not cls and _depth < 1 and t[0] in _SHELLS:
             script = _dash_c_script(t[1:])
@@ -314,9 +362,9 @@ def _count_running(cls: str, snapshot: dict) -> int:
 _SWAP_USED_RE = re.compile(r"used\s*=\s*([\d.]+)([MG])")
 _MEMINFO_RE = re.compile(r"^(MemTotal|MemAvailable):\s*(\d+)", re.MULTILINE)
 
-def _run(argv: list[str], timeout: float = 2) -> str:
+def _run(argv: list[str], timeout: float = 2, cwd: str | None = None) -> str:
     import subprocess  # lazy: paid only once a class is actually detected
-    return subprocess.run(argv, capture_output=True, text=True, timeout=timeout, check=True).stdout
+    return subprocess.run(argv, capture_output=True, text=True, timeout=timeout, check=True, cwd=cwd).stdout
 
 def _parse_swap_used(text: str) -> float:
     m = _SWAP_USED_RE.search(text)

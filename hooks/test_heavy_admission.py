@@ -297,6 +297,33 @@ def _repo_with_hook(base: Path, content: str | None) -> str:
         hook.chmod(0o755)
     return str(repo)
 
+def _repo_with_hookspath(base: Path, tag: str, hp_value: str, content: str) -> str:
+    """A repo whose LOCAL .git/config sets core.hooksPath -- written with the
+    EXACT camelCase git itself uses, appended directly to the ini file so
+    this never depends on `git config`'s own normalization."""
+    repo = base / f"hookspath-{tag}"
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    with open(repo / ".git" / "config", "a", encoding="utf-8") as fh:
+        fh.write(f"[core]\n\thooksPath = {hp_value}\n")
+    hooks_dir = repo / hp_value if not os.path.isabs(hp_value) else Path(hp_value)
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    (hooks_dir / "pre-push").write_text(content, encoding="utf-8")
+    (hooks_dir / "pre-push").chmod(0o755)
+    return str(repo)
+
+def _repo_husky_v9(base: Path, content: str) -> str:
+    repo = base / "husky-v9"
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    shim_dir = repo / ".husky" / "_"
+    shim_dir.mkdir(parents=True)
+    (shim_dir / "pre-push").write_text('#!/bin/sh\n. "$(dirname "$0")/h"\n', encoding="utf-8")
+    (shim_dir / "pre-push").chmod(0o755)
+    (repo / ".husky" / "pre-push").write_text(content, encoding="utf-8")
+    (repo / ".husky" / "pre-push").chmod(0o755)
+    with open(repo / ".git" / "config", "a", encoding="utf-8") as fh:
+        fh.write("[core]\n\thooksPath = .husky/_\n")
+    return str(repo)
+
 def leg_git_push() -> None:
     mod = _load("heavy_admission_g")
     mod.read_signal = lambda: IDLE
@@ -314,6 +341,64 @@ def leg_git_push() -> None:
         check("G no pre-push hook admits", mod.admit("git push", none_) == 0)
         check("G --no-verify admits regardless of the hook", mod.admit("git push --no-verify", heavy) == 0)
         check("G an unresolvable repo (no cwd) admits", mod.admit("git push", None) == 0)
+
+        # step 4: git push, asked of git -----------------------------------
+        check("G /usr/bin/git push (basename of the command word) denies",
+              mod.admit("/usr/bin/git push", heavy) == 2)
+        check("G git -c k=v push (an unrelated global option) still finds push",
+              mod.admit("git -c foo.bar=baz push", heavy) == 2)
+        check("G git --no-pager push still finds push",
+              mod.admit("git --no-pager push", heavy) == 2)
+
+        rel_hp = _repo_with_hookspath(tmp, "rel", "custom-hooks", "#!/bin/sh\nexec pnpm verify\n")
+        check("G a repo-local camelCase hooksPath (RELATIVE) resolves to its heavy hook",
+              mod.admit("git push", rel_hp) == 2)
+        abs_hooks = tmp / "abs-custom-hooks"
+        abs_hp = _repo_with_hookspath(tmp, "abs", str(abs_hooks), "#!/bin/sh\nexec pnpm verify\n")
+        check("G a repo-local camelCase hooksPath (ABSOLUTE) resolves to its heavy hook",
+              mod.admit("git push", abs_hp) == 2)
+
+        light_hooks = tmp / "light-hooks-override"
+        light_hooks.mkdir()
+        check("G git -c core.hooksPath=<light dir> push into a heavy repo admits",
+              mod.admit(f"git -c core.hooksPath={light_hooks} push", heavy) == 0)
+
+        subdir = Path(heavy) / "src" / "nested"
+        subdir.mkdir(parents=True)
+        check("G a subdirectory cwd still resolves the repo's heavy hook",
+              mod.admit("git push", str(subdir)) == 2)
+        check("G git -C <subdir> also resolves the repo's heavy hook",
+              mod.admit(f"git -C {subdir} push", "/somewhere/else") == 2)
+        check("G (cd heavy && git push) from a light cwd denies",
+              mod.admit(f"(cd {heavy} && git push)", light) == 2)
+
+        wt = tmp / "heavy-worktree"
+        # `worktree add` needs a real HEAD to check out; this repo has no
+        # commits yet. A throwaway, fully-hermetic identity (no ambient
+        # user.email/user.name needed).
+        subprocess.run(["git", "-C", heavy, "-c", "user.email=t@t.example", "-c", "user.name=t",
+                        "commit", "--allow-empty", "-q", "-m", "init"], check=True)
+        subprocess.run(["git", "-C", heavy, "worktree", "add", "-q", "--detach", str(wt)], check=True)
+        check("G a linked worktree (git worktree add) shares the main repo's heavy hook",
+              mod.admit("git push", str(wt)) == 2)
+
+        check("G husky v9 (.husky/_/ shim) resolves to the REAL .husky/<hook>",
+              mod.admit("git push", _repo_husky_v9(tmp, "#!/bin/sh\nexec pnpm verify\n")) == 2)
+
+        plain = none_  # a repo with no LOCAL hook at all -- only the GLOBAL config below applies
+        global_hooks = tmp / "global-heavy-hooks"
+        global_hooks.mkdir()
+        (global_hooks / "pre-push").write_text("#!/bin/sh\nexec pnpm verify\n", encoding="utf-8")
+        (global_hooks / "pre-push").chmod(0o755)
+        global_cfg = tmp / "fake-global.gitconfig"
+        global_cfg.write_text(f"[core]\n\thooksPath = {global_hooks}\n", encoding="utf-8")
+        old_global = os.environ.get("GIT_CONFIG_GLOBAL")
+        os.environ["GIT_CONFIG_GLOBAL"] = str(global_cfg)
+        try:
+            check("G a GLOBAL core.hooksPath pointing at a heavy hook denies at cap",
+                  mod.admit("git push", plain) == 2)
+        finally:
+            os.environ["GIT_CONFIG_GLOBAL"] = old_global if old_global is not None else os.devnull
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
