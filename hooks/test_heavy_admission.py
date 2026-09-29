@@ -479,7 +479,7 @@ def leg_leak_control() -> None:
         seen = out.getvalue() + err.getvalue() + (log.read_text(encoding="utf-8", errors="replace") if log.exists() else "")
         check("L token absent from admit()'s own stdout/stderr/telemetry log", _LEAK_TOKEN not in seen, seen[:200])
         argv_dump = subprocess.run(["ps", "-ww", "-o", "args=", "-p", str(p.pid)],
-                                   capture_output=True, text=True).stdout
+                                   capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         check("L positive control: ps on that SAME pid DOES show the token the real reader read",
               _LEAK_TOKEN in argv_dump, argv_dump)
     finally:
@@ -535,7 +535,7 @@ def leg_hook_level_via_retry_budget() -> None:
         payload = json.dumps({"session_id": "heavy-admission-test", "hook_event_name": "PreToolUse",
                               "tool_name": "Bash", "tool_input": {"command": command}, "tool_use_id": call_id})
         return subprocess.run([sys.executable, str(RETRY_BUDGET)], input=payload, capture_output=True,
-                              text=True, env=env, timeout=30)
+                              text=True, encoding="utf-8", errors="replace", env=env, timeout=30)
     try:
         check("H a clean command allows via the real retry-budget.py", hook("ls -la", "toolu_h_allow").returncode == 0)
         r = hook("next build", "toolu_h_idle")

@@ -380,12 +380,15 @@ _MEMINFO_RE = re.compile(r"^(MemTotal|MemAvailable):\s*(\d+)", re.MULTILINE)
 
 def _run(argv: list[str], timeout: float = 2, cwd: str | None = None) -> str:
     import subprocess  # lazy: paid only once a class is actually detected
-    # errors="replace": a foreign process's non-UTF-8 argv byte (macOS `ps`
-    # emits raw bytes under any UTF-8 locale) must decode as U+FFFD and keep
-    # every OTHER row parseable, never raise and disable counting machine-
-    # wide until that one process exits. The text is only ever classified,
-    # never displayed, so a replacement character costs nothing.
-    return subprocess.run(argv, capture_output=True, text=True, errors="replace",
+    # encoding="utf-8" (never the LOCALE encoding: a non-UTF-8 Windows console
+    # raises UnicodeDecodeError on any vault path) + errors="replace": a
+    # foreign process's non-UTF-8 argv byte (macOS `ps` emits raw bytes under
+    # any UTF-8 locale) must decode as U+FFFD and keep every OTHER row
+    # parseable, never raise and disable counting machine-wide until that one
+    # process exits. The text is only ever classified, never displayed, so a
+    # replacement character costs nothing.
+    return subprocess.run(argv, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace",
                           timeout=timeout, check=True, cwd=cwd).stdout
 
 def _parse_swap_used(text: str) -> float:
