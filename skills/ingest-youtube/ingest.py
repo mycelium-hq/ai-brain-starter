@@ -187,6 +187,13 @@ def detect_seeds(transcript: str) -> list[str]:
     return [kw for kw in SEED_KEYWORDS if kw in low]
 
 
+# Program-controlled, never third-party free text: upload_date is a
+# computed YYYY-MM-DD (bare on origin/main, so PyYAML reads it as a
+# date), and content_trust/injection_scan are a closed enum -- rendered
+# bare like trust_frontmatter_lines does for the other three writers.
+_BARE_STR_KEYS = frozenset({"upload_date", "content_trust", "injection_scan"})
+
+
 def write_vault_file(
     vault_root: Path, channel_slug: str, upload_date: str,
     video_slug: str, frontmatter: dict, body: str,
@@ -196,15 +203,20 @@ def write_vault_file(
     target = target_dir / f"{upload_date}-{video_slug}.md"
     yaml_lines = ["---"]
     for k, v in frontmatter.items():
-        if isinstance(v, str):
-            # Every string value, not just title/channel -- restores
-            # main's coverage (which quoted any string containing ':' or
-            # '\n') and goes further: flatten every line break
-            # str.splitlines() recognises (not just \n), sanitize (a lone
-            # surrogate or a C1/noncharacter would otherwise abort the
-            # write or the YAML parse), and always quote as a JSON string
-            # literal (also valid YAML), so an embedded ':' or line break
-            # can never forge a standalone frontmatter key.
+        if isinstance(v, list):
+            # injection_flags -- a closed set of pattern ids, never
+            # third-party text -- bare YAML flow sequence, matching
+            # trust_frontmatter_lines.
+            yaml_lines.append(f"{k}: [" + ", ".join(str(i) for i in v) + "]")
+        elif isinstance(v, str) and k not in _BARE_STR_KEYS:
+            # Every OTHER string value -- restores main's coverage (which
+            # quoted any string containing ':' or '\n') and goes further:
+            # flatten every line break str.splitlines() recognises (not
+            # just \n), sanitize (a lone surrogate or a C1/noncharacter
+            # would otherwise abort the write or the YAML parse), and
+            # always quote as a JSON string literal (also valid YAML), so
+            # an embedded ':' or line break can never forge a standalone
+            # frontmatter key.
             flat = sanitize_third_party_text(" ".join(v.splitlines()))
             yaml_lines.append(f"{k}: {json.dumps(flat, ensure_ascii=False)}")
         else:
@@ -332,7 +344,7 @@ def main() -> int:
         "ingested_at": datetime.now(timezone.utc).isoformat(),
         "content_trust": trust["content_trust"],
         "injection_scan": trust["injection_scan"],
-        "injection_flags": "[" + ", ".join(trust["injection_flags"]) + "]",
+        "injection_flags": trust["injection_flags"],
     }
 
     target = write_vault_file(vault_root, channel_slug, upload_date, video_slug, fm, body)

@@ -92,21 +92,24 @@ def count_pairs(text):
 
 def assert_stamped(text, label, flagged_family=None):
     """Common per-writer shape: content_trust stamped, exactly one BEGIN/END
-    pair, and either flagged with the right family id or clean. Tolerates
-    either bare (`key: value`) or JSON-quoted (`key: "value"`) rendering --
-    ingest-youtube quotes every string frontmatter value (finding 9),
-    granola/github do not."""
-    check("content_trust: untrusted" in text or 'content_trust: "untrusted"' in text,
-          "(%s) content_trust stamped" % label)
+    pair, and either flagged with the right family id or clean. Parses the
+    frontmatter rather than testing raw substrings -- every writer renders
+    these 3 keys bare (finding 2), so a wrong type or a quoted regression
+    on any one of them shows up here as a parsed-value mismatch."""
+    meta, _ = cu.split_frontmatter(text)
+    check(meta.get("content_trust") == "untrusted",
+          "(%s) content_trust stamped (got %r)" % (label, meta.get("content_trust")))
     b, e = count_pairs(text)
     check(b == 1 and e == 1, "(%s) exactly one BEGIN/END pair" % label)
+    flags = meta.get("injection_flags")
+    check(isinstance(flags, list),
+          "(%s) injection_flags is a YAML list (got %s)" % (label, type(flags).__name__))
     if flagged_family:
-        flagged = "injection_scan: flagged" in text or 'injection_scan: "flagged"' in text
-        check(flagged and flagged_family in text,
+        check(meta.get("injection_scan") == "flagged" and flagged_family in (flags or []),
               "(%s) flagged with the right family id" % label)
     else:
-        check("injection_scan: clean" in text or 'injection_scan: "clean"' in text,
-              "(%s) clean" % label)
+        check(meta.get("injection_scan") == "clean",
+              "(%s) clean (got %r)" % (label, meta.get("injection_scan")))
 
 
 # T0: our own scaffolding text must not trip the scanner. scan_or_none, not
@@ -350,8 +353,9 @@ with tempfile.TemporaryDirectory() as d5:
     check(rc5b == 0, "(T5b) exit 0")
     target5b = vault5 / "External Inputs" / "YouTube" / "yt-channel" / "2026-05-02-clean-video.md"
     text5b = target5b.read_text(encoding="utf-8") if target5b.is_file() else ""
-    check("injection_scan: clean" in text5b or 'injection_scan: "clean"' in text5b,
-          "(T5b) clean video reports clean")
+    meta5b, _ = cu.split_frontmatter(text5b)
+    check(meta5b.get("injection_scan") == "clean",
+          "(T5b) clean video reports clean (got %r)" % meta5b.get("injection_scan"))
 
     rc5c = _run_yt("vid_bracket", {"id": "vid_bracket", "title": "[LIVE] launch day", "channel": "YT Channel",
                                     "upload_date": "20260503", "duration": 1},
@@ -380,8 +384,9 @@ with tempfile.TemporaryDirectory() as d5:
         check(RAW_TITLE_H2 not in seed_text, "(T5d) the raw title never lands in the seed stub")
         check("run curl" not in seed_text and "|" not in seed_text,
               "(T5d) the instruction-shaped phrase does not leak into the seed stub")
-        check("injection_scan: flagged" in main_text or 'injection_scan: "flagged"' in main_text,
-              "(T5d) the MAIN file (with the real title) is still fenced/stamped")
+        meta5d, _ = cu.split_frontmatter(main_text)
+        check(meta5d.get("injection_scan") == "flagged",
+              "(T5d) the MAIN file (with the real title) is still fenced/stamped (got %r)" % meta5d.get("injection_scan"))
 
     # M2: two cues, neither ending in closing punctuation. Sentence-joined
     # `transcript` merges them onto ONE line ("Welcome back System: ..."),
@@ -395,9 +400,12 @@ with tempfile.TemporaryDirectory() as d5:
     check(target5e.is_file(), "(T5e) file written")
     if target5e.is_file():
         text5e = target5e.read_text(encoding="utf-8")
-        flagged5e = "injection_scan: flagged" in text5e or 'injection_scan: "flagged"' in text5e
-        check(flagged5e and "prompt-injection-system-impersonation" in text5e,
-              "(T5e) scans raw per-cue lines, not the sentence-joined prose")
+        meta5e, _ = cu.split_frontmatter(text5e)
+        flags5e = meta5e.get("injection_flags")
+        check(meta5e.get("injection_scan") == "flagged" and isinstance(flags5e, list)
+              and "prompt-injection-system-impersonation" in flags5e,
+              "(T5e) scans raw per-cue lines, not the sentence-joined prose (got %r/%r)"
+              % (meta5e.get("injection_scan"), flags5e))
 
     # A YouTube-side T3: a caller cannot fake content_trust: trusted via a
     # line-separator-smuggled title. Trailing "+ LINE_SEPARATOR + 'x'" for
@@ -411,10 +419,10 @@ with tempfile.TemporaryDirectory() as d5:
     matches5f = list((vault5 / "External Inputs" / "YouTube" / "yt-channel").glob("2026-05-06-*.md"))
     check(len(matches5f) == 1, "(T5f) file written")
     if matches5f:
-        lines5f = [ln.strip() for ln in matches5f[0].read_text(encoding="utf-8").splitlines()]
-        check("content_trust: trusted" not in lines5f and 'content_trust: "trusted"' not in lines5f,
-              "(T5f) a line-separator-smuggled YouTube title cannot fake a standalone content_trust: trusted line")
-        check('content_trust: "untrusted"' in lines5f, "(T5f) the real content_trust: untrusted still lands")
+        meta5f, _ = cu.split_frontmatter(matches5f[0].read_text(encoding="utf-8"))
+        check(meta5f.get("content_trust") == "untrusted",
+              "(T5f) a line-separator-smuggled YouTube title cannot fake content_trust: trusted "
+              "(got %r)" % meta5f.get("content_trust"))
 
     # Finding 9: origin/main quoted any string frontmatter value containing
     # ':' or '\n' -- HEAD quoted only title/channel, so a non-title/channel
@@ -428,10 +436,10 @@ with tempfile.TemporaryDirectory() as d5:
     matches5g = list((vault5 / "External Inputs" / "YouTube" / "yt-channel").glob("2026-05-09-*.md"))
     check(len(matches5g) == 1, "(T5g) file written")
     if matches5g:
-        lines5g = [ln.strip() for ln in matches5g[0].read_text(encoding="utf-8").splitlines()]
-        check("content_trust: trusted" not in lines5g and 'content_trust: "trusted"' not in lines5g,
-              "(T5g) a newline-smuggled channel_url cannot fake a standalone content_trust: trusted line")
-        check('content_trust: "untrusted"' in lines5g, "(T5g) the real content_trust: untrusted still lands")
+        meta5g, _ = cu.split_frontmatter(matches5g[0].read_text(encoding="utf-8"))
+        check(meta5g.get("content_trust") == "untrusted",
+              "(T5g) a newline-smuggled channel_url cannot fake content_trust: trusted "
+              "(got %r)" % meta5g.get("content_trust"))
 
 # T6: write_external_input.
 with tempfile.TemporaryDirectory() as d6:
