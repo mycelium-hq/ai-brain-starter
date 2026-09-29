@@ -114,6 +114,12 @@ def assert_stamped(text, label, flagged_family=None):
     identical string. YouTube is the only writer with its own per-key
     bare/quoted branch for these keys (write_vault_file's _BARE_STR_KEYS),
     so it alone also gets a literal-line bareness check (T5i, N3)."""
+    if cu.yaml is None:
+        # split_frontmatter silently returns ({}, text) with no PyYAML,
+        # which otherwise surfaces as 4 checks each failing with a bare
+        # "(got None)" -- indistinguishable from a real stamping bug (N7).
+        check(False, "(%s) content_trust stamped (PyYAML missing -- cannot verify)" % label)
+        return
     meta, _ = cu.split_frontmatter(text)
     check(meta.get("content_trust") == "untrusted",
           "(%s) content_trust stamped (got %r)" % (label, meta.get("content_trust")))
