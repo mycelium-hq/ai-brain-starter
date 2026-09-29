@@ -832,44 +832,32 @@ else:
 # "External Inputs"/"Captures" path segment, or Transcript.md) must CALL
 # guard_untrusted_body -- an AST Call check (bare name or attribute, since
 # granola_core calls it as guard_mod.guard_untrusted_body), not a substring
-# match an import line or docstring would also satisfy. The target
-# check is also AST-based, collecting ast.Constant string values (which
-# covers single/double/triple-quoted literals AND the literal segments of
-# an f-string -- Python represents f"External Inputs/{x}" as a JoinedStr
-# containing a Constant "External Inputs/" plus a FormattedValue), so a
-# writer spelled with different quoting is still examined, not just the
-# one quote style a raw source-substring match would recognise
-# (finding 11). "External Inputs"/"Captures" are scoped to a path-join
-# ('/') operand whose value, split on '/', has a segment that EQUALS the
-# target -- the shape the real writers and the reviewer's own planted
-# example use. Unscoped substring containment also matches plain prose (a
-# docstring, argparse help text) AND an unrelated same-substring path
-# segment actually used elsewhere in this repo ("Session Captures.md",
-# "Passive Captures" -- neither is the Meta/Captures/ directory this guard
-# is about): measured against this repo's real file set, unscoped
-# substring containment produced 6 false positives, and scoping to a
-# path-join operand alone (without the exact-segment check) still left 3.
-# "Transcript.md" never had a quote-style problem (the original check
-# already searched bare text) and isn't a path-join operand here (it is
-# built inside safe_filename()'s f-string, whose return value is joined by
-# the caller), so it keeps the simple unscoped substring check.
+# match an import line or docstring would also satisfy. The target check
+# is AST-based too: every str ast.Constant anywhere in the tree -- not
+# scoped to a '/'-BinOp operand (finding 7: that missed os.path.join(...),
+# Path(...)/.joinpath(...) args, a module-level constant, and '+'
+# concatenation) -- checked with an EXACT path-segment match, split on
+# '/': "External Inputs"/"Captures" as a WHOLE segment, never substring
+# containment. ast.walk already descends into a JoinedStr's literal parts
+# (an f-string's Constant segments are child nodes), so a writer spelled
+# with different quoting or built as an f-string is examined the same way.
+# Unscoped substring containment also matches plain prose (a docstring,
+# argparse help text) AND an unrelated same-substring path segment
+# elsewhere in this repo ("Session Captures.md", "Passive Captures" --
+# neither is the Meta/Captures/ directory this guard is about): measured
+# against this repo's real file set, unscoped substring containment
+# produced 6 false positives; the exact-segment check, applied to every
+# string constant with no BinOp scoping at all, produces 0. "Transcript.md"
+# keeps the simple unscoped substring check (never had a quote-style
+# problem, and isn't a path-join operand -- it's built inside
+# safe_filename()'s f-string, joined by the caller).
 def _writes_guarded_target(src):
-    if "write_text(" not in src and ".write(" not in src:
+    if "write_text(" not in src and ".write(" not in src and "write_bytes(" not in src:
         return False
     try:
         tree = ast.parse(src)
     except SyntaxError:
         return False
-
-    def _literal_parts(node):
-        """Every literal string a node resolves to: a bare Constant, or
-        the literal (non-interpolated) segments of an f-string."""
-        if isinstance(node, ast.Constant) and isinstance(node.value, str):
-            yield node.value
-        elif isinstance(node, ast.JoinedStr):
-            for part in node.values:
-                if isinstance(part, ast.Constant) and isinstance(part.value, str):
-                    yield part.value
 
     def _has_target_segment(s, target):
         return target in (seg.strip() for seg in s.split("/"))
@@ -878,11 +866,8 @@ def _writes_guarded_target(src):
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
             if "Transcript.md" in node.value:
                 return True
-        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
-            for operand in (node.left, node.right):
-                for s in _literal_parts(operand):
-                    if _has_target_segment(s, "External Inputs") or _has_target_segment(s, "Captures"):
-                        return True
+            if _has_target_segment(node.value, "External Inputs") or _has_target_segment(node.value, "Captures"):
+                return True
     return False
 
 
@@ -923,6 +908,30 @@ _planted_fstring = (
 )
 check(_writes_guarded_target(_planted_fstring),
       "(T10-ast) an f-string's literal 'External Inputs/' segment is still recognised as a guarded target")
+
+# Finding 7: neither shape below is a '/'-BinOp operand, so the old
+# Div-scoped check missed both.
+_planted_os_path_join = (
+    "from connector_utils import guard_untrusted_body\n"
+    "import os\n"
+    "def write(v):\n"
+    "    open(os.path.join(v, 'External Inputs', 'Foo', 'x.md'), 'w').write('x')\n"
+)
+check(_writes_guarded_target(_planted_os_path_join),
+      "(T10-ast) an os.path.join(...) argument 'External Inputs' is still recognised as a guarded target")
+check(not _calls_guard(_planted_os_path_join),
+      "(T10-ast) the guard is imported but never called in this planted os.path.join source (sanity check)")
+
+_planted_module_constant = (
+    "from connector_utils import guard_untrusted_body\n"
+    "EXT = 'External Inputs'\n"
+    "def write(v):\n"
+    "    (v / EXT / 'Foo').write_text('x')\n"
+)
+check(_writes_guarded_target(_planted_module_constant),
+      "(T10-ast) a module-level constant assigned 'External Inputs' is still recognised as a guarded target")
+check(not _calls_guard(_planted_module_constant),
+      "(T10-ast) the guard is imported but never called in this planted module-constant source (sanity check)")
 
 
 ls_out = subprocess.run(
