@@ -38,7 +38,10 @@ Also runs heavy_admission.admit() (MYC-5053) on the same parsed command,
 independent of RETRY_BUDGET_BYPASS -- its own bypass is HEAVY_ADMISSION_
 BYPASS=1, so each bypass switches off only its own check. Import and call
 are each wrapped in their own try/except: a broken heavy_admission must
-never break retry-budget's own behaviour, and must never itself block.
+never break retry-budget's own behaviour, and must never itself block. A
+heavy-admission deny is transient machine load, not a failing command being
+retried -- it returns before _count() runs, so it is intentionally NOT
+counted as a retry-budget attempt.
 """
 import json
 import sys
@@ -57,8 +60,21 @@ try:
     # -- the pattern block-scratchpad-cross-agent-clobber.py already uses.
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from _lib.heavy_admission import admit as _heavy_admit
-except Exception:  # pragma: no cover - a broken heavy_admission must never block
-    def _heavy_admit(_command):
+except Exception as _heavy_import_exc:  # pragma: no cover - must never block
+    _HEAVY_IMPORT_ERROR = type(_heavy_import_exc).__name__
+
+    def _heavy_admit(_command, _cwd=None):
+        # Same visible fail-open heavy_admission.admit() itself uses for an
+        # internal error: an omitted _lib dependency (the exact failure that
+        # has already happened in the field on a flat install) must never
+        # silently admit -- it has to say so.
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
+            "additionalContext": f"[heavy-admission] unmeasured ({_HEAVY_IMPORT_ERROR}) -- admitted"}}))
+        try:
+            from _lib.guard_telemetry import log_fire
+            log_fire("heavy-admission", status="warned", detail=_HEAVY_IMPORT_ERROR)
+        except Exception:
+            pass
         return 0
 
 THRESHOLD_BLOCK = 4       # 4th+ attempt blocks (3 attempts allowed)
@@ -220,7 +236,7 @@ def _run():
         sys.exit(0)
 
     try:
-        heavy_code = _heavy_admit(command)
+        heavy_code = _heavy_admit(command, data.get("cwd"))
     except Exception:
         heavy_code = 0
     if heavy_code:
