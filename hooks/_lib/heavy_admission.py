@@ -217,14 +217,39 @@ _GIT_GLOBAL_VALUE = {"-c", "-C", "--git-dir", "--work-tree", "--namespace",
                      "--super-prefix", "--config-env"}
 
 def _parse_git_prefix(rest: list[str]) -> tuple[list[str], list[str]]:
-    """(global options, subcommand argv) of a `git` argv; the options are later
-    forwarded verbatim, so a `-c core.hooksPath=` or `-C` on the push is honoured."""
+    """(global options, subcommand argv) of a `git` argv. A FILTERED subset of
+    the options (_forwarded_prefix) is later forwarded to the real rev-parse,
+    so a `-c core.hooksPath=` or `-C` on the push is honoured."""
     i = 0
     while i < len(rest) and rest[i].startswith("-"):
         tok = rest[i]; i += 1
         if tok.split("=", 1)[0] in _GIT_GLOBAL_VALUE and "=" not in tok:
             i += 1
     return rest[:i], rest[i:]
+
+_HOOKS_PATH_KEY = "core.hookspath"  # compared case-insensitively against a -c key
+
+def _forwarded_prefix(prefix: list[str]) -> list[str]:
+    """Of PREFIX (every parsed global option), keep only the ones that change
+    which hook rev-parse resolves: -C, --git-dir, --work-tree (either form),
+    and -c core.hooksPath=. Every OTHER -c is dropped -- forwarding one
+    verbatim would put its value (a credential: `-c http.extraHeader=
+    <secret>`) into a NEW process's argv, visible to any local `ps` reader,
+    before the user has approved anything."""
+    out, i, n = [], 0, len(prefix)
+    while i < n:
+        tok = prefix[i]
+        key, glued = tok.split("=", 1)[0], "=" in tok
+        take = key in _GIT_GLOBAL_VALUE and not glued  # same rule _parse_git_prefix used
+        if key == "-c":
+            if take and i + 1 < n and prefix[i + 1].split("=", 1)[0].lower() == _HOOKS_PATH_KEY:
+                out += [tok, prefix[i + 1]]
+        elif key in ("-C", "--git-dir", "--work-tree"):
+            out.append(tok)
+            if take:
+                out.append(prefix[i + 1])
+        i += 2 if take else 1
+    return out
 
 _TOOL_CACHE: dict[str, str] = {}
 
@@ -249,7 +274,7 @@ def _pre_push_hook_file(prefix: list[str], cwd: str):
     # cwd=: a chdir'd subprocess resolves a bare/relative PATH entry against the
     # NEW cwd, which the command text (a `cd`/-C) can choose -- see _tool().
     real_cwd = cwd if cwd and os.path.isdir(cwd) else None
-    argv = [_tool("git"), *prefix] + (["-C", real_cwd] if real_cwd else [])
+    argv = [_tool("git"), *_forwarded_prefix(prefix)] + (["-C", real_cwd] if real_cwd else [])
     argv += ["rev-parse", "--path-format=absolute", "--git-path", "hooks/pre-push"]
     hook = _run(argv, timeout=4).strip()
     shim_dir = os.path.dirname(hook)

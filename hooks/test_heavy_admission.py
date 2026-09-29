@@ -446,6 +446,39 @@ def leg_pathprobe() -> None:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+# ------------------------------------------- F: forwarded-prefix argv leak ---
+def leg_forwarded_prefix_leak() -> None:
+    """SECURITY (step 4, LOW): only -C/--git-dir/--work-tree/-c core.hooksPath=
+    are forwarded to the REAL rev-parse spawn. Any OTHER -c (e.g. -c
+    http.extraHeader=<secret>) must never reach that subprocess's argv --
+    visible to any local `ps` reader before the user approves anything. Spy
+    on subprocess.run's actual argv, in-process (never a `ps` read)."""
+    mod = _load("heavy_admission_forward")
+    mod.read_signal = lambda: IDLE
+    mod._count_running = lambda cls, snap: 1  # "a verify" already at cap -> denied, the richest path
+    tmp = Path(tempfile.mkdtemp(prefix="heavy-admission-forward-"))
+    secret = "ghp_" + "B" * 36
+    try:
+        heavy = _repo_with_hook(tmp, "#!/bin/sh\nexec pnpm verify\n")
+        seen_argv: list[list[str]] = []
+        real_run = subprocess.run
+        def spy(argv, *a, **kw):
+            seen_argv.append(list(argv))
+            return real_run(argv, *a, **kw)
+        subprocess.run = spy
+        try:
+            rc = mod.admit(f"git -c http.extraHeader={secret} push", heavy)
+        finally:
+            subprocess.run = real_run
+        check("F the push still resolves and denies (premise: dropping the -c didn't break resolution)",
+              rc == 2, f"rc={rc}")
+        flat = [tok for argv in seen_argv for tok in argv]
+        check("F -c http.extraHeader=<secret> never reaches ANY spawned subprocess argv",
+              not any(secret in tok for tok in flat), str(flat))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 # --------------------------------------------------- L: leak + positive control ---
 _LEAK_TOKEN = "ghp_" + "A" * 36
 
@@ -533,7 +566,8 @@ def leg_hook_level_via_retry_budget() -> None:
 
 def main() -> int:
     print("heavy_admission controls")
-    for leg in (leg_corpora, leg_decision, leg_counting, leg_git_push, leg_pathprobe, leg_leak_control,
+    for leg in (leg_corpora, leg_decision, leg_counting, leg_git_push, leg_pathprobe,
+                leg_forwarded_prefix_leak, leg_leak_control,
                 leg_negative_controls, leg_hook_level_via_retry_budget):
         leg()
     if FAILURES:
