@@ -157,6 +157,13 @@ MUST_DETECT = [
     ('pnpm vitest --watch', 'test_suite'),
     ('vitest watch', 'test_suite'),
     ('vitest dev', 'test_suite'),
+    # finding 4: -w/--watch alone (no --noEmit/-b/--build) was missed by
+    # _tsc_is_full, so these were admitted under critical memory same as any
+    # other watcher-shaped bare tsc invocation -- but unlike tsc -b -w /
+    # --noEmit --watch above, they were never even DETECTED.
+    ('tsc -w', 'tsc_full'),
+    ('tsc --watch', 'tsc_full'),
+    ('npx tsc --watch', 'tsc_full'),
 ]
 
 
@@ -188,6 +195,13 @@ def leg_decision() -> None:
     # too (never silently admitted just because it will "only" sit resident).
     check("A a watcher (tsc --noEmit --watch) is STILL DETECTED: critical memory denies it too",
           _admit(mod, "tsc --noEmit --watch")[0] == 2)
+    # finding 4: `tsc -w`/`tsc --watch` alone (no --noEmit/-b/--build) used to
+    # be undetected entirely, so critical memory admitted them while the
+    # equivalent non-resident `tsc --noEmit --watch` above was denied.
+    check("A a bare watcher (tsc -w) is STILL DETECTED: critical memory denies it too",
+          _admit(mod, "tsc -w")[0] == 2)
+    check("A a bare watcher (tsc --watch) is STILL DETECTED: critical memory denies it too",
+          _admit(mod, "tsc --watch")[0] == 2)
 
     mod = _load("heavy_admission_a_error")
     mod.read_signal = _raise_sig

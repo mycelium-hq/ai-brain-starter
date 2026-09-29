@@ -180,7 +180,7 @@ def _vitest_unscoped(tail: list[str]) -> bool:
 def _tsc_is_full(rest: list[str]) -> bool:
     if not rest:
         return True  # bare `tsc`: compiles per the local tsconfig, i.e. the whole project
-    if not ({"--noEmit", "-b", "--build"} & set(rest)):
+    if not ({"--noEmit", "-b", "--build", "-w", "--watch"} & set(rest)):
         return False
     for i, tok in enumerate(rest):
         if tok in ("-p", "--project"):
