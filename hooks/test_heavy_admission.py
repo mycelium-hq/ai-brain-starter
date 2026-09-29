@@ -340,6 +340,27 @@ def leg_git_push() -> None:
         check("G a heavy pre-push hook, at cap, denies", mod.admit("git push", heavy) == 2)
         check("G git -C <path> push resolves an explicit override",
               mod.admit(f"git -C {heavy} push", "/somewhere/else") == 2)
+        # finding 1 (HIGH, bcd7757 regression): git applies -C options LEFT TO
+        # RIGHT, so a later absolute -C wins. The payload's own -C must come
+        # FIRST, so the push's own forwarded -C (parsed from the command text)
+        # is the one that wins -- matching what git itself resolves for that
+        # push. The control just above uses a payload cwd that does not EXIST,
+        # so real_cwd is None and nothing is appended either way -- the one
+        # shape for which order never mattered, which is why it never caught
+        # this: every case below uses an EXISTING payload cwd.
+        check("G git -C <heavy> push, from an EXISTING light cwd, resolves the heavy repo's own hook",
+              mod.admit(f"git -C {heavy} push", light) == 2)
+        check("G git -C <light> push, from cwd heavy, resolves the light repo's own hook (not heavy's)",
+              mod.admit(f"git -C {light} push", heavy) == 0)
+        check("G a RELATIVE -C into a heavy repo, from its parent dir as payload cwd, denies",
+              mod.admit(f"git -C {os.path.basename(heavy)} push", str(tmp)) == 2)
+        nonrepo = tmp / "not-a-repo"
+        nonrepo.mkdir()
+        old_signal = mod.read_signal
+        mod.read_signal = lambda: CRITICAL
+        check("G CRITICAL memory: git -C <heavy> push && pnpm build, from an existing non-repo cwd, denies",
+              mod.admit(f"git -C {heavy} push && pnpm build", str(nonrepo)) == 2)
+        mod.read_signal = old_signal
         check("G a light pre-push hook admits", mod.admit("git push", light) == 0)
         check("G no pre-push hook admits", mod.admit("git push", none_) == 0)
         check("G --no-verify admits regardless of the hook", mod.admit("git push --no-verify", heavy) == 0)

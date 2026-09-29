@@ -16,8 +16,9 @@ invocations count; shells and this hook's own ancestors never do. Memory is
 read first: critical denies WITHOUT counting. An exception that propagates to
 admit() admits VISIBLY (additionalContext + log_fire).
 
-`git push` counts as `verify` when the pre-push hook git itself would run
-(asked of `git rev-parse --git-path`) contains a heavy-verifier marker.
+`git push` counts as `verify` when the pre-push hook git itself would run for
+THAT push (asked of `git rev-parse --git-path`, from the push's own cwd/-C
+first) contains a heavy-verifier marker.
 
 Bypass: HEAVY_ADMISSION_BYPASS=1, inline or session env -- logged only when
 it actually suppressed a deny.
@@ -275,15 +276,19 @@ def _tool(name: str) -> str:
 
 def _pre_push_hook_file(prefix: list[str], cwd: str):
     # git's own answer (hooksPath at any scope, worktree commondir, the push's own
-    # PREFIX); a husky v9 `.husky/_/` shim defers to `.husky/<hook>`. -C, never
-    # cwd=: a chdir'd subprocess resolves a bare/relative PATH entry against the
-    # NEW cwd, which the command text (a `cd`/-C) can choose -- see _tool().
-    # A cwd candidate that doesn't exist on disk (no absolute -C, and the
-    # resolved cwd isn't a real dir) drops -C entirely, so rev-parse falls
-    # back to resolving whatever repo THIS PROCESS is sitting in -- not the
-    # push's own repo. Same fail-open shape as every other error here.
+    # PREFIX); a husky v9 `.husky/_/` shim defers to `.husky/<hook>`. LEADING -C,
+    # never cwd=: _tool() already resolves the git binary from absolute PATH
+    # entries only, so neither a bare name nor a -C in the command text can steer
+    # that lookup (only THIS PROCESS's own cwd could -- see _tool()). Leading, so
+    # the push's own forwarded -C (if any) applies AFTER and wins, left to right,
+    # same as git itself. A cwd candidate that doesn't exist on disk (real_cwd is
+    # None) drops the leading -C -- the push's own is still forwarded -- so
+    # rev-parse falls back to whatever repo THIS PROCESS is sitting in. That
+    # fallback fails open, but not uniformly: a process cwd already in a heavy
+    # repo denies, in a light repo admits with no note, only a non-repo process
+    # cwd prints one.
     real_cwd = cwd if cwd and os.path.isdir(cwd) else None
-    argv = [_tool("git"), *_forwarded_prefix(prefix)] + (["-C", real_cwd] if real_cwd else [])
+    argv = [_tool("git")] + (["-C", real_cwd] if real_cwd else []) + _forwarded_prefix(prefix)
     argv += ["rev-parse", "--path-format=absolute", "--git-path", "hooks/pre-push"]
     hook = _run(argv, timeout=4).strip()
     shim_dir = os.path.dirname(hook)
@@ -476,7 +481,8 @@ def _guard_deps():
 
 def admit(command: str, cwd: str | None = None) -> int:
     """0 = allow, 2 = deny; an exception that propagates here admits, visibly.
-    `cwd` is the payload's cwd; it resolves only a `git push` (and its relative -C)."""
+    `cwd` is the payload's cwd; only a `git push` consults it, as the base a
+    push's own `-C`/`--git-dir`/`--work-tree` (if any) resolves against."""
     try:
         cls = detect_class(command, cwd)
         if cls is None:
