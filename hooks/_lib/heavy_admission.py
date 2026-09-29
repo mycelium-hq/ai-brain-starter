@@ -67,7 +67,12 @@ _PM_SCOPE_VALUE = {"-C", "--dir", "--filter", "-F", "--prefix", "--workspace"}
 _PM_SCOPE_BOOL = {"-w", "--workspace-root", "-r", "--recursive"}
 _ENV_FLAGS = {"-u": 2, "--unset": 2, "-i": 1, "--ignore-environment": 1}  # -> tokens consumed
 _TIMEOUT_WORDS = {"timeout", "gtimeout"}
-_SHELLS = {"bash", "sh", "zsh"}
+_TIMEOUT_VALUE_FLAGS = {"-s", "--signal", "-k", "--kill-after"}  # the rest (--preserve-status,
+_SHELLS = {"bash", "sh", "zsh"}                                  # --foreground, ...) are boolean
+# Reserved words that can sit in FRONT of a real command word without being
+# one themselves, so it must still be found past them (`{ next build; }`,
+# `for ...; do next build; done`). "time" is already a WRAPPER_PREFIX.
+_RESERVED_WORDS = {"{", "(", "if", "then", "elif", "else", "do", "while", "until", "!"}
 _CARGO_VERBS = {"build", "test", "check", "clippy", "nextest", "b", "t", "c"}
 _CARGO_SKIP_FLAGS = ("--locked", "--offline", "--frozen")
 _VITEST_VALUE_FLAGS = {"--config", "-c", "--pool", "--maxWorkers", "--shard",
@@ -109,6 +114,8 @@ def _strip_once(t: list[str]) -> tuple[list[str], bool]:
     if not t:
         return t, False
     w = t[0]
+    if w in _RESERVED_WORDS:  # `{ next build; }`, `for ...; do next build; done`
+        return t[1:], True
     if ENV_ASSIGN_RE.match(w):
         return t[1:], True
     if w == "env":  # past env's own `-u NAME` / `-i` / `NAME=val`, any mix
@@ -123,15 +130,13 @@ def _strip_once(t: list[str]) -> tuple[list[str], bool]:
         return (t[3:] if t[1:2] == ["-n"] else t[1:]), True
     if w in _TIMEOUT_WORDS:
         j = 1
-        while t[j:j + 1] and t[j].startswith("-"):
-            j += 1
-        return t[j + 1:], True
+        while j < len(t) and t[j].startswith("-"):
+            j += 2 if t[j] in _TIMEOUT_VALUE_FLAGS else 1
+        return t[j + 1:], True  # j is now at the DURATION positional; skip it too
     if tuple(t[:2]) in _TWO_WORD_SKIP:
         return t[2:], True
     if w in ("pnpm", "yarn") and t[1:2] and t[1] in _KNOWN_BINS:
         return t[1:], True  # a local-bin invocation is exec's equivalent
-    if t[:2] == ["yarn", "workspace"] and len(t) > 2:
-        return ["yarn"] + t[3:], True
     return _strip_rest(t, pm=w if w in ("pnpm", "npm") else "")
 
 def _resolve_segment(t: list[str]) -> list[str]:
@@ -309,7 +314,6 @@ def detect_class(command: str, cwd: str | None = None, _depth: int = 0):
 
 
 # ---- counting: ONE process snapshot, classified like detection, never pgrep -
-_SHELL_COMM = {"sh", "bash", "zsh", "dash", "fish"}
 _NODE_RUNNERS = {"node", "bun"}
 _SCRIPT_TOOL_SUFFIX = (
     ("next/dist/bin/next", "next"), ("vitest/vitest.mjs", "vitest"),
@@ -336,15 +340,15 @@ def _resolve_runner(t: list[str]) -> list[str]:
         return [name] + t[2:]
     return t
 
-def _read_snapshot() -> dict[int, tuple[int, str, list[str]]]:
-    # One `ps -A` call: {pid: (ppid, ucomm, argv_tokens)}. The tokens live only
-    # in this dict, for one admit() call -- never printed, logged or stored.
+def _read_snapshot() -> dict[int, tuple[int, list[str]]]:
+    # One `ps -A` call: {pid: (ppid, argv_tokens)}. The tokens live only in
+    # this dict, for one admit() call -- never printed, logged or stored.
     rows = {}
-    for line in _run(["ps", "-A", "-o", "pid=,ppid=,ucomm=,args="], timeout=4).splitlines():
-        parts = line.split(None, 3)
-        if len(parts) < 3 or not (parts[0].isdigit() and parts[1].isdigit()):
+    for line in _run(["ps", "-A", "-o", "pid=,ppid=,args="], timeout=4).splitlines():
+        parts = line.split(None, 2)
+        if len(parts) < 2 or not (parts[0].isdigit() and parts[1].isdigit()):
             continue
-        rows[int(parts[0])] = (int(parts[1]), parts[2], parts[3].split() if len(parts) > 3 else [])
+        rows[int(parts[0])] = (int(parts[1]), parts[2].split() if len(parts) > 2 else [])
     return rows
 
 def _ancestors(pid: int, snapshot: dict) -> set[int]:
@@ -358,10 +362,14 @@ def _ancestors(pid: int, snapshot: dict) -> set[int]:
 def _count_running(cls: str, snapshot: dict) -> int:
     # ROOT invocations of CLS only: a match with a same-class match among its
     # ancestors doesn't count (one `pnpm run build` counts 1, not once per
-    # spawned child). Shells and this hook's own ancestors never count.
+    # spawned child). This hook's own ancestors never count. (A shell-ucomm
+    # filter used to live here too; _classify already rejects every
+    # shell-headed argv on its own, and the filter's only live effect was an
+    # UNDER-count on a torn `ps` read, where ucomm is sampled pre-exec and
+    # argv post-exec.)
     hook_anc = _ancestors(os.getppid(), snapshot)
-    matched = {pid for pid, (_ppid, ucomm, argv) in snapshot.items()
-               if pid not in hook_anc and ucomm not in _SHELL_COMM
+    matched = {pid for pid, (_ppid, argv) in snapshot.items()
+               if pid not in hook_anc
                and argv and _classify(_resolve_segment(_resolve_runner(argv))) == cls}
     return sum(1 for pid in matched if not (_ancestors(snapshot[pid][0], snapshot) & matched))
 

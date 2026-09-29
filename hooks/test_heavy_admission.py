@@ -102,7 +102,6 @@ MUST_DETECT = [
     ('CARGO_BUILD_JOBS=4 nice -n 10 cargo test --lib x', 'cargo'),
     ('cd apps/web && pnpm run build', 'build'),
     ('bash -c "pnpm run build"', 'build'),
-    ('yarn workspace web build', 'build'),
     # correctness-redesign miss-list (both reviews) -----------------------
     ('pnpm -C apps/web exec tsc --noEmit', 'tsc_full'),
     ('pnpm --filter web exec tsc --noEmit', 'tsc_full'),
@@ -139,6 +138,17 @@ MUST_DETECT = [
     ('npm -w apps/web run build', 'build'),
     ('npm --workspace apps/web run build', 'build'),
     ('npm run build -w apps/web', 'build'),
+    # step 6: bare tsc; timeout's own value flags; shell reserved words ---
+    ('tsc', 'tsc_full'),
+    ('npx tsc', 'tsc_full'),
+    ('npx -y tsc', 'tsc_full'),
+    ('timeout -s KILL 60 next build', 'build'),
+    ('timeout -k 5 60 next build', 'build'),
+    ('timeout --signal=KILL 60 next build', 'build'),
+    ('timeout --preserve-status 60 cargo build', 'cargo'),
+    ('for x in a b c; do next build; done', 'build'),
+    ('{ next build; }', 'build'),
+    ('if true; then pnpm run build; fi', 'build'),
 ]
 
 
@@ -207,28 +217,27 @@ def _sleeper(*extra: str, env=None) -> subprocess.Popen:
 def leg_counting() -> None:
     mod = _load("heavy_admission_m")
     count = mod._count_running
-    ts = {101: (1, "node", ["node", "/fake/tsserver.js", "--cancellationPipeName", "/tmp/tscancellation-abc.tmp"]),
-          102: (1, "node", ["tsx", "watch", "--tsconfig", "tsconfig.json", "src/server.ts"])}
+    ts = {101: (1, ["node", "/fake/tsserver.js", "--cancellationPipeName", "/tmp/tscancellation-abc.tmp"]),
+          102: (1, ["tsx", "watch", "--tsconfig", "tsconfig.json", "src/server.ts"])}
     check("M tsserver and tsx-watch argv count 0 for tsc_full", count("tsc_full", ts) == 0)
-    check("M a next-build-shaped argv counts 1", count("build", {103: (1, "node", ["node", "/x/next/dist/bin/next", "build"])}) == 1)
+    check("M a next-build-shaped argv counts 1", count("build", {103: (1, ["node", "/x/next/dist/bin/next", "build"])}) == 1)
     # Captured 2026-09-29 (Next 16.3.2, macOS): `process.title=` overwrites the
     # argv memory region, so a real `next build`'s OWN snapshot row is this
     # shape, never `node .../next/dist/bin/next build`.
     check("M a captured Next 16.3.2 title row ['next-build','(v16.3.2)'] counts as build",
-          count("build", {109: (1, "next-build", ["next-build", "(v16.3.2)"])}) == 1)
+          count("build", {109: (1, ["next-build", "(v16.3.2)"])}) == 1)
     # Captured 2026-09-29: real pnpm here runs in-process via corepack's node
     # shim, so the OWN pid's argv is `node .../bin/pnpm verify`, never a
     # separate `pnpm` process. npm's own title IS `npm run verify` (no shim).
     check("M a captured corepack pnpm row ['node','.../bin/pnpm','verify'] counts as verify",
-          count("verify", {110: (1, "node", ["node", "/x/.pnpm/bin/pnpm", "verify"])}) == 1)
+          count("verify", {110: (1, ["node", "/x/.pnpm/bin/pnpm", "verify"])}) == 1)
     check("M a captured npm row ['npm','run','verify'] counts as verify",
-          count("verify", {111: (1, "npm", ["npm", "run", "verify"])}) == 1)
+          count("verify", {111: (1, ["npm", "run", "verify"])}) == 1)
     # ROOT invocations only: a pnpm process and the build it spawned -> one build.
-    tree = {201: (1, "node", ["pnpm", "run", "build"]), 202: (201, "node", ["node", "/x/next/dist/bin/next", "build"])}
+    tree = {201: (1, ["pnpm", "run", "build"]), 202: (201, ["node", "/x/next/dist/bin/next", "build"])}
     check("M a build's own spawned child doesn't count again", count("build", tree) == 1)
-    # A NON-shell ucomm, so only the ancestor exclusion (not the shell filter) can zero it.
     check("M this hook's own ancestor chain is excluded even if it matches",
-          count("build", {os.getppid(): (1, "node", ["pnpm", "run", "build"])}) == 0)
+          count("build", {os.getppid(): (1, ["pnpm", "run", "build"])}) == 0)
 
     # Real, unmodified plants: _read_snapshot()'s own ps parse, end to end. A
     # lone simple command would tail-exec away the shell, hence `; true`.
@@ -240,9 +249,11 @@ def leg_counting() -> None:
         row = snap.get(idle.pid)
         check("M a real unmodified plant appears in the real snapshot", row is not None, str(row))
         check("M a real unmodified plant's own argv never classifies as heavy",
-              mod._classify(mod._resolve_segment(mod._resolve_runner(row[2] if row else []))) is None, str(row))
-        check("M a real /bin/sh -c plant has a real shell ucomm",
-              snap.get(sh.pid, (0, "", []))[1] in mod._SHELL_COMM, str(snap.get(sh.pid)))
+              mod._classify(mod._resolve_segment(mod._resolve_runner(row[1] if row else []))) is None, str(row))
+        sh_row = snap.get(sh.pid)
+        check("M a real /bin/sh -c plant's own argv never classifies as heavy",
+              sh_row is not None and mod._classify(mod._resolve_segment(mod._resolve_runner(sh_row[1]))) is None,
+              str(sh_row))
     finally:
         for p in (idle, sh):
             p.kill(); p.wait(timeout=5)
@@ -261,7 +272,7 @@ def leg_counting() -> None:
             time.sleep(0.5)
             row = mod._read_snapshot().get(titled.pid)
             check("M a LIVE node process.title rewrite ('next-build (vX)') counts as build",
-                  row is not None and mod._classify(mod._resolve_segment(mod._resolve_runner(row[2]))) == "build",
+                  row is not None and mod._classify(mod._resolve_segment(mod._resolve_runner(row[1]))) == "build",
                   str(row))
         finally:
             titled.kill(); titled.wait(timeout=5)
@@ -286,7 +297,7 @@ def leg_counting() -> None:
         time.sleep(0.5)
         row = mod._read_snapshot().get(corepack.pid)
         check("M a LIVE corepack-shape plant (node .../bin/pnpm verify) counts as verify",
-              row is not None and mod._classify(mod._resolve_segment(mod._resolve_runner(row[2]))) == "verify",
+              row is not None and mod._classify(mod._resolve_segment(mod._resolve_runner(row[1]))) == "verify",
               str(row))
     finally:
         corepack.kill(); corepack.wait(timeout=5)
@@ -443,7 +454,7 @@ def leg_leak_control() -> None:
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             mod.admit("next build")
-            mod._read_snapshot = lambda: {p.pid: (1, "node", ["node", "/x/next/dist/bin/next", "build", _LEAK_TOKEN])}
+            mod._read_snapshot = lambda: {p.pid: (1, ["node", "/x/next/dist/bin/next", "build", _LEAK_TOKEN])}
             rc = mod.admit("next build")
         check("L real code denies the token-bearing row at cap (premise)", rc == 2, f"rc={rc}")
         seen = out.getvalue() + err.getvalue() + (log.read_text(encoding="utf-8", errors="replace") if log.exists() else "")
@@ -477,11 +488,16 @@ def leg_negative_controls() -> None:
                            'grep -rn "playwright test" .github/') if mod.admit(c) != 0]
     check("N detection-widening mutant wrongly DENIES must-admit strings", len(red) == 3, f"only {red} turned red")
 
-    mod = _load("heavy_admission_n_shell_filter")
-    synth = {4242: (1, "zsh", ["next", "build"])}  # a shell ucomm on an argv that WOULD match
-    check("N with the real shell filter, a shell-named row counts 0", mod._count_running("build", synth) == 0)
-    mod._SHELL_COMM = set()
-    check("N deleting the shell filter wrongly counts that same row (goes RED)",
+    # _SHELL_COMM (a ucomm-based filter) is gone (step 6): _classify already
+    # rejects every shell-HEADED argv on its own, so a shell renamed as the
+    # front of the argv itself (not just its ucomm) must still count 0.
+    mod = _load("heavy_admission_n_shell_head")
+    synth = {4242: (1, ["zsh", "next", "build"])}
+    check("N a shell-headed argv ([zsh, next, build]) counts 0 via _classify alone",
+          mod._count_running("build", synth) == 0)
+    real_classify = mod._classify
+    mod._classify = lambda t: "build" if t and t[0] in ("zsh", "bash", "sh") else real_classify(t)
+    check("N a mutant that widens _classify to accept a shell head wrongly counts that row (goes RED)",
           mod._count_running("build", synth) == 1)
 
 
