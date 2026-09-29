@@ -89,7 +89,7 @@ class Sandbox:
     """A private HOME + TMPDIR. The hook keeps its state under
     tempfile.gettempdir(), which honors TMPDIR, so every leg is isolated.
 
-    The hook also runs heavy_admission.admit() (MYC-5053), whose telemetry
+    The hook also runs heavy_admission.admit(), whose telemetry
     (guard_telemetry.log_fire) binds GUARD_FIRES_LOG at its OWN first import,
     once per process, preferring it over HOME-based expansion when both are
     set. The HOME override above happens to protect the default `~/.claude/
