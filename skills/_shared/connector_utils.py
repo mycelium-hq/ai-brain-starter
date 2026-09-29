@@ -335,18 +335,10 @@ _LOOKALIKE_FOLD = str.maketrans({
     chr(0x0501): "d",  # CYRILLIC SMALL LETTER KOMI DE
 })
 
-# Default-ignorable code points that are NOT category "Cf" (so the check
-# below misses them without this set) but render blank or combine onto the
-# previous character: Mongolian/Khmer free-variation marks, Hangul fillers
-# (category Lo, not Cf/Mn), and the variation-selector blocks.
-#
-# U+3164 (HANGUL FILLER) and U+FFA0 (HALFWIDTH HANGUL FILLER) are
-# deliberately NOT listed: both NFKC-decompose to U+1160 (HANGUL JUNGSEONG
-# FILLER, already covered below), and _neutralize_marker_lookalikes runs
-# NFKC before ever consulting this set -- so a raw U+3164 or U+FFA0 input
-# character has already become U+1160 by the time this set is checked.
-# Listing either is unreachable dead code (verified against unicodedata
-# 13.0.0 and 16.0.0).
+# Default-ignorable code points NOT in category "Cf" (so the check below
+# misses them): Mongolian/Khmer free-variation marks, Hangul fillers,
+# variation selectors. U+3164/U+FFA0 are deliberately absent -- both
+# NFKC-decompose to U+1160 (already listed) before this set is checked.
 _DEFAULT_IGNORABLE_EXTRA = frozenset(
     chr(c) for c in (
         0x034F,  # COMBINING GRAPHEME JOINER
@@ -526,11 +518,9 @@ def guard_untrusted_body(
             ids = {f.pattern_id for f in findings}
             if any(not isinstance(i, str) for i in ids):
                 # A non-str id would crash trust_frontmatter_lines's
-                # ", ".join(flags) OUTSIDE this try: the registry loader
-                # validates ids for its own rules, but a scanner need not
-                # be backed by that registry at all. Same rule as an
-                # unreadable scan result: untrusted structured data reads
-                # unavailable, never partial.
+                # ", ".join(flags) OUTSIDE this try -- a scanner need not
+                # be backed by the id-validating registry at all. Same
+                # rule as an unreadable result: unavailable, never partial.
                 status, flags = "unavailable", []
             else:
                 flags = sorted(ids)
@@ -631,20 +621,10 @@ def split_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     ({}, text) when there is no frontmatter or when the YAML is malformed.
     Requires PyYAML. Used by synth-* skills only.
 
-    Splits on a `---` DELIMITER LINE, not on any `---` substring -- a
-    frontmatter value that happens to contain " --- " (e.g. a title like
-    "Part 1 --- The Beginning") must not be mistaken for the closing
-    delimiter. `---` must be the first thing on the line (no leading
-    whitespace); only trailing space/tab and an optional CRLF `\r` are
-    allowed after it.
-
-    The OPENING delimiter is recognised only at offset 0, with the exact
-    same shape as an internal delimiter line (not merely `text.startswith
-    ("---")`, which a first line like "---foo" also satisfies without
-    being a real delimiter -- that first "line" then never matches
-    _FRONTMATTER_DELIM_RE's own scan, so the split silently keys off two
-    LATER, unrelated delimiter-shaped lines instead and returns body text
-    read as meta).
+    Splits on `---` DELIMITER LINES, not any `---` substring (a value like
+    "Part 1 --- The Beginning" must not be mistaken for one). The OPENING
+    delimiter is recognised only at offset 0 with that same exact shape --
+    a naive `startswith("---")` would key off a later unrelated line.
     """
     if yaml is None:
         return {}, text
