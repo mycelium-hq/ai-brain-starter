@@ -369,9 +369,13 @@ def write_transcript_md(
     # well before the point where this module previously first asked
     # whether `_shared` is reachable.
     guard_mod = _untrusted_guard_module()
-    sanitize = (
-        guard_mod.sanitize_third_party_text if guard_mod is not None else _local_sanitize_third_party_text
-    )
+    # getattr, not the hasattr gate above: a _shared copy taken between the
+    # two MYC-4701 batches has guard_untrusted_body/trust_frontmatter_lines
+    # (so fencing still works) but predates sanitize_third_party_text --
+    # fall back to the local copy for just this name rather than losing
+    # fencing too. getattr(None, ...) also safely falls back when _shared
+    # itself is unreachable (guard_mod is None).
+    sanitize = getattr(guard_mod, "sanitize_third_party_text", _local_sanitize_third_party_text)
 
     title = sanitize(note.get("title") or "Untitled Meeting")
     created = note.get("created_at") or ""

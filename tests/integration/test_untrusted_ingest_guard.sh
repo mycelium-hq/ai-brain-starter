@@ -967,6 +967,64 @@ else:
           "(T13) a value containing ' --- ' round-trips through split_frontmatter (got %r)" % meta13.get("title"))
     check(meta13.get("content_trust") == "untrusted", "(T13) content_trust survives alongside it")
 
+# T14 (finding 3): a stale skills/_shared/connector_utils.py -- one taken
+# between the two MYC-4701 batches, with guard_untrusted_body and
+# trust_frontmatter_lines but not yet sanitize_third_party_text -- must not
+# crash granola_core.write_transcript_md via the hasattr gate passing on 2
+# of 3 names, then an AttributeError on the third.
+with tempfile.TemporaryDirectory() as isolated_root14, tempfile.TemporaryDirectory() as fake_home14:
+    isolated_root14 = pathlib.Path(isolated_root14)
+    fake_home14 = pathlib.Path(fake_home14)
+    (isolated_root14 / "scripts").mkdir()
+    (isolated_root14 / "skills" / "_shared").mkdir(parents=True)
+    copied_core_path14 = isolated_root14 / "scripts" / "granola_core.py"
+    copied_core_path14.write_text(
+        (repo / "scripts" / "granola_core.py").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    # The stub re-exports only 2 of the real module's 3 names, loaded from
+    # the REAL connector_utils.py's true on-disk path (not a copy) -- so
+    # guard_untrusted_body/trust_frontmatter_lines behave exactly like
+    # production, and sanitize_third_party_text is genuinely absent.
+    stale_shim = (
+        "import importlib.util\n"
+        "_spec = importlib.util.spec_from_file_location(\n"
+        "    '_stale_real_connector_utils', %r)\n"
+        "_real = importlib.util.module_from_spec(_spec)\n"
+        "_spec.loader.exec_module(_real)\n"
+        "guard_untrusted_body = _real.guard_untrusted_body\n"
+        "trust_frontmatter_lines = _real.trust_frontmatter_lines\n"
+    ) % str(repo / "skills" / "_shared" / "connector_utils.py")
+    (isolated_root14 / "skills" / "_shared" / "connector_utils.py").write_text(stale_shim, encoding="utf-8")
+
+    old_home14 = os.environ.get("HOME")
+    os.environ["HOME"] = str(fake_home14)
+    try:
+        isolated_core14 = load_module("_isolated_granola_core_t14", copied_core_path14)
+        note14 = {
+            "id": "stale1", "title": "Stale Shared Meeting",
+            "created_at": "2026-02-02T10:00:00Z",
+            "web_url": "https://granola.ai/stale1",
+            "summary_markdown": "",
+            "transcript": [{"text": CLEAN, "speaker": {"source": "them"},
+                             "start_time": "2026-02-02T10:00:05Z"}],
+        }
+        with tempfile.TemporaryDirectory() as md14:
+            fp14, _msg14 = isolated_core14.write_transcript_md(note14, pathlib.Path(md14), dry_run=False)
+            check(fp14 is not None and fp14.is_file(),
+                  "(T14) a stale _shared missing sanitize_third_party_text still writes the note")
+            if fp14 is not None and fp14.is_file():
+                text14 = fp14.read_text(encoding="utf-8")
+                check("content_trust: untrusted" in text14, "(T14) content_trust still stamped")
+                check("BEGIN UNTRUSTED CONTENT" in text14,
+                      "(T14) fencing still runs -- the stale module HAS guard_untrusted_body")
+    finally:
+        if old_home14 is not None:
+            os.environ["HOME"] = old_home14
+        else:
+            os.environ.pop("HOME", None)
+        sys.modules.pop("_isolated_granola_core_t14", None)
+        sys.modules.pop("_stale_real_connector_utils", None)
+
 sys.exit(1 if fails else 0)
 PY
 
