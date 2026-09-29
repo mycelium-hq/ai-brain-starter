@@ -505,10 +505,19 @@ with tempfile.TemporaryDirectory() as d5:
     check(rc5h == 0, "(T5h) exit 0 with a malformed upload_date")
     matches5h = list((vault5 / "External Inputs" / "YouTube" / "yt-channel").glob("*-bad-date-video.md"))
     check(len(matches5h) == 1, "(T5h) file written despite a malformed upload_date")
+    EXPECTED_T5H_KEYS = {
+        "type", "source", "video_id", "url", "channel", "channel_url", "title",
+        "upload_date", "duration_seconds", "language", "subtitle_source",
+        "word_count", "ingested_at", "content_trust", "injection_scan", "injection_flags",
+    }
     if matches5h:
         text5h = matches5h[0].read_text(encoding="utf-8")
         meta5h, _ = cu.split_frontmatter(text5h)
-        check("abc" not in meta5h,
+        # The exact SET of keys, not a substring check for "abc" -- the
+        # forged key a mutant produces ("abc-") is an artifact of THIS
+        # specimen's own hyphenation, not a fixed string a future
+        # malformed value would necessarily repeat.
+        check(set(meta5h) == EXPECTED_T5H_KEYS,
               "(T5h) the malformed upload_date forges no standalone frontmatter key (got keys %r)" % sorted(meta5h))
         check(meta5h.get("content_trust") == "untrusted",
               "(T5h) content_trust survives alongside a malformed upload_date (got %r)" % meta5h.get("content_trust"))
