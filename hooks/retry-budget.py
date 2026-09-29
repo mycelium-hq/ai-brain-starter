@@ -60,7 +60,8 @@ try:
     # block-scratchpad-cross-agent-clobber.py already uses. What it does NOT
     # see is an import made after putting `_lib` itself on sys.path, or a
     # `_lib` module's own imports (heavy_admission -> shell_parse), which is
-    # why shell_parse.py is separately listed in HOME_HOOKS_LIB_DEPS below.
+    # why shell_parse.py is separately listed in install-hooks-user-level.py's
+    # HOME_HOOKS_LIB_DEPS (not defined in this file).
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from _lib.heavy_admission import admit as _heavy_admit
 except Exception as _heavy_import_exc:  # pragma: no cover - must never block
