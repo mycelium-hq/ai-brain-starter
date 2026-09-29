@@ -278,6 +278,10 @@ def _pre_push_hook_file(prefix: list[str], cwd: str):
     # PREFIX); a husky v9 `.husky/_/` shim defers to `.husky/<hook>`. -C, never
     # cwd=: a chdir'd subprocess resolves a bare/relative PATH entry against the
     # NEW cwd, which the command text (a `cd`/-C) can choose -- see _tool().
+    # A cwd candidate that doesn't exist on disk (no absolute -C, and the
+    # resolved cwd isn't a real dir) drops -C entirely, so rev-parse falls
+    # back to resolving whatever repo THIS PROCESS is sitting in -- not the
+    # push's own repo. Same fail-open shape as every other error here.
     real_cwd = cwd if cwd and os.path.isdir(cwd) else None
     argv = [_tool("git"), *_forwarded_prefix(prefix)] + (["-C", real_cwd] if real_cwd else [])
     argv += ["rev-parse", "--path-format=absolute", "--git-path", "hooks/pre-push"]
