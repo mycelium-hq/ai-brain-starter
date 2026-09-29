@@ -199,6 +199,11 @@ def leg_counting() -> None:
           102: (1, "node", ["tsx", "watch", "--tsconfig", "tsconfig.json", "src/server.ts"])}
     check("M tsserver and tsx-watch argv count 0 for tsc_full", count("tsc_full", ts) == 0)
     check("M a next-build-shaped argv counts 1", count("build", {103: (1, "node", ["node", "/x/next/dist/bin/next", "build"])}) == 1)
+    # Captured 2026-09-29 (Next 16.3.2, macOS): `process.title=` overwrites the
+    # argv memory region, so a real `next build`'s OWN snapshot row is this
+    # shape, never `node .../next/dist/bin/next build`.
+    check("M a captured Next 16.3.2 title row ['next-build','(v16.3.2)'] counts as build",
+          count("build", {109: (1, "next-build", ["next-build", "(v16.3.2)"])}) == 1)
     # ROOT invocations only: a pnpm process and the build it spawned -> one build.
     tree = {201: (1, "node", ["pnpm", "run", "build"]), 202: (201, "node", ["node", "/x/next/dist/bin/next", "build"])}
     check("M a build's own spawned child doesn't count again", count("build", tree) == 1)
@@ -222,6 +227,25 @@ def leg_counting() -> None:
     finally:
         for p in (idle, sh):
             p.kill(); p.wait(timeout=5)
+
+    # LIVE plant of a process that rewrites its OWN title, reproducing the
+    # incident's real mechanism (not a synthetic row). Node is the tool that
+    # needs to be present; a loud SKIP, never a silent pass, when it is not.
+    node = shutil.which("node")
+    if node is None:
+        print("  SKIP: no node on PATH -- cannot live-plant a real process.title rewrite")
+    else:
+        titled = subprocess.Popen(
+            [node, "-e", "process.title = 'next-build (v16.3.2)'; setTimeout(() => {}, 30000);"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            time.sleep(0.5)
+            row = mod._read_snapshot().get(titled.pid)
+            check("M a LIVE node process.title rewrite ('next-build (vX)') counts as build",
+                  row is not None and mod._classify(mod._resolve_segment(mod._resolve_runner(row[2]))) == "build",
+                  str(row))
+        finally:
+            titled.kill(); titled.wait(timeout=5)
 
 
 # ------------------------------------------------------------- G: git push ---

@@ -261,6 +261,12 @@ _SCRIPT_TOOL_SUFFIX = (
 def _resolve_runner(t: list[str]) -> list[str]:
     """`node|bun <script> ...` -> the LOGICAL command it is really running,
     so a real process goes through the same rules detection uses."""
+    if t[:1] and t[0].startswith("next-build"):
+        # Next 16's own `nextBuild()` sets process.title = "next-build (vX)"
+        # as its first statement; on macOS that overwrites the argv memory
+        # region, so a real `next build`'s snapshot row IS this shape, not
+        # `node .../next/dist/bin/next build` (captured 2026-09-29, v16.3.2).
+        return ["next", "build"]
     if len(t) < 2 or _basename(t[0]) not in _NODE_RUNNERS:
         return t
     script = t[1].replace("\\", "/")
