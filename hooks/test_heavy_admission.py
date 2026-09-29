@@ -118,6 +118,8 @@ MUST_DETECT = [
     ('pnpm playwright test', 'playwright'),
     ('pnpm turbo run build', 'build'),
     ('env -u EQUIPO_DATABASE_URL npx vitest run', 'test_suite'),
+    ('env -i cargo build', 'cargo'),
+    ('env --ignore-environment cargo build', 'cargo'),
     ('env NODE_OPTIONS=--max-old-space-size=4096 next build', 'build'),
     ('./node_modules/.bin/next build', 'build'),
     ('node_modules/.bin/tsc --noEmit', 'tsc_full'),
@@ -206,6 +208,14 @@ def leg_decision() -> None:
     rc, out, _fires = _admit(mod, "next build")
     check("A a critical-memory deny never says 'the running'", rc == 2 and "the running" not in out, out)
 
+    # LOW-2: `tsc -p <one tsconfig>` is refused again in a single-tsconfig
+    # repo (that path IS the default project), so it must never be hinted.
+    mod = _load("heavy_admission_a_tsc_hint")
+    mod.read_signal, mod._count_running = (lambda: IDLE), (lambda cls, snap: 1)
+    rc, out, _fires = _admit(mod, "tsc -p tsconfig.json --noEmit")
+    check("A the tsc_full hint never suggests narrowing the project",
+          rc == 2 and "narrow the project" not in out and "wait for the running one to finish" in out, out)
+
     crit = lambda **kw: mod._memory_critical({**IDLE, **kw})[0]  # noqa: E731
     check("A each macOS arm fires alone: memorystatus <=10, swap>=RAM/2 at WARN",
           crit(memorystatus_level=10) and crit(pressure_level=2, swap_used=8 * 2 ** 30))
@@ -240,6 +250,8 @@ def leg_counting() -> None:
           count("verify", {110: (1, ["node", "/x/.pnpm/bin/pnpm", "verify"])}) == 1)
     check("M a captured npm row ['npm','run','verify'] counts as verify",
           count("verify", {111: (1, ["npm", "run", "verify"])}) == 1)
+    check("M a bun-run next-shaped argv (bun script resolution) counts as build",
+          count("build", {112: (1, ["bun", "/x/next/dist/bin/next", "build"])}) == 1)
     # ROOT invocations only: a pnpm process and the build it spawned -> one build.
     tree = {201: (1, ["pnpm", "run", "build"]), 202: (201, ["node", "/x/next/dist/bin/next", "build"])}
     check("M a build's own spawned child doesn't count again", count("build", tree) == 1)

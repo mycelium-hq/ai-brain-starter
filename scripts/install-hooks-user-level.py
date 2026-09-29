@@ -425,6 +425,7 @@ HOME_HOOKS_LIB_DEPS = {
                            # without it the import falls into a no-op fallback and the
                            # advertised inline bypass silently STOPS WORKING (the guard
                            # then denies a write the operator explicitly un-gated).
+                           # Also its OWN dependency: cmd_env.py -> shell_parse.py.
     "guard_telemetry.py",  # block-scratchpad-cross-agent-clobber.py -> log_fire();
                            # also retry-budget.py -> heavy_admission.py -> log_fire()
     "heavy_admission.py",  # retry-budget.py -> admit() (MYC-5053, heavy-command
@@ -432,8 +433,9 @@ HOME_HOOKS_LIB_DEPS = {
                            # instead of a new PreToolUse(Bash) slot)
     "shell_parse.py",      # heavy_admission.py's own real-argv-token detection;
                            # without it heavy_admission falls into its own
-                           # import-failure fallback in retry-budget.py and never
-                           # admits or denies anything
+                           # import-failure fallback in retry-budget.py, which
+                           # ADMITS EVERY COMMAND, VISIBLY (additionalContext +
+                           # log_fire) -- it never denies, and never no-ops silently
 }
 
 # Hooks ai-brain-starter USED TO ship and has deliberately RETIRED. The

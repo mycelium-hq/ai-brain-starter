@@ -34,7 +34,7 @@ Pattern inspired by Devin 2.0 ("ask user for help if CI does not pass
 after the third attempt") and Cursor 2.0 ("don't loop more than 3 times
 to fix linter errors").
 
-Also runs heavy_admission.admit() (MYC-5053) on the same parsed command,
+Also runs heavy_admission.admit() (MYC-5053) on the same raw command string,
 independent of RETRY_BUDGET_BYPASS -- its own bypass is HEAVY_ADMISSION_
 BYPASS=1, so each bypass switches off only its own check. Import and call
 are each wrapped in their own try/except: a broken heavy_admission must
@@ -55,9 +55,12 @@ import tempfile
 
 try:
     # HOME_HOOKS_LIB_DEPS / check-home-hook-deploy.py's static import scan
-    # only recognizes the `_lib.<mod>` dotted form (AST-matched), so this
-    # imports that way rather than inserting hooks/_lib itself onto sys.path
-    # -- the pattern block-scratchpad-cross-agent-clobber.py already uses.
+    # (AST-matched) recognizes `from _lib.<mod> import x`, `import _lib.<mod>`
+    # and `from _lib import <mod>`; this uses the first form -- the pattern
+    # block-scratchpad-cross-agent-clobber.py already uses. What it does NOT
+    # see is an import made after putting `_lib` itself on sys.path, or a
+    # `_lib` module's own imports (heavy_admission -> shell_parse), which is
+    # why shell_parse.py is separately listed in HOME_HOOKS_LIB_DEPS below.
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from _lib.heavy_admission import admit as _heavy_admit
 except Exception as _heavy_import_exc:  # pragma: no cover - must never block
@@ -65,9 +68,10 @@ except Exception as _heavy_import_exc:  # pragma: no cover - must never block
 
     def _heavy_admit(_command, _cwd=None):
         # Same visible fail-open heavy_admission.admit() itself uses for an
-        # internal error: an omitted _lib dependency (the exact failure that
-        # has already happened in the field on a flat install) must never
-        # silently admit -- it has to say so.
+        # internal error: an omitted _lib dependency on a flat install --
+        # caught by the installer smoke test WHILE BEING BUILT (80bdd47),
+        # never actually shipped -- must never silently admit either; it has
+        # to say so.
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
             "additionalContext": f"[heavy-admission] unmeasured ({_HEAVY_IMPORT_ERROR}) -- admitted"}}))
         try:

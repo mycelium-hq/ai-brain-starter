@@ -515,10 +515,11 @@ INTEGRATION_TESTS=(
   # Heavy-command admission (MYC-5053), folded into retry-budget.py: proves
   # a fresh install ships the FLAT-deployed hook AND its _lib/heavy_admission.py
   # + _lib/shell_parse.py dependencies (a HOME_HOOKS_LIB_DEPS omission left
-  # this dark on a real install even though every in-worktree test passed),
-  # wires it in the block-preserving `if [ -f ] && [ -r ]` form, and that the
-  # SHIPPED command denies `next build` while a planted process is at cap and
-  # allows a clean command.
+  # this dark on a real install even though every in-worktree test passed);
+  # end to end, with a REAL process shaped like `.../next/dist/bin/next build`
+  # (perl renamed via `exec -a`, skipped off darwin/linux or without perl),
+  # the SHIPPED command denies `next build` while it is at cap and allows a
+  # clean command.
   test_installer_registers_heavy_admission
   # Skip-prefix privacy guard: a `__SKIP` line is content the user told the
   # assistant NOT to persist, and a persisted line cannot be un-persisted (file
@@ -1630,15 +1631,18 @@ PY_DIRECT=(
   # structural cost test that a 1M-char segment never reaches shlex.split.
   hooks/test_shell_parse_tokens.py
   # heavy_admission.py (MYC-5053), folded into retry-budget.py: must-admit
-  # (16 strings) and must-detect (45 strings, incl. the pnpm-exec/local-bin,
-  # env -u/-i, bash -e -c and glued-redirect gaps found in review) lists;
-  # real and synthetic ps-snapshot controls (root-invocation-only counting,
-  # a real shell plant, node/bun script resolution); a git-push-as-verify
-  # leg against real .git/hooks/pre-push files; a leak control (a real
-  # secret-bearing process, checked against admit()'s own stdout/stderr/
-  # telemetry) with a positive control (ps -ww -o args= on that same pid
-  # DOES retrieve it); and negative-control mutants (neutered thresholds,
-  # widened detection, a deleted shell filter) that must each flip a verdict.
+  # (22 strings) and must-detect (60 strings, incl. the pnpm-exec/local-bin,
+  # env -u/-i, bash -e -c, glued-redirect, watcher, bare-tsc, timeout-flag
+  # and shell-reserved-word gaps found in review) lists; real and synthetic
+  # ps-snapshot controls (root-invocation-only counting, a real shell plant,
+  # node/bun script resolution, a real Next 16 process.title rewrite, a real
+  # corepack-shape pnpm plant); a git-push-as-verify leg asking a real git
+  # for the pre-push hook it would actually run (hooksPath at any scope,
+  # worktrees, husky v9); a leak control (a real secret-bearing process,
+  # checked against admit()'s own stdout/stderr/telemetry) with a positive
+  # control (ps -ww -o args= on that same pid DOES retrieve it); and
+  # negative-control mutants (neutered thresholds, widened detection, a
+  # widened shell-head classifier) that must each flip a verdict.
   hooks/test_heavy_admission.py
 )
 dormant_py=()

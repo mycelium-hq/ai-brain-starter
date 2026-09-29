@@ -16,8 +16,10 @@ invocations count; shells and this hook's own ancestors never do. Memory is
 read first: critical denies WITHOUT counting. An exception that propagates to
 admit() admits VISIBLY (additionalContext + log_fire).
 
-`git push` counts as `verify` when the repo's pre-push hook file, read from
-disk, contains a heavy-verifier marker.
+`git push` counts as `verify` when the pre-push hook git ITSELF would run
+for that push -- its path asked of a real `git rev-parse --git-path`, never
+regexed off `.git/config` -- has content, read from disk, containing a
+heavy-verifier marker.
 
 Bypass: HEAVY_ADMISSION_BYPASS=1, inline or session env -- logged only when
 it actually suppressed a deny.
@@ -50,10 +52,12 @@ MEMORYSTATUS_LEVEL_CRITICAL = 10
 MEM_AVAILABLE_OVER_TOTAL_CRITICAL = 0.10
 
 CLASS_CAPS = {"build": 1, "verify": 1, "test_suite": 1, "tsc_full": 1, "playwright": 1, "cargo": 2}
-_HINTS = {  # only where a narrower command is actually admitted; every other
-    "test_suite": "run one file: `vitest run <file>`",  # class just says "wait".
-    "tsc_full": "narrow the project: `tsc -p <one tsconfig>`",
-}
+_HINTS = {  # only where a narrower command is UNIVERSALLY admitted (never
+    "test_suite": "run one file: `vitest run <file>`",  # refused again); every
+}  # other class falls back to the generic "wait" below. No tsc_full entry:
+# `tsc -p <narrower tsconfig>` only exists in a monorepo with more than one
+# tsconfig -- in a single-tsconfig repo it is refused again at the SAME cap
+# (measured: `tsc -p tsconfig.json --noEmit` is still the default project).
 
 # ---- detection: real argv tokens resolved to a FIXPOINT, never a substring --
 _BARE_SKIP = WRAPPER_PREFIXES | {"npx", "bunx"}
@@ -436,7 +440,9 @@ def _guard_deps():
 
 def admit(command: str, cwd: str | None = None) -> int:
     """0 = allow, 2 = deny; an exception that propagates here admits, visibly.
-    `cwd` is the payload's cwd, used only to resolve a `git push`'s repo."""
+    `cwd` is the payload's cwd, used only to resolve a `git push`'s repo --
+    including a RELATIVE `-C <path>`/`--git-dir=`/`--work-tree=` on the push
+    itself, not only a bare `git push`."""
     try:
         cls = detect_class(command, cwd)
         if cls is None:
