@@ -302,6 +302,26 @@ with tempfile.TemporaryDirectory() as d4:
     text4b = fpath4b.read_text(encoding="utf-8") if fpath4b.is_file() else ""
     check("injection_scan: clean" in text4b, "(T4b) clean payload reports clean")
 
+    # Finding 6: author matters -- ingest-github scans a PR/issue/commit's
+    # author only via _raw_item_fields' "author" key, and no prior test put
+    # a specimen there (title and body were always the carrier). Both
+    # clean here; the specimen is ONLY in author.
+    payload4c = {
+        "repo": "acme/widgets", "vault_root": str(vault4), "target_date": "2026-04-03",
+        "pull_requests": [{
+            "number": 103, "title": "Refactor auth module", "author": SYSTEM_IMPERSONATION,
+            "merged_at": "2026-01-03T00:00:00Z", "url": "u", "body": "Cleans up the auth module.",
+        }],
+    }
+    buf4c = io.StringIO()
+    with redirect_stdout(buf4c):
+        rc4c = gh_ingest.run_from_payload(payload4c)
+    check(rc4c == 0, "(T4c) exit 0")
+    fpath4c = vault4 / "External Inputs" / "GitHub" / "acme-widgets" / "2026-04-03.md"
+    check(fpath4c.is_file(), "(T4c) file written")
+    text4c = fpath4c.read_text(encoding="utf-8")
+    assert_stamped(text4c, "T4c-author-only-specimen", "prompt-injection-system-impersonation")
+
 # T5: ingest-youtube, one module load. a. flagged (title-only specimen,
 # doubling as the title-dropped-from-scan_text guard) b. clean c. a
 # bracket-leading title, which unquoted would open a YAML flow sequence
@@ -595,6 +615,26 @@ GREEK_OMICRON = chr(0x03BF)
 omicron_specimen = "untrusted c" + GREEK_OMICRON + "ntent"
 check("[untrusted-marker removed]" in cu._neutralize_marker_lookalikes(omicron_specimen),
       "(T7-neutralize) Greek omicron in c%sntent is neutralized" % GREEK_OMICRON)
+
+# Finding 6: three _DEFAULT_IGNORABLE_EXTRA/_LOOKALIKE_FOLD entries were
+# unpinned -- reverting any one of them left both suites green. Every
+# invisible/confusable char is built with chr(0x....), never typed as a
+# raw or escaped literal (a typed \u escape can land in the file as the
+# raw character, invisible to review).
+VS16 = chr(0xFE0F)  # VARIATION SELECTOR-16 -- range(0xFE00, 0xFE10)
+vs16_specimen = "UNTR" + VS16 + "USTED CONTENT"
+check("[untrusted-marker removed]" in cu._neutralize_marker_lookalikes(vs16_specimen),
+      "(T7-neutralize) VS16 inside UNTRUSTED is neutralized")
+
+HANGUL_FILLER = chr(0x3164)  # HANGUL FILLER -- a _DEFAULT_IGNORABLE_EXTRA entry
+hangul_gap_specimen = "untrusted" + HANGUL_FILLER + "content"
+check("[untrusted-marker removed]" in cu._neutralize_marker_lookalikes(hangul_gap_specimen),
+      "(T7-neutralize) a U+3164 gap between untrusted and content is neutralized")
+
+GREEK_LUNATE_SIGMA = chr(0x03F2)  # NFKC-decomposes to U+03C2, the fold table's key
+lunate_sigma_specimen = "untrusted " + GREEK_LUNATE_SIGMA + "ontent"
+check("[untrusted-marker removed]" in cu._neutralize_marker_lookalikes(lunate_sigma_specimen),
+      "(T7-neutralize) Greek lunate sigma in %sontent is neutralized" % GREEK_LUNATE_SIGMA)
 
 # T8: unknown is never clean. No test seam on guard_untrusted_body:
 # monkeypatch the loader itself (its lru_cache lives on the ORIGINAL
