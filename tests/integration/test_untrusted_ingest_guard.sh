@@ -31,6 +31,10 @@ done
 
 HERMETIC_HOME="$(mktemp -d)"
 trap 'rm -rf "$HERMETIC_HOME"' EXIT
+# A `pip install --user` PyYAML (how the ci job's setup-python 3.9 gets it,
+# scripts/ci.sh) lives under the real HOME. Pin the user-site base before
+# HOME goes hermetic, so PyYAML stays importable for T12/T13.
+export PYTHONUSERBASE="$(python3 -m site --user-base)"
 export HOME="$HERMETIC_HOME"
 unset SECRET_WARN_ROOT || true
 
@@ -915,9 +919,12 @@ with tempfile.TemporaryDirectory() as d12yt:
     target12yt = vault12yt / "External Inputs" / "YouTube" / "yt-channel" / "2026-12-01-bad-title-with-chars.md"
     check(target12yt.is_file(), "(T12-yt) file written")
     if target12yt.is_file():
-        meta12yt, _ = cu.split_frontmatter(target12yt.read_text(encoding="utf-8"))
-        check(meta12yt.get("content_trust") == "untrusted",
-              "(T12-yt) PyYAML parses the frontmatter and content_trust: untrusted survives (got %r)" % meta12yt.get("content_trust"))
+        if cu.yaml is None:
+            check(False, "(T12-yt) PyYAML missing -- cannot verify content_trust round-trip")
+        else:
+            meta12yt, _ = cu.split_frontmatter(target12yt.read_text(encoding="utf-8"))
+            check(meta12yt.get("content_trust") == "untrusted",
+                  "(T12-yt) PyYAML parses the frontmatter and content_trust: untrusted survives (got %r)" % meta12yt.get("content_trust"))
 
 with tempfile.TemporaryDirectory() as d12g:
     note12 = {
@@ -931,19 +938,26 @@ with tempfile.TemporaryDirectory() as d12g:
         note12, pathlib.Path(d12g), dry_run=False,
         extra_frontmatter={"external_attendees": "Eve " + UNSAFE_SCALAR},
     )
-    meta12g, _ = cu.split_frontmatter(fp12g.read_text(encoding="utf-8"))
-    check(meta12g.get("content_trust") == "untrusted",
-          "(T12-granola) an unsafe attendee value does not break the YAML parse; content_trust: untrusted survives (got %r)" % meta12g.get("content_trust"))
+    if cu.yaml is None:
+        check(False, "(T12-granola) PyYAML missing -- cannot verify content_trust round-trip")
+    else:
+        meta12g, _ = cu.split_frontmatter(fp12g.read_text(encoding="utf-8"))
+        check(meta12g.get("content_trust") == "untrusted",
+              "(T12-granola) an unsafe attendee value does not break the YAML parse; content_trust: untrusted survives (got %r)" % meta12g.get("content_trust"))
 
 # T13 (finding 2, second half): split_frontmatter must split on a `---`
 # DELIMITER LINE, not any `---` substring -- a value containing " --- "
 # must not be mistaken for the closing delimiter and truncate or empty the
 # frontmatter.
 rendered13 = cu.render_frontmatter({"content_trust": "untrusted", "title": "Part 1 --- The Beginning"})
-meta13, _ = cu.split_frontmatter(rendered13 + "body text\n")
-check(meta13.get("title") == "Part 1 --- The Beginning",
-      "(T13) a value containing ' --- ' round-trips through split_frontmatter (got %r)" % meta13.get("title"))
-check(meta13.get("content_trust") == "untrusted", "(T13) content_trust survives alongside it")
+if cu.yaml is None:
+    check(False, "(T13) PyYAML missing -- cannot verify frontmatter round-trip")
+    check(False, "(T13) PyYAML missing -- cannot verify content_trust round-trip")
+else:
+    meta13, _ = cu.split_frontmatter(rendered13 + "body text\n")
+    check(meta13.get("title") == "Part 1 --- The Beginning",
+          "(T13) a value containing ' --- ' round-trips through split_frontmatter (got %r)" % meta13.get("title"))
+    check(meta13.get("content_trust") == "untrusted", "(T13) content_trust survives alongside it")
 
 sys.exit(1 if fails else 0)
 PY
