@@ -1216,11 +1216,11 @@ else:
     check(meta13c == {},
           "(T13c) a non-delimiter first line yields no meta, not body text read as meta (got %r)" % meta13c)
 
-# T14: a stale skills/_shared/connector_utils.py -- one taken
-# between the two MYC-4701 batches, with guard_untrusted_body and
-# trust_frontmatter_lines but not yet sanitize_third_party_text -- must not
-# crash granola_core.write_transcript_md via the hasattr gate passing on 2
-# of 3 names, then an AttributeError on the third.
+# T14: a stale skills/_shared/connector_utils.py -- one that has
+# guard_untrusted_body and trust_frontmatter_lines but predates
+# sanitize_third_party_text -- must not crash
+# granola_core.write_transcript_md via the hasattr gate passing on 2 of 3
+# names, then an AttributeError on the third.
 with tempfile.TemporaryDirectory() as isolated_root14, tempfile.TemporaryDirectory() as fake_home14:
     isolated_root14 = pathlib.Path(isolated_root14)
     fake_home14 = pathlib.Path(fake_home14)
@@ -1280,10 +1280,13 @@ with tempfile.TemporaryDirectory() as isolated_root14, tempfile.TemporaryDirecto
 # T15: on ingest-youtube's DEGRADED path (real connector_utils
 # unreachable), a title with a lone UTF-16 surrogate half must not abort
 # the write when there is no transcript -- the raw title lands straight in
-# the no-caption stub body, and the degraded guard_untrusted_body must
-# still round-trip it. Forces the degraded path by corrupting the import
-# target text, not by fighting sys.modules -- connector_utils is already
-# cached globally under its real name by this point in the run.
+# the no-caption stub body. Two independent repairs cover it: main()'s
+# upfront sanitize_third_party_text(title), and the degraded
+# guard_untrusted_body's own round-trip -- reverting either ALONE stays
+# green (each is sufficient on its own); only reverting BOTH crashes.
+# Forces the degraded path by corrupting the import target text, not by
+# fighting sys.modules -- connector_utils is already cached globally
+# under its real name by this point in the run.
 yt_source15 = (repo / "skills" / "ingest-youtube" / "ingest.py").read_text(encoding="utf-8")
 FORCE_DEGRADE_MARKER = "from connector_utils import guard_untrusted_body, sanitize_third_party_text"
 if FORCE_DEGRADE_MARKER not in yt_source15:

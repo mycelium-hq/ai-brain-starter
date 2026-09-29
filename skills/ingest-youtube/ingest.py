@@ -40,9 +40,11 @@ try:
     from connector_utils import guard_untrusted_body, sanitize_third_party_text
 except ImportError:
     def guard_untrusted_body(text, source, scan_text=None):
-        # No envelope on this degraded path -- but still round-trip the
-        # same surrogate/C1 sanitize fence_untrusted would have done, so a
-        # lone surrogate elsewhere in the body doesn't abort the write.
+        # No envelope on this degraded path -- but still round-trip a lone
+        # UTF-16 surrogate half the same way fence_untrusted's own sanitize
+        # step does, so that alone doesn't abort the write. This does NOT
+        # strip C1 controls -- fence_untrusted doesn't either; only
+        # sanitize_third_party_text (below) does, via _UNSAFE_SCALAR_RE.
         safe = (text or "").encode("utf-8", "surrogatepass").decode("utf-8", "replace")
         return safe, {"content_trust": "untrusted", "injection_scan": "unavailable", "injection_flags": []}
 
@@ -288,13 +290,15 @@ def main() -> int:
 
     meta = fetch_metadata(args.url, ytdlp)
     video_id = meta.get("id", "unknown")
-    # Sanitized immediately: a lone surrogate or a C1/noncharacter in a
-    # scraped title would otherwise abort the eventual write or make the
-    # frontmatter unreadable by any YAML parser. Not redundant with
-    # write_vault_file()'s per-key sanitize: when there is no transcript,
-    # the raw title is embedded straight into the stub body below, before
-    # guard_untrusted_body ever sees it, and the degraded (no _shared)
-    # guard_untrusted_body does not sanitize its input.
+    # Sanitized immediately: a lone surrogate or a C1/noncharacter would
+    # otherwise abort the write or break the YAML parse. Needed before
+    # guard_untrusted_body ever runs, since with no transcript the raw
+    # title is embedded straight into the stub body below. For a lone
+    # surrogate specifically this is now belt-and-braces, not the only
+    # fix -- the degraded (no _shared) guard_untrusted_body round-trips
+    # surrogates too (3153b9e), and write_vault_file()'s per-key sanitize
+    # covers the frontmatter title regardless. Still the only place that
+    # strips a C1 control before it reaches the stub body.
     title = sanitize_third_party_text(meta.get("title", "Untitled"))
     channel = meta.get("channel") or meta.get("uploader") or "unknown-channel"
     channel_slug = slugify(channel)
