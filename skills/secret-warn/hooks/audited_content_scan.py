@@ -191,7 +191,7 @@ def _main(argv: list[str]) -> int:
         )
         return 2
     if not _load_rules():
-        # N4: a missing/unreadable/emptied registry must never print "clean" --
+        # A missing/unreadable/emptied registry must never print "clean" --
         # that reads as "scanned, found nothing" when nothing was scanned at all.
         sys.stderr.write(
             f"[audited-content-scan] no prompt-injection rules loaded from "

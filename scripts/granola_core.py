@@ -303,11 +303,14 @@ def save_state(state_file: Path, state: dict) -> None:
 @functools.lru_cache(maxsize=1)
 def _untrusted_guard_module():
     """Load skills/_shared/connector_utils.py for guard_untrusted_body /
-    trust_frontmatter_lines. Cached for the life of the process, including
-    a None result. Returns None -- never raises -- when `_shared` is
-    unreachable or a stale copy lacks the names; the caller then skips
-    fencing but still stamps the 3 unavailable trust lines by hand, so a
-    transcript is always written, never dropped, on a degraded install.
+    trust_frontmatter_lines -- the ONLY 2 names gated here. Cached for the
+    life of the process, including a None result. Returns None -- never
+    raises -- when `_shared` is unreachable or a stale copy lacks EITHER
+    of those 2 names; the caller then skips fencing but still stamps the
+    3 unavailable trust lines by hand, so a transcript is always written,
+    never dropped, on a degraded install. A copy that has both of these
+    but predates sanitize_third_party_text is not caught by this gate --
+    write_transcript_md's own getattr fallback covers that case instead.
     """
     candidates = [
         Path(__file__).resolve().parent.parent / "skills" / "_shared",
@@ -434,10 +437,9 @@ def write_transcript_md(
         # no local fencing logic to fall back to -- but the 3 trust lines are
         # still stamped by hand so "unavailable" is never silently "clean".
         # The block still needs the same surrogate round-trip
-        # fence_untrusted would have done (finding 4): title is sanitized
-        # above, but summary_md and the per-utterance transcript text are
-        # not, and a lone surrogate in either would otherwise abort the
-        # write.
+        # fence_untrusted would have done: title is sanitized above, but
+        # summary_md and the per-utterance transcript text are not, and a
+        # lone surrogate in either would otherwise abort the write.
         rendered_block = third_party_block.encode("utf-8", "surrogatepass").decode("utf-8", "replace")
         trust = {"content_trust": "untrusted", "injection_scan": "unavailable", "injection_flags": []}
         fm += ["content_trust: untrusted", "injection_scan: unavailable", "injection_flags: []"]

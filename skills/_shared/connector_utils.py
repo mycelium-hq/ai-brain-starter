@@ -301,7 +301,8 @@ def sanitize_third_party_text(value: str) -> str:
     or a file write) and safe to embed as a YAML scalar. Two independent
     repairs, both always applied: a lone surrogate is replaced via an
     encode/decode roundtrip, then any remaining C0/C1 control (other than
-    tab/newline/CR) or U+FFFE/U+FFFF is replaced with U+FFFD.
+    tab/newline) or U+FFFE/U+FFFF is replaced with U+FFFD. CR is a C0
+    control and is replaced too, not preserved.
     """
     if not value:
         return value
@@ -614,10 +615,12 @@ def split_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     ({}, text) when there is no frontmatter or when the YAML is malformed.
     Requires PyYAML. Used by synth-* skills only.
 
-    Splits on a `---` DELIMITER LINE (the whole line, only whitespace
-    allowed around it), not on any `---` substring -- a frontmatter value
-    that happens to contain " --- " (e.g. a title like "Part 1 --- The
-    Beginning") must not be mistaken for the closing delimiter.
+    Splits on a `---` DELIMITER LINE, not on any `---` substring -- a
+    frontmatter value that happens to contain " --- " (e.g. a title like
+    "Part 1 --- The Beginning") must not be mistaken for the closing
+    delimiter. `---` must be the first thing on the line (no leading
+    whitespace); only trailing space/tab and an optional CRLF `\r` are
+    allowed after it.
     """
     if yaml is None:
         return {}, text

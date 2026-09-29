@@ -280,10 +280,10 @@ def main() -> int:
     # Sanitized immediately: a lone surrogate or a C1/noncharacter in a
     # scraped title would otherwise abort the eventual write or make the
     # frontmatter unreadable by any YAML parser. Not redundant with
-    # write_vault_file()'s per-key sanitize (finding 4): when there is no
-    # transcript, the raw title is embedded straight into the stub body
-    # below, before guard_untrusted_body ever sees it, and the degraded
-    # (no _shared) guard_untrusted_body does not sanitize its input.
+    # write_vault_file()'s per-key sanitize: when there is no transcript,
+    # the raw title is embedded straight into the stub body below, before
+    # guard_untrusted_body ever sees it, and the degraded (no _shared)
+    # guard_untrusted_body does not sanitize its input.
     title = sanitize_third_party_text(meta.get("title", "Untitled"))
     channel = meta.get("channel") or meta.get("uploader") or "unknown-channel"
     channel_slug = slugify(channel)

@@ -203,9 +203,11 @@ def _raw_scan_text(prs: list, issues: list, commits: list) -> str:
     """Raw title/subject/author/body fields for injection scanning -- NOT
     the formatted body. A rendered '### #7 Title' heading pushes the title
     off the start of its line and defeats a line-anchored pattern the raw
-    title would still trip. Reuses connector_utils._raw_item_fields: PRs
-    and issues carry `title`, commits carry `subject`, all three carry
-    `author` and `body`, which is exactly the key set it already scans."""
+    title would still trip. Reuses connector_utils._raw_item_fields, which
+    scans 8 keys total: PRs and issues carry `title`, commits carry
+    `subject`, all three carry `author` and `body` -- the other 4
+    (body_text/description/identifier/id) are never present on a
+    PR/issue/commit item, so only those 4 ever contribute text here."""
     return _raw_item_fields(prs + issues + commits)
 
 
