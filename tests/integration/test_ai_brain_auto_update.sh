@@ -104,6 +104,12 @@ PASS=0; FAIL=0
 ok(){ printf '  PASS: %s\n' "$1"; PASS=$((PASS+1)); }
 no(){ printf '  FAIL: %s\n' "$1"; FAIL=$((FAIL+1)); }
 TMPROOT="$(mktemp -d)"; trap 'rm -rf "$TMPROOT"' EXIT
+# Run from the sandbox. The updater runs a checkout's own scripts with an
+# inherited cwd, so a planted fixture that writes a RELATIVE path lands in
+# whatever directory the suite was launched from: on 2026-09-24 an in-progress
+# T41, run from a team vault's root, left FOREIGN_INSTALLER_MARKER there. From
+# here such a write can only land in $TMPROOT, which the trap removes.
+cd "$TMPROOT" || exit 1
 
 # MYC-4907: the updater now refuses any ABS_SKILL_DIR that does not resolve
 # strictly inside ~/.claude/skills. Every fixture below used to sit directly

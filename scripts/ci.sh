@@ -213,6 +213,15 @@ if [ -n "${GITHUB_ACTIONS:-}" ] && ! python3 -c "import yaml" >/dev/null 2>&1; t
     || echo "    (PyYAML install failed; test_extractors_localized_vault will SKIP)"
 fi
 
+# Pinned HERE (before HOME goes decoy) and exported: run_sandboxed swaps
+# HOME/USERPROFILE per suite, so a suite computing this itself would
+# resolve against the WRONG (decoy) home. Guarded by GITHUB_ACTIONS --
+# the only case PyYAML was just installed --user under the real HOME.
+if [ -n "${GITHUB_ACTIONS:-}" ]; then
+  PYTHONUSERBASE="$(python3 -m site --user-base)"
+  export PYTHONUSERBASE
+fi
+
 # ---- (a) Python syntax gate ------------------------------------------------
 if command -v python3.9 >/dev/null 2>&1; then
   PY=python3.9
@@ -303,6 +312,9 @@ INTEGRATION_TESTS=(
   # installed git, so the one prerequisite a locked-down laptop cannot get was
   # also the one nothing provided.
   test_bootstrap_ps1_git_install
+  # A quick-mint "reused" reply is a warning, not a failure, on both installers.
+  test_bootstrap_quick_mint_reused
+  test_bootstrap_ps1_quick_mint_reused
   test_preflight_git_and_it_request
   test_remediate_runaway_procs
   test_surface_unniced_launchagents
@@ -352,6 +364,7 @@ INTEGRATION_TESTS=(
   test_open_core_boundary
   test_template_purity
   test_audited_content_injection_scan
+  test_untrusted_ingest_guard
   test_post_tool_use_learnings
   # Wired 2026-07-02 — found dormant by the gate-coverage invariant below.
   # These existed on disk, passed locally, and never ran in CI.
@@ -502,6 +515,20 @@ INTEGRATION_TESTS=(
   # and the shipped command actually BLOCKS a seeded secret while passing a
   # clean payload.
   test_installer_registers_mcp_secret_guards
+  # Environment-dump guard (MYC-4988): block-env-dump.py blocks env/printenv/
+  # export/set/declare/ps/echo-of-a-secret-var/proc-environ commands whose
+  # output is a live credential VALUE, which a session transcript persists
+  # permanently. Same registration-is-the-assertion proof as the two guards
+  # above: wired in the block-preserving form, and the shipped command
+  # actually BLOCKS a seeded `env` dump while passing a clean command.
+  test_installer_registers_env_dump_guard
+  # Heavy-command admission, folded into retry-budget.py: proves a fresh
+  # install ships the FLAT-deployed hook plus its heavy_admission.py and
+  # shell_parse.py deps (a HOME_HOOKS_LIB_DEPS omission left this dark
+  # despite every in-worktree test passing) end to end, against a REAL
+  # process shaped like `.../next/dist/bin/next build` (perl renamed via
+  # `exec -a`, skipped off darwin/linux or without perl).
+  test_installer_registers_heavy_admission
   # Skip-prefix privacy guard: a `__SKIP` line is content the user told the
   # assistant NOT to persist, and a persisted line cannot be un-persisted (file
   # + git history + any index over the vault). Every assertion carries a
@@ -568,6 +595,12 @@ INTEGRATION_TESTS=(
   # it); says SKIP and exits 0 when no interpreter has it, and the CI-only
   # bootstrap near the top of this script installs it so CI never takes that path.
   test_extractors_localized_vault
+  # claude_performance_digest.py divided each project's turns by total_turns
+  # unguarded, and a session with no assistant record still gets a row, so a
+  # window where no session had one crashed the weekly run before it wrote the
+  # report or its prescriptions. Carries a mixed-window control pinning that
+  # real percentages are unchanged.
+  test_claude_performance_digest_zero_turns
   # MYC-4285: a brew-less, non-interactive, non-corporate Mac hit the same
   # exit-0 the corporate profile was already built to route around, and never
   # reached the user-space Python/Node installers a few sections down.
@@ -598,6 +631,15 @@ INTEGRATION_TESTS=(
   # mtime): bootstrap.sh's own log-rotation check crashed outright on real
   # GNU coreutils, on every run once ~/.claude/.bootstrap.log existed.
   test_bootstrap_log_rotation_stat
+  # MYC-4635: recurring tool-error text reached Claude To-dos.md unredacted;
+  # proves the digest redacts at capture, before truncation, and a benign
+  # recurring error still survives byte-identical.
+  test_claude_performance_digest_redaction
+  # MYC-4623: the WebFetch revalidation cache served a repo-planted entry as
+  # the page on a 304. Proves entries live outside every project tree, only
+  # untracked entries carrying this machine's digest are served, and the
+  # cache is bounded.
+  test_sdd_cache_out_of_tree
 )
 # ---- Gate-coverage invariant -------------------------------------------------
 # The list above is an explicit allow-list, and allow-lists rot: a new
@@ -1591,6 +1633,25 @@ PY_DIRECT=(
   # shipped copies (scripts/ and skills/graphify/scripts/) so a fix to one
   # cannot silently leave the other behind.
   tests/test_graphify_canonicalize_slash_guard.py
+  # Proves block-env-dump.py (MYC-4988): drives the guard as a real
+  # subprocess with JSON on stdin, the same shape a PreToolUse call uses.
+  # Plain script, no pytest -- main() walks every test_* function itself.
+  hooks/test_block_env_dump.py
+  # shell_parse.tokens() called shlex.split unconditionally, whose read_token
+  # builds each token via string-attribute concatenation -- O(n^2) in ONE
+  # token's length, measured at 1.43s for a 400k-char argument, inside a
+  # PreToolUse hook run on every Bash call. 20k-case equivalence fuzz plus a
+  # structural cost test that a 1M-char segment never reaches shlex.split.
+  hooks/test_shell_parse_tokens.py
+  # heavy_admission.py, folded into retry-budget.py: must-admit/must-detect
+  # corpora; real and synthetic ps-snapshot counting (root-invocation-only,
+  # node/bun script resolution, a real Next 16 process.title rewrite, a
+  # captured corepack-shape pnpm row); a git-push-as-verify leg asking a real
+  # git for the pre-push hook it would actually run (hooksPath, worktrees,
+  # husky v9); a leak control with a positive control (ps -ww -o args=
+  # DOES retrieve the token) proving the check isn't vacuous; and
+  # negative-control mutants that must each flip a verdict.
+  hooks/test_heavy_admission.py
 )
 dormant_py=()
 while IFS= read -r -d '' f; do

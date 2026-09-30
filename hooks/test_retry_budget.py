@@ -87,7 +87,17 @@ def skip(name: str, why: str) -> None:
 
 class Sandbox:
     """A private HOME + TMPDIR. The hook keeps its state under
-    tempfile.gettempdir(), which honors TMPDIR, so every leg is isolated."""
+    tempfile.gettempdir(), which honors TMPDIR, so every leg is isolated.
+
+    The hook also runs heavy_admission.admit(), whose telemetry
+    (guard_telemetry.log_fire) binds GUARD_FIRES_LOG at its OWN first import,
+    once per process, preferring it over HOME-based expansion when both are
+    set. The HOME override above happens to protect the default `~/.claude/
+    guard-fires.jsonl` path too (os.path.expanduser("~") reads HOME), but
+    only as long as nothing sets GUARD_FIRES_LOG in the ambient environment --
+    an explicit env var always wins. Set it here so hermeticity does not
+    depend on that: any registration this Sandbox spawns writes telemetry
+    only under self.root, never a real session's log."""
 
     def __init__(self) -> None:
         self.root = Path(tempfile.mkdtemp(prefix="retry-budget-test-"))
@@ -99,7 +109,8 @@ class Sandbox:
                if k not in ("RETRY_BUDGET_BYPASS", "CLAUDE_SESSION_ID", "VAULT_ROOT")}
         env.update(HOME=str(self.home), USERPROFILE=str(self.home),
                    TMPDIR=str(self.tmp), TEMP=str(self.tmp), TMP=str(self.tmp),
-                   ABS_POSIX_PYTHON=sys.executable)
+                   ABS_POSIX_PYTHON=sys.executable,
+                   GUARD_FIRES_LOG=str(self.root / "guard-fires.jsonl"))
         self.env = env
         self.state_path = self.tmp / f"claude-retry-budget-{SESSION}.json"
 
@@ -715,6 +726,52 @@ def leg_installer_collapses_existing_copies_in_one_run() -> None:
             sb.cleanup()
 
 
+# --------------------------------------------------- telemetry hermeticity ---
+
+def leg_heavy_admission_telemetry_stays_in_the_sandbox() -> None:
+    """Control for Sandbox.env's GUARD_FIRES_LOG override (see the class
+    docstring): forces a real heavy_admission telemetry fire -- a FIFO at
+    the pre-push hook path raises inside _repo_push_is_heavy, caught by
+    admit()'s catch-all, which logs status="warned" -- and asserts the
+    record lands under this Sandbox's own root, never touching a real
+    session's ~/.claude/guard-fires.jsonl."""
+    name = "E1 a heavy-admission telemetry fire lands in the SANDBOX log, never a real HOME"
+    if not POSIX or not hasattr(os, "mkfifo"):
+        skip(name, "needs mkfifo")
+        return
+    sb = Sandbox()
+    try:
+        repo = sb.root / "fifo-repo"
+        (repo / ".git" / "hooks").mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        os.mkfifo(repo / ".git" / "hooks" / "pre-push")
+        fires_log = Path(sb.env["GUARD_FIRES_LOG"])
+        # `cwd` isn't part of payload()'s stdin contract (it only ever sends
+        # session_id/hook_event_name/tool_name/tool_input/tool_use_id);
+        # heavy_admission resolves the push's own repo from the JSON "cwd"
+        # field, so it's built directly here instead.
+        r = subprocess.run([sys.executable, str(HOOK)], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", env=sb.env, timeout=20,
+                           input=json.dumps({"session_id": SESSION, "hook_event_name": "PreToolUse",
+                                             "tool_name": "Bash", "tool_input": {"command": "git push"},
+                                             "cwd": str(repo), "tool_use_id": "toolu_telemetry_sandbox"}))
+        recs = []
+        if fires_log.exists():
+            for ln in fires_log.read_text(encoding="utf-8", errors="replace").splitlines():
+                try:
+                    recs.append(json.loads(ln))
+                except ValueError:
+                    pass
+        fired = any(rec.get("name") == "heavy-admission" and rec.get("status") == "warned" for rec in recs)
+        real_home_log = Path(os.path.expanduser("~/.claude/guard-fires.jsonl"))
+        untouched = not (sb.home / ".claude" / "guard-fires.jsonl").exists()
+        check(name, r.returncode == 0 and fired and untouched,
+              f"rc={r.returncode} sandbox-records={recs} sandbox-home-log-exists="
+              f"{(sb.home / '.claude' / 'guard-fires.jsonl').exists()} real-home={real_home_log}")
+    finally:
+        sb.cleanup()
+
+
 def main() -> int:
     for line in (sys.stdout, sys.stderr):
         try:
@@ -744,6 +801,7 @@ def main() -> int:
     leg_both_installers_one_attempt_per_call()
     leg_existing_install_upgrades_to_one_blocking_registration()
     leg_installer_collapses_existing_copies_in_one_run()
+    leg_heavy_admission_telemetry_stays_in_the_sandbox()
     if FAILURES:
         print(f"\n{len(FAILURES)} control(s) FAILED:")
         for f in FAILURES:

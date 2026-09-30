@@ -194,6 +194,13 @@ ABS_FINGERPRINTS = [
     # idiom would silently rewrite the block into an allow.
     "ai-brain-starter/hooks/block-claude-mcp-inline-secret.py",
     "ai-brain-starter/hooks/block-mcp-config-inline-secret.py",
+    # Environment-dump guard (MYC-4988). Blocks env/printenv/export/set/
+    # declare/ps/echo-of-a-secret-var/proc-environ/remote-secret-dump
+    # commands whose output is a live credential VALUE, which a session
+    # transcript persists permanently. Same reasoning as the pair above:
+    # a blocking gate shipped as a file and never registered protects no
+    # install.
+    "ai-brain-starter/hooks/block-env-dump.py",
     # Auto-remediation (the FIX side of the surfacing hooks):
     "ai-brain-starter/hooks/remediate-runaway-procs.py",
     # Write-time secret guard:
@@ -301,6 +308,9 @@ ABS_OWNED_BASENAMES = {
     # MCP secret-leak guards (MYC-3560): same basename-dedup reasoning as the
     # two gates above.
     "block-claude-mcp-inline-secret.py", "block-mcp-config-inline-secret.py",
+    # Environment-dump guard (MYC-4988): same basename-dedup reasoning as
+    # the two gates above.
+    "block-env-dump.py",
     "block-secret-in-note.py", "block-skip-prefix-in-vault-write.py",
     "context-budget-measure.py",
     "validate-handoff-frontmatter.py",
@@ -415,7 +425,17 @@ HOME_HOOKS_LIB_DEPS = {
                            # without it the import falls into a no-op fallback and the
                            # advertised inline bypass silently STOPS WORKING (the guard
                            # then denies a write the operator explicitly un-gated).
-    "guard_telemetry.py",  # block-scratchpad-cross-agent-clobber.py -> log_fire()
+                           # Also its OWN dependency: cmd_env.py -> shell_parse.py.
+    "guard_telemetry.py",  # block-scratchpad-cross-agent-clobber.py -> log_fire();
+                           # also retry-budget.py -> heavy_admission.py -> log_fire()
+    "heavy_admission.py",  # retry-budget.py -> admit() (MYC-5053, heavy-command
+                           # memory/cap admission folded into the existing hook
+                           # instead of a new PreToolUse(Bash) slot)
+    "shell_parse.py",      # heavy_admission.py's own real-argv-token detection;
+                           # without it heavy_admission falls into its own
+                           # import-failure fallback in retry-budget.py, which
+                           # ADMITS EVERY COMMAND, VISIBLY (additionalContext +
+                           # log_fire) -- it never denies, and never no-ops silently
 }
 
 # Hooks ai-brain-starter USED TO ship and has deliberately RETIRED. The

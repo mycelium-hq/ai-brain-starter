@@ -34,7 +34,9 @@ exporter is scripts/granola_sync.py.
 """
 from __future__ import annotations  # PEP 604 `X | None` annotations safe on py3.8+
 
+import functools
 import gzip
+import importlib.util
 import io
 import json
 import os
@@ -175,6 +177,8 @@ def list_notes(key: str, created_after: str | None, user_agent: str = DEFAULT_US
 # vault + filesystem
 # --------------------------------------------------------------------------- #
 def detect_vault_root() -> Path:
+    # vault-root-ok: explicit override for the unattended launchd exporter; one
+    # Granola account feeds one vault; granola_sync --vault-root is checked first
     env_root = os.environ.get("VAULT_ROOT")
     if env_root:
         return Path(env_root)
@@ -278,7 +282,7 @@ def state_path_for(vault_root: Path) -> Path:
 def load_state(state_file: Path) -> dict:
     if Path(state_file).exists():
         try:
-            s = json.loads(Path(state_file).read_text())
+            s = json.loads(Path(state_file).read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             s = {}
     else:
@@ -294,6 +298,55 @@ def save_state(state_file: Path, state: dict) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# untrusted third-party content guard (MYC-4701)
+# --------------------------------------------------------------------------- #
+@functools.lru_cache(maxsize=1)
+def _untrusted_guard_module():
+    """Load skills/_shared/connector_utils.py for guard_untrusted_body /
+    trust_frontmatter_lines -- the ONLY 2 names gated here. Cached for the
+    life of the process, including a None result. Returns None -- never
+    raises -- when `_shared` is unreachable or a stale copy lacks EITHER
+    of those 2 names; the caller then skips fencing but still stamps the
+    3 unavailable trust lines by hand, so a transcript is always written,
+    never dropped, on a degraded install. A copy that has both of these
+    but predates sanitize_third_party_text is not caught by this gate --
+    write_transcript_md's own getattr fallback covers that case instead.
+    """
+    candidates = [
+        Path(__file__).resolve().parent.parent / "skills" / "_shared",
+        Path.home() / ".claude" / "skills" / "ai-brain-starter" / "skills" / "_shared",
+        Path.home() / ".claude" / "skills" / "_shared",
+    ]
+    for candidate_dir in candidates:
+        try:
+            spec = importlib.util.spec_from_file_location(
+                "_abs_connector_utils", candidate_dir / "connector_utils.py"
+            )
+            candidate_mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(candidate_mod)
+        except Exception:
+            continue
+        if hasattr(candidate_mod, "guard_untrusted_body") and hasattr(
+            candidate_mod, "trust_frontmatter_lines"
+        ):
+            return candidate_mod
+    return None
+
+
+_LOCAL_UNSAFE_SCALAR_RE = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f" + chr(0xFFFE) + chr(0xFFFF) + "]")
+
+
+def _local_sanitize_third_party_text(value: str) -> str:
+    """Local fallback for connector_utils.sanitize_third_party_text (the
+    canonical copy) -- needed here because the title must be made safe
+    before we know whether `_shared` is reachable at all."""
+    if not value:
+        return value
+    cleaned = value.encode("utf-8", "surrogatepass").decode("utf-8", "replace")
+    return _LOCAL_UNSAFE_SCALAR_RE.sub(chr(0xFFFD), cleaned)
+
+
+# --------------------------------------------------------------------------- #
 # export one note
 # --------------------------------------------------------------------------- #
 def write_transcript_md(
@@ -304,8 +357,30 @@ def write_transcript_md(
 ) -> tuple[Path | None, str]:
     """Write one note's transcript .md. `extra_frontmatter` lets a caller add
     keys (e.g. the personal exporter's `external_attendees`) without forking this
-    function -- the only sanctioned point of variation."""
-    title = note.get("title") or "Untitled Meeting"
+    function -- the only sanctioned point of variation.
+
+    The title, summary, and transcript are third-party content (other meeting
+    participants wrote them, not the operator): always stamped
+    `content_trust: untrusted`, and fenced too whenever `_shared` is
+    reachable (the degraded path below has no local fencing logic to fall
+    back to). The scan runs on the RAW per-utterance text, not the
+    rendered `` `mm:ss` **Speaker**: `` markdown -- that prefix pushes a
+    line like "System: ..." off the start of its line and defeats a
+    line-anchored pattern that the raw utterance would still trip."""
+    # Loaded up front (not at its previous call site below), because the
+    # title must be sanitized before it is used to build the filename --
+    # well before the point where this module previously first asked
+    # whether `_shared` is reachable.
+    guard_mod = _untrusted_guard_module()
+    # getattr, not the hasattr gate above: a stale _shared copy can have
+    # guard_untrusted_body/trust_frontmatter_lines (so fencing still works)
+    # while predating sanitize_third_party_text -- fall back to the local
+    # copy for just this name rather than losing fencing too. getattr(None,
+    # ...) also safely falls back when _shared itself is unreachable
+    # (guard_mod is None).
+    sanitize = getattr(guard_mod, "sanitize_third_party_text", _local_sanitize_third_party_text)
+
+    title = sanitize(note.get("title") or "Untitled Meeting")
     created = note.get("created_at") or ""
     date = created[:10] if created else datetime.now().strftime("%Y-%m-%d")
     meeting_start = _parse_dt(created)
@@ -328,19 +403,57 @@ def write_transcript_md(
         f"utterances: {n_utt}",
     ]
     for k, v in (extra_frontmatter or {}).items():
-        fm.append(f"{k}: {v}")
-    fm.append("---")
+        # A caller-supplied value (e.g. an attendee's display name) must
+        # never be able to forge a standalone frontmatter key or line, or
+        # break the YAML parse on an embedded ':'. Flatten every line break
+        # str.splitlines() recognises -- not just \r\n, also
+        # U+2028/U+2029/U+0085/\v/\f -- then sanitize (a lone surrogate or a
+        # C1/noncharacter would otherwise abort the write or the YAML parse,
+        # same as the title above), then render as a JSON string literal,
+        # which is always valid YAML double-quoted syntax too.
+        flat = sanitize(" ".join(str(v).splitlines()))
+        fm.append(f"{k}: {json.dumps(flat, ensure_ascii=False)}")
 
     body = format_transcript(transcript, meeting_start)
-    content = "\n".join(fm) + "\n\n"
-    content += f"# {title}\n\n"
-    content += f"*Pulled from the Granola API on {datetime.now().strftime('%Y-%m-%d %H:%M')}*\n\n"
+    third_party_block = f"# {' '.join(title.split())}\n\n"
+    third_party_block += (
+        f"*Pulled from the Granola API on {datetime.now().strftime('%Y-%m-%d %H:%M')}*\n\n"
+    )
     if summary_md:
-        content += f"## Summary\n\n{summary_md}\n\n"
-    content += f"## Full Transcript\n\n{body or '_(empty transcript)_'}\n"
+        third_party_block += f"## Summary\n\n{summary_md}\n\n"
+    third_party_block += f"## Full Transcript\n\n{body or '_(empty transcript)_'}\n"
+
+    scan_text = "\n".join(
+        [title, summary_md] + [(u.get("text") or "").strip() for u in transcript]
+    )
+
+    if guard_mod is not None:
+        rendered_block, trust = guard_mod.guard_untrusted_body(
+            third_party_block, "granola", scan_text=scan_text
+        )
+        fm += guard_mod.trust_frontmatter_lines(trust)
+    else:
+        # No envelope when the guard module itself is unavailable -- there is
+        # no local fencing logic to fall back to -- but the 3 trust lines are
+        # still stamped by hand so "unavailable" is never silently "clean".
+        # The block still needs the same surrogate round-trip
+        # fence_untrusted would have done: title is sanitized above, but
+        # summary_md and the per-utterance transcript text are not, and a
+        # lone surrogate in either would otherwise abort the write.
+        rendered_block = third_party_block.encode("utf-8", "surrogatepass").decode("utf-8", "replace")
+        trust = {"content_trust": "untrusted", "injection_scan": "unavailable", "injection_flags": []}
+        fm += ["content_trust: untrusted", "injection_scan: unavailable", "injection_flags: []"]
+    fm.append("---")
+
+    content = "\n".join(fm) + "\n\n" + rendered_block
+    if not content.endswith("\n"):
+        content += "\n"
+
+    ids = ", ".join(trust["injection_flags"]) or "none"
+    scan_suffix = "" if trust["injection_scan"] == "clean" else f" [injection_scan={trust['injection_scan']}: {ids}]"
 
     if dry_run:
-        return filepath, f"DRY-RUN would write {filepath.name} ({n_utt} utterances)"
+        return filepath, f"DRY-RUN would write {filepath.name} ({n_utt} utterances){scan_suffix}"
     meeting_dir.mkdir(parents=True, exist_ok=True)
     filepath.write_text(content, encoding="utf-8")
-    return filepath, f"SAVED {filepath.name} ({n_utt} utterances)"
+    return filepath, f"SAVED {filepath.name} ({n_utt} utterances){scan_suffix}"

@@ -788,15 +788,46 @@ PY
       -H "content-type: application/json" \
       -d "$QM_PAYLOAD" 2>/dev/null)"
     set -e
-    QM_TOKEN="$(printf '%s' "${QM_RESP:-}" | "$PY" -c '
-import json, sys
+    # Field order is reused|resent|token, untrusted token LAST, and the
+    # token is hex-validated here (never emitted at all if it doesn't
+    # match) -- belt and suspenders. `read` with 3 target vars dumps every
+    # extra "|"-delimited chunk into the LAST variable, so if token were
+    # first and unvalidated, a token shaped like "abc|1|def" would shift
+    # "1" into the reused slot regardless of the server's real reused
+    # value -- the split happens before any regex could validate it. With
+    # the flags first (never containing "|", they are script-computed "0"
+    # or "1") and the token last and pre-validated, neither failure mode
+    # is reachable.
+    QM_PARSED="$(printf '%s' "${QM_RESP:-}" | "$PY" -c '
+import json, re, sys
 try:
     d = json.load(sys.stdin)
-    print(d.get("token","") if d.get("ok") else "")
 except Exception:
-    print("")
+    d = {}
+ok = bool(d.get("ok"))
+token = d.get("token","") if ok else ""
+if not re.match(r"^[a-f0-9]{32}$", token):
+    token = ""
+reused = "1" if (ok and d.get("reused") is True) else "0"
+resent = "1" if (ok and d.get("resent") is True) else "0"
+print("%s|%s|%s" % (reused, resent, token))
 ' 2>/dev/null)"
-    if [[ -z "$QM_TOKEN" || ! "$QM_TOKEN" =~ ^[a-f0-9]{32}$ ]]; then
+    IFS='|' read -r QM_REUSED QM_RESENT QM_TOKEN <<< "$QM_PARSED"
+    # A resubmit for an email that already has a live token comes back
+    # {ok:true, reused:true, resent:<bool>} with NO token -- the endpoint is
+    # public/unauthenticated and never re-hands out an existing token. This
+    # is not a failure: warn and continue tokenless, same as a fresh install
+    # with no email offered at all. Never err() here (see FAILED list below)
+    # and never retry the mint.
+    if [[ "$QM_REUSED" == "1" ]]; then
+      if [[ "$QM_RESENT" == "1" ]]; then
+        warn "$(t "You already started an install with this email. I sent the link to your inbox again." \
+                  "Ya empezaste una instalación con este email. Te reenvié el link a tu bandeja de entrada.")"
+      else
+        warn "$(t "You already started an install with this email. The link is in your inbox from last time." \
+                  "Ya empezaste una instalación con este email. El link está en tu bandeja de entrada de la última vez.")"
+      fi
+    elif [[ -z "$QM_TOKEN" || ! "$QM_TOKEN" =~ ^[a-f0-9]{32}$ ]]; then
       err "$(t "Inline mint failed. Falling back to form." \
               "Falló la generación inline. Caemos al formulario.")"
     else
@@ -1715,6 +1746,48 @@ if [[ ${#SKILLS_TO_SYNC[@]} -gt 0 ]]; then
         [[ -d "$src" ]] && do_cmd "cp -R $src → $dst" mkdir -p "$dst" && do_cmd "" cp -R "$src/." "$dst/"
       done
     fi
+  fi
+fi
+
+# _shared ships the guard helpers ingest-github/ingest-youtube import
+# (guard_untrusted_body/fence_untrusted). It carries no SKILL.md, so it is
+# deliberately outside the named "for sub in ...; do" list above (and that
+# list's own parity guard, scripts/test_bootstrap_install_parity.py, which
+# requires every listed name to ship one). Without this, a fresh per-skill
+# install never lands a sibling _shared dir, so every third-party write
+# from those two skills silently degrades to injection_scan: unavailable.
+shared_src="$SKILL_DIR/skills/_shared"
+shared_dst="$HOME/.claude/skills/_shared"
+if [[ -L "$shared_dst" ]]; then
+  warn "_shared is a SYMLINK — bootstrap will NOT write through it"
+elif [[ -d "$shared_dst/.git" ]]; then
+  log "_shared has its own .git/ directory — detected as YOUR FORK, skipping entirely"
+elif [[ -d "$shared_src" ]]; then
+  if [[ $DRY_RUN -eq 1 ]]; then
+    dry "would sync _shared → $shared_dst (with backup-before-overwrite)"
+  else
+    mkdir -p "$shared_dst"
+    # File-by-file sync with backup-before-overwrite (mirrors the sub-skill loop above)
+    STAMP="$(date +%Y-%m-%d-%H%M)"
+    SHARED_BACKED_UP=0
+    SHARED_CREATED=0
+    while IFS= read -r srcfile; do
+      rel="${srcfile#$shared_src/}"
+      dstfile="$shared_dst/$rel"
+      mkdir -p "$(dirname "$dstfile")"
+      if [[ -f "$dstfile" ]]; then
+        if ! cmp -s "$srcfile" "$dstfile"; then
+          cp "$dstfile" "$dstfile.bak-$STAMP"
+          BACKUPS+=("$dstfile.bak-$STAMP")
+          cp "$srcfile" "$dstfile"
+          SHARED_BACKED_UP=$((SHARED_BACKED_UP + 1))
+        fi
+      else
+        cp "$srcfile" "$dstfile"
+        SHARED_CREATED=$((SHARED_CREATED + 1))
+      fi
+    done < <(find "$shared_src" -type f)
+    ok "_shared: $SHARED_CREATED new, $SHARED_BACKED_UP backed up"
   fi
 fi
 

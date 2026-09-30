@@ -122,9 +122,9 @@ _PROVIDER = [
     ),
     SecretPattern(
         name="github-pat-classic",
-        regex=re.compile(r"gh[ps]_[A-Za-z0-9]{36,}", re.ASCII),
+        regex=re.compile(r"gh[pousr]_[A-Za-z0-9]{36,}", re.ASCII),
         redaction="[REDACTED-github-pat-classic]",
-        description="GitHub classic PAT (ghp_ / ghs_) or OAuth (gho_).",
+        description="GitHub classic PAT (ghp_), OAuth (gho_, what `gh auth token` prints), app user or installation (ghu_ / ghs_), or refresh (ghr_) token.",
     ),
     SecretPattern(
         name="heroku-api-key",
@@ -287,7 +287,9 @@ _CONNECTION_STRING = [
         name="generic-url-credential",
         regex=re.compile(
             r"\b(?!postgres(?:ql)?://|rediss?://|mongodb(?:\+srv)?://)"
-            r"([A-Za-z][A-Za-z0-9+.\-]*://[^\s/:@]*:)([^@\s]+)(@)",
+            # Bounded, not * / +: an unbounded scheme or password retries at
+            # every position of an "a.a.a." or "a://b:" run (30 KB took 39 s).
+            r"([A-Za-z][A-Za-z0-9+.\-]{0,31}://[^\s/:@]*:)([^@\s]{1,512})(@)",
             re.ASCII | re.IGNORECASE,
         ),
         redaction=r"\1REDACTED url password\3",

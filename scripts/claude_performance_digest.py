@@ -3,7 +3,8 @@
 Claude Performance Self-Improvement System: Weekly Digest
 
 Reads Claude Code JSONL session data, computes effectiveness metrics,
-diagnoses problems, writes prescriptive to-dos. Zero external deps.
+diagnoses problems, writes prescriptive to-dos. No third-party deps; needs
+the skill's hooks/_lib (secret redaction, bounded reads).
 
 Usage:
     python3 claude_performance_digest.py [--days N] [--dry-run]
@@ -38,6 +39,44 @@ VAULT_ROOT = SCRIPT_DIR.parent.parent  # ⚙️ Meta/scripts/ -> vault root
 PERFORMANCE_DIR = VAULT_ROOT / "⚙️ Meta" / "Performance"
 TODO_FILE = VAULT_ROOT / "⚙️ Meta" / "Claude To-dos.md"
 PROJECTS_ROOT = Path.home() / ".claude" / "projects"
+
+# Shared hooks/_lib helpers: secret redaction (MYC-4635) and bounded reads.
+# hooks/ sits beside scripts/ in the repo and the installed skill; a copy
+# deployed to a vault's ⚙️ Meta/scripts/ finds them in the installed skill.
+HOOKS_DIR = next(
+    (d for d in (SCRIPT_DIR.parent / "hooks",
+                 Path.home() / ".claude" / "skills" / "ai-brain-starter" / "hooks")
+     if all((d / "_lib" / f).is_file() for f in ("safe_read.py", "secret_patterns.py"))),
+    SCRIPT_DIR.parent / "hooks",
+)
+sys.path.insert(0, str(HOOKS_DIR))
+from _lib.safe_read import safe_read_text  # noqa: E402
+
+try:  # Fails CLOSED: without the registry, raw error text is withheld.
+    from _lib.secret_patterns import redact as _redact_secrets  # noqa: E402
+except Exception:  # pragma: no cover - _redact_text has the closed fallback
+    _redact_secrets = None
+    print("performance-digest: secret redaction unavailable; tool-error text will not be recorded",
+          file=sys.stderr)
+
+
+def _redact_text(raw: str) -> "str | None":
+    """Redact secrets from tool-error text before it is truncated or persisted.
+
+    Fails CLOSED: if the shared registry could not be imported, or redaction
+    itself raises, return None and the caller records nothing, so no raw text
+    reaches a synced/committed file and no placeholder masquerades as a
+    recurring error.
+    """
+    if not raw:
+        return raw
+    if _redact_secrets is None:
+        return None
+    try:
+        return _redact_secrets(raw)[0]
+    except Exception:
+        return None
+
 
 # ── Tool classification ──────────────────────────────────────────────
 
@@ -205,7 +244,13 @@ def analyze_session(jsonl_path):
             content = msg.get("content", []) if isinstance(msg.get("content"), list) else []
             for block in content:
                 if block.get("is_error") or rec_type == "tool_error":
-                    text = block.get("text", "")[:200] if isinstance(block.get("text"), str) else ""
+                    raw_text = block.get("text", "") if isinstance(block.get("text"), str) else ""
+                    # Redact HERE, before dict-key use/truncation: slicing
+                    # first can cut a credential in half.
+                    text = _redact_text(raw_text)
+                    if text is None:  # unredactable text is never recorded
+                        continue
+                    text = text[:200]
                     tool_id = block.get("tool_use_id", "")
                     tool_errors.append((tool_id, text))
 
@@ -261,7 +306,7 @@ def analyze_subagents(jsonl_path):
     agents = []
     for meta_file in subagent_dir.glob("*.meta.json"):
         try:
-            with open(meta_file) as f:
+            with open(meta_file, encoding="utf-8") as f:
                 meta = json.load(f)
         except (json.JSONDecodeError, OSError):
             continue
@@ -413,7 +458,9 @@ def generate_report(sessions_data, agents_data, days):
     lines.append("| Project | Turns | % |")
     lines.append("|---------|-------|---|")
     for proj, count in project_turns.most_common():
-        pct = count / total_turns * 100
+        # Sessions with no assistant record still get a row, so this loop can
+        # run while total_turns is 0.
+        pct = count / total_turns * 100 if total_turns else 0
         lines.append(f"| {proj} | {count} | {pct:.0f}% |")
     lines.append("")
 
@@ -496,7 +543,7 @@ def generate_report(sessions_data, agents_data, days):
         lines.append("")
         # Read prior report's frontmatter for comparison
         try:
-            with open(prior_reports[0]) as f:
+            with open(prior_reports[0], encoding="utf-8") as f:
                 prior_text = f.read()
             prior_osr_match = re.search(r"one_shot_rate:\s*([\d.]+%|N/A)", prior_text)
             if prior_osr_match and global_one_shot is not None:
@@ -519,59 +566,39 @@ def generate_report(sessions_data, agents_data, days):
 MEMORY_FILE = Path.home() / ".claude" / "CLAUDE.md"
 
 
-def _load_dedupe_sources(vault_root: Path) -> str:
+def _load_dedupe_sources(vault_root: Path) -> "str | None":
     """Collect text from all places a shipped rule might already live.
 
     Checks: ~/.claude/CLAUDE.md, vault CLAUDE.md, cross-session MEMORY.md
     files under ~/.claude/projects/, vault rules files, and ~/.claude/hooks/*.py.
     Returns a single concatenated string for tag-presence checks.
     """
-    chunks = []
+    claude_home = Path.home() / ".claude"
+    paths = [claude_home / "CLAUDE.md", vault_root / "CLAUDE.md"]
+    # Fixed depth, not rglob: rglob never descends a symlinked memory/ dir, so
+    # it found no MEMORY.md at all where those dirs are symlinks.
+    for folder, pattern in ((claude_home / "projects", "*/memory/MEMORY.md"),
+                            (vault_root / "⚙️ Meta" / "rules", "*.md"),
+                            (claude_home / "hooks", "*.py")):
+        if folder.is_dir():
+            paths.extend(folder.glob(pattern))
+    # Bounded reads (a cloud-synced or FIFO path can hang read_text); resolve()
+    # because safe_read refuses a symlink, and a symlinked CLAUDE.md is common.
+    reads = [(p, _read_resolved(p)) for p in paths]
+    # An existing CLAUDE.md that cannot be read makes dedupe unreliable: return
+    # None so the caller writes no rule rather than risk a duplicate.
+    if any(p.name == "CLAUDE.md" and p.exists() and not (r and r.ok) for p, r in reads):
+        print("performance-digest: a CLAUDE.md could not be read; writing no rules this run",
+              file=sys.stderr)
+        return None
+    return "\n".join(r.text for _, r in reads if r and r.ok and r.text)
 
-    # 1. ~/.claude/CLAUDE.md (global)
-    global_claude = Path.home() / ".claude" / "CLAUDE.md"
-    if global_claude.exists():
-        try:
-            chunks.append(global_claude.read_text(errors="ignore"))
-        except OSError:
-            pass
 
-    # 2. Vault CLAUDE.md
-    vault_claude = vault_root / "CLAUDE.md"
-    if vault_claude.exists():
-        try:
-            chunks.append(vault_claude.read_text(errors="ignore"))
-        except OSError:
-            pass
-
-    # 3. Cross-session memory files under ~/.claude/projects/
-    projects_root = Path.home() / ".claude" / "projects"
-    if projects_root.exists():
-        for mem in projects_root.rglob("MEMORY.md"):
-            try:
-                chunks.append(mem.read_text(errors="ignore"))
-            except OSError:
-                pass
-
-    # 4. Vault rules files (⚙️ Meta/rules/*.md)
-    rules_dir = vault_root / "⚙️ Meta" / "rules"
-    if rules_dir.exists():
-        for f in rules_dir.glob("*.md"):
-            try:
-                chunks.append(f.read_text(errors="ignore"))
-            except OSError:
-                pass
-
-    # 5. ~/.claude/hooks/*.py (tags embedded in hook comments/code)
-    hooks_dir = Path.home() / ".claude" / "hooks"
-    if hooks_dir.exists():
-        for f in hooks_dir.glob("*.py"):
-            try:
-                chunks.append(f.read_text(errors="ignore"))
-            except OSError:
-                pass
-
-    return "\n".join(chunks)
+def _read_resolved(p: Path):
+    try:
+        return safe_read_text(p.resolve(), errors="ignore")
+    except (OSError, RuntimeError):  # a symlink loop raises RuntimeError on Python 3.9
+        return None
 
 
 # Map prescription types to MEMORY.md rules (behavioral) vs to-dos (investigation)
@@ -600,6 +627,8 @@ def apply_prescriptions(prescriptions, prescription_types):
     written_types = []  # track which types were actually written (not deduped)
     for rx, rx_type in zip(prescriptions, prescription_types):
         if rx_type in BEHAVIORAL_RULES:
+            if dedupe_text is None:
+                continue
             rule_key = rx_type.lower().replace(" ", "_")
             tag = f"performance_{rule_key}"
             if tag in dedupe_text:
@@ -611,7 +640,7 @@ def apply_prescriptions(prescriptions, prescription_types):
             written_types.append(rx_type)
 
     if new_rules:
-        with open(MEMORY_FILE, "a") as f:
+        with open(MEMORY_FILE, "a", encoding="utf-8") as f:
             for rule in new_rules:
                 f.write(rule + "\n")
         rules_written = len(new_rules)
@@ -619,7 +648,7 @@ def apply_prescriptions(prescriptions, prescription_types):
     # ── Investigation items -> Claude To-dos ──
     existing_todos = ""
     if TODO_FILE.exists():
-        with open(TODO_FILE, "r") as f:
+        with open(TODO_FILE, "r", encoding="utf-8") as f:
             existing_todos = f.read()
 
     new_todos = []
@@ -638,7 +667,7 @@ def apply_prescriptions(prescriptions, prescription_types):
             new_todos.append(rule_summary)
 
     if new_todos:
-        with open(TODO_FILE, "a") as f:
+        with open(TODO_FILE, "a", encoding="utf-8") as f:
             f.write("\n")
             for todo in new_todos:
                 f.write(todo + "\n")
@@ -692,7 +721,7 @@ def main():
 
     # Write report file (skip with --no-report for prescriptions-only mode)
     if not no_report:
-        with open(report_path, "w") as f:
+        with open(report_path, "w", encoding="utf-8") as f:
             f.write(report)
         print(f"Report saved: {report_path}")
     else:
