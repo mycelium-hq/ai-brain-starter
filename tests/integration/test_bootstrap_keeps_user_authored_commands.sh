@@ -23,6 +23,9 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BOOTSTRAP="$REPO_ROOT/bootstrap.sh"
+# HOME alone does not sandbox ~ on Windows -- see lib/sandbox_home.sh.
+# shellcheck source=tests/integration/lib/sandbox_home.sh
+. "$REPO_ROOT/tests/integration/lib/sandbox_home.sh"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -72,8 +75,9 @@ run_block() {
   (
     set -euo pipefail
     # Read by the sourced block, not by this file (shellcheck cannot see that).
-    # shellcheck disable=SC2034,SC2329
-    SKILL_DIR="$1"; HOME="$2"
+    # shellcheck disable=SC2034
+    SKILL_DIR="$1"
+    sandbox_home "$2"   # HOME + USERPROFILE, so the block writes only under the fixture
     # shellcheck disable=SC2034
     UPDATED=(); SKIPPED=(); BACKUPS=()
     # shellcheck disable=SC2329
