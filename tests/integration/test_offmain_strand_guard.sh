@@ -193,10 +193,7 @@ merge_case_block_resolution_modifies(){
 # With no origin ref and no merge in progress, NEITHER exemption route is
 # active at all (both `_have_origin_ref` and `_merge_head_on_default` stay 0),
 # so this proves the exemption never falls back to comparing against the local
-# <default> branch -- not, as an earlier version of this comment claimed, that
-# it resists an "empty-string" lookup-equality trap: this case never reaches a
-# comparison of any kind, on either the old rev-parse implementation or the
-# current diff-index one.
+# <default> branch: this case never reaches a comparison of any kind.
 no_origin_ref_case_block(){
   local d; d="$(mktemp -d)"
   (
@@ -539,7 +536,7 @@ new_artifacts_at_scale_case_block(){
 # `git merge` (no --no-commit) never runs pre-commit; it runs pre-merge-commit,
 # which pre-commit-template.sh does not chain -- before pre-merge-commit-
 # template.sh existed, this exact merge went through with NO hook running at
-# all (review finding F3, reproduced live in extra.r691.sh's X1). The origin
+# all. The origin
 # route inside the guard does not depend on MERGE_HEAD, so it still works here
 # even though MERGE_HEAD itself is not yet written at pre-merge-commit time.
 # (q) a NEW artifact path starting with ':' -- BLOCK. A candidate path is
@@ -609,12 +606,10 @@ diff_index_failure_case_block(){
 }
 
 # (v) the stale-scratch sweep must reap only DEAD dirs -- and must be covered
-# at all. Round 3 added a `find ... -exec rm -rf {} +` inside the git dir to
+# at all. The guard runs `find ... -exec rm -rf {} +` inside the git dir to
 # reap `guard-staged.*` left behind by a hook killed with SIGKILL, where a trap
-# cannot run. That block shipped with NO test: deleting it outright left the
-# whole suite green. That is exactly (u)'s defect class, reintroduced by the
-# very round that fixed (u), on the ONE block in this file that runs `rm -rf`
-# inside `.git`. Found by an independent review of round 3.
+# cannot run. It is the only block in the guard that deletes inside `.git`, so
+# it gets its own test: deleting the block must turn this case red.
 #
 # Three of the four assertions are negative controls, because an over-eager
 # sweep is worse than no sweep: it would delete a CONCURRENT run's scratch dir

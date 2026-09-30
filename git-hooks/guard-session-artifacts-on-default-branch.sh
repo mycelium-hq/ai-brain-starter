@@ -18,8 +18,7 @@
 # only at the allocation block below: if BOTH scratch-dir routes fail, the
 # guard cannot list what is staged at all, so it refuses instead of guessing
 # — and a code-only commit refuses too. That state is too degraded to tell
-# artifact-staged from code-only apart, so it fails closed. An independent
-# review flagged that round 3 rewrote that block and left this line absolute.
+# artifact-staged from code-only apart, so it fails closed.
 #
 # CARVE-OUT: a staged artifact is exempt when the STAGED tree already agrees with
 # the default branch's remote-tracking ref (refs/remotes/origin/<default>), or —
@@ -99,17 +98,10 @@ _def="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | 
 # failure here used to REFUSE unconditionally, even with zero session artifacts
 # staged — contradicting this guard's own contract (header: "Off-branch code
 # work is unaffected").
-# WHICH attempt can actually fail, measured on Darwin 25.6.0 against
-# /usr/bin/mktemp: the TEMPLATED first one, `mktemp -d <dir>/guard-staged.XXXXXX`,
-# does — rc=1 "Permission denied" against a mode-555 dir, rc=1 "No such file or
-# directory" against an absent one. That is the state this fallback exists for.
-# The BARE second one is a different animal on macOS: it never consults $TMPDIR
-# at all, returning rc=0 and a /var/folders/…/T/tmp.* path with TMPDIR=/nonexistent,
-# with TMPDIR at a mode-555 dir, and with TMPDIR unset alike. So an earlier
-# version of this comment, which named "TMPDIR pointing at a reaped /var/folders
-# dir, or /tmp full/read-only" as the measured trigger, was wrong on both the
-# variable and the mechanism — corrected here rather than deleted, because the
-# fallback itself is real and the wrong reason is what would get copied.
+# Measured on Darwin 25.6.0 with /usr/bin/mktemp: the TEMPLATED attempt,
+# `mktemp -d <dir>/guard-staged.XXXXXX`, fails (rc=1) on a mode-555 or missing
+# dir, which is the state this fallback exists for. The BARE attempt ignores
+# $TMPDIR on macOS and returns a /var/folders/…/T/tmp.* path either way.
 # Keep both attempts: they fail independently of each other, and a bare-mktemp
 # failure on its own is exactly what test (t) drives. Only if BOTH fail does the
 # guard still refuse outright (fail closed — a repo whose own .git dir cannot be
@@ -248,9 +240,8 @@ fi
 # symlink swap shows up here even when the bytes match. A candidate the ref
 # has no entry for AND the index also lacks (a staged deletion the ref already
 # made) never appears either way, so it reads as "no difference" — exempt.
-# This is the fix for the review's HIGH cost finding: two spawns total here,
-# never one per candidate, so a merge staging thousands of unchanged artifacts
-# costs the same two spawns as one.
+# Two spawns total here, never one per candidate, so a merge staging thousands
+# of unchanged artifacts costs the same as a merge staging one.
 # --literal-pathspecs: a candidate path is always used AS A PATHSPEC ARGUMENT
 # here, and without this flag git treats one that STARTS WITH ':' as pathspec
 # MAGIC (":(glob)...", ":!...", etc), not a literal path. A path git cannot
