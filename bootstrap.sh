@@ -1803,6 +1803,7 @@ fi
 # This was the surface bug behind the 2026-05-14 install report where
 # /second-brain-mapping didn't appear in the palette after install completed.
 # ───────────────────────────────────────────────────────────────────────────────
+# ai-brain:slash-commands:start
 hdr "Installing slash commands"
 COMMANDS_SRC="$SKILL_DIR/commands"
 COMMANDS_DST="$HOME/.claude/commands"
@@ -1811,12 +1812,40 @@ if [[ -d "$COMMANDS_SRC" ]]; then
   COMMAND_COUNT=0
   COMMAND_BACKED_UP=0
   STAMP="$(date +%Y-%m-%d-%H%M)"
+  # Provenance: every blob this repo ever shipped under commands/. An installed
+  # command that differs from the incoming one is either a stale copy of an
+  # older upstream version (replace it, backup first) or a command the user
+  # wrote (keep it). Before this, the only way to keep a customized command was
+  # to put the same edit in the checkout's commands/ too — and a dirty checkout
+  # blocks every auto-update from then on, silently, for weeks. On a non-git or
+  # shallow checkout provenance is unknowable: SHIPPED_BLOBS stays empty and
+  # every differing copy is replaced with a backup, exactly as before. The
+  # empty --show-prefix means SKILL_DIR is the repo's own root, so an archive
+  # install that sits inside some OTHER repo (a version-controlled ~/.claude)
+  # never reads that repo's history.
+  SHIPPED_BLOBS=""
+  if cmd_prefix="$(git -C "$SKILL_DIR" rev-parse --show-prefix 2>/dev/null)" \
+     && [[ -z "$cmd_prefix" ]] \
+     && [[ "$(git -C "$SKILL_DIR" rev-parse --is-shallow-repository 2>/dev/null)" == "false" ]]; then
+    SHIPPED_BLOBS="$(git -C "$SKILL_DIR" log --format= --raw --no-abbrev -- commands/ 2>/dev/null \
+      | awk 'NF >= 4 { print $3; print $4 }' | sort -u)" || SHIPPED_BLOBS=""
+  fi
   for cmd_src in "$COMMANDS_SRC"/*.md; do
     [[ -f "$cmd_src" ]] || continue
     cmd_name="$(basename "$cmd_src")"
     cmd_dst="$COMMANDS_DST/$cmd_name"
     if [[ -f "$cmd_dst" ]]; then
       if ! cmp -s "$cmd_src" "$cmd_dst"; then
+        if [[ -n "$SHIPPED_BLOBS" ]]; then
+          # --path applies the repo's attributes (eol), so a CRLF copy of a
+          # shipped file still hashes to the blob that shipped it.
+          dst_blob="$(git -C "$SKILL_DIR" hash-object --path="commands/$cmd_name" "$cmd_dst" 2>/dev/null || true)"
+          if [[ -n "$dst_blob" ]] && ! printf '%s\n' "$SHIPPED_BLOBS" | grep -qxF "$dst_blob"; then
+            warn "commands: kept your /${cmd_name%.md} — you wrote it, so it is not replaced. Upstream's version: $cmd_src"
+            SKIPPED+=("/${cmd_name%.md} slash command (yours; upstream's version at $cmd_src)")
+            continue
+          fi
+        fi
         cp "$cmd_dst" "$cmd_dst.bak-$STAMP"
         BACKUPS+=("$cmd_dst.bak-$STAMP")
         cp "$cmd_src" "$cmd_dst"
@@ -1836,6 +1865,7 @@ if [[ -d "$COMMANDS_SRC" ]]; then
 else
   warn "commands/ directory not found at $COMMANDS_SRC — slash commands will not appear in palette"
 fi
+# ai-brain:slash-commands:end
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Humanizer
