@@ -68,7 +68,7 @@ below to confirm on any later revision):
 | Hook | Work it does | Bound |
 |---|---|---|
 | `lint-claude-settings.py` (+ `--test`) | parse + lint one JSON file | single small file |
-| `check-claude-code-version.sh` | read one cached version string | cached, no walk |
+| `check-claude-code-version.sh` | find the `claude` process above the hook (a few `ps` / `/proc` reads), read one cached banner; on a cache miss only, ask that binary `--version` and list the `claude` installs | cached per binary; every probe bounded by a perl alarm; one directory level of `~/Library/LaunchAgents`, no recursion |
 | `first-week-checkin.py` | read an install-date marker | marker read + budget guard |
 | `migrate-to-user-level.py` | one-shot settings migration check | idempotent, no walk |
 | `surface-orphan-claude-branches.py` | `git for-each-ref` + one `iterdir` | bounded git op + 1 dir level |

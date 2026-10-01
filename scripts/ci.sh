@@ -623,6 +623,16 @@ INTEGRATION_TESTS=(
   # lib/gnu_stat_shim.sh so the Linux code path is exercised deterministically
   # from any host.
   test_check_claude_code_version_cache_age
+  # MYC-5205: the version hook measured the PATH-first `claude`, not the binary
+  # running the session, and its cache replayed one binary's reading into
+  # another's. Drives the real hook under a compiled fake `claude` ancestor (a
+  # script cannot be one: ps/proc report its interpreter) and proves the running
+  # binary wins, the PATH fallback is labeled, ONE skew warning line names
+  # every disagreeing install while an all-equal fleet stays silent, an npm
+  # install is read from package.json and never spawned, and a hung
+  # `claude --version` cannot hang the hook. 29 of its 36 assertions fail on the
+  # pre-fix hook (CHECK_CLAUDE_VERSION_TARGET reruns it against any copy).
+  test_check_claude_code_version_running_binary
   # Same bug class, vault-safe-commit.sh's non-PID lock-age check: a lock
   # whose age cannot be proven must never be treated as stale and removed.
   # Runs the real script under the same GNU-stat shim.

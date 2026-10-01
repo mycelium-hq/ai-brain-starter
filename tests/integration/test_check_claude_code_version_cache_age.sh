@@ -28,6 +28,13 @@
 #   stdout -- the script aborted before ever reaching `cat "$CACHE_FILE"`);
 #   passes once the mtime read is GNU-first + numeric-validated.
 #
+# The cache file is PINNED (CLAUDE_VERSION_CHECK_CACHE_FILE). Since MYC-5205 the
+# hook keys its cache by the Claude Code binary that runs the session, so without
+# the pin this test would depend on which claude is above it in the process tree
+# -- and run from inside a Claude Code session (where the session's own claude is
+# an ancestor) it read an empty, differently-keyed cache and failed. The key
+# derivation has its own coverage in test_check_claude_code_version_running_binary.sh.
+#
 # Self-contained. Exit 0 = pass, 1 = fail.
 
 set -u
@@ -71,9 +78,9 @@ printf '%s\n' "$BANNER" > "$CACHE_FILE"
 # branch that this test exercises returns before ever touching gh.
 # HOME (and, on Windows, USERPROFILE) are already exported by sandbox_home
 # above -- re-stating HOME= here alone would redirect it without its
-# Windows pair, so it is intentionally left out; PATH is the only override
-# this specific call needs.
-out="$(PATH="$SHIMDIR:$PATH" bash "$TARGET" 2>"$TMP/stderr")"
+# Windows pair, so it is intentionally left out; PATH and the cache pin are
+# the only overrides this specific call needs.
+out="$(PATH="$SHIMDIR:$PATH" CLAUDE_VERSION_CHECK_CACHE_FILE="$CACHE_FILE" bash "$TARGET" 2>"$TMP/stderr")"
 
 echo "$out" | grep -qF "$BANNER" ||
   fail "fresh cache under GNU stat: expected the cached banner on stdout, got: [$out] (stderr: $(cat "$TMP/stderr"))"
