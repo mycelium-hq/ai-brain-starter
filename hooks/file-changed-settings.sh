@@ -9,7 +9,9 @@ FILE=$(printf '%s' "$PAYLOAD" | python3 -I -c 'import json,sys;d=json.load(sys.s
 [ -z "$FILE" ] && exit 0
 [ ! -f "$FILE" ] && exit 0
 
-if ! python3 -I -c "import json,sys;json.load(open('$FILE'))" 2>/dev/null; then
+# The path is an argument, never part of the program: spliced into the source, a quote in it
+# breaks the program or ends it early.
+if ! python3 -I -c 'import json,sys;json.load(open(sys.argv[1]))' "$FILE" 2>/dev/null; then
   echo "[file-changed] INVALID JSON in $FILE — session settings may be broken. Validate before continuing." >&2
   exit 0
 fi

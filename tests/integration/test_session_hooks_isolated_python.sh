@@ -15,6 +15,9 @@
 #      logged, a settings file is reported as valid, a broken one as invalid)
 #   3. every python3 a hook starts carries -I. This half does not depend on the
 #      interpreter: it holds even where json is imported before any script line runs.
+#   4. the FileChanged hook gives Python the changed file's path as data, not as part of
+#      the program: a path holding a single quote is still validated, and a path built
+#      to end the string and run a statement runs nothing.
 #
 # CHECK_HOOKS_DIR=<dir> runs the same cases against another copy of the hooks (that is
 # how hooks without -I are shown RED). Self-contained. Exit 0 = pass, 1 = fail.
@@ -132,6 +135,59 @@ else
   bad "file-changed: a broken settings file should be reported as invalid" "rc=$RC out=[$OUT] err=[$ERR]"
 fi
 check_isolated "file-changed (broken file)"
+
+# =============================================================================
+echo "=== FileChanged reads the changed file's path as data, never as Python source"
+# The validity check used to be a python3 -c whose SOURCE held the path: open('<path>'). A
+# single quote in the path (a directory named "it's here") broke that program, so a valid
+# file was reported as INVALID JSON, and a path built to end the string ran what followed.
+QDIR="$TMP/it's here"
+mkdir -p "$QDIR"
+printf '{"mcpServers": {}}\n' > "$QDIR/it's valid.json"
+printf '{"broken": \n' > "$QDIR/it's broken.json"
+run_hook file-changed-settings.sh "{\"file_path\":\"$QDIR/it's valid.json\"}"
+if has "$ERR" "updated and parses OK" && ! has "$ERR" "INVALID JSON"; then
+  ok "file-changed: a valid settings file whose path holds a single quote is reported as parsing"
+else
+  bad "file-changed: a single quote in the path made a valid file look invalid" "rc=$RC out=[$OUT] err=[$ERR]"
+fi
+check_isolated "file-changed (quoted path)"
+run_hook file-changed-settings.sh "{\"file_path\":\"$QDIR/it's broken.json\"}"
+if has "$ERR" "INVALID JSON" && ! has "$ERR" "parses OK"; then
+  ok "file-changed: a broken settings file whose path holds a single quote is still reported as invalid"
+else
+  bad "file-changed: a broken file under a quoted path should be reported as invalid" "rc=$RC out=[$OUT] err=[$ERR]"
+fi
+
+# A path built to end the string and run a statement of its own. Its first part is a real, valid
+# file, so the old program got as far as the injected statement; the marker is created in the
+# hook's working directory.
+INJ_DIR="$TMP/inj"
+mkdir -p "$INJ_DIR"
+printf '{}\n' > "$INJ_DIR/x"
+INJ="$INJ_DIR/x')); open('INJECTED','w').write('PWNED'); (('"
+printf '{}\n' > "$INJ"
+# positive control: spliced into Python source, that name does run its statement
+( cd "$HOSTILE" && "$PY3" -I -c "import json,sys;json.load(open('$INJ'))" ) > /dev/null 2>&1
+if [ -e "$HOSTILE/INJECTED" ]; then
+  ok "injection: that path, spliced into Python source, runs its own statement (the check can fail)"
+else
+  bad "injection: the crafted path does not inject, so the check below proves nothing" "$(ls -A "$HOSTILE")"
+fi
+rm -f "$HOSTILE/INJECTED"
+run_hook file-changed-settings.sh "{\"file_path\":\"$INJ\"}"
+if [ ! -e "$HOSTILE/INJECTED" ]; then
+  ok "injection: a crafted path ran nothing"
+else
+  bad "injection: the changed file's path ran as Python source" "a marker was created in the hook's working directory"
+  rm -f "$HOSTILE/INJECTED"
+fi
+if has "$ERR" "updated and parses OK"; then
+  ok "injection: the file with the crafted name is read and validated like any other"
+else
+  bad "injection: the file with the crafted name should be reported as parsing" "rc=$RC out=[$OUT] err=[$ERR]"
+fi
+check_isolated "file-changed (crafted path)"
 
 echo
 echo "passed=$PASS failed=$FAIL"
