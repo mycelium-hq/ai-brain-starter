@@ -6,7 +6,6 @@ Type: `person`.
 Cross-vault fields: mention count + last-journal-iso are computed by scanning
 all journals for backlinks to this person. Expensive per-file, cached per-run.
 """
-import glob
 import os
 import re
 import sys
@@ -14,6 +13,7 @@ import yaml
 
 from _base import (
     VAULT, iso_date_from, count_words, ExtractionResult,
+    is_inside_vault, iter_vault_markdown,
 )
 from _floors import floor_num_from_fm
 from _lib.safe_read import safe_read_text
@@ -43,7 +43,7 @@ PUBLIC_FIGURE_RELATIONSHIP_HINTS = {
 # person_journal_mention_count = 0 and an empty person_floor_cooccurrence,
 # which in turn switched off the lucky-charm / drag-people / stale-relationship
 # sections of the insight engine for the whole vault. Pick the first candidate
-# that exists; fall back to the English default so the glob below still yields
+# that exists; fall back to the English default so the walk below still yields
 # nothing (rather than crashing) on a vault with no journal folder at all.
 _JOURNAL_CANDIDATES = (
     "📓 Journals", "Journals",       # en (Phase 3 default)
@@ -61,7 +61,7 @@ JOURNALS_ROOT = os.environ.get("JOURNALS_FOLDER") or next(
     os.path.join(VAULT, _JOURNAL_CANDIDATES[0]),
 )
 
-# This glob walks a VAULT, and a vault commonly lives in a cloud-synced folder
+# This walk covers a VAULT, and a vault commonly lives in a cloud-synced folder
 # (Drive / iCloud / Dropbox). There, an ordinary-looking `.md` can be a
 # dataless placeholder or sit on a stalled mount, and a plain `open().read()`
 # blocks forever with no timeout — hanging the whole extraction run on one
@@ -101,6 +101,14 @@ def _warn_unread(fp, result):
             pass
 
 
+def _warn(message):
+    """Print a warning to stderr without ever raising: this module is imported, not run."""
+    try:
+        print(message, file=sys.stderr)
+    except Exception:
+        pass
+
+
 def _build_journal_index():
     """Scan every journal once, extract (name_mentioned, date_iso, floor_num)."""
     global _JOURNAL_INDEX
@@ -110,7 +118,13 @@ def _build_journal_index():
     _JOURNAL_INDEX = {}
     wikilink_re = re.compile(r"\[\[([^\]|#]+?)(?:\|[^\]]+)?\]\]")
 
-    for fp in glob.glob(os.path.join(JOURNALS_ROOT, "**", "*.md"), recursive=True):
+    if os.path.isdir(JOURNALS_ROOT) and not is_inside_vault(JOURNALS_ROOT):
+        # JOURNALS_FOLDER, or a journal folder that is itself a link, pointing out
+        # of the vault. Nothing in it is read, so say so rather than let every
+        # person read as "no mentions".
+        _warn(f"WARNING: journal folder resolves outside the vault, not indexed: {JOURNALS_ROOT}")
+
+    for fp in iter_vault_markdown(JOURNALS_ROOT):
         result = safe_read_text(
             fp, timeout=JOURNAL_READ_TIMEOUT_S, max_bytes=JOURNAL_MAX_BYTES,
         )
@@ -123,7 +137,7 @@ def _build_journal_index():
             # loud. safe_read_text returns its failures as a status rather than
             # raising, so timeout / offline-placeholder / too-large / binary /
             # decode-error all skip exactly as before, now named.
-            # "missing" stays quiet: the glob legitimately races a delete.
+            # "missing" stays quiet: the walk legitimately races a delete.
             if result.status != "missing":
                 _warn_unread(fp, result)
             continue

@@ -7,7 +7,6 @@ Every extractor imports from here. Keep it caveman-dense.
 Contract: extractors NEVER generate prose. All fields are verbatim extractions,
 regex matches, enum lookups, or counts. Zero LLM involvement in this base.
 """
-import glob
 import os
 import re
 import sys
@@ -93,9 +92,11 @@ SKIP_PARTS = {
 # every personal-vault script would read — and metadata-extract would WRITE —
 # into the other vault, typically a live cloud-sync folder. Skip them by name.
 # That is a fast path, not the boundary: it covers only a folder linked in at the
-# vault root, and only by its name. is_inside_vault() below is what keeps the
-# extractors from reading or writing outside the vault, however deep the link
-# sits and whether a folder or a single note is the link.
+# vault root, and only by its name. The boundary is iter_vault_markdown() and
+# is_inside_vault() below. The extractors, the insight engine and
+# get_crm_names() walk the vault through the first, and the metadata writer
+# checks the second, so a link out of the vault is neither read nor written
+# however deep it sits and whether a folder or a single note is the link.
 try:
     SKIP_PARTS |= {
         _e for _e in os.listdir(VAULT)
@@ -256,9 +257,14 @@ def get_crm_names():
     """All CRM basenames (no extension). Cached per process."""
     global _CRM_CACHE
     if _CRM_CACHE is None:
-        pattern = os.path.join(CRM_ROOT, "**", "*.md")
-        files = glob.glob(pattern, recursive=True)  # Rule 36: glob.glob, not pathlib
-        _CRM_CACHE = {os.path.splitext(os.path.basename(f))[0] for f in files}
+        if os.path.isdir(CRM_ROOT) and not is_inside_vault(CRM_ROOT):
+            # CRM_FOLDER, or a CRM folder that is itself a link, pointing out of
+            # the vault. Nothing in it is read, so say so rather than let it read
+            # as "no contacts".
+            print(f"WARNING: CRM folder resolves outside the vault, not read: {CRM_ROOT}",
+                  file=sys.stderr)
+        _CRM_CACHE = {os.path.splitext(os.path.basename(f))[0]
+                      for f in iter_vault_markdown(CRM_ROOT)}
     return _CRM_CACHE
 
 

@@ -17,13 +17,17 @@ What is asserted, at each place the pipeline touches a file:
     linked folder;
   - the writer (`process_file`) refuses a path that resolves outside the vault
     BEFORE it opens it, whichever way the path reached it;
-  - the run summary counts and prints a refusal instead of filing it as an error.
+  - the run summary counts and prints a refusal instead of filing it as an error;
+  - the extractors that read the vault themselves (concept backlinks, person
+    journals, CRM names) do not count a note reached through a link.
 Negative controls keep the guard honest: a note inside the vault is still
 written, and so is one in a vault that is itself reached through a symlink. The
 positive control proves the fixture really does reproduce the hazard.
 
-Hermetic: a temp vault, a temp "shared" folder beside it, and a stand-in for the
-person extractor. Nothing here reads a real journal folder or a real vault.
+Hermetic: a temp vault, a temp "shared" folder beside it, a stand-in for the
+person extractor where the extractor itself is not under test, and the real
+concept and person extractors pointed at the temp vault where it is. Nothing
+here reads a real journal folder or a real vault.
 
 Auto-discovered by scripts/ci.sh via the scripts/test_*.py glob.
 Run: python3 scripts/test_vault_metadata_boundary.py
@@ -55,6 +59,8 @@ sys.path.insert(0, os.path.join(HERE, "extractors"))
 
 import _base  # noqa: E402
 import _dispatcher  # noqa: E402
+import concept  # noqa: E402
+import person  # noqa: E402
 
 _spec = importlib.util.spec_from_file_location(
     "vault_insight_engine", os.path.join(HERE, "vault-insight-engine.py"))
@@ -277,6 +283,69 @@ class VaultBoundary(unittest.TestCase):
         # The run went on past the refusal, and only the in-vault note changed.
         self.assertIn("person_journal_mention_count: 3", _read(self.inside_note))
         self.assertNotIn("person_journal_mention_count", _read(self.outside_paths[1]))
+
+    def test_concept_mentions_do_not_count_notes_reached_through_a_link(self):
+        """The backlink count reads the whole vault, so notes in a linked folder
+        were counted as mentions and written into the concept note."""
+        concept_note = os.path.join(self.vault, "📝 Notes", "Deep Work.md")
+        _write(concept_note, "---\ntype: concept\n---\n\n# Deep Work\n")
+        _write(os.path.join(self.vault, "📝 Notes", "Mentions It.md"),
+               "---\ntype: note\n---\n\nSee [[Deep Work]].\n")
+        elsewhere = os.path.join(self.root, "shared-notes")  # linked once, so each note is met once
+        for name in ("Elsewhere One.md", "Elsewhere Two.md"):
+            _write(os.path.join(elsewhere, name),
+                   "---\ntype: note\n---\n\nAlso [[Deep Work]].\n")
+        self._link(elsewhere, os.path.join(self.vault, "📝 Notes", "deeper"), True)
+        with mock.patch.object(concept, "VAULT", self.vault), \
+                mock.patch.object(concept, "_BACKLINK_INDEX", None):
+            status = _dispatcher.process_file(
+                concept_note, {"concept": concept}, {"crm_names": set()})
+        self.assertEqual(status, "WROTE")
+        self.assertIn("concept_mention_count: 1\n", _read(concept_note))
+
+    def test_person_journal_fields_do_not_count_journals_reached_through_a_link(self):
+        """The journal index reads the journal folder, so journals in a linked
+        folder fed the mention count and the last-journal date."""
+        journals = os.path.join(self.vault, "📓 Journals")
+        entry = ("---\ncreationDate: 2026-08-0{day}T21:10\ntype: journal\n---\n\n"
+                 "Spoke with [[Inside Person]] today.\n")
+        _write(os.path.join(journals, "2026-08-01.md"), entry.format(day=1))
+        for day, name in ((2, "Their One.md"), (3, "Their Two.md")):
+            _write(os.path.join(self.shared, name), entry.format(day=day))
+        self._link(self.shared, os.path.join(journals, "shared"), True)
+        with mock.patch.object(person, "JOURNALS_ROOT", journals), \
+                mock.patch.object(person, "_JOURNAL_INDEX", None):
+            status = _dispatcher.process_file(
+                self.inside_note, {"person": person}, {"crm_names": set()})
+        self.assertEqual(status, "WROTE")
+        written = _read(self.inside_note)
+        self.assertIn("person_journal_mention_count: 1\n", written)
+        self.assertIn('person_last_journal_iso: "2026-08-01"', written)
+
+    def test_crm_names_do_not_include_notes_reached_through_a_link(self):
+        crm = os.path.join(self.vault, "👤 CRM")  # Inside Person.md and the Team Share link
+        with mock.patch.object(_base, "CRM_ROOT", crm), \
+                mock.patch.object(_base, "_CRM_CACHE", None):
+            names = _base.get_crm_names()
+        self.assertEqual(names, {"Inside Person"})
+
+    def test_a_crm_folder_outside_the_vault_is_reported_not_silently_empty(self):
+        err = io.StringIO()
+        with mock.patch.object(_base, "CRM_ROOT", self.shared), \
+                mock.patch.object(_base, "_CRM_CACHE", None), \
+                contextlib.redirect_stderr(err):
+            names = _base.get_crm_names()
+        self.assertEqual(names, set())
+        self.assertIn("outside the vault", err.getvalue())
+
+    def test_a_journal_folder_outside_the_vault_is_reported_not_silently_empty(self):
+        err = io.StringIO()
+        with mock.patch.object(person, "JOURNALS_ROOT", self.shared), \
+                mock.patch.object(person, "_JOURNAL_INDEX", None), \
+                contextlib.redirect_stderr(err):
+            index = person._build_journal_index()
+        self.assertEqual(index, {})
+        self.assertIn("outside the vault", err.getvalue())
 
 
 if __name__ == "__main__":

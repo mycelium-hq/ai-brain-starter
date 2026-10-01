@@ -6,7 +6,6 @@ Type: `concept`.
 concept_mention_count + concept_last_mentioned_iso require a vault-wide backlink
 scan. Cached per-run. Dormant flag = last mention >180 days ago.
 """
-import glob
 import os
 import re
 import sys
@@ -17,13 +16,14 @@ import yaml
 
 from _base import (
     VAULT, SKIP_PARTS, iso_date_from, extract_section, wikilinks_in,
-    ExtractionResult,
+    ExtractionResult, iter_vault_markdown,
 )
 
 # extractors/ -> scripts/ -> repo root -> hooks/_lib. Reach the ONE audited
-# safe_read primitive rather than a local reader: the recursive vault-wide
-# glob below must survive a cloud placeholder / stalled mount / FIFO, and
-# scripts/check-cloud-safe-file-walkers.py refuses to trust anything else.
+# safe_read primitive rather than a local reader: the vault-wide walk below
+# must survive a cloud placeholder / stalled mount / FIFO, and
+# scripts/check-cloud-safe-file-walkers.py counts a call to iter_vault_markdown()
+# as a walk, so it refuses to trust anything else.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "hooks"))
 from _lib.safe_read import safe_read_text  # noqa: E402
 
@@ -46,7 +46,7 @@ def _build_backlink_index():
     _BACKLINK_INDEX = {}
     wikilink_re = re.compile(r"\[\[([^\]|#]+?)(?:\|[^\]]+)?\]\]")
 
-    for fp in glob.glob(os.path.join(VAULT, "**", "*.md"), recursive=True):
+    for fp in iter_vault_markdown():
         parts = set(fp.split(os.sep))
         if parts & SKIP_PARTS:
             continue
