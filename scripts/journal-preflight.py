@@ -306,7 +306,10 @@ def main():
             refreshed = refresh_message_exports()
         fp = _fetcher("journal-messages-fetch.py")
         if fp:
-            body, ok = _run(["python3", fp, "--since", since, "--until", until_d.isoformat()])
+            # The interpreter already running this script, never a bare "python3": PATH can
+            # put a shim first that refuses `python3 <script>` (exit 1), which leaves this
+            # section as the shim's advice text instead of the messages.
+            body, ok = _run([sys.executable, fp, "--since", since, "--until", until_d.isoformat()])
             body, rel_surfaced, probe = compress_surface_probe(body, relational)
             sections.append(("MESSAGES — family/partner + emotional threads in full; rest one-line (raw on disk)", body))
             (pulled if ok and body else failed).append("messages")
