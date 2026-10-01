@@ -30,12 +30,14 @@
 #      launcher hides it), fall back to `claude` on PATH. The printed line says
 #      which source it used and which file, so a reading is never anonymous.
 #   3. The cache is keyed by the binary measured (its path -- the running one, or
-#      PATH's when there is none), so one binary's reading is never replayed into
-#      a session running another; and a binary that is NEWER than its reading
-#      invalidates that reading, so an upgrade shows at once instead of after the
-#      TTL. When the running binary reports no version and PATH's is measured
-#      instead, that reading is saved under both names, so the running binary's
-#      next session finds it. Every fresh reading is also written to the original,
+#      PATH's when there is none), so one binary's reading is not replayed into a
+#      session running another, with one exception: when the running binary reports
+#      no version and PATH's is measured instead, that labeled reading is saved
+#      under both names, so the running binary's next session finds it (and keeps
+#      finding it until PATH's claude changes or the TTL ends, even if the running
+#      binary could answer by then). A reading is voided when the binary it is keyed
+#      to, or PATH's claude, is NEWER than it, so an upgrade shows at once instead
+#      of after the TTL. Every fresh reading is also written to the original,
 #      un-keyed file name as a mirror: this hook never reads it back, but other
 #      tools read that name as "the last banner".
 #   4. Skew watchdog, on a cache miss only: list every `claude` reachable through
@@ -67,8 +69,8 @@
 #   CLAUDE_VERSION_CHECK_CACHE_FILE         use exactly this file as the cache: no
 #                                           per-binary key, no mirror, no cleanup
 #
-# What it costs. A cache hit: a few `ps` (or /proc) reads and one file read. A miss
-# adds up to two `gh api` calls (not time-bounded, as before), up to two
+# What it costs. A cache hit: a few `ps` (or /proc) reads, a PATH lookup and one file
+# read. A miss adds up to two `gh api` calls (not time-bounded, as before), up to two
 # `claude --version` probes (10 s each) and the install scan: one directory level of
 # ~/Library/LaunchAgents plus a few globs, no recursive walk, 30 s at the outside. The
 # probes and the scan are bounded by perl's alarm, or by `timeout`; with neither
@@ -281,9 +283,8 @@ select_cache_file() {
 }
 
 find_claude_ancestor
-key_path=$ANC_PATH
-[[ -z "$key_path" ]] && key_path=$(command -v claude 2>/dev/null)
-select_cache_file "$key_path"
+path_claude=$(command -v claude 2>/dev/null)
+select_cache_file "${ANC_PATH:-$path_claude}"
 # Where THIS session looks for a reading. The measurement below can end up keyed
 # elsewhere (the claude above us said nothing, so PATH's is measured instead), but the
 # next session under the same claude will look here again, so a reading is also
@@ -292,8 +293,11 @@ LOOKUP_CACHE_FILE=$CACHE_FILE
 
 now=$(date +%s)
 # `-nt` is a shell builtin (no stat), and follows symlinks: a bin entry that points
-# at a reinstalled file is newer than a reading taken before the reinstall.
-if [[ -f "$CACHE_FILE" ]] && ! { [[ -n "$CACHE_BIN" ]] && [[ "$CACHE_BIN" -nt "$CACHE_FILE" ]]; }; then
+# at a reinstalled file is newer than a reading taken before the reinstall. PATH's
+# claude voids a reading as well as the keyed binary: a fallback reading is saved under
+# the running binary's name but describes PATH's claude, and every skew line lists it.
+if [[ -f "$CACHE_FILE" ]] && ! { [[ -n "$CACHE_BIN" ]] &&
+     { [[ "$CACHE_BIN" -nt "$CACHE_FILE" ]] || [[ "$path_claude" -nt "$CACHE_FILE" ]]; }; }; then
   file_mtime "$CACHE_FILE"
   last=$MTIME
   if [[ -n "$last" ]]; then
@@ -336,7 +340,6 @@ fi
 if [[ -z "$current" ]]; then
   # This reading is of PATH's claude, so it is cached under PATH's claude (and, when
   # a claude above us was found but reported nothing, under that one too).
-  path_claude=$(command -v claude 2>/dev/null)
   select_cache_file "$path_claude"
   if [[ -n "$path_claude" ]]; then
     current=$(probe_version "$path_claude")

@@ -25,11 +25,13 @@
 #   2. no claude ancestor -> PATH is used, and the line says so
 #   3. two installs at different versions -> ONE warning naming both; the same
 #      two at one version -> silence. An npm install is never spawned.
-#   4. one binary's cached reading is never replayed into a session running another,
-#      and a running claude that reports no version still gets cache hits (4b)
+#   4. one binary's cached reading is not replayed into a session running another
+#      (the labeled PATH fallback is the one exception), and a running claude that
+#      reports no version still gets cache hits (4b)
 # plus: a stale copy on a LaunchAgent PATH is named, the newest desktop bundle is
-# read, a hung `claude --version` cannot hang the hook, an upgrade in place
-# invalidates the cache, and the desktop path with a space in it survives `ps`.
+# read, a hung `claude --version` cannot hang the hook, an upgrade in place of the
+# running copy or of PATH's claude invalidates the cache, and the desktop path with
+# a space in it survives `ps`.
 #
 # The hook also runs in a directory nobody has vetted and reads PATHs and files it
 # does not own, so there are checks for what it must NOT do: import a module planted
@@ -685,10 +687,10 @@ reset_state
 if need_cc "upgrade"; then
   build_fake "$TMP/anc/claude" 9.9.9
   plant_path_claude 1.1.1
-  touch -t 202001010000 "$TMP/anc/claude"
+  touch -t 202001010000 "$TMP/anc/claude" "$PATHBIN/claude"
   via_ancestor "$TMP/anc/claude"; c1="$(gh_calls)"
-  # Age the reading by an hour: well inside the 6h TTL, so from here only the
-  # binary changing can void it (mtimes have one-second resolution on macOS).
+  # Age the reading by an hour: well inside the 6h TTL, so from here only a binary
+  # changing can void it (mtimes have one-second resolution on macOS).
   touch -t "$(an_hour_ago)" "$HOME"/.claude/.claude-code-version-check.*
   via_ancestor "$TMP/anc/claude"; c2="$(gh_calls)"
   touch "$TMP/anc/claude"                      # the file changed on disk
@@ -697,6 +699,41 @@ if need_cc "upgrade"; then
     ok "upgrade: unchanged binary -> cache hit; a binary newer than its reading -> a fresh reading"
   else
     bad "upgrade: a changed binary should void its cached reading" "calls: first=$c1 second=$c2 after-touch=$c3"
+  fi
+fi
+
+# =============================================================================
+echo "=== PATH's claude newer than a reading voids it, the fallback reading kept under the running binary's name too"
+reset_state
+if need_cc "fallback upgrade"; then
+  # The running claude reports no version, so PATH's is measured and the labeled reading is
+  # saved under both names. Upgrading PATH's claude voided the reading under PATH's name, but
+  # the same ancestor's next session looks under ITS name, whose binary had not changed, and
+  # went on printing "1.1.1 ... latest 2.0.0. Upgrade" for hours after PATH's claude was 2.0.0.
+  build_fake "$TMP/anc/claude" no-version-here
+  plant_path_claude 1.1.1
+  touch -t 202001010000 "$TMP/anc/claude" "$PATHBIN/claude"
+  LATEST=2.0.0
+  via_ancestor "$TMP/anc/claude"; f1="$(gh_calls)"; first="$ERR"
+  touch -t "$(an_hour_ago)" "$HOME"/.claude/.claude-code-version-check.*
+  via_ancestor "$TMP/anc/claude"; f2="$(gh_calls)"
+  plant_path_claude 2.0.0                      # upgraded in place: newer than every reading
+  via_ancestor "$TMP/anc/claude"; f3="$(gh_calls)"; upgraded="$ALL"
+  via_ancestor "$TMP/anc/claude"; f4="$(gh_calls)"
+  if has "$first" "1.1.1 (PATH claude:" && [ "$f2" = "$f1" ]; then
+    ok "fallback upgrade: the labeled 1.1.1 reading is a cache hit while nothing has changed"
+  else
+    bad "fallback upgrade: the setup should show a fallback reading and then a hit" "calls: first=$f1 second=$f2 err=[$first]"
+  fi
+  if [ "$f3" != "$f2" ] && ! has "$upgraded" "1.1.1"; then
+    ok "fallback upgrade: PATH's claude upgraded to 2.0.0 -> the same ancestor's next session measures again and no longer says 1.1.1"
+  else
+    bad "fallback upgrade: a stale 1.1.1 reading outlived PATH's upgrade" "calls: second=$f2 after-upgrade=$f3 all=[$upgraded]"
+  fi
+  if [ "$f4" = "$f3" ]; then
+    ok "fallback upgrade: that refresh happens once; the session after it is a cache hit again"
+  else
+    bad "fallback upgrade: the readings stayed older than PATH's claude, so every session refreshes" "calls: after-upgrade=$f3 next=$f4"
   fi
 fi
 
@@ -732,7 +769,7 @@ if need_cc "ancestor layouts"; then
   build_fake "$PKG/bin/claude.exe" 9.9.9
   printf '{"name":"@anthropic-ai/claude-code","version":"9.9.9"}\n' > "$PKG/package.json"
   ln -sf "../lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe" "$NPMP/bin/claude"
-  touch -t 202001010000 "$PKG/bin/claude.exe"
+  touch -t 202001010000 "$PKG/bin/claude.exe" "$PATHBIN/claude"
   via_ancestor "$NPMP/bin/claude"; n1="$(gh_calls)"
   H="$(headline)"
   # macOS reports the path the process was exec'd by (the bin symlink); Linux
