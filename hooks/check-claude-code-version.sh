@@ -44,8 +44,9 @@
 #      plist sets none), the usual install locations and the newest desktop
 #      bundle. npm installs are read from package.json (never spawned); one line
 #      names the copies (the first eight, newest first) when their versions
-#      disagree, and nothing prints when they agree. A scan that CRASHES says so:
-#      an empty answer must never be able to mean "could not look".
+#      disagree, and nothing prints when they agree. A copy whose version cannot
+#      be read is listed with a `?` but never counts as a version. A scan that
+#      CRASHES says so: an empty answer must never be able to mean "could not look".
 #
 # Environment (all optional; for odd launchers and for tests):
 #   CLAUDE_VERSION_CHECK_WALK_FROM_PID      pid the ancestor walk starts at
@@ -472,7 +473,10 @@ for p in cands:
     seen.add(r)
     rows.append((layout_version(p) or spawn_version(p) or "?", p))
 
-if len({v for v, _ in rows}) < 2:
+# A copy whose version could not be read is still LISTED ("?"), but it is not a
+# version: one refused wrapper beside an all-equal fleet is not skew.
+versions = {v for v, _ in rows if v != "?"}
+if len(versions) < 2:
     sys.exit(0)
 
 
@@ -496,7 +500,7 @@ line = ("[claude-code-version] SKEW: %d Claude Code installs report %d different
         "Sessions and scheduled jobs run whichever copy their PATH reaches first. "
         "Upgrade each npm install with its own --prefix; a bare npm i -g installs under "
         "whichever node comes first on PATH."
-        % (len(rows), len({v for v, _ in rows}), shown))
+        % (len(rows), len(versions), shown))
 if unreadable:
     line += " (%d LaunchAgent plist(s) could not be read.)" % unreadable
 sys.stdout.buffer.write((line + "\n").encode("utf-8", "replace"))

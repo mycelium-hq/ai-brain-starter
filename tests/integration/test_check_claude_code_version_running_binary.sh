@@ -379,10 +379,20 @@ fi
 rm -f "$TMP/stale/SPAWNED" "$HOME/.claude/.claude-code-version-check"*
 chmod 777 "$TMP/stale/bin/claude"
 run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1
-if [ ! -e "$TMP/stale/SPAWNED" ] && has "$ALL" "? $TMP/stale/bin/claude"; then
-  ok "spawn safety: the same wrapper, world-writable, is NOT run and is listed with an unknown version"
+if [ ! -e "$TMP/stale/SPAWNED" ] && [ -z "$OUT" ] && [ -z "$ERR" ]; then
+  ok "spawn safety: the same wrapper, world-writable, is NOT run; one refused copy beside an all-equal fleet is not skew"
 else
-  bad "spawn safety: a file anyone can write must not be executed" "spawned=$([ -e "$TMP/stale/SPAWNED" ] && echo yes || echo no) all=[$ALL]"
+  bad "spawn safety: a file anyone can write must not be executed, and its unknown version is not a version" "spawned=$([ -e "$TMP/stale/SPAWNED" ] && echo yes || echo no) stdout=[$OUT] stderr=[$ERR]"
+fi
+# beside REAL skew the refused copy is still listed (as '?'), but it is not counted as a version
+plant_npm_install "$TMP/fleet/node-c" 3.0.0
+rm -f "$TMP/stale/SPAWNED" "$HOME/.claude/.claude-code-version-check"*
+run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1 CLAUDE_VERSION_CHECK_KNOWN_INSTALLS="$TMP/fleet/node-c/bin/claude"
+if [ ! -e "$TMP/stale/SPAWNED" ] && has "$ALL" "? $TMP/stale/bin/claude" &&
+   has "$ALL" "3 Claude Code installs report 2 different versions"; then
+  ok "spawn safety: beside real skew the refused wrapper is listed with an unknown version and counted as no version"
+else
+  bad "spawn safety: expected 3 installs, 2 versions, the refused copy listed as '?'" "spawned=$([ -e "$TMP/stale/SPAWNED" ] && echo yes || echo no) all=[$ALL]"
 fi
 TEST_PATH="$TEST_PATH_SAVE"
 
