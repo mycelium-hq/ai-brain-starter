@@ -426,6 +426,51 @@ fi
 TEST_PATH="$TEST_PATH_SAVE"
 
 # =============================================================================
+echo "=== the copy the hook measured keeps the version it read, even when the scan would refuse to run it"
+reset_state
+# The hook runs the claude above it to read its version (it is already running this session),
+# and runs PATH's claude when there is none. The scan runs only files nobody else can write, so
+# a group-writable copy of a layout it cannot read, such as a hand-written wrapper under
+# umask 002, came out as '?' and counted as no version: a 2.1.0 session beside a 1.1.1 copy on
+# PATH printed nothing at all, though the hook had just been told 2.1.0.
+if need_cc "refused running copy"; then
+  build_fake "$TMP/anc/claude" 2.1.0
+  chmod 775 "$TMP/anc/claude"
+  plant_path_claude 1.1.1
+  LATEST=2.1.0
+  via_ancestor "$TMP/anc/claude"
+  if [ "$(skew_lines)" = 1 ] && has "$ALL" "2.1.0 $TMP/anc/claude" && has "$ALL" "1.1.1 $PATHBIN/claude"; then
+    ok "measured copy: a group-writable running claude (2.1.0) beside PATH's 1.1.1 -> one SKEW line naming both"
+  else
+    bad "measured copy: the running claude's version was dropped, so the skew vanished" "skew-lines=$(skew_lines) all=[$ALL]"
+  fi
+  # what the claude printed ends up in that line, so only its digits may: an escape sequence is not a version
+  build_fake "$TMP/anc/claude" '2.1.0\033[31mX'
+  chmod 775 "$TMP/anc/claude"
+  rm -f "$HOME/.claude/.claude-code-version-check"*
+  via_ancestor "$TMP/anc/claude"
+  skew_text="$(printf '%s\n' "$ALL" | sed -n '/SKEW/p')"
+  case $skew_text in *$'\033'*) esc=yes ;; *) esc=no ;; esac
+  if [ "$esc" = no ] && has "$skew_text" "2.1.0 $TMP/anc/claude"; then
+    ok "measured copy: control characters in the version it printed do not reach the SKEW line"
+  else
+    bad "measured copy: the SKEW line must show the version's digits only" "esc=$esc skew=[$skew_text]"
+  fi
+fi
+# the same for the PATH fallback: nothing above the hook, PATH's claude refused by the scan
+reset_state
+plant_path_claude 1.1.1
+chmod 775 "$PATHBIN/claude"
+plant_npm_install "$TMP/fleet/node-a" 4.0.0
+KNOWN="$TMP/fleet/node-*/bin/claude"; LATEST=4.0.0
+run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1
+if [ "$(skew_lines)" = 1 ] && has "$ALL" "1.1.1 $PATHBIN/claude" && has "$ALL" "4.0.0 $TMP/fleet/node-a/bin/claude"; then
+  ok "measured copy: a group-writable PATH claude (1.1.1) beside a 4.0.0 install -> one SKEW line naming both"
+else
+  bad "measured copy: the PATH claude's version was dropped, so the skew vanished" "skew-lines=$(skew_lines) all=[$ALL]"
+fi
+
+# =============================================================================
 echo "=== a hostile directory name cannot forge a line of output"
 reset_state
 plant_npm_install "$TMP/fleet/node-a" 4.0.0

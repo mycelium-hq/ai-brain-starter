@@ -350,11 +350,13 @@ latest=$(gh api repos/anthropics/claude-code/releases/latest --jq .tag_name 2>/d
 [[ -z "$latest" ]] && exit 0
 
 # Skew watchdog. Prints ONE line naming every distinct Claude Code copy when their
-# versions disagree; prints nothing when they agree. $1 = the running binary (may
-# be empty). Python because it reads plists, package.json and globs; no recursive
-# walk, no network, and an npm install is never spawned -- its version comes from
-# the package.json beside it. A copy whose version cannot be read from its layout
-# (a wrapper, a shim) is asked `--version` once, under a wall-clock budget.
+# versions disagree; prints nothing when they agree. $1 = the binary measured above
+# and $2 = the version read from it: that copy is listed with it, even when the scan
+# would not run the file itself. Python because it reads plists, package.json and
+# globs; no recursive walk, no network, and an npm install is never spawned -- its
+# version comes from the package.json beside it. A copy whose version cannot be read
+# from its layout (a wrapper, a shim) is asked `--version` once, under a wall-clock
+# budget.
 IFS= read -r -d '' SKEW_PY <<'PY' || true
 import glob, json, os, plistlib, re, subprocess, sys, time
 
@@ -364,6 +366,8 @@ LAUNCHD_DEFAULT_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
 VER = re.compile(r"\d+\.\d+\.\d+")
 DEADLINE = time.monotonic() + 20
 running = sys.argv[1] if len(sys.argv) > 1 else ""
+m = VER.match(sys.argv[2]) if len(sys.argv) > 2 else None   # digits only: this is printed
+measured = m.group(0) if m else ""
 
 
 def real(p):
@@ -500,7 +504,8 @@ for p in cands:
     if r in seen:
         continue
     seen.add(r)
-    rows.append((layout_version(p) or spawn_version(p) or "?", p))
+    mine = measured if running and r == real(running) else ""
+    rows.append((mine or layout_version(p) or spawn_version(p) or "?", p))
 
 # A copy whose version could not be read is still LISTED ("?"), but it is not a
 # version: one refused wrapper beside an all-equal fleet is not skew.
@@ -543,7 +548,7 @@ skew_line=""
 if command -v python3 >/dev/null 2>&1; then
   # Under the same bounded runner as the probes: the scan reads every PATH and LaunchAgent
   # directory, and its own wall-clock budget only covers the `--version` runs inside it.
-  skew_line=$(run_bounded "$SCAN_TIMEOUT_SEC" python3 -I -c "$SKEW_PY" "$measured_path" 2>/dev/null)
+  skew_line=$(run_bounded "$SCAN_TIMEOUT_SEC" python3 -I -c "$SKEW_PY" "$measured_path" "$current" 2>/dev/null)
   skew_rc=$?
   if [[ "$skew_rc" -ne 0 ]]; then
     case $skew_rc in
