@@ -308,6 +308,9 @@ INTEGRATION_TESTS=(
   # Windows leg of ARTIFACT-WITHOUT-ACTIVATION: bootstrap.ps1 installed the
   # skills but never commands/*.md, so no slash command existed on Windows.
   test_bootstrap_ps1_slash_commands
+  # A command the user rewrote was replaced on every install, so keeping it
+  # meant editing the checkout too, which froze every auto-update after it.
+  test_bootstrap_keeps_user_authored_commands
   # Windows half of MYC-3895: bootstrap.ps1 called `git clone` itself and never
   # installed git, so the one prerequisite a locked-down laptop cannot get was
   # also the one nothing provided.

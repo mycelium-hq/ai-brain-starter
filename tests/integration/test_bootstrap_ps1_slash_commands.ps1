@@ -19,6 +19,10 @@
 #   3. Idempotent: a second run copies nothing and reports "already current".
 #   4. A locally-modified command is BACKED UP before being overwritten.
 #   5. A missing commands/ dir warns instead of throwing.
+#   6. In a git checkout, a stale copy of a shipped version is replaced but a
+#      command the user wrote (a blob the repo never shipped) is KEPT and
+#      reported under Skipped. Assertion 4 runs on a non-git fixture, where
+#      provenance is unknowable and the old replace-with-backup still holds.
 #
 # Exit 0 = pass, 1 = fail.
 
@@ -85,6 +89,7 @@ try {
     function Invoke-Block($caseDir, [switch]$AsDryRun) {
         $script:Backups = @()
         $script:Updated = @()
+        $script:Skipped = @()
         $script:LastOk = $null; $script:LastWarn = $null; $script:LastDry = $null
         $SkillDir = Join-Path $caseDir "skill"
         $savedProfile = $env:USERPROFILE
@@ -131,12 +136,46 @@ try {
     Invoke-Block $d3
     Check ($null -ne $script:LastWarn) "warned about the missing commands/ dir"
 
+    Write-Host "G. git checkout: stale shipped copy replaced, user-authored command kept"
+    $d4 = Join-Path $TmpRoot "g"
+    $skill4 = Join-Path $d4 "skill"
+    New-Item -ItemType Directory -Force -Path (Join-Path $skill4 "commands") | Out-Null
+    New-Item -ItemType Directory -Force -Path (Join-Path $d4 "home/.claude/commands") | Out-Null
+    $eapSaved = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & git -C $skill4 init --quiet 2>$null
+        & git -C $skill4 config user.email t@example.com
+        & git -C $skill4 config user.name T
+        [System.IO.File]::WriteAllText((Join-Path $skill4 ".gitattributes"), "* text=auto eol=lf`n")
+        foreach ($n in @("meeting-todos", "graphify")) {
+            [System.IO.File]::WriteAllText((Join-Path $skill4 "commands/$n.md"), "# $n`nversion one`n")
+        }
+        & git -C $skill4 add -A 2>$null
+        & git -C $skill4 commit --quiet -m v1 2>$null
+        foreach ($n in @("meeting-todos", "graphify")) {
+            [System.IO.File]::WriteAllText((Join-Path $skill4 "commands/$n.md"), "# $n`nversion two`n")
+        }
+        & git -C $skill4 add -A 2>$null
+        & git -C $skill4 commit --quiet -m v2 2>$null
+    } finally { $ErrorActionPreference = $eapSaved }
+    $dst4 = Join-Path $d4 "home/.claude/commands"
+    # meeting-todos: a CRLF copy of the shipped v1 (stale). graphify: the user's own.
+    [System.IO.File]::WriteAllText((Join-Path $dst4 "meeting-todos.md"), "# meeting-todos`r`nversion one`r`n")
+    [System.IO.File]::WriteAllText((Join-Path $dst4 "graphify.md"), "MY OWN GRAPHIFY")
+    Invoke-Block $d4
+    Check ((Get-Content -Raw -LiteralPath (Join-Path $dst4 "meeting-todos.md")) -match "version two") "stale shipped copy (CRLF) replaced by the current version"
+    Check ((Get-Content -Raw -LiteralPath (Join-Path $dst4 "graphify.md")) -eq "MY OWN GRAPHIFY") "user-authored command left exactly as written"
+    Check (-not (Test-Path -LiteralPath (Join-Path $dst4 "graphify.md.bak-TESTSTAMP"))) "no backup of the kept command (nothing was replaced)"
+    Check ($script:Backups.Count -eq 1) "exactly one backup, for the stale copy (got $($script:Backups.Count))"
+    Check (@($script:Skipped | Where-Object { $_ -match "^/graphify " }).Count -eq 1) "kept command reported under Skipped"
+
     Write-Host ""
     if ($script:Failures -gt 0) {
         Write-Host "FAILED: $($script:Failures) assertion(s)" -ForegroundColor Red
         exit 1
     }
-    Write-Host "PASS: bootstrap.ps1 installs slash commands (fresh + idempotent + backup + dry-run + missing-dir)" -ForegroundColor Green
+    Write-Host "PASS: bootstrap.ps1 installs slash commands (fresh + idempotent + backup + dry-run + missing-dir + keeps user-authored)" -ForegroundColor Green
     exit 0
 }
 finally {

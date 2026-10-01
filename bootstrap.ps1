@@ -1434,10 +1434,50 @@ if (-not (Test-Path -LiteralPath $commandsSrc)) {
     New-Item -ItemType Directory -Force -Path $commandsDst | Out-Null
     $cmdNew = 0
     $cmdUpdated = 0
+    # Provenance, same rule as bootstrap.sh: a differing installed command whose
+    # blob this repo ever shipped under commands/ is a stale copy (replace it,
+    # backup first); one it never shipped is the user's (keep it). Without this
+    # the only way to keep a customized command was to edit the checkout too,
+    # and a dirty checkout blocks every auto-update from then on. Not a git
+    # checkout, nested inside another repo, or shallow: $shippedBlobs stays
+    # empty and every differing copy is replaced with a backup, as before.
+    function Get-GitText([string[]]$GitArgs) {
+        # stdout of a git call, or $null when it failed. Stderr is dropped and
+        # EAP relaxed so a git hint cannot become a terminating error.
+        $eapSaved = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        try {
+            $out = & git @GitArgs 2>$null
+            if ($LASTEXITCODE -ne 0) { return $null }
+            return ((@($out) -join "`n").Trim())
+        } catch { return $null } finally { $ErrorActionPreference = $eapSaved }
+    }
+    $shippedBlobs = @{}
+    $cmdPrefix = Get-GitText @("-C", $SkillDir, "rev-parse", "--show-prefix")
+    $cmdShallow = Get-GitText @("-C", $SkillDir, "rev-parse", "--is-shallow-repository")
+    if ($null -ne $cmdPrefix -and $cmdPrefix -eq "" -and $cmdShallow -eq "false") {
+        $cmdLog = Get-GitText @("-C", $SkillDir, "log", "--format=", "--raw", "--no-abbrev", "--", "commands/")
+        if ($cmdLog) {
+            foreach ($line in ($cmdLog -split "`n")) {
+                $f = @($line.Trim() -split '\s+')
+                if ($f.Count -ge 4) { $shippedBlobs[$f[2]] = $true; $shippedBlobs[$f[3]] = $true }
+            }
+        }
+    }
     Get-ChildItem -File -Filter *.md -LiteralPath $commandsSrc | ForEach-Object {
         $dstFile = Join-Path $commandsDst $_.Name
         if (Test-Path -LiteralPath $dstFile) {
             if ((Get-FileHash $_.FullName).Hash -ne (Get-FileHash $dstFile).Hash) {
+                if ($shippedBlobs.Count -gt 0) {
+                    # --path applies the repo's eol attributes, so a CRLF copy
+                    # of a shipped file still hashes to the blob that shipped it.
+                    $dstBlob = Get-GitText @("-C", $SkillDir, "hash-object", "--path=commands/$($_.Name)", $dstFile)
+                    if ($dstBlob -and -not $shippedBlobs.ContainsKey($dstBlob)) {
+                        Warn "commands: kept your /$($_.BaseName) - you wrote it, so it is not replaced. Upstream's version: $($_.FullName)"
+                        $script:Skipped += "/$($_.BaseName) slash command (yours; upstream's version at $($_.FullName))"
+                        return  # next file (return inside ForEach-Object)
+                    }
+                }
                 Copy-Item -LiteralPath $dstFile -Destination "$dstFile.bak-$stamp"
                 $script:Backups += "$dstFile.bak-$stamp"
                 Copy-Item -Force -LiteralPath $_.FullName -Destination $dstFile
