@@ -61,9 +61,13 @@ TARGET="${CHECK_CLAUDE_VERSION_TARGET:-$ROOT/hooks/check-claude-code-version.sh}
 
 [[ -f "$TARGET" ]] || { echo "FAIL: target not found: $TARGET"; exit 1; }
 
+# mktemp must have made a directory before the trap below can delete one: an empty result
+# turns `cd` into a no-op, TMP into the current directory (the repo root, under ci.sh) and
+# the trap into `rm -rf` of it.
+TMP="$(mktemp -d)" && [ -n "$TMP" ] || { echo "FAIL: mktemp -d gave no scratch directory"; exit 1; }
 # Physical path: macOS /var/folders is a symlink to /private/var/folders, and the
 # hook reports resolved paths, so every expectation below must use the same form.
-TMP="$(cd "$(mktemp -d)" && pwd -P)"
+TMP="$(cd "$TMP" && pwd -P)" || exit 1
 trap 'rm -rf "$TMP" ${REAL_PYTHON_SHIM_DIR:+"$REAL_PYTHON_SHIM_DIR"}' EXIT
 sandbox_home "$TMP/home"
 # reset_state deletes under $HOME; prove it is the sandbox before anything can.

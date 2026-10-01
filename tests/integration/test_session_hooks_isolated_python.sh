@@ -37,7 +37,11 @@ for h in cwd-changed.sh file-changed-settings.sh; do
   [[ -f "$HOOKS/$h" ]] || { echo "FAIL: hook not found: $HOOKS/$h"; exit 1; }
 done
 
-TMP="$(cd "$(mktemp -d)" && pwd -P)"
+# mktemp must have made a directory before the trap below can delete one: an empty result
+# turns `cd` into a no-op, TMP into the current directory (the repo root, under ci.sh) and
+# the trap into `rm -rf` of it.
+TMP="$(mktemp -d)" && [ -n "$TMP" ] || { echo "FAIL: mktemp -d gave no scratch directory"; exit 1; }
+TMP="$(cd "$TMP" && pwd -P)" || exit 1
 trap 'rm -rf "$TMP" ${REAL_PYTHON_SHIM_DIR:+"$REAL_PYTHON_SHIM_DIR"}' EXIT
 sandbox_home "$TMP/home"
 case "$HOME" in "$TMP"/*) ;; *) echo "FAIL: HOME is not sandboxed ($HOME)"; exit 1 ;; esac
