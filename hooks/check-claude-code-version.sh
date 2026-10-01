@@ -505,7 +505,9 @@ for p in cands:
         continue
     seen.add(r)
     mine = measured if running and r == real(running) else ""
-    rows.append((mine or layout_version(p) or spawn_version(p) or "?", p))
+    # The install's own files come first: after an upgrade in place the image measured can be
+    # older than the files beside it. The measured version stands in only when they say nothing.
+    rows.append((layout_version(p) or mine or spawn_version(p) or "?", p))
 
 # A copy whose version could not be read is still LISTED ("?"), but it is not a
 # version: one refused wrapper beside an all-equal fleet is not skew.

@@ -477,6 +477,28 @@ else
 fi
 
 # =============================================================================
+echo "=== an install's own files say its version; the measured reading fills in only when they say nothing"
+reset_state
+# The image the hook runs can be older than the install beside it: after an upgrade in place
+# the files on disk are new while a running process (on Linux, read through /proc/<pid>/exe)
+# is still the old image. The skew line is about installs on disk, so it takes each version
+# from their files, and a fleet that is fully upgraded must not be told it disagrees. Here
+# PATH's claude is an npm install whose package.json says 2.2.0 while its binary still
+# answers 2.1.0, beside a second install at 2.2.0.
+plant_npm_install "$TMP/fleet/node-a" 2.2.0
+printf '#!/bin/sh\necho "2.1.0 (Claude Code)"\n' > "$TMP/fleet/node-a/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe"
+plant_npm_install "$TMP/fleet/node-b" 2.2.0
+KNOWN="$TMP/fleet/node-*/bin/claude"; LATEST=2.2.0
+TEST_PATH_SAVE="$TEST_PATH"; TEST_PATH="$TMP/fleet/node-a/bin:$TEST_PATH"
+run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1
+TEST_PATH="$TEST_PATH_SAVE"
+if has "$(headline)" "2.1.0 (PATH claude: $TMP/fleet/node-a/bin/claude" && [ "$(skew_lines)" = 0 ]; then
+  ok "install files: a binary still answering 2.1.0 beside a package.json that says 2.2.0 (and a second 2.2.0 install) -> no SKEW line"
+else
+  bad "install files: the measured 2.1.0 outranked the install's own 2.2.0, so an upgraded fleet reads as skewed" "skew-lines=$(skew_lines) all=[$ALL]"
+fi
+
+# =============================================================================
 echo "=== a hostile directory name cannot forge a line of output"
 reset_state
 plant_npm_install "$TMP/fleet/node-a" 4.0.0
