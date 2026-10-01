@@ -637,8 +637,8 @@ INTEGRATION_TESTS=(
   # (import from the working directory, run a claude reached through a relative PATH
   # entry, count an unreadable copy as a version, outlast its time bounds). Against the
   # hook as it stood before this change (CHECK_CLAUDE_VERSION_TARGET reruns it against
-  # any copy), 40 of its 54 assertions fail on macOS with Python 3.14 and 42 of 55 with
-  # Python 3.9 (one assertion needs an interpreter that does not import re at startup).
+  # any copy), most of its assertions fail; one needs an interpreter that does not import
+  # re at startup, and is skipped with a note on one that does.
   test_check_claude_code_version_running_binary
   # Same bug class, vault-safe-commit.sh's non-PID lock-age check: a lock
   # whose age cannot be proven must never be treated as stale and removed.
