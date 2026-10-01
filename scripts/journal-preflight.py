@@ -136,7 +136,8 @@ def last_entry_date(until_d):
 
 def _run(cmd, timeout=150):
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=timeout)
         out = (r.stdout or "").strip()
         if r.returncode != 0 and r.stderr:
             out += f"\n[stderr rc={r.returncode}] {r.stderr.strip()[:400]}"
@@ -167,7 +168,8 @@ def refresh_message_exports(timeout=25, fresh_min=15):
             if age_min < fresh_min:
                 continue  # already fresh -> no pause
         try:
-            r = subprocess.run(["bash", wp], capture_output=True, text=True, timeout=timeout)
+            r = subprocess.run(["bash", wp], capture_output=True, text=True, encoding="utf-8",
+                               errors="replace", timeout=timeout)
             if r.returncode == 0:
                 done.append(ch.lower())
         except Exception:  # noqa: BLE001 — timeout or error -> use on-disk copy
