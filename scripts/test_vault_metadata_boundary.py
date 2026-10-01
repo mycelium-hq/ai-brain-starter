@@ -194,11 +194,13 @@ class VaultBoundary(unittest.TestCase):
         found = sorted(os.path.basename(p) for p in _base.iter_vault_markdown(crm))
         self.assertEqual(found, ["Inside Person.md"])
 
-    def test_walking_a_folder_outside_the_vault_yields_nothing_and_stops(self):
-        with self._record_listings() as listed:
-            found = list(_base.iter_vault_markdown(self.shared))
-        self.assertEqual(found, [])
-        self.assertEqual(listed, [self.shared])  # it did not go on into the folders below
+    def test_walking_a_folder_outside_or_above_the_vault_yields_nothing(self):
+        for root in (self.shared, self.root):  # a sibling folder, and an ancestor of the vault
+            with self.subTest(root=root):
+                with self._record_listings() as listed:
+                    found = list(_base.iter_vault_markdown(root))
+                self.assertEqual(found, [])
+                self.assertEqual(listed, [])  # not even the top folder is listed
 
     def test_walk_agrees_with_the_per_note_check(self):
         """The walker resolves each folder once instead of each note. It must
@@ -216,6 +218,26 @@ class VaultBoundary(unittest.TestCase):
                     expected.append(path)
         self.assertIn(alias, expected)  # a link that stays inside the vault is kept
         self.assertEqual(sorted(_base.iter_vault_markdown()), sorted(expected))
+
+    def test_a_folder_os_walk_does_not_flag_as_a_link_is_still_not_entered(self):
+        """A link that os.walk does not report as one (a Windows junction, for
+        instance) is a folder os.walk would go into. Simulate that by making
+        os.walk follow links, and expect the walker to prune a folder by where it
+        resolves, before os.walk lists it."""
+        real_walk = os.walk
+
+        def follows_links(top, **kwargs):
+            kwargs["followlinks"] = True
+            return real_walk(top, **kwargs)
+
+        with mock.patch.object(os, "walk", side_effect=follows_links), \
+                self._record_listings() as listed:
+            found = sorted(os.path.basename(p) for p in _base.iter_vault_markdown())
+        self.assertEqual(found, ["Inside Person.md"])
+        linked = (os.path.join(self.vault, "🤝 Shared"),
+                  os.path.join(self.vault, "👤 CRM", "Team Share"))
+        entered = [d for d in listed if any(d == p or d.startswith(p + os.sep) for p in linked)]
+        self.assertEqual(entered, [])
 
     def test_walker_never_lists_a_linked_folder(self):
         """Filtering the results is not enough: a shared folder can be huge, or

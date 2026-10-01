@@ -146,11 +146,18 @@ def iter_vault_markdown(root=None):
     Hidden folders and files are skipped, as glob's `**` skipped them.
     """
     vault_real = os.path.realpath(VAULT)
-    for dirpath, dirnames, filenames in os.walk(root or VAULT, followlinks=False):
-        dirnames[:] = [d for d in dirnames if not d.startswith(".")]
-        if not _resolves_inside(os.path.realpath(dirpath), vault_real):
-            dirnames[:] = []
-            continue
+    top = root or VAULT
+    if not _resolves_inside(os.path.realpath(top), vault_real):
+        return
+    for dirpath, dirnames, filenames in os.walk(top, followlinks=False):
+        # Each folder is judged by where it resolves, before os.walk lists it, so
+        # a folder that resolves outside the vault is never entered, whatever
+        # kind of link it is.
+        dirnames[:] = [
+            d for d in dirnames
+            if not d.startswith(".")
+            and _resolves_inside(os.path.realpath(os.path.join(dirpath, d)), vault_real)
+        ]
         for name in filenames:
             if name.endswith(".md") and not name.startswith("."):
                 path = os.path.join(dirpath, name)
