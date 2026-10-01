@@ -231,6 +231,7 @@ class VaultBoundary(unittest.TestCase):
         _write(os.path.join(self.vault, "Archive", "Old Person.md"), NOTE)
         self._link(os.path.join(self.vault, "Archive"), os.path.join(self.vault, "Old Link"), True)
         self._link(os.path.join(self.vault, "👤 CRM"), os.path.join(self.vault, "CRM Alias"), True)
+        self._link(os.path.join(self.vault, ".hidden"), os.path.join(self.vault, "Hidden Link"), True)
         expected = []
         for dirpath, dirnames, filenames in os.walk(self.vault):
             dirnames[:] = [d for d in dirnames if not d.startswith(".")]
@@ -245,6 +246,7 @@ class VaultBoundary(unittest.TestCase):
         self.assertIn(os.path.join(self.vault, "Archive", "Old Person.md"), found)
         self.assertNotIn(os.path.join(self.vault, "Old Link", "Old Person.md"), found)
         self.assertNotIn(os.path.join(self.vault, "CRM Alias", "Inside Person.md"), found)
+        self.assertNotIn(os.path.join(self.vault, "Hidden Link", "Hidden Person.md"), found)
 
     def test_a_folder_os_walk_does_not_flag_as_a_link_is_still_not_entered(self):
         """A link that os.walk does not report as one (a Windows junction, for
