@@ -34,7 +34,7 @@
 #      session running another, with one exception: when the running binary reports
 #      no version and PATH's is measured instead, that labeled reading is saved
 #      under both names, so the running binary's next session finds it (and keeps
-#      finding it until PATH's claude changes or the TTL ends, even if the running
+#      finding it until either binary changes or the TTL ends, even if the running
 #      binary could answer by then). A reading is voided when the binary it is keyed
 #      to, or PATH's claude, is NEWER than it, so an upgrade shows at once instead
 #      of after the TTL. Every fresh reading is also written to the original,
@@ -63,14 +63,13 @@
 #                                           (default 10); the scan's own runs are
 #                                           capped at 5 s each, 20 s in all
 #   CLAUDE_VERSION_CHECK_SCAN_TIMEOUT_SEC   bound on the whole install-skew scan
-#                                           (default 30). Both bounds take 1 to 3 digits
-#                                           with no leading zero; anything else keeps
-#                                           the default.
+#                                           (default 30). Both bounds are 1 to 3 digits
+#                                           with no leading zero, else the default.
 #   CLAUDE_VERSION_CHECK_CACHE_FILE         use exactly this file as the cache: no
 #                                           per-binary key, no mirror, no cleanup
 #
-# What it costs. A cache hit: a few `ps` (or /proc) reads, a PATH lookup and one file
-# read. A miss adds up to two `gh api` calls (not time-bounded, as before), up to two
+# What it costs. A cache hit: a few `ps` (or /proc) reads and one file read. A miss
+# adds up to two `gh api` calls (not time-bounded, as before), up to two
 # `claude --version` probes (10 s each) and the install scan: one directory level of
 # ~/Library/LaunchAgents plus a few globs, no recursive walk, 30 s at the outside. The
 # probes and the scan are bounded by perl's alarm, or by `timeout`; with neither
@@ -108,9 +107,8 @@ CACHE_TTL_SEC=$((6 * 60 * 60))    # 6 hours
 WARN_VERSION_GAP=3                # warn loudly if behind by N or more patch versions
 DIFF_BULLET_LIMIT=8               # max bullets to surface from the changelog diff
 KEYED_CACHE_KEEP_DAYS=14          # drop per-binary cache files untouched this long
-# A time bound from the environment is 1 to 3 digits with no leading zero, else the default.
-# Zero would switch the alarm off, and so would a number past 32 bits, which perl's alarm
-# wraps (4294967296 becomes 0).
+# A time bound from the environment: 1 to 3 digits, no leading zero, else the default.
+# Zero turns perl's alarm off, and so does a number past 32 bits (4294967296 wraps to 0).
 is_time_bound() { case $1 in [1-9]|[1-9][0-9]|[1-9][0-9][0-9]) return 0 ;; esac; return 1; }
 PROBE_TIMEOUT_SEC=${CLAUDE_VERSION_CHECK_PROBE_TIMEOUT_SEC:-10}
 is_time_bound "$PROBE_TIMEOUT_SEC" || PROBE_TIMEOUT_SEC=10
@@ -295,7 +293,7 @@ now=$(date +%s)
 # `-nt` is a shell builtin (no stat), and follows symlinks: a bin entry that points
 # at a reinstalled file is newer than a reading taken before the reinstall. PATH's
 # claude voids a reading as well as the keyed binary: a fallback reading is saved under
-# the running binary's name but describes PATH's claude, and every skew line lists it.
+# the running binary's name but describes PATH's claude, and the skew line compares it.
 if [[ -f "$CACHE_FILE" ]] && ! { [[ -n "$CACHE_BIN" ]] &&
      { [[ "$CACHE_BIN" -nt "$CACHE_FILE" ]] || [[ "$path_claude" -nt "$CACHE_FILE" ]]; }; }; then
   file_mtime "$CACHE_FILE"
@@ -353,13 +351,12 @@ latest=$(gh api repos/anthropics/claude-code/releases/latest --jq .tag_name 2>/d
 [[ -z "$latest" ]] && exit 0
 
 # Skew watchdog. Prints ONE line naming every distinct Claude Code copy when their
-# versions disagree; prints nothing when they agree. $1 = the binary measured above
-# and $2 = the version read from it: that copy is listed with it, even when the scan
-# would not run the file itself. Python because it reads plists, package.json and
-# globs; no recursive walk, no network, and an npm install is never spawned -- its
-# version comes from the package.json beside it. A copy whose version cannot be read
-# from its layout (a wrapper, a shim) is asked `--version` once, under a wall-clock
-# budget.
+# versions disagree; prints nothing when they agree. $1 = the binary measured above and
+# $2 = the version read from it (listed with it even if the scan would not run the file).
+# Python because it reads plists, package.json and globs; no recursive
+# walk, no network, and an npm install is never spawned -- its version comes from
+# the package.json beside it. A copy whose version cannot be read from its layout
+# (a wrapper, a shim) is asked `--version` once, under a wall-clock budget.
 IFS= read -r -d '' SKEW_PY <<'PY' || true
 import glob, json, os, plistlib, re, subprocess, sys, time
 
