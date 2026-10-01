@@ -38,8 +38,9 @@
 #      next session finds it. Every fresh reading is also written to the original,
 #      un-keyed file name as a mirror: this hook never reads it back, but other
 #      tools read that name as "the last banner".
-#   4. Skew watchdog, on a cache miss only: list every `claude` reachable from the
-#      hook's PATH, each LaunchAgent's PATH (plus launchd's default PATH when a
+#   4. Skew watchdog, on a cache miss only: list every `claude` reachable through
+#      an absolute entry of the hook's PATH or of each LaunchAgent's PATH (a
+#      relative entry is skipped, and launchd's default PATH stands in when a
 #      plist sets none), the usual install locations and the newest desktop
 #      bundle. npm installs are read from package.json (never spawned); one line
 #      names the copies (the first eight, newest first) when their versions
@@ -410,10 +411,16 @@ def add(p):
         cands.append(p)
 
 
+def path_dirs(value):
+    """The absolute directories of a PATH string. A relative entry means 'wherever
+    the session happens to be', which in a freshly cloned repository is a place nobody
+    chose, and a clone leaves its files user-owned and 0755: all safe_to_spawn asks."""
+    return [d for d in value.split(":") if d and os.path.isabs(d)]
+
+
 add(running)
-for d in os.environ.get("PATH", "").split(":"):
-    if d:
-        add(os.path.join(d, "claude"))
+for d in path_dirs(os.environ.get("PATH", "")):
+    add(os.path.join(d, "claude"))
 
 unreadable = 0
 agents = os.path.join(HOME, "Library", "LaunchAgents")
@@ -428,9 +435,8 @@ for plist in sorted(glob.glob(os.path.join(glob.escape(agents), "*.plist"))):
     job_path = env.get("PATH") if isinstance(env, dict) else None
     if not isinstance(job_path, str) or not job_path:
         job_path = LAUNCHD_DEFAULT_PATH
-    for d in job_path.split(":"):
-        if d:
-            add(os.path.join(d, "claude"))
+    for d in path_dirs(job_path):
+        add(os.path.join(d, "claude"))
 
 known = os.environ.get("CLAUDE_VERSION_CHECK_KNOWN_INSTALLS")
 if known is None:

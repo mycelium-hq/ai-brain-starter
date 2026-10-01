@@ -468,6 +468,55 @@ else
 fi
 
 # =============================================================================
+echo "=== the skew scan never runs a claude found through a relative PATH entry"
+reset_state
+# A relative PATH entry means "wherever the session happens to be", which for a session
+# started in a cloned repository is a place nobody chose, and `git clone` leaves files
+# user-owned and 0755, which is all the scan's spawn check asks for. The hook's own lookup
+# only reaches such a claude when no absolute entry has one first; the scan used to add the
+# claude of every entry, relative ones included.
+plant_path_claude 1.1.1
+REPO="$TMP/repo"; rm -rf "$REPO"; mkdir -p "$REPO/rel/bin"
+printf '#!/bin/sh\ntouch "%s/SPAWNED_REL"\necho "3.3.3 (Claude Code)"\n' "$REPO" > "$REPO/rel/bin/claude"
+chmod 755 "$REPO/rel/bin/claude"
+LATEST=10.0.0
+in_repo() { run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1 "$@" -- sh -c 'cd "$1" && exec bash "$2"' sh "$REPO" "$TARGET"; }
+spawned_rel() { [ -e "$REPO/SPAWNED_REL" ] && echo yes || echo no; }
+# (a) the live PATH: the relative directory comes AFTER PATH's own absolute claude
+in_repo PATH="$TEST_PATH:rel/bin"
+if [ "$(spawned_rel)" = no ] && ! has "$ALL" "rel/bin"; then
+  ok "relative PATH: a claude reachable only through 'rel/bin' on PATH is neither run nor listed"
+else
+  bad "relative PATH: the scan ran or named a claude found through a relative PATH entry" "spawned=$(spawned_rel) all=[$ALL]"
+fi
+# positive control: the SAME file reached through an absolute entry is run and named
+rm -f "$HOME/.claude/.claude-code-version-check"*
+in_repo PATH="$TEST_PATH:$REPO/rel/bin"
+if [ "$(spawned_rel)" = yes ] && has "$ALL" "3.3.3 $REPO/rel/bin/claude"; then
+  ok "relative PATH: the same file behind an ABSOLUTE entry is run and named (the check can fail)"
+else
+  bad "relative PATH: the fixture's claude is not runnable by the scan, so the check above proves nothing" "spawned=$(spawned_rel) all=[$ALL]"
+fi
+# (b) a LaunchAgent's PATH
+rm -f "$REPO/SPAWNED_REL" "$HOME/.claude/.claude-code-version-check"*
+plant_plist "com.example.relative" "rel/bin:/usr/bin"
+in_repo
+if [ "$(spawned_rel)" = no ] && ! has "$ALL" "rel/bin"; then
+  ok "relative PATH: a claude reachable only through a relative entry of a LaunchAgent's PATH is neither run nor listed"
+else
+  bad "relative PATH: the scan ran or named a claude found through a relative plist PATH entry" "spawned=$(spawned_rel) all=[$ALL]"
+fi
+rm -f "$REPO/SPAWNED_REL" "$HOME/.claude/.claude-code-version-check"*
+plant_plist "com.example.relative" "$REPO/rel/bin:/usr/bin"
+in_repo
+if [ "$(spawned_rel)" = yes ] && has "$ALL" "3.3.3 $REPO/rel/bin/claude"; then
+  ok "relative PATH: the same file behind an ABSOLUTE plist PATH entry is run and named (the check can fail)"
+else
+  bad "relative PATH: the plist fixture's claude is not runnable by the scan" "spawned=$(spawned_rel) all=[$ALL]"
+fi
+rm -rf "$REPO"
+
+# =============================================================================
 echo "=== control 4: a cached reading is never replayed into another binary's session"
 reset_state
 if need_cc "control 4"; then
