@@ -9,6 +9,18 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-10-01: `/journal` dropped your messages on machines where `python3` refuses to run a script
+
+**Who this affects:** anyone who runs `/journal` with a message reader script in their vault (`journal-messages-fetch.py`), on a machine where a Python tool puts its own stand-in for `python3` first on the PATH. Some of those stand-ins answer `python3 some-script.py` with advice ("use `uv run python ...`") and exit with an error, while still running one-liners, so nothing looks broken.
+
+The `/journal` context pull (`journal-preflight.py`) gathers every source in one command. It started the message reader as a bare `python3 <script>`, which that stand-in refuses. The reader never ran, so where your WhatsApp and iMessage threads should have been, the digest held the stand-in's advice text, and the run record listed `messages` as failed. The RescueTime reader a few lines further down was already started with the interpreter running the pull itself, so the file disagreed with itself.
+
+The message reader now runs under the same interpreter as the pull. In the same edit, the pull reads its helper programs' output as UTF-8 instead of the console's code page, as the rest of this repo's scripts do.
+
+A new test runs the real pull with a script-refusing stand-in first on the PATH and checks that the messages arrive, and that putting the old call back turns it red. A second check reads every Python file under `scripts/` and `skills/` and fails when one starts another Python script through a bare `python3`, so the same mistake cannot return unnoticed.
+
+---
+
 ## 2026-09-25: merging main into a topic branch no longer trips the session-artifact guard, and `git merge` is guarded too
 
 **Who this affects:** anyone using `git-hooks/guard-session-artifacts-on-default-branch.sh`, the hook that refuses to commit session-close notes on a branch other than the default one, where they would strand instead of reaching it.
