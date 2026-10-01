@@ -600,9 +600,12 @@ if [[ "$current" != "$latest" ]]; then
   case $measured_real in
     */lib/node_modules/@anthropic-ai/claude-code/*)
       up_prefix=$(plain "${measured_real%/lib/node_modules/@anthropic-ai/claude-code/*}")
-      # %q quotes for a shell (a name holding a quote or a space stays one word), so the
-      # line can be pasted as it stands
-      up_hint="$up_verb: npm i -g --prefix $(printf '%q' "$up_prefix") @anthropic-ai/claude-code@latest" ;;
+      # Single-quoted, each ' written as '\'': a name holding a quote or a space stays one word, so
+      # the line can be pasted as it stands, and every byte of it is kept (printf %q on bash 3.2
+      # turns non-ASCII text into escapes). LC_ALL=C: sed under a UTF-8 locale refuses a byte that
+      # is not valid UTF-8 and prints nothing.
+      up_quoted=$(printf '%s' "$up_prefix" | LC_ALL=C sed "s/'/'\\\\''/g")
+      up_hint="$up_verb: npm i -g --prefix '$up_quoted' @anthropic-ai/claude-code@latest" ;;
     */Claude/claude-code/*/claude.app/*)
       up_hint="This is the desktop app's bundled copy; it updates with the app." ;;
     *)

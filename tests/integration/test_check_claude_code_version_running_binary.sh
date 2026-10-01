@@ -837,7 +837,7 @@ if need_cc "ancestor layouts"; then
   # reports the image behind it. Either way the hint must name THIS install.
   if [ "$os" = Linux ]; then want_label="$PKG/bin/claude.exe"; else want_label="$NPMP/bin/claude"; fi
   if has "$H" "9.9.9 (running binary: $want_label)" &&
-     has "$H" "npm i -g --prefix $(printf '%q' "$NPMP") @anthropic-ai/claude-code@latest"; then
+     has "$H" "npm i -g --prefix '$NPMP' @anthropic-ai/claude-code@latest"; then
     ok "npm layout: started through the bin symlink, the upgrade hint carries THIS install's --prefix"
   else
     bad "npm layout: expected the running binary path and a --prefix hint" "$H"
@@ -878,6 +878,37 @@ if need_cc "prefix quoting"; then
     bad "prefix quoting: the --prefix argument did not round-trip" "hint=[$H] arg=[$arg] got=[$got]"
   fi
 fi
+
+# =============================================================================
+echo "=== the --prefix in the upgrade hint is single-quoted text that keeps every byte, whatever the locale"
+reset_state
+# `printf %q` on bash 3.2 writes a non-ASCII name as octal escapes under the C locale and, under a
+# UTF-8 locale, as a mix of raw bytes and escapes that is not valid UTF-8, so the hint could be
+# neither read nor copied back. A single-quoted word, each ' written as '\'', keeps every byte.
+# PATH's claude is an npm install under a name holding a quote, a space and non-ASCII text.
+E_ACUTE="$(printf '\303\251')"; KANJI="$(printf '\346\227\245\346\234\254')"
+QP="$TMP/fleet/it's a prefix caf$E_ACUTE $KANJI"
+QPKG="$QP/lib/node_modules/@anthropic-ai/claude-code"
+mkdir -p "$QPKG/bin" "$QP/bin"
+printf '{"name":"@anthropic-ai/claude-code","version":"9.9.9"}\n' > "$QPKG/package.json"
+printf '#!/bin/sh\necho "9.9.9 (Claude Code)"\n' > "$QPKG/bin/claude.exe"; chmod +x "$QPKG/bin/claude.exe"
+ln -sf "../lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe" "$QP/bin/claude"
+want="--prefix '$TMP/fleet/it'\\''s a prefix caf$E_ACUTE $KANJI' @anthropic-ai/claude-code@latest"
+UTF8_LOC=""
+for l in en_US.UTF-8 C.UTF-8 en_US.utf8 C.utf8; do
+  if locale -a 2> /dev/null | awk -v l="$l" '$0 == l { f = 1 } END { exit !f }'; then UTF8_LOC=$l; break; fi
+done
+TEST_PATH_SAVE="$TEST_PATH"; TEST_PATH="$QP/bin:$TEST_PATH"
+for loc in C ${UTF8_LOC:+"$UTF8_LOC"}; do
+  rm -f "$HOME/.claude/.claude-code-version-check"*
+  run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1 LC_ALL="$loc"
+  if has "$(headline)" "$want"; then
+    ok "prefix text ($loc): the --prefix is the install's directory as plain single-quoted text, non-ASCII bytes intact"
+  else
+    bad "prefix text ($loc): the --prefix was garbled or quoted another way" "want=[$want] got=[$(headline)]"
+  fi
+done
+TEST_PATH="$TEST_PATH_SAVE"
 
 # =============================================================================
 echo "=== a binary replaced under a running session"
