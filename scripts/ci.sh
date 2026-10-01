@@ -640,6 +640,10 @@ INTEGRATION_TESTS=(
   # any copy), most of its assertions fail; one needs an interpreter that does not import
   # re at startup, and is skipped with a note on one that does.
   test_check_claude_code_version_running_binary
+  # The CwdChanged and FileChanged hooks read their payload with `python3 -c` in the
+  # session's working directory: a module planted there must not be imported (python3 -I),
+  # and each hook must still do its job.
+  test_session_hooks_isolated_python
   # Same bug class, vault-safe-commit.sh's non-PID lock-age check: a lock
   # whose age cannot be proven must never be treated as stale and removed.
   # Runs the real script under the same GNU-stat shim.

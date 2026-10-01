@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+# Regression tests: the CwdChanged and FileChanged hooks run their embedded Python
+# isolated from the working directory.
+#
+# Both hooks parse their JSON payload with `python3 -c`. They run in the session's
+# working directory, which may be a freshly cloned repository nobody has read, and a
+# plain `python3 -c` puts that directory FIRST on sys.path: a json.py planted in it
+# would run as part of the hook. `python3 -I` drops the directory (and ignores
+# PYTHON* variables and the user site).
+#
+# These drive the REAL, unmodified hooks from a directory holding a planted json.py.
+#   1. a plain interpreter DOES import the planted module from that directory, so the
+#      assertions below are able to fail
+#   2. neither hook imports it, and each still does its job (the directory change is
+#      logged, a settings file is reported as valid, a broken one as invalid)
+#   3. every python3 a hook starts carries -I. This half does not depend on the
+#      interpreter: it holds even where json is imported before any script line runs.
+#
+# CHECK_HOOKS_DIR=<dir> runs the same cases against another copy of the hooks (that is
+# how hooks without -I are shown RED). Self-contained. Exit 0 = pass, 1 = fail.
+
+set -u
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$HERE/../.." && pwd)"
+HOOKS="${CHECK_HOOKS_DIR:-$ROOT/hooks}"
+
+# shellcheck source=tests/integration/lib/sandbox_home.sh
+. "$HERE/lib/sandbox_home.sh"
+# shellcheck source=tests/integration/lib/real_python.sh
+. "$HERE/lib/real_python.sh"
+
+for h in cwd-changed.sh file-changed-settings.sh; do
+  [[ -f "$HOOKS/$h" ]] || { echo "FAIL: hook not found: $HOOKS/$h"; exit 1; }
+done
+
+TMP="$(cd "$(mktemp -d)" && pwd -P)"
+trap 'rm -rf "$TMP" ${REAL_PYTHON_SHIM_DIR:+"$REAL_PYTHON_SHIM_DIR"}' EXIT
+sandbox_home "$TMP/home"
+case "$HOME" in "$TMP"/*) ;; *) echo "FAIL: HOME is not sandboxed ($HOME)"; exit 1 ;; esac
+mkdir -p "$HOME/.claude/hooks"
+
+PASS=0
+FAIL=0
+ok()  { PASS=$((PASS + 1)); echo "PASS  $1"; }
+bad() { FAIL=$((FAIL + 1)); echo "FAIL  $1 :: ${2:-}"; }
+has() { case "$1" in *"$2"*) return 0 ;; *) return 1 ;; esac; }
+
+ensure_real_python || { echo "FAIL: no python3 that runs a script file"; exit 1; }
+PY3="$(command -v python3)"
+
+echo "target: ${HOOKS#"$ROOT"/}"
+
+# ---- the planted module -------------------------------------------------------
+HOSTILE="$TMP/hostile"
+mkdir -p "$HOSTILE"
+printf 'open("IMPORTED-json", "w").close()\n' > "$HOSTILE/json.py"
+
+# positive control: an interpreter that is not isolated imports it from this directory
+( cd "$HOSTILE" && "$PY3" -c 'import json' ) > /dev/null 2>&1
+SHADOWABLE=0
+if [ -e "$HOSTILE/IMPORTED-json" ]; then
+  SHADOWABLE=1
+  ok "planted module: a plain python3 -c in that directory imports its json.py (the check can fail)"
+else
+  echo "NOTE  this interpreter imports json before any script line runs, so a planted json.py cannot show the exposure here; the -I check still applies"
+fi
+rm -f "$HOSTILE"/IMPORTED-*
+
+# every python3 a hook starts is recorded by a shim that then runs the real one
+mkdir -p "$TMP/pyshim"
+printf '#!/bin/sh\nprintf "%%s\\n" "$1" >> "$PY_ARGV_LOG"\nexec "%s" "$@"\n' "$PY3" > "$TMP/pyshim/python3"
+chmod +x "$TMP/pyshim/python3"
+PY_ARGV_LOG="$TMP/py-argv.log"
+
+# run_hook HOOK-FILE PAYLOAD -- from the hostile directory; fills OUT, ERR and RC
+run_hook() {
+  : > "$PY_ARGV_LOG"
+  ( cd "$HOSTILE" && printf '%s' "$2" | PATH="$TMP/pyshim:$PATH" PY_ARGV_LOG="$PY_ARGV_LOG" bash "$HOOKS/$1" ) \
+    > "$TMP/out" 2> "$TMP/err"
+  RC=$?
+  OUT="$(cat "$TMP/out")"; ERR="$(cat "$TMP/err")"
+}
+# no import from the working directory (only provable where the control above imported it)
+check_not_imported() { # LABEL
+  [ "$SHADOWABLE" = 1 ] || return 0
+  if [ ! -e "$HOSTILE/IMPORTED-json" ]; then
+    ok "$1: imported nothing from the working directory"
+  else
+    bad "$1: a json.py in the working directory ran inside the hook" "$(ls -A "$HOSTILE")"
+  fi
+  rm -f "$HOSTILE"/IMPORTED-*
+}
+# every python3 it started ran isolated, and it did start one
+check_isolated() { # LABEL
+  if [ -s "$PY_ARGV_LOG" ] && [ "$(sort -u "$PY_ARGV_LOG")" = "-I" ]; then
+    ok "$1: every python3 it starts runs isolated (-I)"
+  else
+    bad "$1: a python3 was started without -I" "started: [$(sort "$PY_ARGV_LOG" | uniq -c | tr '\n' ';')]"
+  fi
+}
+
+# =============================================================================
+echo "=== CwdChanged logs the change without importing from the working directory"
+run_hook cwd-changed.sh '{"cwd":"/work/new","previous_cwd":"/work/old"}'
+check_not_imported "cwd-changed"
+if has "$(cat "$HOME/.claude/hooks/cwd-changed.log" 2> /dev/null)" "/work/old -> /work/new"; then
+  ok "cwd-changed: the directory change is still logged (the hook did run)"
+else
+  bad "cwd-changed: the change was not logged" "rc=$RC log=[$(cat "$HOME/.claude/hooks/cwd-changed.log" 2> /dev/null)] err=[$ERR]"
+fi
+check_isolated "cwd-changed"
+
+# =============================================================================
+echo "=== FileChanged validates a settings file without importing from the working directory"
+printf '{"mcpServers": {}}\n' > "$TMP/settings.json"
+run_hook file-changed-settings.sh "{\"file_path\":\"$TMP/settings.json\"}"
+check_not_imported "file-changed (valid file)"
+if has "$ERR" "updated and parses OK" && ! has "$ERR" "INVALID JSON"; then
+  ok "file-changed: a valid settings file is reported as parsing"
+else
+  bad "file-changed: a valid settings file should be reported as parsing" "rc=$RC out=[$OUT] err=[$ERR]"
+fi
+check_isolated "file-changed (valid file)"
+
+printf '{"broken": \n' > "$TMP/broken.json"
+run_hook file-changed-settings.sh "{\"file_path\":\"$TMP/broken.json\"}"
+check_not_imported "file-changed (broken file)"
+if has "$ERR" "INVALID JSON"; then
+  ok "file-changed: a settings file that does not parse is reported as invalid"
+else
+  bad "file-changed: a broken settings file should be reported as invalid" "rc=$RC out=[$OUT] err=[$ERR]"
+fi
+check_isolated "file-changed (broken file)"
+
+echo
+echo "passed=$PASS failed=$FAIL"
+if [ "$FAIL" -ne 0 ]; then
+  echo "FAIL: test_session_hooks_isolated_python"
+  exit 1
+fi
+echo "PASS: test_session_hooks_isolated_python"
