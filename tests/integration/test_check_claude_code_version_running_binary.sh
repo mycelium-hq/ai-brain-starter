@@ -37,8 +37,8 @@
 # does not own, so there are checks for what it must NOT do: import a module planted
 # in the working directory, run a claude reached through a relative PATH entry, count
 # an unreadable copy as a version, run a file anyone can write, trust a package.json
-# that cannot be parsed, stop on or print a version made of thousands of digits, break
-# the printed `npm i -g --prefix` line on an odd
+# that cannot be parsed, stop on or print a version made of thousands of digits, count
+# a non-ASCII letter as part of a version, break the printed `npm i -g --prefix` line on an odd
 # directory name, outlast its time bounds (a probe wrapper that forks, a scan
 # stalled on a read, a wrapper that never answers), or let a time-bound setting
 # switch a bound off (0, or a number that wraps to 0).
@@ -1109,6 +1109,91 @@ if has "$(headline)" "[claude-code-version] 10.20.30+build.1 (PATH claude:"; the
   ok "version text: build metadata after a '+' is kept"
 else
   bad "version text: the trim must keep '+' and '.'" "all=[$ALL]"
+fi
+
+# =============================================================================
+echo "=== only ASCII characters count as leading version characters, in every locale"
+reset_state
+# The trim keeps digits, ASCII letters, '.', '+' and '-'. Written as the ranges 0-9, A-Z and a-z it was
+# wrong on bash 3.2 in a UTF-8 locale, where a range is collation order: e-acute, o-slash and every other
+# letter that sorts between a and z came through, so a claude printing 2.1.0 and then e-acute put that
+# letter in the headline (in a Latin-1 locale, one byte of its UTF-8 form: a line that is not valid
+# UTF-8). The trim now lists its 65 characters. First the hook itself, then a sweep of the hook's own
+# trim line over a few thousand characters, under each locale this host has.
+NL=$'\n'
+HOST_LOCS="$NL$(locale -a 2> /dev/null)$NL"
+SWEEP_LOCS=C
+for l in en_US.UTF-8 en_US.utf8 C.UTF-8 C.utf8 cs_CZ.UTF-8 cs_CZ.utf8 tr_TR.UTF-8 tr_TR.utf8 ja_JP.UTF-8 ja_JP.utf8 zh_CN.UTF-8 zh_CN.utf8 en_US.ISO8859-1 en_US.iso88591; do
+  case $HOST_LOCS in *"$NL$l$NL"*) SWEEP_LOCS="$SWEEP_LOCS $l" ;; esac
+done
+echo "NOTE  locales tried: $SWEEP_LOCS"
+E_ACUTE="$(printf '\303\251')"
+printf '#!/bin/sh\necho "2.1.0%s (Claude Code)"\n' "$E_ACUTE" > "$PATHBIN/claude"; chmod +x "$PATHBIN/claude"
+LATEST=2.1.5
+# shellcheck disable=SC2086  # splitting the list of locales on spaces is the point
+for loc in $SWEEP_LOCS; do
+  rm -f "$HOME/.claude/.claude-code-version-check"*
+  run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1 LC_ALL="$loc"
+  H="$(headline)"
+  if has "$H" "[claude-code-version] 2.1.0 (PATH claude:"; then
+    ok "version text ($loc): a claude printing 2.1.0 and then an accented letter is reported as 2.1.0"
+  else
+    bad "version text ($loc): a letter outside ASCII reached the headline" "headline=[$H]"
+  fi
+done
+# the sweep: each candidate character goes through the hook's own trim line, under bash, in each locale
+trim_stmt="$(awk 'index($0, "v=${v%%[!") { sub(/^[ \t]+/, ""); print; exit }' "$TARGET")"
+"$PY3" -I -c '
+import sys
+cps = list(range(1, 128))
+for lo, hi in ((0x80, 0x2ff), (0x370, 0x6ff), (0x900, 0x97f), (0x2000, 0x218f), (0x3040, 0x30ff),
+               (0x4e00, 0x4e7f), (0xac00, 0xac7f), (0xff00, 0xffef), (0x1d400, 0x1d7ff)):
+    cps.extend(range(lo, hi + 1))
+sys.stdout.buffer.write("".join(chr(c) + "\n" for c in cps if c != 10).encode("utf-8"))
+' > "$TMP/sweep-chars.txt"
+nchars="$(wc -l < "$TMP/sweep-chars.txt" | tr -d ' ')"
+# sweep_trim STATEMENT LOCALE: prints the characters that came through whole, in code point order,
+# then how many came through in part (a multi-byte character cut after its first byte, say)
+sweep_trim() {
+  cat > "$TMP/sweep.sh" <<EOF
+while IFS= read -r ch; do
+  v="2.1.0\${ch}X"
+  $1
+  case \$v in
+    "2.1.0\${ch}X") printf 'A%s\\n' "\$ch" ;;
+    2.1.0) ;;
+    *) printf 'P%s\\n' "\$ch" ;;
+  esac
+done
+EOF
+  PATH="$TEST_PATH" LC_ALL="$2" bash "$TMP/sweep.sh" < "$TMP/sweep-chars.txt" |
+    LC_ALL=C awk '/^A/ { got = got substr($0, 2) } /^P/ { part++ } END { print got; print part + 0 }'
+}
+OLD_TRIM='v=${v%%[!0-9A-Za-z.+-]*}'
+want65='+-.0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+if [ -z "$trim_stmt" ]; then
+  bad "version trim: the hook has no line of the form v=\${v%%[!...]*} to sweep" "looked in $TARGET"
+else
+  old_bad=""
+  # shellcheck disable=SC2086
+  for loc in $SWEEP_LOCS; do
+    res="$(sweep_trim "$trim_stmt" "$loc")"
+    got="${res%%"$NL"*}"; part="${res#*"$NL"}"
+    if [ "$got" = "$want65" ] && [ "$part" = 0 ]; then
+      ok "version trim ($loc): of $nchars characters tried, exactly the 65 ASCII ones (digits, letters, '.', '+', '-') come through"
+    else
+      extra="$(printf '%s' "$got" | LC_ALL=C tr -d '+.0-9A-Za-z-')"
+      bad "version trim ($loc): something besides the 65 ASCII characters came through" "$(printf '%s' "$extra" | LC_ALL=C wc -c | tr -d ' ') extra bytes whole, $part characters in part"
+    fi
+    # the same sweep over the range form, for the control below
+    res="$(sweep_trim "$OLD_TRIM" "$loc")"
+    [ "${res%%"$NL"*}" = "$want65" ] || old_bad="$old_bad $loc"
+  done
+  if [ -n "$old_bad" ]; then
+    ok "version trim (control): the range form [A-Za-z] lets non-ASCII characters through in:$old_bad, so the sweep can fail"
+  else
+    echo "NOTE  no locale here turns [A-Za-z] into a collation range, so the sweep cannot show the range form's fault on this host"
+  fi
 fi
 
 reset_state

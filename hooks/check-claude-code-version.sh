@@ -194,9 +194,12 @@ probe_version() {
     # no scratch file to be had: bounded for a wrapper that exec's, as it always was
     v=$(run_bounded "$PROBE_TIMEOUT_SEC" "$1" --version 2>/dev/null </dev/null | awk 'NF { print $1; exit }') || true
   fi
-  # Keep the leading version characters only (digits, letters, '.', '+', '-'): this text is
+  # Keep the leading version characters only (ASCII digits and letters, '.', '+', '-'): this text is
   # printed in the headline, and whatever follows them (an escape sequence, say) is not a version.
-  v=${v%%[!0-9A-Za-z.+-]*}
+  # They are listed, not written as the ranges 0-9, A-Z and a-z: on bash 3.2 in a UTF-8 locale a
+  # range is collation order, and let e-acute, o-slash and every other letter that sorts between
+  # a and z through.
+  v=${v%%[!0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.+-]*}
   # At most 69 characters: three numbers of up to 9 digits and 40 more, the longest version the
   # install-skew scan takes from an install's files. A longer word is not a version, and would
   # otherwise be printed whole.
