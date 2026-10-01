@@ -230,6 +230,10 @@ def process_file(filepath, registry, context, dry_run=False, force=False):
 
 def _peek_type(filepath):
     """Read only the frontmatter header and return the type string (lowercase) or None."""
+    # The same boundary as process_file, which comes after this on the --type and
+    # --sample paths: a note that resolves outside the vault is never opened.
+    if not is_inside_vault(filepath):
+        return None
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             head = f.read(2048)

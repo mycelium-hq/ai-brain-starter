@@ -347,6 +347,23 @@ class VaultBoundary(unittest.TestCase):
         self.assertEqual(index, {})
         self.assertIn("outside the vault", err.getvalue())
 
+    def test_type_peek_refuses_a_path_that_resolves_outside_the_vault(self):
+        """--type and --sample peek at each note's header, and that read comes
+        before the writer's guard, so it needs the same boundary."""
+        for path in self.outside_paths:
+            with self.subTest(path=path):
+                with self._spy_on_opens() as opened:
+                    peeked = _dispatcher._peek_type(path)
+                self.assertIsNone(peeked)
+                self.assertEqual(opened.call_count, 0, "the refused path was opened")
+
+    def test_type_peek_still_reads_a_note_inside_the_vault(self):
+        """Negative control: the guard does not stop a legitimate peek."""
+        with self._spy_on_opens() as opened:
+            peeked = _dispatcher._peek_type(self.inside_note)
+        self.assertEqual(peeked, "person")
+        self.assertTrue(opened.called)
+
 
 if __name__ == "__main__":
     # Windows cp1252-console safety (#313): the fixture paths are emoji-named, and
