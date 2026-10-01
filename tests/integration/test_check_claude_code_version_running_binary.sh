@@ -554,6 +554,41 @@ else
 fi
 
 # =============================================================================
+echo "=== the changelog parser reads and prints UTF-8 whatever the locale says"
+reset_state
+# -I makes the interpreter ignore PYTHONUTF8 and its kin, so its default encoding is the
+# locale's. Under a locale whose encoding is ASCII, reading a changelog that holds any
+# non-ASCII text raised, and so did printing a bullet that does; the helper's errors are
+# hidden, so the "what's new" bullets just vanished. The control proves this host's ASCII
+# locale really rejects UTF-8 for a plain read; without one the check cannot show anything.
+ASCII_LOC=en_US.US-ASCII
+printf 'caf\303\251\n' > "$TMP/utf8-sample.txt"
+if LC_ALL=$ASCII_LOC LANG=$ASCII_LOC "$PY3" -I -c 'import sys; open(sys.argv[1]).read()' "$TMP/utf8-sample.txt" > /dev/null 2>&1; then
+  echo "NOTE  this host has no locale whose default encoding rejects UTF-8, so the changelog parser's encoding cannot be shown here"
+else
+  ok "utf-8 changelog: the control locale ($ASCII_LOC) makes a plain interpreter reject UTF-8 (the check can fail)"
+  plant_path_claude 1.1.1
+  LATEST=2.0.0
+  # (a) non-ASCII text only in an older section: read, but not printed
+  printf '## 2.0.0\n\n- plain bullet\n\n## 0.0.1\n\n- the old \342\206\222 arrow\n' > "$TMP/changelog-read.md"
+  run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1 FAKE_CHANGELOG="$TMP/changelog-read.md" LC_ALL=$ASCII_LOC LANG=$ASCII_LOC
+  if has "$ALL" "[2.0.0] plain bullet"; then
+    ok "utf-8 changelog: non-ASCII text elsewhere in the file does not take the bullets down"
+  else
+    bad "utf-8 changelog: the file was read with the locale's encoding" "all=[$ALL]"
+  fi
+  # (b) a bullet that is itself non-ASCII
+  printf '## 2.0.0\n\n- caf\303\251 bullet\n' > "$TMP/changelog-print.md"
+  rm -f "$HOME/.claude/.claude-code-version-check"*
+  run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1 FAKE_CHANGELOG="$TMP/changelog-print.md" LC_ALL=$ASCII_LOC LANG=$ASCII_LOC
+  if has "$ALL" "[2.0.0] $(printf 'caf\303\251') bullet"; then
+    ok "utf-8 changelog: a non-ASCII bullet is printed as UTF-8"
+  else
+    bad "utf-8 changelog: the bullet was printed with the locale's encoding" "all=[$ALL]"
+  fi
+fi
+
+# =============================================================================
 echo "=== the skew scan never runs a claude found through a relative PATH entry"
 reset_state
 # A relative PATH entry means "wherever the session happens to be", which for a session

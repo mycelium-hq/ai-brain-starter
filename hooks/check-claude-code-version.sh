@@ -619,10 +619,11 @@ if [[ "$current" != "$latest" ]]; then
          > "$changelog_tmp" 2>/dev/null && [[ -s "$changelog_tmp" ]]; then
       diff_block=$(python3 -I - "$current" "$latest" "$DIFF_BULLET_LIMIT" "$changelog_tmp" <<'PY' 2>/dev/null
 import sys, re
+sys.stdout.reconfigure(encoding="utf-8")   # -I ignores PYTHONUTF8: the locale must not pick
 current = sys.argv[1]
 latest = sys.argv[2]
 limit = int(sys.argv[3])
-text = open(sys.argv[4]).read()
+text = open(sys.argv[4], encoding="utf-8").read()
 
 sections = re.split(r'^## ', text, flags=re.MULTILINE)
 
