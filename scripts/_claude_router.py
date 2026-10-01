@@ -97,8 +97,85 @@ def _log(msg: str) -> None:
     print(f"[claude-router] {msg}", file=sys.stderr)
 
 
+# Absolute install locations tried after PATH, in this order. launchd and cron
+# start jobs with a minimal PATH (/usr/bin:/bin:/usr/sbin:/sbin), so "claude is not
+# on PATH" is the normal state of an unattended caller, not an edge case. A module
+# constant so a test can stand in for the host's real files.
+_SYSTEM_CLI_FALLBACKS = (
+    Path("/opt/homebrew/bin/claude"),
+    Path("/usr/local/bin/claude"),
+)
+
+_NPM_PACKAGE = "@anthropic-ai/claude-code"
+_SEMVER = re.compile(r"(\d+)\.(\d+)\.(\d+)")
+
+
+def _fallback_cli_candidates(home: Path) -> list[Path]:
+    """Where to look for `claude` when it is not on PATH, in preference order.
+
+    One npm install per node version lives at ~/local/node-*/bin/claude. They are
+    globbed (sorted, so a tie is decided the same way every run) rather than named:
+    a fallback that spells out one node version's directory finds nothing on any
+    other machine, and on this one it stops being the right copy the day node is
+    upgraded -- the old copy stays behind, frozen at whatever version it had.
+    """
+    return [
+        *sorted(home.glob("local/node-*/bin/claude")),
+        home / ".local/bin/claude",
+        *_SYSTEM_CLI_FALLBACKS,
+    ]
+
+
+def _package_version(pkg_dir: Path) -> tuple[int, int, int] | None:
+    try:
+        data = json.loads((pkg_dir / "package.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or data.get("name") != _NPM_PACKAGE:
+        return None
+    m = _SEMVER.match(str(data.get("version", "")))
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else None
+
+
+def _install_version(cli: Path) -> tuple[int, int, int] | None:
+    """Version of the install that owns `cli`, from files only. None = unknown.
+
+    Never runs `cli`: this is called on a path nobody has vetted yet, in a router
+    that may be a cron job's only way to reach a model. An npm install carries its
+    version in the package.json of the package its bin/claude symlink points into
+    (<pkg>/bin/claude.exe -> <pkg>/package.json); a native install or cask puts the
+    version in the path (.../versions/2.1.286).
+    """
+    try:
+        real = Path(os.path.realpath(cli))
+    except OSError:
+        return None
+    for pkg_dir in (
+        real.parent.parent,
+        real.parent,
+        # a bin entry that is a plain file rather than a symlink into the package
+        cli.parent.parent / "lib" / "node_modules" / "@anthropic-ai" / "claude-code",
+    ):
+        version = _package_version(pkg_dir)
+        if version is not None:
+            return version
+    for part in reversed(real.parts):
+        m = _SEMVER.fullmatch(part)
+        if m:
+            return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    return None
+
+
 def _resolve_cli() -> str | None:
-    """Find the local `claude` CLI binary, or None if missing."""
+    """Find the local `claude` CLI binary, or None if missing.
+
+    Order: CLAUDE_CLI_PATH, then `claude` on PATH, then the install locations of
+    _fallback_cli_candidates(). Of those the NEWEST wins, by the version in the
+    package.json beside each install (read, never spawned); a tie goes to the one
+    listed first, and an install whose version cannot be read never beats one whose
+    version can. Taking the first one that exists would pin every unattended caller
+    to whichever copy happens to be listed first, however stale it has become.
+    """
     if os.environ.get("CLAUDE_ROUTER_DISABLE_CLI") == "1":
         return None
 
@@ -110,17 +187,18 @@ def _resolve_cli() -> str | None:
     if candidate:
         return candidate
 
-    home = Path.home()
-    for fallback in [
-        home / "local/node-v20.19.0-darwin-arm64/bin/claude",
-        home / ".local/bin/claude",
-        Path("/opt/homebrew/bin/claude"),
-        Path("/usr/local/bin/claude"),
-    ]:
-        if fallback.exists():
-            return str(fallback)
+    best: Path | None = None
+    best_version: tuple[int, int, int] | None = None
+    for fallback in _fallback_cli_candidates(Path.home()):
+        if not fallback.exists():
+            continue
+        version = _install_version(fallback)
+        if best is None or (
+            version is not None and (best_version is None or version > best_version)
+        ):
+            best, best_version = fallback, version
 
-    return None
+    return str(best) if best is not None else None
 
 
 def _resolve_api_key() -> str | None:
