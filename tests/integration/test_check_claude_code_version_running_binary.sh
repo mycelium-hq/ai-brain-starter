@@ -924,6 +924,37 @@ else
   bad "prerelease: the hook must survive a non-numeric patch field" "rc=$RC all=[$ALL]"
 fi
 
+# What the claude printed ends up in the headline, so only its leading version characters
+# (digits, letters, '.', '+', '-') may: what follows them is not part of a version.
+reset_state
+printf '#!/bin/sh\necho "2.1.0\033[31mX (Claude Code)"\n' > "$PATHBIN/claude"; chmod +x "$PATHBIN/claude"
+LATEST=2.1.0
+run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1
+if [ -z "$OUT" ] && [ -z "$ERR" ]; then
+  ok "version text: a claude printing 2.1.0 and then an escape sequence is current at 2.1.0 -> nothing printed"
+else
+  bad "version text: what follows the number made a current claude look out of date" "out=[$OUT] err=[$ERR]"
+fi
+LATEST=2.1.5
+rm -f "$HOME/.claude/.claude-code-version-check"*
+run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1
+H="$(headline)"
+case $H in *$'\033'*) esc=yes ;; *) esc=no ;; esac
+if [ "$esc" = no ] && has "$H" "[claude-code-version] 2.1.0 (PATH claude:"; then
+  ok "version text: the headline shows 2.1.0 and no escape byte"
+else
+  bad "version text: the headline must carry the leading version characters only" "esc=$esc headline=[$H]"
+fi
+printf '#!/bin/sh\necho "10.20.30+build.1 (Claude Code)"\n' > "$PATHBIN/claude"
+LATEST=10.20.31
+rm -f "$HOME/.claude/.claude-code-version-check"*
+run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1
+if has "$(headline)" "[claude-code-version] 10.20.30+build.1 (PATH claude:"; then
+  ok "version text: build metadata after a '+' is kept"
+else
+  bad "version text: the trim must keep '+' and '.'" "all=[$ALL]"
+fi
+
 reset_state
 if need_cc "relative path"; then
   build_fake "$TMP/anc/claude" 9.9.9

@@ -194,6 +194,9 @@ probe_version() {
     # no scratch file to be had: bounded for a wrapper that exec's, as it always was
     v=$(run_bounded "$PROBE_TIMEOUT_SEC" "$1" --version 2>/dev/null </dev/null | awk 'NF { print $1; exit }') || true
   fi
+  # Keep the leading version characters only (digits, letters, '.', '+', '-'): this text is
+  # printed in the headline, and whatever follows them (an escape sequence, say) is not a version.
+  v=${v%%[!0-9A-Za-z.+-]*}
   case $v in [0-9]*.[0-9]*.[0-9]*) printf '%s' "$v" ;; esac
 }
 
