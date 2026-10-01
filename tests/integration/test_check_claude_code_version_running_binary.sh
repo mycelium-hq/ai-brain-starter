@@ -25,13 +25,22 @@
 #   2. no claude ancestor -> PATH is used, and the line says so
 #   3. two installs at different versions -> ONE warning naming both; the same
 #      two at one version -> silence. An npm install is never spawned.
-#   4. one binary's cached reading is never replayed into a session running another
+#   4. one binary's cached reading is never replayed into a session running another,
+#      and a running claude that reports no version still gets cache hits (4b)
 # plus: a stale copy on a LaunchAgent PATH is named, the newest desktop bundle is
 # read, a hung `claude --version` cannot hang the hook, an upgrade in place
 # invalidates the cache, and the desktop path with a space in it survives `ps`.
 #
+# The hook also runs in a directory nobody has vetted and reads PATHs and files it
+# does not own, so there are checks for what it must NOT do: import a module planted
+# in the working directory, run a claude reached through a relative PATH entry, count
+# an unreadable copy as a version, run a file anyone can write, trust a package.json
+# that cannot be parsed, break the printed `npm i -g --prefix` line on an odd
+# directory name, or outlast its time bounds (a probe wrapper that forks, a scan
+# stalled on a read, a wrapper that never answers).
+#
 # CHECK_CLAUDE_VERSION_TARGET=<file> runs the same cases against another copy of
-# the hook (that is how the pre-fix hook is shown RED). Self-contained.
+# the hook (that is how a hook without a behavior is shown RED). Self-contained.
 # Exit 0 = pass, 1 = fail.
 
 set -u
@@ -889,8 +898,8 @@ if mkfifo "$STALL" 2> /dev/null; then
     -- perl -e 'alarm shift; exec @ARGV' 25 bash "$TARGET"
   took=$((SECONDS - start))
   { exec 3<> "$STALL"; exec 3>&-; } 2> /dev/null   # let a reader the unbounded variant left blocked go
-  if [ "$took" -lt 15 ] && has "$ALL" "install-skew scan failed"; then
-    ok "scan bound: a scan blocked reading a LaunchAgent entry is cut off after its bound ($took s) and reported as failed"
+  if [ "$took" -lt 15 ] && has "$ALL" "install-skew scan failed (python3 was cut off after 2s)"; then
+    ok "scan bound: a scan blocked reading a LaunchAgent entry is cut off after its bound ($took s) and reported as cut off"
   else
     bad "scan bound: a stalled scan must be cut off and reported" "took=${took}s rc=$RC all=[$ALL]"
   fi

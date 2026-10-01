@@ -107,7 +107,10 @@ KEYED_CACHE_KEEP_DAYS=14          # drop per-binary cache files untouched this l
 PROBE_TIMEOUT_SEC=${CLAUDE_VERSION_CHECK_PROBE_TIMEOUT_SEC:-10}
 case $PROBE_TIMEOUT_SEC in ''|*[!0-9]*) PROBE_TIMEOUT_SEC=10 ;; esac
 SCAN_TIMEOUT_SEC=${CLAUDE_VERSION_CHECK_SCAN_TIMEOUT_SEC:-30}
-case $SCAN_TIMEOUT_SEC in ''|0|*[!0-9]*) SCAN_TIMEOUT_SEC=30 ;; esac   # 0 would disarm the alarm
+case $SCAN_TIMEOUT_SEC in ''|*[!0-9]*) SCAN_TIMEOUT_SEC=30 ;; esac
+# zero (00, 000 too) would disarm the alarm; 10# keeps a leading zero from reading as octal
+(( 10#$SCAN_TIMEOUT_SEC > 0 )) 2>/dev/null || SCAN_TIMEOUT_SEC=30
+SCAN_TIMEOUT_SEC=$((10#$SCAN_TIMEOUT_SEC))
 
 # Sets MTIME to the epoch mtime of $1, cross-platform; empty when unknown.
 # GNU/Linux `stat -c %Y` first, then BSD/macOS `stat -f %m`, validating each result
