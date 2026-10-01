@@ -163,6 +163,26 @@ class ResolveCliFallback(unittest.TestCase):
         honest = self._node("node-b-honest", "2.1.100")
         self.assertEqual(R._resolve_cli(), str(honest))
 
+    def test_a_deeply_nested_package_json_is_an_unreadable_version_not_a_crash(self):
+        # json.loads raises RecursionError, which is not a ValueError, on deep nesting.
+        # An unattended caller whose only way to a model is this resolver must fall back,
+        # whatever a package.json holds.
+        self._node("node-a-nested", None)
+        pkg = self.home / "local" / "node-a-nested" / "lib" / "node_modules" / "@anthropic-ai" / "claude-code"
+        pkg.mkdir(parents=True)
+        (pkg / "package.json").write_text("[" * 200_000, encoding="utf-8")
+        honest = self._node("node-b-honest", "2.1.100")
+        self.assertEqual(R._resolve_cli(), str(honest))
+
+    def test_a_deeply_nested_package_json_alone_still_resolves_the_install(self):
+        # no readable version anywhere: the first one that exists is used, as for any
+        # other unreadable version
+        nested = self._node("node-a-nested", None)
+        pkg = self.home / "local" / "node-a-nested" / "lib" / "node_modules" / "@anthropic-ai" / "claude-code"
+        pkg.mkdir(parents=True)
+        (pkg / "package.json").write_text("[" * 200_000, encoding="utf-8")
+        self.assertEqual(R._resolve_cli(), str(nested))
+
     @unittest.skipUnless(_symlinks_supported(), "symlinks unavailable")
     def test_real_npm_layout_bin_symlink_into_the_package(self):
         # exactly what `npm i -g` lays down: bin/claude -> ../lib/.../bin/claude.exe

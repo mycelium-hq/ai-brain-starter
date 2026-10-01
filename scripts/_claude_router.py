@@ -129,7 +129,9 @@ def _fallback_cli_candidates(home: Path) -> list[Path]:
 def _package_version(pkg_dir: Path) -> tuple[int, int, int] | None:
     try:
         data = json.loads((pkg_dir / "package.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
+        # RecursionError is not a ValueError: a deeply nested file raises it, and the
+        # caller (often a cron job with no other way to a model) must fall back, not die.
         return None
     if not isinstance(data, dict) or data.get("name") != _NPM_PACKAGE:
         return None

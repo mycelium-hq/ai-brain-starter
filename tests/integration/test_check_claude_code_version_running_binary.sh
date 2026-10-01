@@ -361,6 +361,25 @@ fi
 TEST_PATH="$TEST_PATH_SAVE"
 
 # =============================================================================
+echo "=== a package.json nested past the parser's recursion limit does not take the scan down"
+reset_state
+# json raises RecursionError for such a file, and RecursionError is not a ValueError.
+# The second install sits under a directory named for its version, so once its
+# package.json is unreadable the version still comes from the path (no spawn needed).
+plant_npm_install "$TMP/fleet/node-a" 4.0.0
+plant_npm_install "$TMP/fleet/3.0.0" 3.0.0
+printf '%*s' 200000 '' | tr ' ' '[' > "$TMP/fleet/3.0.0/lib/node_modules/@anthropic-ai/claude-code/package.json"
+KNOWN="$TMP/fleet/*/bin/claude"; LATEST=4.0.0
+TEST_PATH_SAVE="$TEST_PATH"; TEST_PATH="$TMP/fleet/node-a/bin:$TEST_PATH"
+run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1
+TEST_PATH="$TEST_PATH_SAVE"
+if [ "$(skew_lines)" = 1 ] && has "$ALL" "3.0.0 $TMP/fleet/3.0.0/bin/claude" && ! has "$ALL" "scan failed"; then
+  ok "unparseable package.json: the scan treats it as an unreadable version and reads the install's version from its path"
+else
+  bad "unparseable package.json: one bad file must not stop the comparison" "skew-lines=$(skew_lines) all=[$ALL]"
+fi
+
+# =============================================================================
 echo "=== the skew scan reaches into other jobs' PATHs, so it must not run just anything"
 reset_state
 plant_npm_install "$TMP/fleet/node-a" 4.0.0

@@ -375,7 +375,7 @@ def pkg_version(pkg_dir):
     try:
         with open(os.path.join(pkg_dir, "package.json"), encoding="utf-8") as fh:
             data = json.load(fh)
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):   # RecursionError: deep nesting; not a ValueError
         return None
     if isinstance(data, dict) and data.get("name") == NPM_NAME \
             and isinstance(data.get("version"), str):
