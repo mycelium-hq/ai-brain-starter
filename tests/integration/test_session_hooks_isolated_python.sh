@@ -13,11 +13,16 @@
 #      assertions below are able to fail
 #   2. neither hook imports it, and each still does its job (the directory change is
 #      logged, a settings file is reported as valid, a broken one as invalid)
-#   3. every python3 a hook starts carries -I. This half does not depend on the
-#      interpreter: it holds even where json is imported before any script line runs.
+#   3. every python3 a hook starts carries `-I -X utf8`. This half does not depend on the
+#      interpreter or the locale: it holds even where json is imported before any script
+#      line runs.
 #   4. the FileChanged hook gives Python the changed file's path as data, not as part of
 #      the program: a path holding a single quote is still validated, and a path built
 #      to end the string and run a statement runs nothing.
+#   5. under a locale whose encoding is ASCII the hooks still read and print UTF-8. -I
+#      ignores PYTHONUTF8, so only `-X utf8` (a command-line option, which -I keeps) makes
+#      a settings file, a payload or a path holding non-ASCII text readable. Needs a host
+#      with such a locale; elsewhere it prints a note and skips.
 #
 # CHECK_HOOKS_DIR=<dir> runs the same cases against another copy of the hooks (that is
 # how hooks without -I are shown RED). Self-contained. Exit 0 = pass, 1 = fail.
@@ -74,16 +79,19 @@ else
 fi
 rm -f "$HOSTILE"/IMPORTED-*
 
-# every python3 a hook starts is recorded by a shim that then runs the real one
+# every python3 a hook starts is recorded (its first three arguments) by a shim that then
+# runs the real one
 mkdir -p "$TMP/pyshim"
-printf '#!/bin/sh\nprintf "%%s\\n" "$1" >> "$PY_ARGV_LOG"\nexec "%s" "$@"\n' "$PY3" > "$TMP/pyshim/python3"
+printf '#!/bin/sh\nprintf "%%s %%s %%s\\n" "$1" "$2" "$3" >> "$PY_ARGV_LOG"\nexec "%s" "$@"\n' "$PY3" > "$TMP/pyshim/python3"
 chmod +x "$TMP/pyshim/python3"
 PY_ARGV_LOG="$TMP/py-argv.log"
 
-# run_hook HOOK-FILE PAYLOAD -- from the hostile directory; fills OUT, ERR and RC
+# run_hook HOOK-FILE PAYLOAD -- from the hostile directory; fills OUT, ERR and RC.
+# HOOK_ENV holds extra VAR=value settings for the hook's environment (none by default).
+HOOK_ENV=()
 run_hook() {
   : > "$PY_ARGV_LOG"
-  ( cd "$HOSTILE" && printf '%s' "$2" | PATH="$TMP/pyshim:$PATH" PY_ARGV_LOG="$PY_ARGV_LOG" bash "$HOOKS/$1" ) \
+  ( cd "$HOSTILE" && printf '%s' "$2" | env "${HOOK_ENV[@]+"${HOOK_ENV[@]}"}" PATH="$TMP/pyshim:$PATH" PY_ARGV_LOG="$PY_ARGV_LOG" bash "$HOOKS/$1" ) \
     > "$TMP/out" 2> "$TMP/err"
   RC=$?
   OUT="$(cat "$TMP/out")"; ERR="$(cat "$TMP/err")"
@@ -98,12 +106,12 @@ check_not_imported() { # LABEL
   fi
   rm -f "$HOSTILE"/IMPORTED-*
 }
-# every python3 it started ran isolated, and it did start one
+# every python3 it started ran isolated and in UTF-8 mode, and it did start one
 check_isolated() { # LABEL
-  if [ -s "$PY_ARGV_LOG" ] && [ "$(sort -u "$PY_ARGV_LOG")" = "-I" ]; then
-    ok "$1: every python3 it starts runs isolated (-I)"
+  if [ -s "$PY_ARGV_LOG" ] && [ "$(sort -u "$PY_ARGV_LOG")" = "-I -X utf8" ]; then
+    ok "$1: every python3 it starts runs isolated, in UTF-8 mode (-I -X utf8)"
   else
-    bad "$1: a python3 was started without -I" "started: [$(sort "$PY_ARGV_LOG" | uniq -c | tr '\n' ';')]"
+    bad "$1: a python3 was started without -I -X utf8" "started: [$(sort "$PY_ARGV_LOG" | uniq -c | tr '\n' ';')]"
   fi
 }
 
@@ -192,6 +200,51 @@ else
   bad "injection: the file with the crafted name should be reported as parsing" "rc=$RC out=[$OUT] err=[$ERR]"
 fi
 check_isolated "file-changed (crafted path)"
+
+# =============================================================================
+echo "=== the hooks read and print UTF-8 whatever the locale says"
+# -I makes the interpreter ignore PYTHONUTF8 and PYTHONIOENCODING, so under a locale whose
+# encoding is ASCII the locale decided how a payload, a path and a settings file were read: a
+# valid file holding non-ASCII text was reported as invalid JSON, a path holding any was
+# skipped without a word, and a directory change was logged with both paths empty. The
+# control proves this host has such a locale; without one nothing below can show the exposure.
+ASCII_LOC=en_US.US-ASCII
+printf 'caf\303\251\n' > "$TMP/utf8-sample.txt"
+if LC_ALL=$ASCII_LOC LANG=$ASCII_LOC "$PY3" -I -c 'import sys; open(sys.argv[1]).read()' "$TMP/utf8-sample.txt" > /dev/null 2>&1; then
+  echo "NOTE  this host has no locale whose default encoding rejects UTF-8, so the hooks' encoding cannot be shown here; the -I -X utf8 check above still applies"
+else
+  ok "utf-8: the control locale ($ASCII_LOC) makes an isolated interpreter reject UTF-8 (the check can fail)"
+  E_ACUTE="$(printf '\303\251')"
+  KANJI="$(printf '\346\227\245\346\234\254')"
+  printf '{"name": "caf%s"}\n' "$E_ACUTE" > "$TMP/accent.json"       # valid JSON, non-ASCII text inside
+  UDIR="$TMP/caf$E_ACUTE $KANJI"
+  mkdir -p "$UDIR"
+  printf '{}\n' > "$UDIR/plain.json"                                   # plain content, non-ASCII path
+  CWD_LOG="$HOME/.claude/hooks/cwd-changed.log"
+  for extra in "" PYTHONUTF8=1; do   # PYTHONUTF8=1 is the setting -I throws away
+    HOOK_ENV=("LC_ALL=$ASCII_LOC" "LANG=$ASCII_LOC" ${extra:+"$extra"})
+    where="$ASCII_LOC${extra:+ with $extra}"
+    run_hook file-changed-settings.sh "{\"file_path\":\"$TMP/accent.json\"}"
+    if has "$ERR" "updated and parses OK" && ! has "$ERR" "INVALID JSON"; then
+      ok "utf-8 ($where): a valid settings file holding non-ASCII text is reported as parsing"
+    else
+      bad "utf-8 ($where): a valid settings file holding non-ASCII text was not reported as parsing" "rc=$RC out=[$OUT] err=[$ERR]"
+    fi
+    run_hook file-changed-settings.sh "{\"file_path\":\"$UDIR/plain.json\"}"
+    if has "$ERR" "$UDIR/plain.json updated and parses OK"; then
+      ok "utf-8 ($where): a settings file under a non-ASCII path is found and named"
+    else
+      bad "utf-8 ($where): a non-ASCII path was skipped or garbled" "rc=$RC out=[$OUT] err=[$ERR]"
+    fi
+    run_hook cwd-changed.sh "{\"cwd\":\"/work/caf$E_ACUTE\",\"previous_cwd\":\"/work/$KANJI\"}"
+    if has "$(tail -1 "$CWD_LOG" 2> /dev/null)" "/work/$KANJI -> /work/caf$E_ACUTE"; then
+      ok "utf-8 ($where): a directory change between non-ASCII paths is logged with both paths"
+    else
+      bad "utf-8 ($where): the directory change lost its non-ASCII paths" "rc=$RC log=[$(tail -1 "$CWD_LOG" 2> /dev/null)] err=[$ERR]"
+    fi
+  done
+  HOOK_ENV=()
+fi
 
 echo
 echo "passed=$PASS failed=$FAIL"
