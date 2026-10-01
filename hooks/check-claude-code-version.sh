@@ -367,6 +367,8 @@ HOME = os.path.expanduser("~")
 NPM_NAME = "@anthropic-ai/claude-code"
 LAUNCHD_DEFAULT_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
 VER = re.compile(r"\d+\.\d+\.\d+")
+# What an install's own files may claim as their version. It is printed, so free text is not one.
+SHAPE = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z.+-]{0,40}")
 DEADLINE = time.monotonic() + 20
 running = sys.argv[1] if len(sys.argv) > 1 else ""
 m = VER.match(sys.argv[2]) if len(sys.argv) > 2 else None   # digits only: this is printed
@@ -391,7 +393,7 @@ def pkg_version(pkg_dir):
     except (OSError, ValueError, RecursionError):   # RecursionError: deep nesting; not a ValueError
         return None
     if isinstance(data, dict) and data.get("name") == NPM_NAME \
-            and isinstance(data.get("version"), str):
+            and isinstance(data.get("version"), str) and SHAPE.fullmatch(data["version"]):
         return data["version"]
     return None
 
