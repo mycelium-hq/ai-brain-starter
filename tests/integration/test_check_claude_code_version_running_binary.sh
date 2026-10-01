@@ -450,6 +450,39 @@ if need_cc "control 4"; then
 fi
 
 # =============================================================================
+echo "=== control 4b: a running claude that reports no version still gets cache hits"
+reset_state
+if need_cc "control 4b"; then
+  # The claude above the hook is found but prints nothing a version parser accepts
+  # (the probe bound under load, or on Linux a comm=claude process whose exe is an
+  # interpreter). The hook then reports PATH's claude, labeled. That reading must be
+  # saved where the NEXT session under the same ancestor looks for it, or every
+  # session start repeats both GitHub requests, the probes and the scan.
+  build_fake "$TMP/anc/claude" no-version-here
+  plant_path_claude 1.1.1
+  via_ancestor "$TMP/anc/claude"; q1="$(gh_calls)"
+  if has "$ERR" "1.1.1 (PATH claude:" && has "$ERR" "reported no version" && [ "$q1" = 2 ]; then
+    ok "control 4b: an ancestor that reports no version -> PATH's 1.1.1, labeled with why, 2 gh calls"
+  else
+    bad "control 4b: the first session should be a labeled PATH fallback" "calls=$q1 err=[$ERR]"
+  fi
+  via_ancestor "$TMP/anc/claude"
+  if has "$OUT" "1.1.1 (PATH claude:" && [ "$(gh_calls)" = "$q1" ]; then
+    ok "control 4b: the same ancestor again -> replayed from cache, zero new gh calls"
+  else
+    bad "control 4b: a second session under the same ancestor must hit the cache" "calls=$(gh_calls) (was $q1) out=[$OUT] err=[$ERR]"
+  fi
+  # an ancestor that DOES answer must still not be served that reading
+  build_fake "$TMP/anc/answering/claude" 9.9.9
+  via_ancestor "$TMP/anc/answering/claude"
+  if has "$ERR" "9.9.9 (running binary:" && ! has "$ALL" "no version"; then
+    ok "control 4b: a different, answering ancestor is measured on its own, not served the fallback reading"
+  else
+    bad "control 4b: the fallback reading leaked into another binary's session" "calls=$(gh_calls) all=[$ALL]"
+  fi
+fi
+
+# =============================================================================
 echo "=== a binary newer than its reading voids the reading"
 reset_state
 if need_cc "upgrade"; then

@@ -33,9 +33,11 @@
 #      PATH's when there is none), so one binary's reading is never replayed into
 #      a session running another; and a binary that is NEWER than its reading
 #      invalidates that reading, so an upgrade shows at once instead of after the
-#      TTL. Every fresh reading is also written to the original, un-keyed file name
-#      as a mirror: this hook never reads it back, but other tools read that name
-#      as "the last banner".
+#      TTL. When the running binary reports no version and PATH's is measured
+#      instead, that reading is saved under both names, so the running binary's
+#      next session finds it. Every fresh reading is also written to the original,
+#      un-keyed file name as a mirror: this hook never reads it back, but other
+#      tools read that name as "the last banner".
 #   4. Skew watchdog, on a cache miss only: list every `claude` reachable from the
 #      hook's PATH, each LaunchAgent's PATH (plus launchd's default PATH when a
 #      plist sets none), the usual install locations and the newest desktop
@@ -251,6 +253,11 @@ find_claude_ancestor
 key_path=$ANC_PATH
 [[ -z "$key_path" ]] && key_path=$(command -v claude 2>/dev/null)
 select_cache_file "$key_path"
+# Where THIS session looks for a reading. The measurement below can end up keyed
+# elsewhere (the claude above us said nothing, so PATH's is measured instead), but the
+# next session under the same claude will look here again, so a reading is also
+# saved here.
+LOOKUP_CACHE_FILE=$CACHE_FILE
 
 now=$(date +%s)
 # `-nt` is a shell builtin (no stat), and follows symlinks: a bin entry that points
@@ -296,7 +303,8 @@ if [[ -n "$ANC_PATH" ]]; then
   fi
 fi
 if [[ -z "$current" ]]; then
-  # This reading belongs to PATH's claude, so it is cached under PATH's claude.
+  # This reading is of PATH's claude, so it is cached under PATH's claude (and, when
+  # a claude above us was found but reported nothing, under that one too).
   path_claude=$(command -v claude 2>/dev/null)
   select_cache_file "$path_claude"
   if [[ -n "$path_claude" ]]; then
@@ -624,6 +632,11 @@ fi
 # sessions inside the window print nothing.
 write_cache "$CACHE_FILE" "$msg"
 if [[ -z "${CLAUDE_VERSION_CHECK_CACHE_FILE:-}" && "$CACHE_FILE" != "$LEGACY_CACHE_FILE" ]]; then
+  # A reading taken from PATH's claude because the one above us reported no version
+  # belongs under that one's name as well, or its next session finds nothing.
+  if [[ "$LOOKUP_CACHE_FILE" != "$CACHE_FILE" && "$LOOKUP_CACHE_FILE" != "$LEGACY_CACHE_FILE" ]]; then
+    write_cache "$LOOKUP_CACHE_FILE" "$msg"
+  fi
   write_cache "$LEGACY_CACHE_FILE" "$msg"
   # One file per binary ever seen adds up across upgrades; drop the long-idle ones.
   find "$(dirname "$LEGACY_CACHE_FILE")" -maxdepth 1 -name "${LEGACY_CACHE_FILE##*/}.*" \
