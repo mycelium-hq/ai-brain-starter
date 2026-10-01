@@ -39,10 +39,9 @@ from _floors import floor_num_from_fm  # noqa: E402
 # primitive rather than a local reader: the vault-wide walk in
 # load_vault_index() below must survive a cloud placeholder / stalled mount /
 # FIFO. The walk itself is iter_vault_markdown() in extractors/_base.py, and
-# scripts/check-cloud-safe-file-walkers.py audits one file at a time, so it no
-# longer sees this read as part of a walk: a raw open() added to
-# load_vault_index() would not be caught there. Keep every read on safe_read_text.
-# Same convention as scripts/build-journal-index.py.
+# scripts/check-cloud-safe-file-walkers.py counts a call to it as a walk, so a
+# raw open() added to load_vault_index() fails that check. Keep every read on
+# safe_read_text. Same convention as scripts/build-journal-index.py.
 #
 # This script is ALSO run from a bare copy of scripts/ that has no sibling
 # hooks/ dir: tests/integration/test_extractors_localized_vault.sh makes "a
