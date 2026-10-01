@@ -630,8 +630,12 @@ INTEGRATION_TESTS=(
   # binary wins, the PATH fallback is labeled, ONE skew warning line names
   # every disagreeing install while an all-equal fleet stays silent, an npm
   # install is read from package.json and never spawned, and a hung
-  # `claude --version` cannot hang the hook. 29 of its 36 assertions fail on the
-  # pre-fix hook (CHECK_CLAUDE_VERSION_TARGET reruns it against any copy).
+  # `claude --version` cannot hang the hook. It also pins what the hook must NOT do
+  # (import from the working directory, run a claude reached through a relative PATH
+  # entry, count an unreadable copy as a version, outlast its time bounds). Against the
+  # hook as it stood before this change (CHECK_CLAUDE_VERSION_TARGET reruns it against
+  # any copy), 40 of its 54 assertions fail on macOS with Python 3.14 and 42 of 55 with
+  # Python 3.9 (one assertion needs an interpreter that does not import re at startup).
   test_check_claude_code_version_running_binary
   # Same bug class, vault-safe-commit.sh's non-PID lock-age check: a lock
   # whose age cannot be proven must never be treated as stale and removed.
