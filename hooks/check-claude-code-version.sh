@@ -56,17 +56,24 @@
 #                                           (default: ~/local/node-*/bin/claude,
 #                                           ~/.local/bin/claude, /opt/homebrew/bin/claude,
 #                                           /usr/local/bin/claude)
-#   CLAUDE_VERSION_CHECK_PROBE_TIMEOUT_SEC  bound on each `claude --version` run
-#                                           (default 10)
+#   CLAUDE_VERSION_CHECK_PROBE_TIMEOUT_SEC  bound on the `claude --version` probe of
+#                                           the running binary and of PATH's claude
+#                                           (default 10); the scan's own runs are
+#                                           capped at 5 s each, 20 s in all
 #   CLAUDE_VERSION_CHECK_SCAN_TIMEOUT_SEC   bound on the whole install-skew scan
 #                                           (default 30)
 #   CLAUDE_VERSION_CHECK_CACHE_FILE         use exactly this file as the cache: no
 #                                           per-binary key, no mirror, no cleanup
 #
-# Bounded by construction: a few `ps` calls and one cached read; on a miss only,
-# one directory level of ~/Library/LaunchAgents plus time-bounded `--version`
-# probes. No recursive walk, and no file is run that another user could have
-# written.
+# What it costs. A cache hit: a few `ps` (or /proc) reads and one file read. A miss
+# adds up to two `gh api` calls (not time-bounded, as before), up to two
+# `claude --version` probes (10 s each) and the install scan: one directory level of
+# ~/Library/LaunchAgents plus a few globs, no recursive walk, 30 s at the outside. The
+# probes and the scan are bounded by perl's alarm, or by `timeout`; with neither
+# installed they run unbounded. The scan runs a file only when this user or root owns
+# it and no one else can write it. The running binary and PATH's first `claude` are
+# run with no such check: the first is already running this session, the second is
+# the one the shell would run.
 
 set -uo pipefail
 
