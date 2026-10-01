@@ -38,7 +38,7 @@
 # in the working directory, run a claude reached through a relative PATH entry, count
 # an unreadable copy as a version, run a file anyone can write, trust a package.json
 # that cannot be parsed, stop on or print a version made of thousands of digits, count
-# a non-ASCII letter as part of a version, break the printed `npm i -g --prefix` line on an odd
+# a non-ASCII letter or digit as part of a version, break the printed `npm i -g --prefix` line on an odd
 # directory name, outlast its time bounds (a probe wrapper that forks, a scan
 # stalled on a read, a wrapper that never answers), or let a time-bound setting
 # switch a bound off (0, or a number that wraps to 0).
@@ -641,6 +641,51 @@ for v in "$V69" "${V69}a"; do
     fi
   fi
 done
+
+# =============================================================================
+echo "=== a folder named with digits that are not ASCII is not a version"
+reset_state
+# A copy whose own files say nothing else is listed under the version its folder is named for (a
+# native installer's folder, a desktop bundle). \d also matches fullwidth and other Unicode digits,
+# so a folder named with the fullwidth digits 2, 1 and 9 between ASCII dots was listed as a version,
+# with those characters in the line; such a copy is asked for its version instead. A folder named
+# with ASCII digits is still read.
+FW="$(printf '\357\274\222.\357\274\221.\357\274\231')"   # fullwidth digits: 2.1.9
+plant_path_claude 4.0.0
+for d in 2.1.9 "$FW"; do
+  mkdir -p "$TMP/fleet/$d"
+  printf '#!/bin/sh\necho "0.0.1 (Claude Code)"\n' > "$TMP/fleet/$d/claude"; chmod 755 "$TMP/fleet/$d/claude"
+done
+KNOWN="$TMP/fleet/2.1.9/claude:$TMP/fleet/$FW/claude"; LATEST=4.0.0
+run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1
+if has "$ALL" "0.0.1 $TMP/fleet/$FW/claude"; then
+  ok "folder name: fullwidth digits are not a version, so the copy is asked and listed with the 0.0.1 it answered"
+else
+  bad "folder name: a folder named with fullwidth digits was listed as a version" "all=[${ALL:0:600}]"
+fi
+if has "$ALL" "2.1.9 $TMP/fleet/2.1.9/claude"; then
+  ok "folder name: an ASCII version in a folder name is still read from it (asked, that copy would say 0.0.1)"
+else
+  bad "folder name: the version in a folder's name should be read from it" "all=[${ALL:0:600}]"
+fi
+# the same pattern picks the newest desktop bundle: a folder named with fullwidth digits is not a
+# version, so it is not the newest and the bundle named 1.0.0 is the one listed
+reset_state
+plant_path_claude 4.0.0
+BR="$HOME/Library/Application Support/Claude/claude-code"
+for d in 1.0.0 "$FW"; do
+  mkdir -p "$BR/$d/claude.app/Contents/MacOS"
+  printf '#!/bin/sh\necho "0.0.1 (Claude Code)"\n' > "$BR/$d/claude.app/Contents/MacOS/claude"
+  chmod 755 "$BR/$d/claude.app/Contents/MacOS/claude"
+done
+LATEST=4.0.0
+run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1
+if has "$ALL" "1.0.0 ~/Library/Application Support/Claude/claude-code/1.0.0/claude.app/Contents/MacOS/claude" &&
+   ! has "$ALL" "$FW"; then
+  ok "folder name: a desktop bundle folder named with fullwidth digits is not the newest bundle; the one named 1.0.0 is listed"
+else
+  bad "folder name: a bundle folder named with fullwidth digits was taken for a version" "all=[${ALL:0:600}]"
+fi
 
 # =============================================================================
 echo "=== the embedded python never imports a module planted in the working directory"

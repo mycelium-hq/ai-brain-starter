@@ -423,9 +423,10 @@ def layout_version(p):
     v = pkg_version(os.path.join(prefix, "lib", "node_modules", "@anthropic-ai", "claude-code"))
     if v:
         return v
-    # native installer, cask, desktop bundle: a path component that IS the version
+    # native installer, cask, desktop bundle: a path component that IS the version (ASCII digits
+    # only: \d would take fullwidth and other Unicode digits, and the component is printed)
     for comp in reversed(r.split(os.sep)):
-        if re.fullmatch(r"\d+\.\d+\.\d+", comp):
+        if VER.fullmatch(comp):
             return comp
     return None
 
@@ -507,7 +508,7 @@ bundles = []
 bundle_root = os.path.join(HOME, "Library", "Application Support", "Claude", "claude-code")
 for d in glob.glob(os.path.join(glob.escape(bundle_root), "*")):
     name = os.path.basename(d)
-    if re.fullmatch(r"\d+\.\d+\.\d+", name):
+    if VER.fullmatch(name):
         bundles.append((tuple(int(x) for x in name.split(".")), d))
 if bundles:
     newest = sorted(bundles)[-1][1]
