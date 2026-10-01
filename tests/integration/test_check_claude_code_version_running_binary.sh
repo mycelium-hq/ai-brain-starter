@@ -36,8 +36,9 @@
 # in the working directory, run a claude reached through a relative PATH entry, count
 # an unreadable copy as a version, run a file anyone can write, trust a package.json
 # that cannot be parsed, break the printed `npm i -g --prefix` line on an odd
-# directory name, or outlast its time bounds (a probe wrapper that forks, a scan
-# stalled on a read, a wrapper that never answers).
+# directory name, outlast its time bounds (a probe wrapper that forks, a scan
+# stalled on a read, a wrapper that never answers), or let a time-bound setting
+# switch a bound off (0, or a number that wraps to 0).
 #
 # CHECK_CLAUDE_VERSION_TARGET=<file> runs the same cases against another copy of
 # the hook (that is how a hook without a behavior is shown RED). Self-contained.
@@ -199,7 +200,7 @@ run_hook() {
   [ "${1:-}" = "--" ] && shift
   [ $# -gt 0 ] || set -- bash "$TARGET"
   env -u CLAUDE_VERSION_CHECK_WALK_FROM_PID -u CLAUDE_VERSION_CHECK_CACHE_FILE \
-      -u CLAUDE_VERSION_CHECK_PROBE_TIMEOUT_SEC \
+      -u CLAUDE_VERSION_CHECK_PROBE_TIMEOUT_SEC -u CLAUDE_VERSION_CHECK_SCAN_TIMEOUT_SEC \
       PATH="$TEST_PATH" GH_LOG="$GH_LOG" FAKE_LATEST="$LATEST" \
       CLAUDE_VERSION_CHECK_KNOWN_INSTALLS="$KNOWN" \
       "${envs[@]+"${envs[@]}"}" "$@" > "$TMP/out" 2> "$TMP/err"
@@ -906,6 +907,73 @@ if mkfifo "$STALL" 2> /dev/null; then
   rm -f "$STALL"
 else
   echo "SKIP  scan bound (no mkfifo on this host)"
+fi
+
+# =============================================================================
+echo "=== a time-bound setting that would switch the bound off falls back to its default"
+reset_state
+# perl's alarm arms nothing for 0, and it keeps only 32 bits of its argument, so 4294967296
+# is 0 as well: either value turns a bound into no bound. A stand-in `perl` records the
+# number the hook hands to `alarm` for each command it bounds (the log is what is asserted),
+# then runs the real perl, cutting the command named in CAP_COMMAND after 1 s whatever it
+# was told, so a hang costs this test a second.
+mkdir -p "$TMP/perlshim"
+cat > "$TMP/perlshim/perl" <<'EOF'
+#!/bin/sh
+# What the hook runs: perl -e 'alarm shift; exec @ARGV' SECS COMMAND [ARGS...]
+script=$2; secs=$3; shift 3
+printf '%s %s\n' "$secs" "${1##*/}" >> "$ALARM_LOG"
+[ "${1##*/}" = "${CAP_COMMAND:-}" ] && secs=1
+exec "$REAL_PERL" -e "$script" "$secs" "$@"
+EOF
+chmod +x "$TMP/perlshim/perl"
+REAL_PERL="$(command -v perl)"
+ALARM_LOG="$TMP/alarm.log"
+alarm_bound() { awk -v c="$1" '$2 == c { print $1; exit }' "$ALARM_LOG" 2> /dev/null; } # COMMAND-NAME
+# run_knob KNOB VALUE COMMAND-TO-CUT -- the hook with CLAUDE_VERSION_CHECK_<KNOB>_TIMEOUT_SEC=VALUE
+run_knob() {
+  : > "$ALARM_LOG"
+  rm -f "$HOME/.claude/.claude-code-version-check"*
+  TEST_PATH_SAVE="$TEST_PATH"; TEST_PATH="$TMP/perlshim:$TEST_PATH"
+  run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1 "CLAUDE_VERSION_CHECK_${1}_TIMEOUT_SEC=$2" \
+    ALARM_LOG="$ALARM_LOG" REAL_PERL="$REAL_PERL" CAP_COMMAND="$3"
+  TEST_PATH="$TEST_PATH_SAVE"
+}
+# check_knob KNOB COMMAND DEFAULT VALUE...
+check_knob() {
+  local knob=$1 cmd=$2 want=$3 v got; shift 3
+  for v in "$@"; do
+    run_knob "$knob" "$v" "$cmd"
+    got="$(alarm_bound "$cmd")"
+    if [ "$got" = "$want" ]; then
+      ok "$knob bound: '$v' is not 1 to 3 digits without a leading zero, so the default ($want s) reaches the alarm"
+    else
+      bad "$knob bound: '$v' must fall back to the default ($want s)" "alarm got [$got]; log: $(tr '\n' ';' < "$ALARM_LOG")"
+    fi
+  done
+  run_knob "$knob" 7 "$cmd"
+  got="$(alarm_bound "$cmd")"
+  if [ "$got" = 7 ]; then
+    ok "$knob bound: a plain 7 is honored (the log can show a setting getting through)"
+  else
+    bad "$knob bound: 7 should reach the alarm as 7" "alarm got [$got]; log: $(tr '\n' ';' < "$ALARM_LOG")"
+  fi
+}
+# (a) the probe: a claude that never answers
+printf '#!/bin/sh\nexec sleep 30\n' > "$PATHBIN/claude"; chmod +x "$PATHBIN/claude"
+check_knob PROBE claude 10 0 4294967296 010 1000
+# (b) the scan: a LaunchAgent entry that is a FIFO stalls its read, as in the case above
+reset_state
+plant_path_claude 2.1.286
+LATEST=2.1.286
+mkdir -p "$HOME/Library/LaunchAgents"
+STALL="$HOME/Library/LaunchAgents/com.example.stalled.plist"
+if mkfifo "$STALL" 2> /dev/null; then
+  check_knob SCAN python3 30 0 4294967296 010 1000
+  { exec 3<> "$STALL"; exec 3>&-; } 2> /dev/null   # let any reader left blocked go
+  rm -f "$STALL"
+else
+  echo "SKIP  scan bound setting (no mkfifo on this host)"
 fi
 
 # =============================================================================

@@ -61,7 +61,9 @@
 #                                           (default 10); the scan's own runs are
 #                                           capped at 5 s each, 20 s in all
 #   CLAUDE_VERSION_CHECK_SCAN_TIMEOUT_SEC   bound on the whole install-skew scan
-#                                           (default 30)
+#                                           (default 30). Both bounds take 1 to 3 digits
+#                                           with no leading zero; anything else keeps
+#                                           the default.
 #   CLAUDE_VERSION_CHECK_CACHE_FILE         use exactly this file as the cache: no
 #                                           per-binary key, no mirror, no cleanup
 #
@@ -104,13 +106,14 @@ CACHE_TTL_SEC=$((6 * 60 * 60))    # 6 hours
 WARN_VERSION_GAP=3                # warn loudly if behind by N or more patch versions
 DIFF_BULLET_LIMIT=8               # max bullets to surface from the changelog diff
 KEYED_CACHE_KEEP_DAYS=14          # drop per-binary cache files untouched this long
+# A time bound from the environment is 1 to 3 digits with no leading zero, else the default.
+# Zero would switch the alarm off, and so would a number past 32 bits, which perl's alarm
+# wraps (4294967296 becomes 0).
+is_time_bound() { case $1 in [1-9]|[1-9][0-9]|[1-9][0-9][0-9]) return 0 ;; esac; return 1; }
 PROBE_TIMEOUT_SEC=${CLAUDE_VERSION_CHECK_PROBE_TIMEOUT_SEC:-10}
-case $PROBE_TIMEOUT_SEC in ''|*[!0-9]*) PROBE_TIMEOUT_SEC=10 ;; esac
+is_time_bound "$PROBE_TIMEOUT_SEC" || PROBE_TIMEOUT_SEC=10
 SCAN_TIMEOUT_SEC=${CLAUDE_VERSION_CHECK_SCAN_TIMEOUT_SEC:-30}
-case $SCAN_TIMEOUT_SEC in ''|*[!0-9]*) SCAN_TIMEOUT_SEC=30 ;; esac
-# zero (00, 000 too) would disarm the alarm; 10# keeps a leading zero from reading as octal
-(( 10#$SCAN_TIMEOUT_SEC > 0 )) 2>/dev/null || SCAN_TIMEOUT_SEC=30
-SCAN_TIMEOUT_SEC=$((10#$SCAN_TIMEOUT_SEC))
+is_time_bound "$SCAN_TIMEOUT_SEC" || SCAN_TIMEOUT_SEC=30
 
 # Sets MTIME to the epoch mtime of $1, cross-platform; empty when unknown.
 # GNU/Linux `stat -c %Y` first, then BSD/macOS `stat -f %m`, validating each result
