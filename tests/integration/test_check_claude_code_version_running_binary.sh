@@ -794,6 +794,67 @@ else
 fi
 
 # =============================================================================
+echo "=== a claude that forks a child instead of exec'ing cannot hold the hook past the bound"
+reset_state
+# `$(...)` waits for end-of-file on its pipe, not for the process: a wrapper that forks a
+# long-lived child and waits leaves that child holding the pipe after the alarm has killed
+# the wrapper itself, so a capture-based probe lasts as long as the child does.
+printf '#!/bin/sh\nsleep 12 &\nwait\n' > "$PATHBIN/claude"; chmod +x "$PATHBIN/claude"
+start=$SECONDS
+run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1 CLAUDE_VERSION_CHECK_PROBE_TIMEOUT_SEC=1
+took=$((SECONDS - start))
+if [ "$took" -lt 9 ] && [ -z "$OUT" ] && [ -z "$ERR" ] && [ "$RC" = 0 ]; then
+  ok "timeout: a wrapper that forks and waits is cut off at the probe bound too ($took s, not its child's 12), hook exits 0 silently"
+else
+  bad "timeout: a forking wrapper held the hook past the probe bound" "took=${took}s rc=$RC out=[$OUT] err=[$ERR]"
+fi
+
+# =============================================================================
+echo "=== a scan that stalls on a read is cut off, and the hook says so"
+reset_state
+plant_path_claude 2.1.286
+LATEST=2.1.286
+mkdir -p "$HOME/Library/LaunchAgents"
+STALL="$HOME/Library/LaunchAgents/com.example.stalled.plist"
+if mkfifo "$STALL" 2> /dev/null; then
+  # A plist that is a FIFO makes the scan's open() block until someone writes to it: a
+  # stand-in for a stalled mount. The outer alarm only lets an unbounded hook FAIL this
+  # test instead of hanging it.
+  start=$SECONDS
+  run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1 CLAUDE_VERSION_CHECK_SCAN_TIMEOUT_SEC=2 \
+    -- perl -e 'alarm shift; exec @ARGV' 25 bash "$TARGET"
+  took=$((SECONDS - start))
+  { exec 3<> "$STALL"; exec 3>&-; } 2> /dev/null   # let a reader the unbounded variant left blocked go
+  if [ "$took" -lt 15 ] && has "$ALL" "install-skew scan failed"; then
+    ok "scan bound: a scan blocked reading a LaunchAgent entry is cut off after its bound ($took s) and reported as failed"
+  else
+    bad "scan bound: a stalled scan must be cut off and reported" "took=${took}s rc=$RC all=[$ALL]"
+  fi
+  rm -f "$STALL"
+else
+  echo "SKIP  scan bound (no mkfifo on this host)"
+fi
+
+# =============================================================================
+echo "=== a claude on a LaunchAgent's PATH that never answers is cut off by the scan's own bound"
+reset_state
+plant_npm_install "$TMP/fleet/node-a" 4.0.0
+mkdir -p "$TMP/stale/bin"
+printf '#!/bin/sh\nexec sleep 40\n' > "$TMP/stale/bin/claude"; chmod 755 "$TMP/stale/bin/claude"
+plant_plist "com.example.hung" "$TMP/stale/bin:/usr/bin"
+LATEST=4.0.0
+TEST_PATH_SAVE="$TEST_PATH"; TEST_PATH="$TMP/fleet/node-a/bin:$TEST_PATH"
+start=$SECONDS
+run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1 -- perl -e 'alarm shift; exec @ARGV' 30 bash "$TARGET"
+took=$((SECONDS - start))
+TEST_PATH="$TEST_PATH_SAVE"
+if [ "$took" -lt 20 ] && [ -z "$OUT" ] && [ -z "$ERR" ] && [ "$RC" = 0 ]; then
+  ok "scan bound: a wrapper that never answers --version is cut off ($took s, not 40); the fleet that otherwise agrees stays quiet"
+else
+  bad "scan bound: a hung wrapper must be cut off and must not read as skew" "took=${took}s rc=$RC out=[$OUT] err=[$ERR]"
+fi
+
+# =============================================================================
 echo "=== the keyed cache survives GNU stat semantics"
 reset_state
 if need_cc "gnu stat"; then

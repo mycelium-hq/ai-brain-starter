@@ -58,6 +58,8 @@
 #                                           /usr/local/bin/claude)
 #   CLAUDE_VERSION_CHECK_PROBE_TIMEOUT_SEC  bound on each `claude --version` run
 #                                           (default 10)
+#   CLAUDE_VERSION_CHECK_SCAN_TIMEOUT_SEC   bound on the whole install-skew scan
+#                                           (default 30)
 #   CLAUDE_VERSION_CHECK_CACHE_FILE         use exactly this file as the cache: no
 #                                           per-binary key, no mirror, no cleanup
 #
@@ -97,6 +99,8 @@ DIFF_BULLET_LIMIT=8               # max bullets to surface from the changelog di
 KEYED_CACHE_KEEP_DAYS=14          # drop per-binary cache files untouched this long
 PROBE_TIMEOUT_SEC=${CLAUDE_VERSION_CHECK_PROBE_TIMEOUT_SEC:-10}
 case $PROBE_TIMEOUT_SEC in ''|*[!0-9]*) PROBE_TIMEOUT_SEC=10 ;; esac
+SCAN_TIMEOUT_SEC=${CLAUDE_VERSION_CHECK_SCAN_TIMEOUT_SEC:-30}
+case $SCAN_TIMEOUT_SEC in ''|0|*[!0-9]*) SCAN_TIMEOUT_SEC=30 ;; esac   # 0 would disarm the alarm
 
 # Sets MTIME to the epoch mtime of $1, cross-platform; empty when unknown.
 # GNU/Linux `stat -c %Y` first, then BSD/macOS `stat -f %m`, validating each result
@@ -161,10 +165,22 @@ run_bounded() {
 # line of `<bin> --version`, bounded, stdin closed. Prints nothing unless it
 # starts like a version -- a path that is not Claude Code (a node shim, a wrapper
 # that errors) must not be reported as a version.
+#
+# The output goes to a file, not to a `$(...)` capture: a capture waits for end-of-file
+# on its pipe, not for the process, so a wrapper that forks a long-lived child and waits
+# (rather than exec'ing) leaves that child holding the pipe after the alarm has killed
+# the wrapper, and the hook would last as long as the child instead of the bound.
 probe_version() {
-  local out v
-  out=$(run_bounded "$PROBE_TIMEOUT_SEC" "$1" --version 2>/dev/null </dev/null) || true
-  v=$(printf '%s\n' "$out" | awk 'NF { print $1; exit }')
+  local tmp v
+  tmp=$(mktemp -t claude-code-probe.XXXXXX 2>/dev/null) || tmp=""
+  if [[ -n "$tmp" ]]; then
+    run_bounded "$PROBE_TIMEOUT_SEC" "$1" --version >"$tmp" 2>/dev/null </dev/null || true
+    v=$(awk 'NF { print $1; exit }' "$tmp" 2>/dev/null)
+    rm -f "$tmp"
+  else
+    # no scratch file to be had: bounded for a wrapper that exec's, as it always was
+    v=$(run_bounded "$PROBE_TIMEOUT_SEC" "$1" --version 2>/dev/null </dev/null | awk 'NF { print $1; exit }') || true
+  fi
   case $v in [0-9]*.[0-9]*.[0-9]*) printf '%s' "$v" ;; esac
 }
 
@@ -512,10 +528,16 @@ PY
 # drops it from sys.path (and ignores PYTHON* variables and the user site).
 skew_line=""
 if command -v python3 >/dev/null 2>&1; then
-  skew_line=$(python3 -I -c "$SKEW_PY" "$measured_path" 2>/dev/null)
+  # Under the same bounded runner as the probes: the scan reads every PATH and LaunchAgent
+  # directory, and its own wall-clock budget only covers the `--version` runs inside it.
+  skew_line=$(run_bounded "$SCAN_TIMEOUT_SEC" python3 -I -c "$SKEW_PY" "$measured_path" 2>/dev/null)
   skew_rc=$?
   if [[ "$skew_rc" -ne 0 ]]; then
-    skew_line="[claude-code-version] The install-skew scan failed (python3 exited $skew_rc), so the installed copies were NOT compared."
+    case $skew_rc in
+      124|142) skew_why="was cut off after ${SCAN_TIMEOUT_SEC}s" ;;   # `timeout` | perl's alarm (128 + SIGALRM)
+      *)       skew_why="exited $skew_rc" ;;
+    esac
+    skew_line="[claude-code-version] The install-skew scan failed (python3 $skew_why), so the installed copies were NOT compared."
   fi
 fi
 
