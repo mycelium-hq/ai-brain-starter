@@ -665,7 +665,7 @@ if need_cc "ancestor layouts"; then
   # reports the image behind it. Either way the hint must name THIS install.
   if [ "$os" = Linux ]; then want_label="$PKG/bin/claude.exe"; else want_label="$NPMP/bin/claude"; fi
   if has "$H" "9.9.9 (running binary: $want_label)" &&
-     has "$H" "npm i -g --prefix '$NPMP' @anthropic-ai/claude-code@latest"; then
+     has "$H" "npm i -g --prefix $(printf '%q' "$NPMP") @anthropic-ai/claude-code@latest"; then
     ok "npm layout: started through the bin symlink, the upgrade hint carries THIS install's --prefix"
   else
     bad "npm layout: expected the running binary path and a --prefix hint" "$H"
@@ -680,6 +680,30 @@ if need_cc "ancestor layouts"; then
     ok "npm layout: reinstalling the file behind the bin symlink voids the cached reading"
   else
     bad "npm layout: a reinstall behind the symlink should void the cache" "calls: first=$n1 second=$n2 after-touch=$n3"
+  fi
+fi
+
+# =============================================================================
+echo "=== the --prefix in the upgrade hint survives a quote and a space in the directory name"
+reset_state
+if need_cc "prefix quoting"; then
+  # The hint is text a person (or a model) pastes into a shell. An install under a
+  # directory whose name holds a single quote must not break out of the quoting.
+  plant_path_claude 1.1.1
+  QP="$TMP/fleet/it's a prefix"
+  QPKG="$QP/lib/node_modules/@anthropic-ai/claude-code"
+  mkdir -p "$QP/bin"
+  build_fake "$QPKG/bin/claude.exe" 9.9.9
+  printf '{"name":"@anthropic-ai/claude-code","version":"9.9.9"}\n' > "$QPKG/package.json"
+  ln -sf "../lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe" "$QP/bin/claude"
+  via_ancestor "$QP/bin/claude"
+  H="$(headline)"
+  arg="$(printf '%s\n' "$H" | sed -n 's/.*--prefix \(.*\) @anthropic-ai\/claude-code@latest.*/\1/p')"
+  got=""; [ -n "$arg" ] && eval "got=$arg" 2> /dev/null
+  if [ "$got" = "$QP" ]; then
+    ok "prefix quoting: a directory name with a quote and a space reads back as itself when the hint is pasted into a shell"
+  else
+    bad "prefix quoting: the --prefix argument did not round-trip" "hint=[$H] arg=[$arg] got=[$got]"
   fi
 fi
 

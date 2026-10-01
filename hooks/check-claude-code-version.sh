@@ -584,7 +584,9 @@ if [[ "$current" != "$latest" ]]; then
   case $measured_real in
     */lib/node_modules/@anthropic-ai/claude-code/*)
       up_prefix=$(plain "${measured_real%/lib/node_modules/@anthropic-ai/claude-code/*}")
-      up_hint="$up_verb: npm i -g --prefix '$up_prefix' @anthropic-ai/claude-code@latest" ;;
+      # %q quotes for a shell (a name holding a quote or a space stays one word), so the
+      # line can be pasted as it stands
+      up_hint="$up_verb: npm i -g --prefix $(printf '%q' "$up_prefix") @anthropic-ai/claude-code@latest" ;;
     */Claude/claude-code/*/claude.app/*)
       up_hint="This is the desktop app's bundled copy; it updates with the app." ;;
     *)
