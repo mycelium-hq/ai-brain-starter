@@ -9,6 +9,18 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-10-01: the version check now measures the Claude Code that is running your session, and says when your installed copies disagree
+
+**Who this affects:** anyone with more than one copy of Claude Code on the machine (an install per node version, Homebrew, the desktop app's own copy), and anyone who runs scheduled `claude -p` jobs. Everyone else sees no difference.
+
+The startup version check asked whichever `claude` your PATH found first, so it could tell a desktop session it was on one release while that session ran another, and it never looked at the copies your scheduled jobs use. Upgrading "the" install and checking it proved nothing about the others: two of three copies on one machine sat weeks behind while every upgrade was verified against the third.
+
+The check now asks the Claude Code process that started the session, and the line it prints says which file it asked (or that it fell back to PATH because no running Claude Code was found). Its saved answer is kept per binary, so one copy's reading is never shown to a session running another, and upgrading a copy shows up straight away instead of after six hours. The upgrade hint names the install's own `--prefix`, because a plain `npm i -g` installs under whichever node comes first on PATH. When the copies it can find (on PATH, on each LaunchAgent's PATH, in the usual install folders, and the newest desktop copy) are not all the same version, it prints one line naming each version and path. When they agree, it prints nothing. Every `claude --version` it runs is now cut off after ten seconds.
+
+The Python helper `scripts/_claude_router.py` had the same blind spot: when `claude` was not on PATH it tried one hardcoded node-version folder, which exists on exactly one machine. It now looks at every `~/local/node-*/bin/claude` plus the usual install folders and uses the newest, reading each version from the package file beside it without running it.
+
+---
+
 ## 2026-09-25: merging main into a topic branch no longer trips the session-artifact guard, and `git merge` is guarded too
 
 **Who this affects:** anyone using `git-hooks/guard-session-artifacts-on-default-branch.sh`, the hook that refuses to commit session-close notes on a branch other than the default one, where they would strand instead of reaching it.
