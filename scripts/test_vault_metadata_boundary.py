@@ -159,6 +159,23 @@ class VaultBoundary(unittest.TestCase):
                                create=True) as spy:
             yield spy
 
+    def _run_main(self, files=None):
+        """Run the dispatcher's main() on the fixture vault with the stand-in
+        extractor, and return what it printed. `files` replaces the walk."""
+        report = io.StringIO()
+        with mock.patch.object(_dispatcher, "discover_extractors",
+                               return_value={"person": FakePersonExtractor}), \
+                mock.patch.object(_dispatcher, "get_crm_names", return_value=set()), \
+                mock.patch.object(sys, "argv", ["vault-metadata-extract"]), \
+                contextlib.redirect_stdout(report):
+            if files is None:
+                _dispatcher.main()
+            else:
+                with mock.patch.object(_dispatcher, "list_vault_files",
+                                       return_value=iter(files)):
+                    _dispatcher.main()
+        return report.getvalue()
+
     @contextlib.contextmanager
     def _record_listings(self):
         """Yield the list of every directory os.scandir is asked to list."""
@@ -208,6 +225,12 @@ class VaultBoundary(unittest.TestCase):
         including for a note linked to another note inside the vault."""
         alias = os.path.join(self.vault, "Alias Person.md")
         self._link(self.inside_note, alias, False)
+        # A link to a folder is not entered even when it points inside the vault:
+        # the notes are yielded under their real path only. The walker does not
+        # apply the callers' skip-by-name (Archive), so the real path is yielded.
+        _write(os.path.join(self.vault, "Archive", "Old Person.md"), NOTE)
+        self._link(os.path.join(self.vault, "Archive"), os.path.join(self.vault, "Old Link"), True)
+        self._link(os.path.join(self.vault, "👤 CRM"), os.path.join(self.vault, "CRM Alias"), True)
         expected = []
         for dirpath, dirnames, filenames in os.walk(self.vault):
             dirnames[:] = [d for d in dirnames if not d.startswith(".")]
@@ -217,7 +240,11 @@ class VaultBoundary(unittest.TestCase):
                         and _base.is_inside_vault(path)):
                     expected.append(path)
         self.assertIn(alias, expected)  # a link that stays inside the vault is kept
-        self.assertEqual(sorted(_base.iter_vault_markdown()), sorted(expected))
+        found = sorted(_base.iter_vault_markdown())
+        self.assertEqual(found, sorted(expected))
+        self.assertIn(os.path.join(self.vault, "Archive", "Old Person.md"), found)
+        self.assertNotIn(os.path.join(self.vault, "Old Link", "Old Person.md"), found)
+        self.assertNotIn(os.path.join(self.vault, "CRM Alias", "Inside Person.md"), found)
 
     def test_a_folder_os_walk_does_not_flag_as_a_link_is_still_not_entered(self):
         """A link that os.walk does not report as one (a Windows junction, for
@@ -287,21 +314,13 @@ class VaultBoundary(unittest.TestCase):
         """A path the walker cannot yield can still reach the writer through
         another caller. The run must count it and say so, not file it as an
         error or drop it."""
-        report = io.StringIO()
-        with mock.patch.object(_dispatcher, "discover_extractors",
-                               return_value={"person": FakePersonExtractor}), \
-                mock.patch.object(_dispatcher, "get_crm_names", return_value=set()), \
-                mock.patch.object(_dispatcher, "list_vault_files",
-                                  return_value=iter([self.outside_paths[1], self.inside_note])), \
-                mock.patch.object(sys, "argv", ["vault-metadata-extract"]), \
-                contextlib.redirect_stdout(report):
-            _dispatcher.main()
-        lines = report.getvalue().splitlines()
+        report = self._run_main(files=[self.outside_paths[1], self.inside_note])
+        lines = report.splitlines()
         refused = [line for line in lines if "REFUSED" in line]
-        self.assertEqual(len(refused), 1, report.getvalue())
+        self.assertEqual(len(refused), 1, report)
         self.assertTrue(refused[0].rstrip().endswith(": 1"), refused[0])
         self.assertFalse([line for line in lines if line.strip().startswith("Errors:")],
-                         report.getvalue())
+                         report)
         # The run went on past the refusal, and only the in-vault note changed.
         self.assertIn("person_journal_mention_count: 3", _read(self.inside_note))
         self.assertNotIn("person_journal_mention_count", _read(self.outside_paths[1]))
@@ -385,6 +404,44 @@ class VaultBoundary(unittest.TestCase):
             peeked = _dispatcher._peek_type(self.inside_note)
         self.assertEqual(peeked, "person")
         self.assertTrue(opened.called)
+
+    def test_walker_records_what_it_skips_because_it_resolves_outside_the_vault(self):
+        skipped = []
+        list(_base.iter_vault_markdown(skipped=skipped))
+        folders = sorted(os.path.relpath(p, self.vault) for kind, p in skipped if kind == "folder")
+        notes = sorted(os.path.relpath(p, self.vault) for kind, p in skipped if kind == "note")
+        self.assertEqual(folders, sorted(["🤝 Shared", os.path.join("👤 CRM", "Team Share")]))
+        self.assertEqual(notes, ["Linked Person.md", "Sibling Person.md"])
+
+    def test_summary_says_how_many_links_out_of_the_vault_were_skipped(self):
+        """A link that is not walked is never an invisible exclusion: the run
+        says how many folders and notes it left out, and which."""
+        report = self._run_main()
+        lines = [line for line in report.splitlines() if "resolve outside the vault" in line]
+        self.assertEqual(len(lines), 1, report)
+        self.assertIn("2 folder(s), 2 note(s)", lines[0])
+        for name in ("🤝 Shared", "Team Share", "Linked Person.md", "Sibling Person.md"):
+            self.assertIn(name, report)
+
+    def test_summary_is_silent_about_links_when_there_are_none(self):
+        """Negative control: a vault with no link out prints no such line."""
+        clean = os.path.join(self.root, "clean-vault")
+        _write(os.path.join(clean, "👤 CRM", "Only Person.md"), NOTE)
+        self._point_at(clean)
+        report = self._run_main()
+        self.assertIn("Wrote / would-write: 1", report)  # the run did happen
+        self.assertNotIn("resolve outside the vault", report)
+
+    def test_insight_engine_says_how_many_links_out_of_the_vault_were_not_indexed(self):
+        report = io.StringIO()
+        with mock.patch.object(engine, "OUTPUT_PATH", os.path.join(self.root, "insights.md")), \
+                mock.patch.object(sys, "argv", ["vault-insight-engine", "--quiet"]), \
+                contextlib.redirect_stdout(report):
+            engine.main()
+        lines = [line for line in report.getvalue().splitlines()
+                 if "resolve outside the vault" in line]
+        self.assertEqual(len(lines), 1, report.getvalue())
+        self.assertIn("2 folder(s), 2 note(s)", lines[0])
 
 
 if __name__ == "__main__":

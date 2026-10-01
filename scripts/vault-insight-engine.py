@@ -199,15 +199,16 @@ def load_scope_paths(scope_file):
     return paths
 
 
-def load_vault_index():
+def load_vault_index(skipped=None):
     """One-pass scan: for every file, return (filepath, type, frontmatter dict).
 
     Only notes that live inside the vault are indexed: iter_vault_markdown() does
     not follow a symlinked folder, and drops a note that is itself a link out, so
     a shared team or cloud folder linked into the vault never reaches the report.
+    `skipped` receives what it left out for that reason.
     """
     index = []
-    for fp in iter_vault_markdown():
+    for fp in iter_vault_markdown(skipped=skipped):
         parts = set(fp.split(os.sep))
         if parts & SKIP_PARTS:
             continue
@@ -690,8 +691,13 @@ def main():
     scope_paths = load_scope_paths(args.scope_files)
 
     print(f"vault-insight-engine  loading index…", flush=True)
-    index = load_vault_index()
+    skipped = []
+    index = load_vault_index(skipped)
     print(f"  {len(index):,} typed files loaded across {len(set(x['type'] for x in index))} types.")
+    if skipped:
+        folders = sum(1 for kind, _ in skipped if kind == "folder")
+        print(f"  not indexed, resolve outside the vault: {folders} folder(s), "
+              f"{len(skipped) - folders} note(s)")
 
     scoped_n, total_n = mark_scope(index, scope_paths)
     if scope_paths is not None:

@@ -133,17 +133,26 @@ def is_inside_vault(path):
     return _resolves_inside(os.path.realpath(path), os.path.realpath(VAULT))
 
 
-def iter_vault_markdown(root=None):
-    """Every .md file under `root` (default: the vault) that resolves inside the vault.
+def iter_vault_markdown(root=None, skipped=None):
+    """Every .md file under `root` (default: the vault) that lives inside the vault.
 
-    os.walk(followlinks=False) never enters a symlinked folder, which a recursive
-    glob does, and a note that is itself a link is resolved, so one pointing out
-    is dropped. The answer is the one is_inside_vault() gives note by note. It is
-    reached more cheaply: realpath stats every component of a path, which adds up
-    over a large or cloud-mounted vault, so the vault and each folder are resolved
-    once, and a note only when it is a link. Resolving each folder also keeps a
-    `root` outside the vault from yielding anything, and ends that walk at once.
-    Hidden folders and files are skipped, as glob's `**` skipped them.
+    A folder is entered only when it resolves inside the vault, and os.walk is told
+    not to follow symlinks. So a link to a folder is never entered, even one that
+    points at another folder inside the vault: those notes are yielded under their
+    real path only, and a link into a hidden folder, or one the caller skips by
+    name such as Archive, yields nothing. A note that is itself a link is yielded
+    under its own path when it resolves inside the vault, and dropped when it
+    points out. `root` has to be inside the vault: a root outside it, or above it,
+    yields nothing and is not listed. Hidden folders and files are skipped, as
+    glob's `**` skipped them.
+
+    `skipped`, when given, is a list that receives a ("folder" or "note", path)
+    pair for each folder or note passed over because it resolves outside the
+    vault, so the caller can say what it left out.
+
+    realpath stats every component of a path, which adds up over a large or
+    cloud-mounted vault, so the vault and each folder are resolved once, and a
+    note only when it is a link.
     """
     vault_real = os.path.realpath(VAULT)
     top = root or VAULT
@@ -153,16 +162,23 @@ def iter_vault_markdown(root=None):
         # Each folder is judged by where it resolves, before os.walk lists it, so
         # a folder that resolves outside the vault is never entered, whatever
         # kind of link it is.
-        dirnames[:] = [
-            d for d in dirnames
-            if not d.startswith(".")
-            and _resolves_inside(os.path.realpath(os.path.join(dirpath, d)), vault_real)
-        ]
+        kept = []
+        for name in dirnames:
+            if name.startswith("."):
+                continue
+            child = os.path.join(dirpath, name)
+            if _resolves_inside(os.path.realpath(child), vault_real):
+                kept.append(name)
+            elif skipped is not None:
+                skipped.append(("folder", child))
+        dirnames[:] = kept
         for name in filenames:
             if name.endswith(".md") and not name.startswith("."):
                 path = os.path.join(dirpath, name)
                 if os.path.islink(path) and not _resolves_inside(
                         os.path.realpath(path), vault_real):
+                    if skipped is not None:
+                        skipped.append(("note", path))
                     continue
                 yield path
 

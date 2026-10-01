@@ -149,10 +149,11 @@ def should_skip_path(path):
     return bool(parts & SKIP_PARTS)
 
 
-def list_vault_files(type_filter=None):
+def list_vault_files(type_filter=None, skipped=None):
     """All .md files in the vault, minus SKIP_PARTS folders and anything that
-    resolves outside the vault (a symlinked shared folder is never walked)."""
-    for fp in iter_vault_markdown():
+    resolves outside the vault (a symlinked shared folder is never walked).
+    `skipped` receives what iter_vault_markdown() left out for that reason."""
+    for fp in iter_vault_markdown(skipped=skipped):
         if should_skip_path(fp):
             continue
         yield fp
@@ -314,7 +315,8 @@ def main():
 
     # Materialize file list (needed for sample + progress total). For very large vaults,
     # this is one walk over .md files — cheap compared to per-file frontmatter parsing.
-    all_files = list(list_vault_files())
+    skipped = []
+    all_files = list(list_vault_files(skipped=skipped))
 
     if args.sample is not None:
         scan_files = select_sample(all_files, registry, args.sample)
@@ -377,6 +379,16 @@ def main():
     print(f"  Extractor skipped:   {counters['EXTRACTOR_SKIPPED']}")
     if counters["OUTSIDE_VAULT"]:
         print(f"  ⚠ REFUSED, resolves outside the vault (symlink): {counters['OUTSIDE_VAULT']}")
+    if skipped:
+        # A folder or note linked in from outside the vault is never walked. Say so,
+        # and which, rather than leave it out without a word.
+        folders = sum(1 for kind, _ in skipped if kind == "folder")
+        print(f"  Skipped, resolve outside the vault: {folders} folder(s), "
+              f"{len(skipped) - folders} note(s)")
+        for kind, path in skipped[:5]:
+            print(f"    {kind}: {os.path.relpath(path, VAULT)}")
+        if len(skipped) > 5:
+            print(f"    … and {len(skipped) - 5} more")
 
     if no_extractor_types:
         print("\n  Types present but no extractor registered:")
