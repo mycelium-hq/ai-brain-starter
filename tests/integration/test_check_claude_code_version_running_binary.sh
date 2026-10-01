@@ -38,7 +38,8 @@
 # in the working directory, run a claude reached through a relative PATH entry, count
 # an unreadable copy as a version, run a file anyone can write, trust a package.json
 # that cannot be parsed, stop on or print a version made of thousands of digits, count
-# a non-ASCII letter or digit as part of a version, break the printed `npm i -g --prefix` line on an odd
+# a non-ASCII letter or digit as part of a version, show a line break or a text-direction control
+# a folder name holds, break the printed `npm i -g --prefix` line on an odd
 # directory name, outlast its time bounds (a probe wrapper that forks, a scan
 # stalled on a read, a wrapper that never answers), or let a time-bound setting
 # switch a bound off (0, or a number that wraps to 0).
@@ -1079,6 +1080,62 @@ for loc in C ${UTF8_LOC:+"$UTF8_LOC"}; do
   fi
 done
 TEST_PATH="$TEST_PATH_SAVE"
+
+# =============================================================================
+echo "=== line breaks, C1 controls and text-direction controls in a folder name stay out of the output"
+reset_state
+# A path in the output can be named on purpose. The C0 controls and DEL were already dropped from the
+# headline and shown as '?' in the skew line, but a reader may also take NEL and the other C1 controls,
+# or the Unicode line and paragraph separators, for a line break, and the bidirectional embeddings,
+# overrides and isolates change the direction text is shown in; all of those got through. The folder
+# below holds 14 of them (U+0080, U+0085, U+009F, U+2028, U+2029, U+202A to U+202E, U+2066 to U+2069)
+# between the letters a and o, then characters that must stay: the no-break space and the copyright
+# sign (they share a lead byte with the C1 range), the characters next to the other ranges (U+2027,
+# U+202F, U+2064, U+206A), e-acute and two kanji. PATH's claude is an npm install there, beside a
+# second install, so the name reaches the headline, the --prefix in its hint, and the skew line.
+R0080="$(printf '\302\200')"; R0085="$(printf '\302\205')"; R009F="$(printf '\302\237')"
+R2028="$(printf '\342\200\250')"; R2029="$(printf '\342\200\251')"
+R202A="$(printf '\342\200\252')"; R202B="$(printf '\342\200\253')"; R202C="$(printf '\342\200\254')"
+R202D="$(printf '\342\200\255')"; R202E="$(printf '\342\200\256')"
+R2066="$(printf '\342\201\246')"; R2067="$(printf '\342\201\247')"; R2068="$(printf '\342\201\250')"; R2069="$(printf '\342\201\251')"
+REMOVED=("U+0080:$R0080" "U+0085:$R0085" "U+009F:$R009F" "U+2028:$R2028" "U+2029:$R2029"
+         "U+202A:$R202A" "U+202B:$R202B" "U+202C:$R202C" "U+202D:$R202D" "U+202E:$R202E"
+         "U+2066:$R2066" "U+2067:$R2067" "U+2068:$R2068" "U+2069:$R2069")
+KEEP="$(printf '\302\240\302\251\342\200\247\342\200\257\342\201\244\342\201\252\303\251\346\227\245\346\234\254')"
+RAW="a${R0080}b${R0085}c${R009F}d${R2028}e${R2029}f${R202A}g${R202B}h${R202C}i${R202D}j${R202E}k${R2066}l${R2067}m${R2068}n${R2069}o-${KEEP}"
+PLAINN="abcdefghijklmno-${KEEP}"                 # the headline and the hint drop the 14 characters
+SHORTN="a?b?c?d?e?f?g?h?i?j?k?l?m?n?o-${KEEP}"    # the skew line shows each of them as '?'
+hasb() { ( LC_ALL=C; case "$1" in *"$2"*) exit 0 ;; *) exit 1 ;; esac ); }   # contains, byte for byte
+plant_npm_install "$TMP/fleet/$RAW" 1.1.1 2> /dev/null
+plant_npm_install "$TMP/fleet/node-b" 4.0.0
+if [ ! -x "$TMP/fleet/$RAW/bin/claude" ]; then
+  bad "folder name: the fixture" "this file system would not make a folder with those characters in its name"
+else
+  KNOWN="$TMP/fleet/node-b/bin/claude"; LATEST=4.0.0
+  TEST_PATH_SAVE="$TEST_PATH"; TEST_PATH="$TMP/fleet/$RAW/bin:$TEST_PATH"
+  for loc in C ${UTF8_LOC:+"$UTF8_LOC"}; do
+    rm -f "$HOME/.claude/.claude-code-version-check"*
+    run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1 LC_ALL="$loc"
+    H="$(headline)"; S="$(printf '%s\n' "$ALL" | sed -n '/SKEW/p')"
+    left_h=""; left_s=""
+    for e in "${REMOVED[@]}"; do
+      if hasb "$H" "${e#*:}"; then left_h="$left_h ${e%%:*}"; fi
+      if hasb "$S" "${e#*:}"; then left_s="$left_s ${e%%:*}"; fi
+    done
+    if [ -z "$left_h" ] && hasb "$H" "PATH claude: $TMP/fleet/$PLAINN/bin/claude;" &&
+       hasb "$H" "--prefix '$TMP/fleet/$PLAINN' @anthropic-ai/claude-code@latest"; then
+      ok "folder name ($loc): the headline and the --prefix in the hint drop all 14 characters and keep every other"
+    else
+      bad "folder name ($loc): the headline kept${left_h:- none of them, but is not the text expected}" "headline=[$H]"
+    fi
+    if [ -z "$left_s" ] && hasb "$S" "1.1.1 $TMP/fleet/$SHORTN/bin/claude"; then
+      ok "folder name ($loc): the skew line shows each of the 14 characters as '?' and keeps every other"
+    else
+      bad "folder name ($loc): the skew line kept${left_s:- none of them, but is not the text expected}" "skew=[$S]"
+    fi
+  done
+  TEST_PATH="$TEST_PATH_SAVE"
+fi
 
 # =============================================================================
 echo "=== a binary replaced under a running session"

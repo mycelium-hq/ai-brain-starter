@@ -148,9 +148,15 @@ resolve_path() {
 # $1 with control characters removed. Every path this hook prints comes from the
 # process table, a PATH or a plist and ends up in a model's context, where a
 # directory named with a newline and a sentence would otherwise read as a line of
-# its own.
+# its own. Removed: the C0 controls and DEL (tr) and, as UTF-8 byte sequences, the C1
+# controls U+0080 to U+009F (U+0085, NEL, is a line break), the line and paragraph
+# separators and the bidirectional embeddings and overrides U+2028 to U+202E, and the
+# bidirectional isolates U+2066 to U+2069. tr cannot delete a sequence, so sed does,
+# under LC_ALL=C so that it works on bytes whatever the locale. The skew scan's short()
+# treats the same set (showing each as '?').
 plain() {
-  printf '%s' "$1" | tr -d '\000-\037\177'
+  printf '%s' "$1" | tr -d '\000-\037\177' |
+    LC_ALL=C sed $'s/\302[\200-\237]//g;s/\342\200[\250-\256]//g;s/\342\201[\246-\251]//g'
 }
 
 # $1 with a leading $HOME shown as ~ (shorter, and keeps the user name out of a
@@ -540,9 +546,14 @@ def vkey(v):
 
 
 def short(p):
+    # Shown as '?': the C0 controls and DEL, the C1 controls (U+0085, NEL, is a line break), the
+    # line and paragraph separators and the bidirectional embeddings and overrides (U+2028 to
+    # U+202E), and the bidirectional isolates (U+2066 to U+2069). A reader that splits on Unicode
+    # line breaks would otherwise see a line the folder name wrote, and an override reorders the
+    # text around it. The shell function plain() drops the same set.
     home = HOME.rstrip(os.sep)
     shown = "~" + p[len(home):] if home and p.startswith(home + os.sep) else p
-    return re.sub(r"[\x00-\x1f\x7f]", "?", shown)
+    return re.sub(r"[\x00-\x1f\x7f-\x9f\u2028-\u202e\u2066-\u2069]", "?", shown)
 
 
 rows.sort(key=lambda row: row[1])
