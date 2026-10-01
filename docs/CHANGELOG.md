@@ -19,6 +19,16 @@ The message reader now runs under the same interpreter as the pull. In the same 
 
 A new test runs the real pull with a script-refusing stand-in first on the PATH and checks that the messages arrive, and that putting the old call back turns it red. A second check reads every Python file under `scripts/` and `skills/` and fails when one starts another Python script through a bare `python3`, so the same mistake cannot return unnoticed.
 
+## 2026-09-29: a slash command you rewrote is kept on update, so keeping it no longer freezes your updates
+
+**Who this affects:** anyone who has rewritten one of the slash commands this repo installs into `~/.claude/commands/`, for example to point `/cierre` at a different skill.
+
+Every install and update copied each shipped command over the one in `~/.claude/commands/` if the two differed. It backed yours up first, but it still replaced it. So the only way to keep your version was to make the same edit in the checkout's own `commands/` folder. That left the checkout with a local edit, and the auto-updater will not update a checkout with local edits. From then on no update arrived: not new features, and not the guard and security fixes. Nothing looked broken, because the update check still ran every day. On the machine where this was found, that went on for 41 days.
+
+Now the installer checks where your copy came from. If it matches any version of that command this repo ever shipped, it is an old copy and gets replaced, with a backup, as before. If it matches none of them, you wrote it: it is left exactly as it is, and the end-of-install summary lists it under "Skipped (your customizations preserved)", with the path to the shipped version so you can compare them. A copy saved with Windows line endings still counts as shipped. When there is no history to check against (an archive install, a shallow clone, or a folder that sits inside some other git repo), nothing changes: a differing copy is replaced with a backup, as before.
+
+**If you used the old workaround:** once you have this update, undo the checkout edit with `git -C ~/.claude/skills/ai-brain-starter restore commands/<name>.md`. Your copy in `~/.claude/commands/` stays, and automatic updates resume. Both installers (`bootstrap.sh` and `bootstrap.ps1`) behave the same way. `tests/integration/test_bootstrap_keeps_user_authored_commands.sh` and a new case in `test_bootstrap_ps1_slash_commands.ps1` cover it, each with a negative control that fails when the check is removed.
+
 ---
 
 ## 2026-09-25: merging main into a topic branch no longer trips the session-artifact guard, and `git merge` is guarded too
