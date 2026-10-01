@@ -684,7 +684,8 @@ if [[ -z "${CLAUDE_VERSION_CHECK_CACHE_FILE:-}" && "$CACHE_FILE" != "$LEGACY_CAC
   fi
   write_cache "$LEGACY_CACHE_FILE" "$msg"
   # One file per binary ever seen adds up across upgrades; drop the long-idle ones.
-  find "$(dirname "$LEGACY_CACHE_FILE")" -maxdepth 1 -name "${LEGACY_CACHE_FILE##*/}.*" \
+  # -H: ~/.claude is often a symlink, which `find DIR` would otherwise not enter.
+  find -H "$(dirname "$LEGACY_CACHE_FILE")" -maxdepth 1 -name "${LEGACY_CACHE_FILE##*/}.*" \
     -mtime +"$KEYED_CACHE_KEEP_DAYS" -exec rm -f {} + 2>/dev/null
 fi
 [[ -n "$msg" ]] && echo "$msg" >&2

@@ -808,6 +808,27 @@ if need_cc "cache cleanup"; then
   fi
 fi
 
+# ~/.claude is often a symlink (dotfile managers, a synced folder). `find DIR` does not
+# follow a symlink given as DIR unless told to, and finds nothing, so the per-binary
+# files would accumulate for good.
+reset_state
+plant_path_claude 1.1.1
+if mv "$HOME/.claude" "$TMP/real-dot-claude" && ln -s "$TMP/real-dot-claude" "$HOME/.claude"; then
+  C="$HOME/.claude/.claude-code-version-check"
+  printf 'idle banner\n' > "$C.%2Fgone%2Fclaude"; touch -t "$(seconds_ago $((30 * 86400)))" "$C.%2Fgone%2Fclaude"
+  printf 'recent banner\n' > "$C.%2Frecent%2Fclaude"; touch -t "$(seconds_ago $((3 * 86400)))" "$C.%2Frecent%2Fclaude"
+  run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1
+  if [ ! -e "$C.%2Fgone%2Fclaude" ] && [ -e "$C.%2Frecent%2Fclaude" ] && [ -e "$C" ]; then
+    ok "cleanup: with ~/.claude a symlink, a per-binary cache idle for 30 days is still removed; a recent one and the un-keyed file stay"
+  else
+    bad "cleanup: a symlinked ~/.claude hid the idle per-binary cache from the cleanup" "$(ls -A "$TMP/real-dot-claude")"
+  fi
+  rm -f "$HOME/.claude"; mv "$TMP/real-dot-claude" "$HOME/.claude"
+else
+  bad "cleanup: could not set up a symlinked ~/.claude for the check" "$(ls -ld "$HOME/.claude" 2>&1)"
+  mkdir -p "$HOME/.claude"
+fi
+
 # A scan that cannot run must not look like a fleet that agrees.
 reset_state
 plant_path_claude 2.1.286
