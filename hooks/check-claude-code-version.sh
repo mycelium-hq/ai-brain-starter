@@ -496,9 +496,13 @@ if unreadable:
 sys.stdout.buffer.write((line + "\n").encode("utf-8", "replace"))
 PY
 
+# -I (isolated): this hook runs in the session's working directory, often a freshly
+# cloned repository nobody has read, and a plain `python3 -c` / `python3 -` searches
+# that directory FIRST, so a glob.py or re.py in it would run as part of the hook. -I
+# drops it from sys.path (and ignores PYTHON* variables and the user site).
 skew_line=""
 if command -v python3 >/dev/null 2>&1; then
-  skew_line=$(python3 -c "$SKEW_PY" "$measured_path" 2>/dev/null)
+  skew_line=$(python3 -I -c "$SKEW_PY" "$measured_path" 2>/dev/null)
   skew_rc=$?
   if [[ "$skew_rc" -ne 0 ]]; then
     skew_line="[claude-code-version] The install-skew scan failed (python3 exited $skew_rc), so the installed copies were NOT compared."
@@ -558,7 +562,7 @@ if [[ "$current" != "$latest" ]]; then
     if gh api repos/anthropics/claude-code/contents/CHANGELOG.md \
          -H "Accept: application/vnd.github.raw" \
          > "$changelog_tmp" 2>/dev/null && [[ -s "$changelog_tmp" ]]; then
-      diff_block=$(python3 - "$current" "$latest" "$DIFF_BULLET_LIMIT" "$changelog_tmp" <<'PY' 2>/dev/null
+      diff_block=$(python3 -I - "$current" "$latest" "$DIFF_BULLET_LIMIT" "$changelog_tmp" <<'PY' 2>/dev/null
 import sys, re
 current = sys.argv[1]
 latest = sys.argv[2]

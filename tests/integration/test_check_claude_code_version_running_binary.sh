@@ -90,13 +90,15 @@ for tool in perl awk ps cksum stat readlink mktemp date sed find mv cat bash; do
     { echo "FAIL: '$tool' is not on the test PATH; the hook needs it"; exit 1; }
 done
 
-# gh: answers the release lookup from FAKE_LATEST, refuses the changelog, and logs
-# every call so the cache assertions can count network round trips.
+# gh: answers the release lookup from FAKE_LATEST, refuses the changelog (unless
+# FAKE_CHANGELOG names a file to serve as it), and logs every call so the cache
+# assertions can count network round trips.
 cat > "$SHIM/gh" <<'EOF'
 #!/bin/sh
 echo "gh $*" >> "${GH_LOG:-/dev/null}"
 case "$*" in
   *releases/latest*) echo "v${FAKE_LATEST:-10.0.0}" ;;
+  *contents/CHANGELOG.md*) [ -n "${FAKE_CHANGELOG:-}" ] && cat "$FAKE_CHANGELOG" ;;
   *) exit 1 ;;
 esac
 EOF
@@ -402,6 +404,68 @@ else
   bad "sanitizing: control characters reached the output" "forged-lines=$forged skew-lines=$(skew_lines) all=[$ALL]"
 fi
 TEST_PATH="$TEST_PATH_SAVE"
+
+# =============================================================================
+echo "=== the embedded python never imports a module planted in the working directory"
+reset_state
+# A session starts in the project directory, which may be a freshly cloned repository
+# nobody has read. `python3 -c` and `python3 -` put that directory FIRST on sys.path,
+# so a glob.py or re.py in it would run as part of the hook.
+plant_path_claude 1.1.1
+LATEST=2.0.0
+HOSTILE="$TMP/hostile"; rm -rf "$HOSTILE"; mkdir -p "$HOSTILE"
+printf 'open("IMPORTED-glob", "w").close()\n' > "$HOSTILE/glob.py"
+printf 'open("IMPORTED-re", "w").close()\n' > "$HOSTILE/re.py"
+printf '## 2.0.0\n\n- something new\n' > "$TMP/changelog.md"
+# positive controls: an interpreter that is not isolated DOES import them from this
+# directory, so the assertions below are able to fail. Some interpreters import `re`
+# during their own startup, before any script line runs; a planted re.py can then never
+# reach the changelog parser, and that half is covered by the argv check further down.
+( cd "$HOSTILE" && python3 -c 'import glob' ) > /dev/null 2>&1
+( cd "$HOSTILE" && printf 'import sys, re\n' | python3 - ) > /dev/null 2>&1
+if [ -e "$HOSTILE/IMPORTED-glob" ]; then
+  ok "planted modules: a plain python3 -c in that directory imports its glob.py (the check can fail)"
+else
+  bad "planted modules: the fixture does not shadow glob for a plain interpreter" "$(ls -A "$HOSTILE")"
+fi
+RE_SHADOWABLE=0; [ -e "$HOSTILE/IMPORTED-re" ] && RE_SHADOWABLE=1
+rm -f "$HOSTILE"/IMPORTED-*
+# every python3 the hook starts is recorded by a shim that then runs the real one
+mkdir -p "$TMP/pyshim"
+printf '#!/bin/sh\nprintf "%%s\\n" "$1" >> "$PY_ARGV_LOG"\nexec "%s" "$@"\n' "$PY3" > "$TMP/pyshim/python3"
+chmod +x "$TMP/pyshim/python3"
+PY_ARGV_LOG="$TMP/py-argv.log"; rm -f "$PY_ARGV_LOG"
+TEST_PATH_SAVE="$TEST_PATH"; TEST_PATH="$TMP/pyshim:$TEST_PATH"
+run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1 FAKE_CHANGELOG="$TMP/changelog.md" PY_ARGV_LOG="$PY_ARGV_LOG" \
+  -- sh -c 'cd "$1" && exec bash "$2"' sh "$HOSTILE" "$TARGET"
+TEST_PATH="$TEST_PATH_SAVE"
+if [ ! -e "$HOSTILE/IMPORTED-glob" ]; then
+  ok "planted modules: the skew scan imported nothing from the working directory"
+else
+  bad "planted modules: a glob.py in the working directory ran inside the hook" "$(ls -A "$HOSTILE")"
+fi
+if [ "$RE_SHADOWABLE" = 1 ]; then
+  if [ ! -e "$HOSTILE/IMPORTED-re" ]; then
+    ok "planted modules: the changelog parser imported nothing from the working directory"
+  else
+    bad "planted modules: a re.py in the working directory ran inside the hook" "$(ls -A "$HOSTILE")"
+  fi
+else
+  echo "NOTE  this interpreter imports re before any script line runs, so a planted re.py cannot show the changelog parser's exposure here"
+fi
+# both helpers must have RUN for the absence above to mean anything
+if has "$ALL" "What's new since 1.1.1" && ! has "$ALL" "scan failed"; then
+  ok "planted modules: both helpers did run (changelog bullets printed, the scan did not fail)"
+else
+  bad "planted modules: the helpers did not both run, so the checks above prove nothing" "$ALL"
+fi
+# the interpreter-independent half: no python3 is started without -I
+argv_n=0; [ -f "$PY_ARGV_LOG" ] && argv_n="$(wc -l < "$PY_ARGV_LOG" | tr -d ' ')"
+if [ "$argv_n" -ge 2 ] && [ "$(sort -u "$PY_ARGV_LOG")" = "-I" ]; then
+  ok "planted modules: every python3 the hook starts (scan and changelog parser) runs isolated (-I)"
+else
+  bad "planted modules: a python3 was started without -I" "started $argv_n, first args seen: [$([ -f "$PY_ARGV_LOG" ] && sort "$PY_ARGV_LOG" | uniq -c | tr '\n' ';')]"
+fi
 
 # =============================================================================
 echo "=== control 4: a cached reading is never replayed into another binary's session"
