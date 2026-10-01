@@ -197,7 +197,10 @@ probe_version() {
   # Keep the leading version characters only (digits, letters, '.', '+', '-'): this text is
   # printed in the headline, and whatever follows them (an escape sequence, say) is not a version.
   v=${v%%[!0-9A-Za-z.+-]*}
-  case $v in [0-9]*.[0-9]*.[0-9]*) printf '%s' "$v" ;; esac
+  # At most 69 characters: three numbers of up to 9 digits and 40 more, the longest version the
+  # install-skew scan takes from an install's files. A longer word is not a version, and would
+  # otherwise be printed whole.
+  case $v in [0-9]*.[0-9]*.[0-9]*) [ "${#v}" -gt 69 ] || printf '%s' "$v" ;; esac
 }
 
 # Find the Claude Code process above this hook. Sets ANC_PATH (the file it runs
@@ -366,9 +369,15 @@ import glob, json, os, plistlib, re, subprocess, sys, time
 HOME = os.path.expanduser("~")
 NPM_NAME = "@anthropic-ai/claude-code"
 LAUNCHD_DEFAULT_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
-VER = re.compile(r"\d+\.\d+\.\d+")
-# What an install's own files may claim as their version. It is printed, so free text is not one.
-SHAPE = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z.+-]{0,40}")
+# A version is three numbers of 1 to 9 digits. A longer run of digits is not one: int() raises on
+# 4,301 digits or more on Python 3.11 and up (and on the later patch releases of older ones), which
+# would end the scan, and on a release without that limit the run would be printed as one line of
+# any length.
+NUM = r"[0-9]{1,9}"
+VER = re.compile(r"(?<![0-9])%s\.%s\.%s(?![0-9])" % (NUM, NUM, NUM))
+# What an install's own files may claim as their version. It is printed, so free text is not one:
+# at most 69 characters, the same bound probe_version holds a version to.
+SHAPE = re.compile(r"%s\.%s\.%s[0-9A-Za-z.+-]{0,40}" % (NUM, NUM, NUM))
 DEADLINE = time.monotonic() + 20
 running = sys.argv[1] if len(sys.argv) > 1 else ""
 m = VER.match(sys.argv[2]) if len(sys.argv) > 2 else None   # digits only: this is printed

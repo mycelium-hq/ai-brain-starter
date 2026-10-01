@@ -37,7 +37,8 @@
 # does not own, so there are checks for what it must NOT do: import a module planted
 # in the working directory, run a claude reached through a relative PATH entry, count
 # an unreadable copy as a version, run a file anyone can write, trust a package.json
-# that cannot be parsed, break the printed `npm i -g --prefix` line on an odd
+# that cannot be parsed, stop on or print a version made of thousands of digits, break
+# the printed `npm i -g --prefix` line on an odd
 # directory name, outlast its time bounds (a probe wrapper that forks, a scan
 # stalled on a read, a wrapper that never answers), or let a time-bound setting
 # switch a bound off (0, or a number that wraps to 0).
@@ -547,6 +548,99 @@ if has "$ALL" "2.1.0 $TMP/fleet/node-a/bin/claude" && has "$ALL" "1.0.0 $TMP/fle
 else
   bad "hostile version: the copies should still be listed with their measured or asked versions" "all=[$ALL]"
 fi
+
+# =============================================================================
+echo "=== a version of thousands of digits stops nothing and is not printed whole"
+reset_state
+# A version is three numbers, and the scan turns each into an integer to order the copies. A run of
+# 4,301 digits or more makes int() raise on Python 3.11 and up (and on the later patch releases of
+# older ones), so the scan ended and the hook said the copies were NOT compared; on a release
+# without that limit the same run was printed as one line of any length. The text of a version
+# reaches the scan from three places: an install's package.json, the --version of a copy the scan
+# asks, and the --version of the claude the hook measured.
+DIGITS="$(printf '%5000s' '' | tr ' ' 1)"
+# (a) a package.json: the copy counts as having no version in its files, so the measured one stands in
+plant_npm_install "$TMP/fleet/node-a" 2.2.0
+printf '{"name":"@anthropic-ai/claude-code","version":"%s.0.0"}\n' "$DIGITS" \
+  > "$TMP/fleet/node-a/lib/node_modules/@anthropic-ai/claude-code/package.json"
+printf '#!/bin/sh\necho "2.1.0 (Claude Code)"\n' > "$TMP/fleet/node-a/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe"
+plant_npm_install "$TMP/fleet/node-b" 3.0.0
+KNOWN="$TMP/fleet/node-*/bin/claude"; LATEST=3.0.0
+TEST_PATH_SAVE="$TEST_PATH"; TEST_PATH="$TMP/fleet/node-a/bin:$TEST_PATH"
+run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1
+TEST_PATH="$TEST_PATH_SAVE"
+if [ "$(skew_lines)" = 1 ] && ! has "$ALL" "scan failed" && [ "${#ALL}" -lt 2000 ] &&
+   has "$ALL" "2.1.0 $TMP/fleet/node-a/bin/claude" && has "$ALL" "3.0.0 $TMP/fleet/node-b/bin/claude"; then
+  ok "digit run: a package.json version of 5,000 digits counts as none: the scan runs, the measured version stands in, nothing long is printed"
+else
+  bad "digit run: a 5,000-digit package.json version stopped the scan or was printed" "skew-lines=$(skew_lines) length=${#ALL} all=[${ALL:0:500}]"
+fi
+# (b) a copy the scan asks: it is listed, with no version
+reset_state
+plant_npm_install "$TMP/fleet/node-a" 4.0.0
+plant_npm_install "$TMP/fleet/node-b" 3.0.0
+mkdir -p "$TMP/stale/bin"
+printf '#!/bin/sh\necho "%s.0.0 (Claude Code)"\n' "$DIGITS" > "$TMP/stale/bin/claude"; chmod 755 "$TMP/stale/bin/claude"
+plant_plist "com.example.huge" "$TMP/stale/bin:/usr/bin"
+KNOWN="$TMP/fleet/node-*/bin/claude"; LATEST=4.0.0
+TEST_PATH_SAVE="$TEST_PATH"; TEST_PATH="$TMP/fleet/node-a/bin:$TEST_PATH"
+run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1
+TEST_PATH="$TEST_PATH_SAVE"
+if [ "$(skew_lines)" = 1 ] && ! has "$ALL" "scan failed" && [ "${#ALL}" -lt 2000 ] &&
+   has "$ALL" "? $TMP/stale/bin/claude" && has "$ALL" "3.0.0 $TMP/fleet/node-b/bin/claude"; then
+  ok "digit run: a copy that answers --version with 5,000 digits is listed with no version; the scan runs and nothing long is printed"
+else
+  bad "digit run: a 5,000-digit --version answer stopped the scan or was printed" "skew-lines=$(skew_lines) length=${#ALL} all=[${ALL:0:500}]"
+fi
+# the bound is nine digits a number: a first number of 999999999 is a version, one of 1000000000 is none
+for v in 999999999.0.0 1000000000.0.0; do
+  reset_state
+  plant_npm_install "$TMP/fleet/node-a" "$v"
+  printf '#!/bin/sh\necho "2.1.0 (Claude Code)"\n' > "$TMP/fleet/node-a/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe"
+  plant_npm_install "$TMP/fleet/node-b" 3.0.0
+  KNOWN="$TMP/fleet/node-*/bin/claude"; LATEST=3.0.0
+  TEST_PATH_SAVE="$TEST_PATH"; TEST_PATH="$TMP/fleet/node-a/bin:$TEST_PATH"
+  run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1
+  TEST_PATH="$TEST_PATH_SAVE"
+  if [ "${v%%.*}" = 999999999 ]; then want="$v $TMP/fleet/node-a/bin/claude"; else want="2.1.0 $TMP/fleet/node-a/bin/claude"; fi
+  if [ "$(skew_lines)" = 1 ] && has "$ALL" "$want"; then
+    ok "digit run: a package.json version whose first number is ${v%%.*} gives the SKEW line '${want%% *}'"
+  else
+    bad "digit run: the nine-digit bound is not where it should be (version $v)" "wanted [$want] all=[${ALL:0:500}]"
+  fi
+done
+# (c) the claude the hook measures: a word that long is no version, so there is nothing to report
+reset_state
+printf '#!/bin/sh\necho "%s.0.0 (Claude Code)"\n' "$DIGITS" > "$PATHBIN/claude"; chmod +x "$PATHBIN/claude"
+LATEST=2.0.0
+run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1
+if [ "$RC" = 0 ] && [ -z "$OUT" ] && [ -z "$ERR" ]; then
+  ok "digit run: PATH's claude answering --version with 5,000 digits is not a version: nothing is printed"
+else
+  bad "digit run: the headline carried a 5,000-digit version" "rc=$RC length=${#ALL} all=[${ALL:0:500}]"
+fi
+# the bound is 69 characters, the most a version in an install's files may have (three numbers of
+# up to 9 digits and 40 more characters): one of exactly that length is shown whole, one longer is not
+V69="1.2.3-$(printf '%63s' '' | tr ' ' a)"
+for v in "$V69" "${V69}a"; do
+  printf '#!/bin/sh\necho "%s (Claude Code)"\n' "$v" > "$PATHBIN/claude"
+  rm -f "$HOME/.claude/.claude-code-version-check"*
+  LATEST=2.0.0
+  run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1
+  if [ "${#v}" = 69 ]; then
+    if has "$(headline)" "[claude-code-version] $v (PATH claude:"; then
+      ok "digit run: a version of 69 characters is shown whole in the headline"
+    else
+      bad "digit run: a version of 69 characters should be reported" "all=[$ALL]"
+    fi
+  else
+    if [ -z "$OUT" ] && [ -z "$ERR" ]; then
+      ok "digit run: a version of ${#v} characters is not reported"
+    else
+      bad "digit run: a version longer than 69 characters should not be reported" "all=[$ALL]"
+    fi
+  fi
+done
 
 # =============================================================================
 echo "=== the embedded python never imports a module planted in the working directory"
