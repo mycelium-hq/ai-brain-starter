@@ -9,6 +9,18 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-10-02: one session's close no longer counts for another session
+
+**Who this affects:** anyone running more than one Claude Code session on the same vault, with the session-close cascade installed (`session-close-runner.sh` in your vault's `scripts/` folder).
+
+When a session closes, the close check (`verify-session-close-cascade.py`) asks three things. One of them is whether the close runner ran in the last 30 minutes. It answered that by reading one shared report file that every run overwrote. So if session B ran the runner, session A could close without ever running it, and the check let A through. A's notes and decision log were then not refreshed, and nothing said so.
+
+Now the close instructions run the runner with the session's own id (`--session <id>`). The runner writes a report for that session alone, and the check reads only that session's report. B's run no longer counts for A, and when A is blocked, the message gives the exact command to run, with the runner's full path and the id. (It used to give a path relative to the vault, which from a worktree could run that worktree's older copy of the runner, so following the instruction never cleared the block.)
+
+Two cases still use the shared report. A session that has no id uses it, as before. So does a vault whose copy of the runner is older than this change: that copy cannot write a per-session report, so requiring one would block every close until the vault's scripts update. Your next update (or `scripts/sync-vault-scripts.sh`) brings the new runner into the vault, and from then on each session needs its own run. The runner also now honors `ABS_RUNNER_REPORT`, the variable the check already read to find the report, so the two always look in the same place.
+
+`hooks/test_close_gate_runner_per_session.py` runs the real runner and the real check as two sessions. It covers A being blocked when only B ran, A passing once it ran too, and the exact command the close instructions inject. It also turns red if the per-session report or the runner's marker for it is removed.
+
 ## 2026-10-01: `/journal` dropped your messages on machines where `python3` refuses to run a script
 
 **Who this affects:** anyone who runs `/journal` with a message reader script in their vault (`journal-messages-fetch.py`), on a machine where a Python tool puts its own stand-in for `python3` first on the PATH. Some of those stand-ins answer `python3 some-script.py` with advice ("use `uv run python ...`") and exit with an error, while still running one-liners, so nothing looks broken.

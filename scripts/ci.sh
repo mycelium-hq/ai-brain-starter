@@ -1661,6 +1661,14 @@ PY_DIRECT=(
   # DOES retrieve the token) proving the check isn't vacuous; and
   # negative-control mutants that must each flip a verdict.
   hooks/test_heavy_admission.py
+  # Close gate 2 read ONE shared runner report, so any session's run within
+  # 30 minutes cleared every other session's gate: session A closed without
+  # ever running session-close-runner.sh because session B had. Drives the
+  # REAL runner (--session) and the REAL gate as two sessions, through the
+  # exact command detect-closing-signal.py injects, with negative controls
+  # (A's own run passes; a no-id session and a legacy runner fall back to the
+  # shared report instead of blocking every close forever).
+  hooks/test_close_gate_runner_per_session.py
 )
 dormant_py=()
 while IFS= read -r -d '' f; do

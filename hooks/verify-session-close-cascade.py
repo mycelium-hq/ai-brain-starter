@@ -14,8 +14,12 @@ Failure modes this prevents:
 
 Three-gate check when a closing claim is detected:
   1. Session file exists at <meta>/Sessions/YYYY-MM-DD*<worktree>*.md
-  2. session-close-runner.sh ran in the last 30 min — verified via
-     /tmp/abs-session-close-runner.report ending in `RUNNER COMPLETE @ <ts>`.
+  2. session-close-runner.sh ran in the last 30 min FOR THIS SESSION —
+     verified via this session's report,
+     /tmp/abs-session-close-runner.<session_id>.report, ending in
+     `RUNNER COMPLETE @ <ts>`. The shared /tmp/abs-session-close-runner.report
+     counts only for a session with no id, or a vault whose installed runner
+     predates per-session reports (see runner_report_for).
   3. No uncommitted session-close artifacts (today's Sessions/Decisions/
      Captures files must be staged + committed via vault-safe-commit.sh).
 
@@ -163,19 +167,70 @@ def _resolve_vault_context(cwd: str) -> None:
 _resolve_vault_context("")
 
 # Default is the exact path session-close-runner.sh writes; the env override is
-# for hermetic tests (and any setup where both sides agree to relocate it).
+# for hermetic tests (and any setup where both sides agree to relocate it --
+# the runner honors ABS_RUNNER_REPORT too).
 # The literal /tmp (NOT tempfile.gettempdir()) is deliberate on POSIX: the bash
 # runner writes literally to /tmp, and macOS GUI processes see TMPDIR as
 # /var/folders/... — gettempdir() there would look in the wrong place and
 # false-block every close. Windows has no /tmp, so use the real temp dir there
 # (the bash runner can't run on Windows anyway; this hook stays advisory).
+# A per-session report (session_runner_report) is derived from this path, so
+# it sits in the same directory and the same reasoning covers it.
 import tempfile
 _DEFAULT_RUNNER_REPORT = (
     str(Path(tempfile.gettempdir()) / "abs-session-close-runner.report")
     if os.name == "nt" else "/tmp/abs-session-close-runner.report"
 )
-RUNNER_REPORT = Path(os.environ.get("ABS_RUNNER_REPORT", _DEFAULT_RUNNER_REPORT))
+# `or`, not a .get() default: set-but-empty means the default here exactly as
+# it does in the runner's `${ABS_RUNNER_REPORT:-...}`, or the two sides would
+# look in different places (an empty Path is ".", relative to the cwd).
+RUNNER_REPORT = Path(os.environ.get("ABS_RUNNER_REPORT") or _DEFAULT_RUNNER_REPORT)
 RUNNER_FRESH_SECONDS = 1800  # 30 minutes
+
+# Gate 2 is scoped by session. The shared report is overwritten by every
+# session's run, so it cannot say WHOSE run it was: session A's gate went green
+# on session B's run. detect-closing-signal.py passes the session id to the
+# runner (`--session <id>`), the runner writes a report of that session's own,
+# and the gate reads THAT. The shared report is the fallback only when this
+# session has no id, or when the vault's installed runner predates per-session
+# reports (it would never write one, so requiring it would block every close
+# until the vault's scripts re-sync). The runner states the contract with this
+# exact line; see the header of scripts/session-close-runner.sh.
+RUNNER_SESSION_CONTRACT = "# abs-runner-contract: per-session-report"
+# The id becomes part of a path, so anything but a plain token is treated as
+# no id at all (Claude Code's ids are UUIDs). The runner applies the same set.
+_SAFE_SESSION_ID = re.compile(r"[A-Za-z0-9_-]+")
+
+
+def safe_session_id(raw: object) -> str:
+    """The payload's session id, or "" when it is missing or not a plain token."""
+    sid = raw if isinstance(raw, str) else ""
+    return sid if _SAFE_SESSION_ID.fullmatch(sid) else ""
+
+
+def runner_writes_session_reports() -> bool:
+    """True iff THIS vault's installed runner carries the per-session contract."""
+    try:
+        text = RUNNER_SCRIPT.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return any(line.strip() == RUNNER_SESSION_CONTRACT for line in text.splitlines())
+
+
+def session_runner_report(session_id: str) -> Path:
+    """The report the runner writes for `--session <id>`. Mirrors the runner's
+    `${REPORT%.report}.${SESSION}.report` exactly."""
+    base = str(RUNNER_REPORT)
+    if base.endswith(".report"):
+        base = base[: -len(".report")]
+    return Path(f"{base}.{session_id}.report")
+
+
+def runner_report_for(session_id: str) -> Path:
+    """The report that proves THIS session ran the runner."""
+    if session_id and runner_writes_session_reports():
+        return session_runner_report(session_id)
+    return RUNNER_REPORT
 
 
 def runner_installed() -> bool:
@@ -200,7 +255,7 @@ def get_last_assistant_text(transcript_path: str) -> str:
     if not transcript_path or not os.path.exists(transcript_path):
         return ""
     try:
-        with open(transcript_path) as f:
+        with open(transcript_path, encoding="utf-8", errors="replace") as f:
             lines = f.readlines()
     except Exception:
         return ""
@@ -301,7 +356,8 @@ def uncommitted_session_artifacts(worktree_slug: str) -> list[str]:
             ["git", "-C", str(VAULT_ROOT), "status", "--short",
              "--", f"{META_NAME}/Sessions/", f"{META_NAME}/Decisions/",
              f"{META_NAME}/Session Captures.md"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=10,
         )
     except Exception:
         return []
@@ -335,19 +391,22 @@ def uncommitted_session_artifacts(worktree_slug: str) -> list[str]:
     return sessions_unc + decisions_unc + flagged_captures
 
 
-def runner_ran_recently() -> bool:
-    """True iff session-close-runner.sh wrote a fresh RUNNER COMPLETE marker.
+def runner_ran_recently(report: Path | None = None) -> bool:
+    """True iff session-close-runner.sh wrote a fresh RUNNER COMPLETE marker
+    into `report` (default: the shared report).
 
-    The runner writes to /tmp/abs-session-close-runner.report on every run
-    and ends with `RUNNER COMPLETE @ <ISO8601-UTC>`. The marker is fresh
-    iff timestamp is within RUNNER_FRESH_SECONDS of now (UTC).
+    The runner writes its report on every run (this session's own when it was
+    given --session, see runner_report_for) and ends it with
+    `RUNNER COMPLETE @ <ISO8601-UTC>`. The marker is fresh iff timestamp is
+    within RUNNER_FRESH_SECONDS of now (UTC).
 
     Missing report file, missing marker, or stale marker → False.
     """
-    if not RUNNER_REPORT.exists():
+    report = RUNNER_REPORT if report is None else report
+    if not report.exists():
         return False
     try:
-        text = RUNNER_REPORT.read_text(errors="replace")
+        text = report.read_text(encoding="utf-8", errors="replace")
     except Exception:
         return False
     m = re.search(r"RUNNER COMPLETE @ (\S+)", text)
@@ -383,6 +442,7 @@ def main() -> int:
 
     cwd = payload.get("cwd", "")
     transcript_path = payload.get("transcript_path", "")
+    session_id = safe_session_id(payload.get("session_id"))
 
     worktree_slug = extract_worktree_slug(cwd)
     if not worktree_slug:
@@ -430,7 +490,9 @@ def main() -> int:
         return 0
 
     # Enforce mode: all three gates must pass; hard-block on any failure.
-    runner_ok = runner_ran_recently()
+    runner_report = runner_report_for(session_id)
+    scoped = runner_report != RUNNER_REPORT
+    runner_ok = runner_ran_recently(runner_report)
     if file_ok and runner_ok and commit_ok:
         return 0  # all three gates clear — cascade ran fully
 
@@ -442,11 +504,22 @@ def main() -> int:
             f"    Author it manually (Phase 2 of session-close.md) before retry."
         )
     if not runner_ok:
-        runner_state = "missing" if not RUNNER_REPORT.exists() else "stale (>30min old)"
+        runner_state = "missing" if not runner_report.exists() else "stale (>30min old)"
+        owner = (
+            "    This session's own report: another session's run does not count.\n"
+            if scoped else ""
+        )
+        session_arg = f" --session {session_id}" if scoped else ""
+        # Absolute, never vault-relative: from a worktree a relative path runs
+        # the worktree's own committed copy, which can predate per-session
+        # reports (it would write only the shared report, and this gate would
+        # block again on every retry) or not exist at all. RUNNER_SCRIPT is the
+        # copy runner_report_for() judged, the one the injected cascade runs.
         failures.append(
             f"  • session-close-runner.sh report is {runner_state}\n"
-            f"    Path: {RUNNER_REPORT}\n"
-            f"    Run: bash \"{META_NAME}/scripts/session-close-runner.sh\"\n"
+            f"    Path: {runner_report}\n"
+            f"{owner}"
+            f"    Run: bash \"{RUNNER_SCRIPT}\"{session_arg}\n"
             f"    The runner handles Phase 0c-0e + Phase 2 aggregators +\n"
             f"    Phase 2c worktree settle deterministically."
         )
