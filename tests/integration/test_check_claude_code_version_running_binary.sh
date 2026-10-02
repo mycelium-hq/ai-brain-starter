@@ -1138,6 +1138,76 @@ else
 fi
 
 # =============================================================================
+echo "=== plain() leaves nothing for its own deletion to put back together"
+reset_state
+# plain() deletes byte sequences, and a name that is not valid UTF-8 can be built so that what is left after
+# one deletion is another sequence: E2 80 [E2 80 A8] A8 leaves E2 80 A8, which is U+2028; C2 [C2 85] 85 leaves
+# U+0085; E2 80 [E2 80 AE] AE leaves U+202E. Linux accepts such folder names (macOS refuses them), so the
+# function is run on the bytes themselves, which works on every host, and the hook is run on the folders
+# where the file system holds them. plain() also has to leave valid UTF-8 alone under a locale whose own
+# encoding is not UTF-8: tr refuses those bytes there and cut the text at the first of them.
+plain_src="$(awk '/^plain\(\) \{/ { f = 1 } f { print } f && /^\}/ { exit }' "$TARGET")"
+eqb() { ( LC_ALL=C; [ "$1" = "$2" ] ); }   # equal, byte for byte
+# plain_of LOCALE BYTES: what the hook's own plain() prints for BYTES, run under bash in that locale
+plain_of() { PATH="$TEST_PATH" LC_ALL="$1" bash -c "$plain_src"$'\n''plain "$1"' _ "$2" 2> /dev/null; }
+if [ -z "$plain_src" ]; then
+  bad "plain: the hook has no plain() function to run" "looked in $TARGET"
+else
+  # shellcheck disable=SC2059  # the cases are printf formats with octal escapes on purpose
+  for loc in C ${UTF8_LOC:+"$UTF8_LOC"}; do
+    wrong=""
+    while IFS='|' read -r cname cbytes; do
+      got="$(plain_of "$loc" "$(printf "$cbytes")")"
+      eqb "$got" ab || wrong="$wrong $cname"
+    done <<'CASES'
+u2028|a\342\200\342\200\250\250b
+u0085|a\302\302\205\205b
+u202e|a\342\200\342\200\256\256b
+CASES
+    if [ -z "$wrong" ]; then
+      ok "plain ($loc): U+2028, U+0085 and U+202E built from bytes that are not valid UTF-8 are removed too"
+    else
+      bad "plain ($loc): the name a, those bytes, b did not come out as ab for:$wrong" "a removed character came back, or the text was cut"
+    fi
+  done
+  keep="$(printf 'a\303\251\346\227\245\346\234\254b')"
+  legacy=""
+  for loc in ja_JP.eucJP zh_CN.eucCN ko_KR.eucKR; do
+    locale -a 2> /dev/null | awk -v l="$loc" '$0 == l { f = 1 } END { exit !f }' || continue
+    legacy="$legacy $loc"
+    if eqb "$(plain_of "$loc" "$keep")" "$keep"; then
+      ok "plain ($loc): valid UTF-8 is left alone under a locale whose own encoding is not UTF-8"
+    else
+      bad "plain ($loc): valid UTF-8 was changed under a locale whose own encoding is not UTF-8" "tr runs under the caller's locale and refuses those bytes"
+    fi
+  done
+  [ -n "$legacy" ] || echo "NOTE  none of ja_JP.eucJP, zh_CN.eucCN, ko_KR.eucKR exists here, so plain() cannot be shown under a multi-byte locale that is not UTF-8"
+fi
+# the hook itself, on folders named with those bytes: Linux holds them, macOS refuses and the checks above stand
+plant_npm_install "$TMP/fleet/node-b" 4.0.0
+KNOWN="$TMP/fleet/node-b/bin/claude"; LATEST=4.0.0
+held=0
+for spec in 'u2028:\342\200\342\200\250\250:\342\200\250' 'u0085:\302\302\205\205:\302\205' 'u202e:\342\200\342\200\256\256:\342\200\256'; do
+  sname="${spec%%:*}"; rest="${spec#*:}"
+  # shellcheck disable=SC2059
+  fname="a$(printf "${rest%%:*}")b"; gone="$(printf "${rest#*:}")"
+  plant_npm_install "$TMP/fleet/$fname" 1.1.1 2> /dev/null
+  [ -x "$TMP/fleet/$fname/bin/claude" ] || continue
+  held=1
+  TEST_PATH_SAVE="$TEST_PATH"; TEST_PATH="$TMP/fleet/$fname/bin:$TEST_PATH"
+  rm -f "$HOME/.claude/.claude-code-version-check"*
+  run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1 LC_ALL=C
+  TEST_PATH="$TEST_PATH_SAVE"
+  H="$(headline)"
+  if hasb "$H" "PATH claude: $TMP/fleet/ab/bin/claude;" && ! hasb "$H" "$gone"; then
+    ok "hook ($sname): a folder named a, bytes that are not valid UTF-8, b is shown as ab, with no removed character in the line"
+  else
+    bad "hook ($sname): a removed character was rebuilt from the folder name's bytes" "headline=[$H]"
+  fi
+done
+[ "$held" = 1 ] || echo "NOTE  this file system refuses folder names that are not valid UTF-8, so the hook cannot be run on them here"
+
+# =============================================================================
 echo "=== a binary replaced under a running session"
 reset_state
 if need_cc "replaced binary"; then

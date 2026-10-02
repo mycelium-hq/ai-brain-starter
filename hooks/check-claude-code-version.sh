@@ -151,12 +151,16 @@ resolve_path() {
 # its own. Removed: the C0 controls and DEL (tr) and, as UTF-8 byte sequences, the C1
 # controls U+0080 to U+009F (U+0085, NEL, is a line break), the line and paragraph
 # separators and the bidirectional embeddings and overrides U+2028 to U+202E, and the
-# bidirectional isolates U+2066 to U+2069. tr cannot delete a sequence, so sed does,
-# under LC_ALL=C so that it works on bytes whatever the locale. The skew scan's short()
-# treats the same set (showing each as '?').
+# bidirectional isolates U+2066 to U+2069. tr cannot delete a sequence, so sed does. Both
+# run under LC_ALL=C so that they work on bytes whatever the locale: under a multi-byte
+# locale that is not UTF-8, tr refuses valid UTF-8 and cuts the text at it. The sed repeats
+# until a pass deletes nothing, because deleting a sequence can bring the bytes around it
+# together into another one, and a name that is not valid UTF-8 can be built so (E2 80 E2 80
+# A8 A8 leaves E2 80 A8, which is U+2028). The skew scan's short() treats the same set
+# (showing each as '?').
 plain() {
-  printf '%s' "$1" | tr -d '\000-\037\177' |
-    LC_ALL=C sed $'s/\302[\200-\237]//g;s/\342\200[\250-\256]//g;s/\342\201[\246-\251]//g'
+  printf '%s' "$1" | LC_ALL=C tr -d '\000-\037\177' |
+    LC_ALL=C sed $':a\ns/\302[\200-\237]//g;s/\342\200[\250-\256]//g;s/\342\201[\246-\251]//g\nta'
 }
 
 # $1 with a leading $HOME shown as ~ (shorter, and keeps the user name out of a
