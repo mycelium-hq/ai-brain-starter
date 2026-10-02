@@ -627,10 +627,13 @@ if [[ "$current" != "$latest" ]]; then
   lat_patch=$(echo "$latest" | awk -F. '{print $3}')
   gap=""
   # Both fields are external text; arithmetic on a non-number ("286-beta") would
-  # abort the whole hook under `set -u`, so only subtract two plain integers.
+  # abort the whole hook under `set -u`, so only subtract two plain integers, of at most 9
+  # digits (more would wrap to a meaningless gap) and read as decimal: bash reads a leading
+  # zero as octal, where 08 is an error that ends the hook and 010 is 8.
   case "$cur_patch$lat_patch" in
     ''|*[!0-9]*) ;;
-    *) [[ -n "$cur_patch" && -n "$lat_patch" ]] && gap=$(( lat_patch - cur_patch )) ;;
+    *) [[ -n "$cur_patch" && -n "$lat_patch" && ${#cur_patch} -le 9 && ${#lat_patch} -le 9 ]] &&
+         gap=$(( 10#$lat_patch - 10#$cur_patch )) ;;
   esac
 
   # How to upgrade THE BINARY THAT WAS MEASURED. A bare `npm i -g` installs under

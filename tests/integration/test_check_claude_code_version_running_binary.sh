@@ -1308,6 +1308,32 @@ else
   bad "prerelease: the hook must survive a non-numeric patch field" "rc=$RC all=[$ALL]"
 fi
 
+# a patch number written with a leading zero is a number, not octal (bash reads 08 and 09 as an error and
+# 010 as 8), and one of more digits than fit is no number to subtract (it wrapped to a gap that was printed)
+reset_state
+W20="$(printf '%20s' '' | tr ' ' 9)"
+for spec in "2.1.08|2.1.12|(4 versions behind)" "2.1.09|2.1.12|(3 versions behind)" "2.1.010|2.1.12|" "2.1.5|2.1.012|(7 versions behind)" "2.1.1|2.1.${W20}|"; do
+  IFS='|' read -r cur lat want <<< "$spec"
+  plant_path_claude "$cur"
+  rm -f "$HOME/.claude/.claude-code-version-check"*
+  LATEST="$lat"
+  run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1
+  H="$(headline)"
+  good=no
+  if [ "$RC" = 0 ] && ! has "$ALL" "too great" && has "$H" "[claude-code-version] $cur (PATH claude:" && has "$H" " latest $lat"; then
+    if [ -n "$want" ]; then
+      if has "$H" "$want"; then good=yes; fi
+    elif ! has "$H" "versions behind"; then
+      good=yes
+    fi
+  fi
+  if [ "$good" = yes ]; then
+    ok "patch number: $cur against ${lat:0:14} gives ${want:-no count}, and no arithmetic error"
+  else
+    bad "patch number: $cur against ${lat:0:14} should give ${want:-no count}" "rc=$RC all=[${ALL:0:400}]"
+  fi
+done
+
 # What the claude printed ends up in the headline, so only its leading version characters
 # (digits, letters, '.', '+', '-') may: what follows them is not part of a version.
 reset_state
