@@ -194,7 +194,7 @@ run_bounded() {
 # (rather than exec'ing) leaves that child holding the pipe after the alarm has killed
 # the wrapper, and the hook would last as long as the child instead of the bound.
 probe_version() {
-  local tmp v
+  local tmp v n1 n2 n3 rest n
   tmp=$(mktemp -t claude-code-probe.XXXXXX 2>/dev/null) || tmp=""
   if [[ -n "$tmp" ]]; then
     run_bounded "$PROBE_TIMEOUT_SEC" "$1" --version >"$tmp" 2>/dev/null </dev/null || true
@@ -210,10 +210,17 @@ probe_version() {
   # range is collation order, and let e-acute, o-slash and every other letter that sorts between
   # a and z through.
   v=${v%%[!0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.+-]*}
-  # At most 69 characters: three numbers of up to 9 digits and 40 more, the longest version the
-  # install-skew scan takes from an install's files. A longer word is not a version, and would
-  # otherwise be printed whole.
-  case $v in [0-9]*.[0-9]*.[0-9]*) [ "${#v}" -gt 69 ] || printf '%s' "$v" ;; esac
+  # Reported only when the install-skew scan reads it as a version too (its VER): three numbers of
+  # 1 to 9 digits, in at most 69 characters, the longest version the scan takes from an install's
+  # files. Anything else is no version, and would otherwise be printed whole.
+  case $v in [0-9]*.[0-9]*.[0-9]*) ;; *) return 0 ;; esac
+  n1=${v%%.*}; rest=${v#*.}; n2=${rest%%.*}; rest=${rest#*.}; n3=${rest%%[!0123456789]*}
+  for n in "$n1" "$n2" "$n3"; do
+    case $n in ''|*[!0123456789]*) return 0 ;; esac
+    [ "${#n}" -le 9 ] || return 0
+  done
+  [ "${#v}" -le 69 ] || return 0
+  printf '%s' "$v"
 }
 
 # Find the Claude Code process above this hook. Sets ANC_PATH (the file it runs
@@ -389,8 +396,9 @@ LAUNCHD_DEFAULT_PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
 NUM = r"[0-9]{1,9}"
 VER = re.compile(r"(?<![0-9])%s\.%s\.%s(?![0-9])" % (NUM, NUM, NUM))
 # What an install's own files may claim as their version. It is printed, so free text is not one:
-# at most 69 characters, the same bound probe_version holds a version to.
-SHAPE = re.compile(r"%s\.%s\.%s[0-9A-Za-z.+-]{0,40}" % (NUM, NUM, NUM))
+# three numbers as above (the third not run on into more digits), then at most 40 more of the
+# characters below, 69 in all, the same bound probe_version holds a version to.
+SHAPE = re.compile(r"%s\.%s\.%s(?![0-9])[0-9A-Za-z.+-]{0,40}" % (NUM, NUM, NUM))
 DEADLINE = time.monotonic() + 20
 running = sys.argv[1] if len(sys.argv) > 1 else ""
 m = VER.match(sys.argv[2]) if len(sys.argv) > 2 else None   # digits only: this is printed

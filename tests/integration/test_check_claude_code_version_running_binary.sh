@@ -593,8 +593,9 @@ if [ "$(skew_lines)" = 1 ] && ! has "$ALL" "scan failed" && [ "${#ALL}" -lt 2000
 else
   bad "digit run: a 5,000-digit --version answer stopped the scan or was printed" "skew-lines=$(skew_lines) length=${#ALL} all=[${ALL:0:500}]"
 fi
-# the bound is nine digits a number: a first number of 999999999 is a version, one of 1000000000 is none
-for v in 999999999.0.0 1000000000.0.0; do
+# the bound is nine digits a number, in each of the three: 999999999 is a number of a version, 1000000000 is none
+for spec in 999999999.0.0:read 1000000000.0.0:none 1.999999999.0:read 1.1000000000.0:none 1.1.999999999:read 1.1.1000000000:none; do
+  v="${spec%%:*}"
   reset_state
   plant_npm_install "$TMP/fleet/node-a" "$v"
   printf '#!/bin/sh\necho "2.1.0 (Claude Code)"\n' > "$TMP/fleet/node-a/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe"
@@ -603,9 +604,9 @@ for v in 999999999.0.0 1000000000.0.0; do
   TEST_PATH_SAVE="$TEST_PATH"; TEST_PATH="$TMP/fleet/node-a/bin:$TEST_PATH"
   run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1
   TEST_PATH="$TEST_PATH_SAVE"
-  if [ "${v%%.*}" = 999999999 ]; then want="$v $TMP/fleet/node-a/bin/claude"; else want="2.1.0 $TMP/fleet/node-a/bin/claude"; fi
+  if [ "${spec#*:}" = read ]; then want="$v $TMP/fleet/node-a/bin/claude"; else want="2.1.0 $TMP/fleet/node-a/bin/claude"; fi
   if [ "$(skew_lines)" = 1 ] && has "$ALL" "$want"; then
-    ok "digit run: a package.json version whose first number is ${v%%.*} gives the SKEW line '${want%% *}'"
+    ok "digit run: a package.json version $v gives the SKEW line '${want%% *}'"
   else
     bad "digit run: the nine-digit bound is not where it should be (version $v)" "wanted [$want] all=[${ALL:0:500}]"
   fi
@@ -640,6 +641,27 @@ for v in "$V69" "${V69}a"; do
     else
       bad "digit run: a version longer than 69 characters should not be reported" "all=[$ALL]"
     fi
+  fi
+done
+# the headline holds a version to the same numbers as the scan: a word with a number of more than 9
+# digits is not reported (the scan lists such a copy as ?), and one with nine digits in each number is
+W65="$(printf '%65s' '' | tr ' ' 9)"
+for spec in 1000000000.0.0:none 1000000000000.0.0:none 1.1000000000.0:none 1.1.1000000000:none "1.1.${W65}:none" 999999999.999999999.999999999:read; do
+  v="${spec%%:*}"
+  printf '#!/bin/sh\necho "%s (Claude Code)"\n' "$v" > "$PATHBIN/claude"
+  rm -f "$HOME/.claude/.claude-code-version-check"*
+  LATEST=2.0.0
+  run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1
+  if [ "${spec#*:}" = read ]; then
+    if has "$(headline)" "[claude-code-version] $v (PATH claude:"; then
+      ok "digit run: a version with nine digits in each number is shown whole in the headline"
+    else
+      bad "digit run: a version of three numbers of nine digits should be reported" "all=[$ALL]"
+    fi
+  elif [ -z "$OUT" ] && [ -z "$ERR" ]; then
+    ok "digit run: a version with a number of more than 9 digits (${#v} characters) is not reported, as the scan lists it with ?"
+  else
+    bad "digit run: the headline reported a version with a number of more than 9 digits" "version=[$v] all=[${ALL:0:300}]"
   fi
 done
 
