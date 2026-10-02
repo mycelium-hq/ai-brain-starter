@@ -951,6 +951,7 @@ def build_injected_context(
     goal_condition: str | None = None,
     todo_files: list[Path] | None = None,
     offsite_warning: str = "",
+    session_id: str | None = None,
 ) -> str:
     """Compose the system block injected into the model's context.
 
@@ -981,7 +982,7 @@ def build_injected_context(
                 timestamp_human, timestamp_file, worktree, vault_root,
                 meta_dir, session_file, decisions_dir, captures_file,
                 pending_outcomes, goal_condition=None, todo_files=todo_files,
-                offsite_warning=offsite_warning,
+                offsite_warning=offsite_warning, session_id=session_id,
             )
         )
 
@@ -992,7 +993,7 @@ def build_injected_context(
             timestamp_human, timestamp_file, worktree, vault_root,
             meta_dir, session_file, decisions_dir, captures_file,
             pending_outcomes, goal_condition, todo_files=todo_files,
-            offsite_warning=offsite_warning,
+            offsite_warning=offsite_warning, session_id=session_id,
         )
     )
 
@@ -1047,9 +1048,19 @@ def _full_cascade_block(
     goal_condition: str | None = None,
     todo_files: list[Path] | None = None,
     offsite_warning: str = "",
+    session_id: str | None = None,
 ) -> str:
     """The reusable cascade-instruction block."""
     pending = ", ".join(pending_outcomes) if pending_outcomes else "(none)"
+    # A decision file names no session in its filename, so on a shared checkout
+    # the close commit (session-end-hook.sh) and the close gate
+    # (verify-session-close-cascade.py) can only tell this session's decisions
+    # from a parallel session's by an owner line in the frontmatter.
+    known_id = session_id if session_id and session_id != "unknown" else ""
+    decision_owner = (
+        f"; frontmatter carries session_id: {json.dumps(known_id)}"
+        if known_id else ""
+    )
     # Pre-resolve the to-do destination the same way the Time Tracking surface
     # is resolved: the model trusts the injected path instead of inferring it.
     if todo_files:
@@ -1115,7 +1126,7 @@ Then walk Phases 0b -> 1 -> 2 -> 2b -> 3 below."""
   Worktree:         {worktree}
   Vault root:       {vault_root}{offsite_warning}
   Session file:     {session_file}  (already pre-built with frontmatter + headers; fill in the body)
-  Decisions dir:    {decisions_dir}  (write per-decision files here, slug-named)
+  Decisions dir:    {decisions_dir}  (write per-decision files here, slug-named{decision_owner})
   Captures file:    {captures_file}
 {todo_line}
 {tt_line}
@@ -1432,6 +1443,7 @@ def main() -> int:
             goal_condition=active_session_goal(transcript_path),
             todo_files=todo_files,
             offsite_warning=offsite_vault_warning(vault_root, cwd),
+            session_id=session_id,
         )
         emit_context(context)
         log_debug(f"injected context for {confidence} signal in {int((time.time() - start) * 1000)}ms")

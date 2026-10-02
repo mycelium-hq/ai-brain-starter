@@ -13,11 +13,21 @@ Failure modes this prevents:
     permanent."
 
 Three-gate check when a closing claim is detected:
-  1. Session file exists at <meta>/Sessions/YYYY-MM-DD*<worktree>*.md
+  1. THIS session's file exists: the `session_file` the closing-signal marker
+     recorded, else today's note whose frontmatter `session_id:` names this
+     session, else (no identity at all) any <meta>/Sessions/YYYY-MM-DD*<worktree>*.md.
   2. session-close-runner.sh ran in the last 30 min — verified via
      /tmp/abs-session-close-runner.report ending in `RUNNER COMPLETE @ <ts>`.
-  3. No uncommitted session-close artifacts (today's Sessions/Decisions/
-     Captures files must be staged + committed via vault-safe-commit.sh).
+  3. No uncommitted session-close artifacts OF THIS SESSION (its Sessions/
+     file, its Decisions/ files, Captures — staged + committed via
+     vault-safe-commit.sh).
+
+2026-10-01: gates 1 and 3 are scoped by SESSION, not worktree. Every session
+on a plain checkout is `main` and two sessions can share a worktree, so a
+slug match let session A's gate pass on session B's note and blocked A on B's
+uncommitted one. A plain checkout was skipped outright; it is now checked
+whenever the closing-signal marker, or the note's own `session_id:` owner
+line, identifies the session.
 
 All three must be true. Two-gate version was the 2026-05-12 funny-golick
 gap: session file existed, runner ran, but 5 files (session + 3 decisions
@@ -200,7 +210,7 @@ def get_last_assistant_text(transcript_path: str) -> str:
     if not transcript_path or not os.path.exists(transcript_path):
         return ""
     try:
-        with open(transcript_path) as f:
+        with open(transcript_path, encoding="utf-8", errors="replace") as f:
             lines = f.readlines()
     except Exception:
         return ""
@@ -229,6 +239,113 @@ def extract_worktree_slug(cwd: str) -> str:
     return m.group(1) if m else ""
 
 
+# Session scoping. A worktree slug cannot tell two sessions apart: every
+# session on a plain checkout is `main`, and two sessions can share one
+# worktree. Scoped by slug, session A's gate went green on session B's note,
+# and A was blocked on B's half-written one. The session id can: the
+# closing-signal marker records this session's exact `session_file`, and a
+# note or decision whose frontmatter names its owner (`session_id:`) is
+# attributed by that owner. The slug is the fallback only when neither exists.
+#
+# The owner line is `session_id: "<id>"` (JSON-quoted), as the close cascade
+# asks the model to write it on decisions and as the pre-built session note
+# carries it. Hand-edited spellings are tolerated: unquoted, single-quoted, or
+# with a trailing ` # comment`.
+_SESSION_ID_LINE = re.compile(r"^session_id:[ \t]*(.*?)[ \t]*$", re.MULTILINE)
+# The id becomes part of a path below, so anything but a plain token is
+# treated as no id at all (Claude Code's ids are UUIDs).
+_SAFE_SESSION_ID = re.compile(r"[A-Za-z0-9_-]+")
+
+
+def safe_session_id(raw: object) -> str:
+    """The payload's session id, or "" when it is missing or not a plain token."""
+    sid = raw if isinstance(raw, str) else ""
+    return sid if _SAFE_SESSION_ID.fullmatch(sid) else ""
+
+
+def _owner_value(raw: str) -> str:
+    """The id out of a `session_id:` value: quoted, or bare up to a comment.
+
+    Kept byte-identical to the owner filter in scripts/session-end-hook.sh,
+    so the close gate and the close commit agree on whose file is whose.
+    """
+    raw = raw.strip()
+    if raw[:1] in ("\"", "'"):
+        end = raw.find(raw[0], 1)
+        return raw[1:end] if end != -1 else raw[1:]
+    return raw.split(" #", 1)[0].strip()
+
+
+def frontmatter_owner(path: Path) -> str:
+    """The `session_id:` a file's frontmatter names, or "" when it names none.
+
+    Text-mode read, so a CRLF file parses the same as an LF one.
+    """
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            head = f.read(4096)
+    except OSError:
+        return ""
+    if not head.startswith("---"):
+        return ""
+    end = head.find("\n---", 3)
+    m = _SESSION_ID_LINE.search(head[: end if end != -1 else len(head)])
+    return _owner_value(m.group(1)) if m else ""
+
+
+def read_marker(session_id: str) -> dict:
+    """The closing-signal marker detect-closing-signal.py wrote for this
+    session, or {} when there is none.
+
+    session-end-hook.sh deletes the marker at the end of the close turn, so a
+    retry after a block finds none; see owned_session_file() for that case.
+    """
+    if not session_id:
+        return {}
+    marker = Path.home() / ".claude" / f".closing-signal-{session_id}.json"
+    try:
+        data = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def marker_session_file(marker: dict) -> Path | None:
+    """This session's note, as the marker recorded it."""
+    recorded = marker.get("session_file")
+    return Path(recorded) if isinstance(recorded, str) and recorded else None
+
+
+def owned_session_file(session_id: str) -> Path | None:
+    """Today's (or yesterday's) note whose frontmatter names this session.
+
+    The durable identity: it survives the marker being consumed. Newest wins.
+    """
+    if not session_id or not SESSIONS_DIR.is_dir():
+        return None
+    from datetime import timedelta
+    today = datetime.now().strftime("%Y-%m-%d")
+    yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    for date_prefix in (today, yesterday):
+        for path in sorted(SESSIONS_DIR.glob(f"{date_prefix}*.md"), reverse=True):
+            if frontmatter_owner(path) == session_id:
+                return path
+    return None
+
+
+def _same_file(a: Path, b: Path) -> bool:
+    """Same file on disk. samefile, not a resolved-path compare: resolve() does
+    not fold case, so a VAULT_ROOT typed in the wrong case on a
+    case-insensitive volume would never match git's spelling of the path."""
+    try:
+        return os.path.samefile(a, b)
+    except (OSError, ValueError):
+        try:
+            return a.resolve() == b.resolve()
+        except (OSError, RuntimeError):
+            return False
+
+
 def session_file_exists_for_today(worktree_slug: str) -> bool:
     """True iff a session file exists for today (or yesterday, to handle the
     midnight-roll case) matching the worktree slug.
@@ -250,7 +367,7 @@ def session_file_exists_for_today(worktree_slug: str) -> bool:
     return False
 
 
-def _decision_belongs_to_worktree(path_str: str, worktree_slug: str) -> bool:
+def _decision_belongs_to_worktree(full_path: Path, worktree_slug: str) -> bool:
     """Check decision-file frontmatter for `worktree: <slug>` match.
 
     Decision filenames are date-only (no worktree slug), so frontmatter is
@@ -259,8 +376,9 @@ def _decision_belongs_to_worktree(path_str: str, worktree_slug: str) -> bool:
     legitimate goodbye of an unrelated session, which is worse than
     missing a real uncommitted artifact.
     """
+    if not worktree_slug:
+        return False
     try:
-        full_path = VAULT_ROOT / path_str
         if not full_path.exists():
             return False
         head = full_path.read_text(encoding="utf-8", errors="replace")[:2000]
@@ -272,60 +390,127 @@ def _decision_belongs_to_worktree(path_str: str, worktree_slug: str) -> bool:
     return m.group(1).strip() == worktree_slug
 
 
-def uncommitted_session_artifacts(worktree_slug: str) -> list[str]:
+def _decision_is_ours(
+    full_path: Path, worktree_slug: str, session_id: str, identified: bool,
+) -> bool:
+    """A decision that names its owner is ours iff that owner is this session.
+
+    One that names none is ours only when this session could not be identified
+    at all (the old worktree match). An identified session claims nothing it
+    cannot prove is its own: a parallel session in the same worktree writes
+    the same `worktree:` line, and an unowned decision is still staged by the
+    close commit, so it is not at risk of being lost.
+    """
+    owner = frontmatter_owner(full_path)
+    if owner and session_id:
+        return owner == session_id
+    if identified:
+        return False
+    return _decision_belongs_to_worktree(full_path, worktree_slug)
+
+
+def _uncommitted_meta_paths() -> list[tuple[str, Path]] | None:
+    """(display path, absolute path) for every uncommitted file under this
+    vault's Sessions/, Decisions/ and Session Captures.md. None if git failed.
+
+    `--porcelain -z`, never `--short`: `--short` prints the decorated
+    "⚙️ Meta" as an octal-escaped C string ("\\342\\232\\231..."), which no
+    path join can open, while `-z` prints every path verbatim. And without
+    `--untracked-files=all` a wholly-untracked Decisions/ folds into one
+    `Decisions/` line. Both left the decision check unable to fire in a default
+    vault. Porcelain paths are relative to the repo top level: they are joined
+    to it for the absolute path, and shown relative to the vault (git's own
+    `--show-prefix`, in git's spelling) so a vault in a repo subdirectory gets
+    paths that work in the vault-safe-commit command the block message prints.
+    """
+    import subprocess
+    try:
+        top = subprocess.run(
+            ["git", "-C", str(VAULT_ROOT), "rev-parse", "--show-toplevel", "--show-prefix"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=10,
+        )
+        result = subprocess.run(
+            ["git", "-C", str(VAULT_ROOT),
+             "status", "--porcelain", "-z", "--untracked-files=all",
+             "--", f"{META_NAME}/Sessions/", f"{META_NAME}/Decisions/",
+             f"{META_NAME}/Session Captures.md"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=10,
+        )
+    except Exception:
+        return None
+    if top.returncode != 0 or result.returncode != 0:
+        return None
+    lines = top.stdout.splitlines()
+    toplevel = Path(lines[0].strip())
+    prefix = lines[1].strip() if len(lines) > 1 else ""
+    out: list[tuple[str, Path]] = []
+    entries = result.stdout.split("\0")
+    i = 0
+    while i < len(entries):
+        entry = entries[i]
+        i += 1
+        if len(entry) < 4:
+            continue
+        if "R" in entry[:2] or "C" in entry[:2]:
+            i += 1  # a rename/copy carries its source path as the next entry
+        rel = entry[3:]
+        shown = rel[len(prefix):] if prefix and rel.startswith(prefix) else rel
+        out.append((shown, toplevel / rel))
+    return out
+
+
+def uncommitted_session_artifacts(
+    worktree_slug: str,
+    session_id: str = "",
+    own_file: Path | None = None,
+) -> list[str]:
     """Return paths of uncommitted session-close artifacts owned by THIS
-    worktree's session.
+    session.
 
     Scoping rules (added 2026-05-13 after the funny-golick gate caught
-    parallel-session work):
-      - Sessions/: match filename contains today's OR yesterday's date AND
-        the worktree slug.
-      - Decisions/: filename has no worktree, so read frontmatter
-        `worktree: <slug>` and match.
+    parallel-session work; session-scoped 2026-10-01):
+      - Sessions/: with `own_file` (from the marker or the note's own
+        `session_id:`), exactly that file. Without it, the old proxy: the
+        filename carries today's OR yesterday's date AND the worktree slug.
+      - Decisions/: filename has no owner, so read the frontmatter. A
+        `session_id:` decides it outright; with none, `worktree: <slug>`.
       - Session Captures.md: shared across sessions; flag only if THIS
-        worktree also has an uncommitted session file (likely-same-batch
+        session also has an uncommitted session file (likely-same-batch
         proxy). This avoids blocking goodbye on another session's append.
 
-    Empty list = clean for this worktree. Non-empty = block.
+    Empty list = clean for this session. Non-empty = block.
 
     Original failure: funny-golick-fe8400 wrote 5 files at session close
     and almost lost them at archive. Permanent-fix-pattern: block at the
     model layer, not the UI layer.
     """
-    import subprocess
     from datetime import timedelta
     today = datetime.now().strftime("%Y-%m-%d")
     yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
-    try:
-        result = subprocess.run(
-            ["git", "-C", str(VAULT_ROOT), "status", "--short",
-             "--", f"{META_NAME}/Sessions/", f"{META_NAME}/Decisions/",
-             f"{META_NAME}/Session Captures.md"],
-            capture_output=True, text=True, timeout=10,
-        )
-    except Exception:
-        return []
-    if result.returncode != 0:
+    entries = _uncommitted_meta_paths()
+    if entries is None:
         return []
 
     sessions_unc: list[str] = []
     decisions_unc: list[str] = []
     captures_unc: list[str] = []
-    for raw in result.stdout.splitlines():
-        line = raw.strip()
-        if not line or len(line) < 4:
-            continue
-        path = line[3:].strip().strip('"')
-        if "Session Captures.md" in path:
+    for path, full_path in entries:
+        if path.endswith("Session Captures.md"):
             captures_unc.append(path)
             continue
         if "/Sessions/" in path or path.startswith(f"{META_NAME}/Sessions/"):
-            if (today in path or yesterday in path) and worktree_slug and worktree_slug in path:
+            if own_file is not None:
+                if _same_file(full_path, own_file):
+                    sessions_unc.append(path)
+            elif (today in path or yesterday in path) and worktree_slug and worktree_slug in path:
                 sessions_unc.append(path)
             continue
         if "/Decisions/" in path or path.startswith(f"{META_NAME}/Decisions/"):
             if today in path or yesterday in path:
-                if _decision_belongs_to_worktree(path, worktree_slug):
+                if _decision_is_ours(full_path, worktree_slug, session_id,
+                                     identified=own_file is not None):
                     decisions_unc.append(path)
             continue
 
@@ -347,7 +532,7 @@ def runner_ran_recently() -> bool:
     if not RUNNER_REPORT.exists():
         return False
     try:
-        text = RUNNER_REPORT.read_text(errors="replace")
+        text = RUNNER_REPORT.read_text(encoding="utf-8", errors="replace")
     except Exception:
         return False
     m = re.search(r"RUNNER COMPLETE @ (\S+)", text)
@@ -383,10 +568,32 @@ def main() -> int:
 
     cwd = payload.get("cwd", "")
     transcript_path = payload.get("transcript_path", "")
+    session_id = safe_session_id(payload.get("session_id"))
 
     worktree_slug = extract_worktree_slug(cwd)
-    if not worktree_slug:
-        return 0  # not in a worktree — skip
+    marker = read_marker(session_id)
+    if marker.get("is_trivial"):
+        # The cascade told this session to skip itself (<5 user messages), so
+        # its note is never built and there is nothing for this gate to verify.
+        return 0
+    # This session's own note, as the close hook recorded it. With it the gate
+    # can attribute artifacts on a plain checkout too, where every session's
+    # worktree is `main` and the slug says nothing about whose file is whose.
+    own_file = marker_session_file(marker)
+    resolved = False
+    if not worktree_slug and own_file is None:
+        # A plain checkout with no marker. The marker is consumed at the end of
+        # the close turn (session-end-hook.sh deletes it even when this gate
+        # blocked that same turn), so a retry, or a goodbye that comes a turn
+        # after the close prompt, finds none. The note's own owner line still
+        # identifies the session. Nothing identifies it -> skip, as before.
+        if not session_id:
+            return 0
+        _resolve_vault_context(cwd)
+        resolved = True
+        own_file = owned_session_file(session_id)
+        if own_file is None:
+            return 0
 
     last_text = get_last_assistant_text(transcript_path)
     if not is_closing_claim(last_text):
@@ -395,7 +602,12 @@ def main() -> int:
     # Repo-aware vault resolution, now that we know this is worth the work:
     # put every gate below in lockstep with whichever vault
     # detect-closing-signal.py resolved for THIS cwd (see _lib/vault_root.py).
-    _resolve_vault_context(cwd)
+    if not resolved:
+        _resolve_vault_context(cwd)
+    if own_file is None:
+        # Marker already consumed in a worktree: the note's own frontmatter
+        # still says whose it is.
+        own_file = owned_session_file(session_id)
 
     # Enforcement (hard-block) is conditional on the session-close cascade
     # being INSTALLED in this vault — see runner_installed(). This is what
@@ -406,8 +618,11 @@ def main() -> int:
     enforce = runner_installed() and os.environ.get("VERIFY_CASCADE_SOFT") != "1"
 
     today = datetime.now().strftime("%Y-%m-%d")
-    file_ok = session_file_exists_for_today(worktree_slug)
-    uncommitted = uncommitted_session_artifacts(worktree_slug)
+    if own_file is not None:
+        file_ok = own_file.is_file()
+    else:
+        file_ok = session_file_exists_for_today(worktree_slug)
+    uncommitted = uncommitted_session_artifacts(worktree_slug, session_id, own_file)
     commit_ok = not uncommitted
 
     if not enforce:
@@ -437,8 +652,12 @@ def main() -> int:
     # Block with diagnostic naming WHICH gate failed
     failures = []
     if not file_ok:
+        expected = (
+            str(own_file) if own_file is not None
+            else f"{META_NAME}/Sessions/{today}T*-{worktree_slug}.md"
+        )
         failures.append(
-            f"  • Session file missing at {META_NAME}/Sessions/{today}T*-{worktree_slug}.md\n"
+            f"  • Session file missing at {expected}\n"
             f"    Author it manually (Phase 2 of session-close.md) before retry."
         )
     if not runner_ok:
