@@ -291,6 +291,12 @@ INTEGRATION_TESTS=(
   test_installer_retires_email_gate
   test_installer_relocates_moved_hooks
   test_installer_shim_safe_interpreter
+  # The same shim, one layer down: journal-preflight.py started its message
+  # fetcher as a bare `python3 <script>`, which a PATH shim refuses, so the
+  # /journal digest lost its MESSAGES section while looking like a long digest.
+  # Runs the shipped preflight with a faithful fake shim FIRST on PATH, and
+  # proves the harness itself goes red when the bare python3 is put back.
+  test_journal_preflight_shim_safe_fetch
   test_deployed_hooks_behind
   test_sync_guard_surface
   test_windows_platformize
