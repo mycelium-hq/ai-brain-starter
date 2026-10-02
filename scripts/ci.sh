@@ -494,6 +494,12 @@ INTEGRATION_TESTS=(
   # to stdout and never writes the log, so a "(dry-run)" header IN the log was
   # unreachable except as a mislabel.
   test_sync_vault_scripts_dryrun_label
+  # A python3/python WRAPPER first on PATH (a Claude Code plugin ships one) left
+  # sync-vault-scripts.sh with no interpreter, so it installed nothing and still
+  # exited 0, silently under the --quiet its automated callers pass. Pins the
+  # file probe, the versioned + install-location ladder, AI_BRAIN_PYTHON as one
+  # path, and the stdin fallback when no probe file can be written.
+  test_sync_vault_scripts_shimmed_python
   # At-rest leg of the sync-clobber class. test_vault_script_sync.sh section 1b
   # PREVENTS a manifest gap; this detects vaults already damaged, plus the case
   # closure cannot see — a committed local patch silently overwritten by the sync

@@ -9,6 +9,22 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-10-02: with a `python3` wrapper on PATH, the vault scripts never installed
+
+**Who this affects:** anyone running a Claude Code plugin that puts its own `python3` wrapper on PATH — the trailofbits modern-python plugin is the common one. Mac and Linux both.
+
+`sync-vault-scripts.sh` is what copies the helper scripts into your vault. Before it can do that it has to find a working Python 3, so it walks a short list of candidates — `python3`, `python`, `py` — and keeps the first one that actually reports version 3.
+
+A plugin wrapper breaks that list in a way the list was never built for. The wrapper is named `python3` and it sits on PATH, so it looks like a real candidate. Call it and it refuses outright: *"Use `uv run python3 ...` instead."* Same for `python`. And `py` does not exist off Windows. All three candidates fail, and the script ends up with no interpreter at all, so it can neither read your vault's location from settings nor run the resolver that finds your Meta folder.
+
+It then reported "no vault resolved" or "no Meta folder", called that non-fatal, and exited 0. Success, as far as anything watching it could tell. The automatic sync after an update and the journal-guard repair both run it with `--quiet`, so there it printed nothing at all. Nothing had been installed. `journal-preflight.py` in particular never reached the vault, which left the /journal Step 0 guard asking for a script that was not there — unsatisfiable, so `JOURNAL_CONTEXT_BYPASS=1` became routine and the guard quietly stopped guarding.
+
+The list now reaches past the wrapper. It tries `AI_BRAIN_PYTHON` first if you set it, then `python3`, `python` and `py` as before, then the version-suffixed names (`python3.15` down to `python3.9`), which a wrapper does not ship, and last the usual install locations (`/opt/homebrew/bin/python3`, `/usr/local/bin/python3`, `/usr/bin/python3`), skipping any that do not exist. A Mac whose only real Python is the system one is covered too. If the `AI_BRAIN_PYTHON` you set does not work, a sync you run yourself now says so instead of quietly moving on.
+
+The probe also runs a real file now instead of `python3 -c`. Some wrappers forward `-c` to the genuine interpreter and refuse only a script path, and this script needs a script path — so a `-c` probe would happily accept a wrapper that then fails on the one call it was chosen for. If no temporary file can be written for that probe, it checks without one rather than giving up, and a sync you run yourself says so.
+
+---
+
 ## 2026-10-01: `/journal` dropped your messages on machines where `python3` refuses to run a script
 
 **Who this affects:** anyone who runs `/journal` with a message reader script in their vault (`journal-messages-fetch.py`), on a machine where a Python tool puts its own stand-in for `python3` first on the PATH. Some of those stand-ins answer `python3 some-script.py` with advice ("use `uv run python ...`") and exit with an error, while still running one-liners, so nothing looks broken.
