@@ -376,6 +376,9 @@ fi
 [[ -z "$current" ]] && exit 0
 
 latest=$(gh api repos/anthropics/claude-code/releases/latest --jq .tag_name 2>/dev/null | sed 's/^v//')
+# The tag is printed in the headline as the feed returns it: cut it to its leading version
+# characters, as the measured version is (the same 65 characters; an empty result exits below).
+latest=${latest%%[!0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.+-]*}
 [[ -z "$latest" ]] && exit 0
 
 # Skew watchdog. Prints ONE line naming every distinct Claude Code copy when their

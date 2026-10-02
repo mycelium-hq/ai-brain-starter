@@ -1424,6 +1424,44 @@ else
   fi
 fi
 
+# =============================================================================
+echo "=== the latest release tag is cut to its leading version characters, like the measured version"
+reset_state
+# The tag comes from the release feed and is printed in the headline after "latest". Only the measured
+# version was trimmed, so a tag followed by an escape sequence, a right-to-left override, a line
+# separator or NEL put that text in the headline. The measured claude is a plain 1.1.1 here.
+plant_path_claude 1.1.1
+for spec in "an escape sequence:$(printf '\033[31mX')" "a right-to-left override:$(printf '\342\200\256')" "a line separator:$(printf '\342\200\250')" "NEL:$(printf '\302\205')" "e-acute:$(printf '\303\251')"; do
+  extra="${spec#*:}"
+  for loc in C ${UTF8_LOC:+"$UTF8_LOC"}; do
+    rm -f "$HOME/.claude/.claude-code-version-check"*
+    LATEST="9.0.0$extra"
+    run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1 LC_ALL="$loc"
+    H="$(headline)"
+    if has "$H" " latest 9.0.0. Upgrade" && ! hasb "$H" "$extra"; then
+      ok "release tag ($loc): 9.0.0 followed by ${spec%%:*} is shown as 9.0.0"
+    else
+      bad "release tag ($loc): ${spec%%:*} after the tag reached the headline" "headline=[$H]"
+    fi
+  done
+done
+rm -f "$HOME/.claude/.claude-code-version-check"*
+LATEST=9.0.0-rc.1
+run_hook CLAUDE_VERSION_CHECK_WALK_FROM_PID=1
+if has "$(headline)" " latest 9.0.0-rc.1. Upgrade"; then
+  ok "release tag: a pre-release tag is shown whole"
+else
+  bad "release tag: the trim must keep '-', '.' and the digits" "all=[$ALL]"
+fi
+# the measured version and the tag are cut with the same 65 characters
+want_list='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz.+-'
+n_trims="$(awk -v a="v=\${v%%[!$want_list]*}" -v b="latest=\${latest%%[!$want_list]*}" 'index($0, a) { x++ } index($0, b) { y++ } END { print x + 0 "," y + 0 }' "$TARGET")"
+if [ "$n_trims" = "1,1" ]; then
+  ok "release tag: the hook cuts the measured version and the tag with the same 65 characters"
+else
+  bad "release tag: the measured version and the tag must each be cut with the 65 characters" "lines with the list (version,tag): $n_trims"
+fi
+
 reset_state
 if need_cc "relative path"; then
   build_fake "$TMP/anc/claude" 9.9.9
