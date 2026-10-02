@@ -150,17 +150,19 @@ resolve_path() {
 # directory named with a newline and a sentence would otherwise read as a line of
 # its own. Removed: the C0 controls and DEL (tr) and, as UTF-8 byte sequences, the C1
 # controls U+0080 to U+009F (U+0085, NEL, is a line break), the line and paragraph
-# separators and the bidirectional embeddings and overrides U+2028 to U+202E, and the
-# bidirectional isolates U+2066 to U+2069. tr cannot delete a sequence, so sed does. Both
-# run under LC_ALL=C so that they work on bytes whatever the locale: under a multi-byte
-# locale that is not UTF-8, tr refuses valid UTF-8 and cuts the text at it. The sed repeats
-# until a pass deletes nothing, because deleting a sequence can bring the bytes around it
-# together into another one, and a name that is not valid UTF-8 can be built so (E2 80 E2 80
-# A8 A8 leaves E2 80 A8, which is U+2028). The skew scan's short() treats the same set
-# (showing each as '?').
+# separators U+2028 and U+2029, every bidirectional control (the marks U+061C, U+200E and
+# U+200F, the embeddings and overrides U+202A to U+202E, the isolates U+2066 to U+2069) and
+# the zero-width characters U+200B to U+200D, U+2060 and U+FEFF. Other invisible characters
+# (the soft hyphen, variation selectors, the tag characters U+E0000 to U+E007F) are not
+# removed. tr cannot delete a sequence, so sed does. Both run under LC_ALL=C so that they
+# work on bytes whatever the locale: under a multi-byte locale that is not UTF-8, tr refuses
+# valid UTF-8 and cuts the text at it. The sed repeats until a pass deletes nothing, because
+# deleting a sequence can bring the bytes around it together into another one, and a name
+# that is not valid UTF-8 can be built so (E2 80 E2 80 A8 A8 leaves E2 80 A8, which is
+# U+2028). The skew scan's short() treats the same set (showing each as '?').
 plain() {
   printf '%s' "$1" | LC_ALL=C tr -d '\000-\037\177' |
-    LC_ALL=C sed $':a\ns/\302[\200-\237]//g;s/\342\200[\250-\256]//g;s/\342\201[\246-\251]//g\nta'
+    LC_ALL=C sed $':a\ns/\302[\200-\237]//g;s/\330\234//g;s/\342\200[\213-\217\250-\256]//g;s/\342\201[\240\246-\251]//g;s/\357\273\277//g\nta'
 }
 
 # $1 with a leading $HOME shown as ~ (shorter, and keeps the user name out of a
@@ -559,13 +561,14 @@ def vkey(v):
 
 def short(p):
     # Shown as '?': the C0 controls and DEL, the C1 controls (U+0085, NEL, is a line break), the
-    # line and paragraph separators and the bidirectional embeddings and overrides (U+2028 to
-    # U+202E), and the bidirectional isolates (U+2066 to U+2069). A reader that splits on Unicode
-    # line breaks would otherwise see a line the folder name wrote, and an override reorders the
-    # text around it. The shell function plain() drops the same set.
+    # line and paragraph separators U+2028 and U+2029, every bidirectional control (U+061C, U+200E,
+    # U+200F, U+202A to U+202E, U+2066 to U+2069) and the zero-width characters (U+200B to U+200D,
+    # U+2060, U+FEFF). A reader that splits on Unicode line breaks would otherwise see a line the
+    # folder name wrote, a bidirectional control reorders the text around it, and the zero-width
+    # characters are invisible. The shell function plain() drops the same set.
     home = HOME.rstrip(os.sep)
     shown = "~" + p[len(home):] if home and p.startswith(home + os.sep) else p
-    return re.sub(r"[\x00-\x1f\x7f-\x9f\u2028-\u202e\u2066-\u2069]", "?", shown)
+    return re.sub(r"[\x00-\x1f\x7f-\x9f\u061c\u200b-\u200f\u2028-\u202e\u2060\u2066-\u2069\ufeff]", "?", shown)
 
 
 rows.sort(key=lambda row: row[1])

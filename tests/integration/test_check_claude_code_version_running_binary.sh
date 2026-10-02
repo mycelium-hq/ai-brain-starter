@@ -1104,29 +1104,43 @@ done
 TEST_PATH="$TEST_PATH_SAVE"
 
 # =============================================================================
-echo "=== line breaks, C1 controls and text-direction controls in a folder name stay out of the output"
+echo "=== line breaks, C1 controls, bidirectional controls and zero-width characters in a folder name stay out of the output"
 reset_state
 # A path in the output can be named on purpose. The C0 controls and DEL were already dropped from the
 # headline and shown as '?' in the skew line, but a reader may also take NEL and the other C1 controls,
-# or the Unicode line and paragraph separators, for a line break, and the bidirectional embeddings,
-# overrides and isolates change the direction text is shown in; all of those got through. The folder
-# below holds 14 of them (U+0080, U+0085, U+009F, U+2028, U+2029, U+202A to U+202E, U+2066 to U+2069)
-# between the letters a and o, then characters that must stay: the no-break space and the copyright
-# sign (they share a lead byte with the C1 range), the characters next to the other ranges (U+2027,
-# U+202F, U+2064, U+206A), e-acute and two kanji. PATH's claude is an npm install there, beside a
-# second install, so the name reaches the headline, the --prefix in its hint, and the skew line.
-R0080="$(printf '\302\200')"; R0085="$(printf '\302\205')"; R009F="$(printf '\302\237')"
-R2028="$(printf '\342\200\250')"; R2029="$(printf '\342\200\251')"
-R202A="$(printf '\342\200\252')"; R202B="$(printf '\342\200\253')"; R202C="$(printf '\342\200\254')"
-R202D="$(printf '\342\200\255')"; R202E="$(printf '\342\200\256')"
-R2066="$(printf '\342\201\246')"; R2067="$(printf '\342\201\247')"; R2068="$(printf '\342\201\250')"; R2069="$(printf '\342\201\251')"
-REMOVED=("U+0080:$R0080" "U+0085:$R0085" "U+009F:$R009F" "U+2028:$R2028" "U+2029:$R2029"
-         "U+202A:$R202A" "U+202B:$R202B" "U+202C:$R202C" "U+202D:$R202D" "U+202E:$R202E"
-         "U+2066:$R2066" "U+2067:$R2067" "U+2068:$R2068" "U+2069:$R2069")
-KEEP="$(printf '\302\240\302\251\342\200\247\342\200\257\342\201\244\342\201\252\303\251\346\227\245\346\234\254')"
-RAW="a${R0080}b${R0085}c${R009F}d${R2028}e${R2029}f${R202A}g${R202B}h${R202C}i${R202D}j${R202E}k${R2066}l${R2067}m${R2068}n${R2069}o-${KEEP}"
-PLAINN="abcdefghijklmno-${KEEP}"                 # the headline and the hint drop the 14 characters
-SHORTN="a?b?c?d?e?f?g?h?i?j?k?l?m?n?o-${KEEP}"    # the skew line shows each of them as '?'
+# or the Unicode line and paragraph separators, for a line break; a bidirectional control changes the
+# direction text is shown in, or reorders the text around it; and a zero-width character is invisible.
+# The folder below holds 22 of them (U+0080, U+0085, U+009F; the marks U+061C, U+200E, U+200F; the
+# zero-width characters U+200B, U+200C, U+200D, U+2060, U+FEFF; U+2028, U+2029; the embeddings and
+# overrides U+202A to U+202E; the isolates U+2066 to U+2069) between the letters a and w, then
+# characters that must stay: ones that share a lead byte with the removed ranges (the no-break space,
+# the copyright sign, an Arabic semicolon), the characters next to the other ranges (U+200A, U+2010,
+# U+2027, U+202F, U+205F, U+2061, U+2064, U+206A, U+FEFC), e-acute and two kanji. PATH's claude is an
+# npm install there, beside a second install, so the name reaches the headline, the --prefix in its
+# hint, and the skew line.
+RLIST='U+0080:\302\200 U+0085:\302\205 U+009F:\302\237 U+061C:\330\234 U+200B:\342\200\213
+       U+200C:\342\200\214 U+200D:\342\200\215 U+200E:\342\200\216 U+200F:\342\200\217
+       U+2028:\342\200\250 U+2029:\342\200\251 U+202A:\342\200\252 U+202B:\342\200\253
+       U+202C:\342\200\254 U+202D:\342\200\255 U+202E:\342\200\256 U+2060:\342\201\240
+       U+2066:\342\201\246 U+2067:\342\201\247 U+2068:\342\201\250 U+2069:\342\201\251
+       U+FEFF:\357\273\277'
+KLIST='U+00A0:\302\240 U+00A9:\302\251 U+061B:\330\233 U+200A:\342\200\212 U+2010:\342\200\220
+       U+2027:\342\200\247 U+202F:\342\200\257 U+205F:\342\201\237 U+2061:\342\201\241
+       U+2064:\342\201\244 U+206A:\342\201\252 U+FEFC:\357\273\274 U+00E9:\303\251
+       U+65E5:\346\227\245 U+672C:\346\234\254'
+letters=abcdefghijklmnopqrstuvwxyz
+REMOVED=(); RAW=""; PLAINN=""; SHORTN=""; KEEP=""; i=0
+# shellcheck disable=SC2059,SC2086  # the lists are words, each with a printf format of octal escapes
+for e in $RLIST; do
+  bytes="$(printf "${e#*:}")"
+  RAW="$RAW${letters:$i:1}$bytes"; PLAINN="$PLAINN${letters:$i:1}"; SHORTN="$SHORTN${letters:$i:1}?"
+  REMOVED[$i]="${e%%:*}:$bytes"; i=$((i + 1))
+done
+# shellcheck disable=SC2059,SC2086
+for e in $KLIST; do KEEP="$KEEP$(printf "${e#*:}")"; done
+RAW="$RAW${letters:$i:1}-$KEEP"          # the name: letter, character, letter, character ..., then what must stay
+PLAINN="$PLAINN${letters:$i:1}-$KEEP"    # the headline and the hint drop the removed characters
+SHORTN="$SHORTN${letters:$i:1}-$KEEP"    # the skew line shows each of them as '?'
 hasb() { ( LC_ALL=C; case "$1" in *"$2"*) exit 0 ;; *) exit 1 ;; esac ); }   # contains, byte for byte
 plant_npm_install "$TMP/fleet/$RAW" 1.1.1 2> /dev/null
 plant_npm_install "$TMP/fleet/node-b" 4.0.0
@@ -1146,12 +1160,12 @@ else
     done
     if [ -z "$left_h" ] && hasb "$H" "PATH claude: $TMP/fleet/$PLAINN/bin/claude;" &&
        hasb "$H" "--prefix '$TMP/fleet/$PLAINN' @anthropic-ai/claude-code@latest"; then
-      ok "folder name ($loc): the headline and the --prefix in the hint drop all 14 characters and keep every other"
+      ok "folder name ($loc): the headline and the --prefix in the hint drop all ${#REMOVED[@]} characters and keep every other"
     else
       bad "folder name ($loc): the headline kept${left_h:- none of them, but is not the text expected}" "headline=[$H]"
     fi
     if [ -z "$left_s" ] && hasb "$S" "1.1.1 $TMP/fleet/$SHORTN/bin/claude"; then
-      ok "folder name ($loc): the skew line shows each of the 14 characters as '?' and keeps every other"
+      ok "folder name ($loc): the skew line shows each of the ${#REMOVED[@]} characters as '?' and keeps every other"
     else
       bad "folder name ($loc): the skew line kept${left_s:- none of them, but is not the text expected}" "skew=[$S]"
     fi
@@ -1175,7 +1189,7 @@ plain_of() { PATH="$TEST_PATH" LC_ALL="$1" bash -c "$plain_src"$'\n''plain "$1"'
 if [ -z "$plain_src" ]; then
   bad "plain: the hook has no plain() function to run" "looked in $TARGET"
 else
-  # shellcheck disable=SC2059  # the cases are printf formats with octal escapes on purpose
+  # shellcheck disable=SC2059,SC2086  # the cases are printf formats with octal escapes on purpose
   for loc in C ${UTF8_LOC:+"$UTF8_LOC"}; do
     wrong=""
     while IFS='|' read -r cname cbytes; do
@@ -1185,11 +1199,31 @@ else
 u2028|a\342\200\342\200\250\250b
 u0085|a\302\302\205\205b
 u202e|a\342\200\342\200\256\256b
+u200e|a\342\200\342\200\216\216b
+u061c|a\330\330\234\234b
+u2060|a\342\201\342\201\240\240b
+ufeff|a\357\357\273\277\273\277b
+nel-inside-u2028|a\342\200\302\205\250b
+nested|a\342\200\342\200\342\200\250\250\250b
 CASES
     if [ -z "$wrong" ]; then
-      ok "plain ($loc): U+2028, U+0085 and U+202E built from bytes that are not valid UTF-8 are removed too"
+      ok "plain ($loc): a removed character built from bytes that are not valid UTF-8 is removed too (U+2028, U+0085, U+202E, U+200E, U+061C, U+2060, U+FEFF, one inside another, nested)"
     else
       bad "plain ($loc): the name a, those bytes, b did not come out as ab for:$wrong" "a removed character came back, or the text was cut"
+    fi
+    # each character of the removed set goes, alone, and each neighbour stays, also the ones a folder cannot be named with
+    gone=""; stays=""
+    for e in $RLIST; do
+      eqb "$(plain_of "$loc" "$(printf "a${e#*:}b")")" ab || gone="$gone ${e%%:*}"
+    done
+    for e in $KLIST U+2062:'\342\201\242' U+2063:'\342\201\243' U+2065:'\342\201\245' U+206F:'\342\201\257'; do
+      want="$(printf "a${e#*:}b")"
+      eqb "$(plain_of "$loc" "$want")" "$want" || stays="$stays ${e%%:*}"
+    done
+    if [ -z "$gone" ] && [ -z "$stays" ]; then
+      ok "plain ($loc): each of the ${#REMOVED[@]} removed characters goes and each neighbour stays"
+    else
+      bad "plain ($loc): the set is not what it should be" "left in:$gone, damaged:$stays"
     fi
   done
   keep="$(printf 'a\303\251\346\227\245\346\234\254b')"
