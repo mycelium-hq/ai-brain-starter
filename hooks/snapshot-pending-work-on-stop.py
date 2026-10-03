@@ -56,8 +56,14 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-SNAPSHOT_REL = "⚙️ Meta/Worktree Snapshots"
-LOG_REL = "⚙️ Meta/logs/snapshot-pending.log"
+HOOK_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(HOOK_DIR))
+try:  # the shared resolver decides vault vs machine-local; never the reaped repo
+    from _lib.worktree_safety import artifact_base, snapshot_dir_for
+except Exception:  # partial install: do nothing rather than write into a repo
+    artifact_base = snapshot_dir_for = None
+
+LOG_NAME = "snapshot-pending.log"
 
 
 def find_main_vault(cwd: Path) -> Path | None:
@@ -121,12 +127,17 @@ def main() -> int:
     if not slug:
         return 0
 
-    vault_root = find_main_vault(cwd)
-    if vault_root is None:
+    # The main checkout the worktree belongs to: the baseline the diff is taken
+    # against. It is NOT where snapshots go. Writing `⚙️ Meta/` into a product repo
+    # (the old behaviour) dropped vault artifacts at its root, one `git add -A`
+    # away from a commit; the shared resolver keeps them outside the repo.
+    main_repo = find_main_vault(cwd)
+    if main_repo is None or snapshot_dir_for is None:
         return 0
 
-    snapshot_dir = vault_root / SNAPSHOT_REL / slug
-    log_path = vault_root / LOG_REL
+    snapshot_dir = snapshot_dir_for(main_repo) / slug
+    base, is_vault = artifact_base(main_repo)
+    log_path = base / ("⚙️ Meta/logs" if is_vault else "logs") / LOG_NAME
 
     try:
         result = subprocess.run(
@@ -164,7 +175,7 @@ def main() -> int:
         if not wt_file.is_file():
             continue
 
-        main_file = vault_root / relpath
+        main_file = main_repo / relpath
         wt_hash = _hash(wt_file)
         main_hash = _hash(main_file) if main_file.is_file() else None
 
