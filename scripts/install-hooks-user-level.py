@@ -994,6 +994,11 @@ def _posix_python() -> str:
     Only space-free paths qualify: the template invokes the interpreter
     unquoted, so a path with a space would break the command. Overridable for
     tests via ABS_POSIX_PYTHON.
+
+    A virtualenv's python never qualifies. Run the installer under `uv run` or
+    an activated venv and that python comes first on PATH; once the project's
+    venv is deleted or rebuilt, every hook pinned to it exits 127, which a
+    PreToolUse gate treats as allow.
     """
     override = os.environ.get("ABS_POSIX_PYTHON")
     if override:
@@ -1011,7 +1016,7 @@ def _posix_python() -> str:
                 continue
             # Cheap pre-filter: known refuse-shim locations.
             rp = os.path.realpath(cand)
-            if "/hooks/shims/" in rp or "modern-python" in rp:
+            if "/hooks/shims/" in rp or "modern-python" in rp or _in_virtualenv(cand):
                 continue
             # Robust: a real interpreter runs `-c` with rc 0; a refuse-shim
             # exit-1s. Bounded so a hung candidate can't stall the install.
@@ -1023,11 +1028,21 @@ def _posix_python() -> str:
                 continue
     # This installer is itself running under a real python (a refuse-shim would
     # have blocked this very process), so sys.executable is a safe absolute
-    # fallback when PATH resolution came up empty.
+    # fallback when PATH resolution came up empty. Inside a venv, use the base
+    # interpreter the venv links to, which outlives it.
     exe = sys.executable or ""
-    if exe and " " not in exe and os.path.isfile(exe):
+    if exe and _in_virtualenv(exe):
+        exe = os.path.realpath(exe)
+    if exe and " " not in exe and os.path.isfile(exe) and not _in_virtualenv(exe):
         return exe
     return "python3"
+
+
+def _in_virtualenv(path: str) -> bool:
+    """True for an interpreter inside a virtualenv: `<venv>/bin/python3`, with
+    `pyvenv.cfg` at `<venv>`."""
+    venv = os.path.dirname(os.path.dirname(os.path.abspath(path)))
+    return os.path.isfile(os.path.join(venv, "pyvenv.cfg"))
 
 
 def substitute_python_interpreter(template: dict) -> dict:

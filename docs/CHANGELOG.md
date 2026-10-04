@@ -9,6 +9,18 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-10-04: deleting a project can no longer switch your hooks off
+
+**Who this affects:** anyone who ran the installer, or an update, from inside a Python virtualenv: under `uv run`, or with a project's `.venv` activated. Everyone else sees no difference.
+
+The installer writes one absolute Python path into every hook command, so a stand-in `python3` on your PATH cannot quietly disable the hooks. It took the first working `python3` on the PATH, and inside a virtualenv that is the project's own copy. When that project was deleted, or its virtualenv rebuilt, every hook pointed at a file that was gone. A hook that cannot start blocks nothing. The guards that keep secrets and environment dumps out of a session then let everything through, without a word. On the machine where this was found, twelve hooks were tied to one project's virtualenv, the secret and environment-dump blockers among them.
+
+The installer now skips any Python inside a virtualenv and takes the next one on the PATH. If the virtualenv's Python is the only one it can find, it uses the Python that virtualenv was built from, which stays when the project goes. To repair an install that is already affected, run the update once from outside a virtualenv.
+
+The installer test now puts a real virtualenv first on the PATH and fails if that virtualenv's Python ends up in a hook. It fails on the previous installer.
+
+---
+
 ## 2026-10-01: the version check now measures the Claude Code that is running your session, and says when your installed copies disagree
 
 **Who this affects:** anyone with more than one copy of Claude Code on the machine (an install per node version, Homebrew, the desktop app's own copy), and anyone who runs scheduled `claude -p` jobs. Everyone else sees no difference.

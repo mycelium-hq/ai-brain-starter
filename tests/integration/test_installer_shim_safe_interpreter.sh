@@ -17,6 +17,7 @@
 #   1. NO ABS-owned hook command invokes bare `python3`/`python`.
 #   2. The baked interpreter is absolute and is NOT the shim.
 #   3. END-TO-END: that interpreter executes under the hostile PATH.
+#   4. A virtualenv python first on PATH is skipped for one outside it.
 #
 # Stdlib python3 + bash only. No network, no git. Tmpdir removed on exit.
 set -u
@@ -96,30 +97,28 @@ PY
 )"
 if [ -z "$bare" ]; then ok "no bare python3 in ABS-owned commands"; else bad "bare python3 present" "$bare"; fi
 
-echo "=== 2. baked interpreter is absolute + not a shim ==="
-INTERP=$("$LAUNCH_PY" - "$SETTINGS" <<'PY'
+# Every distinct absolute interpreter baked into an ABS-owned hook command.
+baked_interps() {
+  "$LAUNCH_PY" - "$1" <<'PY'
 import json, sys
 h = json.load(open(sys.argv[1])).get("hooks", {})
-found = ""
-for ev, blocks in h.items():
+found = []
+for blocks in h.values():
     for blk in blocks:
         for e in blk.get("hooks", []):
             cmd = e.get("command", "")
             if "ai-brain-starter" not in cmd:
                 continue
             for tok in cmd.split():
-                if tok.startswith("/") and tok.rsplit("/", 1)[-1] in ("python3", "python"):
-                    found = tok
-                    break
-            if found:
-                break
-        if found:
-            break
-    if found:
-        break
-print(found)
+                if tok.startswith("/") and tok.rsplit("/", 1)[-1] in ("python3", "python") \
+                        and tok not in found:
+                    found.append(tok)
+print("\n".join(found))
 PY
-)
+}
+
+echo "=== 2. baked interpreter is absolute + not a shim ==="
+INTERP=$(baked_interps "$SETTINGS" | head -1)
 echo "   interpreter: ${INTERP:-<none>}"
 case "${INTERP:-}" in
   */hooks/shims/*) bad "interp not shim" "$INTERP is a shim" ;;
@@ -133,6 +132,29 @@ if [ -n "${INTERP:-}" ] && \
   ok "baked interpreter runs under shim-first PATH"
 else
   bad "interp runs" "interpreter did not execute under hostile PATH"
+fi
+
+# A project virtualenv gets deleted or rebuilt. A hook pinned to its python then
+# exits 127, and a PreToolUse gate that exits anything but 2 lets the call through.
+echo "=== 4. a virtualenv python first on PATH is never baked in ==="
+VENV="$TMP/proj/.venv"
+"$LAUNCH_PY" -m venv --without-pip "$VENV" >/dev/null 2>&1
+if [ "$("$VENV/bin/python3" -c 'import sys; print(sys.prefix != sys.base_prefix)' 2>/dev/null)" = "True" ]; then
+  ok "fixture is a real virtualenv that runs (it would qualify on PATH alone)"
+  H2="$TMP/venv-home"
+  mkdir -p "$H2/.claude"
+  echo '{}' > "$H2/.claude/settings.json"
+  run_sandboxed "$H2" env -u CLAUDECODE PATH="$VENV/bin:$PATH" \
+    "$VENV/bin/python3" "$INSTALLER" --hooks-source "$REPO_ROOT/hooks.json" --quiet >/dev/null 2>&1
+  VINTERPS="$(baked_interps "$H2/.claude/settings.json")"
+  echo "   interpreters: ${VINTERPS:-<none>}"
+  case "$VINTERPS" in
+    "") bad "venv skipped" "no absolute interpreter was baked in" ;;
+    *"$VENV"/*) bad "venv skipped" "the virtualenv python was baked in" ;;
+    *) ok "virtualenv python skipped for one outside it" ;;
+  esac
+else
+  bad "venv fixture" "could not create a working virtualenv with $LAUNCH_PY"
 fi
 
 echo
