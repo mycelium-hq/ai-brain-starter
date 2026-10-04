@@ -288,11 +288,13 @@ _UNTRUSTED_END_TMPL = "<!-- END UNTRUSTED CONTENT id={nonce} -->"
 # A single character can abort a write (a lone UTF-16 surrogate half -- e.g.
 # a truncated 4-byte emoji from a scraped page, VTT caption, or API field --
 # raises UnicodeEncodeError under plain "utf-8") or make the emitted
-# frontmatter unreadable by any YAML parser (a C1 control or a noncharacter,
+# frontmatter unreadable by any YAML parser (a raw C1 control or noncharacter,
 # both common in cp1252 mojibake): PyYAML's reader rejects them anywhere in
 # the stream, even inside a quoted scalar, so wrapping the value in
-# json.dumps() does not help. Every third-party scalar that ends up in a
-# filename or a frontmatter value goes through this first.
+# json.dumps() does not help. yaml_escape writes them as escapes instead, so
+# a value it renders never carries one raw; a lone surrogate is not its job.
+# Every third-party scalar that ends up in a filename or a frontmatter value
+# goes through this first.
 _UNSAFE_SCALAR_RE = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f" + chr(0xFFFE) + chr(0xFFFF) + "]")
 
 
@@ -554,15 +556,38 @@ def trust_frontmatter_lines(trust: dict[str, Any]) -> list[str]:
 # YAML helpers (used by ingest-* skills; no PyYAML dep)
 # ---------------------------------------------------------------------------
 
+# Every character yaml_escape writes as an escape, never raw: the C0 controls but tab, DEL,
+# the C1 controls, U+2028/U+2029 and U+FFFE/U+FFFF. Raw, each is either a line break
+# (str.splitlines() splits on it), which can end the frontmatter early or forge a line, or a
+# character PyYAML's reader rejects anywhere in the stream, even inside quotes.
+_CONTROL_ESCAPES = {
+    **{chr(c): "\\x%02x" % c for c in [*range(0x20), *range(0x7F, 0xA0)] if c != 0x09},
+    "\n": "\\n", "\r": "\\r", "\u2028": "\\L", "\u2029": "\\P",
+    "\ufffe": "\\ufffe", "\uffff": "\\uffff",
+}
+_CONTROL_TABLE = str.maketrans(_CONTROL_ESCAPES)
+
+
 def yaml_escape(value: Any) -> str:
     """Escape a scalar for safe YAML inclusion. Returns the string 'null' for
     None so the caller can render `field: null` directly.
+
+    A value holding any of : # " ' [ ] { }, a tab, or a character in
+    _CONTROL_ESCAPES comes back in double quotes with those characters written
+    as escapes (a tab stays raw, which is legal inside quotes), so it is one
+    physical line and yaml.safe_load returns the exact original. Any other
+    value comes back bare, unchanged. A lone surrogate is not handled here: it
+    cannot be written as UTF-8, so run sanitize_third_party_text over
+    third-party text first.
     """
     if value is None:
         return "null"
     s = str(value)
-    if any(c in s for c in [':', '#', '\n', '"', "'", '[', ']', '{', '}']):
-        return '"' + s.replace('\\', '\\\\').replace('"', '\\"') + '"'
+    # Tab is kept raw but forces the quotes: unquoted, PyYAML's default loader cannot read it.
+    if any(c in s for c in [':', '#', '"', "'", '[', ']', '{', '}', '\t', *_CONTROL_ESCAPES]):
+        # Backslash and quote first, so the backslash each control escape adds is not doubled.
+        escaped = s.replace('\\', '\\\\').replace('"', '\\"').translate(_CONTROL_TABLE)
+        return '"' + escaped + '"'
     return s
 
 
