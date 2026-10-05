@@ -18,6 +18,7 @@
 #   2. The baked interpreter is absolute and is NOT the shim.
 #   3. END-TO-END: that interpreter executes under the hostile PATH.
 #   4. A virtualenv python first on PATH is skipped for one outside it.
+#   4b. A virtualenv python with nothing else on PATH falls back to its base.
 #   5. An install made under a virtualenv is repaired by a re-run from outside it.
 #
 # Stdlib python3 + bash only. No network, no git. Tmpdir removed on exit.
@@ -101,7 +102,7 @@ if [ -z "$bare" ]; then ok "no bare python3 in ABS-owned commands"; else bad "ba
 # Every distinct absolute interpreter baked into an ABS-owned hook command.
 baked_interps() {
   "$LAUNCH_PY" - "$1" <<'PY'
-import json, sys
+import json, re, sys
 h = json.load(open(sys.argv[1])).get("hooks", {})
 found = []
 for blocks in h.values():
@@ -111,10 +112,26 @@ for blocks in h.values():
             if "ai-brain-starter" not in cmd:
                 continue
             for tok in cmd.split():
-                if tok.startswith("/") and tok.rsplit("/", 1)[-1] in ("python3", "python") \
+                # python3.14 as well as python3: an interpreter baked under its
+                # versioned name must not read as "nothing was baked".
+                if tok.startswith("/") and re.fullmatch(r"python[0-9.]*", tok.rsplit("/", 1)[-1]) \
                         and tok not in found:
                     found.append(tok)
 print("\n".join(found))
+PY
+}
+
+# How many hook scripts the installer's own post-install check reports missing, with
+# HOME pointed at a directory that holds none of them. The check finds a script from
+# the `python3 <path>` text of a command, so a command it cannot read adds nothing.
+missing_hook_scripts() {  # missing_hook_scripts HOME_DIR SETTINGS_FILE
+  run_sandboxed "$1" "$LAUNCH_PY" - "$INSTALLER" "$2" <<'PY'
+import importlib.util, json, sys
+spec = importlib.util.spec_from_file_location("ih", sys.argv[1])
+ih = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(ih)
+missing, _optional = ih.verify_paths_on_disk(json.load(open(sys.argv[2])))
+print(len(missing))
 PY
 }
 
@@ -123,7 +140,7 @@ INTERP=$(baked_interps "$SETTINGS" | head -1)
 echo "   interpreter: ${INTERP:-<none>}"
 case "${INTERP:-}" in
   */hooks/shims/*) bad "interp not shim" "$INTERP is a shim" ;;
-  /*/python3|/*/python) ok "absolute non-shim interpreter" ;;
+  /*/python[0-9.]*) ok "absolute non-shim interpreter" ;;
   *) bad "interp absolute" "got [${INTERP:-<none>}]" ;;
 esac
 
@@ -136,10 +153,13 @@ else
 fi
 
 # A project virtualenv gets deleted or rebuilt. A hook pinned to its python then
-# exits 127, and a PreToolUse gate that exits anything but 2 lets the call through.
-echo "=== 4. a virtualenv python first on PATH is never baked in ==="
+# fails to start, and a PreToolUse gate that fails to start lets the call through.
+echo "=== 4. a virtualenv python first on PATH is skipped for one outside it ==="
 VENV="$TMP/proj/.venv"
 "$LAUNCH_PY" -m venv --without-pip "$VENV" >/dev/null 2>&1
+# CPython reports the resolved spelling of a path (macOS: /private/var/... where
+# mktemp returned /var/...), so a check that names the venv has to match both.
+VENV_REAL="$(cd "$VENV" 2>/dev/null && pwd -P)"
 if [ "$("$VENV/bin/python3" -c 'import sys; print(sys.prefix != sys.base_prefix)' 2>/dev/null)" = "True" ]; then
   ok "fixture is a real virtualenv that runs (it would qualify on PATH alone)"
   H2="$TMP/venv-home"
@@ -151,12 +171,64 @@ if [ "$("$VENV/bin/python3" -c 'import sys; print(sys.prefix != sys.base_prefix)
   echo "   interpreters: ${VINTERPS:-<none>}"
   case "$VINTERPS" in
     "") bad "venv skipped" "no absolute interpreter was baked in" ;;
-    *"$VENV"/*) bad "venv skipped" "the virtualenv python was baked in" ;;
+    *"$VENV"/*|*"$VENV_REAL"/*) bad "venv skipped" "the virtualenv python was baked in" ;;
     *) ok "virtualenv python skipped for one outside it" ;;
   esac
 else
   bad "venv fixture" "could not create a working virtualenv with $LAUNCH_PY"
 fi
+
+# Section 4 never reaches the installer's fallback: $PATH still holds real pythons
+# after the venv, so the PATH search finds one first. Here the venv is all there is, so
+# the installer has only the python it is itself running under, and that one is inside
+# the venv. It has to name the interpreter the venv was built from, for a venv that
+# links to it (--symlinks) and for one that holds a copy (--copies, which links to
+# nothing and used to end up as a bare python3).
+echo "=== 4b. a virtualenv python with nothing else on PATH falls back to its base ==="
+# What the post-install check reports for the ordinary install of section 2.
+ORDINARY_MISSING="$(missing_hook_scripts "$TMP" "$SETTINGS")"
+for MODE in symlinks copies; do
+  VB="$TMP/proj-$MODE/.venv"
+  if ! "$LAUNCH_PY" -m venv --without-pip "--$MODE" "$VB" >/dev/null 2>&1 \
+     || [ "$("$VB/bin/python3" -c 'import sys; print(sys.prefix != sys.base_prefix)' 2>/dev/null)" != "True" ]; then
+    bad "venv fixture ($MODE)" "could not create a working --$MODE virtualenv with $LAUNCH_PY"
+    continue
+  fi
+  VB_REAL="$(cd "$VB" && pwd -P)"
+  BASE_HOME="$(sed -n 's/^home *= *//p' "$VB/pyvenv.cfg" | head -1)"
+  H4B="$TMP/venv-home-$MODE"
+  mkdir -p "$H4B/.claude"
+  echo '{}' > "$H4B/.claude/settings.json"
+  run_sandboxed "$H4B" env -u CLAUDECODE PATH="$VB/bin" \
+    "$VB/bin/python3" "$INSTALLER" --hooks-source "$REPO_ROOT/hooks.json" --quiet >/dev/null 2>&1
+  FB="$(baked_interps "$H4B/.claude/settings.json" | head -1)"
+  echo "   $MODE: ${FB:-<none>} (the venv's home: ${BASE_HOME:-<none>})"
+  case "$FB" in
+    "") bad "fallback ($MODE)" "no absolute interpreter was baked in (bare python3?)" ;;
+    "$VB"/*|"$VB_REAL"/*) bad "fallback ($MODE)" "the virtualenv python was baked in" ;;
+    *)
+      # What the venv's own pyvenv.cfg names: a stable spelling, and one whose
+      # basename the installer's post-install path check recognises.
+      WANT=""
+      for n in python3 python; do
+        if [ -f "$BASE_HOME/$n" ] && [ -x "$BASE_HOME/$n" ]; then WANT="$BASE_HOME/$n"; break; fi
+      done
+      if [ "$("$FB" -c 'print(42)' 2>/dev/null)" != "42" ]; then
+        bad "fallback ($MODE)" "$FB does not run"
+      elif [ -n "$WANT" ] && [ "$FB" != "$WANT" ]; then
+        bad "fallback ($MODE)" "baked $FB, but the venv's pyvenv.cfg names $WANT"
+      else
+        ok "fallback ($MODE): the interpreter the venv was built from, and it runs"
+      fi
+      SEEN="$(missing_hook_scripts "$H4B" "$H4B/.claude/settings.json")"
+      if [ "${ORDINARY_MISSING:-0}" -gt 0 ] && [ "$SEEN" = "$ORDINARY_MISSING" ]; then
+        ok "fallback ($MODE): the post-install check reads the commands as it does an ordinary install ($SEEN missing hook scripts reported)"
+      else
+        bad "fallback ($MODE)" "the post-install check reports $SEEN missing hook scripts, an ordinary install gives ${ORDINARY_MISSING:-none}, so a missing script would go unreported"
+      fi
+      ;;
+  esac
+done
 
 # An installer without the skip above pinned every [PYTHON] hook to the virtualenv's
 # python. Once the project is gone the way to repair that install is to run the
