@@ -11,8 +11,8 @@ screen tells the truth about the install, from the code that runs it:
   4. bootstrap.sh --dry-run, per profile, would add exactly the marketplaces,
      plugins, cloned repos and MCP servers its screen names (POSIX only; the
      windows-install workflow checks the Windows screen against a real install);
-  5. bootstrap.sh --consented records one yes line, and nothing without it or
-     under --dry-run;
+  5. ABS_CONSENTED=1 makes bootstrap.sh record one yes line, and nothing is
+     written without it or under --dry-run;
   6. install-telemetry.py tells a finished run from one that stopped after a yes.
 
 Plain script, no pytest (the CI job runs scripts/test_*.py directly on 3.9).
@@ -129,7 +129,7 @@ else:
         check(f"{profile}: dry-run ends on its screen", run.stdout.rstrip().endswith(
             screen.screen_path(profile, "posix", "en").read_text(encoding="utf-8").rstrip()))
 
-print("5. bootstrap.sh --consented records the yes")
+print("5. ABS_CONSENTED=1 records the yes")
 source = (REPO / "bootstrap.sh").read_text(encoding="utf-8")
 block = re.search(r"# ai-brain:consent-record:start\n(.*?)# ai-brain:consent-record:end", source, re.S)
 check("consent-record block found in bootstrap.sh", block is not None)
@@ -137,11 +137,11 @@ for consented, dry, corporate, expect in (("1", "0", "0", "default"), ("1", "0",
                                           ("0", "0", "0", None), ("1", "1", "0", None)):
     with tempfile.TemporaryDirectory() as tmp:
         os.makedirs(Path(tmp) / ".claude")
-        env = dict(os.environ, HOME=tmp, CONSENTED=consented, DRY_RUN=dry, CORPORATE_PROFILE=corporate)
+        env = dict(os.environ, HOME=tmp, ABS_CONSENTED=consented, DRY_RUN=dry, CORPORATE_PROFILE=corporate)
         bash(block.group(1) if block else "exit 3", env=env)
         log = Path(tmp) / ".claude" / ".ai-brain-starter-install.jsonl"
         lines = log.read_text(encoding="utf-8").splitlines() if log.is_file() else []
-        label = f"CONSENTED={consented} DRY_RUN={dry} corporate={corporate}"
+        label = f"ABS_CONSENTED={consented} DRY_RUN={dry} corporate={corporate}"
         if expect is None:
             check(f"{label}: writes nothing", lines == [], lines)
         else:

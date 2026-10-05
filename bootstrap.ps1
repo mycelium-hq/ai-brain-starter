@@ -30,7 +30,7 @@
 #
 # Safe to re-run. Skips anything already installed.
 
-param([switch]$DryRun, [string]$Profile = "", [switch]$Consented)
+param([switch]$DryRun, [string]$Profile = "")
 
 $ErrorActionPreference = "Stop"
 $RepoUrl = "https://github.com/mycelium-hq/ai-brain-starter.git"
@@ -191,8 +191,10 @@ if ($CorporateProfile) {
 # itself so install-telemetry.py can tell "said yes, install never finished"
 # from "never said yes". No Python yet: this runs before anything is installed.
 # ASCII, not UTF8: Windows PowerShell 5.1 writes a BOM with UTF8, and a BOM on
-# the first line of a .jsonl breaks the JSON parse of that line.
-if ($Consented -and -not $DryRun) {
+# the first line of a .jsonl breaks the JSON parse of that line. An env var,
+# not a -Consented switch: an older bootstrap.ps1 already on disk would fail
+# to bind an unknown parameter and never run at all.
+if ($env:ABS_CONSENTED -eq "1" -and -not $DryRun) {
     $consentProfile = if ($CorporateProfile) { "corporate" } else { "default" }
     $consentTs = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
     try {

@@ -301,8 +301,6 @@ for arg in "$@"; do
       fi ;;
     --uninstall)
       UNINSTALL=1 ;;
-    --consented)
-      CONSENTED=1 ;;
     --force)
       FORCE=1 ;;
     --help|-h)
@@ -319,9 +317,6 @@ Options:
                                 reviewed revision), user-space only (no sudo). Emits a
                                 reviewable manifest. Pair with --dry-run to review first.
                                 Full spec: docs/CORPORATE_PROFILE.md
-  --consented                   The user said yes on the install screen
-                                (install/screen/). Records that yes in
-                                ~/.claude/.ai-brain-starter-install.jsonl; changes nothing else.
   --uninstall                   Remove everything bootstrap installed (with confirmation)
   --force                       Skip the uninstall confirmation prompt
   --restore                     Interactive restore from .bak files (closes #2)
@@ -337,6 +332,10 @@ Environment:
   PREFLIGHT_BYPASS=1            Skip the preflight check (development)
   SKIP_VENDOR_SKILLS=1          Skip third-party plugin marketplaces (air-gapped)
   CORPORATE_PROFILE=1           Same as --profile corporate (hardened/compliance install)
+  ABS_CONSENTED=1               The user said yes on the install screen (install/screen/):
+                                records that yes in ~/.claude/.ai-brain-starter-install.jsonl.
+                                Changes nothing else. An env var, not a flag, so an older
+                                installer already on disk ignores it instead of failing.
   REQUIRED_CLAUDE_VERSION       Override the minimum Claude Code version (default 2.1.133)
 
 Logs: every run is appended to ~/.claude/.bootstrap.log (closes #3).
@@ -356,7 +355,6 @@ HELP
 done
 UNINSTALL="${UNINSTALL:-0}"
 FORCE="${FORCE:-0}"
-CONSENTED="${CONSENTED:-0}"
 
 # ── Corporate / hardened profile: compose the existing hardening primitives ──
 # Done BEFORE the email-gate + vendor-pack blocks below so the forced bypasses
@@ -384,7 +382,7 @@ fi
 # itself so install-telemetry.py can tell "said yes, install never finished"
 # from "never said yes". No Python yet: this runs before anything is installed.
 # ai-brain:consent-record:start
-if [[ "$CONSENTED" == "1" && $DRY_RUN -eq 0 ]]; then
+if [[ "${ABS_CONSENTED:-0}" == "1" && $DRY_RUN -eq 0 ]]; then
   printf '{"ts": "%s", "phase": "consent", "outcome": "yes_recorded", "profile": "%s"}\n' \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$([[ "$CORPORATE_PROFILE" == "1" ]] && echo corporate || echo default)" \
     >> "$HOME/.claude/.ai-brain-starter-install.jsonl" 2>/dev/null || true
