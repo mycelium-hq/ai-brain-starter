@@ -486,6 +486,14 @@ INTEGRATION_TESTS=(
   # copy, with a negative control that a first install from a dev tree still
   # wires a runner that exists.
   test_hook_runner_path_stability
+  # The same sandbox, one route HOME does not cover: the host's launchd job.
+  # launchd keys a job by label for the whole account, and the hook installer
+  # takes its vault from an exported VAULT_ROOT, so a test under a sandbox HOME
+  # could still unload the real daily-maintenance job and load one pointing at a
+  # directory about to be deleted. Pins both layers with a recording launchctl
+  # (run_sandboxed drops VAULT_ROOT; the scheduler script loads only under the
+  # account's real home) and runs the installer end to end with each defeated.
+  test_sandbox_cannot_reach_host_scheduler
   # sync-vault-scripts.sh labelled its log header with `${DRY_RUN:+ (dry-run)}`,
   # which tests NON-EMPTY while DRY_RUN is initialised to `0` — so every REAL run
   # was recorded as "(dry-run)". Behaviour was correct (the write-guards use

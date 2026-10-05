@@ -9,6 +9,18 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-10-05: the installer tests no longer reach your daily maintenance job
+
+**Who this affects:** anyone who runs this repo's tests, or `scripts/install-vault-daily-maintenance.sh` by hand, on a Mac whose shell exports `VAULT_ROOT`. Everyone else sees no difference.
+
+macOS keeps one launchd job per label for the whole account, whatever `HOME` is. The hook installer takes its vault from `VAULT_ROOT` when none is given, and for a vault outside the temporary directory it runs `scripts/install-vault-daily-maintenance.sh`, which unloads and then loads the `com.abs.vault-daily-maintenance` job. A test that gave the installer a throwaway `HOME` still reached that job, and four tests never changed `HOME` at all, so on such a Mac they could unload your real job and load one that runs from a folder about to be deleted.
+
+Three changes close this. The script now calls `launchctl` only when `HOME` is the home directory your account's user record names. Under any other `HOME` it still writes the plist, prints one line saying it skipped loading, and leaves launchd alone. The test helper `run_sandboxed` drops `VAULT_ROOT` and sets `ABS_NO_AUTO_GC=1` unless a test names them. And the four tests that ran the installer under your real `HOME` (`test_install_path_verification.sh`, `test_verify_fallback_chain_optional.sh`, `scripts/test-memory-routing-guard.sh` and `scripts/test_windows_install_regressions.py`) now run it under a throwaway one.
+
+`tests/integration/test_sandbox_cannot_reach_host_scheduler.sh` checks the first two with a recording `launchctl` in place of the real one. Not covered: on Linux the same script writes a cron entry, and `crontab` belongs to the user rather than to `HOME`, so that path has no such check; and a test that runs the installer under your real `HOME` is stopped only if it is one of the four above.
+
+---
+
 ## 2026-10-04: deleting a project can no longer switch your hooks off
 
 **Who this affects:** anyone who ran the installer, or an update, from inside a Python virtualenv: under `uv run`, or with a project's `.venv` activated. Everyone else sees no difference.

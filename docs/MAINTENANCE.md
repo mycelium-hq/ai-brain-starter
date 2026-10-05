@@ -149,7 +149,7 @@ Edit the existing task by renaming the directory and updating the `name:` field 
 
 ### Daily Vault Maintenance + auto-GC (installed by default)
 - **What:** the resource-gated daily cron above (`vault-daily-maintenance.sh`): deferred-close reconciliation + heavy hygiene, off the interactive close path.
-- **Install:** automatic — the hook installer schedules it (launchd on macOS, cron elsewhere). Re-run by hand with `bash scripts/install-vault-daily-maintenance.sh /path/to/vault`; opt out with `ABS_NO_AUTO_GC=1`.
+- **Install:** automatic — the hook installer schedules it (launchd on macOS, cron elsewhere). Re-run by hand with `bash scripts/install-vault-daily-maintenance.sh /path/to/vault`; opt out with `ABS_NO_AUTO_GC=1`. On macOS the script calls `launchctl` only when `HOME` is your account's own home directory. Under any other `HOME` (a test sandbox, a throwaway checkout) it writes the plist, prints one line saying it skipped loading, and leaves launchd alone, because launchd keys the job by label for the whole account.
 - **Why a launchd/cron job and not a Claude Code scheduled task:** this is a deterministic shell pass with no model judgment, and it must run at low IO/CPU priority even when no Claude session is open, exactly what launchd/cron does and a scheduled task does not.
 
 ### Monthly Vault Maintenance (recommended)
