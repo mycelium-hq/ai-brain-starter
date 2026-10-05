@@ -383,11 +383,13 @@ fi
 # The yes from the install screen (install/screen/), written by the installer
 # itself so install-telemetry.py can tell "said yes, install never finished"
 # from "never said yes". No Python yet: this runs before anything is installed.
+# ai-brain:consent-record:start
 if [[ "$CONSENTED" == "1" && $DRY_RUN -eq 0 ]]; then
   printf '{"ts": "%s", "phase": "consent", "outcome": "yes_recorded", "profile": "%s"}\n' \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$([[ "$CORPORATE_PROFILE" == "1" ]] && echo corporate || echo default)" \
     >> "$HOME/.claude/.ai-brain-starter-install.jsonl" 2>/dev/null || true
 fi
+# ai-brain:consent-record:end
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Helpers
