@@ -1055,11 +1055,13 @@ def _posix_python() -> str:
                 continue
     # This installer is itself running under a real python (a refuse-shim would
     # have blocked this very process), so sys.executable is a safe absolute
-    # fallback when PATH resolution came up empty. Inside a venv, use the base
-    # interpreter the venv links to, which outlives it.
+    # fallback when PATH resolution came up empty. Inside a venv the interpreter
+    # the venv was built from outlives it, and its path comes from pyvenv.cfg: a
+    # resolved path pins one patch version, and a --copies venv links to nothing
+    # to resolve.
     exe = sys.executable or ""
     if exe and _in_virtualenv(exe):
-        exe = os.path.realpath(exe)
+        exe = _venv_base_python(exe) or os.path.realpath(exe)
     if exe and " " not in exe and os.path.isfile(exe) and not _in_virtualenv(exe):
         return exe
     return "python3"
@@ -1070,6 +1072,33 @@ def _in_virtualenv(path: str) -> bool:
     `pyvenv.cfg` at `<venv>`."""
     venv = os.path.dirname(os.path.dirname(os.path.abspath(path)))
     return os.path.isfile(os.path.join(venv, "pyvenv.cfg"))
+
+
+def _venv_base_python(path: str) -> str:
+    """The interpreter the venv holding `path` was built from, spelled as the
+    venv's own `pyvenv.cfg` spells it (`<home>/python3`, else `<home>/python`),
+    or "" when that cannot be read or is not runnable.
+
+    `home =` follows a patch upgrade where a resolved path does not: Homebrew
+    spells it `opt/python@3.x` where realpath gives the versioned keg, and uv
+    spells it with the minor version where realpath gives the patch directory.
+    It is also present for a `--copies` venv, whose interpreter is a copy and
+    not a link. The basename stays `python3`, which is what the post-install
+    path check (verify_paths_on_disk) looks for."""
+    cfg = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(path))), "pyvenv.cfg")
+    try:
+        with open(cfg, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                key, _, value = line.partition("=")
+                if key.strip().lower() != "home":
+                    continue
+                for name in ("python3", "python"):
+                    cand = os.path.join(value.strip(), name)
+                    if os.path.isfile(cand) and os.access(cand, os.X_OK):
+                        return cand
+    except OSError:
+        pass
+    return ""
 
 
 def substitute_python_interpreter(template: dict) -> dict:
