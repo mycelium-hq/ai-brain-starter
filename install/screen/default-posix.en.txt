@@ -1,0 +1,43 @@
+AI Brain Starter on macOS or Linux: what this install adds
+Nothing has been installed or changed yet.
+
+If you say yes, this stays on your computer:
+  73 hooks in ~/.claude/settings.json: scripts that Claude Code
+    runs on its own, in every session.
+    3 more once your vault exists.
+  AI Brain Starter's skills in ~/.claude/skills and its slash
+    commands in ~/.claude/commands.
+  Plugin marketplaces: getsentry/sentry-skills, trailofbits/skills,
+    stripe/agent-toolkit, cloudflare/skills, AgriciDaniel/claude-seo,
+    obra/superpowers, coreyhaines31/marketingskills,
+    kepano/obsidian-skills
+  Plugins switched on: sentry-skills, insecure-defaults, sharp-edges,
+    property-based-testing, static-analysis, testing-handbook-skills,
+    differential-review, ask-questions-if-underspecified, stripe,
+    cloudflare, claude-seo, superpowers, marketing-skills, obsidian,
+    context7, playwright
+  Skills copied from GitHub: adelaidasofia/humanizer, obra/superpowers,
+    yvgude/lean-ctx, CyberZenithX/Rich-Elicitation-Skill,
+    vercel-labs/agent-skills
+  MCP servers in ~/.claude/.mcp.json: granola, chatprd
+  Tools, only the ones you are missing: Homebrew (macOS), git, Python,
+    Node, pipx, gh, Claude Code, Obsidian, graphify, fastmcp,
+    skill-seekers
+  Updates: AI Brain Starter updates itself from GitHub every few
+    days, new hooks included.
+
+The same yes covers what the setup interview adds next: your vault,
+its Obsidian plugins and hooks, and scheduled jobs (insights, backups,
+daily upkeep). I will ask separately about connectors such as email,
+calendar or Slack, and about the optional email sign-up at the end.
+
+Not pinned: third-party parts install their newest version.
+Backups: settings files are copied before every edit.
+
+Claude Code may ask you to allow some of these steps. Those prompts are
+between you and Claude Code. I will not answer them for you or tell
+you which to pick.
+
+Reply "yes" to install all of this, or "no" to install nothing.
+Or reply "yes, without optional packs" to leave out the
+7 optional plugin marketplaces and what they bring.

@@ -1,0 +1,37 @@
+?posix AI Brain Starter en macOS o Linux: lo que agrega esta instalación
+?windows AI Brain Starter en Windows: lo que agrega esta instalación
+?corporate Perfil corporativo.
+Todavía no se instaló ni se cambió nada.
+
+Si decís que sí, esto queda en tu computadora:
+  {hooks} hooks en ~/.claude/settings.json: scripts que Claude Code
+    corre solo, en cada sesión.
+?vault_hooks     {vault_hooks} más cuando exista tu vault.
+  Las skills de AI Brain Starter en ~/.claude/skills y sus comandos
+    en ~/.claude/commands.
+  Marketplaces de plugins: {marketplaces}
+  Plugins activados: {plugins}
+  Skills copiadas de GitHub: {clones}
+?mcp   Servidores MCP en ~/.claude/.mcp.json: {mcp}
+  Herramientas, sólo las que te faltan: {tools}
+?it_tools   Quedan para tu equipo de IT, si faltan: {it_tools}
+?default   Actualizaciones: AI Brain Starter se actualiza solo desde GitHub
+?default     cada pocos días, hooks nuevos incluidos.
+?corporate   Actualizaciones y telemetría: apagadas, en ~/.claude/settings.json.
+
+El mismo sí cubre lo que agrega la entrevista de setup que sigue: tu
+vault, sus plugins de Obsidian y sus hooks, y tareas programadas
+(insights, respaldos, mantenimiento diario). Aparte te pregunto por los
+conectores como email, calendario o Slack, y por el registro opcional
+por email del final.
+
+Sin versión fija: las partes de terceros instalan su versión más nueva.
+Respaldos: los archivos de configuración se copian antes de cada cambio.
+
+Claude Code te puede pedir permiso para algunos de estos pasos. Esos
+avisos son entre vos y Claude Code. No los voy a contestar por vos ni
+te voy a decir qué elegir.
+
+Respondé "sí" para instalar todo esto, o "no" para no instalar nada.
+?optional O respondé "sí, sin paquetes opcionales" para dejar afuera los
+?optional {optional} marketplaces opcionales y lo que traen.

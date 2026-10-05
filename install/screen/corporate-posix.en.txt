@@ -1,0 +1,31 @@
+AI Brain Starter on macOS or Linux: what this install adds
+Corporate profile.
+Nothing has been installed or changed yet.
+
+If you say yes, this stays on your computer:
+  73 hooks in ~/.claude/settings.json: scripts that Claude Code
+    runs on its own, in every session.
+    3 more once your vault exists.
+  AI Brain Starter's skills in ~/.claude/skills and its slash
+    commands in ~/.claude/commands.
+  Plugin marketplaces: kepano/obsidian-skills
+  Plugins switched on: obsidian, context7
+  Skills copied from GitHub: adelaidasofia/humanizer, obra/superpowers
+  Tools, only the ones you are missing: Python, Node, pipx, gh, Claude
+    Code, Obsidian, graphify, fastmcp
+  Left for your IT team, if missing: Homebrew (macOS), git
+  Updates and telemetry: off, set in ~/.claude/settings.json.
+
+The same yes covers what the setup interview adds next: your vault,
+its Obsidian plugins and hooks, and scheduled jobs (insights, backups,
+daily upkeep). I will ask separately about connectors such as email,
+calendar or Slack, and about the optional email sign-up at the end.
+
+Not pinned: third-party parts install their newest version.
+Backups: settings files are copied before every edit.
+
+Claude Code may ask you to allow some of these steps. Those prompts are
+between you and Claude Code. I will not answer them for you or tell
+you which to pick.
+
+Reply "yes" to install all of this, or "no" to install nothing.
