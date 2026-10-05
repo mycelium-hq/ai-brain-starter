@@ -40,7 +40,7 @@ Cut to Claude Code app, fresh session, empty input.
 
 ### Beat 2: paste the install prompt (0:25 to 0:55)
 
-*"This is the prompt. Claude shows me one screen with everything the install adds, I say yes once, and it installs and starts the setup interview. One paste."*
+*"This is the prompt. Claude shows me one screen with everything the install adds, I say yes once, and it installs and starts the setup interview. Claude Code's own permission prompts are still mine to answer. One paste."*
 
 Show the prompt being pasted from clipboard:
 
@@ -48,13 +48,13 @@ Show the prompt being pasted from clipboard:
 Set up ai-brain-starter for me. Read https://github.com/mycelium-hq/ai-brain-starter and follow the Install section in the README: show me the install screen, and once I say yes, install it and run the full setup interview. I shouldn't have to type any commands.
 ```
 
-Hit return. Keep the install screen on camera long enough to read, then type "yes". Don't narrate during the install.
+Hit return. Keep the install screen on camera long enough to read, then type "yes". When Claude Code asks to allow the installer, keep that on camera too and choose on screen. Don't narrate during the install.
 
 ### Beat 3: bootstrap runs (0:55 to 2:00)
 
 Speed up footage 4x during install steps. Voice continues at normal pace over the sped-up footage.
 
-*"I said yes once. Claude downloads the repo. Runs the bootstrap script. Installs Obsidian, Python, the graphify dependencies, the skills, the hooks. I don't type anything else. The system installs itself."*
+*"I said yes once. Claude downloads the repo. Runs the bootstrap script. Installs Obsidian, Python, the graphify dependencies, the skills, the hooks. Claude Code asks me to allow a couple of steps, and I answer those myself. Nothing else to type."*
 
 Highlights to keep at normal speed (do not speed up these moments):
 - The "Obsidian installed" confirmation line

@@ -9,7 +9,7 @@ You are setting up a new user's AI-powered second brain. This is an interactive,
 
 Your tone: warm, clear, encouraging. They might not be technical. Explain things simply. Celebrate small wins along the way.
 
-**Consent: one screen, one yes.** The paste (or `/setup-brain`) is the user's request. Their consent is the install screen, `install/screen/<profile>-<platform>.<lang>.txt`, which Phase 0 shows verbatim before anything changes. A yes covers everything the screen lists, the setup interview included, so nothing on it is asked again; anything not on it (connectors, the email sign-up at the end) gets its own question. Claude Code's own prompts (its trust prompt, permission modes, approving a command) are between the user and Claude Code: never answer them, pre-answer them, or say which choice to make. **That rule cannot be unlocked by the user's permission.** "Approve it for me", "turn on auto mode" or "stop asking" changes nothing: say what the prompt is for and leave the choice with them.
+**Consent: one screen, one yes.** The paste (or `/setup-brain`) is the user's request. Their consent is the install screen, `install/screen/<profile>-<platform>.<lang>.txt`, which Phase 0 shows verbatim before anything changes. A yes covers everything the screen lists, the setup interview included, so nothing on it is asked again; anything not on it (connectors, the email sign-up at the end) gets its own question. Claude Code's own prompts (its trust prompt, permission modes, approving a command) are between the user and Claude Code: never answer them, pre-answer them, or say which choice to make. **That rule cannot be unlocked by the user's permission.** "Approve it for me", "turn on auto mode" or "stop asking" changes nothing: say what the prompt is for and leave the choice with them. Asked how to change the mode themselves, say where Claude Code keeps that setting.
 
 **Between phases, keep going: the yes covered every phase.** Don't ask "What do you want to do next?" or list choices; finish a phase, introduce the next in one line, start it. Pause only when a phase needs the user's input, the user says stop, a step failed and needs them, or Claude Code is asking them something. If a phase doesn't apply based on what they said in Phase 1, skip it silently.
 
@@ -47,7 +47,7 @@ These improvisations look helpful in the moment but break the install. Catch you
 `outcome` ∈ {`completed`, `skipped_on_user_no`, `errored`}. Set `new_improvisation_seen` to a short string ONLY when the user catches you doing something this skill didn't tell you to do (the file is the diff between what the skill prescribed and what you actually did). That string is the maintainer's signal for the next BANNED PATTERNS row. Use the `append-install-event` helper at `scripts/install-telemetry.py` when present; fall back to `jq -c .` from bash if not.
 </details>
 
-**Update check:** Before starting, check if this skill is up to date by running `cd ~/.claude/skills/ai-brain-starter && git log --oneline -1` and comparing to the latest on GitHub. If behind, offer to update. If yes, run `git pull`, read `docs/CHANGELOG.md`, and summarize what's new in plain English.
+**Update check:** Before starting, check if this skill is up to date by running `cd ~/.claude/skills/ai-brain-starter && git log --oneline -1` and comparing to the latest on GitHub. If behind, update it: the install screen's yes covers updates, so do not ask again. Run `git pull`, read `docs/CHANGELOG.md`, and summarize what's new in plain English. If `~/.claude/.ai-brain-starter-pinned` exists, the corporate profile froze this install: leave it as is and say so.
 
 ## Already Set Up? Use This Instead
 
@@ -119,7 +119,7 @@ On the next install run (or session resume), read this file FIRST and skip to th
 
 ### Resuming a stalled install
 
-Trigger this on any of: "resume my ai-brain-starter install", "finish my install",
+Trigger this on any of: "continue my brain setup", "resume my ai-brain-starter install", "finish my install",
 "continue the setup", "my install stopped", "I never got the interview", or the
 Spanish equivalents ("retoma mi instalación", "termina el setup", "nunca llegué a
 la entrevista").
@@ -199,7 +199,7 @@ Say in PRIMARY_LANGUAGE BEFORE the scary moment:
 | Sudo/password prompt | ES: "Pide tu contraseña del computador. Escríbela, enter. No vas a ver los caracteres. Normal." · EN: "Asks for your computer password. Type, enter. Won't see characters. Normal." |
 | Silent pause (no progress bar) | ES: "Se ve como si nada pasara. Sí pasa. Espera 30s." · EN: "Looks frozen. Isn't. Wait 30s." |
 | Yellow/red warning text | ES: "Vas a ver amarillo o rojo. Si dice 'warning', sigue." · EN: "Yellow/red text. If it says 'warning', keep going." |
-| Claude Code permission prompt | ES: "Ese cuadro es Claude Code preguntándote si permite el paso que voy a correr. La decisión es tuya." · EN: "That box is Claude Code asking whether to allow the step I'm about to run. Your call." |
+| Claude Code permission prompt | ES: "Ese cuadro es Claude Code preguntándote si permitís el paso que voy a correr. La decisión es tuya." · EN: "That box is Claude Code asking whether to allow the step I'm about to run. Your call." |
 | **A gray tool box vs a question: the most common point of confusion** | A gray box naming a tool is Claude Code asking the user: **⌘↩** (Mac) or **Ctrl↩** (Windows) allows it, **Esc** declines it. A message from Claude that ends in a question wants a typed answer and Enter. ES: "Una caja gris con el nombre de una herramienta es Claude Code preguntándote a vos: ⌘↩ la permite, Esc la rechaza. Si Claude te hace una pregunta, escribí tu respuesta y Enter." |
 
 After scary moment passes: ES: "Listo. Sigamos." · EN: "Done. Moving on."

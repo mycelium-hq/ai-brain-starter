@@ -679,7 +679,10 @@ Then truly stop.
 
 **Phase 24.5 is the last phase.** There is no next file.
 
-Write `~/.claude/.ai-brain-starter-progress.json` with
+Run `scripts/install-telemetry.py append 24.5 completed` from this skill's own
+directory with Python 3. It writes the progress file and the install log line
+that marks this install, after its yes, as finished. If that fails, write
+`~/.claude/.ai-brain-starter-progress.json` yourself:
 `{"last_completed_phase": "24.5", "ts": "<ISO-8601 timestamp for now>", "version": 1}`
 so a later session can tell a finished install from an abandoned one and never
 re-runs it.

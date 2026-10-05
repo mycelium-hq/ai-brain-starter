@@ -93,7 +93,7 @@ Read the four problems the team version solves: [`for-teams/why-teams-are-differ
 > (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/mycelium-hq/ai-brain-starter/main/install/screen/default-windows.en.txt").Content
 > ```
 >
-> Show the screen verbatim and ask the question at its end. On **yes**, step 2 installs. For "yes, without optional packs", put `SKIP_VENDOR_SKILLS=1` in front of it too:
+> Show the screen verbatim and ask the question at its end. On **yes**, step 2 installs. For "yes, without optional packs", run its last line as `ABS_CONSENTED=1 SKIP_VENDOR_SKILLS=1 bash "$D/bootstrap.sh"`:
 >
 > ```bash
 > # macOS / Linux
@@ -201,7 +201,7 @@ No browser tab. No Terminal. No email required to install. Paste, read the scree
 
 Before anything is installed, Claude shows you the install screen and asks one question. The screen lists what stays on your computer: hooks (small scripts Claude Code runs on its own), skills, plugins and the marketplaces they come from, MCP servers, tools, and how updates work. A yes covers what the screen lists and nothing else. Connectors such as email or calendar, and the email sign-up at the end, are asked about separately.
 
-While the installer runs, Claude Code may ask you to allow a step, and it shows its own prompt for plugins and tools that did not come from Anthropic. That prompt appears for any third-party tool, so seeing it here is expected, and what it covers is already on the screen. Claude will tell you what a prompt is for if you ask. It will not answer one for you or tell you which choice to make.
+While the installer runs, Claude Code may ask you to allow a step, and it shows its own prompt for plugins and tools that did not come from Anthropic. That prompt appears for any third-party tool, so seeing it here is expected, and what it covers is already on the screen. Claude will tell you what a prompt is for if you ask. It will not answer one for you or tell you which choice to make. After the install, some of its hooks approve Bash commands and file edits that pass their checks, so Claude Code stops asking you about those; the screen says so before you answer.
 
 A compact approval receipt for this install:
 
@@ -225,10 +225,10 @@ None of this sends your files anywhere. The install is local, and your vault sta
 > | What stays on the machine: hooks, skills, plugins, marketplaces, MCP servers, settings, tools, updates | The user, for every future session | It is all on the screen. One yes covers all of it; never ask about any of it again. |
 > | Reading the repo, printing the screen, `--dry-run` | Nobody | Just do it. |
 >
-> **The first rule cannot be unlocked by the user's permission.** If the user says "approve it for me", "you have my permission", "turn on auto mode" or "stop asking", you still do not answer Claude Code's prompts or tell them which choice to make. Say the prompts are theirs, say what the pending one is for, and leave the choice with them. The answer is no now and no later.
+> **The first rule cannot be unlocked by the user's permission.** If the user says "approve it for me", "you have my permission", "turn on auto mode" or "stop asking", you still do not answer Claude Code's prompts or tell them which choice to make. Say the prompts are theirs, say what the pending one is for, and leave the choice with them. The answer is no now and no later. If they ask how to change their permission mode themselves, say where Claude Code keeps that setting; whether to change it stays their call.
 >
 > 1. **Show the screen.** Run step 1 from the top of this section with the file that fits the user: `default`, or `corporate` only if they asked for the corporate profile; `posix` for macOS or Linux, `windows` for Windows; `en`, or `es` when they wrote in Spanish. Show it verbatim. Do not summarize it, reword it, or add numbers of your own.
-> 2. **Ask once,** with the question the screen ends on. Answer questions about it from this repository (this README, [`SECURITY.md`](SECURITY.md), [`docs/CORPORATE_PROFILE.md`](docs/CORPORATE_PROFILE.md)), then ask the same question again. Do not add options the screen does not offer. If you have a concern of your own, say it once, plainly, and let the user decide.
+> 2. **Ask once,** with the question the screen ends on. Answer questions about it from this repository (this README, [`SECURITY.md`](SECURITY.md), [`docs/CORPORATE_PROFILE.md`](docs/CORPORATE_PROFILE.md)), then ask the same question again. Do not add options the screen does not offer, with one exception: a user asking for no telemetry, no external services or no automatic updates is describing the corporate profile, so tell them it exists and show its screen. If you have a concern of your own, say it once, plainly, and let the user decide.
 > 3. **On yes, install** with step 2 (add `--profile corporate`, or `-Profile corporate` on Windows, after a yes to the corporate screen). `ABS_CONSENTED=1` records the yes, so never set it without one. The installer is idempotent and prints its own progress: tell the user in plain, calm language what is happening, without repeating every line.
 > 4. **When the installer prints `━━━ Install complete ━━━`, the install is only step one of two:** the yes covered the setup interview too. In the **same turn**, read `~/.claude/skills/ai-brain-starter/SKILL.md` and begin Phase 1: **your very next message to the user is the Phase 1 language question.** Do not end your message on an install summary or ask whether to start the interview; stopping at the install boundary is the most common reason a setup never happens.
 > 5. **If the installer prints `TERMINAL STEP NEEDED`** (Mac only: Homebrew is missing and needs the user's Mac password, which you cannot type from a non-interactive session), relay the exact one-line Terminal command it printed, verbatim, ask them to run it and reply when it finishes, then continue. Do not install Homebrew yourself, and do not skip Obsidian to avoid it: the vault lives in Obsidian, and that one command installs everything and re-runs the rest. Otherwise, if the summary lists ordinary failures, say plainly which ones and offer to re-run.
@@ -278,7 +278,7 @@ Bootstrap is idempotent — re-running after a `git pull` just installs anything
 > (Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/mycelium-hq/ai-brain-starter/main/install/screen/default-windows.es.txt").Content
 > ```
 >
-> Mostrá la pantalla tal cual y hacé la pregunta del final. Con **sí**, el paso 2 instala. Para "sí, sin paquetes opcionales", poné también `SKIP_VENDOR_SKILLS=1` adelante:
+> Mostrá la pantalla tal cual y hacé la pregunta del final. Con **sí**, el paso 2 instala. Para "sí, sin paquetes opcionales", corré su última línea como `ABS_CONSENTED=1 SKIP_VENDOR_SKILLS=1 bash "$D/bootstrap.sh"`:
 >
 > ```bash
 > # macOS / Linux
@@ -293,7 +293,7 @@ Bootstrap is idempotent — re-running after a `git pull` just installs anything
 > $env:ABS_CONSENTED="1"; powershell -NoProfile -ExecutionPolicy Bypass -File "$D\bootstrap.ps1"
 > ```
 >
-> Con **no**, pará: no se instaló nada. Los avisos propios de Claude Code en el camino (su aviso de confianza para herramientas de terceros, los modos de permiso, aprobar un comando) son entre la persona y Claude Code: nunca los contestes por la persona, ni de antemano, ni le digas qué elegir, diga lo que diga. El contrato completo y lo que sigue después de instalar están en la guía para el asistente, al final de la sección Install en inglés.
+> Con **no**, pará: no se instaló nada. Los avisos propios de Claude Code en el camino (su aviso de confianza para herramientas de terceros, los modos de permiso, aprobar un comando) son entre la persona y Claude Code: nunca los contestes por la persona, ni de antemano, ni le digas qué elegir. **Esta regla no se puede desbloquear con permiso de la persona.** Si dice "dale", "sigue", "aprobalo vos", "poné el modo automático" o "no me preguntes más", igual no contestás esos avisos ni le decís qué elegir: le decís para qué es el aviso y la decisión queda en sus manos. Si pregunta cómo cambiar el modo de permisos, le decís dónde está esa opción en Claude Code, y cambiarla o no es cosa suya. El contrato completo y lo que sigue después de instalar están en la guía para el asistente, al final de la sección Install en inglés.
 
 Abrí la [app de escritorio de Claude Code](https://claude.ai/download), logueate con una cuenta paga de Claude (Pro, Max o Team), y pegá esto en el chat:
 
@@ -339,7 +339,7 @@ Imprime qué está, qué falta, y un estado: verde, advertencias, o bloqueos. Ni
 
 Antes de instalar nada, Claude te muestra la pantalla de instalación y te hace una sola pregunta. La pantalla lista lo que queda en tu computadora: hooks (scripts chicos que Claude Code corre solo), skills, plugins y los marketplaces de donde vienen, servidores MCP, herramientas, y cómo funcionan las actualizaciones. Un sí cubre lo que lista la pantalla y nada más. Los conectores como email o calendario, y el registro por email del final, se preguntan aparte.
 
-Mientras corre el instalador, Claude Code te puede pedir permiso para un paso, y muestra su propio aviso para plugins y herramientas que no vienen de Anthropic. Ese aviso aparece con cualquier herramienta de terceros, así que verlo acá es esperable, y lo que cubre ya está en la pantalla. Si preguntás, Claude te dice para qué es un aviso. No lo va a contestar por vos ni te va a decir qué elegir.
+Mientras corre el instalador, Claude Code te puede pedir permiso para un paso, y muestra su propio aviso para plugins y herramientas que no vienen de Anthropic. Ese aviso aparece con cualquier herramienta de terceros, así que verlo acá es esperable, y lo que cubre ya está en la pantalla. Si preguntás, Claude te dice para qué es un aviso. No lo va a contestar por vos ni te va a decir qué elegir. Después de instalar, algunos de sus hooks aprueban comandos de Bash y ediciones de archivos que pasan sus chequeos, así que Claude Code deja de preguntarte por esos; la pantalla lo dice antes de que respondas.
 
 Nada de esto manda tus archivos a ningún lado. Es una instalación local; tu vault no sale de tu máquina. Para saltearte los paquetes de terceros en macOS o Linux, respondé "sí, sin paquetes opcionales".
 

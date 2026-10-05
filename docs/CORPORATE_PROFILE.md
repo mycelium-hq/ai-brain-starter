@@ -48,7 +48,7 @@ After the run, the exact manifest is written to
 | 2 | Two external MCP servers registered (`granola`, `chatprd`) + `playwright` plugin | All three excluded — they egress data or drive a browser. Opt-in after review. |
 | 3 | Optional email signup + a best-effort install ping | Both off: `EMAIL_GATE_BYPASS=1`, `MYCELIUM_NO_PING=1`, plus Claude Code telemetry env enforced in `settings.json`. |
 | 4 | Auto-updates: a self-update hook pulls the skill repo every ~6 days; Claude Code auto-updates | No auto-update: self-update hook disabled via a sentinel; Claude Code autoupdater off. Versions freeze at install. Nothing is pinned to a reviewed revision: each part is the newest release on the day you install. Updates require a manual re-run. |
-| 5 | On a fresh machine, may install Homebrew (sudo) and symlink the Obsidian CLI into `/usr/local/bin` (sudo) | No sudo. Runs entirely in user space. On macOS and Linux, missing Python, Node and Obsidian are installed in user space, and Homebrew and git are left to your IT team. On Windows, missing git, Python, Node and Obsidian are left to your IT team. |
+| 5 | On a fresh machine, may install Homebrew (sudo) and symlink the Obsidian CLI into `/usr/local/bin` (sudo) | Never installs Homebrew or git, and skips the sudo `/usr/local/bin` symlink. On a Mac without Homebrew, missing Python and Node come from user-space downloads, and gh and Obsidian are left for you to install. On Linux, system packages still come from the package manager when `sudo` works without a password; otherwise Python and Node come from user-space downloads. On Windows, missing git, Python, Node and Obsidian are left to your IT team. |
 
 It also **emits a reviewable component manifest** (see below) so a security team
 can approve the exact set before install — run with `--dry-run` to get it without
@@ -72,8 +72,24 @@ installer, checked against a real dry-run in CI, and printed at the end of every
 | `obsidian@obsidian-skills` | Unpinned: newest at install | `github: kepano/obsidian-skills` | Obsidian/vault authoring skills — core knowledge-worker need. |
 | `context7` | Claude Code plugin | Anthropic plugin registry | Documentation lookup. Read-only, no data egress. |
 | `adelaidasofia/humanizer`, and `obra/superpowers` on macOS and Linux | Unpinned: newest at install, then no auto-update | GitHub (skill folders copied into `~/.claude/skills`) | Writing and engineering-discipline skills the substrate uses. The superpowers marketplace stays excluded. |
-| Python 3.10+, Node.js, pipx, GitHub CLI, graphify, fastmcp, Claude Code, Obsidian | Installed in user space only if missing. On Windows only pipx, GitHub CLI, graphify, fastmcp and Claude Code are | Upstream installers | Runtime prerequisites. Provision and pin them yourself first if you want versions under your control. |
+| Python 3.10+, Node.js, pipx, GitHub CLI, graphify, fastmcp, Claude Code, Obsidian | Installed only if missing and only where row 5 allows: gh and Obsidian need Homebrew or a Linux package manager, and Windows installs only pipx, GitHub CLI, graphify, fastmcp and Claude Code | Upstream installers | Runtime prerequisites. Provision and pin them yourself first if you want versions under your control. |
 | Homebrew and git (and on Windows, Python, Node.js and Obsidian) | **Not installed by this profile** | Your IT-approved channel | Need an administrator, or are left to your IT team by policy. |
+
+### Added by the setup interview (both profiles)
+
+The interview that follows the install does not read the profile, so a corporate
+install gets the same additions. The install screen lists them under the same yes:
+
+- Obsidian community plugins in the vault: Dataview, Templater, Tasks, Local REST
+  API and Custom Sort. Local REST API serves the vault over a local HTTP port; if you
+  enforce Restricted Mode (below), these plugins do not load.
+- A daily journal reminder at a time the user picks.
+- Weekly and monthly insight reports: unattended Claude Code runs that read the
+  journal and write notes, with file edits and commands allowed.
+- On macOS and Linux, a daily job at 04:30 that, besides vault upkeep, tidies git
+  repos under `~/dev`: it removes merged branches, finished worktrees, old
+  checkpoint stashes and rebuildable build files, and fast-forwards their main
+  checkouts. Set `ABS_NO_AUTO_GC=1` before the interview to leave it out.
 
 ### Excluded by default (and why)
 

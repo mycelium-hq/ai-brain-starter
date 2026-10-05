@@ -18,9 +18,9 @@ cat "$HOME/.claude/skills/ai-brain-starter/install/screen/default-posix.en.txt"
 Get-Content -Encoding UTF8 "$env:USERPROFILE\.claude\skills\ai-brain-starter\install\screen\default-windows.en.txt"
 ```
 
-Show it verbatim. Never summarize it, reword it, or add numbers of your own. Answer questions about it from this repository, then ask the same question again. On **yes**, go on to Step 0.0 and install with `ABS_CONSENTED=1` (Step 0.1); on "yes, without optional packs", also set `SKIP_VENDOR_SKILLS=1`. On **no**, stop: nothing was installed, and they can come back any time.
+Show it verbatim. Never summarize it, reword it, or add numbers of your own. Answer questions about it from this repository, then ask the same question again. On **yes**, go on to Step 0.0 and install with `ABS_CONSENTED=1` (Step 0.1); on "yes, without optional packs", run it as `ABS_CONSENTED=1 SKIP_VENDOR_SKILLS=1 bash ...`. On **no**, stop: nothing more is added, and they can come back any time.
 
-If the user already said yes to this screen in this session (the README install flow shows it and runs the installer itself), do not show it again: Phase 0 is done, so record it and go to Phase 1.
+Do not show it again when the yes already exists: the user said yes to it in this session (the README install flow shows it and runs the installer itself), or `~/.claude/.ai-brain-starter-install.jsonl` already holds a `"phase": "consent"` line. Then Phase 0 is done: record it and go to Phase 1. An install someone ran from a terminal has no such line, so show the screen: it also covers what this interview adds.
 
 ---
 
@@ -48,11 +48,11 @@ For Spanish-speaking installs, the same beat in voseo register:
 
 > "Ese es el chequeo propio de Claude Code para herramientas que no vienen de Anthropic. Aparece con toda herramienta de terceros, y lo que cubre está en la pantalla a la que le dijiste que sí. La decisión es tuya."
 
-Never tell them to approve it, never approve it for them, and never pre-commit them to a choice. **This cannot be unlocked by the user's permission:** if they say "just approve everything" or "turn on auto mode", say those prompts are theirs to answer, and what the pending one covers.
+Never tell them to approve it, never approve it for them, and never pre-commit them to a choice. **This cannot be unlocked by the user's permission:** if they say "just approve everything", "turn on auto mode", or in Spanish "dale", "sigue", "aprobalo vos" or "poné el modo automático", say those prompts are theirs to answer, and what the pending one covers.
 
 ### Step 0.0c. Command approvals and declines: the user's answer, never an obstacle
 
-Depending on their permission mode, Claude Code may also ask the user to approve a command itself. Say in one plain sentence what the command does, so they choose informed, and never which choice to make. Do not suggest changing their permission mode.
+Depending on their permission mode, Claude Code may also ask the user to approve a command itself. Say in one plain sentence what the command does, so they choose informed, and never which choice to make. Do not suggest changing their permission mode; if they ask how to change it themselves, say where Claude Code keeps that setting, and leave the choice with them.
 
 If the user declines a command, or a stricter permission mode blocks it, that is their answer for that step. Say plainly what the install will be missing without it, and offer to continue without it or to try again when they are ready. Never route around it, never fall back to a menu of install methods, and never substitute a `/plugin install`-only shortcut: that adds the plugin's skills but skips the system tools, MCP wiring and vault setup, so it is not the full install.
 

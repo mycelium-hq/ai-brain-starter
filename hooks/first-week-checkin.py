@@ -207,12 +207,14 @@ def build_checkin_message(milestone: str, days: int) -> str:
     if gaps_file.is_file():
         gaps_note = (
             f"\n\nSEPARATELY: {gaps_file} lists install steps that didn't finish. A "
-            f"line whose 'repair' command re-installs something the install screen "
-            f"listed (~/.claude/skills/ai-brain-starter/install/screen/) is covered "
-            f"by the user's yes: tell them in one line what you are finishing, then "
-            f"run it. A line that would install or run anything else: show it to the "
-            f"user and ask first. Delete the file once every repair succeeds. Never "
-            f"frame a gap as an error."
+            f"line whose 'repair' command re-installs a component named on this "
+            f"computer's install screen is covered by the user's yes. That screen is "
+            f"~/.claude/skills/ai-brain-starter/install/screen/<profile>-<platform>.en.txt, "
+            f"with the profile from the consent line of "
+            f"~/.claude/.ai-brain-starter-install.jsonl (default when absent). Tell "
+            f"them in one line what you are finishing, then run it. A line that would "
+            f"install or run anything else: show it to the user and ask first. Delete "
+            f"the file once every repair succeeds. Never frame a gap as an error."
         )
 
     return (
