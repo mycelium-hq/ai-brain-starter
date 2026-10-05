@@ -599,11 +599,38 @@ def _without_launcher(cmd: str) -> str:
     return (cmd[quote:] if quote != -1 else cmd).strip()
 
 
+# The [PYTHON] slot of a POSIX hook command: a python-named token at a command
+# position (the start of the command, or right after `then`, `&&` or `||`) followed
+# by a space. hooks.json puts [PYTHON] in exactly those places, and what
+# _posix_python() writes there is `python3`, `python`, or a path ending in a
+# python-named file (sys.executable can end in `python3.14`).
+_INTERPRETER_SLOT_RE = re.compile(
+    r"(?:^|(?<=\bthen )|(?<=&& )|(?<=\|\| ))(?:\S*/)?python[0-9.]*(?= )"
+)
+
+
+def _without_interpreter(cmd: str) -> str:
+    """`cmd` with the interpreter in its [PYTHON] slot replaced by the token
+    `[PYTHON]`, after the Windows launcher is set aside (see _without_launcher).
+
+    WHY. Which interpreter a hook was written with is a fact about the PATH of
+    the install that wrote it, not part of the hook's identity. A second install
+    from another PATH (outside the virtualenv the first one ran in, or after an
+    interpreter moved) writes a different token, and a literal comparison reads
+    the same hook as a new one: merge_hooks() adds a second copy and leaves the
+    first, pinned to an interpreter that may be gone. Hooks with an ABS
+    fingerprint or an owned script name never reach that comparison, which is
+    why only some were left behind (11 of the 70 [PYTHON] commands in hooks.json
+    when this was measured)."""
+    return _INTERPRETER_SLOT_RE.sub("[PYTHON]", _without_launcher(cmd))
+
+
 def is_same_command(a: str, b: str) -> bool:
     """Two commands count as the same hook if they share an ABS fingerprint OR
     an owned script basename (so a skill-path entry and a ~/.claude/hooks/ entry
     for the same script dedup to one), else if the literal text matches once the
-    machine-specific launcher token is set aside (see _without_launcher).
+    machine-specific launcher and interpreter tokens are set aside (see
+    _without_launcher and _without_interpreter).
 
     The same script with DIFFERENT arguments is NOT the same hook. merge_hooks()
     REPLACES on a match, so reading the pair as duplicates means whichever one
@@ -616,7 +643,7 @@ def is_same_command(a: str, b: str) -> bool:
             return True
     if _owned_basenames(a) & _owned_basenames(b):
         return True
-    return _without_launcher(a) == _without_launcher(b)
+    return _without_interpreter(a) == _without_interpreter(b)
 
 
 def _hook_depends_on_vault(command: str) -> bool:
