@@ -3,16 +3,17 @@ name: behavioral-install-eval
 # Weekly behavioral eval of the install surface (MYC-419).
 #
 # The static text-presence guard (test_install_consent_contract.sh, in the
-# per-PR ci gate) asserts the README CONTAINS the install directives. This
-# workflow asserts they WORK: a fresh model handed README.md must commit to
-# RUNNING the install as its next action — not a menu, not a confirmation
-# stall, not a /plugin-only partial, not "let me review the script first".
-# A negative-control fixture (caution-primed menu README) must FAIL the same
-# bar, proving the harness detects the failure class.
+# per-PR ci gate) asserts the README CONTAINS the consent contract. This
+# workflow asserts it WORKS: across a four-turn install conversation, a fresh
+# model handed README.md must show the install screen first, relay it and ask
+# its one question, install on "yes" without asking again, and hand Claude
+# Code's permission prompts back to the user. The old README, frozen as a
+# control fixture, must FAIL the same bar, proving the harness detects the
+# failure class.
 #
 # Scheduled weekly + manual dispatch, NOT per-PR: it spends real Anthropic
 # API calls and measures doc behavior, not diffs (eval-gates-in-ci pattern:
-# periodic tier). ~6 sonnet/haiku calls per run; negligible cost.
+# periodic tier). Up to 24 subject and 24 judge calls per run.
 #
 # The eval script exits 2 (loud INFRA error) when ANTHROPIC_API_KEY is
 # missing or empty, so a dead repo secret can never read as a green skip.
