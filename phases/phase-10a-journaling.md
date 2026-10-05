@@ -534,18 +534,22 @@ Rick Rubin (creativity via presence, subtractive genius, trust the muse) · Eliz
 
 ## → Next phase (the install is not finished)
 
-You have just completed **Phase 10a**. Do not stop here, do not summarise the
-install as complete, and do not wait to be asked to continue.
+You have just completed **Phase 10a**. The yes on the install screen covers
+the next phase too, so start it now; nothing on the screen needs asking again.
 
-1. **Record progress.** Write `~/.claude/.ai-brain-starter-progress.json`:
+1. **Record progress.** Run `scripts/install-telemetry.py append 10a completed`
+   from this skill's own directory with Python 3. It writes the progress file
+   a resumed install reads, and the install log. If that fails, write
+   `~/.claude/.ai-brain-starter-progress.json` yourself:
    `{"last_completed_phase": "10a", "ts": "<ISO-8601 timestamp for now>", "version": 1}`
-   This one line is what lets a resumed install pick up here instead of starting over.
 2. **Run the next phase.** Read `phases/phase-10b-panel-roster.md` from this skill's own directory
    and execute **Phase 10b**.
 
-If you are running low on context, say so out loud and tell the user to open a
-fresh session and ask to resume the ai-brain-starter install; the progress file
-above is what makes that work. Ending here silently leaves them with a
-half-built brain that looks finished.
+Pause only if the user says stop, a step failed and needs them, or Claude Code
+is asking them something; then say where the install stands and that "continue
+my brain setup" picks it up. If you are running low on context, say so and tell
+the user to open a fresh session and ask to resume; the progress file is what
+makes that work. Ending silently leaves them with a half-built brain that looks
+finished.
 
 <!-- phase-chain: next=phase-10b-panel-roster.md -->

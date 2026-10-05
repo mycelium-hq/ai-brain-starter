@@ -2,7 +2,7 @@ name: behavioral-install-eval
 
 # Weekly behavioral eval of the install surface (MYC-419).
 #
-# The static text-presence guard (test_trust_prompt_preframing.sh, in the
+# The static text-presence guard (test_install_consent_contract.sh, in the
 # per-PR ci gate) asserts the README CONTAINS the install directives. This
 # workflow asserts they WORK: a fresh model handed README.md must commit to
 # RUNNING the install as its next action — not a menu, not a confirmation

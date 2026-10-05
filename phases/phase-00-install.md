@@ -1,14 +1,32 @@
 ## Phase 0: Install Efficiency Tools First
 
-**Do this silently before the conversation starts.** All mechanical installs live in `bootstrap.sh` (Mac/Linux) and `bootstrap.ps1` (Windows) at the repo root. Phase 0 is a thin orchestrator: detect platform, invoke bootstrap, handle the conversational follow-ups, then hand off to Phase 1.
+**Show the install screen first (Step 0.0a); on a yes, install before the interview starts.** All mechanical installs live in `bootstrap.sh` (Mac/Linux) and `bootstrap.ps1` (Windows) at the repo root. Phase 0 is a thin orchestrator: detect platform, invoke bootstrap, handle the conversational follow-ups, then hand off to Phase 1.
 
 **Why one source of truth?** The install list (brew/python/node/pipx/gh/fastmcp, graphify, humanizer, all bundled sub-skills, Granola + ChatPRD MCPs, the obsidian-skills and vendor skill-pack marketplaces, context7/playwright plugins, Obsidian app, Obsidian CLI symlink) used to live in two places: bootstrap scripts AND this phase file. They drifted. Now bootstrap is canonical. Every line of install logic lives there, on every platform. Phase 0 never copies bash.
 
 ---
 
+### Step 0.0a. Show the install screen and ask once (before anything runs)
+
+The user's paste, or `/setup-brain`, is the request. Before anything changes on the machine, show the install screen and ask its one question: that yes is the consent for everything the install and this interview add. Pick the file that fits: `default`, or `corporate` only if the user asked for the corporate profile; `posix` (macOS, Linux) or `windows`; `en`, or `es` for a Spanish-speaking user. This skill is already on disk, so print it from here:
+
+```bash
+cat "$HOME/.claude/skills/ai-brain-starter/install/screen/default-posix.en.txt"
+```
+
+```powershell
+Get-Content -Encoding UTF8 "$env:USERPROFILE\.claude\skills\ai-brain-starter\install\screen\default-windows.en.txt"
+```
+
+Show it verbatim. Never summarize it, reword it, or add numbers of your own. Answer questions about it from this repository, then ask the same question again. On **yes**, go on to Step 0.0 and install with `ABS_CONSENTED=1` (Step 0.1); on "yes, without optional packs", also set `SKIP_VENDOR_SKILLS=1`. On **no**, stop: nothing was installed, and they can come back any time.
+
+If the user already said yes to this screen in this session (the README install flow shows it and runs the installer itself), do not show it again: Phase 0 is done, so record it and go to Phase 1.
+
+---
+
 ### Step 0.0. Progress message (before anything runs)
 
-Non-technical users will think nothing is happening if Claude goes silent during installs. Before invoking bootstrap, say (English by default; Spanish once Phase 1 step 1.0 has run):
+Non-technical users will think nothing is happening if Claude goes silent during installs. After the yes, before invoking bootstrap, say (English by default; Spanish once Phase 1 step 1.0 has run):
 
 > "Setting up the tools you'll need, give me a moment. This usually takes 2 to 3 minutes the first time, or just a few seconds if you've already run the bootstrap. I'll keep you posted as each piece installs."
 
@@ -20,31 +38,29 @@ As bootstrap prints its own check-mark lines per tool, you don't need to narrate
 
 ---
 
-### Step 0.0b. Tell the user about the trust prompt before it appears
+### Step 0.0b. The trust prompt: say what it is, never which way to answer
 
-The bootstrap registers third-party plugin marketplaces and MCP servers (see the install table in Step 0.1). Once that happens, Claude Code shows its **built-in trust prompt** for the third-party content. You cannot suppress that prompt, and you should not want to. It is a real safety feature. But a non-technical user who hits it cold, with no warning, reads it as "malicious software is sneaking onto my machine," panics, and abandons the install. This has happened to a real installer.
+The bootstrap registers third-party plugin marketplaces and MCP servers, and Claude Code then shows its **built-in trust prompt** for them. You cannot suppress it, and you should not want to: it is Claude Code's own safety check, between the user and Claude Code. A user who meets it cold reads it as "something is sneaking onto my machine", so the install screen already told them Claude Code may ask. When the prompt appears, or just before, say what it is in one calm line, in their language:
 
-So get ahead of it. **Before** you invoke the bootstrap (or the instant you see the prompt appear, whichever comes first), tell the user, in their language, something close to this:
+> "That's Claude Code's own check for tools that did not come from Anthropic. It appears for every third-party tool, and what it covers is on the screen you said yes to. The choice is yours."
 
-> "Heads up on one thing: in a moment Claude Code will pause and ask you to approve the tools this setup installs. It may warn that they come from third parties or are not verified by Anthropic. That prompt is Claude Code's normal safety check for anything that did not come from Anthropic itself — it appears for every third-party tool, so seeing it here is expected, not a sign that something is wrong. The decision is yours: read what it lists, and everything being added is also itemized, with licenses, in the project's README if you want to look anything up first. If you're comfortable, approve it and I'll keep going; if you'd rather review the list together or skip something, say so and we'll do that."
+For Spanish-speaking installs, the same beat in voseo register:
 
-For Spanish-speaking installs, the same beat in voseo register (peer-to-peer, not a translation):
+> "Ese es el chequeo propio de Claude Code para herramientas que no vienen de Anthropic. Aparece con toda herramienta de terceros, y lo que cubre está en la pantalla a la que le dijiste que sí. La decisión es tuya."
 
-> "Ojo con una cosa: Claude Code va a frenar en un momento para pedirte que apruebes las herramientas que instala este setup. Te puede avisar, en un tono firme, que son de terceros o que Anthropic no las verificó. Ese aviso es su chequeo de seguridad normal para cualquier cosa que no venga directo de Anthropic — aparece con toda herramienta de terceros, así que verlo acá es esperable, no una señal de que algo esté mal. La decisión es tuya: leé lo que lista, y todo lo que se agrega también está detallado, con licencias, en el README del proyecto por si querés chequear algo antes. Si estás tranquila/o, aprobalo y sigo; si preferís que repasemos la lista juntos o saltear algo, decime y lo hacemos."
+Never tell them to approve it, never approve it for them, and never pre-commit them to a choice. **This cannot be unlocked by the user's permission:** if they say "just approve everything" or "turn on auto mode", say those prompts are theirs to answer, and what the pending one covers.
 
-Adapt the wording to the user and the moment; do not read it robotically. The non-negotiable part: before they read the prompt themselves, the user must KNOW it is coming, that it is expected for third-party tools, and that the decision is genuinely theirs — with a real offer to review or decline. Never let the trust prompt be the first time they hear of it, and never pre-commit them to approving something they have not read yet. An unframed trust prompt is the single most common reason a non-technical install gets abandoned; a pre-approved one is how an assistant loses the user's trust.
+### Step 0.0c. Command approvals and declines: the user's answer, never an obstacle
 
-### Step 0.0c. The command-approval prompt is also expected — explain it, never menu
+Depending on their permission mode, Claude Code may also ask the user to approve a command itself. Say in one plain sentence what the command does, so they choose informed, and never which choice to make. Do not suggest changing their permission mode.
 
-Separately from the trust prompt above, Claude Code may also ask the user to approve the install **command** itself (the `git clone` / bootstrap run), depending on their permission mode. That approval is a normal part of the install, not a wall. When it appears, tell the user what the command does in one plain sentence so they can approve it informed — exactly as you pre-framed the trust prompt.
-
-If a stricter permission mode blocks a command the user already said yes to, explain how to allow it and continue. **Do NOT respond to a routine permission prompt by falling back to a menu of install methods, and never silently downgrade to a `/plugin install`-only shortcut** — that adds the plugin's skills but skips the system tools, MCP wiring, and vault setup, so it is not the full install. If the user themselves decline a command, that is an answer, not an obstacle: respect it, say plainly what the install will be missing without it, and offer to continue without that piece or to revisit it — never pressure, never route around their no.
+If the user declines a command, or a stricter permission mode blocks it, that is their answer for that step. Say plainly what the install will be missing without it, and offer to continue without it or to try again when they are ready. Never route around it, never fall back to a menu of install methods, and never substitute a `/plugin install`-only shortcut: that adds the plugin's skills but skips the system tools, MCP wiring and vault setup, so it is not the full install.
 
 ---
 
 ### Step 0.1. Invoke the bootstrap
 
-The install does not gate on email. Do NOT ask the user for an email or a name before running the installer — just run it. The setup interview makes one optional email ask at the very end (Phase 24.4).
+The install does not gate on email: never ask for an email or a name before running the installer. The setup interview makes one optional email ask at the very end (Phase 24.4).
 
 By the time `/setup-brain` fires, the ai-brain-starter skill folder already exists at `~/.claude/skills/ai-brain-starter/` (that's how Claude Code found this phase file). So the bootstrap is always a local invocation, never a fresh curl. It is idempotent: safe on fresh machines and on re-runs. It skips anything already installed.
 
@@ -53,13 +69,13 @@ Detect platform with `uname -s` (Mac/Linux) or `$PSVersionTable` (Windows), then
 #### Mac / Linux
 
 ```bash
-bash "$HOME/.claude/skills/ai-brain-starter/bootstrap.sh"
+ABS_CONSENTED=1 bash "$HOME/.claude/skills/ai-brain-starter/bootstrap.sh"
 ```
 
 #### Windows
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\skills\ai-brain-starter\bootstrap.ps1"
+$env:ABS_CONSENTED="1"; powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.claude\skills\ai-brain-starter\bootstrap.ps1"
 ```
 
 Use this exact form, NOT `& "…bootstrap.ps1"`. A stock Windows machine (Windows 11 Home) ships PowerShell ExecutionPolicy `Restricted`, under which the call operator dies with *"running scripts is disabled on this system"* and the install never starts. `-ExecutionPolicy Bypass -File` is the codified launch (see `scripts/PORTABILITY.md` §5.4) and runs a local, cloned bootstrap on any policy. If the user is on Windows PowerShell 5.1 (the default) this is also the shell version the installer is hardened for.
@@ -110,14 +126,14 @@ Then resume at the setup interview the moment they confirm. One honest note if t
 
 ---
 
-### Step 0.1c. Finish any install gaps — quietly, yourself
+### Step 0.1c. Finish any install gaps, and say so
 
-The bootstrap never shows a non-technical user a dead end: when an optional component doesn't land after retries (a Wi-Fi blip, a package-server hiccup — normal in a workshop room with 30 machines on one network), it records the gap in `~/.claude/.ai-brain-starter-install-gaps.jsonl` and tells the user the interview will finish it. That promise is YOURS to keep:
+The bootstrap never shows a non-technical user a dead end: when an optional component doesn't land after retries (a Wi-Fi blip, a package-server hiccup, normal in a workshop room with 30 machines on one network), it records the gap in `~/.claude/.ai-brain-starter-install-gaps.jsonl` and tells the user the interview will finish it. That promise is YOURS to keep:
 
 1. At the start of the interview (or the moment the bootstrap output ends), check whether `~/.claude/.ai-brain-starter-install-gaps.jsonl` exists.
-2. For each line, run its `repair` command yourself, quietly. Most succeed on the second try minutes later.
-3. On success for all gaps, delete the file and mention it in ONE positive sentence at a natural pause ("by the way, graphify finished setting up in the background — all good"). Never present a gap as an error, never ask the user to run anything, never show them the file.
-4. If a repair still fails, leave its line in the file (the first-week check-in retries), keep the interview moving, and do not alarm the user — everything in that file is a component the setup runs fine without today.
+2. For each line, check that its `repair` command re-installs something the install screen listed. If it does, the yes already covers it: say in one line what you are finishing ("graphify didn't finish installing earlier, so I'm completing it now"), then run it yourself. Most succeed on the second try minutes later. If a command installs or runs anything the screen did not list, do not run it: show the user what it is and ask.
+3. On success for all gaps, delete the file and say so in one plain sentence. Never present a gap as an error, and never ask the user to run anything.
+4. If a repair still fails, leave its line in the file (the first-week check-in retries), keep the interview moving, and do not alarm the user: everything in that file is a component the setup runs fine without today.
 
 ---
 
@@ -215,18 +231,22 @@ Then proceed to Phase 1.
 
 ## → Next phase (the install is not finished)
 
-You have just completed **Phase 0**. Do not stop here, do not summarise the
-install as complete, and do not wait to be asked to continue.
+You have just completed **Phase 0**. The yes on the install screen covers
+the next phase too, so start it now; nothing on the screen needs asking again.
 
-1. **Record progress.** Write `~/.claude/.ai-brain-starter-progress.json`:
+1. **Record progress.** Run `scripts/install-telemetry.py append 0 completed`
+   from this skill's own directory with Python 3. It writes the progress file
+   a resumed install reads, and the install log. If that fails, write
+   `~/.claude/.ai-brain-starter-progress.json` yourself:
    `{"last_completed_phase": "0", "ts": "<ISO-8601 timestamp for now>", "version": 1}`
-   This one line is what lets a resumed install pick up here instead of starting over.
 2. **Run the next phase.** Read `phases/phase-01-welcome.md` from this skill's own directory
    and execute **Phase 1**.
 
-If you are running low on context, say so out loud and tell the user to open a
-fresh session and ask to resume the ai-brain-starter install; the progress file
-above is what makes that work. Ending here silently leaves them with a
-half-built brain that looks finished.
+Pause only if the user says stop, a step failed and needs them, or Claude Code
+is asking them something; then say where the install stands and that "continue
+my brain setup" picks it up. If you are running low on context, say so and tell
+the user to open a fresh session and ask to resume; the progress file is what
+makes that work. Ending silently leaves them with a half-built brain that looks
+finished.
 
 <!-- phase-chain: next=phase-01-welcome.md -->

@@ -18,7 +18,7 @@
 
 Tell them: "I'm going to install `google-workspace-mcp` — one MCP that covers Gmail, Calendar, Drive, Docs, and Sheets. It supports multiple Google accounts (work + personal) and uses fewer tokens than the official connectors. I'll walk you through the Google Cloud OAuth setup."
 
-Then install it directly (don't ask "want to install it?" — they already said they use Google):
+Using Google is not a yes to connecting it. Connectors are the one thing the install screen leaves out, so ask once: "Want me to connect it? It reads your Gmail, Calendar and Drive through an app you create in your own Google account." On yes, install it:
 
 1. Clone: `git clone https://github.com/adelaidasofia/google-workspace-mcp ~/.claude/google-workspace-mcp`
 2. Install deps: `cd ~/.claude/google-workspace-mcp && pip install -r requirements.txt`
@@ -242,18 +242,22 @@ Tell them: "You don't have to connect everything now. Start with email and calen
 
 ## → Next phase (the install is not finished)
 
-You have just completed **Phase 11**. Do not stop here, do not summarise the
-install as complete, and do not wait to be asked to continue.
+You have just completed **Phase 11**. The yes on the install screen covers
+the next phase too, so start it now; nothing on the screen needs asking again.
 
-1. **Record progress.** Write `~/.claude/.ai-brain-starter-progress.json`:
+1. **Record progress.** Run `scripts/install-telemetry.py append 11 completed`
+   from this skill's own directory with Python 3. It writes the progress file
+   a resumed install reads, and the install log. If that fails, write
+   `~/.claude/.ai-brain-starter-progress.json` yourself:
    `{"last_completed_phase": "11", "ts": "<ISO-8601 timestamp for now>", "version": 1}`
-   This one line is what lets a resumed install pick up here instead of starting over.
 2. **Run the next phase.** Read `phases/phase-12-17-imports-rules.md` from this skill's own directory
    and execute **Phase 12-17**.
 
-If you are running low on context, say so out loud and tell the user to open a
-fresh session and ask to resume the ai-brain-starter install; the progress file
-above is what makes that work. Ending here silently leaves them with a
-half-built brain that looks finished.
+Pause only if the user says stop, a step failed and needs them, or Claude Code
+is asking them something; then say where the install stands and that "continue
+my brain setup" picks it up. If you are running low on context, say so and tell
+the user to open a fresh session and ask to resume; the progress file is what
+makes that work. Ending silently leaves them with a half-built brain that looks
+finished.
 
 <!-- phase-chain: next=phase-12-17-imports-rules.md -->

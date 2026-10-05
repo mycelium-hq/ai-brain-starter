@@ -285,7 +285,7 @@ INTEGRATION_TESTS=(
   test_session_coordination_guards
   test_gh_safe_session_coordination
   test_cd_worktree_guard_wiring
-  test_trust_prompt_preframing
+  test_install_consent_contract
   test_onboarding_wrong_surface_and_nudge
   test_post_update_email_ask
   test_installer_retires_email_gate
