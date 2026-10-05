@@ -85,8 +85,8 @@ fi
 
 mkdir -p "$TARGET_DIR" "$LOG_DIR"
 
-# The home directory the user database records for this uid. Never read from $HOME:
-# $HOME is the thing a sandbox overrides.
+# The home directory the user database records for this uid. Deliberately not read
+# from $HOME: $HOME is the thing a sandbox overrides.
 account_home() {
     dscacheutil -q user -a uid "$(id -u)" 2>/dev/null | sed -n '/^dir: /{s/^dir: //p;q;}'
 }

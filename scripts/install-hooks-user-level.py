@@ -618,10 +618,10 @@ def _without_interpreter(cmd: str) -> str:
     from another PATH (outside the virtualenv the first one ran in, or after an
     interpreter moved) writes a different token, and a literal comparison reads
     the same hook as a new one: merge_hooks() adds a second copy and leaves the
-    first, pinned to an interpreter that may be gone. Hooks with an ABS
-    fingerprint or an owned script name never reach that comparison, which is
-    why only some were left behind (11 of the 70 [PYTHON] commands in hooks.json
-    when this was measured)."""
+    first, pinned to an interpreter that may be gone. Two commands that share
+    an ABS fingerprint or an owned script name are matched before that
+    comparison, which is why only some were left behind (11 of the 70 [PYTHON]
+    commands in hooks.json when this was measured)."""
     return _INTERPRETER_SLOT_RE.sub("[PYTHON]", _without_launcher(cmd))
 
 
@@ -1022,10 +1022,19 @@ def _posix_python() -> str:
     unquoted, so a path with a space would break the command. Overridable for
     tests via ABS_POSIX_PYTHON.
 
-    A virtualenv's python never qualifies. Run the installer under `uv run` or
-    an activated venv and that python comes first on PATH; once the project's
-    venv is deleted or rebuilt, every hook pinned to it exits 127, which a
-    PreToolUse gate treats as allow.
+    A python inside a virtualenv does not qualify. Run the installer under
+    `uv run` or an activated venv and that python comes first on PATH; once the
+    project's venv is deleted or rebuilt, every hook pinned to it fails to
+    start, and a PreToolUse gate that fails to start lets the call through. So a
+    PATH candidate with a `pyvenv.cfg` at its prefix is skipped, and when
+    nothing else runs, the base interpreter the venv was built from stands in
+    for it (see _venv_base_python). ABS_POSIX_PYTHON, returned as given, is the
+    one way to name a venv python on purpose.
+
+    NOT COVERED: a PATH entry that is a symlink into a venv (it reads as an
+    ordinary interpreter), a conda environment or a pyenv shim (neither has a
+    `pyvenv.cfg`), and the Windows launcher (_windows_launcher), which has the
+    same pin. A hook pinned to one of those breaks the same way when it goes.
     """
     override = os.environ.get("ABS_POSIX_PYTHON")
     if override:
@@ -1069,7 +1078,8 @@ def _posix_python() -> str:
 
 def _in_virtualenv(path: str) -> bool:
     """True for an interpreter inside a virtualenv: `<venv>/bin/python3`, with
-    `pyvenv.cfg` at `<venv>`."""
+    `pyvenv.cfg` at `<venv>`. The path is read as written: a symlink that points
+    into a venv, or a bin directory that is one, is not seen."""
     venv = os.path.dirname(os.path.dirname(os.path.abspath(path)))
     return os.path.isfile(os.path.join(venv, "pyvenv.cfg"))
 
