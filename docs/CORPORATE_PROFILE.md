@@ -44,11 +44,11 @@ After the run, the exact manifest is written to
 
 | # | Default behavior | Corporate profile |
 |---|---|---|
-| 1 | Installs first-party skills **plus** seven third-party plugin marketplaces (Sentry, Stripe, Cloudflare, claude-seo, superpowers, marketingskills, Trail of Bits) | Installs **only** the minimal named set: first-party ai-brain-starter skills + `obsidian@obsidian-skills` + `context7`. All third-party marketplaces skipped. |
+| 1 | Installs first-party skills **plus** seven third-party plugin marketplaces (Sentry, Stripe, Cloudflare, claude-seo, superpowers, marketingskills, Trail of Bits) | Installs **only** a minimal named set: first-party ai-brain-starter skills, `obsidian@obsidian-skills` and `context7`, plus two skill repos copied from GitHub (humanizer everywhere, superpowers on macOS and Linux). The seven optional marketplaces are skipped; `kepano/obsidian-skills` is the one third-party marketplace it registers. |
 | 2 | Two external MCP servers registered (`granola`, `chatprd`) + `playwright` plugin | All three excluded — they egress data or drive a browser. Opt-in after review. |
 | 3 | Optional email signup + a best-effort install ping | Both off: `EMAIL_GATE_BYPASS=1`, `MYCELIUM_NO_PING=1`, plus Claude Code telemetry env enforced in `settings.json`. |
-| 4 | Auto-updates: a self-update hook pulls the skill repo every ~6 days; Claude Code auto-updates | Versions pinned: self-update hook disabled via a sentinel; Claude Code autoupdater off. Updates require a reviewed manual re-run. |
-| 5 | On a fresh machine, may install Homebrew (sudo) and symlink the Obsidian CLI into `/usr/local/bin` (sudo) | No sudo. Runs entirely in user space. Missing runtimes (Python, Node, Obsidian) are reported, not auto-installed — provision them via your IT-approved, version-pinned channel. |
+| 4 | Auto-updates: a self-update hook pulls the skill repo every ~6 days; Claude Code auto-updates | No auto-update: self-update hook disabled via a sentinel; Claude Code autoupdater off. Versions freeze at install. Nothing is pinned to a reviewed revision: each part is the newest release on the day you install. Updates require a manual re-run. |
+| 5 | On a fresh machine, may install Homebrew (sudo) and symlink the Obsidian CLI into `/usr/local/bin` (sudo) | No sudo. Runs entirely in user space. On macOS and Linux, missing Python, Node and Obsidian are installed in user space, and Homebrew and git are left to your IT team. On Windows, missing git, Python, Node and Obsidian are left to your IT team. |
 
 It also **emits a reviewable component manifest** (see below) so a security team
 can approve the exact set before install — run with `--dry-run` to get it without
@@ -58,17 +58,22 @@ changing anything.
 
 ## Component manifest (what gets installed)
 
-This is the canonical list. The installer prints the same content at the end of
-every corporate run and writes it to `~/.claude/.ai-brain-starter-corporate-manifest.md`.
+The canonical list is the install screen for this profile,
+`install/screen/corporate-<posix|windows>.<en|es>.txt`: it is generated from the
+installer, checked against a real dry-run in CI, and printed at the end of every
+`--dry-run`. This table gives the reasons. The installer also writes its manifest to
+`~/.claude/.ai-brain-starter-corporate-manifest.md` after each corporate run.
 
 ### Installed
 
 | Component | Version / pin | Source | Why it's in the minimal set |
 |---|---|---|---|
-| ai-brain-starter skill (+ bundled first-party skills: graphify, daily-journal, insights, patterns, meeting-todos, second-brain-mapping, …) | Pinned to the git revision you install; self-update disabled | `https://github.com/mycelium-hq/ai-brain-starter` | The vault workflow itself. Ships in-repo — no per-skill network fetch. |
-| `obsidian@obsidian-skills` | Marketplace pin | `github: kepano/obsidian-skills` | Obsidian/vault authoring skills — core knowledge-worker need. |
+| ai-brain-starter skill (+ bundled first-party skills: graphify, daily-journal, insights, patterns, meeting-todos, second-brain-mapping, …) | Frozen at the revision you install (self-update disabled); that revision is whatever `main` was, not a reviewed pin | `https://github.com/mycelium-hq/ai-brain-starter` | The vault workflow itself. Ships in-repo — no per-skill network fetch. |
+| `obsidian@obsidian-skills` | Unpinned: newest at install | `github: kepano/obsidian-skills` | Obsidian/vault authoring skills — core knowledge-worker need. |
 | `context7` | Claude Code plugin | Anthropic plugin registry | Documentation lookup. Read-only, no data egress. |
-| Python 3.10+, Node.js, pipx, GitHub CLI, graphify | **Not installed by this profile** | Your IT-approved channel | Runtime prerequisites. Provision + pin them yourself so versions stay under your control. |
+| `adelaidasofia/humanizer`, and `obra/superpowers` on macOS and Linux | Unpinned: newest at install, then no auto-update | GitHub (skill folders copied into `~/.claude/skills`) | Writing and engineering-discipline skills the substrate uses. The superpowers marketplace stays excluded. |
+| Python 3.10+, Node.js, pipx, GitHub CLI, graphify, fastmcp, Claude Code, Obsidian | Installed in user space only if missing. On Windows only pipx, GitHub CLI, graphify, fastmcp and Claude Code are | Upstream installers | Runtime prerequisites. Provision and pin them yourself first if you want versions under your control. |
+| Homebrew and git (and on Windows, Python, Node.js and Obsidian) | **Not installed by this profile** | Your IT-approved channel | Need an administrator, or are left to your IT team by policy. |
 
 ### Excluded by default (and why)
 
@@ -93,7 +98,7 @@ so they persist for every future Claude Code session, not just the install:
 | `DISABLE_ERROR_REPORTING=1` | No crash/error reports. |
 | `DISABLE_FEEDBACK_COMMAND=1` | Disables the in-product feedback command. |
 | `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` | Single switch that disables non-essential network calls, including the autoupdater. |
-| `DISABLE_AUTOUPDATER=1` | Belt-and-suspenders pin of the Claude Code CLI version. |
+| `DISABLE_AUTOUPDATER=1` | Belt-and-suspenders: keeps the Claude Code CLI at the version installed. |
 | `MYCELIUM_NO_PING=1` | No install ping to the project's server (also pre-creates the dedup sentinel). |
 
 During the install itself, `EMAIL_GATE_BYPASS=1` is forced, so no email is
@@ -106,16 +111,18 @@ collected and `quick-mint` is never called.
 
 ---
 
-## Version pinning and updates
+## Updates: frozen at install, not pinned
 
 By default this project keeps itself current with a `UserPromptSubmit` hook that
-`git pull`s the skill repo roughly every six days. Corporate installs pin instead:
+`git pull`s the skill repo roughly every six days. Corporate installs freeze instead:
 
 - The installer creates `~/.claude/.ai-brain-starter-pinned`. The self-update
-  hook checks for that file first and short-circuits — so the skill stays at the
-  revision you approved.
-- `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` + `DISABLE_AUTOUPDATER=1` pin the
-  Claude Code CLI.
+  hook checks for that file first and short-circuits, so the skill stays at the
+  revision you installed. Review that revision (the manifest prints its SHA):
+  the profile freezes whatever `main` was at install time; it does not choose a
+  reviewed one for you.
+- `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` + `DISABLE_AUTOUPDATER=1` freeze the
+  Claude Code CLI version.
 - Obsidian: deploy your IT-approved, version-pinned build and disable in-app
   automatic updates (Settings → General → Automatic updates).
 
@@ -162,9 +169,9 @@ security team approves a specific component, enable it by hand:
 
 Before approving a rollout:
 
-- [ ] Run `bash bootstrap.sh --profile corporate --dry-run` and read the emitted manifest.
-- [ ] Confirm the pinned ai-brain-starter revision (SHA) matches one you've reviewed.
-- [ ] Confirm `~/.claude/settings.json` `env` carries the six telemetry/pin keys above.
+- [ ] Run `bash bootstrap.sh --profile corporate --dry-run` and read the emitted manifest and the install screen it ends with.
+- [ ] Confirm the installed ai-brain-starter revision (SHA) matches one you've reviewed.
+- [ ] Confirm `~/.claude/settings.json` `env` carries the six telemetry and auto-update keys above.
 - [ ] Confirm `~/.claude/.mcp.json` contains no external URL MCPs you didn't approve.
 - [ ] Confirm the vault path is not under a cloud-sync folder.
 - [ ] Confirm Obsidian Restricted Mode is on for sensitive vaults.

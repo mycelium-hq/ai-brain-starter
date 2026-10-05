@@ -102,7 +102,7 @@ By default the corporate profile:
 - Installs a **minimal, named** plugin/skill set only — first-party skills plus `obsidian@obsidian-skills` and `context7`. It skips every third-party marketplace (Sentry, Stripe, Cloudflare, SEO, marketing skills, etc.).
 - **Excludes shell-execution-capable Obsidian community plugins** (e.g. "Shell Commands", "Hider") and recommends Obsidian Restricted Mode. Those plugins were the abuse vector in the REF6598 / PHANTOMPULSE RAT campaign (Elastic Security Labs, April 2026).
 - **Excludes external-egress components** by default: the `granola` and `chatprd` MCP servers and the `playwright` browser plugin.
-- **Turns telemetry off** and pins versions (disables the self-update hook and the Claude Code autoupdater).
+- **Turns telemetry off** and automatic updates off (disables the self-update hook and the Claude Code autoupdater). Versions freeze at install; nothing is pinned to a reviewed revision.
 - **Skips every sudo step** (Homebrew, the `/usr/local/bin` symlink) and runs entirely in user space.
 - **Emits a reviewable component manifest** (exact components + versions + source URLs) to `~/.claude/.ai-brain-starter-corporate-manifest.md` and to stdout, so a security team can approve before install.
 
