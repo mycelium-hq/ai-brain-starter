@@ -21,6 +21,20 @@ The installer test now puts a real virtualenv first on the PATH and fails if tha
 
 ---
 
+## 2026-10-04: text from outside can no longer end a note's frontmatter early or add a line to it
+
+**Who this affects:** anyone who writes a skill on the shared frontmatter helper `yaml_escape` (in `skills/_shared/connector_utils.py`), and anyone who runs `ingest-github` with a repo name that came from somewhere untrusted (its `repo` field is the one place this repo calls the helper directly). Everyone else sees no difference.
+
+`yaml_escape` turns a piece of text into a value that is safe to put on a `key: value` line in a note's frontmatter. When a value needed quoting it was wrapped in double quotes, but a line break inside it was left as it was. So text that came from outside (a web page, a caption, a field in an API payload) could end the frontmatter early with a line holding only `---`, or add a line of its own such as `injection_scan: clean`, the stamp this repo uses to say whether a note's body was scanned for planted instructions. Only a plain newline was even noticed: a lone carriage return, the Unicode next-line character, the two Unicode line and paragraph separators, vertical tab and form feed did not trigger the quoting at all. A control character that is not a line break (a bell, an escape, a NUL byte) made PyYAML refuse the whole header, and `split_frontmatter` then returns an empty header, which hides the stamp too.
+
+Now each of these is written as its YAML escape (`\n`, `\x07`, `\L` and so on) and makes the value quoted: the C0 control characters, DEL, the C1 control characters, the two Unicode separators, and U+FFFE and U+FFFF, which PyYAML's reader rejects even inside quotes. A tab is left as it is but also makes the value quoted, because PyYAML's default loader cannot read a tab in an unquoted value. A value that holds any of these characters comes back as one physical line, and `yaml.safe_load` returns the exact original. A value with none of them renders exactly as before.
+
+One case is not covered: a lone surrogate half, the leftover of a cut emoji. It cannot be written to a file as UTF-8 at all, so an escape cannot save it. `sanitize_third_party_text` replaces it, and text from outside should go through that first.
+
+`tests/integration/test_untrusted_ingest_guard.sh` (T18) takes the list of characters from the Unicode database instead of from the helper's own table. It fails if any one of them is dropped from the table, if backslashes are escaped after the control characters instead of before, or if a tab stops forcing quotes. It also fails if either file holds one of the invisible characters raw, so an editor that normalizes whitespace cannot quietly rewrite the table.
+
+---
+
 ## 2026-10-01: the version check now measures the Claude Code that is running your session, and says when your installed copies disagree
 
 **Who this affects:** anyone with more than one copy of Claude Code on the machine (an install per node version, Homebrew, the desktop app's own copy), and anyone who runs scheduled `claude -p` jobs. Everyone else sees no difference.
