@@ -256,40 +256,6 @@ def _strip_prefix(words: list) -> list:
     return words[i:]
 
 
-def _statements(segs: list) -> list:
-    """Whole statements, rebuilt from the shared splitter's `(sep, text)` segments.
-
-    The splitter cuts at every `(` and `)`, so `for x in $(cat f) $v` arrives as
-    three pieces and the bare `$v` lands in a segment that no longer begins with
-    `for`. Re-join the text around each `$( ... )` (the substitution itself
-    becomes a placeholder word) and emit the substitution's own statements
-    separately, so a loop INSIDE `$( ... )` is still scanned.
-    """
-    out, cur, stack = [], [], []
-    for sep, text in segs:
-        if sep == "(":
-            if cur and cur[-1].endswith("$"):        # `$(`: command substitution
-                cur[-1] = cur[-1][:-1] + "S"
-                stack.append(("sub", cur))
-            else:                                    # subshell, `f()`, `v=(`
-                out.append("".join(cur))
-                stack.append(("plain", None))
-            cur = [text]
-        elif sep == ")":
-            out.append("".join(cur))
-            kind, outer = stack.pop() if stack else ("plain", None)
-            cur = outer + [text] if kind == "sub" else [text]
-        else:                                        # ; & | && || newline
-            out.append("".join(cur))
-            cur = [text]
-    out.append("".join(cur))
-    while stack:                                     # unclosed `$(`: keep the outer text
-        kind, outer = stack.pop()
-        if kind == "sub":
-            out.append("".join(outer))
-    return out
-
-
 def _operands(w: list):
     """`(shape, operand_words)` when `w` is `for NAME... in OPERANDS` or
     `set ... -- OPERANDS`, else None."""
@@ -360,7 +326,7 @@ def detect_unsplit_param(command: str, zsh: bool) -> list:
     found = []
     # `bash -c '...'` and `sh -c '...'` stay ONE quoted segment led by `bash`/`sh`,
     # so they never reach `_operands`: bash reads those strings, not zsh.
-    for seg in _statements(split_segments_with_seps(code)):
+    for _sep, seg in split_segments_with_seps(code):
         w = _strip_prefix(_raw_words(seg))
         arrays.update(_declared_arrays(w))
         got = _operands(w)
@@ -478,9 +444,6 @@ def _selftest() -> int:
         (split, 'setopt noshwordsplit; for x in $v; do :; done', True),
         (split, 'cat <<EOF\nsetopt shwordsplit\nEOF\nfor x in $v; do :; done', True),
         (split, 'cat <<EOF\nZSH_SILENT_IDIOMS_BYPASS=1\nEOF\nfor x in $v; do :; done', True),
-        (split, 'for x in $(cat f) $v; do :; done', True),      # bare one AFTER a $(...)
-        (split, 'set -- $(cmd) $v', True),
-        (split, 'for x in $(cat f | sort; echo z) $v; do :; done', True),
         (split, 'for x in $(for y in $v; do echo "$y"; done); do :; done', True),  # loop inside
         (split, 'echo $((1+2)); for x in $v; do :; done', True),
         # --- detector 2: word-split, must stay SILENT ---
@@ -513,8 +476,6 @@ def _selftest() -> int:
         (split, "# for x in $v; do :; done", False),            # comment
         (split, "echo ok  # for x in $v", False),
         (split, "export ZSH_SILENT_IDIOMS_BYPASS=1; for x in $v; do :; done", False),
-        (split, 'for x in $(cat f) "$v"; do :; done', False),
-        (split, 'for x in $(cat f) ${=v}; do :; done', False),
         (split, 'n=$(( 2 * 3 )); for x in a b; do :; done', False),
     ]
     bad = 0

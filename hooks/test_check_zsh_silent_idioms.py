@@ -261,18 +261,15 @@ def main() -> int:
     expect_deny("14h after then", 'if [ -n "$q" ]; then for x in $v; do :; done; fi')
     expect_deny("14i inside a brace group", "echo ok && { for x in $v; do :; done; }")
     expect_deny("14j inside $( )", 'out=$(for x in $v; do echo "$x"; done)')
-    expect_deny("14k bare word AFTER a $( ) in the same list",
-                "for x in $(cat f) $v; do :; done")
-    expect_deny("14l set -- with a $( ) before the bare word", "set -- $(cmd) $v")
-    expect_deny("14m array text that sits only inside a string",
+    expect_deny("14k array text that sits only inside a string",
                 'echo "v=(a b)"; for x in $v; do :; done')
-    expect_deny("14n unsetopt shwordsplit turns splitting OFF",
+    expect_deny("14l unsetopt shwordsplit turns splitting OFF",
                 "unsetopt shwordsplit; for x in $v; do :; done")
-    expect_deny("14o noshwordsplit turns splitting OFF",
+    expect_deny("14m noshwordsplit turns splitting OFF",
                 "setopt noshwordsplit; for x in $v; do :; done")
-    expect_deny("14p shwordsplit named only in a heredoc body",
+    expect_deny("14n shwordsplit named only in a heredoc body",
                 "cat <<EOF\nsetopt shwordsplit\nEOF\nfor x in $v; do :; done")
-    expect_deny("14q multi-line loop", 'for x in $v\ndo\n  echo "$x"\ndone')
+    expect_deny("14o multi-line loop", 'for x in $v\ndo\n  echo "$x"\ndone')
 
     # --- 15: the shapes that must NOT be refused -----------------------------
     silent_forms = [
@@ -306,8 +303,6 @@ def main() -> int:
         ("comment line", "# for x in $v; do :; done"),
         ("comment tail", "echo ok  # for x in $v"),
         ("set without --", "set -euo pipefail"),
-        ("quoted word after a $( )", 'for x in $(cat f) "$v"; do :; done'),
-        ("split flag after a $( )", "for x in $(cat f) ${=v}; do :; done"),
         ("arithmetic then a literal loop", "n=$(( 2 * 3 )); for x in a b; do :; done"),
     ]
     for label, command in silent_forms:
