@@ -2,11 +2,12 @@
 """Controls for check-zsh-silent-idioms.py.
 
 THE NEGATIVE CONTROL IS THE POINT. A guard earns trust only by failing on the
-thing it catches. This hook's whole job is to refuse a command shape that,
-under zsh, prints NOTHING and exits 0 -- so a guard that silently did nothing
-would be indistinguishable from the bug it exists to prevent, and from a
-correctly-quiet run. Every leg below drives the REAL hook as a subprocess over
-REAL stdin JSON and asserts on the signal a caller actually reads.
+thing it catches. This hook's whole job is to refuse command shapes that, under
+zsh, run, exit 0 and return a wrong answer that looks like a right one -- so a
+guard that silently did nothing would be indistinguishable from the bug it
+exists to prevent, and from a correctly-quiet run. Every leg below drives the
+REAL hook as a subprocess over REAL stdin JSON and asserts on the signal a
+caller actually reads.
 
 WHY EXIT CODE IS NOT THE ASSERTION, and this is the load-bearing detail: the
 hook exits 0 on EVERY path, deny included. The refusal travels as
@@ -14,12 +15,15 @@ hook exits 0 on EVERY path, deny included. The refusal travels as
 `returncode != 0` would pass identically against a hook that had been gutted to
 `sys.exit(0)`. So every leg here asserts the PARSED DECISION, never the status.
 
-The defect being guarded, for whoever reads this next: under zsh `$VAR:` is a
-history modifier, so `git show "$SHA:src/app.py"` emits nothing and succeeds.
-Every absence concluded from that command is a false clean. bash does not do
-this, so it only bites on a zsh box -- which is every machine this ships to.
+The two defects being guarded, for whoever reads this next. Both are silent
+under zsh and both are correct in bash, so they only bite on a zsh box:
+  * `git show "$SHA:src/app.py"` -- `$VAR:` is a history modifier, so the
+    command emits nothing and succeeds. Every absence concluded from it is a
+    false clean.
+  * `set -- $r` / `for c in $CHECKS` -- zsh does not word-split an unquoted
+    parameter expansion, so `$1` holds the whole string and the loop runs once.
 
-Legs:
+Detector 1, git-ref (any shell):
    1. DENIES  git show "$SHA:path"                  <- the incident shape
    2. DENIES  git show $SHA:path                    <- unquoted, same hazard
    3. DENIES  git grep -n foo "$REF:path"           <- not just `show`
@@ -39,35 +43,69 @@ Legs:
   13. The deny reason names the offending variable AND shows the braced fix, so
       the refusal is actionable rather than merely obstructive.
 
+Detector 2, word-split (zsh only):
+  14. DENIES the witnessed commands VERBATIM, plus every other shape it owns.
+  15. SILENT on every allowed form: `${=v}`, `"$@"`, `$@`, command
+      substitution, an array assigned in the same command, literal lists,
+      `bash -c` / `sh -c` strings, heredoc bodies, quoted words, comments.
+  16. The SHELL gate: silent on a bash box and with SHELL unset, while
+      detector 1 still fires there.
+  17. The bypass covers this detector too, and cannot be smuggled in.
+  18. The reason names the trap, the variable and all three fixes, and does
+      not print the bypass token.
+
+Both detectors:
+  19. ISOLATION. A detector that raises is skipped loudly and never disarms
+      the other, in either order, and a partial install that lacks the shared
+      parser still leaves detector 1 armed.
+  20. One command that trips both gets ONE deny carrying both blocks.
+
 Stdlib only. Exit 0 = all pass.
 """
 
 from __future__ import annotations
 
+import contextlib
+import importlib.util
+import io
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
-HOOK = Path(__file__).resolve().parent / "check-zsh-silent-idioms.py"
+HOOKS_DIR = Path(__file__).resolve().parent
+HOOK = HOOKS_DIR / "check-zsh-silent-idioms.py"
 BYPASS = "ZSH_SILENT_IDIOMS_BYPASS"
 
 FAILURES: list[str] = []
+CHECKS = 0
+
+W_SET = 'for r in "repo 1420 1421"; do set -- $r; echo "$1"; done'   # witnessed
+W_FOR = 'for c in $CHECKS; do node "$c"; done'                      # witnessed
 
 
-def run(command: str, *, tool: str = "Bash", env: dict | None = None,
-        raw: str | None = None) -> tuple[int, str]:
-    """Drive the real hook over real stdin. Returns (returncode, stdout)."""
+def run_full(command: str, *, tool: str = "Bash", env: dict | None = None,
+             raw: str | None = None, hook: Path = HOOK) -> tuple[int, str, str]:
+    """Drive the real hook over real stdin. Returns (returncode, stdout, stderr).
+
+    `env` values of None REMOVE the variable from the child environment.
+    """
     payload = raw if raw is not None else json.dumps(
         {"tool_name": tool, "tool_input": {"command": command}}
     )
     child_env = dict(os.environ)
-    child_env.pop(BYPASS, None)  # never inherit a bypass from the runner
-    if env:
-        child_env.update(env)
+    child_env.pop(BYPASS, None)        # never inherit a bypass from the runner
+    child_env["SHELL"] = "/bin/zsh"    # detector 2 arms only under zsh: pin it
+    for key, value in (env or {}).items():
+        if value is None:
+            child_env.pop(key, None)
+        else:
+            child_env[key] = value
     proc = subprocess.run(
-        [sys.executable, str(HOOK)],
+        [sys.executable, str(hook)],
         input=payload,
         capture_output=True,
         text=True,
@@ -78,7 +116,12 @@ def run(command: str, *, tool: str = "Bash", env: dict | None = None,
         errors="replace",
         env=child_env,
     )
-    return proc.returncode, proc.stdout
+    return proc.returncode, proc.stdout, proc.stderr
+
+
+def run(command: str, **kw) -> tuple[int, str]:
+    code, out, _ = run_full(command, **kw)
+    return code, out
 
 
 def decision(stdout: str) -> str | None:
@@ -92,24 +135,48 @@ def decision(stdout: str) -> str | None:
     return (parsed.get("hookSpecificOutput") or {}).get("permissionDecision")
 
 
+def reason_of(command: str, **kw) -> str:
+    _, out = run(command, **kw)
+    parsed = json.loads(out) if out.strip() else {}
+    return (parsed.get("hookSpecificOutput") or {}).get("permissionDecisionReason", "")
+
+
+def check(label: str, ok: bool, detail: str = "") -> None:
+    global CHECKS
+    CHECKS += 1
+    if not ok:
+        FAILURES.append(f"{label}: {detail}".rstrip(": "))
+
+
 def expect_deny(label: str, command: str, **kw) -> None:
     code, out = run(command, **kw)
     got = decision(out)
     if got != "deny":
-        FAILURES.append(f"{label}: expected deny, got {got!r} (rc={code})")
+        check(label, False, f"expected deny, got {got!r} (rc={code})")
     elif code != 0:
         # The contract is "deny via stdout, always exit 0". A non-zero exit here
         # would break the wrapper, which treats a crash as fail-open.
-        FAILURES.append(f"{label}: denied but exited {code}, expected 0")
+        check(label, False, f"denied but exited {code}, expected 0")
+    else:
+        check(label, True)
 
 
 def expect_silent(label: str, command: str, **kw) -> None:
     code, out = run(command, **kw)
     got = decision(out)
     if got is not None:
-        FAILURES.append(f"{label}: expected silence, got {got!r}")
+        check(label, False, f"expected silence, got {got!r}")
     elif code != 0:
-        FAILURES.append(f"{label}: silent but exited {code}, expected 0")
+        check(label, False, f"silent but exited {code}, expected 0")
+    else:
+        check(label, True)
+
+
+def load_hook():
+    spec = importlib.util.spec_from_file_location("check_zsh_silent_idioms", HOOK)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def main() -> int:
@@ -117,6 +184,7 @@ def main() -> int:
         print(f"FAIL: hook not found at {HOOK}")
         return 1
 
+    # ===== Detector 1: git-ref ================================================
     # --- 1-3: the shapes that must be refused --------------------------------
     expect_deny("1 quoted $SHA:path", 'git show "$SHA:src/app.py"')
     expect_deny("2 bare $SHA:path", "git show $SHA:src/app.py")
@@ -132,8 +200,8 @@ def main() -> int:
     # --- 8-9: out of scope, and never crash ----------------------------------
     expect_silent("8 non-Bash tool", 'git show "$SHA:x.py"', tool="Read")
     code, out = run("", raw="{not json at all")
-    if decision(out) is not None or code != 0:
-        FAILURES.append(f"9 malformed stdin: expected silent exit 0, got rc={code}")
+    check("9 malformed stdin is a silent exit 0",
+          decision(out) is None and code == 0, f"rc={code}")
 
     # --- 10-11: the bypass works both ways -----------------------------------
     expect_silent("10 env bypass", 'git show "$SHA:x.py"', env={BYPASS: "1"})
@@ -146,25 +214,169 @@ def main() -> int:
     expect_deny("12 heredoc-smuggled bypass still denies", smuggled)
 
     # --- 13: the refusal is actionable ---------------------------------------
-    _, out = run('git show "$SHA:src/app.py"')
-    parsed = json.loads(out) if out.strip() else {}
-    reason = (parsed.get("hookSpecificOutput") or {}).get("permissionDecisionReason", "")
-    if "SHA" not in reason:
-        FAILURES.append("13 reason does not name the offending variable")
-    if "${SHA}" not in reason:
-        FAILURES.append("13 reason does not show the braced fix")
-    if BYPASS in reason:
-        # Printing the bypass token in the refusal is how a guard teaches its
-        # own defeat (MYC-4724). The doc should carry it, not the deny message.
-        FAILURES.append("13 reason prints the bypass token")
+    reason = reason_of('git show "$SHA:src/app.py"')
+    check("13a reason names the offending variable", "SHA" in reason)
+    check("13b reason shows the braced fix", "${SHA}" in reason)
+    # Printing the bypass token in the refusal is how a guard teaches its own
+    # defeat (MYC-4724). The doc should carry it, not the deny message.
+    check("13c reason does not print the bypass token", BYPASS not in reason)
 
-    total = 13
+    # ===== Detector 2: word-split =============================================
+    # --- 14: the shapes that must be refused ---------------------------------
+    expect_deny("14a witnessed: set -- $r inside a loop", W_SET)
+    expect_deny("14b witnessed: for c in $CHECKS", W_FOR)
+    expect_deny("14c bare set -- $r", "set -- $r")
+    expect_deny("14d $NAME among other words", 'for x in a $v b; do echo "$x"; done')
+    expect_deny("14e braced ${v}", 'for x in ${v}; do echo "$x"; done')
+    expect_deny("14f only the bare word of a mixed list",
+                'for x in "$a" $b; do :; done')
+    expect_deny("14g scalar built from a command substitution",
+                "v=$(cat list.txt); for x in $v; do :; done")
+    expect_deny("14h after then", 'if [ -n "$q" ]; then for x in $v; do :; done; fi')
+    expect_deny("14i inside a brace group", "echo ok && { for x in $v; do :; done; }")
+    expect_deny("14j inside $( )", 'out=$(for x in $v; do echo "$x"; done)')
+    expect_deny("14k bare word AFTER a $( ) in the same list",
+                "for x in $(cat f) $v; do :; done")
+    expect_deny("14l set -- with a $( ) before the bare word", "set -- $(cmd) $v")
+    expect_deny("14m array text that sits only inside a string",
+                'echo "v=(a b)"; for x in $v; do :; done')
+    expect_deny("14n unsetopt shwordsplit turns splitting OFF",
+                "unsetopt shwordsplit; for x in $v; do :; done")
+    expect_deny("14o noshwordsplit turns splitting OFF",
+                "setopt noshwordsplit; for x in $v; do :; done")
+    expect_deny("14p shwordsplit named only in a heredoc body",
+                "cat <<EOF\nsetopt shwordsplit\nEOF\nfor x in $v; do :; done")
+    expect_deny("14q multi-line loop", 'for x in $v\ndo\n  echo "$x"\ndone')
+
+    # --- 15: the shapes that must NOT be refused -----------------------------
+    silent_forms = [
+        ("zsh splitting flag in a loop", "for x in ${=v}; do :; done"),
+        ("zsh splitting flag in set --", "set -- ${=v}"),
+        ('quoted "$@"', 'for x in "$@"; do :; done'),
+        ("bare $@, which zsh splits", "for x in $@; do :; done"),
+        ('set -- "$@"', 'set -- "$@"'),
+        ("set -- $@", "set -- $@"),
+        ("command substitution, which zsh splits", "for x in $(ls); do :; done"),
+        ("backtick substitution", "for x in `ls`; do :; done"),
+        ("array assigned in the same command", "v=(a b); for x in $v; do :; done"),
+        ("typeset -a array", "typeset -a v; v+=(c); for x in $v; do :; done"),
+        ("read -A array", 'read -A v <<< "a b"; for x in $v; do :; done'),
+        ("literal words", "for x in a b c; do :; done"),
+        ("glob", "for f in *.txt; do :; done"),
+        ("brace range", "for n in {1..3}; do :; done"),
+        ("zsh's own array parameter", 'for p in $path; do echo "$p"; done'),
+        ("shwordsplit switched on", "setopt shwordsplit; for x in $v; do :; done"),
+        ("quoted word", 'for x in "$v"; do :; done'),
+        ("single-quoted word", "for x in '$v'; do :; done"),
+        ("bash -c string", "bash -c 'for x in $v; do echo \"$x\"; done'"),
+        ("sh -c string", "sh -c 'set -- $v; echo \"$1\"'"),
+        ("heredoc body read by bash",
+         "bash <<'EOF'\nfor x in $v; do echo \"$x\"; done\nEOF"),
+        ("`for` as an argument, not a loop", "echo for x in $v"),
+        ("`set` inside a quoted message", 'git commit -m "set -- $v"'),
+        ("a word that merely STARTS with the parameter", "for x in $v/*.txt; do :; done"),
+        ("parameter with a default", "for x in ${v:-a b}; do :; done"),
+        ("array subscript expansion", "for x in ${v[@]}; do :; done"),
+        ("comment line", "# for x in $v; do :; done"),
+        ("comment tail", "echo ok  # for x in $v"),
+        ("set without --", "set -euo pipefail"),
+        ("quoted word after a $( )", 'for x in $(cat f) "$v"; do :; done'),
+        ("split flag after a $( )", "for x in $(cat f) ${=v}; do :; done"),
+        ("arithmetic then a literal loop", "n=$(( 2 * 3 )); for x in a b; do :; done"),
+    ]
+    for label, command in silent_forms:
+        expect_silent(f"15 {label}", command)
+    expect_silent("15 non-Bash tool", W_FOR, tool="Read")
+
+    # --- 16: the SHELL gate --------------------------------------------------
+    # `${=VAR}` is a bad substitution in bash and the idiom is already correct
+    # there, so on a bash box this detector must have no opinion at all.
+    expect_silent("16a bash box", W_FOR, env={"SHELL": "/bin/bash"})
+    expect_silent("16b SHELL unset", W_FOR, env={"SHELL": None})
+    expect_deny("16c zsh from a Homebrew path", W_FOR,
+                env={"SHELL": "/opt/homebrew/bin/zsh"})
+    expect_deny("16d detector 1 still fires on a bash box",
+                'git show "$SHA:x.py"', env={"SHELL": "/bin/bash"})
+
+    # --- 17: the bypass covers this detector, and cannot be smuggled in ------
+    expect_silent("17a env bypass", W_FOR, env={BYPASS: "1"})
+    expect_silent("17b inline export bypass", f"export {BYPASS}=1; {W_FOR}")
+    expect_deny("17c heredoc-smuggled bypass still denies",
+                f"cat <<EOF\n{BYPASS}=1\nEOF\n{W_FOR}")
+
+    # --- 18: the refusal is actionable ---------------------------------------
+    reason = reason_of(W_FOR)
+    check("18a reason names the variable", "$CHECKS" in reason)
+    check("18b reason names the trap", "zsh" in reason and "word-split" in reason)
+    check("18c reason offers ${=VAR}", "${=CHECKS}" in reason)
+    check("18d reason offers read -r a b c <<<", 'read -r a b c <<< "$CHECKS"' in reason)
+    check("18e reason offers bash -c", "bash -c" in reason)
+    check("18f reason does not print the bypass token", BYPASS not in reason)
+    reason = reason_of("set -- $r")
+    check("18g set -- reason shows the set -- fix", "set -- ${=r}" in reason)
+
+    # ===== Both detectors =====================================================
+    # --- 19: one failing detector never disarms the other --------------------
+    module = load_hook()
+    real = module.DETECTORS
+
+    def boom(command, zsh):
+        raise RuntimeError("injected failure")
+
+    noise = io.StringIO()
+    word_split, git_ref = [], []
+    try:
+        with contextlib.redirect_stderr(noise):
+            module.DETECTORS = (("boom", boom),) + real
+            try:
+                word_split = module.run_detectors("for c in $CHECKS; do :; done", True)
+            except Exception as exc:                 # the regression this leg pins
+                noise.write(f"run_detectors raised {type(exc).__name__}\n")
+            module.DETECTORS = real + (("boom", boom),)
+            try:
+                git_ref = module.run_detectors('git show "$SHA:x.py"', True)
+            except Exception as exc:
+                noise.write(f"run_detectors raised {type(exc).__name__}\n")
+    finally:
+        module.DETECTORS = real
+    check("19a word-split survives a detector that raised before it",
+          len(word_split) == 1 and "CHECKS" in word_split[0], noise.getvalue().strip())
+    check("19b git-ref survives a detector that raised after it",
+          len(git_ref) == 1 and "SHA" in git_ref[0], noise.getvalue().strip())
+    check("19c the failure is loud on stderr, not silent", "boom" in noise.getvalue())
+
+    # A partial install that lacks the shared parser: detector 2 cannot run, and
+    # that must cost detector 1 nothing.
+    with tempfile.TemporaryDirectory() as tmp:
+        partial = Path(tmp) / HOOK.name
+        shutil.copy2(HOOK, partial)
+        shutil.copytree(
+            HOOKS_DIR / "_lib", Path(tmp) / "_lib",
+            ignore=shutil.ignore_patterns("__pycache__", "shell_parse.py"),
+        )
+        code, out, _ = run_full('git show "$SHA:x.py"', hook=partial)
+        check("19d partial install: git-ref still denies",
+              decision(out) == "deny" and code == 0, f"rc={code}")
+        code, out, err = run_full(W_FOR, hook=partial)
+        check("19e partial install: word-split skipped, hook does not crash",
+              decision(out) is None and code == 0, f"rc={code}")
+        check("19f partial install: the skip is announced on stderr",
+              "word-split" in err, repr(err[:120]))
+
+    # --- 20: one command tripping both gets one deny with both blocks --------
+    both = f'git show "$SHA:src/app.py"; {W_FOR}'
+    code, out = run(both)
+    reason = reason_of(both)
+    check("20a one deny for a command that trips both",
+          decision(out) == "deny" and code == 0)
+    check("20b both blocks are in it", "$SHA:" in reason and "$CHECKS" in reason)
+
     if FAILURES:
-        print(f"FAIL: {len(FAILURES)} of {total} control(s) failed")
-        for f in FAILURES:
-            print(f"  - {f}")
+        print(f"FAIL: {len(FAILURES)} of {CHECKS} control(s) failed")
+        for failure in FAILURES:
+            print(f"  - {failure}")
         return 1
-    print(f"PASS: {total}/{total} controls")
+    print(f"PASS: {CHECKS}/{CHECKS} controls")
     return 0
 
 

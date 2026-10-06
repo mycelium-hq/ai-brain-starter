@@ -38,8 +38,9 @@ disarm the other. One bypass covers the whole guard.
    Not covered: `arr=($v)`, `cmd $v`, `select`, positional parameters such as
    `$1`, and the contents of a `zsh -c '...'` string.
 
-Bypass: ZSH_SILENT_IDIOMS_BYPASS=1 (env OR inline prefix — both are honored, because
-a guard whose advertised inline bypass cannot fire is a guard that lies).
+Bypass: ZSH_SILENT_IDIOMS_BYPASS=1, from the env OR as an inline prefix. Both are
+honored, because a guard whose advertised inline bypass cannot fire is a guard
+that lies. One bypass covers both detectors.
 
 Self-test: `check-zsh-silent-idioms.py --selftest` proves it BOTH ways.
 """
