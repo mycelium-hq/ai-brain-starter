@@ -387,10 +387,10 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         partial = Path(tmp) / HOOK.name
         shutil.copy2(HOOK, partial)
-        shutil.copytree(
-            HOOKS_DIR / "_lib", Path(tmp) / "_lib",
-            ignore=shutil.ignore_patterns("__pycache__", "shell_parse.py"),
-        )
+        lib = Path(tmp) / "_lib"
+        lib.mkdir()
+        for name in ("__init__.py", "cmd_env.py"):  # everything but shell_parse.py
+            shutil.copyfile(HOOKS_DIR / "_lib" / name, lib / name)
         code, out, _ = run_full('git show "$SHA:x.py"', hook=partial)
         check("19d partial install: git-ref still denies",
               decision(out) == "deny" and code == 0, f"rc={code}")
