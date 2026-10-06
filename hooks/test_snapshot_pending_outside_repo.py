@@ -52,6 +52,7 @@ class SnapshotOutsideRepo(unittest.TestCase):
             if k not in {"VAULT_ROOT", "WORKTREE_ARTIFACT_ROOT", "SNAPSHOT_PENDING_BYPASS"}
         }
         env["HOME"] = str(self.home)
+        env["USERPROFILE"] = str(self.home)  # Path.home() reads this on Windows
         env["CLAUDE_PROJECT_DIR"] = str(self.repo)
         return subprocess.run([sys.executable, str(HOOK)], cwd=self.wt, env=env, capture_output=True)
 

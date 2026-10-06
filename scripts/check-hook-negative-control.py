@@ -119,7 +119,6 @@ NO_TEST_BASELINE: Set[str] = {
     "agent-briefing-check",
     "check-rule-conflicts-on-write",
     "session-turn-counter",
-    "snapshot-pending-work-on-stop",
     "list-wip-stashes-on-session-start",
     "permission-denied",
     "pre-compact-context",
