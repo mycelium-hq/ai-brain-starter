@@ -64,6 +64,8 @@ Detector 1 again:
   21. Detector 1 reads CODE, not text. Ordinary commands that merely contain a
       `$VAR:` stay allowed (a different statement, a URL's host:port, single
       quotes, comments, heredoc bodies) and the real shapes still deny.
+  22. The verb list also covers `git rev-parse` and `git ls-tree`, which take a
+      <rev>:<path> spec too.
 
 Stdlib only. Exit 0 = all pass.
 """
@@ -403,6 +405,13 @@ def main() -> int:
                 'cd "$D" && git show $SHA:src/app.py | head')
     expect_deny("21 still denies after another statement",
                 'echo ok; git show "$SHA:src/app.py"')
+
+    # --- 22: every git read that takes a <rev>:<path> spec is covered ----------
+    expect_deny("22a git rev-parse", 'git rev-parse --verify -q "$SHA:hooks.json"')
+    expect_deny("22b git ls-tree", 'git ls-tree "$SHA:hooks"')
+    expect_silent("22c braced rev-parse",
+                  'git rev-parse --verify -q "${SHA}:hooks.json"')
+    expect_silent("22d braced ls-tree", 'git ls-tree "${SHA}:hooks"')
 
     if FAILURES:
         print(f"FAIL: {len(FAILURES)} of {CHECKS} control(s) failed")

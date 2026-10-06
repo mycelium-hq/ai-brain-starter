@@ -117,7 +117,8 @@ def _mask_quotes(code: str, kinds: str = "'\"") -> str:
 
 # A git read that resolves a <rev>:<path> object spec.
 GIT_OBJECT_READ = re.compile(
-    r"\bgit\b[^\n|;&]{0,200}?\b(show|cat-file|grep|diff|log|archive)\b"
+    r"\bgit\b[^\n|;&]{0,200}?"
+    r"\b(show|cat-file|grep|diff|log|archive|rev-parse|ls-tree)\b"
 )
 # `$VAR:` with NO braces, then a LETTER. zsh modifiers are letters, so `$PATH:/opt`,
 # `$HOST:8080` and `$SHA:.gitignore` are plain text in every shell and never match.
