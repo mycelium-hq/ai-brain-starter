@@ -603,9 +603,10 @@ def _without_launcher(cmd: str) -> str:
 # position (the start of the command, or right after `then`, `&&` or `||`) followed
 # by a space. hooks.json puts [PYTHON] in exactly those places, and what
 # _posix_python() writes there is `python3`, `python`, or a path ending in a
-# python-named file (sys.executable can end in `python3.14`).
+# python-named file (sys.executable can end in `python3.14`, or `python3.14t` for a
+# free-threaded build). No other interpreter's name is read as one.
 _INTERPRETER_SLOT_RE = re.compile(
-    r"(?:^|(?<=\bthen )|(?<=&& )|(?<=\|\| ))(?:\S*/)?python[0-9.]*(?= )"
+    r"(?:^|(?<=\bthen )|(?<=&& )|(?<=\|\| ))(?:\S*/)?python(?:[0-9.]+t?)?(?= )"
 )
 
 

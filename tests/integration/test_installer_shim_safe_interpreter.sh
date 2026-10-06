@@ -22,6 +22,11 @@
 #       what its python resolves to when the venv records that base under a path
 #       with a space in it.
 #   5. An install made under a virtualenv is repaired by a re-run from outside it.
+#   5b. So is one whose dead copies sit AFTER the live ones, and the installer's own
+#       check names a hook whose python is gone (and leaves a user's own hook alone).
+#   Then: the interpreter check reads each place a command names its python; every
+#       [PYTHON] command, and a command of each shape that no owned name decides,
+#       reads as the same hook under any spelling, a free-threaded python3.14t included.
 #
 # Stdlib python3 + bash only. No network, no git. Tmpdir removed on exit.
 set -u
@@ -576,7 +581,9 @@ if [ $? -eq 0 ]; then ok "the interpreter check reads every place a command name
 else bad "interpreter check" "it missed a python that is gone, or reported one that is fine or not the installer's"; fi
 
 # The same property for every [PYTHON] command hooks.json ships, whatever the
-# interpreter is spelled as.
+# interpreter is spelled as. is_same_command() settles the 59 owned commands by their
+# script name before it reaches the interpreter-slot match, so the match itself is
+# asserted here directly too: only that reaches every place hooks.json puts [PYTHON].
 "$LAUNCH_PY" - "$INSTALLER" "$REPO_ROOT/hooks.json" <<'PY'
 import importlib.util, json, sys
 
@@ -584,8 +591,10 @@ spec = importlib.util.spec_from_file_location("ih", sys.argv[1])
 ih = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ih)
 template = json.load(open(sys.argv[2]))["hooks"]
+# A free-threaded build ends its name in a `t`: python3.14t, which is what
+# sys.executable can be when the installer runs under one.
 spellings = ["python3", "python", "/usr/bin/python3", "/opt/homebrew/bin/python3.14",
-             "/tmp/proj/.venv/bin/python3"]
+             "/opt/homebrew/bin/python3.14t", "python3.13t", "/tmp/proj/.venv/bin/python3"]
 checked, failures = 0, []
 for event, groups in template.items():
     for group in groups:
@@ -596,18 +605,61 @@ for event, groups in template.items():
             checked += 1
             pinned = cmd.replace("[PYTHON]", spellings[-1])
             for spelling in spellings[:-1]:
-                if not ih.is_same_command(pinned, cmd.replace("[PYTHON]", spelling)):
-                    failures.append((event, spelling, cmd[:90]))
+                other = cmd.replace("[PYTHON]", spelling)
+                if not ih.is_same_command(pinned, other):
+                    failures.append((event, spelling, "read as a different hook", cmd[:90]))
+                    break
+                if ih._without_interpreter(pinned) != ih._without_interpreter(other):
+                    failures.append((event, spelling, "differs once the interpreter is set aside", cmd[:90]))
                     break
 if checked == 0:
-    failures.append(("hooks.json", "", "no [PYTHON] command found, so nothing was checked"))
-for event, spelling, cmd in failures:
-    print(f"   DIFFERENT {event} [{spelling}] {cmd}")
-print(f"   checked {checked} [PYTHON] commands, {len(failures)} read as a different hook")
+    failures.append(("hooks.json", "", "no [PYTHON] command found, so nothing was checked", ""))
+for event, spelling, why, cmd in failures[:5]:
+    print(f"   {why}: {event} [{spelling}] {cmd}")
+print(f"   checked {checked} [PYTHON] commands, {len(failures)} failed")
 sys.exit(1 if failures else 0)
 PY
 if [ $? -eq 0 ]; then ok "every [PYTHON] command reads as the same hook under any interpreter spelling"
 else bad "interpreter spelling" "a [PYTHON] command reads as a different hook when only its interpreter differs"; fi
+
+# Each place a command can name its python, for a command no owned script name decides:
+# only the interpreter-slot match tells two spellings of it apart. Taking the `then` or
+# the `||` alternative out of the match leaves every other check on is_same_command green,
+# because hooks.json uses them only in owned commands, so each gets a command of its own
+# where it is the only place the interpreter appears.
+"$LAUNCH_PY" - "$INSTALLER" <<'PY'
+import importlib.util, sys
+
+spec = importlib.util.spec_from_file_location("ih", sys.argv[1])
+ih = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(ih)
+script = "~/mine/not-an-owned-hook.py"
+places = {
+    "the start of a command": "{i} " + script + " 2>/dev/null || echo ok",
+    "after &&": "[ -f " + script + " ] && {i} " + script + " || true",
+    "after then": "if [ -f " + script + " ]; then {i} " + script + "; else echo ok; fi",
+    "after ||": "echo first || {i} " + script,
+}
+spellings = ["python3", "python", "/usr/bin/python3", "/opt/homebrew/bin/python3.14",
+             "/opt/homebrew/bin/python3.14t", "python3.13t"]
+problems = []
+for place, shape in places.items():
+    base = shape.format(i="/tmp/proj/.venv/bin/python3")
+    if ih.is_abs_owned(base):
+        problems.append(f"{place}: the command is owned, so it proves nothing about the match")
+    for spelling in spellings:
+        if not ih.is_same_command(base, shape.format(i=spelling)):
+            problems.append(f"{place}: [{spelling}] reads as a different hook")
+    if ih.is_same_command(base, shape.format(i="/usr/bin/node")):
+        problems.append(f"{place}: another interpreter reads as the same hook")
+    if ih.is_same_command(base, shape.format(i="python3").replace("not-an-owned", "another")):
+        problems.append(f"{place}: another script reads as the same hook")
+for problem in problems:
+    print("   " + problem)
+sys.exit(1 if problems else 0)
+PY
+if [ $? -eq 0 ]; then ok "an interpreter reads as the same hook at the start, after &&, after then and after ||, free-threaded python included"
+else bad "interpreter slot" "a command read as a different hook where only its interpreter differs, or two different hooks read as one"; fi
 
 # And the pairs that must stay different hooks.
 "$LAUNCH_PY" - "$INSTALLER" <<'PY'
