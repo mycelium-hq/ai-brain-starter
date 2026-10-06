@@ -69,6 +69,49 @@ BYPASS = "ZSH_SILENT_IDIOMS_BYPASS"
 
 
 # ---------------------------------------------------------------------------
+# Shared: blank the inside of quoted strings.
+# ---------------------------------------------------------------------------
+
+
+def _mask_quotes(code: str, kinds: str = "'\"") -> str:
+    """`code` with the INSIDE of each quoted string blanked (same length), for the
+    quote characters in `kinds`. The other kind is still tracked, never blanked.
+
+    A pattern search over shell CODE must be neither satisfied nor disarmed by
+    text that merely sits in a string: `echo "v=(a b)"` assigns no array, and
+    nothing inside single quotes is expanded.
+    """
+    out = []
+    quote = None
+    i, n = 0, len(code)
+    while i < n:
+        c = code[i]
+        if quote:
+            blank = quote in kinds
+            if c == "\\" and quote == '"' and i + 1 < n:
+                out.append("  " if blank else code[i:i + 2])
+                i += 2
+                continue
+            if c == quote:
+                quote = None
+                out.append(c)
+            else:
+                out.append(" " if blank else c)
+            i += 1
+            continue
+        if c == "\\" and i + 1 < n:
+            out.append(c)
+            out.append(code[i + 1])
+            i += 2
+            continue
+        if c in "'\"":
+            quote = c
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
+# ---------------------------------------------------------------------------
 # Detector 1: unbraced `$VAR:path` in a git object read (fires in any shell).
 # ---------------------------------------------------------------------------
 
@@ -76,22 +119,42 @@ BYPASS = "ZSH_SILENT_IDIOMS_BYPASS"
 GIT_OBJECT_READ = re.compile(
     r"\bgit\b[^\n|;&]{0,200}?\b(show|cat-file|grep|diff|log|archive)\b"
 )
-# `$VAR:` with NO braces, followed by something path-shaped.
-UNBRACED_REF = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*):(?=[A-Za-z0-9_./~-])")
+# `$VAR:` with NO braces, then a LETTER. zsh modifiers are letters, so `$PATH:/opt`,
+# `$HOST:8080` and `$SHA:.gitignore` are plain text in every shell and never match.
+UNBRACED_REF = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*):(?=[A-Za-z])")
+
+
+def _git_statements(command: str) -> list:
+    """The command's statements as shell CODE: heredoc bodies and comments gone,
+    single-quoted text blanked (nothing in it is expanded), cut at every shell
+    operator. A missing or failing shared parser falls back to the raw command,
+    so this detector is never disarmed by a broken `_lib`."""
+    try:
+        from _lib.shell_parse import (
+            split_segments_with_seps, strip_heredoc_bodies, strip_noncode)
+        code = _mask_quotes(strip_noncode(strip_heredoc_bodies(command)), "'")
+        return [seg for _sep, seg in split_segments_with_seps(code)]
+    except Exception:
+        return [command]
 
 
 def detect_unbraced_git_ref(command: str, zsh: bool) -> list:
-    """Detector 1. One deny block when a git object read carries `$VAR:path`.
+    """Detector 1. One deny block when a git object read carries `$VAR:path` in
+    the SAME statement.
 
     `zsh` is unused on purpose: the braced fix is correct in every shell, so
     this detector never needs to know which one is running.
     """
-    if not GIT_OBJECT_READ.search(command):
+    if "$" not in command or ":" not in command or "git" not in command:
+        return []        # cheap exit: this runs on every Bash call
+    first = None
+    for stmt in _git_statements(command):
+        m = UNBRACED_REF.search(stmt) if GIT_OBJECT_READ.search(stmt) else None
+        if m:
+            first = m.group(1)
+            break
+    if first is None:
         return []
-    names = [m.group(1) for m in UNBRACED_REF.finditer(command)]
-    if not names:
-        return []
-    first = names[0]
     return [
         f"BLOCKED by {GUARD}: `${first}:` is unbraced in a git object read.\n\n"
         f"Under zsh, `$VAR:` triggers a HISTORY MODIFIER. The command prints NOTHING "
@@ -132,41 +195,6 @@ _SHWORDSPLIT = re.compile(
     r"\b(?:setopt|set\s+-o)\b[^;&|\n]*?(?<![A-Za-z_])sh_?word_?split",
     re.IGNORECASE,
 )
-
-
-def _mask_quotes(code: str) -> str:
-    """`code` with the INSIDE of every quoted string blanked (same length).
-
-    A pattern search over shell CODE must be neither satisfied nor disarmed by
-    text that merely sits in a string: `echo "v=(a b)"` assigns no array.
-    """
-    out = []
-    quote = None
-    i, n = 0, len(code)
-    while i < n:
-        c = code[i]
-        if quote:
-            if c == "\\" and quote == '"' and i + 1 < n:
-                out.append("  ")
-                i += 2
-                continue
-            if c == quote:
-                quote = None
-                out.append(c)
-            else:
-                out.append(" ")
-            i += 1
-            continue
-        if c == "\\" and i + 1 < n:
-            out.append(c)
-            out.append(code[i + 1])
-            i += 2
-            continue
-        if c in "'\"":
-            quote = c
-        out.append(c)
-        i += 1
-    return "".join(out)
 
 
 def _raw_words(seg: str) -> list:

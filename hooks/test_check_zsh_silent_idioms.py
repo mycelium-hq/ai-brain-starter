@@ -60,6 +60,11 @@ Both detectors:
       parser still leaves detector 1 armed.
   20. One command that trips both gets ONE deny carrying both blocks.
 
+Detector 1 again:
+  21. Detector 1 reads CODE, not text. Ordinary commands that merely contain a
+      `$VAR:` stay allowed (a different statement, a URL's host:port, single
+      quotes, comments, heredoc bodies) and the real shapes still deny.
+
 Stdlib only. Exit 0 = all pass.
 """
 
@@ -370,6 +375,34 @@ def main() -> int:
     check("20a one deny for a command that trips both",
           decision(out) == "deny" and code == 0)
     check("20b both blocks are in it", "$SHA:" in reason and "$CHECKS" in reason)
+
+    # --- 21: detector 1 reads CODE, not text -----------------------------------
+    # Each of these was a measured wrong deny. A guard that refuses ordinary
+    # commands trains a reflexive bypass, which disables it.
+    for label, command in [
+        ("a PATH append in another statement",
+         "export PATH=$PATH:/opt/bin && git log -1 --oneline"),
+        ("host:port in a URL", "git log -1 && curl -s http://$HOST:8080/health"),
+        ("a docker volume spec", "git diff --stat && docker run -v $PWD:/work img ls"),
+        ("the pattern sits in single quotes",
+         "git grep -n 'show \"$SHA:path\"' -- '*.md'"),
+        ("a single-quoted echo", "echo 'never: git show \"$SHA:path\"'"),
+        ("a comment line, then another command", "# git show $SHA:x\ngit status"),
+        ("a heredoc body written to a file",
+         "cat >> notes.md <<'EOF'\ngit show \"$SHA:path\"\nEOF"),
+        ("a heredoc commit message",
+         "git commit -F - <<'EOF'\nfix: git show \"$SHA:path\" reads\nEOF"),
+        ("a letter after the colon, but in a DIFFERENT statement",
+         "git log -1 && echo $KEY:path"),
+        ("a dot after the colon is not a modifier", 'git show "$SHA:.gitignore"'),
+        ("a variable after the colon is not a modifier", 'git show "$SHA:$FILE"'),
+    ]:
+        expect_silent(f"21 {label}", command)
+    expect_deny("21 still denies inside $( )", 'x=$(git show "$SHA:src/app.py")')
+    expect_deny("21 still denies before a pipe",
+                'cd "$D" && git show $SHA:src/app.py | head')
+    expect_deny("21 still denies after another statement",
+                'echo ok; git show "$SHA:src/app.py"')
 
     if FAILURES:
         print(f"FAIL: {len(FAILURES)} of {CHECKS} control(s) failed")
