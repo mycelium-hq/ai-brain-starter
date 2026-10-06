@@ -118,8 +118,10 @@ sed \
 
 say "[install-vault-daily-maintenance] wrote $TARGET_FILE"
 if [[ $LOAD_JOB -eq 0 ]]; then
-    # Printed even under --quiet: a job that was written and not loaded is not a success.
-    echo "[install-vault-daily-maintenance] skipped loading $TARGET_FILE: HOME is not this account's home directory, and launchd would replace the account's real job"
+    # Printed even under --quiet, and on stderr: the hook installer runs this with --quiet
+    # and shows a finished child's stderr but never its stdout. A job that was written and
+    # not loaded is not a success.
+    echo "[install-vault-daily-maintenance] skipped loading $TARGET_FILE: HOME is not this account's home directory, and launchd would replace the account's real job" >&2
     exit 0
 fi
 launchctl load "$TARGET_FILE"

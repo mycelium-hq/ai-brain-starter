@@ -1851,6 +1851,10 @@ def install_auto_gc(vault_path: str, quiet: bool) -> None:
               f"  bash {installer} '{vault_path}'", file=sys.stderr)
         if result.stderr:
             print(result.stderr, file=sys.stderr)
+    elif result.stderr:
+        # On success the script writes to stderr for one reason: to say something the user
+        # has to see even under --quiet (a job it wrote and did not load). Pass it on.
+        print(result.stderr, end="", file=sys.stderr)
 
 
 def deploy_home_hooks(

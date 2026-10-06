@@ -16,7 +16,9 @@
 #      sets ABS_NO_AUTO_GC=1 unless the caller names them.
 #   2. scripts/install-vault-daily-maintenance.sh calls launchctl only when HOME is
 #      the home directory the user database records for this uid.
-# The hook installer is then run end to end with each layer defeated in turn.
+# The hook installer is then run end to end with each layer defeated in turn, and the
+# line that says a job was written and not loaded has to reach the user under --quiet,
+# which is how bootstrap and the auto-updater run it.
 #
 # No real launchd is reached. A recording launchctl is first on PATH in every run,
 # and the user database is injected through a stub dscacheutil, so the case where
@@ -158,12 +160,16 @@ echo "=== 4. the hook installer leaves launchd alone, with each layer defeated i
 # A vault the installer treats as real: outside the directory it believes is the
 # system temp dir, which TMPDIR moves for these runs.
 mkdir -p "$TMP/elsewhere" "$TMP/vault4"
+INSTALLER_OUT="$TMP/installer.out"   # what the hook installer printed, both streams
+skip_lines() { grep -c 'skipped loading' "$INSTALLER_OUT" || true; }
+# --quiet unless the caller sets QUIET_ARG to something else (empty: not quiet).
 run_installer() {  # run_installer VAULT_ROOT_FOR_THE_CALLER INNER_ENV...   (inner env defeats run_sandboxed's defaults)
   H4="$TMP/h4"; rm -rf "$H4"; mkdir -p "$H4/.claude"; echo '{}' > "$H4/.claude/settings.json"
   : > "$LOG"
+  # shellcheck disable=SC2086
   VAULT_ROOT="$1" run_sandboxed "$H4" env -u CLAUDECODE TMPDIR="$TMP/elsewhere" PATH="$STUB_PATH" \
     LAUNCHCTL_LOG="$LOG" "${@:2}" \
-    "$LAUNCH_PY" "$HOOK_INSTALLER" --hooks-source "$REPO_ROOT/hooks.json" --quiet >/dev/null 2>&1
+    "$LAUNCH_PY" "$HOOK_INSTALLER" --hooks-source "$REPO_ROOT/hooks.json" ${QUIET_ARG---quiet} >"$INSTALLER_OUT" 2>&1
 }
 # Layer 2 defeated: the user database says HOME IS the account's home. Only
 # run_sandboxed stands between this run and launchd.
@@ -175,10 +181,21 @@ else bad "run_sandboxed" "$(calls) launchctl call(s) recorded: $(tr '\n' ';' < "
 run_installer "" VAULT_ROOT="$TMP/vault4" ABS_NO_AUTO_GC=0 STUB_PASSWD_HOME="$TMP/the-account-home"
 if [ "$(calls)" -eq 0 ]; then ok "the scheduler's own check alone keeps a sandbox HOME away from launchd"
 else bad "scheduler check" "$(calls) launchctl call(s) recorded: $(tr '\n' ';' < "$LOG")"; fi
+# bootstrap and the auto-updater run the hook installer with --quiet. A job that was
+# written and not loaded must not pass without a word, so the one line that says so has
+# to get through.
+if [ "$(skip_lines)" -eq 1 ]; then ok "the user is told the job was written and not loaded, even under --quiet"
+else bad "skipped loading" "expected one 'skipped loading' line from the hook installer under --quiet, got $(skip_lines): $(tr '\n' ' ' < "$INSTALLER_OUT")"; fi
+# ...and once, not twice, when the installer is not quiet.
+QUIET_ARG='' run_installer "" VAULT_ROOT="$TMP/vault4" ABS_NO_AUTO_GC=0 STUB_PASSWD_HOME="$TMP/the-account-home"
+if [ "$(skip_lines)" -eq 1 ]; then ok "the line is said once without --quiet too"
+else bad "skipped loading" "expected one 'skipped loading' line without --quiet, got $(skip_lines): $(tr '\n' ' ' < "$INSTALLER_OUT")"; fi
 # Both defeated: the recorder does see the call, so the two runs above mean something.
 run_installer "" VAULT_ROOT="$TMP/vault4" ABS_NO_AUTO_GC=0 STUB_PASSWD_HOME="$TMP/h4"
 if [ "$(calls)" -gt 0 ]; then ok "control: with both layers defeated the installer does reach launchctl"
 else bad "control" "no launchctl call recorded with both layers defeated, so the runs above prove nothing"; fi
+if [ "$(skip_lines)" -eq 0 ]; then ok "control: nothing is said about skipping when the job was loaded"
+else bad "skipped loading" "the job was loaded, yet the hook installer reported skipping: $(tr '\n' ' ' < "$INSTALLER_OUT")"; fi
 
 echo
 echo "=== summary: $PASS passed, $FAIL failed ==="
