@@ -1028,8 +1028,10 @@ def _posix_python() -> str:
     start, and a PreToolUse gate that fails to start lets the call through. So a
     PATH candidate with a `pyvenv.cfg` at its prefix is skipped, and when
     nothing else runs, the base interpreter the venv was built from stands in
-    for it (see _venv_base_python). ABS_POSIX_PYTHON, returned as given, is the
-    one way to name a venv python on purpose.
+    for it (see _venv_base_python), and if its recorded path cannot be written
+    into a command (a space in it) the venv python's resolved path does.
+    ABS_POSIX_PYTHON, returned as given, is the one way to name a venv python
+    on purpose.
 
     NOT COVERED: a PATH entry that is a symlink into a venv (it reads as an
     ordinary interpreter), a conda environment or a pyenv shim (neither has a
@@ -1067,12 +1069,16 @@ def _posix_python() -> str:
     # fallback when PATH resolution came up empty. Inside a venv the interpreter
     # the venv was built from outlives it, and its path comes from pyvenv.cfg: a
     # resolved path pins one patch version, and a --copies venv links to nothing
-    # to resolve.
+    # to resolve. Each candidate has to pass the same test, so a base interpreter
+    # whose recorded path has a space in it is passed over for the next candidate
+    # and does not end the search at a bare python3.
     exe = sys.executable or ""
+    candidates = [exe]
     if exe and _in_virtualenv(exe):
-        exe = _venv_base_python(exe) or os.path.realpath(exe)
-    if exe and " " not in exe and os.path.isfile(exe) and not _in_virtualenv(exe):
-        return exe
+        candidates = [_venv_base_python(exe), os.path.realpath(exe)]
+    for cand in candidates:
+        if cand and " " not in cand and os.path.isfile(cand) and not _in_virtualenv(cand):
+            return cand
     return "python3"
 
 

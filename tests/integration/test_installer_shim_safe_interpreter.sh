@@ -18,7 +18,9 @@
 #   2. The baked interpreter is absolute and is NOT the shim.
 #   3. END-TO-END: that interpreter executes under the hostile PATH.
 #   4. A virtualenv python first on PATH is skipped for one outside it.
-#   4b. A virtualenv python with nothing else on PATH falls back to its base.
+#   4b. A virtualenv python with nothing else on PATH falls back to its base, or to
+#       what its python resolves to when the venv records that base under a path
+#       with a space in it.
 #   5. An install made under a virtualenv is repaired by a re-run from outside it.
 #
 # Stdlib python3 + bash only. No network, no git. Tmpdir removed on exit.
@@ -229,6 +231,50 @@ for MODE in symlinks copies; do
       ;;
   esac
 done
+
+# A venv whose pyvenv.cfg records its base interpreter under a path with a space in it.
+# A hook command runs its interpreter unquoted, so that path cannot be written into one.
+# The fallback has to go on to the next interpreter it can name, the one the venv's python
+# resolves to, instead of ending at a bare python3: that is the spelling a refuse-shim or
+# a pyenv shim intercepts.
+VSP="$TMP/proj-spaced/.venv"
+SPACED_BIN="$TMP/a base python/bin"
+if ! "$LAUNCH_PY" -m venv --without-pip --symlinks "$VSP" >/dev/null 2>&1; then
+  bad "venv fixture (spaced home)" "could not create a working --symlinks virtualenv with $LAUNCH_PY"
+else
+  VSP_REAL="$(cd "$VSP" && pwd -P)"
+  VSP_TARGET="$("$LAUNCH_PY" -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$VSP/bin/python3")"
+  mkdir -p "$SPACED_BIN" && ln -s "$VSP_TARGET" "$SPACED_BIN/python3"
+  sed "s|^home *=.*|home = $SPACED_BIN|" "$VSP/pyvenv.cfg" > "$VSP/pyvenv.cfg.new" \
+    && mv "$VSP/pyvenv.cfg.new" "$VSP/pyvenv.cfg"
+  if [ "$("$VSP/bin/python3" -c 'import sys; print(sys.prefix != sys.base_prefix)' 2>/dev/null)" != "True" ]; then
+    echo "SKIP: fallback (spaced home) needs a venv python that still starts once its recorded home is moved"
+  else
+    case "$VSP_TARGET" in
+      *" "*) echo "SKIP: fallback (spaced home): the venv's python itself resolves to a path with a space ($VSP_TARGET)" ;;
+      *)
+        H4C="$TMP/venv-home-spaced"
+        mkdir -p "$H4C/.claude"
+        echo '{}' > "$H4C/.claude/settings.json"
+        run_sandboxed "$H4C" env -u CLAUDECODE PATH="$VSP/bin" \
+          "$VSP/bin/python3" "$INSTALLER" --hooks-source "$REPO_ROOT/hooks.json" --quiet >/dev/null 2>&1
+        FC="$(baked_interps "$H4C/.claude/settings.json" | head -1)"
+        echo "   spaced home: ${FC:-<none>} (recorded home: $SPACED_BIN)"
+        case "$FC" in
+          "") bad "fallback (spaced home)" "no absolute interpreter was baked in (bare python3?)" ;;
+          "$VSP"/*|"$VSP_REAL"/*) bad "fallback (spaced home)" "the virtualenv python was baked in" ;;
+          *)
+            if [ "$("$FC" -c 'print(42)' 2>/dev/null)" = "42" ]; then
+              ok "fallback (spaced home): a path the commands can carry, outside the venv, and it runs"
+            else
+              bad "fallback (spaced home)" "$FC does not run"
+            fi
+            ;;
+        esac
+        ;;
+    esac
+  fi
+fi
 
 # An installer without the skip above pinned every [PYTHON] hook to the virtualenv's
 # python. Once the project is gone the way to repair that install is to run the
