@@ -341,6 +341,240 @@ else bad "duplicates" "$AFTER_CMDS commands after the re-run, a fresh install ha
 if [ "$AFTER_SAME" = "same" ]; then ok "the repaired settings hold exactly the commands of a fresh install"
 else bad "repair" "the repaired settings differ from a fresh install"; fi
 
+# The history above is the one where every line was replaced. The common one is
+# different: an install from a terminal, then a later update that fires inside a session
+# launched under a virtualenv. An installer without the skip rewrote the lines it
+# recognised in place and appended a second copy of the rest AFTER the live ones. When the
+# virtualenv goes, those copies name nothing, and an update has to remove them, not add a
+# working one beside them. The installer's own check has to say so while they are there:
+# it used to read the script a command runs and never the interpreter in front of it, so
+# that state printed OK.
+echo "=== 5b. a stale copy left after the live one is removed, and the check names it ==="
+PROJ5B="$TMP/proj-deleted-2"
+VENV5B="$PROJ5B/.venv"
+"$LAUNCH_PY" -m venv --without-pip "$VENV5B" >/dev/null 2>&1
+VENV5B_REAL="$(cd "$VENV5B" && pwd -P)"
+H5B="$TMP/stale-after-live-home"
+S5B="$H5B/.claude/settings.json"
+mkdir -p "$H5B/.claude/skills"
+# The hooks have to find their scripts, or the check fails for that and a failure for the
+# interpreter proves nothing.
+ln -s "$REPO_ROOT" "$H5B/.claude/skills/ai-brain-starter"
+echo '{}' > "$S5B"
+run_sandboxed "$H5B" env -u CLAUDECODE PATH="$CLEAN_PATH" \
+  "$LAUNCH_PY" "$INSTALLER" --hooks-source "$REPO_ROOT/hooks.json" --quiet >/dev/null 2>&1
+LIVE5B="$TMP/live-5b.json"
+cp "$S5B" "$LIVE5B"
+LIVE_INTERP="$(baked_interps "$LIVE5B" | head -1)"
+
+# Builds the damaged settings from the live ones, the way that installer left them: a
+# command the match saw by owned script name is rewritten in place, any other gets a pinned
+# copy appended to the first group with its matcher. The user's own hooks go in as well,
+# between the live and the stale copies; none is a copy of a hook the installer ships under
+# the matcher it ships it under, so none of them may change.
+DAMAGED5B="$TMP/damaged-5b.json"
+EXPECTED5B="$TMP/expected-5b.json"
+USERHOOKS5B="$TMP/user-hooks-5b.json"
+"$LAUNCH_PY" - "$INSTALLER" "$LIVE5B" "$LIVE_INTERP" "$VENV5B/bin/python3" "$DAMAGED5B" "$EXPECTED5B" "$USERHOOKS5B" <<'PY'
+import copy, importlib.util, json, sys
+
+spec = importlib.util.spec_from_file_location("ih", sys.argv[1])
+ih = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(ih)
+live_path, live, pinned, damaged_path, expected_path, user_path = sys.argv[2:8]
+settings = json.load(open(live_path))
+
+def hooks_of(doc):
+    return [(event, group.get("matcher"), hook) for event, groups in doc["hooks"].items()
+            for group in groups for hook in group["hooks"]]
+
+shipped = next(h["command"] for event, matcher, h in hooks_of(settings)
+               if event == "SessionStart" and matcher is None and live in h["command"]
+               and not ih.is_abs_owned(h["command"]))
+user_hooks = [
+    ("SessionStart", None, {"type": "command", "timeout": 7,
+                            "command": "'/Users/Ana Maria/hooks/mine.py' --flag \"a b\""}),
+    ("SessionStart", None, {"type": "command",
+                            "command": "/gone/user-env/bin/python3 ~/mine/own-hook.py 2>/dev/null || true"}),
+    # one the installer wired once and the template no longer ships: an update cannot
+    # repair it, so a check that failed on it could never be cleared by running one
+    ("SessionStart", None, {"type": "command",
+                            "command": "/gone/user-env/bin/python3 "
+                                       "~/.claude/skills/ai-brain-starter/hooks/dropped-from-the-template.py "
+                                       "2>/dev/null || true"}),
+    ("SessionStart", None, {"type": "command",
+                            "command": "python3 ~/.claude/hooks/surface-backup-status.py"}),
+    # a shipped command under a matcher the installer does not ship it under
+    ("SessionStart", "startup", {"type": "command", "command": shipped.replace(live, "/usr/bin/python3")}),
+    ("PreToolUse", "Bash", {"type": "command", "command": 'py -3 "C:\\Users\\x\\hooks\\mine.py"'}),
+]
+
+def put_user_hooks(doc):
+    for event, matcher, hook in user_hooks:
+        groups = doc["hooks"].setdefault(event, [])
+        group = next((g for g in groups if g.get("matcher") == matcher), None)
+        if group is None:
+            group = {"hooks": []}
+            if matcher is not None:
+                group["matcher"] = matcher
+            groups.append(group)
+        group["hooks"].insert(1, copy.deepcopy(hook))
+
+damaged, appended = copy.deepcopy(settings), []
+for event, groups in damaged["hooks"].items():
+    for group in groups:
+        for hook in group["hooks"]:
+            cmd = hook.get("command", "")
+            if live not in cmd:
+                continue
+            if ih.is_abs_owned(cmd):
+                hook["command"] = cmd.replace(live, pinned)
+            else:
+                appended.append((event, group.get("matcher"), dict(hook, command=cmd.replace(live, pinned))))
+for event, matcher, hook in appended:
+    next(g for g in damaged["hooks"][event] if g.get("matcher") == matcher)["hooks"].append(hook)
+expected = copy.deepcopy(settings)
+put_user_hooks(damaged)
+put_user_hooks(expected)
+json.dump(damaged, open(damaged_path, "w"), indent=2)
+json.dump(expected, open(expected_path, "w"), indent=2)
+json.dump([[e, m, h] for e, m, h in user_hooks], open(user_path, "w"))
+print(f"   {len(appended)} pinned copies appended after the live ones, {len(user_hooks)} user hooks added")
+PY
+cp "$DAMAGED5B" "$S5B"
+rm -rf "$PROJ5B"
+
+# The installer's own check, with every hook script in place, so only the interpreter can fail it.
+interpreter_reports() {  # interpreter_reports HOME_DIR SETTINGS_FILE INTERPRETER
+  run_sandboxed "$1" "$LAUNCH_PY" - "$INSTALLER" "$2" "$3" <<'PY'
+import importlib.util, json, sys
+spec = importlib.util.spec_from_file_location("ih", sys.argv[1])
+ih = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(ih)
+required, optional = ih.verify_paths_on_disk(json.load(open(sys.argv[2])))
+print(sum(1 for _event, path, _cmd in required + optional if path == sys.argv[3]))
+PY
+}
+# shellcheck disable=SC2046
+set -- $(hook_report "$S5B" "$EXPECTED5B" "$VENV5B" "$VENV5B_REAL")
+DAMAGED_CMDS=${1:-0}; EXPECTED_CMDS=${2:-0}; DAMAGED_PINNED=${3:-0}
+if [ "$DAMAGED_PINNED" -gt 0 ] && [ "$DAMAGED_CMDS" -gt "$EXPECTED_CMDS" ]; then
+  ok "setup: $DAMAGED_PINNED of $DAMAGED_CMDS commands name the deleted virtualenv, and $((DAMAGED_CMDS - EXPECTED_CMDS)) are copies added after the live ones"
+else
+  bad "setup" "$DAMAGED_PINNED pinned, $DAMAGED_CMDS commands against $EXPECTED_CMDS expected: not the history this section is about"
+fi
+VERIFY_OUT="$(run_sandboxed "$H5B" env -u CLAUDECODE PATH="$CLEAN_PATH" \
+  "$LAUNCH_PY" "$INSTALLER" --settings "$S5B" --verify-only --fail-on-missing 2>&1)"
+VERIFY_RC=$?
+if [ "$VERIFY_RC" -ne 0 ] && printf '%s' "$VERIFY_OUT" | grep -qF "$VENV5B/bin/python3"; then
+  ok "the installer's check fails and names the interpreter that is gone"
+else
+  bad "dead interpreter" "exit $VERIFY_RC; the check did not name $VENV5B/bin/python3: $(printf '%s' "$VERIFY_OUT" | tail -3 | tr '\n' ' ')"
+fi
+SEEN5B="$(interpreter_reports "$H5B" "$S5B" "$VENV5B/bin/python3")"
+if [ "$SEEN5B" -eq "$DAMAGED_PINNED" ]; then
+  ok "it reports each of the $DAMAGED_PINNED hooks that name the deleted virtualenv, owned or not"
+else
+  bad "dead interpreter" "it reports $SEEN5B hooks, $DAMAGED_PINNED name the deleted virtualenv"
+fi
+if printf '%s' "$VERIFY_OUT" | grep -qF "/gone/user-env/bin/python3"; then
+  bad "hooks no update rewrites" "the check judged a hook of the user's own, or one the template no longer ships"
+else
+  ok "a hook no update rewrites (the user's own, or one the template dropped) is not judged for its interpreter"
+fi
+
+run_sandboxed "$H5B" env -u CLAUDECODE PATH="$CLEAN_PATH" \
+  "$LAUNCH_PY" "$INSTALLER" --hooks-source "$REPO_ROOT/hooks.json" --quiet >/dev/null 2>&1
+# shellcheck disable=SC2046
+set -- $(hook_report "$S5B" "$EXPECTED5B" "$VENV5B" "$VENV5B_REAL")
+HEALED_CMDS=${1:-0}; HEALED_PINNED=${3:-1}; HEALED_SAME=${4:-different}
+echo "   after the update: $HEALED_CMDS commands, $HEALED_PINNED naming the deleted virtualenv (a fresh install has $EXPECTED_CMDS, counting the user's own)"
+if [ "$HEALED_PINNED" -eq 0 ]; then ok "no command still names the deleted virtualenv"
+else bad "stale copies" "$HEALED_PINNED command(s) still name the deleted virtualenv"; fi
+if [ "$HEALED_CMDS" -eq "$EXPECTED_CMDS" ]; then ok "the update left as many commands as a fresh install plus the user's own"
+else bad "stale copies" "$HEALED_CMDS commands after the update, a fresh install plus the user's own has $EXPECTED_CMDS"; fi
+if [ "$HEALED_SAME" = "same" ]; then ok "the settings hold exactly the commands of a fresh install plus the user's own"
+else bad "stale copies" "the settings differ from a fresh install plus the user's own"; fi
+HEALED_OUT="$(run_sandboxed "$H5B" env -u CLAUDECODE PATH="$CLEAN_PATH" \
+  "$LAUNCH_PY" "$INSTALLER" --settings "$S5B" --verify-only --fail-on-missing 2>&1)"
+HEALED_RC=$?
+if [ "$HEALED_RC" -eq 0 ]; then ok "the installer's check passes once the stale copies are gone"
+else bad "verify after repair" "exit $HEALED_RC: $(printf '%s' "$HEALED_OUT" | tail -3 | tr '\n' ' ')"; fi
+
+# The user's own hooks come out of the update exactly as they went in.
+"$LAUNCH_PY" - "$S5B" "$USERHOOKS5B" <<'PY'
+import json, sys
+settings = json.load(open(sys.argv[1]))
+lost = []
+for event, matcher, hook in json.load(open(sys.argv[2])):
+    found = sum(1 for g in settings["hooks"].get(event, []) if g.get("matcher") == matcher
+                for h in g["hooks"] if h == hook)
+    if found != 1:
+        lost.append((event, matcher, found, hook["command"][:60]))
+for item in lost:
+    print(f"   user hook found {item[2]} time(s): {item[0]} [{item[1]}] {item[3]}")
+sys.exit(1 if lost else 0)
+PY
+if [ $? -eq 0 ]; then ok "every hook of the user's own is still there once, exactly as written"
+else bad "user hooks" "the update changed or removed a hook of the user's own"; fi
+
+# What the interpreter check reads. It shares the interpreter-slot match with
+# is_same_command, so it sees the four places hooks.json puts [PYTHON]: the start of a
+# command, and after `&&`, `then` and `||`. It must stay quiet about a python that exists,
+# a bare python3 (looked up on the PATH when the hook runs), a Windows launcher, and any
+# hook no update rewrites.
+"$LAUNCH_PY" - "$INSTALLER" "$LAUNCH_PY" <<'PY'
+import importlib.util, os, sys
+
+spec = importlib.util.spec_from_file_location("ih", sys.argv[1])
+ih = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(ih)
+real, gone = sys.argv[2], "/gone/venv/bin/python3"
+owned = "~/.claude/hooks/lint-claude-settings.py"
+shapes = {
+    "the start of a command": "{i} " + owned + " 2>/dev/null || true",
+    "after &&": "[ -f " + owned + " ] && {i} " + owned + " || true",
+    "after then": "if [ -f " + owned + " ]; then {i} " + owned + "; else echo ok; fi",
+    "after ||": real + " " + owned + " 2>/dev/null || {i} " + owned,
+}
+
+def reported(cmd, template=None):
+    settings = {"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": cmd}]}]}}
+    required, _optional = ih.verify_paths_on_disk(settings, {} if template is None else template)
+    return [path for _event, path, _short in required if path == gone]
+
+problems = []
+for place, shape in shapes.items():
+    if reported(shape.format(i=gone)) != [gone]:
+        problems.append(f"{place}: a python that is gone was not reported")
+    if reported(shape.format(i=real)):
+        problems.append(f"{place}: a python that exists was reported")
+    if reported(shape.format(i="python3")):
+        problems.append(f"{place}: a bare python3 was reported")
+runner = ' "C:/r/hook_runner.py" --fallback silent "C:/Users/x/.claude/hooks/lint-claude-settings.py"'
+if reported("C:/Python313/python.exe -X utf8" + runner):
+    problems.append("a Windows launcher was reported")
+os.environ["ABS_FORCE_WINDOWS"] = "1"
+if reported(shapes["the start of a command"].format(i=gone)):
+    problems.append("a python that is gone was reported while checking for Windows")
+del os.environ["ABS_FORCE_WINDOWS"]
+if reported(gone + " ~/mine/own-hook.py 2>/dev/null || true"):
+    problems.append("a user's own hook was reported")
+# A command the template ships with no owned script is read as the installer's own only
+# because the template ships it.
+unowned = "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/surface-backup-status.py 2>/dev/null || true"
+template = {"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": unowned}]}]}}
+if reported(unowned.replace("[PYTHON]", gone), template) != [gone]:
+    problems.append("a copy of a command the template ships was not reported")
+if reported(unowned.replace("[PYTHON]", gone)):
+    problems.append("that same command was reported with no template to say the installer ships it")
+for problem in problems:
+    print("   " + problem)
+sys.exit(1 if problems else 0)
+PY
+if [ $? -eq 0 ]; then ok "the interpreter check reads every place a command names its python, and only where an update rewrites"
+else bad "interpreter check" "it missed a python that is gone, or reported one that is fine or not the installer's"; fi
+
 # The same property for every [PYTHON] command hooks.json ships, whatever the
 # interpreter is spelled as.
 "$LAUNCH_PY" - "$INSTALLER" "$REPO_ROOT/hooks.json" <<'PY'

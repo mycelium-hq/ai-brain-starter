@@ -646,6 +646,38 @@ def is_same_command(a: str, b: str) -> bool:
     return _without_interpreter(a) == _without_interpreter(b)
 
 
+def _template_commands(template: dict | None) -> list[str]:
+    """Every hook command in a hooks.json-shaped dict."""
+    return [h.get("command", "") for groups in ((template or {}).get("hooks") or {}).values()
+            for g in groups for h in g.get("hooks", [])]
+
+
+def _unowned_template_index(commands) -> dict[str, str]:
+    """The template commands that run no owned script, keyed by their text with the
+    interpreter set aside.
+
+    An owned command is found by the script it runs (_owned_hook_key). One of these has
+    nothing of the kind, so a copy of it is only ever recognised by comparing it to the
+    template's own command (see _copy_of_template_command). An empty command is never
+    indexed: hooks that carry no command (a prompt or agent hook) would all read as
+    copies of each other."""
+    index: dict[str, str] = {}
+    for cmd in commands:
+        if cmd and _owned_hook_key(cmd) is None:
+            index.setdefault(_without_interpreter(cmd), cmd)
+    return index
+
+
+def _copy_of_template_command(cmd: str, index: dict[str, str]) -> str | None:
+    """The template command `cmd` is a copy of (the same hook under another
+    interpreter), or None. `index` comes from _unowned_template_index; the final test
+    is is_same_command, which is also how merge_hooks() decides what to replace."""
+    template_cmd = index.get(_without_interpreter(cmd)) if cmd else None
+    if template_cmd is not None and is_same_command(template_cmd, cmd):
+        return template_cmd
+    return None
+
+
 def _hook_depends_on_vault(command: str) -> bool:
     """True if a hook command can only run once the user's vault exists: it
     references a [VAULT_PATH]/... path AND carries no ~/.claude home fallback.
@@ -1515,10 +1547,16 @@ def relocate_moved_hooks(existing: dict, template: dict) -> tuple[dict, int]:
 
 
 def dedupe_owned_hooks(existing: dict, preferred: frozenset = frozenset()) -> tuple[dict, int]:
-    """Collapse duplicate OWNED hooks that share the same (event, matcher, owned-script)
-    down to one, across every group carrying that matcher. The survivor is the copy
+    """Collapse duplicate copies of a hook the installer ships down to one per
+    (event, matcher), across every group carrying that matcher. The survivor is the copy
     whose command is in `preferred` (the template's own rendered commands, i.e. the
     freshest merge result), else the LAST occurrence.
+
+    A copy is identified one of two ways. An OWNED hook is identified by the script it
+    runs and the arguments it passes (see _owned_hook_key). A command the template ships
+    that runs no owned script has no such key, so a copy of it is whatever is_same_command
+    reads as that template command. That is the test merge_hooks() replaces by, so the
+    same hook under another interpreter is a copy here too.
 
     merge_hooks() REPLACES a template hook in place only when is_same_command matches; for
     an owned hook that match is by basename, but if a machine's stored command text drifts
@@ -1526,27 +1564,42 @@ def dedupe_owned_hooks(existing: dict, preferred: frozenset = frozenset()) -> tu
     in the group (e.g. an interpreter-path change from bare `python3` to an absolute
     shim-safe path left two copies before this hook was owned), the replace touches only
     the first and a duplicate persists. This pass is the idempotent cleanup that self-heals
-    such duplicates on the next install. Non-owned (user) hooks and DISTINCT owned hooks
-    are never touched — and one script wired twice with different ARGUMENTS is two
-    distinct hooks, not a duplicate (see _owned_hook_key).
+    such duplicates on the next install. A hook that is neither owned nor a copy of a
+    template command (a user's own) and DISTINCT owned hooks are never touched — and one
+    script wired twice with different ARGUMENTS is two distinct hooks, not a duplicate (see
+    _owned_hook_key).
 
     Why the preference and the cross-group scope: merge_hooks() rewrites the FIRST match,
     so "keep the last" keeps a stale copy whenever one sits after it. Measured on a
     machine where a second installer also wires retry-budget.py: one install left only
     the old `|| true` copy, which can never block, and dropped the fresh template form;
-    two copies in separate groups with the same matcher were never collapsed at all.
+    two copies in separate groups with the same matcher were never collapsed at all. The
+    same holds for a template command with no owned script: an update run inside a
+    virtualenv, with the virtualenv deleted since, leaves its pinned copy after the live
+    one, and nothing else removes it (it is not byte-identical to the template's, which
+    is all dedupe_identical_hooks collapses).
     Groups emptied are dropped. Returns (cleaned, count_removed)."""
     cleaned = json.loads(json.dumps(existing))
     removed = 0
     if "hooks" not in cleaned:
         return cleaned, 0
+    shipped = _unowned_template_index(preferred)
+
+    def identity(cmd: str):
+        """What makes two hooks copies of each other, or None for a hook of the user's own."""
+        key = _owned_hook_key(cmd)
+        if key is not None:
+            return key
+        template_cmd = _copy_of_template_command(cmd, shipped)
+        return ("template", template_cmd) if template_cmd is not None else None
+
     for event, groups in list(cleaned["hooks"].items()):
-        # Survivor per (matcher, owned key) across this event's groups. Only owned hooks
-        # (non-None key) are eligible; a user hook (None) is always kept.
+        # Survivor per (matcher, identity) across this event's groups. Only a hook with an
+        # identity is eligible; a user hook (None) is always kept.
         survivor: dict = {}
         for gi, g in enumerate(groups):
             for hi, h in enumerate(g.get("hooks", [])):
-                key = _owned_hook_key(h.get("command", ""))
+                key = identity(h.get("command", ""))
                 if not key:
                     continue
                 slot = (g.get("matcher"), key)
@@ -1558,10 +1611,10 @@ def dedupe_owned_hooks(existing: dict, preferred: frozenset = frozenset()) -> tu
         for gi, g in enumerate(groups):
             kept = []
             for hi, h in enumerate(g.get("hooks", [])):
-                key = _owned_hook_key(h.get("command", ""))
+                key = identity(h.get("command", ""))
                 if key and survivor.get((g.get("matcher"), key)) != (gi, hi):
                     removed += 1
-                    continue  # a duplicate of an owned hook kept elsewhere under this matcher
+                    continue  # a duplicate of a hook the installer ships, kept elsewhere under this matcher
                 kept.append(h)
             if kept:
                 ng = dict(g)
@@ -2044,7 +2097,9 @@ def main() -> int:
                 return 2
         elif not args.quiet:
             print(f"NOTE: {settings_path} does not exist — nothing is wired yet.")
-        return run_verification(current, fail_on_missing=args.fail_on_missing)
+        return run_verification(
+            current, fail_on_missing=args.fail_on_missing,
+            template=_load_shipped_template(Path(args.hooks_source) if args.hooks_source else None))
 
     # === make the vault the home of Claude Code's memory ===
     # Independent of the hooks install and idempotent, so do it first whenever a
@@ -2161,12 +2216,12 @@ def main() -> int:
     # copy but never removed the stale old-event one). Without this a moved hook
     # fires on BOTH events on every existing install (MYC-2359).
     merged, moved_count = relocate_moved_hooks(merged, template)
-    # Collapse duplicate owned-hook copies that an interpreter-path drift left behind
-    # (a byte-changed command the owned-basename dedup recognizes only AFTER the hook is
-    # owned, so merge replaced the first copy but a second stale one persisted).
-    merged, deduped_count = dedupe_owned_hooks(merged, preferred=frozenset(
-        h.get("command", "") for groups in (template.get("hooks") or {}).values()
-        for g in groups for h in g.get("hooks", [])))
+    # Collapse duplicate copies of a hook the installer ships that an interpreter-path
+    # drift left behind (a byte-changed command: merge replaced the first copy but a
+    # second stale one persisted). Owned hooks are matched by their script, the rest by
+    # the template command they are a copy of; the template's own commands are the
+    # survivors.
+    merged, deduped_count = dedupe_owned_hooks(merged, preferred=frozenset(_template_commands(template)))
     # Collapse byte-identical copies regardless of ownership. dedupe_owned_hooks
     # above cannot see a hook the template no longer declares, which is exactly
     # the copy that accumulates forever (MYC-3876).
@@ -2180,7 +2235,7 @@ def main() -> int:
         print(f"Updated:      {len(summary['updated'])} hook(s)")
         print(f"Retired:      {retired_count} stale hook(s) removed")
         print(f"Relocated:    {moved_count} moved-event stale copy(ies) removed")
-        print(f"Deduped:      {deduped_count} duplicate owned hook(s) removed")
+        print(f"Deduped:      {deduped_count} duplicate hook(s) removed")
         print(f"Collapsed:    {identical_count} byte-identical hook(s) removed")
         print(f"Preserved:    {len(set(summary['kept']))} non-ABS hook(s) untouched")
         if win_skipped:
@@ -2201,7 +2256,7 @@ def main() -> int:
             if moved_count:
                 print(f"  - relocate {moved_count} moved-event stale copy(ies)")
             if deduped_count:
-                print(f"  - dedupe {deduped_count} duplicate owned hook(s)")
+                print(f"  - dedupe {deduped_count} duplicate hook(s)")
             if identical_count:
                 print(f"  - collapse {identical_count} byte-identical hook(s)")
         return 0
@@ -2220,7 +2275,7 @@ def main() -> int:
         # was skipped on exactly the installs most likely to have drifted — the
         # ones already in sync — so a missing hook script passed silently.
         if args.verify or args.fail_on_missing:
-            return run_verification(merged, fail_on_missing=args.fail_on_missing)
+            return run_verification(merged, fail_on_missing=args.fail_on_missing, template=template)
         return 0
 
     backup = backup_settings(settings_path)
@@ -2230,7 +2285,7 @@ def main() -> int:
             if backup:
                 print(f"Backup: {backup}")
         if args.verify or args.fail_on_missing:
-            rc = run_verification(merged, fail_on_missing=args.fail_on_missing)
+            rc = run_verification(merged, fail_on_missing=args.fail_on_missing, template=template)
             if rc != 0:
                 return rc
         return 0
@@ -2251,26 +2306,59 @@ def _is_gated_command(cmd: str, script_path: str) -> bool:
     return bool(pattern.search(cmd))
 
 
-def verify_paths_on_disk(settings: dict) -> tuple[list[tuple[str, str, str]], list[tuple[str, str, str]]]:
-    """Inspect every ABS-owned hook command in settings; verify the referenced
-    script exists on disk. Distinguishes:
+def _load_shipped_template(source: Path | None = None) -> dict | None:
+    """hooks.json of the checkout this installer runs from (or `source`), or None when
+    it cannot be read."""
+    try:
+        return load_hooks_template(source if source is not None else find_repo_root() / "hooks.json")
+    except (OSError, ValueError):  # FileNotFoundError is an OSError, a JSONDecodeError a ValueError
+        return None
 
-      - REQUIRED: command runs the script directly (`python3 <path> ...`).
-        Script missing = silent hook failure at runtime.
-      - OPTIONAL: command wraps in `[ -f <path> ] && ...` (the guard suppresses
-        the call), OR the missing path has a present same-basename sibling in
-        the SAME command — a `||` fallback chain (`python3 <vault-copy> ||
-        python3 <home-copy>`) is satisfied as long as one copy exists (MYC-2558).
 
-    Returns (missing_required, missing_optional), each a list of
-    (event, script_path, full_command_short).
+def _is_installer_hook(cmd: str, shipped: dict[str, str]) -> bool:
+    """True for a hook an update rewrites: one the installer owns, or a copy of a command
+    the template ships (`shipped` is _unowned_template_index of the template). A user's
+    own hook is neither.
 
-    The full_command_short is the first 80 chars of the command for grep-friendly
-    error output without dumping the entire 1500-char auto-update one-liner.
-    """
+    The ownership list lags the template, so ownership alone leaves out hooks the
+    installer wrote: a command the template ships can run no owned script. A hook that
+    is neither is left out on purpose: re-running the installer cannot repair it, so a
+    check that failed on it could never be cleared that way."""
+    return is_abs_owned(cmd) or _copy_of_template_command(cmd, shipped) is not None
+
+
+def _dead_interpreters(cmd: str) -> list[str]:
+    """Absolute interpreter paths in the [PYTHON] slots of `cmd` that name no file.
+
+    Only an absolute path can be tested: a bare `python3` is looked up on the PATH when
+    the hook runs. Not read on Windows, where the launcher is a different spelling and
+    its pin is not covered (see _posix_python)."""
+    if _is_windows():
+        return []
+    dead: list[str] = []
+    for m in _INTERPRETER_SLOT_RE.finditer(cmd):
+        token = m.group(0)
+        if not token.startswith(("/", "~")):
+            continue
+        path = str(Path(os.path.expanduser(token)))
+        if not os.path.isfile(path) and path not in dead:
+            dead.append(path)
+    return dead
+
+
+def _check_hooks_on_disk(settings: dict, template: dict) -> tuple[list[tuple[str, str, str]],
+                                                                 list[tuple[str, str, str]],
+                                                                 list[tuple[str, str, str]], int]:
+    """verify_paths_on_disk() with the interpreter findings kept apart from the script
+    ones, and the count of owned hooks that have no finding at all.
+
+    Returns (missing_required, missing_optional, dead_interpreters, ok_count)."""
     import re
+    shipped = _unowned_template_index(_template_commands(template))
     missing_required: list[tuple[str, str, str]] = []
     missing_optional: list[tuple[str, str, str]] = []
+    dead_interpreters: list[tuple[str, str, str]] = []
+    ok_count = 0
     # Two shapes to cover:
     #   POSIX: `python3 <path>` / `bash <path>`, path optionally quoted.
     #   Windows runner form: every path is a QUOTED argument. The quoted
@@ -2288,7 +2376,17 @@ def verify_paths_on_disk(settings: dict) -> tuple[list[tuple[str, str, str]], li
         for g in groups:
             for h in g.get("hooks", []):
                 cmd = h.get("command", "")
-                if not cmd or not is_abs_owned(cmd):
+                if not cmd:
+                    continue
+                short = cmd[:80] + ("…" if len(cmd) > 80 else "")
+                # The interpreter first: the script check below reads the script a
+                # command runs and never the python in front of it, so a hook pinned
+                # to an interpreter that has been removed (a deleted virtualenv, an
+                # uninstalled version) verified as healthy while it could not start.
+                before = len(dead_interpreters) + len(missing_required) + len(missing_optional)
+                if _is_installer_hook(cmd, shipped):
+                    dead_interpreters.extend((event, interp, short) for interp in _dead_interpreters(cmd))
+                if not is_abs_owned(cmd):
                     continue
                 # Find every script path the command references — a single
                 # hook may chain `python3 a.py && bash b.sh`.
@@ -2312,34 +2410,68 @@ def verify_paths_on_disk(settings: dict) -> tuple[list[tuple[str, str, str]], li
                     if exists[raw]:
                         continue
                     p = Path(os.path.expanduser(raw))
-                    short = cmd[:80] + ("…" if len(cmd) > 80 else "")
                     entry = (event, str(p), short)
                     if _is_gated_command(cmd, raw) or \
                             os.path.basename(raw) in satisfied_basenames:
                         missing_optional.append(entry)
                     else:
                         missing_required.append(entry)
-    return missing_required, missing_optional
+                if len(dead_interpreters) + len(missing_required) + len(missing_optional) == before:
+                    ok_count += 1
+    return missing_required, missing_optional, dead_interpreters, ok_count
 
 
-def run_verification(settings: dict, fail_on_missing: bool = False) -> int:
-    """Print verification report. Returns 0 if all required paths exist, 1 otherwise.
+def verify_paths_on_disk(settings: dict, template: dict | None = None
+                         ) -> tuple[list[tuple[str, str, str]], list[tuple[str, str, str]]]:
+    """Inspect every hook command in settings that this installer wrote, and verify what
+    it runs exists on disk: the script, and the interpreter in front of it. Of the
+    script, distinguishes:
+
+      - REQUIRED: command runs the script directly (`python3 <path> ...`).
+        Script missing = silent hook failure at runtime.
+      - OPTIONAL: command wraps in `[ -f <path> ] && ...` (the guard suppresses
+        the call), OR the missing path has a present same-basename sibling in
+        the SAME command — a `||` fallback chain (`python3 <vault-copy> ||
+        python3 <home-copy>`) is satisfied as long as one copy exists (MYC-2558).
+
+    An absolute interpreter that is not a file is REQUIRED too: the hook cannot start,
+    whatever else is on disk. Only a hook an update rewrites is read for it: an owned
+    one, or a copy of a command in `template` (default: this checkout's hooks.json), see
+    _is_installer_hook. A user's own hook never fails the check.
+
+    Returns (missing_required, missing_optional), each a list of
+    (event, path, full_command_short). The path of an interpreter entry is the
+    interpreter's, not a script's.
+
+    The full_command_short is the first 80 chars of the command for grep-friendly
+    error output without dumping the entire 1500-char auto-update one-liner.
+    """
+    if template is None:
+        template = _load_shipped_template() or {}
+    missing_required, missing_optional, dead_interpreters, _ok = _check_hooks_on_disk(settings, template)
+    return missing_required + dead_interpreters, missing_optional
+
+
+def run_verification(settings: dict, fail_on_missing: bool = False, template: dict | None = None) -> int:
+    """Print verification report. Returns 0 if every required script and interpreter
+    exists, 1 otherwise.
 
     With fail_on_missing=True, the caller should propagate the nonzero exit
     (used by bootstrap.sh to escalate a divergent-fork strand to `err`).
+
+    `template` is the hooks.json the settings were merged from; without one the
+    checkout's own is read.
     """
     print("\n--- Verification ---")
-    missing_required, missing_optional = verify_paths_on_disk(settings)
-    ok_count = 0
-    for event, groups in (settings.get("hooks") or {}).items():
-        for g in groups:
-            for h in g.get("hooks", []):
-                cmd = h.get("command", "")
-                if cmd and is_abs_owned(cmd):
-                    ok_count += 1
+    if template is None:
+        template = _load_shipped_template()
+        if template is None:
+            print("  NOTE   hooks.json could not be read, so only hooks the installer owns were")
+            print("         checked for an interpreter that is not on disk.")
+            template = {}
+    missing_required, missing_optional, dead_interpreters, ok_count = _check_hooks_on_disk(settings, template)
     # Print OK count rather than every entry to keep output scannable
-    ok_count -= len(missing_required) + len(missing_optional)
-    print(f"  OK     {ok_count} hook(s) — referenced scripts exist on disk")
+    print(f"  OK     {ok_count} hook(s) — referenced scripts and interpreter exist on disk")
     if missing_optional:
         print(f"  SKIP   {len(missing_optional)} hook(s) — optional ([ -f ] guard, or a same-basename fallback sibling exists):")
         for event, p, _short in missing_optional:
@@ -2357,8 +2489,21 @@ def run_verification(settings: dict, fail_on_missing: bool = False) -> int:
         print("    cd ~/.claude/skills/ai-brain-starter && git pull --rebase origin main")
         py = "py -3" if os.name == "nt" else "python3"
         print(f"    {py} ~/.claude/skills/ai-brain-starter/scripts/install-hooks-user-level.py")
-        if fail_on_missing:
-            return 1
+    if dead_interpreters:
+        print(f"  FAIL   {len(dead_interpreters)} hook(s) — interpreter not on disk:")
+        for event, p, short in dead_interpreters:
+            print(f"           {event}: {p}")
+            print(f"             command: {short}")
+        print()
+        print("  These hooks cannot start, and a hook that cannot start blocks nothing. The python")
+        print("  each one names has been removed: a virtualenv that was deleted or rebuilt, or a")
+        print("  python that was uninstalled.")
+        print("  Recover: run the installer from a shell with a working python3 on its PATH,")
+        print("  outside any virtualenv. It rewrites each hook line it ships to that python:")
+        py = "py -3" if os.name == "nt" else "python3"
+        print(f"    {py} ~/.claude/skills/ai-brain-starter/scripts/install-hooks-user-level.py")
+    if fail_on_missing and (missing_required or dead_interpreters):
+        return 1
     return 0
 
 
