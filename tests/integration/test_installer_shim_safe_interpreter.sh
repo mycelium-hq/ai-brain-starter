@@ -398,7 +398,7 @@ shipped = next(h["command"] for event, matcher, h in hooks_of(settings)
                and not ih.is_abs_owned(h["command"]))
 user_hooks = [
     ("SessionStart", None, {"type": "command", "timeout": 7,
-                            "command": "'/Users/Ana Maria/hooks/mine.py' --flag \"a b\""}),
+                            "command": "'/Users/Some User/hooks/mine.py' --flag \"a b\""}),
     ("SessionStart", None, {"type": "command",
                             "command": "/gone/user-env/bin/python3 ~/mine/own-hook.py 2>/dev/null || true"}),
     # one the installer wired once and the template no longer ships: an update cannot
