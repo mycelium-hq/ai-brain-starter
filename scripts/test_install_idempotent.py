@@ -304,6 +304,7 @@ with tempfile.TemporaryDirectory() as td:
     # The decoy sits under the temp dir, where the installer never schedules anything.
     decoy_vault = Path(td) / "elsewhere" / "vault"
     decoy_vault.mkdir(parents=True)
+    # vault-root-ok: saves the caller's value to restore it below; nothing resolves a vault from it.
     saved_vault_root = os.environ.get("VAULT_ROOT")
     os.environ["VAULT_ROOT"] = str(decoy_vault)
     try:
