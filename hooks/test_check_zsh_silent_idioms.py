@@ -67,6 +67,8 @@ Detector 1 again:
       quotes, comments, heredoc bodies) and the real shapes still deny.
   22. The verb list also covers `git rev-parse` and `git ls-tree`, which take a
       <rev>:<path> spec too.
+  23. The detector-1 refusal says the unbraced form is unpredictable, and does
+      not claim the command prints nothing (zsh can also fail outright).
 
 Stdlib only. Exit 0 = all pass.
 """
@@ -439,6 +441,15 @@ def main() -> int:
     expect_silent("22c braced rev-parse",
                   'git rev-parse --verify -q "${SHA}:hooks.json"')
     expect_silent("22d braced ls-tree", 'git ls-tree "${SHA}:hooks"')
+
+    # --- 23: the refusal does not claim what zsh does not do -------------------
+    # Measured: "$SHA:src/app.py" is a bad substitution, "$SHA:hooks/x" reads
+    # .ooks/x, "$SHA:path/x" happens to work. Only "unpredictable" is true of all.
+    reason = reason_of('git show "$SHA:src/app.py"')
+    check("23a reason says the unbraced form is unpredictable",
+          "unpredictable" in reason)
+    check("23b reason does not claim the command prints nothing",
+          "prints NOTHING" not in reason)
 
     if FAILURES:
         print(f"FAIL: {len(FAILURES)} of {CHECKS} control(s) failed")

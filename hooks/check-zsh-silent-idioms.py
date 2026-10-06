@@ -2,23 +2,18 @@
 """
 PreToolUse Bash hook: bash idioms that silently do the wrong thing under zsh.
 
-One guard, one bug class. On a zsh shell a bash idiom runs, exits 0, prints no
-error, and returns output that looks like a legitimate answer: empty, or
+One guard, one bug class. On a zsh shell a bash idiom quietly does the wrong
+thing and returns output that looks like a legitimate answer: empty, wrong, or
 false-red. Two detectors, deliberately independent, so one raising can never
 disarm the other. One bypass covers the whole guard.
 
-1. git-ref. Unbraced `$VAR:path` in a git object read.
-   zsh applies HISTORY MODIFIERS after `$VAR:`, so `git show "$SHA:src/app.py"`
-   expands to something else entirely and prints NOTHING. The command exits 0
-   with empty output, which is byte-identical to "this path does not exist at
-   this ref": a silent false clean on an absence claim, and absence is the
-   most dangerous result a search can return. Witnessed twice: a session
-   reported a LIVE fix as undeployed, and a later session probed four branches
-   for a security regression and got `<NONE FOUND>` on all four while the
-   symbol was plainly present. Only a positive control caught the second one.
-   The fix is two characters and is correct in BOTH shells:
+1. git-ref. Unbraced `$VAR:` plus a letter in a git object read. zsh reads it as
+   a HISTORY MODIFIER, so the result is unpredictable: `"$SHA:src/app.py"` is a
+   bad substitution, `"$SHA:hooks/x"` reads `.ooks/x`, `"$SHA:path/x"` happens to
+   work. It can fail outright or read an empty or wrong path, and a silent miss
+   looks exactly like "that path does not exist at that ref". The braced form is
+   always right, in both shells, so this detector fires in any shell:
        git show "$SHA:path"     ->  git show "${SHA}:path"
-   Fires in any shell, because the braced form is correct everywhere.
 
 2. word-split. An unquoted `$VAR` as a `for X in` list item or a `set --`
    operand. zsh does not word-split an unquoted parameter expansion
@@ -160,9 +155,10 @@ def detect_unbraced_git_ref(command: str, zsh: bool) -> list:
         return []
     return [
         f"BLOCKED by {GUARD}: `${first}:` is unbraced in a git object read.\n\n"
-        f"Under zsh, `$VAR:` triggers a HISTORY MODIFIER. The command prints NOTHING "
-        f"and exits 0 — indistinguishable from 'that path does not exist at that ref'. "
-        f"Every absence you conclude from it is a false clean.\n\n"
+        f"Under zsh, `$VAR:` followed by a letter is a HISTORY MODIFIER, so the "
+        f"unbraced form is unpredictable: it can fail outright or read an empty or "
+        f"wrong path, and the braced form is always right. A silent miss looks "
+        f"exactly like 'that path does not exist at that ref'.\n\n"
         f"Brace it (correct in bash AND zsh):\n"
         f'    git show "${{{first}}}:path/to/file"\n\n'
         f"If you are asserting an ABSENCE from this command, also run a positive "
@@ -588,8 +584,8 @@ if __name__ == "__main__":
     # Windows cp1252-console safety (ai-brain-starter#313; hooks/ sweep #314).
     # A hook that print()s non-ASCII raises UnicodeEncodeError on a cp1252
     # console: the gate then fails silently OPEN, or denies the tool call with
-    # no legible cause. This one's deny reason carries em dashes, so it is in
-    # exactly that class. Idempotent; a no-op on an already-UTF-8 console.
+    # no legible cause. The deny text is ASCII today; this keeps it safe if an
+    # edit ever adds a non-ASCII character. Idempotent; a no-op on UTF-8.
     for _stream in (sys.stdout, sys.stderr):
         try:
             _stream.reconfigure(encoding="utf-8")  # Python 3.7+
