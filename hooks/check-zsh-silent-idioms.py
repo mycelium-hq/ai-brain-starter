@@ -26,8 +26,9 @@ disarm the other. One bypass covers the whole guard.
    string, and `for c in $CHECKS` runs ONCE with a newline-separated list as a
    single argument. Witnessed repeatedly across sessions as empty or false-red
    output with no error.
-   Fires only when $SHELL is zsh: the fixes it offers include `${=VAR}`, a bad
-   substitution in bash, where the idiom is already correct.
+   Fires only when the Bash tool's shell is zsh (`_shell_is_zsh`): the fixes it
+   offers include `${=VAR}`, a bad substitution in bash, where the idiom is
+   already correct.
    Matches a WHOLE word that is exactly `$name` or `${name}`. Allowed, because
    zsh splits it, bash reads it, or there is nothing to split: `${=name}`,
    `"$@"` and `$@`, a quoted `"$name"`, command substitution `$(...)` and
@@ -49,6 +50,7 @@ import io
 import json
 import os
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -397,8 +399,19 @@ _BYPASS_NOTE = (
 
 
 def _shell_is_zsh() -> bool:
-    """Is the Bash tool's shell zsh? Detector 2 means nothing anywhere else."""
-    return os.path.basename(os.environ.get("SHELL", "")) == "zsh"
+    """Is the Bash tool's shell zsh? Detector 2 means nothing anywhere else.
+
+    Mirrors the order Claude Code uses to pick that shell: CLAUDE_CODE_SHELL when
+    it names bash or zsh, else bash if SHELL names bash, else zsh when it is
+    installed, else bash. $SHELL alone is not enough: an override or a fish login
+    shell changes the answer.
+    """
+    forced = os.path.basename(os.environ.get("CLAUDE_CODE_SHELL", ""))
+    if forced in ("bash", "zsh"):
+        return forced == "zsh"
+    if os.path.basename(os.environ.get("SHELL", "")) == "bash":
+        return False
+    return shutil.which("zsh") is not None
 
 
 def run_detectors(command: str, zsh: bool) -> list:

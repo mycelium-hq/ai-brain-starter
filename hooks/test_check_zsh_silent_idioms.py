@@ -48,8 +48,9 @@ Detector 2, word-split (zsh only):
   15. SILENT on every allowed form: `${=v}`, `"$@"`, `$@`, command
       substitution, an array assigned in the same command, literal lists,
       `bash -c` / `sh -c` strings, heredoc bodies, quoted words, comments.
-  16. The SHELL gate: silent on a bash box and with SHELL unset, while
-      detector 1 still fires there.
+  16. The shell gate follows how Claude Code picks the Bash tool's shell
+      (CLAUDE_CODE_SHELL, then SHELL, then whether zsh is installed): silent on
+      a bash box, while detector 1 still fires there.
   17. The bypass covers this detector too, and cannot be smuggled in.
   18. The reason names the trap, the variable and all three fixes, and does
       not print the bypass token.
@@ -72,6 +73,7 @@ Stdlib only. Exit 0 = all pass.
 
 from __future__ import annotations
 
+import atexit
 import contextlib
 import importlib.util
 import io
@@ -93,6 +95,17 @@ CHECKS = 0
 W_SET = 'for r in "repo 1420 1421"; do set -- $r; echo "$1"; done'   # witnessed
 W_FOR = 'for c in $CHECKS; do node "$c"; done'                      # witnessed
 
+# A stub `zsh` on PATH makes "zsh is installed" true on any runner, and an empty
+# PATH dir makes it false, so the shell-gate legs never depend on the machine.
+ZSH_DIR = tempfile.mkdtemp(prefix="zsh-present-")
+NO_ZSH_DIR = tempfile.mkdtemp(prefix="zsh-absent-")
+atexit.register(shutil.rmtree, ZSH_DIR, ignore_errors=True)
+atexit.register(shutil.rmtree, NO_ZSH_DIR, ignore_errors=True)
+for _name in ("zsh", "zsh.exe", "zsh.cmd"):
+    _stub = Path(ZSH_DIR) / _name
+    _stub.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    _stub.chmod(0o755)
+
 
 def run_full(command: str, *, tool: str = "Bash", env: dict | None = None,
              raw: str | None = None, hook: Path = HOOK) -> tuple[int, str, str]:
@@ -104,8 +117,12 @@ def run_full(command: str, *, tool: str = "Bash", env: dict | None = None,
         {"tool_name": tool, "tool_input": {"command": command}}
     )
     child_env = dict(os.environ)
-    child_env.pop(BYPASS, None)        # never inherit a bypass from the runner
-    child_env["SHELL"] = "/bin/zsh"    # detector 2 arms only under zsh: pin it
+    child_env.pop(BYPASS, None)               # never inherit a bypass from the runner
+    child_env.pop("CLAUDE_CODE_SHELL", None)  # nor a shell override
+    # Detector 2 arms only when the Bash tool's shell is zsh. Pin that: SHELL says
+    # zsh and a stub `zsh` is on PATH, so the answer never depends on the runner.
+    child_env["SHELL"] = "/bin/zsh"
+    child_env["PATH"] = ZSH_DIR + os.pathsep + child_env.get("PATH", "")
     for key, value in (env or {}).items():
         if value is None:
             child_env.pop(key, None)
@@ -295,14 +312,24 @@ def main() -> int:
         expect_silent(f"15 {label}", command)
     expect_silent("15 non-Bash tool", W_FOR, tool="Read")
 
-    # --- 16: the SHELL gate --------------------------------------------------
-    # `${=VAR}` is a bad substitution in bash and the idiom is already correct
-    # there, so on a bash box this detector must have no opinion at all.
-    expect_silent("16a bash box", W_FOR, env={"SHELL": "/bin/bash"})
-    expect_silent("16b SHELL unset", W_FOR, env={"SHELL": None})
-    expect_deny("16c zsh from a Homebrew path", W_FOR,
-                env={"SHELL": "/opt/homebrew/bin/zsh"})
-    expect_deny("16d detector 1 still fires on a bash box",
+    # --- 16: the shell gate follows how Claude Code picks the Bash tool's shell:
+    # CLAUDE_CODE_SHELL when it names bash or zsh, else bash if SHELL names bash,
+    # else zsh when it is installed, else bash. `${=VAR}` is a bad substitution in
+    # bash and the idiom is already correct there, so on a bash box detector 2
+    # must have no opinion at all. `run_full` puts a stub zsh on PATH by default.
+    expect_silent("16a SHELL=bash", W_FOR, env={"SHELL": "/bin/bash"})
+    expect_deny("16b SHELL unset, zsh installed", W_FOR, env={"SHELL": None})
+    expect_deny("16c SHELL=fish, zsh installed", W_FOR,
+                env={"SHELL": "/usr/bin/fish"})
+    expect_silent("16d SHELL unset, zsh NOT installed", W_FOR,
+                  env={"SHELL": None, "PATH": NO_ZSH_DIR})
+    expect_silent("16e CLAUDE_CODE_SHELL=bash beats SHELL=zsh", W_FOR,
+                  env={"CLAUDE_CODE_SHELL": "/bin/bash", "SHELL": "/bin/zsh"})
+    expect_deny("16f CLAUDE_CODE_SHELL=zsh beats SHELL=bash", W_FOR,
+                env={"CLAUDE_CODE_SHELL": "/bin/zsh", "SHELL": "/bin/bash"})
+    expect_silent("16g a CLAUDE_CODE_SHELL naming neither is ignored", W_FOR,
+                  env={"CLAUDE_CODE_SHELL": "/usr/bin/fish", "SHELL": "/bin/bash"})
+    expect_deny("16h detector 1 still fires on a bash box",
                 'git show "$SHA:x.py"', env={"SHELL": "/bin/bash"})
 
     # --- 17: the bypass covers this detector, and cannot be smuggled in ------
