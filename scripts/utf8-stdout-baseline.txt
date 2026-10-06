@@ -42,6 +42,12 @@
 #     MYC-3520 forbids" and that SEV-3 wants a per-file read (several want
 #     `# utf8-stdout-ok: <reason>`, not the guard). They remain pinned, and come
 #     off only per file, with a reviewer, as those rules require.
+#   - hooks/block-secret-in-note.py   marked `# utf8-stdout-ok` + unpinned when
+#     the guard gained NVIDIA, Google OAuth client secret, npm and Backblaze B2
+#     coverage and its first test. That edit staled the row, and per the rule
+#     below it was deleted, not re-pinned. Every console write is
+#     print(json.dumps(...)), and hooks/test_block_secret_in_note.py runs a deny
+#     for a non-ASCII note name under PYTHONIOENCODING=cp1252.
 #
 # THE RATCHET (same mechanism as scripts/vault-root-read-baseline.txt #407 and
 # scripts/cloud-safe-walker-baseline.txt #411)
@@ -103,9 +109,8 @@
 # ---- SEV-3-doc-only  (1 file(s)) ----
 ed1d68dba02ab76c99907e8efc27ac0aac8c98a14dad261da73fa5d8e1610369 SEV-3-doc-only hooks/_lib/template_purity.py
 
-# ---- SEV-4-json-encoded  (20 file(s)) ----
+# ---- SEV-4-json-encoded  (19 file(s)) ----
 e943857ef9482c097b4357ee8abf2e4ede3ffcab3b9bae3a1a0687b0ae371e2b SEV-4-json-encoded hooks/block-populated-public-skill.py
-73ec7598cd563971fcafc2542818e297df5ed045714d7b66263de949f4619093 SEV-4-json-encoded hooks/block-secret-in-note.py
 b647243fdf0a358d46a6a79b0bf7f817ee121f68d5d685fabe4b0ee2a93af94d SEV-4-json-encoded hooks/check-fabricated-hook-attribution.py
 25d963d25e1e2e6844a35133bbad1d0aad8d03de424e29d4a406a67cb1d4c1cb SEV-4-json-encoded hooks/check-rule-conflicts-on-write.py
 85006d7e25f42ba787b2ce616bd1c71590c3990f89f3153a6f958156c93029ed SEV-4-json-encoded hooks/coach-auto-prescribe-on-journal.py

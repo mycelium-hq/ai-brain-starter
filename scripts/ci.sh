@@ -1540,6 +1540,12 @@ PY_DIRECT=(
   hooks/test_secret_patterns_fp_filter.py
   hooks/test_secret_patterns_nvidia.py
   hooks/test_secret_patterns_anthropic.py
+  hooks/test_secret_patterns_google_oauth.py
+  # block-secret-in-note's first test surface. Runs the guard as a subprocess
+  # under the hook contract, behind an AWS positive control, and fails when a
+  # registry pattern has no block or detect-only decision: the gap that let
+  # nvidia-api-key, npm-access-token and backblaze-b2-app-key into notes.
+  hooks/test_block_secret_in_note.py
   hooks/test_check_fabricated_verification.py
   hooks/test_warn_chained_state_command.py
   hooks/test_footprint_aggregate_bloat.py

@@ -109,12 +109,12 @@ SKIP_PARTS = {".git", "node_modules", "__pycache__", ".venv"}
 # surface anywhere in the repo -- nothing that could distinguish it working
 # from it being dead. Ordered worst-first by blast radius.
 #
-# The two secret-handling guards at the top are the reason this check exists:
-# a secret guard nobody has proven can fire is indistinguishable from no secret
-# guard at all, and it fails silently in the one direction that matters.
+# The secret-handling guards that opened this list are the reason this check
+# exists: a secret guard nobody has proven can fire is indistinguishable from no
+# secret guard at all, and it fails silently in the one direction that matters.
+# The last of them, `block-secret-in-note`, came off when it gained a test
+# surface, so the list no longer holds a secret guard.
 NO_TEST_BASELINE: Set[str] = {
-    # -- secret / data-exposure guards (highest stakes) --
-    "block-secret-in-note",
     # -- correctness / process guards --
     "agent-briefing-check",
     "check-rule-conflicts-on-write",
@@ -159,7 +159,12 @@ NO_TEST_BASELINE: Set[str] = {
 # the list down to the new length rather than keeping either freed slot as
 # slack -- slack is silently re-appendable, which is the exact hole the
 # ratchet closed.
-NO_TEST_MAX = 25
+#
+# 25 -> 23: `block-secret-in-note` gained its first test surface
+# (hooks/test_block_secret_in_note.py), and the cap had been left one above
+# the list's length (24 entries, cap 25), a slot of exactly the slack the
+# paragraph above forbids. Both close here.
+NO_TEST_MAX = 23
 
 
 def is_test_surface(path: Path) -> bool:

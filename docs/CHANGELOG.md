@@ -9,6 +9,24 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-10-06: the note guard now blocks NVIDIA keys, Google OAuth client secrets, npm tokens and Backblaze B2 keys
+
+**Who this affects:** anyone with an NVIDIA build API key, a Google OAuth client of their own (for example from connecting Gmail and Calendar), an npm token or a Backblaze B2 key.
+
+The note guard stops Claude's file-editing tools from writing a live credential into a `.md` or `.txt` note, because notes get synced, committed and searched. It works from a fixed list, and every kind of credential added to the secret scanner after the guard was written was left off that list, with nothing to point out the gap. So NVIDIA keys, npm tokens and Backblaze B2 keys were recognized everywhere else and still went into notes without a word. Google's OAuth client secret, the value starting with `GOCSPX-` that Google shows when you create an OAuth client, was not recognized anywhere.
+
+All four are now blocked in notes. The Google client secret is also recognized by the other secret layers: it is scrubbed from a session's transcript when the session closes, and flagged if it shows up in command output. A transcript saved before this update is not re-read for it unless it changes.
+
+Nothing changes about where these keys belong. The dotfiles `nvidia.sh` reads its key from, a `client_secret.json`, and a connector's own settings are not notes, and writing a key there works as before. If one of these keys is already in a note, Claude can no longer rewrite that note, or edit the part that holds the key, until the key moves out of it.
+
+On Windows the guard waved through every write into a folder whose name has an emoji, such as `⚙️ Meta`, whenever Python read the hook's input with the console's codepage instead of UTF-8. It now reads UTF-8 on every system. Its message also stopped promising a per-write bypass that no tool call could use: it now says to keep the key in a keychain or a secrets file that is not a note, or to write a placeholder in its place.
+
+Google says a desktop app's client secret is not really secret, so why block it? Web-application clients get the same `GOCSPX-` prefix, Google says to keep theirs out of anywhere publicly accessible, and nothing in the value says which kind it is. A note is also never where a client secret needs to live.
+
+So the note guard cannot fall behind the scanner again, every credential pattern the scanner knows now has to be marked either "blocks in notes" or "does not, and here is why", and a test fails when a new one arrives without that decision. That test is also the first one that proves the guard fires at all. Three other checks keep their own lists and do not know these four kinds yet: the two that look for keys written straight into an MCP server's settings, and the secret-warn skill.
+
+---
+
 ## 2026-10-04: text from outside can no longer end a note's frontmatter early or add a line to it
 
 **Who this affects:** anyone who writes a skill on the shared frontmatter helper `yaml_escape` (in `skills/_shared/connector_utils.py`), and anyone who runs `ingest-github` with a repo name that came from somewhere untrusted (its `repo` field is the one place this repo calls the helper directly). Everyone else sees no difference.

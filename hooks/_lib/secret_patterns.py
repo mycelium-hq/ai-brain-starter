@@ -1,14 +1,26 @@
 """Shared secret-pattern registry.
 
-One module, used by every secret-detection / redaction layer:
+One module, used by every secret-detection / redaction layer that imports it:
 - `hooks/detect-secrets-in-bash-output.py` (PostToolUse Bash, alerts on detect)
 - `hooks/scrub-session-jsonl-secrets.py` (SessionEnd, rewrites JSONLs)
-- `hooks/scan-prior-sessions-for-secrets.py` (SessionStart, warns + auto-scrubs closed sessions)
+- `hooks/scan-prior-sessions-for-secrets.py` (scheduled corpus scan, warns +
+  auto-scrubs closed sessions; SessionStart only reads its cached findings)
+- `hooks/block-secret-in-note.py` (PreToolUse Write/Edit/MultiEdit, blocks the
+  names it lists)
 - Any standalone tool that imports `redact()` or `scan()`
 
-Adding a new pattern here automatically covers all layers. That's the
-architectural property: the secret-defense surface is one regex file, not
-N hooks that each evolved separately.
+Adding a new pattern here covers every layer that imports this module. That's
+the architectural property: the secret-defense surface is meant to be one
+regex file, not N hooks that each evolved separately. It is not there yet:
+three checks keep their own hand-written lists and do not import this module
+(`block-claude-mcp-inline-secret.py`, `block-mcp-config-inline-secret.py`, and
+the secret-warn skill's `pattern_registry.json`). Two layers that do import it
+need more than the pattern: `block-secret-in-note.py` blocks only the names in
+its BLOCK_NAMES, and hooks/test_block_secret_in_note.py fails until a new
+pattern is classified there as blocking or detect-only; and
+`scan-prior-sessions-for-secrets.py`'s incremental pass re-reads only
+transcripts changed since its last completed pass, so a new pattern never
+reaches a transcript that has not changed since.
 
 False-positive discipline: every pattern in this registry that has known
 benign matches (Docker image digests, NPM integrity hashes, base64 blobs,
@@ -170,6 +182,32 @@ _PROVIDER = [
         ),
         redaction="[REDACTED-google-api-key]",
         description="Google API key. Requires non-alphanumeric boundary on both sides to skip base64-binary substring false positives.",
+    ),
+    SecretPattern(
+        # Google OAuth 2.0 client secret. Same class as nvidia-api-key above: the
+        # google-workspace-mcp connector's guided setup has people create their
+        # own OAuth client and hand its secret to the connector's installer,
+        # and no layer here could see the shape. Desktop and Web-application
+        # clients both get it: that setup says a Desktop secret usually starts
+        # with GOCSPX-, and FastMCP's Google guide shows a Web-application one
+        # that does.
+        #
+        # Shape: GOCSPX- + 28 of [A-Za-z0-9_-], 35 in all. Google's own scanner
+        # (osv-scalibr, veles/secrets/gcpoauth2client) matches
+        # `\bGOCSPX-[a-zA-Z0-9_-]{28}`, and a real client secret measured for
+        # this entry had a 28-character body. Two departures from that rule:
+        # no leading `\b`, so a secret glued to a word character (after a
+        # URL-encoded `%3D`, say) still matches, and `{28,}` rather than
+        # `{28}`, so redaction takes the whole run instead of leaving a tail.
+        # Case-sensitive, like Google's rule. A secret without the prefix has no
+        # distinctive shape and is not covered.
+        name="google-oauth-client-secret",
+        regex=re.compile(r"GOCSPX-[A-Za-z0-9_\-]{28,}", re.ASCII),
+        redaction="[REDACTED-google-oauth-client-secret]",
+        description=(
+            "Google OAuth 2.0 client secret, GOCSPX- + 28 of [A-Za-z0-9_-] "
+            "(35 total). A secret without the prefix is not covered."
+        ),
     ),
     SecretPattern(
         name="resend-api-key",
