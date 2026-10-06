@@ -276,6 +276,21 @@ import subprocess             # noqa: E402
 import sys as _sys            # noqa: E402
 import tempfile               # noqa: E402
 
+
+def sandbox_env(home) -> dict:
+    """Environment for a child that runs the hook installer for real, shaped as
+    tests/integration/lib/sandbox_home.sh run_sandboxed shapes it.
+
+    --settings moves only the hook merge. The same run links Claude Code's memory into
+    $VAULT_ROOT and schedules the daily maintenance job, so the child gets a throwaway
+    HOME (and USERPROFILE, which is what Windows reads), no VAULT_ROOT, and the
+    installer's own opt-out from scheduling."""
+    env = dict(os.environ, HOME=str(home), USERPROFILE=str(home),
+               HOMEDRIVE="", HOMEPATH="", ABS_NO_AUTO_GC="1")
+    env.pop("VAULT_ROOT", None)
+    return env
+
+
 with tempfile.TemporaryDirectory() as td:
     home = Path(td) / "home"
     (home / ".claude").mkdir(parents=True)
@@ -284,20 +299,32 @@ with tempfile.TemporaryDirectory() as td:
     # the new pass can remove them.
     target.write_text(json.dumps(settings(*[UNOWNED] * 6)), encoding="utf-8")
 
-    env = dict(os.environ)
-    env.update(USERPROFILE=str(home), HOME=str(home),
-               HOMEDRIVE=str(home)[:2], HOMEPATH=str(home)[2:])
-    proc = subprocess.run(
-        [_sys.executable, str(ROOT / "scripts" / "install-hooks-user-level.py"),
-         "--settings", str(target), "--quiet"],
-        capture_output=True, env=env, timeout=180,
-    )
+    # A developer's shell often exports VAULT_ROOT, and the installer takes its vault
+    # from it when none is given: it would link Claude Code's memory into that vault.
+    # The decoy sits under the temp dir, where the installer never schedules anything.
+    decoy_vault = Path(td) / "elsewhere" / "vault"
+    decoy_vault.mkdir(parents=True)
+    saved_vault_root = os.environ.get("VAULT_ROOT")
+    os.environ["VAULT_ROOT"] = str(decoy_vault)
+    try:
+        proc = subprocess.run(
+            [_sys.executable, str(ROOT / "scripts" / "install-hooks-user-level.py"),
+             "--settings", str(target), "--quiet"],
+            capture_output=True, env=sandbox_env(home), timeout=180,
+        )
+    finally:
+        if saved_vault_root is None:
+            os.environ.pop("VAULT_ROOT", None)
+        else:
+            os.environ["VAULT_ROOT"] = saved_vault_root
     after = json.loads(target.read_text(encoding="utf-8"))
     survivors = [h for groups in after.get("hooks", {}).values()
                  for g in groups for h in g.get("hooks", [])
                  if h.get("command") == UNOWNED]
     check("WIRING-installer-run-succeeded", proc.returncode == 0)
     check("WIRING-installer-collapses-identical-copies", len(survivors) == 1)
+    check("WIRING-an-exported-VAULT_ROOT-does-not-reach-the-installer",
+          not any(decoy_vault.iterdir()))
 
 # --- report ----------------------------------------------------------------
 if FAILS:
