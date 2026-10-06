@@ -5,8 +5,8 @@ PreToolUse Bash hook: bash idioms that silently do the wrong thing under zsh.
 Two independent detectors (one raising never disarms the other), one bypass.
 
 1. git-ref, in any shell. An unbraced `$VAR:` plus a letter in a git object read
-   (show, cat-file, grep, diff, log, archive, rev-parse, ls-tree). zsh reads it
-   as a history modifier, so the result is unpredictable: `"$SHA:src/app.py"` is
+   (show, cat-file, grep, diff, log, archive, rev-parse, ls-tree). zsh can read
+   it as a history modifier, so the result is unpredictable: `"$SHA:src/app.py"` is
    a bad substitution, `"$SHA:hooks/x"` reads `.ooks/x`. A silent miss looks
    exactly like "that path does not exist at that ref". The braced
    `"${SHA}:path"` is always right. Only code is scanned (heredoc bodies,
@@ -144,7 +144,7 @@ def detect_unbraced_git_ref(command: str, zsh: bool) -> list:
         return []
     return [
         f"BLOCKED by {GUARD}: `${first}:` is unbraced in a git object read.\n\n"
-        f"Under zsh, `$VAR:` followed by a letter is a HISTORY MODIFIER, so the "
+        f"Under zsh, `$VAR:` followed by a letter can be read as a HISTORY MODIFIER, so the "
         f"unbraced form is unpredictable: it can fail outright or read an empty or "
         f"wrong path, and the braced form is always right. A silent miss looks "
         f"exactly like 'that path does not exist at that ref'.\n\n"

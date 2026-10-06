@@ -15,11 +15,11 @@ hook exits 0 on EVERY path, deny included. The refusal travels as
 `returncode != 0` would pass identically against a hook that had been gutted to
 `sys.exit(0)`. So every leg here asserts the PARSED DECISION, never the status.
 
-The two defects being guarded, for whoever reads this next. Both are silent
-under zsh and both are correct in bash, so they only bite on a zsh box:
-  * `git show "$SHA:src/app.py"` -- `$VAR:` is a history modifier, so the
-    command emits nothing and succeeds. Every absence concluded from it is a
-    false clean.
+The two defects being guarded, for whoever reads this next. Both can mislead
+silently under zsh and both are correct in bash, so they only bite on a zsh box:
+  * `git show "$SHA:hooks/x"` -- `$VAR:` can be read as a history modifier, so
+    the path is unpredictable: this one silently reads `.ooks/x`, others fail
+    outright. Every absence concluded from a silent miss is a false clean.
   * `set -- $r` / `for c in $CHECKS` -- zsh does not word-split an unquoted
     parameter expansion, so `$1` holds the whole string and the loop runs once.
 
