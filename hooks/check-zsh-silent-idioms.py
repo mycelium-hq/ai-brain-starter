@@ -402,6 +402,8 @@ def _isolation_ok() -> bool:
             word_split = run_detectors("for c in $CHECKS; do :; done", True)
             DETECTORS = real + (("boom", boom),)
             git_ref = run_detectors('git show "$SHA:x.py"', True)
+    except Exception:
+        return False        # the failure escaped run_detectors: isolation is broken
     finally:
         DETECTORS = real
     return bool(word_split) and bool(git_ref)
