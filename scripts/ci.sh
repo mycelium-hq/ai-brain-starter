@@ -1679,6 +1679,13 @@ PY_DIRECT=(
   # DOES retrieve the token) proving the check isn't vacuous; and
   # negative-control mutants that must each flip a verdict.
   hooks/test_heavy_admission.py
+  # check-zsh-silent-idioms.py: bash idioms that silently do the wrong thing under
+  # zsh (an unbraced $VAR:path in a git read; an unsplit $VAR in `set --` / `for`).
+  # Drives the real hook over real stdin and asserts the PARSED decision, because
+  # the hook exits 0 on every path and an exit-code assertion would pass against a
+  # gutted hook. Fire and silent legs for both detectors, the shell gate, the
+  # bypass, and detector isolation. Plain script, stdlib only.
+  hooks/test_check_zsh_silent_idioms.py
 )
 dormant_py=()
 while IFS= read -r -d '' f; do
