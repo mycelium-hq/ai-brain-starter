@@ -27,6 +27,10 @@ Usage:
 
 Env overrides:
     VAULT_ROOT       Default: current working directory (must be a git repo).
+                     Honored only when cwd is not itself inside an established
+                     vault, when it agrees with the vault cwd resolves to, or
+                     when VAULT_ROOT_FORCE=1 -- see
+                     hooks/_lib/vault_root.py's resolve_cli_vault_root().
     DRIFT_DAYS       Default: 30
     DRIFT_MIN_EDITS  Default: 5
     DRIFT_TOP_N      Default: 30
@@ -45,7 +49,54 @@ from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
-VAULT_ROOT = Path(os.environ.get("VAULT_ROOT") or os.getcwd())
+# Reach for the repo's canonical per-target vault-root semantics
+# (hooks/_lib/vault_root.py) instead of re-deriving cwd-vs-VAULT_ROOT
+# precedence a second time -- the same two-line sys.path trick
+# scripts/build-journal-index.py already uses for hooks/_lib/safe_read.py.
+# The first entry resolves `_lib` when this file is a synced vault copy at
+# <meta>/scripts/drift-detection.py (sync-vault-scripts.sh mirrors
+# hooks/_lib/vault_root.py to <meta>/scripts/_lib/ for exactly this case);
+# the second resolves it when this file is the repo checkout's own
+# scripts/drift-detection.py, sitting next to hooks/_lib/ two levels up.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+from _lib.vault_root import collapse_worktree, resolve_cli_vault_root  # noqa: E402
+
+
+def _warn_vault_root_mismatch(cwd_vault: Path, env_root: Path) -> None:
+    """resolve_cli_vault_root's on_mismatch callback for this CLI.
+
+    This CLI is documented (see the module docstring) to prefer the vault
+    you actually ran it from over a globally-exported VAULT_ROOT (a shell
+    profile, or a Claude Code settings.json `env` block, so every hook
+    subprocess always sees it set) -- `git()` below runs with cwd=VAULT_ROOT
+    and the report is written under it too, so a real mismatch is not a
+    cosmetic label, it audits and overwrites the wrong vault's
+    `Meta/Drift Audit.md` with no error otherwise
+    (scripts/check-vault-root-reads.py's SEV-B-cwd bug class). Warning here,
+    naming the ignored VAULT_ROOT, is the actual bug-class fix.
+    compress-vault-doc.py shares this exact resolver but omits this
+    callback, since it has no comparable warning of its own.
+    """
+    print(
+        f"WARNING: VAULT_ROOT env points at {env_root}, but the current "
+        f"directory resolves to the vault at {cwd_vault}. Auditing "
+        f"{cwd_vault} (where you actually ran this from); set "
+        f"VAULT_ROOT_FORCE=1 to force {env_root} instead.",
+        file=sys.stderr,
+    )
+
+
+# fallback= is what this CLI is documented (see the module docstring) to
+# default to when NEITHER cwd nor VAULT_ROOT resolves to an established
+# vault at all -- unchanged from before #683. It is the one parameter
+# resolve_cli_vault_root lets callers differ on; every other combination of
+# cwd/VAULT_ROOT/VAULT_ROOT_FORCE resolves identically to whatever
+# compress-vault-doc.py (which shares this same function) would resolve.
+VAULT_ROOT = resolve_cli_vault_root(
+    fallback=collapse_worktree(Path.cwd()),
+    on_mismatch=_warn_vault_root_mismatch,
+)
 
 # Resolve Meta/ folder. Vaults vary: "Meta/", "⚙️ Meta/", "_meta/", etc.
 # Pick the first one that exists; fall back to "Meta/" for new installs.
@@ -184,6 +235,8 @@ def git(args):
         cwd=str(VAULT_ROOT),
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
     return r.stdout
@@ -200,7 +253,19 @@ def main():
     args = parser.parse_args()
 
     if not (VAULT_ROOT / ".git").exists():
-        print(f"No .git at {VAULT_ROOT}. Set VAULT_ROOT to a git-tracked vault.", file=sys.stderr)
+        # vault-root-ok: message-only read to phrase this error -- VAULT_ROOT
+        # itself was already resolved through resolve_cli_vault_root() above;
+        # this only decides whether to say "already set (to ...)" or "Set".
+        env_raw = os.environ.get("VAULT_ROOT")
+        if env_raw:
+            print(
+                f"No .git at {VAULT_ROOT}. VAULT_ROOT is already set (to "
+                f"{env_raw!r}) -- point it at a git-tracked vault, or run "
+                f"this from inside one.",
+                file=sys.stderr,
+            )
+        else:
+            print(f"No .git at {VAULT_ROOT}. Set VAULT_ROOT to a git-tracked vault, or run this from inside one.", file=sys.stderr)
         return 2
 
     log = git([
@@ -289,11 +354,31 @@ def main():
     today = datetime.now().strftime("%Y-%m-%d")
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
+    # The purpose line carries both ": " and "'". An unquoted YAML scalar
+    # containing ": " parses as a nested mapping, so the generated file's
+    # frontmatter failed yaml.safe_load. json.dumps emits a double-quoted
+    # scalar, which is valid YAML -- but json.dumps's OWN default
+    # (ensure_ascii=True) escapes any non-ASCII character to a \uXXXX
+    # sequence, and for an astral-plane codepoint (an emoji vault folder
+    # name like "📓 Journals", a real --include glob) that means a SURROGATE
+    # PAIR: two \uXXXX escapes neither YAML loader treats as one character.
+    # The pure-Python SafeLoader silently reassembles them into a lone
+    # surrogate (fails to re-encode as UTF-8 the moment anything downstream
+    # tries), and the libyaml-backed CSafeLoader -- what a production PyYAML
+    # install actually runs when available -- raises ScannerError outright.
+    # ensure_ascii=False writes the real UTF-8 character instead, which both
+    # loaders parse as one codepoint. See test_drift_audit_frontmatter.py's
+    # astral-emoji case.
+    purpose = (
+        f"Multi-edit drift audit. Files edited {args.min_edits}+ times "
+        f"in last {args.days} days. Include: '{args.include}'."
+    )
+
     body = [
         "---",
         f"creationDate: {today}",
         "type: meta",
-        f"purpose: Multi-edit drift audit. Files edited {args.min_edits}+ times in last {args.days} days. Include: '{args.include}'.",
+        f"purpose: {json.dumps(purpose, ensure_ascii=False)}",
         "generator: scripts/drift-detection.py",
         "---",
         "",

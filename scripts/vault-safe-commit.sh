@@ -50,6 +50,13 @@ if [ -f "$CLOSE_GUARD" ]; then
     . "$CLOSE_GUARD"
 else
     vault_git_index_lock() { echo ""; return 1; }
+    # _close_lock_mtime and _close_lock_size are normally defined by
+    # CLOSE_GUARD too (cross-platform mtime/size, GNU-first + numeric-
+    # validated -- PORTABILITY.md #1). Guard missing -> both unknown -> the
+    # lock-age AND lock-size callers below treat the lock as unprovable and
+    # do NOT remove it. Fail closed, same as above.
+    _close_lock_mtime() { echo ""; }
+    _close_lock_size() { echo ""; }
 fi
 
 # VAULT_ROOT is optional: when unset, derive it from the repo the caller is
@@ -172,7 +179,14 @@ is_real_write_process() {
 # --- lock safety check loop ---
 waited=0
 while [ -e "${LOCK_FILE}" ]; do
-    lock_size=$(stat -f%z "${LOCK_FILE}" 2>/dev/null || stat -c%s "${LOCK_FILE}" 2>/dev/null || echo "999")
+    # _close_lock_size (from _session_close_guard.sh, sourced above) is the
+    # canonical GNU-first + numeric-validated size reader -- PORTABILITY.md
+    # #1. A lock whose size we cannot prove must never be treated as
+    # removable: empty (unknown) falls back to 999, the same non-zero
+    # sentinel the original raw `|| echo "999"` chain used, so an unreadable
+    # size can never satisfy the `= "0"` stale check below.
+    lock_size=$(_close_lock_size "${LOCK_FILE}")
+    [ -n "${lock_size}" ] || lock_size=999
     write_procs=$(is_real_write_process)
 
     stale=0
@@ -187,7 +201,20 @@ while [ -e "${LOCK_FILE}" ]; do
                 stale=1
             fi
         else
-            lock_age=$(( $(date +%s) - $(stat -f%m "${LOCK_FILE}" 2>/dev/null || stat -c%Y "${LOCK_FILE}" 2>/dev/null || date +%s) ))
+            # _close_lock_mtime (from _session_close_guard.sh, sourced above)
+            # is the canonical GNU-first + numeric-validated mtime reader --
+            # see its own comment for why a raw `stat -f%m ... || stat -c%Y`
+            # chain is not safe on Linux (PORTABILITY.md #1). A lock whose age
+            # we cannot prove must never be treated as stale: an unprovable
+            # age must not cause a live mutex to be removed out from under a
+            # concurrent committer.
+            lock_mtime=$(_close_lock_mtime "${LOCK_FILE}")
+            if [ -n "${lock_mtime}" ]; then
+                lock_age=$(( $(date +%s) - lock_mtime ))
+            else
+                lock_age=0
+                log "lock age unknown (mtime unreadable) for non-PID content — not removing"
+            fi
             if [ "${lock_age}" -gt 60 ]; then
                 log "stale non-empty lock (non-PID content, ${lock_age}s old) — removing"
                 stale=1

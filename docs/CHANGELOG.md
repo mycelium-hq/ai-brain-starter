@@ -9,6 +9,190 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-10-04: text from outside can no longer end a note's frontmatter early or add a line to it
+
+**Who this affects:** anyone who writes a skill on the shared frontmatter helper `yaml_escape` (in `skills/_shared/connector_utils.py`), and anyone who runs `ingest-github` with a repo name that came from somewhere untrusted (its `repo` field is the one place this repo calls the helper directly). Everyone else sees no difference.
+
+`yaml_escape` turns a piece of text into a value that is safe to put on a `key: value` line in a note's frontmatter. When a value needed quoting it was wrapped in double quotes, but a line break inside it was left as it was. So text that came from outside (a web page, a caption, a field in an API payload) could end the frontmatter early with a line holding only `---`, or add a line of its own such as `injection_scan: clean`, the stamp this repo uses to say whether a note's body was scanned for planted instructions. Only a plain newline was even noticed: a lone carriage return, the Unicode next-line character, the two Unicode line and paragraph separators, vertical tab and form feed did not trigger the quoting at all. A control character that is not a line break (a bell, an escape, a NUL byte) made PyYAML refuse the whole header, and `split_frontmatter` then returns an empty header, which hides the stamp too.
+
+Now each of these is written as its YAML escape (`\n`, `\x07`, `\L` and so on) and makes the value quoted: the C0 control characters, DEL, the C1 control characters, the two Unicode separators, and U+FFFE and U+FFFF, which PyYAML's reader rejects even inside quotes. A tab is left as it is but also makes the value quoted, because PyYAML's default loader cannot read a tab in an unquoted value. A value that holds any of these characters comes back as one physical line, and `yaml.safe_load` returns the exact original. A value with none of them renders exactly as before.
+
+One case is not covered: a lone surrogate half, the leftover of a cut emoji. It cannot be written to a file as UTF-8 at all, so an escape cannot save it. `sanitize_third_party_text` replaces it, and text from outside should go through that first.
+
+`tests/integration/test_untrusted_ingest_guard.sh` (T18) takes the list of characters from the Unicode database instead of from the helper's own table. It fails if any one of them is dropped from the table, if backslashes are escaped after the control characters instead of before, or if a tab stops forcing quotes. It also fails if either file holds one of the invisible characters raw, so an editor that normalizes whitespace cannot quietly rewrite the table.
+
+---
+
+## 2026-10-01: the version check now measures the Claude Code that is running your session, and says when your installed copies disagree
+
+**Who this affects:** anyone with more than one copy of Claude Code on the machine (an install per node version, Homebrew, the desktop app's own copy), and anyone who runs scheduled `claude -p` jobs. Everyone else sees no difference.
+
+The startup version check asked whichever `claude` your PATH found first, so it could tell a desktop session it was on one release while that session ran another, and it never looked at the copies your scheduled jobs use. Upgrading "the" install and checking it proved nothing about the others: two of three copies on one machine sat weeks behind while every upgrade was verified against the third.
+
+The check now asks the Claude Code process that started the session, and the line it prints says which file it asked (or that it fell back to PATH, and why). Its saved answer is kept per binary, so one copy's reading is not shown to a session running another. The one exception is a labeled fallback: when the running copy will not say its version, the copy on PATH is measured instead and that reading is saved for both. Upgrading the copy a session runs, or the copy on PATH, shows up straight away instead of after six hours. The upgrade hint names the install's own `--prefix`, because a plain `npm i -g` installs under whichever node comes first on PATH. When the copies it can find (on PATH and on each LaunchAgent's PATH, skipping any relative entry; in the usual install folders; and the newest desktop copy) are not all the same version, it prints one line naming the copies and their versions (up to eight). When they agree, it prints nothing, and a copy whose version it cannot read never counts as a different version. The `claude --version` runs are time-limited (this needs perl or `timeout`, which nearly every machine has): ten seconds each for the running copy and the PATH copy, five seconds each (twenty in all) for the copies the comparison checks, and thirty seconds for the whole comparison. The GitHub requests a refresh makes have no time limit, as before.
+
+The Python helper `scripts/_claude_router.py` had the same blind spot: when `claude` was not on PATH it tried one hardcoded node-version folder, which exists on exactly one machine. It now looks at every `~/local/node-*/bin/claude` plus the usual install folders and uses the newest, reading each version from the package file beside it without running it.
+
+---
+
+## 2026-10-01: `/journal` dropped your messages on machines where `python3` refuses to run a script
+
+**Who this affects:** anyone who runs `/journal` with a message reader script in their vault (`journal-messages-fetch.py`), on a machine where a Python tool puts its own stand-in for `python3` first on the PATH. Some of those stand-ins answer `python3 some-script.py` with advice ("use `uv run python ...`") and exit with an error, while still running one-liners, so nothing looks broken.
+
+The `/journal` context pull (`journal-preflight.py`) gathers every source in one command. It started the message reader as a bare `python3 <script>`, which that stand-in refuses. The reader never ran, so where your WhatsApp and iMessage threads should have been, the digest held the stand-in's advice text, and the run record listed `messages` as failed. The RescueTime reader a few lines further down was already started with the interpreter running the pull itself, so the file disagreed with itself.
+
+The message reader now runs under the same interpreter as the pull. In the same edit, the pull reads its helper programs' output as UTF-8 instead of the console's code page, as the rest of this repo's scripts do.
+
+A new test runs the real pull with a script-refusing stand-in first on the PATH and checks that the messages arrive, and that putting the old call back turns it red. A second check reads every Python file under `scripts/` and `skills/` and fails when one starts another Python script through a bare `python3`, so the same mistake cannot return unnoticed.
+
+---
+
+## 2026-09-29: a slash command you rewrote is kept on update, so keeping it no longer freezes your updates
+
+**Who this affects:** anyone who has rewritten one of the slash commands this repo installs into `~/.claude/commands/`, for example to point `/cierre` at a different skill.
+
+Every install and update copied each shipped command over the one in `~/.claude/commands/` if the two differed. It backed yours up first, but it still replaced it. So the only way to keep your version was to make the same edit in the checkout's own `commands/` folder. That left the checkout with a local edit, and the auto-updater will not update a checkout with local edits. From then on no update arrived: not new features, and not the guard and security fixes. Nothing looked broken, because the update check still ran every day. On the machine where this was found, that went on for 41 days.
+
+Now the installer checks where your copy came from. If it matches any version of that command this repo ever shipped, it is an old copy and gets replaced, with a backup, as before. If it matches none of them, you wrote it: it is left exactly as it is, and the end-of-install summary lists it under "Skipped (your customizations preserved)", with the path to the shipped version so you can compare them. A copy saved with Windows line endings still counts as shipped. When there is no history to check against (an archive install, a shallow clone, or a folder that sits inside some other git repo), nothing changes: a differing copy is replaced with a backup, as before.
+
+**If you used the old workaround:** once you have this update, undo the checkout edit with `git -C ~/.claude/skills/ai-brain-starter restore commands/<name>.md`. Your copy in `~/.claude/commands/` stays, and automatic updates resume. Both installers (`bootstrap.sh` and `bootstrap.ps1`) behave the same way. `tests/integration/test_bootstrap_keeps_user_authored_commands.sh` and a new case in `test_bootstrap_ps1_slash_commands.ps1` cover it, each with a negative control that fails when the check is removed.
+
+---
+
+## 2026-09-25: merging main into a topic branch no longer trips the session-artifact guard, and `git merge` is guarded too
+
+**Who this affects:** anyone using `git-hooks/guard-session-artifacts-on-default-branch.sh`, the hook that refuses to commit session-close notes on a branch other than the default one, where they would strand instead of reaching it.
+
+Merging `origin/main` into a feature branch stages main's own session notes, unchanged, and the guard refused that merge, so the only way through was the bypass. A staged note is now let through when its content and file mode already match `origin/<default>`, or the commit being merged when that commit is already on the default branch. A new note, an edited one, a mode change, or a deletion the default branch does not have is still refused.
+
+A conflict-free `git merge` never runs the `pre-commit` hook, so a merge could bring another branch's session notes in with no check at all. `git-hooks/pre-merge-commit-template.sh` chains the same guard onto `pre-merge-commit`. Install it next to your pre-commit hook; its header has the two commands.
+
+The check now costs a fixed handful of `git` calls however many files are staged, reads every path byte for byte (quotes, tabs, newlines and a leading `:` included), and refuses rather than allows whenever git fails to list or compare what is staged.
+
+---
+
+## 2026-09-25: the weekly performance digest crashed when no session in its window got a reply
+
+**Who this affects:** anyone who runs `scripts/claude_performance_digest.py` over a window in which not one session got an assistant reply. That is likeliest on a fresh install, or with a short `--days` window.
+
+The digest's Project Allocation table shows how your assistant turns split across projects. Every project with a session in the window gets a row, even when that session never got an answer. Each row's percentage was the project's turns divided by the total, and nothing checked that the total was above zero. So when every session in the window had zero replies, the run stopped with a "division by zero" error before it saved the weekly report or applied any of its prescriptions, and that week's digest produced nothing.
+
+A zero total now shows each project at 0% and the run carries on, saving the report and applying prescriptions as usual. The activity and model-mix tables next to it already handled this case. A new test runs the digest over sessions with no replies, where it must finish and save the report, and over a mix with one normal session, where the real percentages must stay the same.
+
+## 2026-09-25: the retry limit blocked work that was not a loop, and on most installs it could not block at all
+
+**Who this affects:** everyone. The retry-budget hook is wired on every install.
+
+The retry-budget hook stops Claude after the 3rd identical Bash command in 30 minutes, so a failing command gets surfaced to you instead of retried forever. Three problems made it wrong in both directions.
+
+It told commands apart by their first 400 characters only. Commands that start with a long folder path, which is common when Claude works from a scratch folder, looked identical even when everything after the path was different, so a 4th *different* step could be blocked as a loop. It now compares the whole command.
+
+On a machine where a second installer also registered the hook, every Bash command was counted twice, so the block came on the 3rd command instead of the 4th. The hook now counts each command once, however many times it is registered.
+
+And the way `hooks.json` registered it (`... || true`) quietly turned the hook's "block" answer into "allow", so on Mac and Linux an install carrying only this repo's copy never blocked anything. (Windows runs hooks through its own launcher, which kept the block, so it was not affected.)
+
+Two smaller things came with it. If the hook's small tracking file is damaged, or the hook file itself cannot be read, it now stays out of the way instead of erroring (or blocking) on every command. And a machine that already had the hook registered twice ends up with exactly one registration after a single update. It is now registered in the same form as the other blocking hooks, and when the hook file is missing it stays out of the way instead of answering for the command.
+
+## 2026-09-25: a Linux-only `stat` bug crashed both the version-check hook and the installer itself
+
+**Who this affects:** anyone running ai-brain-starter on Linux, or in CI on ubuntu. macOS was never affected.
+
+Twelve sites across the repo read a file's modified time or size with a "try BSD's `stat -f` first, fall back to GNU's `stat -c`" pattern. That order is backwards on Linux: GNU's `-f` flag means "show filesystem info," not "custom format," so `stat -f %m FILE` (or `%z`, for size) does not fail the way the fallback assumed. On real GNU coreutils it can hand back non-numeric text instead of a clean error, and two sites fed that text straight into arithmetic: `hooks/check-claude-code-version.sh`'s cache-age check, and `bootstrap.sh`'s own log-rotation check. Both aborted with a bash "unbound variable" error on Linux. `bootstrap.sh`'s crash is the worse one: it happens on *every* run once `~/.claude/.bootstrap.log` exists from a prior run, in the one script every Linux user runs to install this project.
+
+The other ten sites (`scripts/auto-snapshot.sh`'s log-trim check, `scripts/bootstrap-restore.sh`'s backup-age filter and its size and modified-time columns, `scripts/diagnose.sh`'s journal-index freshness check, `hooks/rotate-logs.sh`'s rotation-size check, `scripts/vault-backup.sh`'s two size reads, and `scripts/vault-safe-commit.sh`'s stale-lock age and size checks) used differently-shaped versions of the same backwards order. Measured against real GNU coreutils, most of those didn't crash the same way, each had its own accidental reason not to (a `uname` gate that never reaches the BSD form on Linux, a glued option form that happens to fail cleanly, separate assignments that overwrite instead of concatenate), but none were safe by design, and a different coreutils build or a different `stat` implementation could change that without warning. `scripts/auto-snapshot.sh`'s log-trim silently never fired on Linux and printed a confusing "integer expression expected" error on every run once its log existed.
+
+All twelve now try the matching GNU form first (`stat -c %Y` for mtime, `stat -c %s` for size) and check the result is a plain number before trusting it, falling back to the BSD form (also validated) only if that fails, the same pattern already used by `_close_lock_mtime` in `scripts/_session_close_guard.sh` (which gained a sibling, `_close_lock_size`, for the size case). `vault-safe-commit.sh` now calls both shared functions directly instead of carrying its own copies. A check, `scripts/check-stat-portability.py`, fails CI if this backwards pattern shows up again at any BSD `stat` format letter in any tracked shell script, quoted or not, not just `%m`.
+
+## 2026-09-24: graph routing never fired on Linux
+
+**Who this affects:** anyone running `graph-context-hook.sh` on Linux, or anywhere `stat` is the GNU version, with a graph that exists.
+
+The hook reads the graph file's age to warn when it is stale. It asked `stat -f %m` first, which is the macOS form. On Linux `stat -f` means "file system", so it printed file-system text before failing, that text landed in the captured age next to the fallback's number, and the hook then crashed on it and printed nothing. Routing silently never happened there.
+
+Now it asks the Linux form first, then the macOS form, checks that the answer is a number, and says "age unknown" instead of crashing if neither works. The test added with the graph-routing env overrides (#682) caught this the first time it ran on a Linux machine.
+
+---
+
+## 2026-09-23: the Decision Log index stops listing decisions as "????-??-?? — What"
+
+**Who this affects:** anyone whose decision files have `creationDate` but no `decision_date`, or use a What/Why template with `## What` (or `## Qué`) as the first heading. Session-close writes plenty of both.
+
+The index at the top of `Decision Log.md` took the date from `decision_date` only and the title from the first heading in the file. On one 102-decision vault, 16 entries showed up as `????-??-??`, and 12 of those had the same title, "Qué". An index where a dozen rows read the same thing is no help for finding a decision.
+
+It wasn't only cosmetic. A decision with no date stays in the main log forever, so closed decisions without `decision_date` could never move to `Decision Log Archive.md`.
+
+Now, when `decision_date` is missing, the date comes from `creationDate`, and failing that from the date at the start of the filename. Headings that are just template labels (What, Why, Context, Qué, Por qué, Contexto…) are skipped. When nothing else is left, the title is the first sentence of the What section, stripped of bold and links and cut at about 90 characters. Decision files are not touched. The fix is entirely in how the index is built.
+
+---
+
+## 2026-09-20: the generated Drift Audit frontmatter did not parse as YAML, and the script could silently audit the wrong vault
+
+**Who this affects:** anyone running `drift-detection.py`, and anyone with `VAULT_ROOT` exported machine-wide (a shell profile, or a Claude Code `settings.json` `env` block someone configured) who runs it from a vault other than the one `VAULT_ROOT` names.
+
+**Bug 1 — the frontmatter it wrote couldn't be parsed.** The generated `Meta/Drift Audit.md` carries a `purpose:` line built from the `--include` glob, e.g. `purpose: Multi-edit drift audit. ... Include: '*.md'.`. An unquoted YAML scalar containing `": "` is read as a nested mapping, so `yaml.safe_load` raised "mapping values are not allowed here" — the file was invisible to Dataview, metadata extractors, and any other frontmatter-reading tool, with nothing erroring to say so. The purpose line is now JSON-encoded (`json.dumps(..., ensure_ascii=False)`), which is valid YAML for every glob we tested, including one with an apostrophe or an astral-plane emoji (a real vault folder name, e.g. "📓 Journals") in it.
+
+**Bug 2 — a globally-exported `VAULT_ROOT` silently outranked the vault you were standing in.** The script read `os.environ.get("VAULT_ROOT") or os.getcwd()`: once `VAULT_ROOT` is set anywhere (a shell profile, or Claude Code's `env` block, which every hook subprocess inherits), it always wins, even when you `cd` into a different git-tracked vault and run the script there. Both the git history it scans and the `Meta/Drift Audit.md` it writes would resolve against the wrong vault, with no error. It now prefers the vault you're actually standing in — cwd, or an ancestor of cwd that already has a Meta folder, collapsing a vault worktree to its main vault first — and only falls back to `VAULT_ROOT` when cwd isn't inside an established vault at all (a plain code checkout, say), when the two already agree, or when you set `VAULT_ROOT_FORCE=1` — otherwise it warns and audits the vault you actually ran it from. `compress-vault-doc.py` resolves the vault the same way, so it can always find what `drift-detection.py` just wrote.
+
+Bug 2 surfaced while landing the fix for Bug 1, not from a user report — both ship together, with a regression test for each. Both bugs, and this second hardening pass on Bug 2's own fix (the worktree and non-vault-checkout cases), came from @juan-monsalve-mon's #683 plus an independent adversarial review of that PR before it landed.
+
+---
+
+## 2026-09-19: the graph routing hook told you to customize it, then overwrote your customization
+
+**Who this affects:** anyone who set up `graph-context-hook.sh` and has only ONE graph — the default second graph points at `$VAULT_ROOT/Work/`, a folder most vaults do not have.
+
+The hook's own header says "CUSTOMIZE THIS SCRIPT for your vault" and lists four values to edit. But `install-hooks-user-level.py` treats it as a vault-content hook and copies it from the skill into the vault **unconditionally**, and the auto-update runs that roughly every six days. So the file asks you to edit it and then silently discards what you wrote.
+
+**What that looked like on one vault:** the local edit emptied `SECONDARY_GRAPH`, which is the documented way to say "I only have one graph" — the code already guards on it being empty. After an installer run the default came back, and every prompt containing *work*, *team*, *client*, *meeting*, *deadline* or *sprint* was injected with:
+
+> ⚠ LOST — this graph was built before but is GONE now ... rebuild it: /graphify --update on Work/
+
+A false alarm about a graph that never existed, plus an instruction to rebuild it, on every prompt of that family. The user had already moved the file out of the installer's reach once; the installer simply repointed `settings.json` back at the copy it manages, and the edited file sat there unused.
+
+**The fix:** every CONFIG value now reads an env override, so it can live in `~/.claude/settings.json` → `env`, which the installer does not touch — exactly how `VAULT_ROOT` already worked. One graph only:
+
+```json
+"env": { "SECONDARY_GRAPH": "" }
+```
+
+Note for anyone reading the diff: `SECONDARY_GRAPH` uses `${VAR-default}`, not `${VAR:-default}`. The bare `-` is the only spelling that honours an exported empty value; with `:-` the default would come back and re-enable the graph the user just turned off. The other values keep `:-` because emptying them is not a supported configuration.
+
+Nothing changes if you set no env vars: same defaults, same behaviour.
+
+---
+
+## 2026-09-17: graphify's self-link guard missed accented filenames, and skipped files were invisible
+
+**Who this affects:** anyone running `graphify_apply_wikilinks.py` on a vault with accented filenames, notes that share a name across folders, or notes near the 1 MB read cap.
+
+**Bug 1 — the self-link guard didn't survive a Unicode round-trip.** The guard that stops a note linking to itself compared `md.stem.casefold() == link_target.casefold()`. `casefold()` normalizes case, not Unicode composition, so an NFD-decomposed filename (common on macOS/HFS+ — an accented letter stored as a base letter plus a combining mark) never matched an NFC-composed link target, even though the two render identically. An adversarial review found real NFD-decomposed filenames in a live vault and confirmed the script would insert a self-referential `[[wikilink]]` into a note about itself. Both sides now go through a small `_norm()` helper (`unicodedata.normalize("NFC", s).casefold()`) before comparing.
+
+**Bug 2 — the same guard skipped silently, even under `--dry-run`.** When two notes share a stem in different folders (say `Team/Acme.md` and `Archive/Acme.md`), the guard correctly treats both as "the entity's own page" and skips them, but said nothing. The skip was indistinguishable from "no match found" — a legitimate mention could vanish with zero signal, even in dry-run mode. Every self-link skip now prints the vault-relative path and why. The same guard was missing from `find_contexts()` entirely — the function that gathers preview snippets for the approval prompt — so an entity's own note could fill every preview slot with self-references before a real external mention was ever reached.
+
+**Bug 3 — an unreadable or oversized file vanished without a trace.** Three call sites (`collect_mentions()`, `find_contexts()`, `apply_wikilink()`) read every note through the shared `safe_read_text()` primitive and just `continue`d past anything that failed: a file over the 1 MB cap, mid-write, or otherwise unreadable. Nothing printed, nothing counted. `build-journal-index.py` already solved this exact problem — accumulate `skipped.append((relpath, status))` and print `"  note: skipped N unreadable file(s): <preview>"` once at the end. All three call sites now follow that pattern.
+
+**Bug 4 — `load_report()`'s own error handling couldn't fire.** `load_report()` already prints a warning when its read fails, but it read the gap report with `errors="ignore"`, so a malformed byte was silently dropped and the file parsed as if it were clean — the warning path existed but nothing could ever reach it. Restored to strict decoding (the behavior before this PR); the other three call sites keep `errors="ignore"`, since that was already their behavior before this PR and isn't a regression.
+
+All four came out of an adversarial review of this PR before merge, not a user report — the fixes ship in the same PR, verified against a synthetic vault built specifically to reproduce each one.
+
+---
+
+## 2026-09-16: asking about a close phrase no longer closes the session
+
+**Who this affects:** anyone who set their own `closingSignals.custom` phrases in CLAUDE.md — and, if you write in Spanish, anyone at all.
+
+Your custom close phrases are the highest authority in the detector: they fire no matter what, and they deliberately skip the false-positive guards. That is the right call for a phrase you chose yourself — until you need to *talk about* it.
+
+Quote one of your own phrases and the session closed. Testing the detector, reporting a false positive, asking to add a phrase to the list, pasting a config line — all of them ended the session mid-task. It happened live while someone was asking to test the very phrase that closed the session on them.
+
+This is the same shape as the relayed-speech fix from #661, one tier up. There the close phrase was content addressed to a third party (`dile a Ana que ya quedó`). Here it is content wrapped in quotes. Both times the phrase is what the message is *about*, not what the message *does*.
+
+The guard that was supposed to catch this only knew four phrases: `chao`, `bye`, `listo`, and two ways to say "close the session". Your own phrases were invisible to it, because a shared language pack cannot know what you put in your CLAUDE.md.
+
+The detector treats quoted spans with real text around them as content, whatever the phrase happens to be. A separate, unquoted close command still works in the same message, even when a filename elsewhere is quoted. A bare quoted phrase with nothing around it still closes the session — someone typing `"chao"` is saying goodbye, not quoting.
+
+---
+
 ## 2026-09-16: "es todo por hoy" now closes the session in Spanish
 
 **Who this affects:** Spanish speakers, especially in Colombia and Mexico.
@@ -72,6 +256,17 @@ So the map has been re-probed against actual `/v1/chat/completions` calls and no
 **The honest caveat, now written into both files:** these IDs were verified on one free-tier account on 2026-09-09. If yours differ, probe a completion — do not trust the catalog, and do not trust this map to still be current.
 
 One practical note that cost an hour: the default's **first call after an idle spell takes 10–15 seconds** (cold start), then settles to about 1.5s. A 60-second timeout is not generous, it is barely enough. Do not read a slow first call as a dead model.
+
+---
+
+## 2026-09-04: wikilinks stop pointing at generated files and at themselves
+
+**Who this affects:** anyone who runs `/graphify` and lets it apply wikilinks.
+
+Two links were being written that no one would write by hand:
+
+- **Links into graphify's own output.** The pass walked `graphify-out/`, so it edited `GRAPH_REPORT.md` and `WIKILINK_GAPS.md` — files the next run overwrites anyway — and left the gap report linking its own table rows.
+- **Notes linking to themselves.** A note whose title matched the link target got a link back to the page you are already reading, and a self-loop in the graph.
 
 ---
 

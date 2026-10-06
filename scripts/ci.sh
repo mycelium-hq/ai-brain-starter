@@ -213,6 +213,15 @@ if [ -n "${GITHUB_ACTIONS:-}" ] && ! python3 -c "import yaml" >/dev/null 2>&1; t
     || echo "    (PyYAML install failed; test_extractors_localized_vault will SKIP)"
 fi
 
+# Pinned HERE (before HOME goes decoy) and exported: run_sandboxed swaps
+# HOME/USERPROFILE per suite, so a suite computing this itself would
+# resolve against the WRONG (decoy) home. Guarded by GITHUB_ACTIONS --
+# the only case PyYAML was just installed --user under the real HOME.
+if [ -n "${GITHUB_ACTIONS:-}" ]; then
+  PYTHONUSERBASE="$(python3 -m site --user-base)"
+  export PYTHONUSERBASE
+fi
+
 # ---- (a) Python syntax gate ------------------------------------------------
 if command -v python3.9 >/dev/null 2>&1; then
   PY=python3.9
@@ -282,6 +291,12 @@ INTEGRATION_TESTS=(
   test_installer_retires_email_gate
   test_installer_relocates_moved_hooks
   test_installer_shim_safe_interpreter
+  # The same shim, one layer down: journal-preflight.py started its message
+  # fetcher as a bare `python3 <script>`, which a PATH shim refuses, so the
+  # /journal digest lost its MESSAGES section while looking like a long digest.
+  # Runs the shipped preflight with a faithful fake shim FIRST on PATH, and
+  # proves the harness itself goes red when the bare python3 is put back.
+  test_journal_preflight_shim_safe_fetch
   test_deployed_hooks_behind
   test_sync_guard_surface
   test_windows_platformize
@@ -299,10 +314,16 @@ INTEGRATION_TESTS=(
   # Windows leg of ARTIFACT-WITHOUT-ACTIVATION: bootstrap.ps1 installed the
   # skills but never commands/*.md, so no slash command existed on Windows.
   test_bootstrap_ps1_slash_commands
+  # A command the user rewrote was replaced on every install, so keeping it
+  # meant editing the checkout too, which froze every auto-update after it.
+  test_bootstrap_keeps_user_authored_commands
   # Windows half of MYC-3895: bootstrap.ps1 called `git clone` itself and never
   # installed git, so the one prerequisite a locked-down laptop cannot get was
   # also the one nothing provided.
   test_bootstrap_ps1_git_install
+  # A quick-mint "reused" reply is a warning, not a failure, on both installers.
+  test_bootstrap_quick_mint_reused
+  test_bootstrap_ps1_quick_mint_reused
   test_preflight_git_and_it_request
   test_remediate_runaway_procs
   test_surface_unniced_launchagents
@@ -352,6 +373,7 @@ INTEGRATION_TESTS=(
   test_open_core_boundary
   test_template_purity
   test_audited_content_injection_scan
+  test_untrusted_ingest_guard
   test_post_tool_use_learnings
   # Wired 2026-07-02 — found dormant by the gate-coverage invariant below.
   # These existed on disk, passed locally, and never ran in CI.
@@ -502,6 +524,20 @@ INTEGRATION_TESTS=(
   # and the shipped command actually BLOCKS a seeded secret while passing a
   # clean payload.
   test_installer_registers_mcp_secret_guards
+  # Environment-dump guard (MYC-4988): block-env-dump.py blocks env/printenv/
+  # export/set/declare/ps/echo-of-a-secret-var/proc-environ commands whose
+  # output is a live credential VALUE, which a session transcript persists
+  # permanently. Same registration-is-the-assertion proof as the two guards
+  # above: wired in the block-preserving form, and the shipped command
+  # actually BLOCKS a seeded `env` dump while passing a clean command.
+  test_installer_registers_env_dump_guard
+  # Heavy-command admission, folded into retry-budget.py: proves a fresh
+  # install ships the FLAT-deployed hook plus its heavy_admission.py and
+  # shell_parse.py deps (a HOME_HOOKS_LIB_DEPS omission left this dark
+  # despite every in-worktree test passing) end to end, against a REAL
+  # process shaped like `.../next/dist/bin/next build` (perl renamed via
+  # `exec -a`, skipped off darwin/linux or without perl).
+  test_installer_registers_heavy_admission
   # Skip-prefix privacy guard: a `__SKIP` line is content the user told the
   # assistant NOT to persist, and a persisted line cannot be un-persisted (file
   # + git history + any index over the vault). Every assertion carries a
@@ -529,6 +565,22 @@ INTEGRATION_TESTS=(
   # path, because with a relative one the old code fails open before the gate is
   # reached and the assertion would pass without varying with the defect.
   test_journal_guard_end_to_end
+  # Same guard, the inline-interpreter write form (`python3 - <<PY`, `node -e`).
+  # Those carry no shell redirect marker, so the gate never opened and an entire
+  # /journal session's saves went unguarded (2026-08-24). The fix must compose
+  # with the heredoc-body stripping rather than undo it, so the three gate-shut
+  # controls (read-only script, fixture quoting a journal path, file NAMED
+  # python3_helper.sh) run with NO marker planted: an ALLOW there means the gate
+  # stayed shut, not that a marker satisfied it.
+  test_journal_guard_interpreter_write
+  # Same guard, the fix command it PRINTS (2026-09-24). Step 1 was the literal
+  # `python3 "⚙️ Meta/scripts/journal-preflight.py"`: a session PATH shim
+  # refuses `python3 <script>`, and the relative path resolves only from the
+  # vault root, so the one sanctioned way past the block could not run. The
+  # printed text is executed from `/` and must reach a sentinel-printing
+  # fixture, so a refusal or a wrong path cannot pass. 8 assertions fail on the
+  # pre-fix hook; both no-marker DENY controls still hold.
+  test_journal_guard_preflight_command
   # Close detector, whole-message anchoring + length gate (2026-08-16): the
   # shared pack tiers ran under re.MULTILINE, so every `$`-anchored sign-off
   # matched the end of ANY line and a 60-line handoff whose third line read
@@ -552,6 +604,12 @@ INTEGRATION_TESTS=(
   # it); says SKIP and exits 0 when no interpreter has it, and the CI-only
   # bootstrap near the top of this script installs it so CI never takes that path.
   test_extractors_localized_vault
+  # claude_performance_digest.py divided each project's turns by total_turns
+  # unguarded, and a session with no assistant record still gets a row, so a
+  # window where no session had one crashed the weekly run before it wrote the
+  # report or its prescriptions. Carries a mixed-window control pinning that
+  # real percentages are unchanged.
+  test_claude_performance_digest_zero_turns
   # MYC-4285: a brew-less, non-interactive, non-corporate Mac hit the same
   # exit-0 the corporate profile was already built to route around, and never
   # reached the user-space Python/Node installers a few sections down.
@@ -561,6 +619,54 @@ INTEGRATION_TESTS=(
   # it; this proves the helper still works and still keeps its hands off a PATH
   # that was already healthy.
   test_real_python_shim
+  # PR #682: graph-context-hook.sh's CONFIG now reads env overrides so a vault
+  # can set it from ~/.claude/settings.json instead of editing the file (which
+  # install-hooks-user-level.py overwrites on every auto-update). Proves an
+  # exported-empty SECONDARY_GRAPH disables the secondary branch (bare `-`,
+  # not `:-`), an unset one falls back to the default path, and PRIMARY_PATTERN
+  # replaces rather than extends the default keyword regex.
+  test_graph_context_hook_env
+  # PORTABILITY.md #1: the BSD-first `stat -f %m` mtime read broke
+  # check-claude-code-version.sh's cache-freshness check outright on real GNU
+  # coreutils (unbound-variable abort). Runs the real hook under
+  # lib/gnu_stat_shim.sh so the Linux code path is exercised deterministically
+  # from any host.
+  test_check_claude_code_version_cache_age
+  # MYC-5205: the version hook measured the PATH-first `claude`, not the binary
+  # running the session, and its cache replayed one binary's reading into
+  # another's. Drives the real hook under a compiled fake `claude` ancestor (a
+  # script cannot be one: ps/proc report its interpreter) and proves the running
+  # binary wins, the PATH fallback is labeled, ONE skew warning line names
+  # every disagreeing install while an all-equal fleet stays silent, an npm
+  # install is read from package.json and never spawned, and a hung
+  # `claude --version` cannot hang the hook. It also pins what the hook must NOT do
+  # (import from the working directory, run a claude reached through a relative PATH
+  # entry, count an unreadable copy as a version, outlast its time bounds). Against the
+  # hook as it stood before this change (CHECK_CLAUDE_VERSION_TARGET reruns it against
+  # any copy), most of its assertions fail; one needs an interpreter that does not import
+  # re at startup, and is skipped with a note on one that does.
+  test_check_claude_code_version_running_binary
+  # The CwdChanged and FileChanged hooks read their payload with `python3 -c` in the
+  # session's working directory: a module planted there must not be imported (python3 -I),
+  # each hook must still do its job, and a changed file's path reaches Python as data.
+  test_session_hooks_isolated_python
+  # Same bug class, vault-safe-commit.sh's non-PID lock-age check: a lock
+  # whose age cannot be proven must never be treated as stale and removed.
+  # Runs the real script under the same GNU-stat shim.
+  test_vault_safe_commit_lock_age
+  # Same bug class at a different `stat` format letter (%z, size, not %m,
+  # mtime): bootstrap.sh's own log-rotation check crashed outright on real
+  # GNU coreutils, on every run once ~/.claude/.bootstrap.log existed.
+  test_bootstrap_log_rotation_stat
+  # MYC-4635: recurring tool-error text reached Claude To-dos.md unredacted;
+  # proves the digest redacts at capture, before truncation, and a benign
+  # recurring error still survives byte-identical.
+  test_claude_performance_digest_redaction
+  # MYC-4623: the WebFetch revalidation cache served a repo-planted entry as
+  # the page on a 304. Proves entries live outside every project tree, only
+  # untracked entries carrying this machine's digest are served, and the
+  # cache is bounded.
+  test_sdd_cache_out_of_tree
 )
 # ---- Gate-coverage invariant -------------------------------------------------
 # The list above is an explicit allow-list, and allow-lists rot: a new
@@ -1038,6 +1144,17 @@ else
   echo "    install: brew install shellcheck  (macOS)  /  sudo apt-get install -y shellcheck  (Debian/Ubuntu)"
 fi
 
+# ---- (c1) stat portability gate --------------------------------------
+# scripts/check-stat-portability.py is the single source of truth -
+# lint.yml's `lint` job runs the SAME script, so the laptop pre-push gate and
+# CI cannot drift. This one is stdlib-only and hermetic (no external binary
+# to install), so unlike the check just above it there is no OS-dependent
+# reason to skip it in either place -- it mirrors check-exit-contract.py's
+# wiring below instead.
+echo "==> (c1) stat portability: $PY scripts/check-stat-portability.py"
+"$PY" scripts/check-stat-portability.py --self-test >/dev/null
+"$PY" scripts/check-stat-portability.py
+
 # ---- (c2) PowerShell static analysis ---------------------------------------
 # Runs the SAME canonical gate as the lint job's 'repo PowerShell' step, so the
 # local pre-push gate and CI cannot drift on .ps1 quality. Warn-skipped locally
@@ -1387,6 +1504,16 @@ PY_DIRECT=(
   # off-scratchpad, bypass), and the shell-variable form that slipped past the
   # guard's own first production run. Plain script, no pytest.
   hooks/test_scratchpad_cross_agent_clobber.py
+  # retry-budget.py blocked work that was not a loop, two ways: its fingerprint
+  # hashed only the first 400 characters, so distinct commands opening with one
+  # long scratch path shared a budget, and a second installer's registration of
+  # the same script counted every Bash call twice. The hooks.json `|| true`
+  # wrapper also rewrote the exit-2 block into an allow, so under a POSIX shell
+  # this repo's own copy never blocked. Drives the hook, the registered
+  # hooks.json command and the real installer in a sandbox HOME; 25 of its 38
+  # checks fail against the pre-fix revision, and reverting any one fix turns
+  # its own checks red.
+  hooks/test_retry_budget.py
   tests/test_instinct.py
   tests/test_entity_disambiguator_clustering.py
   tests/test_graphify_stage_select_cache_key.py
@@ -1533,6 +1660,25 @@ PY_DIRECT=(
   # shipped copies (scripts/ and skills/graphify/scripts/) so a fix to one
   # cannot silently leave the other behind.
   tests/test_graphify_canonicalize_slash_guard.py
+  # Proves block-env-dump.py (MYC-4988): drives the guard as a real
+  # subprocess with JSON on stdin, the same shape a PreToolUse call uses.
+  # Plain script, no pytest -- main() walks every test_* function itself.
+  hooks/test_block_env_dump.py
+  # shell_parse.tokens() called shlex.split unconditionally, whose read_token
+  # builds each token via string-attribute concatenation -- O(n^2) in ONE
+  # token's length, measured at 1.43s for a 400k-char argument, inside a
+  # PreToolUse hook run on every Bash call. 20k-case equivalence fuzz plus a
+  # structural cost test that a 1M-char segment never reaches shlex.split.
+  hooks/test_shell_parse_tokens.py
+  # heavy_admission.py, folded into retry-budget.py: must-admit/must-detect
+  # corpora; real and synthetic ps-snapshot counting (root-invocation-only,
+  # node/bun script resolution, a real Next 16 process.title rewrite, a
+  # captured corepack-shape pnpm row); a git-push-as-verify leg asking a real
+  # git for the pre-push hook it would actually run (hooksPath, worktrees,
+  # husky v9); a leak control with a positive control (ps -ww -o args=
+  # DOES retrieve the token) proving the check isn't vacuous; and
+  # negative-control mutants that must each flip a verdict.
+  hooks/test_heavy_admission.py
 )
 dormant_py=()
 while IFS= read -r -d '' f; do
@@ -1576,4 +1722,4 @@ done
 echo "    OK - ${#PY_DIRECT[@]} hooks/+tests/ direct suite(s) passed; dormancy invariant clean"
 
 echo
-echo "All gates passed: py_compile ($count file(s)) + ${#INTEGRATION_TESTS[@]} integration tests + $unit_count scripts/ + ${#PY_DIRECT[@]} hooks/tests unit suite(s) + shellcheck [$shellcheck_note] + powershell [$pssa_note] + phase-doc python [$phasepy_note] + repo python [$ruffgate_note] + utf8 console guard [$utf8_note] + hook block-protocol [passed] + vault-root reads [passed] + home-hook deploy [passed] + subprocess decode [passed] + py3.9 annotation parity [passed] + ps1 encoding [passed]."
+echo "All gates passed: py_compile ($count file(s)) + ${#INTEGRATION_TESTS[@]} integration tests + $unit_count scripts/ + ${#PY_DIRECT[@]} hooks/tests unit suite(s) + shellcheck [$shellcheck_note] + stat portability [passed] + powershell [$pssa_note] + phase-doc python [$phasepy_note] + repo python [$ruffgate_note] + utf8 console guard [$utf8_note] + hook block-protocol [passed] + vault-root reads [passed] + home-hook deploy [passed] + subprocess decode [passed] + py3.9 annotation parity [passed] + ps1 encoding [passed]."

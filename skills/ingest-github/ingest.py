@@ -45,6 +45,46 @@ from connector_utils import (
     yaml_int_array,
 )
 
+# Separate, guarded import (MYC-4701): these two names are newer than the
+# eight above, so a deployed _shared that has not synced yet would otherwise
+# raise ImportError on the whole module instead of degrading gracefully. The
+# degraded stubs below skip fencing (no local fencing logic to fall back to)
+# but still stamp content_trust: untrusted, injection_scan: unavailable --
+# never a dropped or crashed write.
+try:
+    from connector_utils import guard_untrusted_body, trust_frontmatter_lines, _raw_item_fields
+except ImportError:
+    def guard_untrusted_body(text, source, scan_text=None):
+        # No envelope on this degraded path -- but still round-trip a lone
+        # UTF-16 surrogate half (matches the ingest-youtube sibling's own
+        # degraded-path fallback), so that alone doesn't abort the write.
+        # A stale _shared returned `text` unmodified here; a PR/issue/commit
+        # body with a lone surrogate then raised UnicodeEncodeError at
+        # write_vault_file's plain "utf-8" write, with no file written.
+        safe = (text or "").encode("utf-8", "surrogatepass").decode("utf-8", "replace")
+        return safe, {"content_trust": "untrusted", "injection_scan": "unavailable", "injection_flags": []}
+
+    def trust_frontmatter_lines(trust):
+        return [
+            f"content_trust: {trust['content_trust']}",
+            f"injection_scan: {trust['injection_scan']}",
+            # str()-coerced: this degraded stub's own guard_untrusted_body
+            # above always returns [], but connector_utils.py's real
+            # trust_frontmatter_lines does the same bare ", ".join(flags) --
+            # belt-and-braces here too so this local copy cannot regress
+            # into the same non-str-id crash independently.
+            "injection_flags: [" + ", ".join(str(i) for i in trust["injection_flags"]) + "]",
+        ]
+
+    def _raw_item_fields(items):
+        parts = []
+        for item in items or []:
+            for key in ("title", "subject", "author", "body", "body_text", "description", "identifier", "id"):
+                v = item.get(key)
+                if v:
+                    parts.append(str(v))
+        return "\n".join(parts)
+
 BODY_EXCERPT_LIMIT = 800
 
 
@@ -148,8 +188,10 @@ def build_frontmatter(
     pr_ids: list[int],
     issue_ids: list[int],
     ingested_at: str,
+    trust_lines: list[str],
 ) -> str:
     start_date, end_date = date_range_strs(target_date, days)
+    trust_block = "\n".join(trust_lines)
     return (
         "---\n"
         "type: external-input\n"
@@ -162,10 +204,23 @@ def build_frontmatter(
         f"  github_repo: {yaml_escape(repo)}\n"
         f"  github_pr: {yaml_int_array(pr_ids)}\n"
         f"  github_issue: {yaml_int_array(issue_ids)}\n"
+        f"{trust_block}\n"
         "---\n\n"
         f"# GitHub {repo} from {start_date} to {end_date}\n\n"
         f"_{item_count} item(s) ingested via /ingest-github._\n\n"
     )
+
+
+def _raw_scan_text(prs: list, issues: list, commits: list) -> str:
+    """Raw title/subject/author/body fields for injection scanning -- NOT
+    the formatted body. A rendered '### #7 Title' heading pushes the title
+    off the start of its line and defeats a line-anchored pattern the raw
+    title would still trip. Reuses connector_utils._raw_item_fields, which
+    scans 8 keys total: PRs and issues carry `title`, commits carry
+    `subject`, all three carry `author` and `body` -- the other 4
+    (body_text/description/identifier/id) are never present on a
+    PR/issue/commit item, so only those 4 ever contribute text here."""
+    return _raw_item_fields(prs + issues + commits)
 
 
 def write_vault_file(payload: dict, body: str, frontmatter: str) -> Path:
@@ -211,6 +266,9 @@ def run_from_payload(payload: dict) -> int:
         body_parts.append("_No activity in the date range._\n")
     body = "\n".join(body_parts).rstrip() + "\n"
 
+    body, trust = guard_untrusted_body(body, "github", scan_text=_raw_scan_text(prs, issues, commits))
+    trust_lines = trust_frontmatter_lines(trust)
+
     item_count = len(prs) + len(issues) + len(commits)
     frontmatter = build_frontmatter(
         repo=repo,
@@ -220,14 +278,16 @@ def run_from_payload(payload: dict) -> int:
         pr_ids=pr_ids,
         issue_ids=issue_ids,
         ingested_at=ingested_at,
+        trust_lines=trust_lines,
     )
 
     out_path = write_vault_file(payload, body, frontmatter)
 
+    scan_suffix = f"; injection_scan={trust['injection_scan']}" if trust["injection_scan"] != "clean" else ""
     print(
         f"Wrote {item_count} item(s) "
         f"({len(prs)} prs, {len(issues)} issues, {len(commits)} commits) "
-        f"to {out_path}"
+        f"to {out_path}{scan_suffix}"
     )
     return 0
 

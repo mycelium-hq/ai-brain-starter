@@ -52,7 +52,7 @@ def _source(body):
 def extract(filepath, body, fm, context):
     fields = {
         "meeting_attendees": match_people(body[:3000], context["crm_names"]),
-        "meeting_date_iso": iso_date_from(fm.get("date")) or iso_date_from(fm.get("creationDate")),
+        "meeting_date_iso": iso_date_from(fm.get("date")) or iso_date_from(fm.get("fecha")) or iso_date_from(fm.get("creationDate")),
         "meeting_decisions": _bullets(body, [r"^##\s+Decisions", r"^##\s+Decisiones"]),
         "meeting_action_items": _bullets(body, [
             r"^##\s+Action Items", r"^##\s+Action\s+items",

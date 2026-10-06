@@ -41,8 +41,14 @@ fi
 rotate() {
   local f="$1"
   [[ -f "$f" ]] || return 0
+  # Byte size of $f, cross-platform. GNU/Linux `stat -c%s` first, then
+  # BSD/macOS `stat -f%z`, validated -- see PORTABILITY.md #1. Unknown size
+  # -> 0 (skip rotation), the same safe default the original `|| echo 0`
+  # fallback already used.
   local size
-  size=$(stat -f%z "$f" 2>/dev/null || stat -c%s "$f" 2>/dev/null || echo 0)
+  size=$(stat -c%s "$f" 2>/dev/null)                        # GNU/Linux
+  case "$size" in ''|*[!0-9]*) size=$(stat -f%z "$f" 2>/dev/null) ;; esac  # BSD/macOS
+  case "$size" in ''|*[!0-9]*) size=0 ;; esac  # neither gave a plain integer -> unknown, treat as small
   (( size > MAX_BYTES )) || return 0
 
   local i

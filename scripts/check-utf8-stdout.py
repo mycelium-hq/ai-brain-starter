@@ -57,6 +57,22 @@ Rule (deterministic, near-zero false negative):
       - it lacks the guard ............. no stdout/stderr .reconfigure(utf-8)
       - it is not opted out ............ no `# utf8-stdout-ok: <reason>` marker
 
+    SECOND rule, CROSS-FILE - the launcher seam (see find_seams):
+    Two files can each pass the per-file rule while the seam between them is
+    unguarded. A thin launcher with `__main__` but no print of its own is never
+    flagged; the printing module it imports passes because it HAS a guard --
+    inside its own `__main__`, which never executes on the import path. That was
+    live in this repo: scripts/vault-metadata-extract.py and
+    scripts/journal-metadata-extract.py both do `import _dispatcher;
+    _dispatcher.main()`, the only supported way to run extraction, and
+    extractors/_dispatcher.py parked its guard under `__main__`. Both linted
+    clean; the run had no cp1252 protection at all and died on the first emoji
+    vault path. A seam FAILS when an unguarded importer calls into a module that
+    is not protected on import, prints outside __main__, and can emit non-ASCII.
+    "Not protected on import" covers a guard parked under `__main__`, a guard
+    inside a function, and NO guard at all -- the last being the worst case,
+    since a __main__ guard at least fires on direct execution.
+
 Why signal (1) is not enough - the corrected premise (MYC-3520):
 This guard used to state that "a genuinely ASCII-only CLI (no non-ASCII byte
 anywhere) can never hit the crash". That is FALSE, and the counter-case was
@@ -120,6 +136,30 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "hooks"))
+
+from _lib.safe_read import safe_read_bytes  # noqa: E402
+
+# Bounded reads: this lint walks the whole tracked fleet, which is the shape the
+# shared primitive exists for (scripts/check-cloud-safe-file-walkers.py). On a
+# cloud-synced checkout a single dehydrated placeholder would otherwise block
+# the gate or hand back partial bytes that silently change a pinned hash.
+# Same limits as the sibling lint scripts/check-utf8-subprocess.py.
+READ_TIMEOUT = 5.0
+MAX_SOURCE_BYTES = 1_000_000
+
+
+def _read_bytes(path):
+    """Bounded read. Returns (data, error) -- error is a status string, never
+    silently empty: a file this gate cannot READ is a file it cannot CLEAR, so
+    callers surface it as a failure instead of treating it as clean."""
+    result = safe_read_bytes(path, timeout=READ_TIMEOUT, max_bytes=MAX_SOURCE_BYTES)
+    if not result.ok:
+        detail = " ({})".format(result.detail) if result.detail else ""
+        return None, "{}{}".format(result.status, detail)
+    return result.data, None
 
 # The guard is detected structurally: a .reconfigure(encoding="utf-8") call
 # (single/double quotes, optional hyphen, flexible whitespace). Both files PR
@@ -185,7 +225,19 @@ def _is_console_print(node):
 
 def classify(path):
     """Return a dict describing the file against the signals."""
-    data = path.read_bytes()
+    data, read_error = _read_bytes(path)
+    if read_error is not None:
+        # Fail CLOSED. Everything below would read as "not a CLI, never prints",
+        # i.e. clean, which is exactly the silent-pass this gate exists to stop.
+        return {
+            "path": path, "is_cli": False, "prints_console": False,
+            "has_non_ascii": False, "resolves_vault_path": False,
+            "has_guard": False, "has_bypass": False,
+            "parse_error": None, "flagged": False,
+            "guard_module_scope": False, "module_imports": set(),
+            "prints_outside_main": False,
+            "_tree": None, "read_error": read_error,
+        }
     has_non_ascii = any(b > 0x7F for b in data)
     text = data.decode("utf-8", errors="replace")
 
@@ -202,6 +254,19 @@ def classify(path):
         parse_error = str(exc)
         tree = None
 
+    # Node ids lexically inside an `if __name__ == "__main__":` block. Used to
+    # tell a guard that protects EVERY entry path (module scope) from one that
+    # protects only the direct-execution path -- the launcher seam below.
+    main_ids = _main_block_node_ids(tree) if tree is not None else set()
+    # A guard only protects an IMPORTED path if it runs at true module scope:
+    # not under `__main__` (never runs on import) and not inside a function or
+    # class body (only runs if something calls it). Both were counted as guards
+    # before, and both are dead on the import path.
+    nested_ids = _nested_node_ids(tree) if tree is not None else set()
+    guard_module_scope = False
+    prints_outside_main = False
+    module_imports = set()
+
     if tree is not None:
         for node in ast.walk(tree):
             if isinstance(node, ast.If):
@@ -215,6 +280,30 @@ def classify(path):
                     is_cli = True
             if isinstance(node, ast.Call) and _is_console_print(node):
                 prints_console = True
+                if id(node) not in main_ids:
+                    prints_outside_main = True
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "reconfigure"
+                and _GUARD_RE.search(ast.get_source_segment(text, node) or "")
+                and id(node) not in main_ids
+                and id(node) not in nested_ids
+            ):
+                guard_module_scope = True
+        # Modules imported at TRUE module scope. Importing one whose own guard
+        # is module-scope reconfigures the shared streams during THIS module's
+        # import, before any of its functions can print -- so it is protected
+        # even though it carries no guard of its own. One hop, deliberately:
+        # that is the real shape here (extractors/_dispatcher.py -> _base.py).
+        for node in ast.walk(tree):
+            if id(node) in nested_ids or id(node) in main_ids:
+                continue
+            if isinstance(node, ast.Import):
+                for a in node.names:
+                    module_imports.add(a.name)
+            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                module_imports.add(node.module)
 
     # Either emission signal is sufficient: non-ASCII already in the source, OR
     # a vault-path resolution that fetches non-ASCII from the filesystem.
@@ -237,7 +326,174 @@ def classify(path):
         "has_bypass": has_bypass,
         "parse_error": parse_error,
         "flagged": flagged,
+        # Seam inputs (see find_seams). guard_module_scope is the only kind that
+        # survives being reached by IMPORT rather than by execution.
+        "guard_module_scope": guard_module_scope,
+        "module_imports": module_imports,
+        "prints_outside_main": prints_outside_main,
+        "_tree": tree,
+        "read_error": None,
     }
+
+
+def _main_block_node_ids(tree):
+    """id()s of every node lexically inside an `if __name__ == "__main__":`."""
+    ids = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.If):
+            test = node.test
+            if (
+                isinstance(test, ast.Compare)
+                and isinstance(test.left, ast.Name)
+                and test.left.id == "__name__"
+            ):
+                for sub in ast.walk(node):
+                    ids.add(id(sub))
+    return ids
+
+
+def _nested_node_ids(tree):
+    """id()s of every node inside a function or class body.
+
+    A guard there runs only if something CALLS it, so it is not module scope
+    however far left it is written.
+    """
+    ids = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            for sub in ast.walk(node):
+                ids.add(id(sub))
+    return ids
+
+
+def _protected_on_import(result, by_stem):
+    """True if this module's console streams are already UTF-8 when it prints.
+
+    Either it carries a module-scope guard itself, or it imports (at module
+    scope) an in-scope module that does -- that import reconfigures the shared
+    sys.stdout/sys.stderr objects before any of this module's functions run.
+    ONE hop on purpose: it is the real shape in this repo
+    (extractors/_dispatcher.py -> _base.py) and a bounded rule is auditable
+    where a full transitive closure quietly swallows seams.
+    """
+    if result["guard_module_scope"]:
+        return True
+    for stem in result["module_imports"]:
+        for cand in by_stem.get(stem.rsplit(".", 1)[-1], ()):
+            if cand is not result and cand["guard_module_scope"]:
+                return True
+    return False
+
+
+def find_seams(results):
+    """THE LAUNCHER SEAM (ai-brain-starter#652 follow-up).
+
+    Two files can each pass the per-file predicate above while the SEAM between
+    them is unguarded. scripts/vault-metadata-extract.py is a thin launcher: it
+    has `__main__` but prints nothing of its own, so it is never flagged. The
+    module it imports prints plenty, but passes either because its guard sits
+    inside its OWN `if __name__ == "__main__":` -- which never executes when the
+    launcher does `import M; M.main()` -- or because it has no `__main__` at
+    all, which makes the per-file rule skip it as a library. Net effect: the run
+    has no cp1252 protection while both files lint clean.
+
+    Measured before the fix, emoji vault path under PYTHONIOENCODING=cp1252:
+    the launcher died with UnicodeEncodeError at `print(f"Vault: {VAULT}")`
+    while running the module directly exited 0 -- same code, same vault, same
+    console, differing only in which __main__ ran.
+
+    A seam is reported when ALL hold:
+      - target M is NOT protected on import (no module-scope guard of its own,
+        and no module-scope import of something that has one). A guard under
+        `__main__`, inside a function, or absent entirely all qualify -- the
+        no-guard case is the WORSE one, since a __main__ guard at least runs on
+        direct execution.
+      - M prints to the console OUTSIDE `__main__` (reachable by import)
+      - M can emit non-ASCII (source bytes, or a vault-path resolver)
+      - an in-scope file L imports M and calls into it
+      - L carries NO guard of its own
+
+    That last clause is what keeps this quiet: `.reconfigure()` mutates the
+    process-wide sys.stdout object, so an importer that guards its own streams
+    has already protected everything it then calls.
+
+    Residual gaps, stated rather than hidden -- this is a grep-level lint, same
+    philosophy as signal (2):
+      - Dynamic dispatch is invisible: importlib.import_module("M").main(),
+        `mod = M; mod.main()`, getattr(M, "main")().
+      - Ordering is not modelled. A module-scope guard placed AFTER an
+        import-time print, and an importer whose only guard is under `__main__`
+        while the target prints at import time, both read as protected.
+      - Resolution is by FILE STEM, not real sys.path semantics. Where a stem is
+        ambiguous every candidate is reported rather than one guess, because
+        naming the wrong file invites a fix that silences the gate without
+        touching the risk.
+    """
+    by_stem = {}
+    for r in results:
+        by_stem.setdefault(r["path"].stem, []).append(r)
+
+    seams = []
+    for r in results:
+        tree = r.get("_tree")
+        # An importer with a guard anywhere has already reconfigured the shared
+        # streams by the time it calls in; only an UNGUARDED importer opens a seam.
+        if tree is None or r["has_guard"] or r["has_bypass"]:
+            continue
+        alias, fromimp = {}, {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for a in node.names:
+                    if a.name in by_stem:
+                        alias[a.asname or a.name] = a.name
+            elif isinstance(node, ast.ImportFrom):
+                # level > 0 is an explicitly RELATIVE import: `from .safe_read
+                # import x` cannot reach a same-stem module in another package,
+                # and treating it as absolute blames an unrelated file.
+                if node.level == 0 and node.module in by_stem:
+                    for a in node.names:
+                        fromimp[a.asname or a.name] = node.module
+        if not alias and not fromimp:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            stem = called = None
+            if (
+                isinstance(func, ast.Attribute)
+                and isinstance(func.value, ast.Name)
+                and func.value.id in alias
+            ):
+                stem, called = alias[func.value.id], func.attr
+            elif isinstance(func, ast.Name) and func.id in fromimp:
+                stem, called = fromimp[func.id], func.id
+            if stem is None:
+                continue
+            # Same-directory candidate wins, mirroring how the launcher's own
+            # sys.path.insert resolves it. Otherwise EVERY candidate is reported
+            # (see the docstring) rather than one guess.
+            cands = [t for t in by_stem[stem] if t is not r]
+            same_dir = [t for t in cands if t["path"].parent == r["path"].parent]
+            if same_dir:
+                cands = same_dir
+            for tgt in cands:
+                if tgt["parse_error"] or tgt["has_bypass"]:
+                    continue
+                if (
+                    not _protected_on_import(tgt, by_stem)
+                    and tgt["prints_outside_main"]
+                    and (tgt["has_non_ascii"] or tgt["resolves_vault_path"])
+                ):
+                    seams.append((r, tgt, called))
+    # Stable, de-duplicated: one row per (importer, target, called name).
+    # One row per (importer, target). Keying on the CALLED NAME instead emits a
+    # row per call site -- six for one target here, five of them redundant, two
+    # of them exception constructors that print nothing.
+    uniq = {}
+    for imp, tgt, called in seams:
+        uniq.setdefault((str(imp["path"]), str(tgt["path"])), (imp, tgt, called))
+    return [uniq[k] for k in sorted(uniq)]
 
 
 def normalize(source):
@@ -256,7 +512,12 @@ def normalize(source):
 
 def content_digest(path):
     """SHA-256 over the newline-normalized text of `path`."""
-    text = path.read_bytes().decode("utf-8", errors="replace")
+    data, read_error = _read_bytes(path)
+    if read_error is not None:
+        # A digest over "" would silently MATCH nothing and read as drift; make
+        # the unreadable file say so instead.
+        raise OSError("cannot read {} for digest: {}".format(path, read_error))
+    text = data.decode("utf-8", errors="replace")
     return hashlib.sha256(normalize(text).encode("utf-8")).hexdigest()
 
 
@@ -288,7 +549,11 @@ def _scanned_files():
         out = subprocess.check_output(
             ["git", "-C", str(root), "ls-files", "--cached", "--others",
              "--exclude-standard", "--", *_SCAN_PATHSPECS],
-            text=True,
+            # NOT text=True: that decodes with locale.getpreferredencoding(),
+            # i.e. cp1252 on a Windows console, and this repo's own paths
+            # (scripts/extractors/...) are ASCII but a user's vault copy's are
+            # not. Same class this file lints for, on the input side.
+            encoding="utf-8", errors="replace",
         )
     except (subprocess.CalledProcessError, FileNotFoundError):
         # Not a git checkout - fall back to a plain glob per scanned root. git
@@ -308,7 +573,10 @@ def load_baseline(path):
     if not path.is_file():
         raise ValueError("baseline not found: {}".format(path))
     entries = {}
-    text = path.read_bytes().decode("utf-8", errors="replace")
+    data, read_error = _read_bytes(path)
+    if read_error is not None:
+        raise ValueError("cannot read baseline {}: {}".format(path, read_error))
+    text = data.decode("utf-8", errors="replace")
     for line_no, raw in enumerate(text.splitlines(), start=1):
         line = raw.strip()
         if not line or line.startswith("#"):
@@ -352,6 +620,12 @@ def main(argv):
         return 0
 
     violations = [r for r in results if r["flagged"]]
+    # A file this gate could not READ cannot be cleared by it (bounded reads can
+    # fail on a cloud placeholder or a stalled mount). Fail closed.
+    unreadable = [r for r in results if r.get("read_error")]
+    # Cross-file check: a launcher that imports a printing module whose guard is
+    # __main__-only. Neither file fails on its own; the SEAM between them does.
+    seams = find_seams(results)
     pardoned = {}
     stale = []
     if fleet_mode:
@@ -373,9 +647,19 @@ def main(argv):
         # A row is live only while its file is STILL flagged at exactly the
         # pinned content. Anything else - guard added, file deleted, file
         # edited, content drifted - is stale and must be removed, not re-pinned.
-        stale = sorted(set(baseline) - set(pardoned))
+        # An UNREADABLE file is not a clean file. Excluding it here stops the
+        # gate telling you to DELETE a legitimate exemption row because a cloud
+        # placeholder or a stalled mount made its content unavailable for one
+        # run. The unreadable error below is the honest signal.
+        unreadable_rels = set()
+        for r in unreadable:
+            try:
+                unreadable_rels.add(r["path"].relative_to(root).as_posix())
+            except ValueError:
+                pass
+        stale = sorted(set(baseline) - set(pardoned) - unreadable_rels)
 
-    if violations or stale:
+    if violations or stale or seams or unreadable:
         if violations:
             print(
                 "::error::vault script/hook(s) print to a Windows-hostile console "
@@ -424,9 +708,54 @@ def main(argv):
                 "exemption.".format(f=rel, b=DEFAULT_BASELINE.name),
                 file=sys.stderr,
             )
+        for r in unreadable:
+            try:
+                rel = r["path"].relative_to(root).as_posix()
+            except ValueError:
+                rel = r["path"]
+            print(
+                "::error file={f}::{f} could not be read ({e}), so this gate "
+                "cannot clear it. Treated as a FAILURE, never as clean.".format(
+                    f=rel, e=r["read_error"]
+                ),
+                file=sys.stderr,
+            )
+        if seams:
+            print(
+                "::error::LAUNCHER SEAM: a module that is NOT protected on import "
+                "is imported and called by a file carrying no guard of its own. "
+                "Both files lint clean individually while the run they form has "
+                "no cp1252 protection. Move the 5-line reconfigure block to "
+                "MODULE scope in the imported module.",
+                file=sys.stderr,
+            )
+        for imp, tgt, called in seams:
+            def _rel(pth):
+                try:
+                    return pth.relative_to(root).as_posix()
+                except ValueError:
+                    return str(pth)
+            if not tgt["has_guard"]:
+                why = ("carries NO UTF-8 console guard at all (the worst case: a "
+                       "guard under `__main__` would at least fire on direct "
+                       "execution)")
+            else:
+                why = ("has its UTF-8 console guard only under `__main__` or "
+                       "inside a function, so it never runs on the import path")
+            print(
+                "::error file={f}::{f} {why}, but {L} imports it and calls {c}() "
+                "without a guard of its own -- so {f}'s prints hit a raw cp1252 "
+                "console. Move the 5-line reconfigure block to MODULE scope in "
+                "{f}.".format(f=_rel(tgt["path"]), L=_rel(imp["path"]),
+                              c=called, why=why),
+                file=sys.stderr,
+            )
         print(
             "\nFAILED: {n} unpinned file(s) missing the UTF-8 console guard, "
-            "{s} stale baseline row(s).".format(n=len(violations), s=len(stale)),
+            "{s} stale baseline row(s), {m} launcher seam(s), "
+            "{u} unreadable file(s).".format(
+                n=len(violations), s=len(stale), m=len(seams), u=len(unreadable)
+            ),
             file=sys.stderr,
         )
         return 1
@@ -439,6 +768,7 @@ def main(argv):
         print(
             "OK - {n} file(s) checked across {roots}; every unpinned printing CLI "
             "that can emit non-ASCII carries the UTF-8 console guard. "
+            "No launcher seams. "
             "{p} content-pinned legacy file(s) remain [{tags}] - see {b}.".format(
                 n=len(results),
                 roots=" + ".join(_SCAN_PATHSPECS),
@@ -453,7 +783,8 @@ def main(argv):
     print(
         "OK - {n} script(s) checked; every printing CLI that can emit non-ASCII "
         "carries the UTF-8 console guard ({r} of them via a runtime "
-        "Meta/vault-path resolution, not a source literal).".format(
+        "Meta/vault-path resolution, not a source literal); no launcher "
+        "seams.".format(
             n=len(results), r=n_resolver
         )
     )
@@ -468,6 +799,10 @@ def _print_report(results):
 
     def _reason(r):
         bits = []
+        if r.get("read_error"):
+            # Never render an unreadable file as a clean library row: every
+            # other signal below is a DEFAULT, not an observation.
+            return "UNREADABLE:" + r["read_error"]
         bits.append("cli" if r["is_cli"] else "lib")
         bits.append("print" if r["prints_console"] else "no-print")
         bits.append("non-ascii" if r["has_non_ascii"] else "ascii")

@@ -213,8 +213,21 @@ mkdir -p "$HOME/.claude" 2>/dev/null || true
 
 # Rotate if log is large
 if [[ -f "$BOOTSTRAP_LOG" ]]; then
-  log_size=$(stat -f %z "$BOOTSTRAP_LOG" 2>/dev/null || stat -c %s "$BOOTSTRAP_LOG" 2>/dev/null || echo 0)
-  if [[ "$log_size" -gt 5242880 ]]; then
+  # Byte size of $BOOTSTRAP_LOG, cross-platform. GNU/Linux `stat -c %s` first,
+  # then BSD/macOS `stat -f %z`, validating each result is a plain integer
+  # before trusting it -- see PORTABILITY.md #1. The old BSD-first `||` chain
+  # crashed this script outright on real GNU coreutils: `stat -f %z FILE`
+  # leaks non-numeric filesystem-status text to stdout on its way to failing,
+  # `log_size` ended up contaminated, and `[[ "$log_size" -gt N ]]` then hit
+  # bash's arithmetic evaluator on a bare word under this script's
+  # `set -u` -- an unbound-variable abort on every run once the log existed.
+  log_size=$(stat -c %s "$BOOTSTRAP_LOG" 2>/dev/null)                        # GNU/Linux
+  case "$log_size" in ''|*[!0-9]*) log_size=$(stat -f %z "$BOOTSTRAP_LOG" 2>/dev/null) ;; esac  # BSD/macOS
+  case "$log_size" in ''|*[!0-9]*) log_size="" ;; esac  # neither gave a plain integer -> unknown
+  # Unknown size -> skip rotation rather than act on an unprovable read. The
+  # log just keeps growing until the next successful check (self-healing,
+  # low cost); a forced rotation instead would be the more disruptive guess.
+  if [[ -n "$log_size" ]] && [[ "$log_size" -gt 5242880 ]]; then
     mv "$BOOTSTRAP_LOG" "${BOOTSTRAP_LOG}.$(date +%Y%m%d-%H%M%S)" 2>/dev/null || true
   fi
 fi
@@ -775,15 +788,46 @@ PY
       -H "content-type: application/json" \
       -d "$QM_PAYLOAD" 2>/dev/null)"
     set -e
-    QM_TOKEN="$(printf '%s' "${QM_RESP:-}" | "$PY" -c '
-import json, sys
+    # Field order is reused|resent|token, untrusted token LAST, and the
+    # token is hex-validated here (never emitted at all if it doesn't
+    # match) -- belt and suspenders. `read` with 3 target vars dumps every
+    # extra "|"-delimited chunk into the LAST variable, so if token were
+    # first and unvalidated, a token shaped like "abc|1|def" would shift
+    # "1" into the reused slot regardless of the server's real reused
+    # value -- the split happens before any regex could validate it. With
+    # the flags first (never containing "|", they are script-computed "0"
+    # or "1") and the token last and pre-validated, neither failure mode
+    # is reachable.
+    QM_PARSED="$(printf '%s' "${QM_RESP:-}" | "$PY" -c '
+import json, re, sys
 try:
     d = json.load(sys.stdin)
-    print(d.get("token","") if d.get("ok") else "")
 except Exception:
-    print("")
+    d = {}
+ok = bool(d.get("ok"))
+token = d.get("token","") if ok else ""
+if not re.match(r"^[a-f0-9]{32}$", token):
+    token = ""
+reused = "1" if (ok and d.get("reused") is True) else "0"
+resent = "1" if (ok and d.get("resent") is True) else "0"
+print("%s|%s|%s" % (reused, resent, token))
 ' 2>/dev/null)"
-    if [[ -z "$QM_TOKEN" || ! "$QM_TOKEN" =~ ^[a-f0-9]{32}$ ]]; then
+    IFS='|' read -r QM_REUSED QM_RESENT QM_TOKEN <<< "$QM_PARSED"
+    # A resubmit for an email that already has a live token comes back
+    # {ok:true, reused:true, resent:<bool>} with NO token -- the endpoint is
+    # public/unauthenticated and never re-hands out an existing token. This
+    # is not a failure: warn and continue tokenless, same as a fresh install
+    # with no email offered at all. Never err() here (see FAILED list below)
+    # and never retry the mint.
+    if [[ "$QM_REUSED" == "1" ]]; then
+      if [[ "$QM_RESENT" == "1" ]]; then
+        warn "$(t "You already started an install with this email. I sent the link to your inbox again." \
+                  "Ya empezaste una instalación con este email. Te reenvié el link a tu bandeja de entrada.")"
+      else
+        warn "$(t "You already started an install with this email. The link is in your inbox from last time." \
+                  "Ya empezaste una instalación con este email. El link está en tu bandeja de entrada de la última vez.")"
+      fi
+    elif [[ -z "$QM_TOKEN" || ! "$QM_TOKEN" =~ ^[a-f0-9]{32}$ ]]; then
       err "$(t "Inline mint failed. Falling back to form." \
               "Falló la generación inline. Caemos al formulario.")"
     else
@@ -1705,6 +1749,48 @@ if [[ ${#SKILLS_TO_SYNC[@]} -gt 0 ]]; then
   fi
 fi
 
+# _shared ships the guard helpers ingest-github/ingest-youtube import
+# (guard_untrusted_body/fence_untrusted). It carries no SKILL.md, so it is
+# deliberately outside the named "for sub in ...; do" list above (and that
+# list's own parity guard, scripts/test_bootstrap_install_parity.py, which
+# requires every listed name to ship one). Without this, a fresh per-skill
+# install never lands a sibling _shared dir, so every third-party write
+# from those two skills silently degrades to injection_scan: unavailable.
+shared_src="$SKILL_DIR/skills/_shared"
+shared_dst="$HOME/.claude/skills/_shared"
+if [[ -L "$shared_dst" ]]; then
+  warn "_shared is a SYMLINK — bootstrap will NOT write through it"
+elif [[ -d "$shared_dst/.git" ]]; then
+  log "_shared has its own .git/ directory — detected as YOUR FORK, skipping entirely"
+elif [[ -d "$shared_src" ]]; then
+  if [[ $DRY_RUN -eq 1 ]]; then
+    dry "would sync _shared → $shared_dst (with backup-before-overwrite)"
+  else
+    mkdir -p "$shared_dst"
+    # File-by-file sync with backup-before-overwrite (mirrors the sub-skill loop above)
+    STAMP="$(date +%Y-%m-%d-%H%M)"
+    SHARED_BACKED_UP=0
+    SHARED_CREATED=0
+    while IFS= read -r srcfile; do
+      rel="${srcfile#$shared_src/}"
+      dstfile="$shared_dst/$rel"
+      mkdir -p "$(dirname "$dstfile")"
+      if [[ -f "$dstfile" ]]; then
+        if ! cmp -s "$srcfile" "$dstfile"; then
+          cp "$dstfile" "$dstfile.bak-$STAMP"
+          BACKUPS+=("$dstfile.bak-$STAMP")
+          cp "$srcfile" "$dstfile"
+          SHARED_BACKED_UP=$((SHARED_BACKED_UP + 1))
+        fi
+      else
+        cp "$srcfile" "$dstfile"
+        SHARED_CREATED=$((SHARED_CREATED + 1))
+      fi
+    done < <(find "$shared_src" -type f)
+    ok "_shared: $SHARED_CREATED new, $SHARED_BACKED_UP backed up"
+  fi
+fi
+
 # Summary of what was protected this section
 [[ ${#SKILL_FORKS[@]} -gt 0 ]] && log "Forks preserved untouched: ${SKILL_FORKS[*]}"
 [[ ${#SKILL_SYMLINKS[@]} -gt 0 ]] && log "Symlinks preserved untouched: ${#SKILL_SYMLINKS[@]} skill(s)"
@@ -1717,6 +1803,7 @@ fi
 # This was the surface bug behind the 2026-05-14 install report where
 # /second-brain-mapping didn't appear in the palette after install completed.
 # ───────────────────────────────────────────────────────────────────────────────
+# ai-brain:slash-commands:start
 hdr "Installing slash commands"
 COMMANDS_SRC="$SKILL_DIR/commands"
 COMMANDS_DST="$HOME/.claude/commands"
@@ -1725,12 +1812,40 @@ if [[ -d "$COMMANDS_SRC" ]]; then
   COMMAND_COUNT=0
   COMMAND_BACKED_UP=0
   STAMP="$(date +%Y-%m-%d-%H%M)"
+  # Provenance: every blob this repo ever shipped under commands/. An installed
+  # command that differs from the incoming one is either a stale copy of an
+  # older upstream version (replace it, backup first) or a command the user
+  # wrote (keep it). Before this, the only way to keep a customized command was
+  # to put the same edit in the checkout's commands/ too — and a dirty checkout
+  # blocks every auto-update from then on, silently, for weeks. On a non-git or
+  # shallow checkout provenance is unknowable: SHIPPED_BLOBS stays empty and
+  # every differing copy is replaced with a backup, exactly as before. The
+  # empty --show-prefix means SKILL_DIR is the repo's own root, so an archive
+  # install that sits inside some OTHER repo (a version-controlled ~/.claude)
+  # never reads that repo's history.
+  SHIPPED_BLOBS=""
+  if cmd_prefix="$(git -C "$SKILL_DIR" rev-parse --show-prefix 2>/dev/null)" \
+     && [[ -z "$cmd_prefix" ]] \
+     && [[ "$(git -C "$SKILL_DIR" rev-parse --is-shallow-repository 2>/dev/null)" == "false" ]]; then
+    SHIPPED_BLOBS="$(git -C "$SKILL_DIR" log --format= --raw --no-abbrev -- commands/ 2>/dev/null \
+      | awk 'NF >= 4 { print $3; print $4 }' | sort -u)" || SHIPPED_BLOBS=""
+  fi
   for cmd_src in "$COMMANDS_SRC"/*.md; do
     [[ -f "$cmd_src" ]] || continue
     cmd_name="$(basename "$cmd_src")"
     cmd_dst="$COMMANDS_DST/$cmd_name"
     if [[ -f "$cmd_dst" ]]; then
       if ! cmp -s "$cmd_src" "$cmd_dst"; then
+        if [[ -n "$SHIPPED_BLOBS" ]]; then
+          # --path applies the repo's attributes (eol), so a CRLF copy of a
+          # shipped file still hashes to the blob that shipped it.
+          dst_blob="$(git -C "$SKILL_DIR" hash-object --path="commands/$cmd_name" "$cmd_dst" 2>/dev/null || true)"
+          if [[ -n "$dst_blob" ]] && ! printf '%s\n' "$SHIPPED_BLOBS" | grep -qxF "$dst_blob"; then
+            warn "commands: kept your /${cmd_name%.md} — you wrote it, so it is not replaced. Upstream's version: $cmd_src"
+            SKIPPED+=("/${cmd_name%.md} slash command (yours; upstream's version at $cmd_src)")
+            continue
+          fi
+        fi
         cp "$cmd_dst" "$cmd_dst.bak-$STAMP"
         BACKUPS+=("$cmd_dst.bak-$STAMP")
         cp "$cmd_src" "$cmd_dst"
@@ -1750,6 +1865,7 @@ if [[ -d "$COMMANDS_SRC" ]]; then
 else
   warn "commands/ directory not found at $COMMANDS_SRC — slash commands will not appear in palette"
 fi
+# ai-brain:slash-commands:end
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Humanizer

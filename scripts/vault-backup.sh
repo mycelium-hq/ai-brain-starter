@@ -252,7 +252,16 @@ rotate() { # <dest> <keep>
 }
 
 human_size() { # <file>
-  if [ "$(uname)" = "Darwin" ]; then stat -f %z "$1" 2>/dev/null; else stat -c %s "$1" 2>/dev/null; fi \
+  # Byte size of $1, cross-platform. GNU/Linux `stat -c %s` first, then
+  # BSD/macOS `stat -f %z`, validated -- see PORTABILITY.md #1. A `uname`
+  # gate alone isn't validation: it says nothing about whether the chosen
+  # stat call actually succeeded. Unknown -> empty input to awk, same as
+  # this function already produced whenever its chosen stat call failed.
+  local s
+  s=$(stat -c %s "$1" 2>/dev/null)                        # GNU/Linux
+  case "$s" in ''|*[!0-9]*) s=$(stat -f %z "$1" 2>/dev/null) ;; esac  # BSD/macOS
+  case "$s" in ''|*[!0-9]*) s="" ;; esac  # neither gave a plain integer -> unknown
+  printf '%s' "$s" \
     | awk '{ s=$1; u="B"; if(s>1073741824){s/=1073741824;u="GB"} else if(s>1048576){s/=1048576;u="MB"} else if(s>1024){s/=1024;u="KB"} printf "%.1f%s", s, u }'
 }
 
@@ -379,7 +388,15 @@ cmd_run() {
     tar -tzf "$out" >/dev/null 2>&1 || { rm -f "$out"; die "archive failed integrity check (corrupt tar.gz)"; }
   else
     # Can't list without decrypting; assert it is non-trivially sized.
-    local bytes; bytes="$(if [ "$(uname)" = Darwin ]; then stat -f %z "$out"; else stat -c %s "$out"; fi)"
+    # Byte size of $out, cross-platform, GNU-first + validated (same pattern
+    # as human_size() above; see PORTABILITY.md #1). Unknown size still
+    # reads as "0" via the ${bytes:-0} default below, same fail-closed
+    # intent as before: an unverifiable fresh backup is treated the same as
+    # a suspiciously small one, and removed rather than trusted.
+    local bytes
+    bytes=$(stat -c %s "$out" 2>/dev/null)                        # GNU/Linux
+    case "$bytes" in ''|*[!0-9]*) bytes=$(stat -f %z "$out" 2>/dev/null) ;; esac  # BSD/macOS
+    case "$bytes" in ''|*[!0-9]*) bytes="" ;; esac  # neither gave a plain integer -> unknown
     [ "${bytes:-0}" -gt 256 ] || { rm -f "$out"; die "encrypted archive is suspiciously small"; }
   fi
 

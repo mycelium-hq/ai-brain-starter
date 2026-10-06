@@ -89,11 +89,23 @@ find_backups() {
     local cutoff_epoch
     cutoff_epoch=$(($(date +%s) - SINCE_DAYS * 86400))
     for f in "${before_filter[@]}"; do
+      # Epoch mtime of $f, cross-platform. GNU/Linux `stat -c %Y` first, then
+      # BSD/macOS `stat -f %m`, validating each result is a plain integer
+      # before trusting it -- see PORTABILITY.md #1. A raw `A || B` exit-code
+      # chain is not enough: GNU's `-f` means `--file-system`, so
+      # `stat -f %m FILE` on Linux can still hand back non-numeric text rather
+      # than failing cleanly into the fallback.
       local mtime
-      if mtime=$(stat -f %m "$f" 2>/dev/null) || mtime=$(stat -c %Y "$f" 2>/dev/null); then
-        if [[ "$mtime" -ge "$cutoff_epoch" ]]; then
-          echo "$f"
-        fi
+      mtime=$(stat -c %Y "$f" 2>/dev/null)                          # GNU/Linux
+      case "$mtime" in ''|*[!0-9]*) mtime=$(stat -f %m "$f" 2>/dev/null) ;; esac  # BSD/macOS
+      case "$mtime" in ''|*[!0-9]*) mtime="" ;; esac  # neither gave a plain integer -> unknown
+      # Unknown age -> include the candidate rather than silently hide a real
+      # backup from this recovery listing (--since only narrows what's shown;
+      # restoring still requires a separate explicit per-item confirmation, or
+      # --yes, and never deletes anything -- the prior live file is renamed
+      # aside, not destroyed).
+      if [[ -z "$mtime" ]] || [[ "$mtime" -ge "$cutoff_epoch" ]]; then
+        echo "$f"
       fi
     done
   else
@@ -164,11 +176,24 @@ fi
 echo ""
 echo "Found ${#BACKUPS[@]} backup file(s):"
 for f in "${BACKUPS[@]}"; do
-  size=$(stat -f %z "$f" 2>/dev/null || stat -c %s "$f" 2>/dev/null || echo "?")
-  if mtime_h=$(stat -f "%Sm" -t "%Y-%m-%d %H:%M" "$f" 2>/dev/null) || \
-     mtime_h=$(date -d "@$(stat -c %Y "$f" 2>/dev/null)" "+%Y-%m-%d %H:%M" 2>/dev/null); then :; else
-    mtime_h="?"
-  fi
+  # Byte size of $f, cross-platform, for display only. GNU/Linux `stat -c %s`
+  # first, then BSD/macOS `stat -f %z`, validated -- see PORTABILITY.md #1.
+  # Unknown -> "?", the same sentinel the original `|| echo "?"` fallback
+  # already used for this listing.
+  size=$(stat -c %s "$f" 2>/dev/null)                        # GNU/Linux
+  case "$size" in ''|*[!0-9]*) size=$(stat -f %z "$f" 2>/dev/null) ;; esac  # BSD/macOS
+  case "$size" in ''|*[!0-9]*) size="?" ;; esac  # neither gave a plain integer -> unknown
+  # Modified time for display, cross-platform. Epoch via GNU `stat -c %Y`
+  # first, then BSD `stat -f %m`, validated (PORTABILITY.md #1), then
+  # formatted with GNU `date -d @N` or BSD `date -r N`. The old line asked BSD
+  # `stat -f "%Sm"` first; on Linux that prints file-system text and fails,
+  # and only its separate fallback assignment kept this column right.
+  mtime_e=$(stat -c %Y "$f" 2>/dev/null)                          # GNU/Linux
+  case "$mtime_e" in ''|*[!0-9]*) mtime_e=$(stat -f %m "$f" 2>/dev/null) ;; esac  # BSD/macOS
+  case "$mtime_e" in
+    ''|*[!0-9]*) mtime_h="?" ;;  # neither gave a plain integer -> unknown
+    *) mtime_h=$(date -d "@$mtime_e" "+%Y-%m-%d %H:%M" 2>/dev/null || date -r "$mtime_e" "+%Y-%m-%d %H:%M" 2>/dev/null || echo "?") ;;
+  esac
   printf "  - %s (%s bytes, %s)\n" "$f" "$size" "$mtime_h"
 done
 

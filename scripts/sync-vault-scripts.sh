@@ -301,6 +301,8 @@ done
 VAULT_LIB_MODULES=(
   "__init__.py"     # makes _lib an importable package
   "safe_read.py"    # bounded, symlink-refusing read (dep of build-journal-index.py)
+  "vault_root.py"   # canonical vault-root resolution (dep of drift-detection.py,
+                     # compress-vault-doc.py -- #683 F4); stdlib-only (os, re, pathlib)
 )
 if [ "$DRY_RUN" -eq 0 ]; then
   mkdir -p "$DEST_DIR/_lib" 2>/dev/null || {

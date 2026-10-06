@@ -13,7 +13,7 @@ quoting and correctness class. It does **not** catch the GNU-vs-BSD flag
 differences below. Those are on you. Each has a reference implementation in this
 repo.
 
-## 1. File mtime: `stat`
+## 1. File mtime/size: `stat`
 
 GNU and BSD `stat` take different flags, and the failure mode is SILENT:
 
@@ -21,17 +21,45 @@ GNU and BSD `stat` take different flags, and the failure mode is SILENT:
 - BSD/macOS: `stat -f %m FILE`  gives the epoch mtime
 
 The trap: GNU `stat -f` means `--file-system`. So `stat -f %m FILE` on Linux
-**exits 0** and prints non-numeric filesystem text instead of failing. Relying on
-`||` (the exit code) hands you garbage, not a fallback. Validate that the result
-is numeric after each attempt.
+does not fail the way a BSD-first `||` chain assumes. Measured directly
+(GNU coreutils 9.4, `docker run --rm ubuntu:24.04 sh -c 'touch /f; stat -f %m
+/f; echo rc=$?; stat -f%m /f; echo rc=$?'`), it actually **exits 1** either
+way, not 0, but the exit code alone still doesn't save a BSD-first chain:
 
-Reference: `scripts/_session_close_guard.sh`, function `_close_lock_mtime`:
+- Spaced (`stat -f %m FILE`): GNU's filesystem-mode stat treats `%m` itself
+  as a second filesystem target, fails to resolve it, but has *already
+  printed FILE's own filesystem-info block to stdout* before that failure.
+  A caller combining `A || B` inside ONE command substitution gets that
+  leaked block mixed into the result, non-numeric text same as if the exit
+  code had lied.
+- Glued (`stat -f%m FILE`): GNU's option parser sees `-f` (boolean) glued to
+  a `%`, which isn't a valid option, and fails immediately with "invalid
+  option" before touching any operand -- stdout stays clean here, which is
+  why some glued-form BSD-first chains in this repo's history turned out to
+  work by accident. Accident, not contract: a different coreutils build or
+  a different `stat` (busybox, toybox) is not guaranteed to fail the same
+  way, so treat both shapes as unsafe regardless of which one you're
+  looking at.
+
+Either way, relying on `||` (the exit code) does not reliably get you a
+clean fallback. Validate that the result is numeric after each attempt.
+
+This same trap applies to every BSD custom-format letter, not just `%m` --
+measured identically for `%z` (size; GNU's paired form is `stat -c %s`).
+
+Reference: `scripts/_session_close_guard.sh`, function `_close_lock_mtime`
+(sibling `_close_lock_size` in the same file applies the identical shape to
+`%z`/`%s`):
 
 ```bash
 m=$(stat -c %Y "$1" 2>/dev/null)                                   # GNU/Linux
 case "$m" in ''|*[!0-9]*) m=$(stat -f %m "$1" 2>/dev/null) ;; esac # BSD/macOS
 case "$m" in ''|*[!0-9]*) m="" ;; esac   # neither gave a plain integer -> empty
 ```
+
+A tracked shell script using the unsafe shape at any BSD format letter fails
+`scripts/check-stat-portability.py`, wired into `scripts/ci.sh` and
+`.github/workflows/lint.yml`.
 
 ## 2. Date arithmetic: `date`
 

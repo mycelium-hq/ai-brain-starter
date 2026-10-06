@@ -4,7 +4,9 @@
 The guard follows local helper calls with Python's AST.  A function is in scope
 only when its reachable code both recursively walks and reads filesystem content.
 Metadata-only walkers are clean.  In-scope walkers pass only when that same call
-surface reaches the shared ``safe_read`` primitive.
+surface reaches the shared ``safe_read`` primitive.  A call to one of the vault
+walkers in ``VAULT_WALKERS`` counts as a walk, because those helpers live in
+another module and this audit cannot follow an import.
 
 Modes:
   --check FILE [FILE ...]  audit real files; 0 clean, 1 unsafe, 2 unreadable/bad
@@ -38,6 +40,11 @@ from _lib.safe_read import safe_read_text  # noqa: E402
 SAFE_READ_NAMES = {"safe_read", "safe_read_bytes", "safe_read_text"}
 DIRECT_READ_METHODS = {"read_text", "read_bytes"}
 COPY_READERS = {"copy", "copy2", "copyfile", "copyfileobj"}
+# Recursive walks that live in another module. This audit reads one file at a
+# time and cannot follow an import, so a call to one of these counts as a walk
+# here. Without that, moving a walk out of a file made the raw reads left behind
+# in it read as clean.
+VAULT_WALKERS = {"iter_vault_markdown", "list_vault_files"}
 
 
 @dataclass
@@ -389,6 +396,8 @@ class _BodyVisitor(ast.NodeVisitor):
             # cannot inherit the shared safe_read boundary from a caller.
             self.summary.walkers.add("shutil.copytree")
             self.summary.readers.add("copytree")
+        if leaf in VAULT_WALKERS:
+            self.summary.walkers.add("vault-walk")
 
         safe_name_call = isinstance(node.func, ast.Name) and (
             node.func.id in self.imports.safe_names or node.func.id in self.safe_aliases
@@ -894,6 +903,38 @@ def self_test() -> int:
             "    for base, dirs, files in os.walk(root):\n"
             "        for name in files: safe_read_text(os.path.join(base, name))\n",
             False,
+        ),
+        (
+            "vault walker helper followed by a raw read",
+            "from _base import iter_vault_markdown\n"
+            "def scan():\n"
+            "    for path in iter_vault_markdown():\n"
+            "        open(path).read()\n",
+            False,
+        ),
+        (
+            "vault walker helper reached through a module followed by a raw read",
+            "import _dispatcher\n"
+            "def scan():\n"
+            "    for path in _dispatcher.list_vault_files():\n"
+            "        open(path).read()\n",
+            False,
+        ),
+        (
+            "vault walker helper followed by the shared primitive",
+            "from _base import iter_vault_markdown\n"
+            "from _lib.safe_read import safe_read_text\n"
+            "def scan():\n"
+            "    for path in iter_vault_markdown():\n"
+            "        safe_read_text(path)\n",
+            True,
+        ),
+        (
+            "vault walker helper that only lists paths",
+            "from _base import iter_vault_markdown\n"
+            "def count():\n"
+            "    return sum(1 for _ in iter_vault_markdown())\n",
+            True,
         ),
         (
             "metadata-only walker",

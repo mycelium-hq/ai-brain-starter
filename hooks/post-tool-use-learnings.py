@@ -21,13 +21,13 @@ The file's frontmatter follows the closed-loop learning contract:
     memory_class: episodic
     captured_at: <ISO 8601 timestamp>
     source_tool: Bash | Edit | Write | Agent
-    error_excerpt: <first ~500 chars of error output, optional>
+    error_excerpt: <first ~500 chars of redacted error output, optional>
     provenance:
       - source_type: claude-session
         source_id: <session_id>
         captured_at: <ISO 8601 timestamp>
 
-The body carries the raw tool input + tool output (truncated) so a downstream
+The body carries the redacted tool input + tool output (truncated) so a downstream
 consolidation pass (scripts/promote-episodic-to-procedural.py) can group
 similar Learnings and draft procedural-memory candidates for human review.
 
@@ -39,7 +39,8 @@ Vault detection: walks up from cwd looking for a folder whose name ends in
 'Meta'. If no vault is found, the hook emits a passthrough and exits without
 writing.
 
-Performance budget: <100ms. Hook never blocks the calling agent on errors.
+Performance budget: <100ms on typical output; redaction reads a bounded prefix
+of each string. Hook never blocks the calling agent on errors.
 """
 
 from __future__ import annotations
@@ -56,6 +57,79 @@ try:
     import yaml
 except ImportError:
     yaml = None
+
+HOOK_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(HOOK_DIR))
+
+try:
+    from _lib.secret_patterns import redact as _redact_secrets
+except Exception:
+    _redact_secrets = None
+
+
+REDACTION_UNAVAILABLE = "[redaction unavailable -- raw content omitted]"
+
+
+ANSI_ESCAPE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|[()*+][0-9A-Za-z])")  # CSI + charset (tput sgr0)
+SECRET_SLACK = 4096  # longer than any secret shape, so none straddles the cut
+
+
+def safe_redact(text: str, limit: int | None = None) -> str:
+    """Redact secrets BEFORE the caller truncates/persists (MYC-4703).
+
+    Strips terminal colour codes first (a key after `ESC[32m` defeats the
+    patterns anchored on a non-word character) and redacts only a bounded
+    prefix, so a huge or adversarial output cannot stall the hook. Fails
+    CLOSED to a placeholder if the registry is unavailable or raises.
+    """
+    if not text:
+        return text
+    if _redact_secrets is None:
+        return REDACTION_UNAVAILABLE
+    window = text if limit is None else text[: limit + SECRET_SLACK]
+    try:
+        redacted, _hits = _redact_secrets(ANSI_ESCAPE.sub("", window))
+    except Exception:
+        return REDACTION_UNAVAILABLE
+    if limit is None:
+        return redacted
+    if len(text) > len(window):  # a token cut at the window edge is too short to match
+        end = len(redacted)  # linear scan back: a regex like \S+\Z is quadratic here
+        while end and not redacted[end - 1].isspace():
+            end -= 1
+        redacted = redacted[:end]
+    return redacted[:limit]
+
+
+def _redact_tree(value, limit: int):
+    """Redact every string in a JSON-like value BEFORE it is serialized.
+
+    json.dumps and repr turn a newline into `\\n`, and that letter in front
+    of a key defeats patterns anchored on a non-word character.
+    """
+    if isinstance(value, str):
+        return safe_redact(value, limit)
+    if isinstance(value, dict):
+        return {safe_redact(str(k), limit): _redact_tree(v, limit) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return [_redact_tree(v, limit) for v in value]
+    if isinstance(value, bytes):
+        return safe_redact(value.decode("utf-8", "replace"), limit)
+    return value
+
+
+def _join_content(content) -> str:
+    if isinstance(content, list):
+        return " ".join(str(c.get("text", c)) if isinstance(c, dict) else str(c) for c in content)
+    return str(content)
+
+
+def _dump_redacted(value, limit: int = 1500) -> str:
+    redacted = _redact_tree(value, limit)
+    try:
+        return json.dumps(redacted, indent=2, ensure_ascii=False)[:limit]
+    except (TypeError, ValueError):
+        return str(redacted)[:limit]
 
 
 WATCHED_TOOLS = {"Bash", "Edit", "Write", "Agent", "Task"}
@@ -129,8 +203,10 @@ def detect_failure(tool_response: dict, source_tool: str = "") -> tuple[bool, st
     if "exitCode" in tool_response:
         try:
             if int(tool_response.get("exitCode") or 0) != 0:
-                stderr = (tool_response.get("stderr") or "")[:500]
-                stdout = (tool_response.get("stdout") or "")[:500]
+                # Redact BEFORE truncating: slicing first can cut a
+                # credential (e.g. a header echoed in the output) in half.
+                stderr = safe_redact(tool_response.get("stderr") or "", 500)
+                stdout = safe_redact(tool_response.get("stdout") or "", 500)
                 return True, (stderr or stdout)
         except (TypeError, ValueError):
             pass
@@ -138,7 +214,7 @@ def detect_failure(tool_response: dict, source_tool: str = "") -> tuple[bool, st
     # Explicit isError flag is authoritative
     if tool_response.get("isError") or tool_response.get("is_error"):
         msg = tool_response.get("error") or tool_response.get("message") or ""
-        return True, str(msg)[:500]
+        return True, safe_redact(msg if isinstance(msg, str) else str(_redact_tree(msg, 500)), 500)
 
     # Write/Edit success short-circuit. Success shape carries filePath +
     # content; the content is the file written, not error output.
@@ -161,15 +237,11 @@ def detect_failure(tool_response: dict, source_tool: str = "") -> tuple[bool, st
 
     # Generic content scan (Bash without an explicit exitCode)
     content = tool_response.get("content") or tool_response.get("output") or ""
-    if isinstance(content, list):
-        joined = " ".join(str(c.get("text", c)) if isinstance(c, dict) else str(c) for c in content)
-    else:
-        joined = str(content)
-    lower = joined.lower()
+    lower = _join_content(content).lower()
     if any(tok in lower for tok in ERROR_TOKENS):
         # Only treat as failure if there's no clear success signal
         if not any(s in lower for s in ("success", " ok ", "completed")):
-            return True, joined[:500]
+            return True, safe_redact(_join_content(_redact_tree(content, 500)), 500)
     return False, ""
 
 
@@ -287,7 +359,8 @@ def write_learning(
         ],
     }
     if error_excerpt:
-        frontmatter["error_excerpt"] = error_excerpt[:500]
+        # Idempotent defense-in-depth; detect_failure() already redacted this.
+        frontmatter["error_excerpt"] = safe_redact(error_excerpt)[:500]
 
     # Agent/Task captures reach here only on a genuine isError failure or an
     # explicit <learning> annotation (detect_failure short-circuits successful
@@ -302,14 +375,14 @@ def write_learning(
     if learning_text:
         body_parts.append("## Learning annotation")
         body_parts.append("")
-        body_parts.append(learning_text)
+        body_parts.append(safe_redact(learning_text, 8000))
         body_parts.append("")
 
     if error_excerpt:
         body_parts.append("## Error excerpt")
         body_parts.append("")
         body_parts.append("```")
-        body_parts.append(error_excerpt[:1000])
+        body_parts.append(safe_redact(error_excerpt, 1000))
         body_parts.append("```")
         body_parts.append("")
 
@@ -326,20 +399,14 @@ def write_learning(
         body_parts.append("## Tool input")
         body_parts.append("")
         body_parts.append("```json")
-        try:
-            body_parts.append(json.dumps(tool_input, indent=2, ensure_ascii=False)[:1500])
-        except (TypeError, ValueError):
-            body_parts.append(str(tool_input)[:1500])
+        body_parts.append(_dump_redacted(tool_input))
         body_parts.append("```")
         body_parts.append("")
 
         body_parts.append("## Tool response (excerpt)")
         body_parts.append("")
         body_parts.append("```")
-        try:
-            body_parts.append(json.dumps(tool_response, indent=2, ensure_ascii=False)[:1500])
-        except (TypeError, ValueError):
-            body_parts.append(str(tool_response)[:1500])
+        body_parts.append(_dump_redacted(tool_response))
         body_parts.append("```")
         body_parts.append("")
 

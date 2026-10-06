@@ -54,11 +54,13 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
+from typing import Callable
 
 __all__ = [
     "collapse_worktree",
     "find_meta_vault_root",
     "find_repo_vault_root",
+    "resolve_cli_vault_root",
     "resolve_vault_root",
     "vault_root_for",
 ]
@@ -342,3 +344,76 @@ def resolve_vault_root(cwd: Path, env_vault_root: str | None) -> Path:
     if repo_match is not None:
         return repo_match
     return collapse_worktree(Path(env_vault_root) if env_vault_root else cwd)
+
+
+def resolve_cli_vault_root(
+    cwd: Path | None = None,
+    fallback: Path | None = None,
+    on_mismatch: Callable[[Path, Path], None] | None = None,
+) -> Path:
+    """Single source of truth for a standalone CLI's own module-level
+    VAULT_ROOT (drift-detection.py, compress-vault-doc.py -- #683 F3/review
+    follow-up). Before this function existed, each such script carried its
+    OWN copy of this precedence, and the two drifted the moment one was
+    edited and the other wasn't (compress-vault-doc.py silently looking for
+    a report drift-detection.py had written somewhere else). Centralizing it
+    here makes "these callers agree" true by construction instead of an
+    assertion two copies could stop matching.
+
+    "Cwd is a vault" means what find_meta_vault_root() means: an ancestor of
+    cwd (worktree-collapsed) already has a Meta-suffixed folder -- not
+    merely that cwd happens to sit inside some git repository (the #683
+    review's F2: a first pass at this fix treated any git repo as a vault,
+    which sent a plain code checkout's audit into <coderepo>/Meta instead of
+    honoring a real VAULT_ROOT, and treated a vault's own
+    .claude/worktrees/<slug> checkout as a second, separate vault instead of
+    collapsing to the main one).
+
+    Args:
+      cwd: defaults to Path.cwd().
+      fallback: what to return when NEITHER cwd nor VAULT_ROOT resolves to
+        an established vault at all -- the one case callers are allowed to
+        differ on (there is no vault here for them to agree ABOUT), and the
+        only parameter this function does not itself decide. Defaults to
+        collapse_worktree(cwd) when omitted. Every OTHER combination of
+        cwd/VAULT_ROOT/VAULT_ROOT_FORCE resolves identically for every
+        caller, regardless of what `fallback` they pass.
+      on_mismatch: optional callback `(cwd_vault, env_root) -> None`, called
+        (never printed here) on a genuine, unforced mismatch -- both args
+        are already resolved + worktree-collapsed Paths. A caller that wants
+        to warn (drift-detection.py) passes one; a caller that doesn't
+        (compress-vault-doc.py) omits it. The vault RETURNED is always
+        cwd_vault on a mismatch regardless of whether a callback is given.
+
+    Precedence:
+      1. cwd (worktree-collapsed), when it resolves to an already-established
+         vault and VAULT_ROOT is unset, or set but equal to that vault.
+      2. VAULT_ROOT (worktree-collapsed), when cwd does NOT resolve to an
+         established vault at all -- there is nothing here to override --
+         or when VAULT_ROOT_FORCE=1 (deliberate cross-vault run).
+      3. Otherwise the vault cwd resolves to wins; on_mismatch(cwd_vault,
+         env_root) fires first when given.
+      4. `fallback` (or collapse_worktree(cwd) when fallback is None), when
+         NEITHER cwd nor VAULT_ROOT resolves to an established vault.
+    """
+    cwd = Path.cwd() if cwd is None else cwd
+    cwd_vault = find_meta_vault_root(collapse_worktree(cwd))
+    env_raw = os.environ.get("VAULT_ROOT")
+
+    if cwd_vault is None:
+        found = vault_root_for(cwd)
+        if found is not None:
+            return found
+        return collapse_worktree(cwd) if fallback is None else fallback
+
+    if not env_raw:
+        return cwd_vault
+
+    env_root = collapse_worktree(Path(os.path.expanduser(env_raw)).resolve())
+    if env_root == cwd_vault:
+        return cwd_vault
+    if os.environ.get("VAULT_ROOT_FORCE", "").strip().lower() in ("1", "true", "yes"):
+        return env_root
+    if on_mismatch is not None:
+        on_mismatch(cwd_vault, env_root)
+    return cwd_vault

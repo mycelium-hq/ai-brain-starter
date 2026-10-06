@@ -234,15 +234,24 @@ fi
 section "5. Insights pipeline"
 INDEX="$META/journal-index.json"
 if [ -f "$INDEX" ]; then
-  if [ "$(uname)" = "Darwin" ]; then
-    age_days=$(( ( $(date +%s) - $(stat -f %m "$INDEX") ) / 86400 ))
+  # Epoch mtime of $INDEX, cross-platform. GNU/Linux `stat -c %Y` first, then
+  # BSD/macOS `stat -f %m`, validating each result is a plain integer before
+  # trusting it -- see PORTABILITY.md #1. A `uname`-gated branch is not a
+  # substitute for validation: it says nothing about whether the chosen stat
+  # invocation actually succeeded (permissions, a raced delete), and an
+  # unvalidated failure here fed straight into arithmetic as an empty operand.
+  idx_mtime=$(stat -c %Y "$INDEX" 2>/dev/null)                          # GNU/Linux
+  case "$idx_mtime" in ''|*[!0-9]*) idx_mtime=$(stat -f %m "$INDEX" 2>/dev/null) ;; esac  # BSD/macOS
+  case "$idx_mtime" in ''|*[!0-9]*) idx_mtime="" ;; esac  # neither gave a plain integer -> unknown
+  if [ -n "$idx_mtime" ]; then
+    age_days=$(( ( $(date +%s) - idx_mtime ) / 86400 ))
+    if [ "$age_days" -gt 14 ]; then
+      warn "journal-index.json is $age_days days old" "Re-run build-journal-index.py or /weekly to refresh."
+    else
+      ok "journal-index.json is fresh ($age_days days old)"
+    fi
   else
-    age_days=$(( ( $(date +%s) - $(stat -c %Y "$INDEX") ) / 86400 ))
-  fi
-  if [ "$age_days" -gt 14 ]; then
-    warn "journal-index.json is $age_days days old" "Re-run build-journal-index.py or /weekly to refresh."
-  else
-    ok "journal-index.json is fresh ($age_days days old)"
+    warn "journal-index.json age is unknown (stat failed to read its mtime)" "Re-run build-journal-index.py or /weekly to refresh."
   fi
   # quick JSON validity check
   if python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$INDEX" 2>/dev/null; then

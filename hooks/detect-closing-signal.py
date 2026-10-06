@@ -324,6 +324,32 @@ def is_false_positive(prompt: str, guards: list) -> bool:
     return False
 
 
+# Paired delimiters only; apostrophes inside words are not quote boundaries.
+_QUOTED_CONTENT_RE = re.compile(
+    r"`[^`]*`|\"[^\"]*\"|(?<!\w)'[^']*'(?!\w)|“[^”]*”|‘[^’]*’",
+    re.DOTALL,
+)
+
+
+def _without_quoted_content(text: str) -> str:
+    """Mask quoted spans when the prompt also contains substantive text.
+
+    Positive matches must occur outside quoted content. Masking preserves a
+    genuine close elsewhere in the same prompt; a whole-message quote such as
+    \"bye\" keeps its existing sign-off behavior.
+    """
+    spans = list(_QUOTED_CONTENT_RE.finditer(text))
+    outside = _QUOTED_CONTENT_RE.sub("", text)
+    if not re.search(r"\w", outside):
+        return text
+    chars = list(text)
+    for span in spans:
+        for i in range(span.start(), span.end()):
+            if chars[i] != "\n":
+                chars[i] = " "
+    return "".join(chars).strip()
+
+
 def classify_signal(
     prompt: str,
     packs: dict,
@@ -373,10 +399,13 @@ def classify_signal(
         log_debug("user suppress phrase matched, suppressing ALL tiers")
         return (None, None)
 
+    # Quoted phrases are content; a custom close elsewhere still participates.
+    signal_text = _without_quoted_content(text)
+
     # User custom patterns are highest authority — always win, FP guard skipped
     for pattern in custom:
         try:
-            if re.search(pattern, text, re.IGNORECASE | re.MULTILINE):
+            if re.search(pattern, signal_text, re.IGNORECASE | re.MULTILINE):
                 return ("explicit", pattern)
         except re.error:
             continue
@@ -407,12 +436,12 @@ def classify_signal(
     # length — typing a command is deliberate — and the user's own custom
     # phrases keep their original semantics for the same reason.
     is_short = len(text) <= SHORT_PROMPT_MAX_CHARS
-    last_line = text.splitlines()[-1].strip() if "\n" in text else text
+    last_line = signal_text.splitlines()[-1].strip() if "\n" in signal_text else signal_text
 
     def _pack_match(pattern: str) -> bool:
-        if re.search(pattern, text, re.IGNORECASE):
+        if re.search(pattern, signal_text, re.IGNORECASE):
             return True
-        return last_line != text and bool(re.search(pattern, last_line, re.IGNORECASE))
+        return last_line != signal_text and bool(re.search(pattern, last_line, re.IGNORECASE))
 
     # Strong tiers (explicit, high_confidence) override FP guards
     for level in ("explicit", "high_confidence"):

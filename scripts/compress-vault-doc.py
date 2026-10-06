@@ -55,7 +55,33 @@ import sys
 from pathlib import Path
 
 _SCRIPT_DIR = Path(__file__).resolve().parent
-VAULT_ROOT = Path(os.environ.get("VAULT_ROOT", str(_SCRIPT_DIR.parent)))
+
+# Same two-line sys.path trick scripts/drift-detection.py and
+# scripts/build-journal-index.py use to reach hooks/_lib/ from either a repo
+# checkout or a synced vault copy (see sync-vault-scripts.sh's VAULT_LIB_MODULES).
+sys.path.insert(0, str(_SCRIPT_DIR))
+sys.path.insert(0, str(_SCRIPT_DIR.parent / "hooks"))
+from _lib.vault_root import collapse_worktree, resolve_cli_vault_root  # noqa: E402
+
+# This script is the CONSUMER of what drift-detection.py's `--auto-from-
+# drift` PRODUCES (`Meta/Drift Audit.md`). Before #683's review, each script
+# carried its OWN copy of resolve_cli_vault_root's precedence -- this one
+# read VAULT_ROOT naively -- so a cwd/VAULT_ROOT combination
+# drift-detection.py resolved one way could have this script looking for its
+# output somewhere else, reporting a false "Drift Audit not found" with no
+# hint the producer wrote the file elsewhere. Calling the SAME function
+# drift-detection.py calls (hooks/_lib/vault_root.py's resolve_cli_vault_root)
+# is what makes them agree by construction, not by two copies staying in
+# sync by hand.
+#
+# fallback= is this script's own pre-existing default (its parent
+# directory), used only when NEITHER cwd nor VAULT_ROOT resolves to an
+# established vault at all -- the one case where there is no vault for the
+# two scripts to agree on, and the case this script's default already
+# covered before #683. No on_mismatch=: this script has no warning of its
+# own to raise on a mismatch (unlike drift-detection.py), so it takes the
+# function's default silent resolution.
+VAULT_ROOT = resolve_cli_vault_root(fallback=collapse_worktree(_SCRIPT_DIR.parent))
 
 
 # ─── Regex patterns (run in order) ──────────────────────────────────────

@@ -109,8 +109,9 @@
         "matcher": "Bash",
         "hooks": [
           {
+            "_comment": "BLOCKING gate (RETRY-LOOP). Blocks the 4th identical Bash command inside 30 minutes. Wired in the `if [ -f ]` form on purpose: it signals by EXIT CODE 2 with its prose on STDERR, and the `[ -f X ] && X || true` form it shipped in rewrote that exit into 0, so under a POSIX shell the gate never blocked anything (Windows installs route it through hook_runner.py, which propagates exit 2). The guard also requires `-r`: python exits 2 on a script it cannot read, and exit 2 is a block, so a mode-000 copy behind `[ -f ]` alone would refuse every Bash call. The absent/unreadable branch prints a neutral no-op and makes no permission decision: a missing loop-breaker should answer nothing for the call. The hook counts one attempt per tool_use_id, so a second installer wiring the same script cannot double-count a call. Bypass: prefix the command with RETRY_BUDGET_BYPASS=1.",
             "type": "command",
-            "command": "[ -f ~/.claude/hooks/retry-budget.py ] && [PYTHON] ~/.claude/hooks/retry-budget.py || true"
+            "command": "if [ -f ~/.claude/hooks/retry-budget.py ] && [ -r ~/.claude/hooks/retry-budget.py ]; then [PYTHON] ~/.claude/hooks/retry-budget.py; else echo '{\"continue\":true,\"suppressOutput\":true}'; fi"
           },
           {
             "type": "command",
@@ -143,6 +144,11 @@
             "_comment": "BLOCKING gate (MCP-SECRET-LEAK-VIA-ARGV). Blocks `claude mcp add ... --env NAME=<secret>`: every Claude Code child spawn carries the full MCP config via `--mcp-config '<json>'` argv, so `ps aux` / `pgrep -fl` / `lsof` on the running claude process dumps the secret in plaintext. Past incident: 2026-05-19 github-mcp PAT leaked via `pgrep -fl chrome-devtools-mcp`. Same `if [ -f ]` form as the two gates above and for the same reason: it signals by EXIT CODE 2 with its remediation prose on STDERR, so the `2>/dev/null || echo <allow>` idiom would discard the message AND convert the block into an allow. Bypass: MCP_INLINE_SECRET_BYPASS=1.",
             "type": "command",
             "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/block-claude-mcp-inline-secret.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/block-claude-mcp-inline-secret.py; else echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'; fi"
+          },
+          {
+            "_comment": "BLOCKING gate (MYC-4988). Blocks a Bash command that prints environment VALUES into the session transcript: bare env/printenv, bare export/set, declare/typeset with no operands or a -p flag, ps with an environment flag, a pgrep listing form combining -l with -f (or carrying -a/--list-full) that exposes a titled process's (npm, Node) leading environment strings, /proc/<pid>/environ, an echo/printf that expands a secret-shaped variable, and the remote secret-dump vocabulary (heroku config, fly secrets list, vercel env pull, etc). Presence/length checks (`[ -n \"${NAME:-}\" ]`, `echo ${#NAME}`) and the three value-stripping pipeline extractors (`env | cut -d= -f1`, `sed 's/=.*//'`, `awk -F= '{print $1}'`) stay allowed. Same `if [ -f ]` form as the gate above and for the same reason: it signals by EXIT CODE 2 with its remediation prose on STDERR, so the `2>/dev/null || echo <allow>` idiom would discard the message AND convert the block into an allow. Bypass: ENV_DUMP_BYPASS=1.",
+            "type": "command",
+            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/block-env-dump.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/block-env-dump.py; else echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'; fi"
           },
           {
             "type": "command",

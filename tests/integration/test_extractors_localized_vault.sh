@@ -155,14 +155,88 @@ type: sistema
 
 Cómo se organizan las carpetas del vault y qué va en cada una, con ejemplos.
 MD
+# A Spanish meeting note dated with `fecha:` (no `date:` key) — the key the
+# Spanish setup interview writes.
+cat > "$V/📝 Notas/Junta directiva.md" <<'MD'
+---
+type: reunion
+fecha: 2026-08-05
+---
+
+Junta directiva mensual. Asistió [[Ana Pérez]].
+MD
+# A concept, linked from a note whose `date_iso` is UNQUOTED (PyYAML loads it
+# as datetime.date) and from one whose date comes from creationDate (a str).
+# Mixed types used to reach max()/min() and raise TypeError.
+cat > "$V/📝 Notas/Flujo de caja.md" <<'MD'
+---
+type: concept
+---
+
+Qué entra y qué sale de la caja, y cuándo.
+MD
+cat > "$V/📝 Notas/Cierre de mes.md" <<'MD'
+---
+date_iso: 2026-08-06
+---
+
+Revisamos el [[Flujo de caja]] del mes.
+MD
+# A person mentioned in two journals: one dated by an UNQUOTED date_iso
+# (datetime.date) and one by creationDate (str). person.py used to max() the
+# mixed list and raise TypeError, aborting the run.
+cat > "$V/👤 CRM/Luis Gómez.md" <<'MD'
+---
+type: person
+relationship: proveedor
+---
+
+Luis coordina las entregas del proveedor de equipos.
+MD
+cat > "$V/📓 Diarios/2026-08/2026-08-06.md" <<'MD'
+---
+type: journal
+date_iso: 2026-08-06
+---
+
+Llamada corta con [[Luis Gómez]] por la entrega de los equipos.
+MD
+cat > "$V/📓 Diarios/2026-08/2026-08-07.md" <<'MD'
+---
+creationDate: 2026-08-07T21:10
+type: journal
+---
+
+[[Luis Gómez]] confirmó la fecha de entrega.
+MD
+# graphify's output folder sits inside the vault and holds generated .md
+# reports full of wikilinks. It is tool output, not notes: it must not be
+# indexed nor count as a mention.
+mkdir -p "$V/graphify-out/wiki"
+cat > "$V/graphify-out/wiki/Flujo de caja.md" <<'MD'
+---
+type: concept
+---
+
+Generated page. [[Flujo de caja]] [[Ana Pérez]]
+MD
 
 # ── Run extraction, then the engine ─────────────────────────────────────
-if ! VAULT_ROOT="$V" "$PY" "$STARTER/scripts/vault-metadata-extract.py" --progress-every 0 >"$TMP/extract.log" 2>&1; then
+# VAULT_ROOT_FORCE=1: the copied extractors live under $STARTER (their
+# auto-detected root per _base.py's _resolve_vault_root()), but the fixture
+# content is at $V, a sibling directory under $TMP. Without the force flag
+# the resolver treats that mismatch as the wrong-vault hazard it exists to
+# catch and silently falls back to $STARTER (which holds no fixture content
+# at all), so every assertion below would see None/empty rather than the
+# planted Spanish journals -- same override _resolve_vault_root() documents
+# for scripts/aggregate-sessions.py callers that legitimately target a
+# non-default vault.
+if ! VAULT_ROOT="$V" VAULT_ROOT_FORCE=1 "$PY" "$STARTER/scripts/vault-metadata-extract.py" --progress-every 0 >"$TMP/extract.log" 2>&1; then
   echo "FAIL: vault-metadata-extract.py exited non-zero" >&2
   cat "$TMP/extract.log" >&2
   exit 1
 fi
-if ! VAULT_ROOT="$V" INSIGHTS_OUTPUT="$TMP/insights.md" \
+if ! VAULT_ROOT="$V" VAULT_ROOT_FORCE=1 INSIGHTS_OUTPUT="$TMP/insights.md" \
      "$PY" "$STARTER/scripts/vault-insight-engine.py" --quiet >"$TMP/engine.log" 2>&1; then
   echo "FAIL: vault-insight-engine.py exited non-zero" >&2
   cat "$TMP/engine.log" >&2
@@ -194,6 +268,10 @@ person = fm_of("👤 CRM/Ana Pérez.md")
 meeting = fm_of("📝 Notas/Comité de gerencia.md")
 plan = fm_of("📝 Notas/Plan comercial.md")
 sistema = fm_of("📝 Notas/Sistema de archivo.md")
+junta = fm_of("📝 Notas/Junta directiva.md")
+concept = fm_of("📝 Notas/Flujo de caja.md")
+luis = fm_of("👤 CRM/Luis Gómez.md")
+generated = fm_of("graphify-out/wiki/Flujo de caja.md")
 
 # 1. journal extractor: floor NAME -> 34-floor number, Spanish and English
 check(j1.get("floor_num") == 31, f"journal 'Entusiasmo' -> floor_num 31 (got {j1.get('floor_num')!r})")
@@ -222,6 +300,24 @@ check("Cerrar el presupuesto esta semana" in (meeting.get("meeting_decisions") o
       "meeting extractor read the Spanish '## Decisiones' section")
 check("reference_topic" in sistema or "word_count" in sistema, "type: sistema -> reference extractor")
 
+# 4b. a Spanish meeting dated with `fecha:` gets its date, not the mtime
+check(junta.get("meeting_date_iso") == "2026-08-05",
+      f"type: reunion with only `fecha:` -> meeting_date_iso 2026-08-05 (got {junta.get('meeting_date_iso')!r})")
+
+# 4c. concept backlinks: unquoted date_iso (datetime.date) is normalized, and
+#     graphify-out/ is neither indexed nor counted as a mention
+check(concept.get("concept_last_mentioned_iso") == "2026-08-06",
+      f"concept last mention from unquoted date_iso == '2026-08-06' (got {concept.get('concept_last_mentioned_iso')!r})")
+check(concept.get("concept_mention_count") == 1,
+      f"concept mention count == 1, graphify-out/ not counted (got {concept.get('concept_mention_count')!r})")
+check("concept_mention_count" not in generated, "graphify-out/ .md was not extracted")
+
+# 4d. person with mixed date types (unquoted date_iso + creationDate)
+check(luis.get("person_journal_mention_count") == 2,
+      f"person mentioned in 2 journals with mixed date types == 2 (got {luis.get('person_journal_mention_count')!r})")
+check(luis.get("person_last_journal_iso") == "2026-08-07",
+      f"person last journal iso == '2026-08-07' (got {luis.get('person_last_journal_iso')!r})")
+
 # 5. an explicit extractor beats an alias
 check(plan.get("plan_marker") == "custom-extractor", f"type: plan -> the user's plan.py, not the strategy alias (got {plan!r})")
 check("strategy_counterpart" not in plan and "strategy_stakes" not in plan, "strategy fields were NOT written to the plan note")
@@ -247,3 +343,65 @@ if failed:
 print("PASS: Spanish vault — journals in 📓 Diarios are found, floor names (es+en) score on the 34-floor scale, "
       "es/rise types reach real extractors, a custom extractor beats an alias, and the engine has a floor baseline")
 PY
+
+# ── Regression: a note with MALFORMED UTF-8 is never rewritten ──────────────
+# process_file() is a read-modify-WRITE. When it moved onto the shared bounded
+# read (safe_read_text, obliged by scripts/check-cloud-safe-file-walkers.py),
+# passing errors="replace" would decode an undecodable byte to U+FFFD and then
+# write that replacement character back -- silently corrupting the user's note.
+# The pre-migration code used a strict open() and let the exception become
+# READ_ERR, leaving the file untouched.
+#
+# MEASURED, not assumed. On an identical planted note (a real prose sentence, so
+# the journal extractor actually emits and the write path is reached):
+#   errors="replace" -> "Wrote: 1", 0xFF GONE, U+FFFD written into the note
+#   strict decoding  -> "Wrote: 0", a READ_ERR, note byte-identical
+# An earlier, thinner fixture returned EXTRACTOR_SKIPPED and never reached the
+# write at all, which looked exactly like "no corruption". A fixture for this
+# bug MUST reach the write.
+#
+# The assertion deliberately matches READ_ERR + "decode" rather than one exact
+# string: a plain strict open() says "'utf-8' codec can't decode byte 0xff..."
+# and safe_read_text says "decode-error". Pinning either spelling would make
+# this test fail on a refactor that kept the property intact.
+MAL="$TMP/mal-vault"
+mkdir -p "$MAL/📓 Diarios"
+"$PY" - "$MAL" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1]) / "\U0001f4d3 Diarios" / "malformed.md"
+body = (b"Hoy fue un dia largo y aprendi algo importante sobre el trabajo con "
+        + b"\xff" + b" y sigo pensando en ello.\n")
+p.write_bytes("---\ntype: journal\ndate: 2026-09-24\n---\n\n".encode() + body)
+PY
+mal_before="$("$PY" -c "import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" "$MAL/📓 Diarios/malformed.md")"
+VAULT_ROOT="$MAL" VAULT_ROOT_FORCE=1 "$PY" "$STARTER/scripts/vault-metadata-extract.py" \
+  --progress-every 0 >"$TMP/mal.log" 2>&1 || true
+mal_after="$("$PY" -c "import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" "$MAL/📓 Diarios/malformed.md")"
+
+mal_fail=0
+if [ "$mal_before" != "$mal_after" ]; then
+  echo "FAIL: a malformed-UTF-8 note was REWRITTEN by extraction (data corruption)" >&2
+  mal_fail=1
+fi
+if ! grep -Eq "READ_ERR:.*([Dd]ecode|codec)" "$TMP/mal.log"; then
+  echo "FAIL: malformed note did not surface as a decode READ_ERR (silent skip?)" >&2
+  cat "$TMP/mal.log" >&2
+  mal_fail=1
+fi
+# The undecodable byte must still be on disk and no replacement char written.
+if ! "$PY" - "$MAL/📓 Diarios/malformed.md" <<'PY'
+import sys
+d = open(sys.argv[1], "rb").read()
+ok = b"\xff" in d and "�".encode() not in d
+print("ok" if ok else "FAIL: 0xFF present=%s U+FFFD written=%s" % (
+    b"\xff" in d, "�".encode() in d), file=sys.stderr if not ok else sys.stdout)
+sys.exit(0 if ok else 1)
+PY
+then
+  mal_fail=1
+fi
+if [ "$mal_fail" != 0 ]; then
+  echo "FAIL: malformed-note regression" >&2
+  exit 1
+fi
+echo "PASS: a malformed-UTF-8 note is reported as a decode READ_ERR and left byte-identical"

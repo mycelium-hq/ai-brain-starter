@@ -7,17 +7,64 @@ Every extractor imports from here. Keep it caveman-dense.
 Contract: extractors NEVER generate prose. All fields are verbatim extractions,
 regex matches, enum lookups, or counts. Zero LLM involvement in this base.
 """
-import glob
 import os
 import re
+import sys
 import yaml
 
-# VAULT: self-locating. Override with VAULT_ROOT env var, else climbs from
-# scripts/extractors/_base.py two levels up (scripts/extractors/ → scripts/ → vault root).
-VAULT = os.environ.get(
-    "VAULT_ROOT",
-    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")),
-)
+# Windows cp1252-console safety (#313). MODULE scope, and this is the ONLY
+# place the extractor fleet needs it: every extractor imports this module, and
+# extractors/_dispatcher.py imports it (line ~39) before any print, so both thin
+# launchers -- vault-metadata-extract.py and journal-metadata-extract.py, which
+# `import _dispatcher; _dispatcher.main()` -- are covered on the one path that
+# actually runs extraction. _dispatcher's own guard sits under its `__main__`
+# and never fires on that path; measured under PYTHONIOENCODING=cp1252 on an
+# emoji vault path, the launcher used to die with UnicodeEncodeError at
+# `print(f"Vault: {VAULT}")`.
+#
+# errors="backslashreplace" is DELIBERATE, not decoration. A bare
+# reconfigure(encoding="utf-8") RESETS errors to "strict" -- measured: stderr
+# goes backslashreplace -> strict, stdout surrogateescape -> strict. So the
+# naive guard would REMOVE the one property that keeps a lone surrogate (what
+# glob() hands back for a filename holding non-UTF-8 bytes, reachable on
+# Linux/exFAT/SMB) printable, trading a decode crash for an encode crash.
+# Escaping beats dying for a CLI whose whole job is printing vault paths.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="backslashreplace")  # Python 3.7+
+    except (AttributeError, ValueError):
+        pass
+
+# VAULT: self-locating. Ground truth is THIS file's own location:
+# scripts/extractors/_base.py two levels up (scripts/extractors/ -> scripts/ ->
+# vault root) is the vault this physical copy belongs to. A VAULT_ROOT env var
+# is honored only when it points at that same vault, or when the caller
+# explicitly sets VAULT_ROOT_FORCE=1 -- same contract as
+# scripts/aggregate-sessions.py's _resolve_vault_root(). A naive `env.get(...,
+# default)` read would let a machine-wide VAULT_ROOT (a shell-profile export,
+# or Claude Code's settings.json env block) silently redirect every extractor
+# -- including copies ported into other vaults -- at one vault, with wrong-
+# vault reads and no error (scripts/check-vault-root-reads.py).
+def _resolve_vault_root() -> str:
+    auto_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    env_raw = os.environ.get("VAULT_ROOT")
+    if not env_raw:
+        return auto_root
+    env_root = os.path.abspath(os.path.expanduser(env_raw))
+    if env_root == auto_root:
+        return env_root
+    if os.environ.get("VAULT_ROOT_FORCE", "").strip().lower() in ("1", "true", "yes"):
+        return env_root
+    print(
+        f"WARNING: VAULT_ROOT env points at {env_root}, but this extractor lives "
+        f"in {auto_root}. Operating on the extractor's own vault ({auto_root}); "
+        f"this copy will NOT touch {env_root}. Set VAULT_ROOT_FORCE=1 to override.",
+        file=sys.stderr,
+    )
+    return auto_root
+
+
+VAULT = _resolve_vault_root()
 
 # CRM folder: override with CRM_FOLDER env var, else auto-detect.
 CRM_ROOT = os.environ.get("CRM_FOLDER")
@@ -37,7 +84,104 @@ SKIP_PARTS = {
     "_review_alternate_drafts",
     "📥 Inbox", "Inbox",
     ".obsidian", ".git", "node_modules",
+    "graphify-out",
 }
+
+# A symlinked top-level folder is ANOTHER vault mounted inside this one (the
+# Phase 20 team-vault pattern). glob's `**` follows those links, so without this
+# every personal-vault script would read — and metadata-extract would WRITE —
+# into the other vault, typically a live cloud-sync folder. Skip them by name.
+# That is a fast path, not the boundary: it covers only a folder linked in at the
+# vault root, and only by its name. The boundary is iter_vault_markdown() and
+# is_inside_vault() below. The extractors, the insight engine and
+# get_crm_names() walk the vault through the first, and the metadata writer
+# checks the second, so a link out of the vault is neither read nor written
+# however deep it sits and whether a folder or a single note is the link.
+try:
+    SKIP_PARTS |= {
+        _e for _e in os.listdir(VAULT)
+        if os.path.islink(os.path.join(VAULT, _e))
+        and os.path.isdir(os.path.join(VAULT, _e))
+    }
+except OSError:
+    pass
+
+
+def _resolves_inside(real, vault_real):
+    """True when an already-resolved path is the vault or lies under it.
+
+    Compared on a path boundary, so a sibling folder whose name merely starts
+    with the vault's name is outside.
+    """
+    return real == vault_real or real.startswith(vault_real.rstrip(os.sep) + os.sep)
+
+
+def is_inside_vault(path):
+    """True when `path` resolves inside the vault, following every symlink.
+
+    A folder or note linked in from outside the vault (a shared team or cloud
+    folder, another repo) resolves outside it. So a file is judged by where it
+    LIVES, never by what the link is called. VAULT is read at call time, so the
+    answer is for the vault the caller is operating on, and the vault root may
+    itself be reached through a link.
+
+    The extractors write fields derived from the owner's private notes (dates,
+    mention counts, the floors a person co-occurs with). A file that resolves
+    outside the vault must never be read or written by them: whoever else can
+    open that folder would be able to read those fields.
+    """
+    return _resolves_inside(os.path.realpath(path), os.path.realpath(VAULT))
+
+
+def iter_vault_markdown(root=None, skipped=None):
+    """Every .md file under `root` (default: the vault) that lives inside the vault.
+
+    A folder is entered only when it resolves inside the vault, and os.walk is told
+    not to follow symlinks. So a link to a folder is never entered, even one that
+    points at another folder inside the vault: those notes are yielded under their
+    real path only, and a link into a hidden folder, or one the caller skips by
+    name such as Archive, yields nothing. A note that is itself a link is yielded
+    under its own path when it resolves inside the vault, and dropped when it
+    points out. `root` has to be inside the vault: a root outside it, or above it,
+    yields nothing and is not listed. Hidden folders and files are skipped, as
+    glob's `**` skipped them.
+
+    `skipped`, when given, is a list that receives a ("folder" or "note", path)
+    pair for each folder or note passed over because it resolves outside the
+    vault, so the caller can say what it left out.
+
+    realpath stats every component of a path, which adds up over a large or
+    cloud-mounted vault, so the vault and each folder are resolved once, and a
+    note only when it is a link.
+    """
+    vault_real = os.path.realpath(VAULT)
+    top = root or VAULT
+    if not _resolves_inside(os.path.realpath(top), vault_real):
+        return
+    for dirpath, dirnames, filenames in os.walk(top, followlinks=False):
+        # Each folder is judged by where it resolves, before os.walk lists it, so
+        # a folder that resolves outside the vault is never entered, whatever
+        # kind of link it is.
+        kept = []
+        for name in dirnames:
+            if name.startswith("."):
+                continue
+            child = os.path.join(dirpath, name)
+            if _resolves_inside(os.path.realpath(child), vault_real):
+                kept.append(name)
+            elif skipped is not None:
+                skipped.append(("folder", child))
+        dirnames[:] = kept
+        for name in filenames:
+            if name.endswith(".md") and not name.startswith("."):
+                path = os.path.join(dirpath, name)
+                if os.path.islink(path) and not _resolves_inside(
+                        os.path.realpath(path), vault_real):
+                    if skipped is not None:
+                        skipped.append(("note", path))
+                    continue
+                yield path
+
 
 SKIP_LINE_PREFIXES = (
     "#", "---", "**Gym", "**Sleep", "**RescueTime",
@@ -136,9 +280,14 @@ def get_crm_names():
     """All CRM basenames (no extension). Cached per process."""
     global _CRM_CACHE
     if _CRM_CACHE is None:
-        pattern = os.path.join(CRM_ROOT, "**", "*.md")
-        files = glob.glob(pattern, recursive=True)  # Rule 36: glob.glob, not pathlib
-        _CRM_CACHE = {os.path.splitext(os.path.basename(f))[0] for f in files}
+        if os.path.isdir(CRM_ROOT) and not is_inside_vault(CRM_ROOT):
+            # CRM_FOLDER, or a CRM folder that is itself a link, pointing out of
+            # the vault. Nothing in it is read, so say so rather than let it read
+            # as "no contacts".
+            print(f"WARNING: CRM folder resolves outside the vault, not read: {CRM_ROOT}",
+                  file=sys.stderr)
+        _CRM_CACHE = {os.path.splitext(os.path.basename(f))[0]
+                      for f in iter_vault_markdown(CRM_ROOT)}
     return _CRM_CACHE
 
 

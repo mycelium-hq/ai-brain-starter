@@ -89,14 +89,28 @@ _close_lock_mtime() {
   # Epoch mtime of $1, cross-platform. Try GNU `stat -c %Y` first, then BSD
   # `stat -f %m`, and VALIDATE the result is numeric after each attempt. We must
   # not rely on exit code alone: GNU `stat -f` means `--file-system`, so
-  # `stat -f %m FILE` on Linux exits 0 with non-numeric filesystem text instead
-  # of failing - if we trusted `||` that garbage would make lock_age huge and
-  # the mutex would falsely reclaim a live lock on Linux.
+  # `stat -f %m FILE` on Linux prints non-numeric filesystem text to stdout
+  # before it fails - a `$(A || B)` capture keeps that text next to the
+  # fallback's number, and trusting it would break the lock-age arithmetic on
+  # Linux.
   local m
   m=$(stat -c %Y "$1" 2>/dev/null)              # GNU/Linux
   case "$m" in ''|*[!0-9]*) m=$(stat -f %m "$1" 2>/dev/null) ;; esac   # BSD/macOS
   case "$m" in ''|*[!0-9]*) m="" ;; esac        # neither gave a plain integer
   echo "$m"
+}
+
+_close_lock_size() {
+  # Byte size of $1, cross-platform. Same trap and same fix as
+  # _close_lock_mtime above, for the sibling `stat` format: GNU `-c %s`
+  # first, validated, then BSD `-f %z`, validated again. GNU `stat -f`
+  # means `--file-system`, so `stat -f %z FILE` on Linux does not fail
+  # cleanly the way a BSD-first `||` chain assumes.
+  local s
+  s=$(stat -c %s "$1" 2>/dev/null)              # GNU/Linux
+  case "$s" in ''|*[!0-9]*) s=$(stat -f %z "$1" 2>/dev/null) ;; esac   # BSD/macOS
+  case "$s" in ''|*[!0-9]*) s="" ;; esac        # neither gave a plain integer
+  echo "$s"
 }
 
 close_mutex_acquire() {
