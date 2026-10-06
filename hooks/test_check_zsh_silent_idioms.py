@@ -270,6 +270,9 @@ def main() -> int:
     expect_deny("14n shwordsplit named only in a heredoc body",
                 "cat <<EOF\nsetopt shwordsplit\nEOF\nfor x in $v; do :; done")
     expect_deny("14o multi-line loop", 'for x in $v\ndo\n  echo "$x"\ndone')
+    expect_deny("14p a loop inside the $( ) that is another loop's list",
+                'for x in $(for y in $v; do echo "$y"; done); do :; done')
+    expect_deny("14q arithmetic, then a loop", "echo $((1+2)); for x in $v; do :; done")
 
     # --- 15: the shapes that must NOT be refused -----------------------------
     silent_forms = [
@@ -304,6 +307,9 @@ def main() -> int:
         ("comment tail", "echo ok  # for x in $v"),
         ("set without --", "set -euo pipefail"),
         ("arithmetic then a literal loop", "n=$(( 2 * 3 )); for x in a b; do :; done"),
+        ("typeset -a with no assignment", "typeset -a v; for x in $v; do :; done"),
+        ("sh -c, double-quoted with escaped dollars",
+         'sh -c "set -- \\$v; echo \\$1"'),
     ]
     for label, command in silent_forms:
         expect_silent(f"15 {label}", command)

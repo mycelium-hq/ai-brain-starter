@@ -37,11 +37,7 @@ disarm the other. One bypass covers the whole guard.
 Bypass: ZSH_SILENT_IDIOMS_BYPASS=1, from the env OR as an inline prefix. Both are
 honored, because a guard whose advertised inline bypass cannot fire is a guard
 that lies. One bypass covers both detectors.
-
-Self-test: `check-zsh-silent-idioms.py --selftest` proves it BOTH ways.
 """
-import contextlib
-import io
 import json
 import os
 import re
@@ -392,114 +388,7 @@ def run_detectors(command: str, zsh: bool) -> list:
     return blocks
 
 
-def _isolation_ok() -> bool:
-    """A detector that raises must not disarm the other one, in either order."""
-    global DETECTORS
-    real = DETECTORS
-
-    def boom(command, zsh):
-        raise RuntimeError("injected failure")
-
-    try:
-        with contextlib.redirect_stderr(io.StringIO()):
-            DETECTORS = (("boom", boom),) + real
-            word_split = run_detectors("for c in $CHECKS; do :; done", True)
-            DETECTORS = real + (("boom", boom),)
-            git_ref = run_detectors('git show "$SHA:x.py"', True)
-    except Exception:
-        return False        # the failure escaped run_detectors: isolation is broken
-    finally:
-        DETECTORS = real
-    return bool(word_split) and bool(git_ref)
-
-
-def _selftest() -> int:
-    git, split = 0, 1   # indexes into DETECTORS
-    cases = [
-        # (detector, command, should_fire)
-        # --- detector 1: git-ref ---
-        (git, 'git show "$SHA:src/app.py"', True),
-        (git, "git show $SHA:src/app.py", True),
-        (git, 'git grep -n foo "$REF:path/x.py"', True),
-        (git, 'git show "${SHA}:src/app.py"', False),          # braced = correct
-        (git, "git show origin/main:src/app.py", False),        # no variable
-        (git, 'echo "$MSG: done"', False),                      # not a git read
-        (git, 'git log --format="%H"', False),                  # no ref spec
-        (git, 'ZSH_SILENT_IDIOMS_BYPASS=1 git show "$SHA:x.py"', False),  # real inline bypass
-        # the token merely APPEARING in a heredoc body must NOT disarm it
-        (git, 'cat <<EOF\nZSH_SILENT_IDIOMS_BYPASS=1\nEOF\ngit show "$SHA:x.py"', True),
-        # --- detector 2: word-split, must FIRE ---
-        (split, 'for r in "repo 1420 1421"; do set -- $r; echo "$1"; done', True),
-        (split, 'for c in $CHECKS; do node "$c"; done', True),
-        (split, "set -- $r", True),
-        (split, 'for x in a $v b; do echo "$x"; done', True),   # among other words
-        (split, 'for x in ${v}; do echo "$x"; done', True),     # braced plain
-        (split, 'for x in "$a" $b; do :; done', True),          # only the bare one
-        (split, 'v=$(cat list.txt); for x in $v; do :; done', True),  # scalar
-        (split, 'if [ -n "$q" ]; then for x in $v; do :; done; fi', True),
-        (split, 'echo ok && { for x in $v; do :; done; }', True),
-        (split, 'out=$(for x in $v; do echo "$x"; done)', True),  # inside $( )
-        (split, 'echo "v=(a b)"; for x in $v; do :; done', True),  # array text in a string
-        (split, 'unsetopt shwordsplit; for x in $v; do :; done', True),
-        (split, 'setopt noshwordsplit; for x in $v; do :; done', True),
-        (split, 'cat <<EOF\nsetopt shwordsplit\nEOF\nfor x in $v; do :; done', True),
-        (split, 'cat <<EOF\nZSH_SILENT_IDIOMS_BYPASS=1\nEOF\nfor x in $v; do :; done', True),
-        (split, 'for x in $(for y in $v; do echo "$y"; done); do :; done', True),  # loop inside
-        (split, 'echo $((1+2)); for x in $v; do :; done', True),
-        # --- detector 2: word-split, must stay SILENT ---
-        (split, "for x in ${=v}; do :; done", False),           # zsh splitting flag
-        (split, "set -- ${=v}", False),
-        (split, 'for x in "$@"; do :; done', False),
-        (split, "for x in $@; do :; done", False),              # zsh splits $@
-        (split, 'set -- "$@"', False),
-        (split, "set -- $@", False),
-        (split, "for x in $(ls); do :; done", False),           # zsh splits $(...)
-        (split, "for x in `ls`; do :; done", False),
-        (split, "v=(a b); for x in $v; do :; done", False),     # array, same command
-        (split, "typeset -a v; for x in $v; do :; done", False),
-        (split, 'read -A v <<< "a b"; for x in $v; do :; done', False),
-        (split, "for x in a b c; do :; done", False),           # literal words
-        (split, "for x in *.txt; do :; done", False),
-        (split, "for x in {1..3}; do :; done", False),
-        (split, 'bash -c \'for x in $v; do echo "$x"; done\'', False),
-        (split, 'sh -c "set -- \\$v; echo \\$1"', False),
-        (split, 'bash <<\'EOF\'\nfor x in $v; do echo "$x"; done\nEOF', False),
-        (split, 'for x in "$v"; do :; done', False),            # quoted
-        (split, "for x in '$v'; do :; done", False),
-        (split, 'for p in $path; do echo "$p"; done', False),   # zsh's own array
-        (split, "setopt shwordsplit; for x in $v; do :; done", False),
-        (split, "echo for x in $v", False),                     # not a loop
-        (split, 'git commit -m "set -- $v"', False),
-        (split, "for x in $v/*.txt; do :; done", False),        # not a bare word
-        (split, "for x in ${v:-a b}; do :; done", False),
-        (split, "for x in ${v[@]}; do :; done", False),
-        (split, "# for x in $v; do :; done", False),            # comment
-        (split, "echo ok  # for x in $v", False),
-        (split, "export ZSH_SILENT_IDIOMS_BYPASS=1; for x in $v; do :; done", False),
-        (split, 'n=$(( 2 * 3 )); for x in a b; do :; done', False),
-    ]
-    bad = 0
-    for idx, cmd, want in cases:
-        got = bool(DETECTORS[idx][1](cmd, True)) and not inline_bypass(cmd, BYPASS)
-        if got != want:
-            bad += 1
-        print(f"  [{'ok ' if got == want else 'FAIL'}] fire={got!s:5} want={want!s:5}"
-              f"  {DETECTORS[idx][0]:10} {cmd!r}")
-    total = len(cases)
-    if not _isolation_ok():
-        bad += 1
-        print("  [FAIL] a raising detector disarmed the other one")
-    else:
-        print("  [ok ] a raising detector does not disarm the other one (both orders)")
-    total += 1
-    print(f"\n{'PASS' if not bad else 'FAIL'}: {total - bad}/{total} cases")
-    return 1 if bad else 0
-
-
 def main() -> None:
-    if "--selftest" in sys.argv:
-        sys.exit(_selftest())
-
     try:
         data = json.load(sys.stdin)
     except Exception:
