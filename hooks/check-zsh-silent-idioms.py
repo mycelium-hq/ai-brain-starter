@@ -2,41 +2,34 @@
 """
 PreToolUse Bash hook: bash idioms that silently do the wrong thing under zsh.
 
-One guard, one bug class. On a zsh shell a bash idiom quietly does the wrong
-thing and returns output that looks like a legitimate answer: empty, wrong, or
-false-red. Two detectors, deliberately independent, so one raising can never
-disarm the other. One bypass covers the whole guard.
+Two independent detectors (one raising never disarms the other), one bypass.
 
-1. git-ref. Unbraced `$VAR:` plus a letter in a git object read. zsh reads it as
-   a HISTORY MODIFIER, so the result is unpredictable: `"$SHA:src/app.py"` is a
-   bad substitution, `"$SHA:hooks/x"` reads `.ooks/x`, `"$SHA:path/x"` happens to
-   work. It can fail outright or read an empty or wrong path, and a silent miss
-   looks exactly like "that path does not exist at that ref". The braced form is
-   always right, in both shells, so this detector fires in any shell:
-       git show "$SHA:path"     ->  git show "${SHA}:path"
+1. git-ref, in any shell. An unbraced `$VAR:` plus a letter in a git object read
+   (show, cat-file, grep, diff, log, archive, rev-parse, ls-tree). zsh reads it
+   as a history modifier, so the result is unpredictable: `"$SHA:src/app.py"` is
+   a bad substitution, `"$SHA:hooks/x"` reads `.ooks/x`. A silent miss looks
+   exactly like "that path does not exist at that ref". The braced
+   `"${SHA}:path"` is always right. Only code is scanned (heredoc bodies,
+   comments and single-quoted text are skipped), and the `$VAR:` must sit in
+   the same statement as the git verb.
 
-2. word-split. An unquoted `$VAR` as a `for X in` list item or a `set --`
-   operand. zsh does not word-split an unquoted parameter expansion
-   (SH_WORD_SPLIT is off); bash does. `set -- $r` leaves `$1` holding the whole
-   string, and `for c in $CHECKS` runs ONCE with a newline-separated list as a
-   single argument. Witnessed repeatedly across sessions as empty or false-red
-   output with no error.
-   Fires only when the Bash tool's shell is zsh (`_shell_is_zsh`): the fixes it
-   offers include `${=VAR}`, a bad substitution in bash, where the idiom is
-   already correct.
-   Matches a WHOLE word that is exactly `$name` or `${name}`. Allowed, because
-   zsh splits it, bash reads it, or there is nothing to split: `${=name}`,
-   `"$@"` and `$@`, a quoted `"$name"`, command substitution `$(...)` and
-   backticks, a literal list, an array assigned in the same command
-   (`v=(a b)`, `typeset -a v`, `read -A v`), zsh's own array parameters
-   (`$path`), `setopt shwordsplit` in the same command, anything inside a
-   `bash -c '...'` or `sh -c '...'` string, and a heredoc body.
-   Not covered: `arr=($v)`, `cmd $v`, `select`, positional parameters such as
-   `$1`, and the contents of a `zsh -c '...'` string.
+2. word-split, only when the Bash tool's shell is zsh (`_shell_is_zsh`). A whole
+   word that is exactly `$name` or `${name}` as a `for X in` item or a `set --`
+   operand. zsh does not word-split an unquoted parameter, so `set -- $r` leaves
+   `$1` holding the whole string and `for c in $CHECKS` runs once. Allowed:
+   `${=name}`, `"$@"` and `$@`, quoted words, `$(...)` and backticks, literal
+   lists, an array assigned in the same command (`v=(a b)`, `typeset -a v`,
+   `read -A v`), zsh's own array parameters (`$path`), `setopt shwordsplit`, a
+   `bash -c` / `sh -c` string, and a heredoc body.
 
-Bypass: ZSH_SILENT_IDIOMS_BYPASS=1, from the env OR as an inline prefix. Both are
-honored, because a guard whose advertised inline bypass cannot fire is a guard
-that lies. One bypass covers both detectors.
+Not covered: `arr=($v)`, `cmd $v`, `select`, `set $LINE` without `--`, positional
+parameters such as `$1`, a bare `$v` after a `$(...)` in the same list, loops
+inside backticks, a `zsh -c '...'` string, `emulate sh` (not read as turning
+splitting on), text after a stray `<<` (the shared `strip_heredoc_bodies` cuts
+there), and a failing detector (skipped with a stderr note only).
+
+Bypass: ZSH_SILENT_IDIOMS_BYPASS=1, from the env or as an inline prefix; both are
+honored, because a guard whose advertised inline bypass cannot fire lies.
 """
 import json
 import os
