@@ -38,10 +38,10 @@ disarm the other. One bypass covers the whole guard.
    Not covered: `arr=($v)`, `cmd $v`, `select`, positional parameters such as
    `$1`, and the contents of a `zsh -c '...'` string.
 
-Bypass: ZSH_COLON_BYPASS=1 (env OR inline prefix — both are honored, because
+Bypass: ZSH_SILENT_IDIOMS_BYPASS=1 (env OR inline prefix — both are honored, because
 a guard whose advertised inline bypass cannot fire is a guard that lies).
 
-Self-test: `check-zsh-unbraced-git-ref.py --selftest` proves it BOTH ways.
+Self-test: `check-zsh-silent-idioms.py --selftest` proves it BOTH ways.
 """
 import contextlib
 import io
@@ -63,8 +63,8 @@ except Exception:                                    # pragma: no cover - fail o
     def inline_bypass(command, var, value="1"):
         return False
 
-GUARD = "check-zsh-unbraced-git-ref"
-BYPASS = "ZSH_COLON_BYPASS"
+GUARD = "check-zsh-silent-idioms"
+BYPASS = "ZSH_SILENT_IDIOMS_BYPASS"
 
 
 # ---------------------------------------------------------------------------
@@ -418,9 +418,9 @@ def _selftest() -> int:
         (git, "git show origin/main:src/app.py", False),        # no variable
         (git, 'echo "$MSG: done"', False),                      # not a git read
         (git, 'git log --format="%H"', False),                  # no ref spec
-        (git, 'ZSH_COLON_BYPASS=1 git show "$SHA:x.py"', False),  # real inline bypass
+        (git, 'ZSH_SILENT_IDIOMS_BYPASS=1 git show "$SHA:x.py"', False),  # real inline bypass
         # the token merely APPEARING in a heredoc body must NOT disarm it
-        (git, 'cat <<EOF\nZSH_COLON_BYPASS=1\nEOF\ngit show "$SHA:x.py"', True),
+        (git, 'cat <<EOF\nZSH_SILENT_IDIOMS_BYPASS=1\nEOF\ngit show "$SHA:x.py"', True),
         # --- detector 2: word-split, must FIRE ---
         (split, 'for r in "repo 1420 1421"; do set -- $r; echo "$1"; done', True),
         (split, 'for c in $CHECKS; do node "$c"; done', True),
@@ -436,7 +436,7 @@ def _selftest() -> int:
         (split, 'unsetopt shwordsplit; for x in $v; do :; done', True),
         (split, 'setopt noshwordsplit; for x in $v; do :; done', True),
         (split, 'cat <<EOF\nsetopt shwordsplit\nEOF\nfor x in $v; do :; done', True),
-        (split, 'cat <<EOF\nZSH_COLON_BYPASS=1\nEOF\nfor x in $v; do :; done', True),
+        (split, 'cat <<EOF\nZSH_SILENT_IDIOMS_BYPASS=1\nEOF\nfor x in $v; do :; done', True),
         (split, 'for x in $(cat f) $v; do :; done', True),      # bare one AFTER a $(...)
         (split, 'set -- $(cmd) $v', True),
         (split, 'for x in $(cat f | sort; echo z) $v; do :; done', True),
@@ -471,7 +471,7 @@ def _selftest() -> int:
         (split, "for x in ${v[@]}; do :; done", False),
         (split, "# for x in $v; do :; done", False),            # comment
         (split, "echo ok  # for x in $v", False),
-        (split, "export ZSH_COLON_BYPASS=1; for x in $v; do :; done", False),
+        (split, "export ZSH_SILENT_IDIOMS_BYPASS=1; for x in $v; do :; done", False),
         (split, 'for x in $(cat f) "$v"; do :; done', False),
         (split, 'for x in $(cat f) ${=v}; do :; done', False),
         (split, 'n=$(( 2 * 3 )); for x in a b; do :; done', False),

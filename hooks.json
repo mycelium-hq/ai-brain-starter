@@ -115,7 +115,7 @@
           },
           {
             "type": "command",
-            "command": "[ -f ~/.claude/hooks/check-zsh-unbraced-git-ref.py ] && [PYTHON] ~/.claude/hooks/check-zsh-unbraced-git-ref.py || true"
+            "command": "[ -f ~/.claude/hooks/check-zsh-silent-idioms.py ] && [PYTHON] ~/.claude/hooks/check-zsh-silent-idioms.py || true"
           },
           {
             "type": "command",

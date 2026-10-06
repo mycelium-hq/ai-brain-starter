@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Controls for check-zsh-unbraced-git-ref.py.
+"""Controls for check-zsh-silent-idioms.py.
 
 THE NEGATIVE CONTROL IS THE POINT. A guard earns trust only by failing on the
 thing it catches. This hook's whole job is to refuse a command shape that,
@@ -50,8 +50,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-HOOK = Path(__file__).resolve().parent / "check-zsh-unbraced-git-ref.py"
-BYPASS = "ZSH_COLON_BYPASS"
+HOOK = Path(__file__).resolve().parent / "check-zsh-silent-idioms.py"
+BYPASS = "ZSH_SILENT_IDIOMS_BYPASS"
 
 FAILURES: list[str] = []
 
