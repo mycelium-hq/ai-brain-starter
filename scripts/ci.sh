@@ -1691,6 +1691,14 @@ PY_DIRECT=(
   # DOES retrieve the token) proving the check isn't vacuous; and
   # negative-control mutants that must each flip a verdict.
   hooks/test_heavy_admission.py
+  # The close gate and the close commit scoped by WORKTREE, and every session
+  # on a plain checkout is `main`: session A's gate passed on session B's note,
+  # A was blocked on B's uncommitted one, and A's close commit staged B's
+  # decisions. Two real sessions per scenario, driven through the real hooks
+  # (verify-session-close-cascade.py, session-end-hook.sh,
+  # detect-closing-signal.py) with negative controls that the gate still
+  # blocks on A's own uncommitted note and decision.
+  hooks/test_close_gate_scoped_to_session.py
   # check-zsh-silent-idioms.py: bash idioms that silently do the wrong thing under
   # zsh (an unbraced $VAR:path in a git read; an unsplit $VAR in `set --` / `for`).
   # Drives the real hook over real stdin and asserts the PARSED decision, because
