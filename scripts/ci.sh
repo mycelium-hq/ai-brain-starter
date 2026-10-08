@@ -1706,6 +1706,10 @@ PY_DIRECT=(
   # gutted hook. Fire and silent legs for both detectors, the shell gate, the
   # bypass, and detector isolation. Plain script, stdlib only.
   hooks/test_check_zsh_silent_idioms.py
+  # snapshot-pending-work-on-stop.py: a snapshot of a working tree is written OUTSIDE
+  # the repo it snapshots, so the hook never leaves vault artifacts in a product repo.
+  # Pairs USERPROFILE with HOME for hermeticity. Plain script, stdlib only.
+  hooks/test_snapshot_pending_outside_repo.py
 )
 dormant_py=()
 while IFS= read -r -d '' f; do
