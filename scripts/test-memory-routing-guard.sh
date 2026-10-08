@@ -17,6 +17,8 @@ ROOT="$(cd "$HERE/.." && pwd)"
 GUARD="$ROOT/hooks/warn-learning-to-tool-private-memory.py"
 INSTALLER="$ROOT/scripts/install-hooks-user-level.py"
 HOOKS_JSON="$ROOT/hooks.json"
+# shellcheck source=tests/integration/lib/sandbox_home.sh
+. "$ROOT/tests/integration/lib/sandbox_home.sh"
 
 [ -f "$GUARD" ]      || { echo "FAIL: guard missing: $GUARD"; exit 1; }
 [ -f "$INSTALLER" ]  || { echo "FAIL: installer missing: $INSTALLER"; exit 1; }
@@ -71,7 +73,9 @@ out="$(printf '%s' "$pld" | TOOL_PRIVATE_MEMORY_BYPASS=1 python3 "$GUARD" 2>/dev
 
 # 6. ACTIVATION smoke — a fresh install REGISTERS the guard in settings.json
 SETTINGS="$TMP/settings.json"; echo '{}' > "$SETTINGS"
-python3 "$INSTALLER" --settings "$SETTINGS" --hooks-source "$HOOKS_JSON" --quiet >/dev/null 2>&1 || true
+# --settings moves only the hook merge; the same run links memory into $VAULT_ROOT and
+# schedules the daily maintenance job under whatever HOME it is given. So: a throwaway HOME.
+run_sandboxed "$TMP" python3 "$INSTALLER" --settings "$SETTINGS" --hooks-source "$HOOKS_JSON" --quiet >/dev/null 2>&1 || true
 grep -q "warn-learning-to-tool-private-memory.py" "$SETTINGS" \
   && ok "fresh install registers the guard in settings.json (activation, not just file presence)" \
   || bad "installer did NOT register the guard in settings.json"

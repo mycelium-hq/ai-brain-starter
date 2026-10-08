@@ -123,6 +123,15 @@ NOUN_EN_CORE = (
     r"offsite(?:s)?|demo(?:s)?|all-?hands"
 )
 
+# Nouns for the UNANCHORED completion patterns (no "I just" in front).
+# "sync" is also a data word: "the sync is finished" / "the sync's done" is
+# usually a file, vault or calendar sync, not a meeting. In these patterns
+# it only counts as a meeting when a person follows ("sync with Dana is
+# done"). Anchored forms ("I just had a sync", "wrapped up the sync") still
+# accept bare "sync".
+NOUN_EN_UNANCHORED = NOUN_EN.replace(r"sync(?:s)?|", r"sync(?:s)?(?=\s+with\b)|", 1)
+assert NOUN_EN_UNANCHORED != NOUN_EN
+
 TRIGGERS_EN = [
     # "I just <verb> <det> [adj×0-3] <noun>" — the standard form.
     rf"\bi\s+just\s+(?:had|did|finished|wrapped(?:\s+up)?|got\s+out\s+of|came\s+out\s+of|ended|got\s+off)\s+"
@@ -131,13 +140,13 @@ TRIGGERS_EN = [
     rf"\bjust\s+(?:had|did|finished|wrapped(?:\s+up)?|got\s+out\s+of|came\s+out\s+of|ended|got\s+off)\s+"
     rf"(?:{DET_EN})\s+{MOD}({NOUN_EN})\b",
     # "<det> [adj×0-3] <noun> [with X×1-5] just (ended|wrapped|finished|is done)"
-    rf"\b(?:{DET_EN})\s+{MOD}({NOUN_EN})\s+(?:with\s+(?:[\w\-]+\s+){{1,5}})?(?:just\s+)?"
+    rf"\b(?:{DET_EN})\s+{MOD}({NOUN_EN_UNANCHORED})\s+(?:with\s+(?:[\w\-]+\s+){{1,5}})?(?:just\s+)?"
     rf"(?:ended|wrapped(?:\s+up)?|finished|(?:is|was)\s+(?:{ADV_DONE}\s+){{0,2}}(?:done|over|finished))\b",
     # "<noun> [with X×1-5] just (ended|wrapped|...)"  — no det, e.g. "meeting just ended"
-    rf"\b({NOUN_EN})\s+(?:with\s+(?:[\w\-]+\s+){{1,5}})?(?:just\s+)?"
+    rf"\b({NOUN_EN_UNANCHORED})\s+(?:with\s+(?:[\w\-]+\s+){{1,5}})?(?:just\s+)?"
     rf"(?:ended|wrapped(?:\s+up)?|(?:is|was)\s+(?:{ADV_DONE}\s+){{0,2}}(?:done|over|finished))\b",
     # "[name]'s [adj×0-2] <noun> (is done|just ended|...)"
-    rf"\b[\w\-]+(?:'s|s')\s+(?:[\w\-]+\s+){{0,2}}({NOUN_EN})\s+"
+    rf"\b[\w\-]+(?:'s|s')\s+(?:[\w\-]+\s+){{0,2}}({NOUN_EN_UNANCHORED})\s+"
     rf"(?:is\s+done|just\s+ended|ended|wrapped|finished)\b",
     # "done|finished with <det> [adj×0-3] <noun>"
     rf"\b(?:done|finished)\s+with\s+(?:{DET_EN})\s+{MOD}({NOUN_EN})\b",
@@ -156,7 +165,7 @@ TRIGGERS_EN = [
     # "<noun>'s done" / "the standup's over" — contracted "is". The
     # possessive pattern above catches "[name]'s meeting is done"; this
     # catches the 's riding on the NOUN itself, which is how people type.
-    rf"\b({NOUN_EN})(?:'s|s')\s+(?:\w+\s+){{0,2}}"
+    rf"\b({NOUN_EN_UNANCHORED})(?:'s|s')\s+(?:\w+\s+){{0,2}}"
     rf"(?:done|over|finished|ended|wrapped(?:\s+up)?)\b",
     # "had a meeting just now" — postfix temporal anchor. Needs the literal
     # "just now", so bare past tense ("I had a meeting last week") stays out.
@@ -197,12 +206,19 @@ def normalize(s: str) -> str:
     return strip_accents(s).lower()
 
 
+# A status question ("check if the meeting is finished", "whether the call
+# is over") is asking, not reporting that a meeting ended. A match whose
+# clause starts with if/whether a few words earlier is skipped.
+QUESTION_LEAD = re.compile(r"\b(?:if|whether)\s+(?:[\w'\-]+\s+){0,3}$")
+
+
 def matches_trigger(prompt: str) -> Optional[str]:
     """Return the matched substring if any trigger fires, else None."""
     p = normalize(prompt)
     for regex in TRIGGERS_EN + TRIGGERS_ES:
-        m = re.search(regex, p)
-        if m:
+        for m in re.finditer(regex, p):
+            if QUESTION_LEAD.search(p[: m.start()]):
+                continue
             return m.group(0)
     return None
 

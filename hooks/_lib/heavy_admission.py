@@ -13,7 +13,7 @@ phrase in a commit message is not a heavy command. Counting reads ONE `ps -A`
 snapshot and runs each process's whitespace-split argv through the same
 _resolve_segment/_classify rules; argv is never printed or logged. Only ROOT
 invocations count; shells and this hook's own ancestors never do. Memory is
-read first: critical denies WITHOUT counting. An exception that propagates to
+read first, then load: either one critical denies WITHOUT counting. An exception that propagates to
 admit() admits VISIBLY (additionalContext + log_fire).
 
 `git push` counts as `verify` when the pre-push hook git itself would run for
@@ -50,8 +50,15 @@ SWAP_OVER_RAM_CRITICAL = 0.50
 MEMORYSTATUS_LEVEL_CRITICAL = 10
 # Linux: the kernel's own reclaimable-aware "about to swap-thrash" estimate.
 MEM_AVAILABLE_OVER_TOTAL_CRITICAL = 0.10
+# Load is read too: on 2026-10-04 the 1-minute load hit 330 on 10 cores while
+# memory read 55% free, and this guard admitted every build and install. The
+# limit is ci-test's own load pre-flight (same env names, same defaults), so the
+# two gates share one threshold.
+LOAD_RATIO_ENV, LOAD_RATIO_DEFAULT = "CI_PARITY_LOAD_RATIO", 4.0
+LOAD_FLOOR_ENV, LOAD_FLOOR_DEFAULT = "CI_PARITY_LOAD_FLOOR", 8.0
 
-CLASS_CAPS = {"build": 1, "verify": 1, "test_suite": 1, "tsc_full": 1, "playwright": 1, "cargo": 2}
+CLASS_CAPS = {"build": 1, "verify": 1, "test_suite": 1, "tsc_full": 1, "playwright": 1, "cargo": 2,
+              "install": 2}
 # Only a hint that is never refused again: no tsc_full one, since in a one-
 # tsconfig repo `tsc -p tsconfig.json` IS the default project.
 _HINTS = {"test_suite": "run one file: `vitest run <file>`"}
@@ -210,6 +217,9 @@ def _classify(t: list[str]):
         return "playwright"
     if head == "cargo" and next((x for x in rest if x not in _CARGO_SKIP_FLAGS), None) in _CARGO_VERBS:
         return "cargo"
+    # `rest`, not `r`: `npm run ci` is a script named ci, not an install.
+    if pm and rest[:1] in (["install"], ["i"], ["ci"]):
+        return "install"
     return None
 
 # ---- `git push` -> class `verify`, iff the repo's own pre-push hook is heavy
@@ -452,15 +462,18 @@ def _parse_swap_used(text: str) -> float:
 
 def read_signal() -> dict:
     if sys.platform == "darwin":
-        level, ms, swap_txt, ram = _run([_tool("sysctl"), "-n",
+        level, ms, swap_txt, ram, load, cpus = _run([_tool("sysctl"), "-n",
             "kern.memorystatus_vm_pressure_level", "kern.memorystatus_level",
-            "vm.swapusage", "hw.memsize"]).splitlines()
+            "vm.swapusage", "hw.memsize", "vm.loadavg", "hw.logicalcpu"]).splitlines()
         return {"platform": "darwin", "pressure_level": int(level),
                 "memorystatus_level": int(ms), "swap_used": _parse_swap_used(swap_txt),
-                "ram": float(ram)}
+                "ram": float(ram), "load1": float(load.strip("{} ").split()[0]), "cpus": int(cpus)}
     if sys.platform.startswith("linux"):
         with open("/proc/meminfo", encoding="utf-8", errors="replace") as fh:
-            return {"platform": "linux", **{k: int(v) for k, v in _MEMINFO_RE.findall(fh.read())}}
+            mem = {k: int(v) for k, v in _MEMINFO_RE.findall(fh.read())}
+        with open("/proc/loadavg", encoding="utf-8", errors="replace") as fh:
+            load1 = float(fh.read().split()[0])
+        return {"platform": "linux", **mem, "load1": load1, "cpus": os.cpu_count() or 1}
     return {"platform": "other"}  # incl. Windows: no snapshot counting there either
 
 def _memory_critical(sig: dict) -> tuple[bool, str]:
@@ -479,6 +492,12 @@ def _memory_critical(sig: dict) -> tuple[bool, str]:
     ratio = avail / total
     return (ratio < MEM_AVAILABLE_OVER_TOTAL_CRITICAL,
             f"MemAvailable {avail / 2 ** 20:.1f} GB / MemTotal {total / 2 ** 20:.1f} GB ({ratio:.0%})")
+
+def _load_critical(sig: dict) -> tuple[bool, str]:
+    load, cpus = sig["load1"], sig["cpus"]
+    limit = max(float(os.environ.get(LOAD_FLOOR_ENV) or LOAD_FLOOR_DEFAULT),
+                float(os.environ.get(LOAD_RATIO_ENV) or LOAD_RATIO_DEFAULT) * cpus)
+    return load >= limit, f"1-minute load {load:.0f} (limit {limit:.0f} on {cpus} CPUs)"
 
 
 # ---- dispatch -----------------------------------------------------------------
@@ -504,9 +523,13 @@ def admit(command: str, cwd: str | None = None) -> int:
         if sig["platform"] not in ("darwin", "linux"):
             return 0  # Windows and unmeasured platforms: allow silently, not an error
         critical, reading = _memory_critical(sig)
+        overloaded, load_reading = _load_critical(sig)
+        reading = f"{reading}; {load_reading}"
         if critical:
             # Counting was SKIPPED, so there is no "the running" job to name.
             headline, hint = "machine memory is critical", "wait for machine memory to recover"
+        elif overloaded:
+            headline, hint = "machine load is critical", "wait for the 1-minute load to fall below the limit (`uptime`)"
         else:
             running = _count_running(cls, _read_snapshot())
             cap = CLASS_CAPS[cls]
