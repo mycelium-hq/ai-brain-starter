@@ -275,6 +275,22 @@ def unsafe_id(e: Env) -> None:
               err[-300:])
 
 
+# ── 7b: the literal "unknown" is a placeholder, not an id ─────────────────────
+@scenario
+def unknown_placeholder_is_no_id(e: Env) -> None:
+    # detect-closing-signal.py stamps "unknown" when the payload has no id and
+    # injects no --session for it, so the only report that can exist is the
+    # shared one. The gate must read that, not demand `.unknown.report`.
+    e.run_runner(None)
+    rc, err = e.gate("unknown")
+    check(rc == 0, f"the gate treats the placeholder 'unknown' as no id (rc={rc})", err[-500:])
+    check(".unknown.report" not in err, "the gate never asks for a report named 'unknown'",
+          err[-300:])
+    # Negative control: a real id is still not satisfied by the shared report.
+    rc, err = e.gate(A)
+    check(rc == 2, f"a real id is still BLOCKED on the unscoped report (rc={rc})", err[-300:])
+
+
 # ── 8: end to end through the injected command ────────────────────────────────
 def injected_runner_line(e: Env, session: str | None) -> str:
     lines = [json.dumps({"type": "user", "message": {"content": f"msg {i}"}}) for i in range(6)]

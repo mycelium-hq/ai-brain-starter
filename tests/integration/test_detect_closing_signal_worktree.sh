@@ -100,8 +100,10 @@ if [ ! -f "$SESSION_WT" ]; then
 fi
 echo "PASS: session shell physically written to the main vault"
 
+# The session-id tag follows the slug (<minute>-<slug>-<tag>.md); see
+# hooks/test_session_file_unique_per_session.py.
 case "$(basename "$SESSION_WT")" in
-  *-test-slug.md) ;;
+  *-test-slug-*.md) ;;
   *)
     echo "FAIL: worktree slug lost from the session filename" >&2
     echo "  got: $(basename "$SESSION_WT")" >&2

@@ -22,6 +22,10 @@
       "type": "string",
       "description": "Worktree slug or 'main'"
     },
+    "session_id": {
+      "type": "string",
+      "description": "The Claude Code session that wrote this decision (the session-close cascade asks for it). The close commit and the close gate attribute the file to that session; a file without it falls back to worktree matching, which cannot tell two sessions on one checkout apart."
+    },
     "floor": {
       "oneOf": [
         {"type": "integer", "minimum": 1, "maximum": 34},
