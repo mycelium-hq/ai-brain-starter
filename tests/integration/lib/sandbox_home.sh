@@ -38,10 +38,14 @@
 #   run_sandboxed "$TMP" python3 "$HOOK"
 #   run_sandboxed "$TMP" env VAULT_ROOT="$v" python3 "$HOOK"
 #   run_sandboxed "$TMP" env -u VAULT_ROOT python3 "$HOOK"
+#   run_sandboxed "$TMP" env ABS_NO_AUTO_GC=0 bash "$SCHEDULER" "$v"   # a test of auto-GC itself
 #
 # Both forms set HOME and USERPROFILE, and neutralise the HOMEDRIVE/HOMEPATH
 # pair that ntpath.expanduser falls back to when USERPROFILE is absent, so there
 # is no route left from "~" to the real profile.
+#
+# run_sandboxed also closes the one route HOME cannot: the host's scheduler. See
+# the note above run_sandboxed.
 
 # Path in the form a native (non-MSYS) interpreter needs. No-op off Windows.
 _sandbox_native_path() {
@@ -75,6 +79,18 @@ sandbox_home() {
 # Deliberately creates nothing: callers pass a dir they already built, and a
 # negative control that asserts "~/.claude is absent" must not be handed an
 # empty ~/.claude by its own test harness.
+#
+# HOME is not the only way a child reaches the host. launchd keys a job by label
+# for the whole account, so a child under a sandboxed HOME can still replace the
+# real com.abs.vault-daily-maintenance job. The hook installer defaults
+# --vault-path to $VAULT_ROOT and, for a vault outside the temp dir, runs
+# scripts/install-vault-daily-maintenance.sh: `launchctl unload`, then `load`.
+# CI exports no VAULT_ROOT; a developer's shell often does. So the child starts
+# with VAULT_ROOT unset and ABS_NO_AUTO_GC=1 (the installer's own opt-out from
+# that scheduling). A test that needs either names it on the inner command, which
+# runs after this env and wins:
+#   run_sandboxed "$TMP" env VAULT_ROOT="$v" ABS_NO_AUTO_GC=0 python3 "$HOOK"
+# tests/integration/test_sandbox_cannot_reach_host_scheduler.sh pins this.
 run_sandboxed() {
   local d="${1:-}"
   if [ -z "$d" ]; then
@@ -82,8 +98,10 @@ run_sandboxed() {
     return 2
   fi
   shift
-  env HOME="$d" \
+  env -u VAULT_ROOT \
+      HOME="$d" \
       USERPROFILE="$(_sandbox_native_path "$d")" \
       HOMEDRIVE="" HOMEPATH="" \
+      ABS_NO_AUTO_GC=1 \
       "$@"
 }
