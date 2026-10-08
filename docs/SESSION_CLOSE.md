@@ -230,7 +230,7 @@ On a mature vault (10k–60k+ tracked files), the close-time git snapshot is the
   "worktree": "main",
   "vault_root": "/Users/.../My Vault",
   "meta_dir": "/Users/.../My Vault/⚙️ Meta",
-  "session_file": "/Users/.../⚙️ Meta/Sessions/2026-04-30T14-23-main.md",
+  "session_file": "/Users/.../⚙️ Meta/Sessions/2026-04-30T14-23-main-abc123.md",
   "user_msg_count": 23,
   "is_trivial": false,
   "is_ambiguous": false,
@@ -243,7 +243,7 @@ On a mature vault (10k–60k+ tracked files), the close-time git snapshot is the
 ```json
 {
   "session_id": "abc-123",
-  "session_file": "/Users/.../Sessions/2026-04-30T14-23-main.md",
+  "session_file": "/Users/.../Sessions/2026-04-30T14-23-main-abc123.md",
   "reason": "session body empty + fallback unavailable"
 }
 ```
@@ -255,6 +255,7 @@ On a mature vault (10k–60k+ tracked files), the close-time git snapshot is the
 creationDate: 2026-04-30 14:23
 type: session
 worktree: main
+session_id: "abc-123"
 session_date: 2026-04-30
 session_label: "update pending"
 ---
@@ -268,5 +269,7 @@ session_label: "update pending"
 ## Delegations
 ## Pending / incomplete
 ```
+
+The file is named `<minute>-<worktree>-<first 8 alphanumerics of the session id>.md` and claimed with an exclusive create, so two sessions closing in the same minute on the same checkout never share a file. `session_id` in the frontmatter is the owner: a second close by the same session in the same minute reuses its own file, and a file owned by any other session is never handed out (the next free `-2`, `-3`, ... name is used instead).
 
 The model fills bodies under each header. The `session_label` flips from `"update pending"` to a real label once the body is non-empty (or to `"fallback (haiku)"` / `"fallback (no-api-key)"` if the Stop hook had to backfill).

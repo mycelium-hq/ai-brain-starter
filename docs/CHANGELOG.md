@@ -75,8 +75,6 @@ The Python helper `scripts/_claude_router.py` had the same blind spot: when `cla
 
 ---
 
----
-
 ## 2026-10-02: scripts you run by name stopped at `permission denied`
 
 **Who this affects:** anyone who runs a script from this repo by its path, with no `bash` or `python3` in front. The clearest case is `vault-safe-commit.sh`, whose own usage line shows it run that way.
@@ -89,6 +87,29 @@ A new test, `scripts/test_shebang_scripts_executable.py`, fails when a program u
 
 **If you worked around it with `chmod +x`:** git counts that as a local edit, and the auto-updater holds every update while it is there. Undo it with `git -C ~/.claude/skills/ai-brain-starter restore <the file you changed>`. The next update then brings the file in executable.
 
+---
+
+## 2026-10-01: the session-close check and the close-time commit now look at your session's files only, not every session on the same checkout
+
+**Who this affects:** anyone who runs two Claude Code sessions at once on the same vault, whether on the plain checkout or inside one shared worktree.
+
+At goodbye, two things check your session's notes. A gate (`verify-session-close-cascade.py`) confirms you wrote a session note and committed it. Then the close-time commit (`session-end-hook.sh`) saves that note and any decisions you logged. Both picked files by worktree name. Every session on a plain checkout has the same worktree name, `main`, so they could not tell your files from a parallel session's:
+
+- Your gate could pass because another session had written a note, even when you hadn't.
+- Your gate could block you because another session still had an unsaved note or decision.
+- Your close-time commit could pick up another session's half-written decisions and save them under your session's name. It also saved anything the other session had already queued for its own commit.
+- On a plain checkout the gate didn't run at all, because it only knew how to tell sessions apart by worktree.
+
+Now both go by the session itself. When you say goodbye, the close hook records exactly which note is yours, and the gate checks that file. That record is cleared at the end of the goodbye turn. So if the gate blocks you and you try again, or you say goodbye a turn later, the gate finds your note by the session id in its header. That header line is written by the session-file naming fix (ai-brain-starter#712). Until that lands, a retry on a plain checkout is not checked, the same as before.
+
+The close-cascade instructions now ask for your session's id in each decision's header too. The commit saves only decisions that name your session, plus decisions that name no session at all, like one you wrote by hand. It commits only the files it picked, and leaves anything another session queued alone. The gate only counts a decision against you when the decision names your session. A short session that the close cascade tells to skip itself is not checked. When nothing identifies the session at all, the old worktree check runs.
+
+While fixing this we found two more problems. First, the gate read git's file list in a format that turns the `⚙️ Meta` folder name into escaped octal codes. That format also lists a folder with nothing committed in it as one line, not one line per file. Together these meant the "unsaved decisions" check could never fire in a vault using the default folder name. It now reads a format that prints every path as-is, one line per file. Second, on Windows the commit's new decision filter would have crashed on that same folder name and saved no decisions at all. It now reads paths as raw UTF-8.
+
+`hooks/test_close_gate_scoped_to_session.py` runs two sessions through the real hooks, on `main` and on a shared worktree. Against the old code, 25 of its 42 checks fail. Its negative controls confirm the gate still blocks when your own note or decision is unsaved.
+
+---
+
 ## 2026-10-01: `/journal` dropped your messages on machines where `python3` refuses to run a script
 
 **Who this affects:** anyone who runs `/journal` with a message reader script in their vault (`journal-messages-fetch.py`), on a machine where a Python tool puts its own stand-in for `python3` first on the PATH. Some of those stand-ins answer `python3 some-script.py` with advice ("use `uv run python ...`") and exit with an error, while still running one-liners, so nothing looks broken.
@@ -98,6 +119,18 @@ The `/journal` context pull (`journal-preflight.py`) gathers every source in one
 The message reader now runs under the same interpreter as the pull. In the same edit, the pull reads its helper programs' output as UTF-8 instead of the console's code page, as the rest of this repo's scripts do.
 
 A new test runs the real pull with a script-refusing stand-in first on the PATH and checks that the messages arrive, and that putting the old call back turns it red. A second check reads every Python file under `scripts/` and `skills/` and fails when one starts another Python script through a bare `python3`, so the same mistake cannot return unnoticed.
+
+---
+
+## 2026-10-01: two sessions closing in the same minute no longer share one session note
+
+**Who this affects:** anyone who runs more than one Claude session on the same vault at a time.
+
+When you say goodbye, the close hook creates the session note Claude fills in. It named that note after the minute and the worktree, for example `2026-10-01T15-25-main.md`. Every session on a plain checkout has the worktree name `main`, so two sessions closing in the same minute were given the same note. The second session wrote over the first one's summary. On the machine where this was found, the first session then committed the note under its own commit message, so the history said one thing and the file said another. Nothing flagged it.
+
+Now the note's name ends with the first 8 characters of the session's id (`2026-10-01T15-25-main-12871536.md`), and the note records which session owns it. If a note with that name already exists and belongs to another session, it is left alone and the next free name is used. If it belongs to the same session (you said goodbye twice in one minute), that session keeps its own half-written note instead of starting a new one. A session with no id still gets a note of its own. The first-install copy of the session-end hook in Phase 5 tags its note the same way.
+
+`hooks/test_session_file_unique_per_session.py` covers it, with a negative control that fails if a session's second goodbye strands its own note.
 
 ---
 
