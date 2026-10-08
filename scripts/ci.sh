@@ -486,6 +486,14 @@ INTEGRATION_TESTS=(
   # copy, with a negative control that a first install from a dev tree still
   # wires a runner that exists.
   test_hook_runner_path_stability
+  # The same sandbox, one route HOME does not cover: the host's launchd job.
+  # launchd keys a job by label for the whole account, and the hook installer
+  # takes its vault from an exported VAULT_ROOT, so a test under a sandbox HOME
+  # could still unload the real daily-maintenance job and load one pointing at a
+  # directory about to be deleted. Pins both layers with a recording launchctl
+  # (run_sandboxed drops VAULT_ROOT; the scheduler script loads only under the
+  # account's real home) and runs the installer end to end with each defeated.
+  test_sandbox_cannot_reach_host_scheduler
   # sync-vault-scripts.sh labelled its log header with `${DRY_RUN:+ (dry-run)}`,
   # which tests NON-EMPTY while DRY_RUN is initialised to `0` — so every REAL run
   # was recorded as "(dry-run)". Behaviour was correct (the write-guards use
@@ -632,6 +640,24 @@ INTEGRATION_TESTS=(
   # lib/gnu_stat_shim.sh so the Linux code path is exercised deterministically
   # from any host.
   test_check_claude_code_version_cache_age
+  # MYC-5205: the version hook measured the PATH-first `claude`, not the binary
+  # running the session, and its cache replayed one binary's reading into
+  # another's. Drives the real hook under a compiled fake `claude` ancestor (a
+  # script cannot be one: ps/proc report its interpreter) and proves the running
+  # binary wins, the PATH fallback is labeled, ONE skew warning line names
+  # every disagreeing install while an all-equal fleet stays silent, an npm
+  # install is read from package.json and never spawned, and a hung
+  # `claude --version` cannot hang the hook. It also pins what the hook must NOT do
+  # (import from the working directory, run a claude reached through a relative PATH
+  # entry, count an unreadable copy as a version, outlast its time bounds). Against the
+  # hook as it stood before this change (CHECK_CLAUDE_VERSION_TARGET reruns it against
+  # any copy), most of its assertions fail; one needs an interpreter that does not import
+  # re at startup, and is skipped with a note on one that does.
+  test_check_claude_code_version_running_binary
+  # The CwdChanged and FileChanged hooks read their payload with `python3 -c` in the
+  # session's working directory: a module planted there must not be imported (python3 -I),
+  # each hook must still do its job, and a changed file's path reaches Python as data.
+  test_session_hooks_isolated_python
   # Same bug class, vault-safe-commit.sh's non-PID lock-age check: a lock
   # whose age cannot be proven must never be treated as stale and removed.
   # Runs the real script under the same GNU-stat shim.
@@ -1661,6 +1687,13 @@ PY_DIRECT=(
   # DOES retrieve the token) proving the check isn't vacuous; and
   # negative-control mutants that must each flip a verdict.
   hooks/test_heavy_admission.py
+  # check-zsh-silent-idioms.py: bash idioms that silently do the wrong thing under
+  # zsh (an unbraced $VAR:path in a git read; an unsplit $VAR in `set --` / `for`).
+  # Drives the real hook over real stdin and asserts the PARSED decision, because
+  # the hook exits 0 on every path and an exit-code assertion would pass against a
+  # gutted hook. Fire and silent legs for both detectors, the shell gate, the
+  # bypass, and detector isolation. Plain script, stdlib only.
+  hooks/test_check_zsh_silent_idioms.py
 )
 dormant_py=()
 while IFS= read -r -d '' f; do

@@ -9,6 +9,74 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-10-05: the maintenance installer leaves your launchd job alone under a different HOME
+
+**Who this affects:** anyone who runs this repo's tests on a Mac whose shell exports `VAULT_ROOT`, and anyone on a Mac who runs the daily-maintenance installer (`scripts/install-vault-daily-maintenance.sh`, directly or through the hook installer) under a `HOME` that is not the home directory their account's user record names: a `HOME` set by hand, say, or the same folder spelled with different capitals. The first group no longer reaches their real job. For the second, the job is now written but not loaded, and the installer says so.
+
+macOS keeps one launchd job per label for the whole account, whatever `HOME` is. The hook installer takes its vault from `VAULT_ROOT` when none is given, and for a vault outside the temporary directory it runs `scripts/install-vault-daily-maintenance.sh`, which unloads and then loads the `com.abs.vault-daily-maintenance` job. A test that gave the installer a throwaway `HOME` still reached that job, and four tests never changed `HOME` at all, so on such a Mac they could unload your real job and load one that runs from a folder about to be deleted.
+
+Three changes close this. The script now calls `launchctl` only when `HOME` is the home directory your account's user record names. Under any other `HOME` it still writes the plist, prints one line saying it skipped loading, and leaves launchd alone. The line goes to stderr, so the hook installer shows it even when it runs with `--quiet`, as `bootstrap.sh` runs it. The test helper `run_sandboxed` drops `VAULT_ROOT` and sets `ABS_NO_AUTO_GC=1` unless a test names them. And the four tests that ran the installer under your real `HOME` (`test_install_path_verification.sh`, `test_verify_fallback_chain_optional.sh`, `scripts/test-memory-routing-guard.sh` and `scripts/test_windows_install_regressions.py`) now run it under a throwaway one.
+
+`tests/integration/test_sandbox_cannot_reach_host_scheduler.sh` checks the first two with a recording `launchctl` in place of the real one, and checks that the skip line reaches the user under `--quiet`. Not covered: on Linux the same script writes a cron entry, and `crontab` belongs to the user rather than to `HOME`, so that path has no such check. A test that runs the installer under your real `HOME` is not stopped by any of this either. The four above are the ones that were found and changed. `scripts/test-hooks-in-worktree.sh` also runs the installer under your real `HOME`, and was left as it was.
+
+---
+
+## 2026-10-04: an update run from a project's virtualenv no longer ties your hooks to it
+
+**Who this affects:** anyone on macOS or Linux who ran the installer, or an update, from inside a Python virtualenv: under `uv run`, or with a project's `.venv` activated. Anyone whose Python changed between two installs (Homebrew to the system Python, say) is affected too: an update used to leave a second copy of 11 hook lines beside the old one and now rewrites them in place, as it always did for the other 59. If you had edited the Python on one of those 11 lines yourself, the update now puts the installer's choice back.
+
+The installer writes one absolute Python path into every hook command, so a stand-in `python3` on your PATH cannot quietly disable the hooks. It took the first working `python3` on the PATH, and inside a virtualenv that is the project's own copy. When that project was deleted, or its virtualenv rebuilt, every hook pointed at a file that was gone. A hook that fails to start blocks nothing, so the guards that keep secrets and environment dumps out of a session stopped guarding. On the machine where this was found, twelve hooks were tied to one project's virtualenv, the secret and environment-dump blockers among them.
+
+The installer now skips a Python that sits inside a virtualenv (every `venv`, `virtualenv` and `uv` environment has a `pyvenv.cfg` file at its top) and takes the next one on the PATH. If the virtualenv's Python is the only one it can find, it uses the Python that virtualenv was built from, at the path the virtualenv's own `pyvenv.cfg` records, and that Python stays when the project goes. A hook command cannot carry a path with a space in it, so if that recorded path has one, the installer uses the path the virtualenv's Python resolves to instead.
+
+Four cases are not covered. A PATH entry that is a symlink pointing into a virtualenv is still taken as an ordinary Python. A conda environment (it has no `pyvenv.cfg`) and a pyenv shim are accepted as before. On Windows the launcher has the same pin and was not changed. A hook tied to one of these still breaks the same way when it goes away. The fourth: a virtualenv that holds a copy of its Python, and records a base path with a space in it, leaves the installer nothing it can name, so it writes a bare `python3`, which a stand-in on your PATH can still intercept.
+
+To repair an install that is already affected, run the update once from outside a virtualenv. It rewrites each hook line the installer ships so it points at a working Python, and removes a dead copy of one that an earlier update left behind. Before this fix an update did that for 59 of the 70 hook lines that run Python, and for each of the other 11 it added a second, working copy and left the dead one in place. Now all 70 are rewritten in place and a dead copy is removed.
+
+The installer's own check now reads the Python in front of each hook line the installer ships, not only the script it runs. It used to look at the script alone, so a hook tied to a deleted virtualenv read as healthy. Now `install-hooks-user-level.py --verify-only` lists the hooks whose Python is gone, and with `--fail-on-missing` (which `bootstrap.sh` uses) it exits 1. It does not read a hook you wrote yourself, or the Windows launcher.
+
+The installer test now puts a real virtualenv first on the PATH, then makes it the only Python on the PATH (for a virtualenv that links to its Python, one that holds a copy, and one whose recorded base path has a space in it), and fails if that virtualenv's Python ends up in a hook. A further check installs under a virtualenv, deletes it, runs the installer again from outside, and fails if a hook line still names the deleted virtualenv or any line was added twice. A last one builds the history the other way round, with the dead copies after the working ones and hooks of the user's own mixed in, and fails if an update leaves a dead copy, changes one of the user's hooks, or lets the installer's check pass while a hook still names the deleted virtualenv. Each of these fails on the installer from before this change.
+
+---
+
+## 2026-10-04: asking whether a sync has finished no longer starts the meeting workflow
+
+**Who this affects:** anyone who syncs files, a vault or a calendar and asks Claude about it, and anyone who asks whether a meeting is over.
+
+The meeting-workflow hook treated "sync" as a meeting, so "check if the sync is finished" or "the sync's done" told Claude a meeting had just ended and to run the whole post-meeting cascade (find the transcript, update CRM files, to-dos, the Decision Log). A question like "check if the meeting is finished" did the same, because the hook read it as a report rather than a question.
+
+Now a bare "sync" only counts as a meeting when you say you just had or wrapped one up ("I just had a sync", "wrapped up the sync") or name who it was with ("the sync with Dana is done"). A phrase that comes right after "if" or "whether" is read as a question and does not start the workflow. Everything that started it before still does, including "I just had a meeting", "the kickoff is done" and "sync with Sam just ended".
+
+---
+
+## 2026-10-04: text from outside can no longer end a note's frontmatter early or add a line to it
+
+**Who this affects:** anyone who writes a skill on the shared frontmatter helper `yaml_escape` (in `skills/_shared/connector_utils.py`), and anyone who runs `ingest-github` with a repo name that came from somewhere untrusted (its `repo` field is the one place this repo calls the helper directly). Everyone else sees no difference.
+
+`yaml_escape` turns a piece of text into a value that is safe to put on a `key: value` line in a note's frontmatter. When a value needed quoting it was wrapped in double quotes, but a line break inside it was left as it was. So text that came from outside (a web page, a caption, a field in an API payload) could end the frontmatter early with a line holding only `---`, or add a line of its own such as `injection_scan: clean`, the stamp this repo uses to say whether a note's body was scanned for planted instructions. Only a plain newline was even noticed: a lone carriage return, the Unicode next-line character, the two Unicode line and paragraph separators, vertical tab and form feed did not trigger the quoting at all. A control character that is not a line break (a bell, an escape, a NUL byte) made PyYAML refuse the whole header, and `split_frontmatter` then returns an empty header, which hides the stamp too.
+
+Now each of these is written as its YAML escape (`\n`, `\x07`, `\L` and so on) and makes the value quoted: the C0 control characters, DEL, the C1 control characters, the two Unicode separators, and U+FFFE and U+FFFF, which PyYAML's reader rejects even inside quotes. A tab is left as it is but also makes the value quoted, because PyYAML's default loader cannot read a tab in an unquoted value. A value that holds any of these characters comes back as one physical line, and `yaml.safe_load` returns the exact original. A value with none of them renders exactly as before.
+
+One case is not covered: a lone surrogate half, the leftover of a cut emoji. It cannot be written to a file as UTF-8 at all, so an escape cannot save it. `sanitize_third_party_text` replaces it, and text from outside should go through that first.
+
+`tests/integration/test_untrusted_ingest_guard.sh` (T18) takes the list of characters from the Unicode database instead of from the helper's own table. It fails if any one of them is dropped from the table, if backslashes are escaped after the control characters instead of before, or if a tab stops forcing quotes. It also fails if either file holds one of the invisible characters raw, so an editor that normalizes whitespace cannot quietly rewrite the table.
+
+---
+
+## 2026-10-01: the version check now measures the Claude Code that is running your session, and says when your installed copies disagree
+
+**Who this affects:** anyone with more than one copy of Claude Code on the machine (an install per node version, Homebrew, the desktop app's own copy), and anyone who runs scheduled `claude -p` jobs. Everyone else sees no difference.
+
+The startup version check asked whichever `claude` your PATH found first, so it could tell a desktop session it was on one release while that session ran another, and it never looked at the copies your scheduled jobs use. Upgrading "the" install and checking it proved nothing about the others: two of three copies on one machine sat weeks behind while every upgrade was verified against the third.
+
+The check now asks the Claude Code process that started the session, and the line it prints says which file it asked (or that it fell back to PATH, and why). Its saved answer is kept per binary, so one copy's reading is not shown to a session running another. The one exception is a labeled fallback: when the running copy will not say its version, the copy on PATH is measured instead and that reading is saved for both. Upgrading the copy a session runs, or the copy on PATH, shows up straight away instead of after six hours. The upgrade hint names the install's own `--prefix`, because a plain `npm i -g` installs under whichever node comes first on PATH. When the copies it can find (on PATH and on each LaunchAgent's PATH, skipping any relative entry; in the usual install folders; and the newest desktop copy) are not all the same version, it prints one line naming the copies and their versions (up to eight). When they agree, it prints nothing, and a copy whose version it cannot read never counts as a different version. The `claude --version` runs are time-limited (this needs perl or `timeout`, which nearly every machine has): ten seconds each for the running copy and the PATH copy, five seconds each (twenty in all) for the copies the comparison checks, and thirty seconds for the whole comparison. The GitHub requests a refresh makes have no time limit, as before.
+
+The Python helper `scripts/_claude_router.py` had the same blind spot: when `claude` was not on PATH it tried one hardcoded node-version folder, which exists on exactly one machine. It now looks at every `~/local/node-*/bin/claude` plus the usual install folders and uses the newest, reading each version from the package file beside it without running it.
+
+---
+
+---
+
 ## 2026-10-02: scripts you run by name stopped at `permission denied`
 
 **Who this affects:** anyone who runs a script from this repo by its path, with no `bash` or `python3` in front. The clearest case is `vault-safe-commit.sh`, whose own usage line shows it run that way.
@@ -30,6 +98,8 @@ The `/journal` context pull (`journal-preflight.py`) gathers every source in one
 The message reader now runs under the same interpreter as the pull. In the same edit, the pull reads its helper programs' output as UTF-8 instead of the console's code page, as the rest of this repo's scripts do.
 
 A new test runs the real pull with a script-refusing stand-in first on the PATH and checks that the messages arrive, and that putting the old call back turns it red. A second check reads every Python file under `scripts/` and `skills/` and fails when one starts another Python script through a bare `python3`, so the same mistake cannot return unnoticed.
+
+---
 
 ## 2026-09-29: a slash command you rewrote is kept on update, so keeping it no longer freezes your updates
 
