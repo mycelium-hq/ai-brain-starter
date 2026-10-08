@@ -47,6 +47,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _project_key import project_dir_for  # noqa: E402
+from _meta_resolver import find_meta_dir  # noqa: E402
 
 AGENT_MEMORY_RELPATH = ("⚙️ Meta", "Agent Memory")
 
@@ -170,7 +171,10 @@ def link_agent_memory(vault: str, *, dry_run: bool = False, quiet: bool = False)
     if not (vault_path / ".obsidian").exists():
         _say(f"  note: {vault_path} has no .obsidian/ — linking anyway", quiet)
 
-    agent_mem = vault_path.joinpath(*AGENT_MEMORY_RELPATH)
+    # Reuse the vault's existing Meta folder and memory instead of creating a
+    # competing emoji-prefixed folder that redirects other session artifacts.
+    meta = find_meta_dir(vault_path, (AGENT_MEMORY_RELPATH[1],))
+    agent_mem = (meta / AGENT_MEMORY_RELPATH[1]) if meta else vault_path.joinpath(*AGENT_MEMORY_RELPATH)
     if dry_run:
         _say(f"  would ensure vault memory home: {agent_mem}", quiet)
     else:
