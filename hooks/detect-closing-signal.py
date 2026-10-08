@@ -746,26 +746,68 @@ def list_decisions_with_empty_outcome(meta_dir: Path) -> list[str]:
     return out[:20]  # cap to keep injected context small
 
 
+def _known_session_id(session_id: str | None) -> str:
+    """The session id, or "" when the hook payload carried none."""
+    return "" if not session_id or session_id == "unknown" else session_id
+
+
+def session_file_stem(timestamp_file: str, worktree: str, session_id: str | None) -> str:
+    """`<minute>-<worktree>-<first 8 alphanumerics of the session id>`.
+
+    Minute + worktree alone is NOT unique: every session on a plain checkout
+    has worktree `main`, so two parallel sessions closing in the same minute
+    were handed the same file and the second wrote over the first (witnessed
+    2026-10-01). The tag makes the name distinct and lets a human tell whose
+    file it is; ownership itself is the full id in the frontmatter.
+    """
+    tag = re.sub(r"[^A-Za-z0-9]", "", _known_session_id(session_id))[:8]
+    return f"{timestamp_file}-{worktree}-{tag}" if tag else f"{timestamp_file}-{worktree}"
+
+
+_SESSION_ID_LINE = re.compile(r"^session_id:[ \t]*(.*?)[ \t]*$", re.MULTILINE)
+
+
+def _owned_by(path: Path, session_id: str) -> bool:
+    """True iff the file's frontmatter names `session_id` as its owner."""
+    if not session_id:
+        return False
+    try:
+        head = path.read_text(encoding="utf-8", errors="replace")[:4096]
+    except OSError:
+        return False
+    if not head.startswith("---"):
+        return False
+    end = head.find("\n---", 3)
+    m = _SESSION_ID_LINE.search(head[: end if end != -1 else len(head)])
+    return bool(m) and m.group(1).strip("\"'") == session_id
+
+
 def pre_build_session_shell(
     sessions_dir: Path,
     timestamp_file: str,
     worktree: str,
     timestamp_human: str,
+    session_id: str | None = None,
 ) -> Path:
     """Pre-create session file with frontmatter + section headers.
 
     Model only fills in the body. Returns the absolute path.
+
+    The file is claimed with O_EXCL, so two sessions racing for one name can
+    never both get it. An existing file is reused ONLY when its frontmatter
+    names this session (a second close in the same minute keeps its partial
+    note); a file owned by anyone else is left alone and the next free
+    `-2`, `-3`, ... name is claimed instead.
     """
     sessions_dir.mkdir(parents=True, exist_ok=True)
-    path = sessions_dir / f"{timestamp_file}-{worktree}.md"
-    if path.exists() and path.stat().st_size > 0:
-        # Don't clobber a partial session file from earlier in the same minute
-        return path
+    known = _known_session_id(session_id)
+    stem = session_file_stem(timestamp_file, worktree, session_id)
+    owner = f"session_id: {json.dumps(known)}\n" if known else ""
     shell = f"""---
 creationDate: {timestamp_human}
 type: session
 worktree: {worktree}
-session_date: {timestamp_human[:10]}
+{owner}session_date: {timestamp_human[:10]}
 session_label: "update pending"
 ---
 
@@ -795,11 +837,32 @@ session_label: "update pending"
 
 <!-- Background tasks, killed runs, items deferred to next session. -->
 """
-    try:
-        path.write_text(shell, encoding="utf-8")
-    except OSError as e:
-        log_debug(f"failed to write session shell: {e}")
-    return path
+    for n in range(1, 100):
+        path = sessions_dir / (f"{stem}.md" if n == 1 else f"{stem}-{n}.md")
+        try:
+            # O_BINARY: on Windows a text-mode fd under fdopen's own newline
+            # translation would write "\r\r\n". No-op (0) elsewhere.
+            fd = os.open(
+                path,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0),
+                0o644,
+            )
+        except FileExistsError:
+            if _owned_by(path, known):
+                return path  # this session's own file from an earlier close
+            continue  # another session's file: never hand it out
+        except OSError as e:
+            log_debug(f"failed to create session shell: {e}")
+            return path
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(shell)
+        except OSError as e:
+            log_debug(f"failed to write session shell: {e}")
+        return path
+    # Unreachable in practice. Raising (not returning a taken path) lets the
+    # catch-all in main() surface it instead of handing out someone's file.
+    raise RuntimeError(f"no free session file name for {stem} in {sessions_dir}")
 
 
 def write_marker(
@@ -951,6 +1014,7 @@ def build_injected_context(
     goal_condition: str | None = None,
     todo_files: list[Path] | None = None,
     offsite_warning: str = "",
+    session_id: str | None = None,
 ) -> str:
     """Compose the system block injected into the model's context.
 
@@ -981,7 +1045,7 @@ def build_injected_context(
                 timestamp_human, timestamp_file, worktree, vault_root,
                 meta_dir, session_file, decisions_dir, captures_file,
                 pending_outcomes, goal_condition=None, todo_files=todo_files,
-                offsite_warning=offsite_warning,
+                offsite_warning=offsite_warning, session_id=session_id,
             )
         )
 
@@ -992,7 +1056,7 @@ def build_injected_context(
             timestamp_human, timestamp_file, worktree, vault_root,
             meta_dir, session_file, decisions_dir, captures_file,
             pending_outcomes, goal_condition, todo_files=todo_files,
-            offsite_warning=offsite_warning,
+            offsite_warning=offsite_warning, session_id=session_id,
         )
     )
 
@@ -1047,9 +1111,19 @@ def _full_cascade_block(
     goal_condition: str | None = None,
     todo_files: list[Path] | None = None,
     offsite_warning: str = "",
+    session_id: str | None = None,
 ) -> str:
     """The reusable cascade-instruction block."""
     pending = ", ".join(pending_outcomes) if pending_outcomes else "(none)"
+    # A decision file names no session in its filename, so on a shared checkout
+    # the close commit (session-end-hook.sh) and the close gate
+    # (verify-session-close-cascade.py) can only tell this session's decisions
+    # from a parallel session's by an owner line in the frontmatter.
+    known_id = session_id if session_id and session_id != "unknown" else ""
+    decision_owner = (
+        f"; frontmatter carries session_id: {json.dumps(known_id)}"
+        if known_id else ""
+    )
     # Pre-resolve the to-do destination the same way the Time Tracking surface
     # is resolved: the model trusts the injected path instead of inferring it.
     if todo_files:
@@ -1115,7 +1189,7 @@ Then walk Phases 0b -> 1 -> 2 -> 2b -> 3 below."""
   Worktree:         {worktree}
   Vault root:       {vault_root}{offsite_warning}
   Session file:     {session_file}  (already pre-built with frontmatter + headers; fill in the body)
-  Decisions dir:    {decisions_dir}  (write per-decision files here, slug-named)
+  Decisions dir:    {decisions_dir}  (write per-decision files here, slug-named{decision_owner})
   Captures file:    {captures_file}
 {todo_line}
 {tt_line}
@@ -1386,11 +1460,16 @@ def main() -> int:
 
         is_ambiguous = (confidence == "ambiguous")
 
-        # Pre-build session file shell unless trivial
-        session_file = sessions_dir / f"{timestamp_file}-{worktree}.md"
+        # Pre-build session file shell unless trivial. The name carries the
+        # session id: minute + worktree alone collides across parallel
+        # sessions on the same checkout (see session_file_stem).
+        session_file = sessions_dir / (
+            session_file_stem(timestamp_file, worktree, session_id) + ".md"
+        )
         if not is_trivial:
             session_file = pre_build_session_shell(
                 sessions_dir, timestamp_file, worktree, timestamp_human,
+                session_id,
             )
 
         # Pre-fetch decisions with empty outcomes
@@ -1432,6 +1511,7 @@ def main() -> int:
             goal_condition=active_session_goal(transcript_path),
             todo_files=todo_files,
             offsite_warning=offsite_vault_warning(vault_root, cwd),
+            session_id=session_id,
         )
         emit_context(context)
         log_debug(f"injected context for {confidence} signal in {int((time.time() - start) * 1000)}ms")

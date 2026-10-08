@@ -253,7 +253,14 @@ if [ -z "$WORKTREE_NAME" ] && [ -f "$PWD_PATH/.git" ]; then
 fi
 [ -z "$WORKTREE_NAME" ] && WORKTREE_NAME="main-$$"
 
-SESSION_FILE="$SESSIONS_DIR/${TIMESTAMP_FILE}-${WORKTREE_NAME}.md"
+# Tag the file with the session id from the hook's stdin (PID if absent):
+# timestamp + worktree alone is shared by two sessions in the same worktree
+# closing in the same minute, and the second one writes over the first.
+HOOK_INPUT="$(cat 2>/dev/null || true)"
+SESSION_TAG=$(printf '%s' "$HOOK_INPUT" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1 | tr -cd 'A-Za-z0-9' | cut -c1-8)
+[ -z "$SESSION_TAG" ] && SESSION_TAG="$$"
+
+SESSION_FILE="$SESSIONS_DIR/${TIMESTAMP_FILE}-${WORKTREE_NAME}-${SESSION_TAG}.md"
 
 mkdir -p "$SESSIONS_DIR" 2>>"$ERROR_LOG"
 mkdir -p "$ARCHIVE_DIR" 2>>"$ERROR_LOG"
