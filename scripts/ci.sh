@@ -1625,6 +1625,10 @@ PY_DIRECT=(
   # personal vocabulary again.
   hooks/test_vault_context_signals.py
   hooks/test_close_catchall_not_silent.py
+  # Two sessions on one checkout closing in the same minute were both handed
+  # `<minute>-main.md`; the second wrote over the first, and the first one's
+  # commit carried the other's note (witnessed 2026-10-01).
+  hooks/test_session_file_unique_per_session.py
   # block-raw-vault-git resolved a `cd` only when it was the first token of the
   # whole command, because it split statements on && || ; but not on a NEWLINE.
   # `set -e` on line 1 was enough to make the cd invisible, so the hook read the

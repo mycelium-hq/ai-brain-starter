@@ -87,6 +87,18 @@ A new test runs the real pull with a script-refusing stand-in first on the PATH 
 
 ---
 
+## 2026-10-01: two sessions closing in the same minute no longer share one session note
+
+**Who this affects:** anyone who runs more than one Claude session on the same vault at a time.
+
+When you say goodbye, the close hook creates the session note Claude fills in. It named that note after the minute and the worktree, for example `2026-10-01T15-25-main.md`. Every session on a plain checkout has the worktree name `main`, so two sessions closing in the same minute were given the same note. The second session wrote over the first one's summary. On the machine where this was found, the first session then committed the note under its own commit message, so the history said one thing and the file said another. Nothing flagged it.
+
+Now the note's name ends with the first 8 characters of the session's id (`2026-10-01T15-25-main-12871536.md`), and the note records which session owns it. If a note with that name already exists and belongs to another session, it is left alone and the next free name is used. If it belongs to the same session (you said goodbye twice in one minute), that session keeps its own half-written note instead of starting a new one. A session with no id still gets a note of its own. The first-install copy of the session-end hook in Phase 5 tags its note the same way.
+
+`hooks/test_session_file_unique_per_session.py` covers it, with a negative control that fails if a session's second goodbye strands its own note.
+
+---
+
 ## 2026-09-29: a slash command you rewrote is kept on update, so keeping it no longer freezes your updates
 
 **Who this affects:** anyone who has rewritten one of the slash commands this repo installs into `~/.claude/commands/`, for example to point `/cierre` at a different skill.

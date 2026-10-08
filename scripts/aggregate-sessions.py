@@ -7,7 +7,7 @@ concurrently raced on Last Session.md writes. Last write wins. Entries from
 earlier sessions were silently clobbered.
 
 Fix: each session writes its content to its own unique file in
-{VAULT}/⚙️ Meta/Sessions/ (filename: YYYY-MM-DDTHH-MM-{worktree}.md). This
+{VAULT}/⚙️ Meta/Sessions/ (filename: YYYY-MM-DDTHH-MM-{worktree}-{session}.md). This
 script rebuilds Last Session.md by concatenating the N most recent session
 files in reverse chronological order. Because the output is a deterministic
 function of the sorted input, concurrent runs of this script produce
