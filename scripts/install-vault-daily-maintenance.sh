@@ -14,6 +14,12 @@
 #
 # Idempotent: re-running unloads the old plist before writing the new one.
 #
+# Calls launchctl only when $HOME is the home directory the user database records
+# for this uid. launchd keys a job by label for the whole account, so under any
+# other HOME (a test, a throwaway checkout) `launchctl unload` and `load` would
+# replace the account's real job. There the plist is still written, and one line
+# says that loading was skipped.
+#
 # Requires: macOS, launchctl, /bin/bash. Linux users: add a cron line instead
 # (see the comment block in templates/launchd/com.abs.vault-daily-maintenance.plist.template).
 set -euo pipefail
@@ -79,7 +85,26 @@ fi
 
 mkdir -p "$TARGET_DIR" "$LOG_DIR"
 
-if [[ -f "$TARGET_FILE" ]]; then
+# The home directory the user database records for this uid. Deliberately not read
+# from $HOME: $HOME is the thing a sandbox overrides.
+account_home() {
+    dscacheutil -q user -a uid "$(id -u)" 2>/dev/null | sed -n '/^dir: /{s/^dir: //p;q;}'
+}
+# True when both name one existing directory, however each is spelled (a symlink or
+# a trailing slash is not a different home). An empty or missing one is not a match.
+same_dir() {
+    local a b
+    [[ -n "$1" && -n "$2" ]] || return 1
+    a="$(cd "$1" 2>/dev/null && pwd -P)" || return 1
+    b="$(cd "$2" 2>/dev/null && pwd -P)" || return 1
+    [[ "$a" == "$b" ]]
+}
+LOAD_JOB=0
+if same_dir "$HOME" "$(account_home || true)"; then
+    LOAD_JOB=1
+fi
+
+if [[ -f "$TARGET_FILE" && $LOAD_JOB -eq 1 ]]; then
     say "[install-vault-daily-maintenance] unloading existing plist..."
     launchctl unload "$TARGET_FILE" 2>/dev/null || true
 fi
@@ -92,6 +117,13 @@ sed \
     "$TEMPLATE" > "$TARGET_FILE"
 
 say "[install-vault-daily-maintenance] wrote $TARGET_FILE"
+if [[ $LOAD_JOB -eq 0 ]]; then
+    # Printed even under --quiet, and on stderr: the hook installer runs this with --quiet
+    # and shows a finished child's stderr but never its stdout. A job that was written and
+    # not loaded is not a success.
+    echo "[install-vault-daily-maintenance] skipped loading $TARGET_FILE: HOME is not this account's home directory, and launchd would replace the account's real job" >&2
+    exit 0
+fi
 launchctl load "$TARGET_FILE"
 say "[install-vault-daily-maintenance] loaded (runs daily at 04:30 local)"
 say
