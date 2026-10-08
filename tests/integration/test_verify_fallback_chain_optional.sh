@@ -32,12 +32,17 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 INSTALLER="$REPO_ROOT/scripts/install-hooks-user-level.py"
+# shellcheck source=tests/integration/lib/sandbox_home.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/sandbox_home.sh"
 
 fail() { echo "FAIL: $1" >&2; exit 1; }
 
 [[ -f "$INSTALLER" ]] || fail "installer missing at $INSTALLER"
 
-# Throwaway HOME so we never touch the real ~/.claude/settings.json.
+# Throwaway HOME so we never touch the real ~/.claude/settings.json. Every installer
+# run below goes through run_sandboxed with it: --settings alone moves only the hook
+# merge, and the same run links Claude Code's memory into $VAULT_ROOT and schedules
+# the daily maintenance job under whatever HOME it is given.
 TMP_HOME="$(mktemp -d)"
 trap 'rm -rf "$TMP_HOME"' EXIT
 
@@ -87,7 +92,7 @@ SETTINGS_PATH="$TMP_HOME/.claude/settings.json"
 # --- (a) only the home copy exists -> exit 0 -------------------------------
 echo "{}" > "$SETTINGS_PATH"
 set +e
-OUT=$(python3 "$INSTALLER" --hooks-source "$SKILL_DIR/hooks.json" \
+OUT=$(run_sandboxed "$TMP_HOME" python3 "$INSTALLER" --hooks-source "$SKILL_DIR/hooks.json" \
         --settings "$SETTINGS_PATH" --fail-on-missing 2>&1)
 RC=$?
 set -e
@@ -104,7 +109,7 @@ fi
 rm -f "$HOME_COPY"
 echo "{}" > "$SETTINGS_PATH"
 set +e
-OUT=$(python3 "$INSTALLER" --hooks-source "$SKILL_DIR/hooks.json" \
+OUT=$(run_sandboxed "$TMP_HOME" python3 "$INSTALLER" --hooks-source "$SKILL_DIR/hooks.json" \
         --settings "$SETTINGS_PATH" --fail-on-missing 2>&1)
 RC=$?
 set -e

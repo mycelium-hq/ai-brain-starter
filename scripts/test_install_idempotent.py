@@ -18,6 +18,10 @@ At the measured ~59 ms marginal cost per hook past core saturation, the redundan
 entries alone cost ~1.8 s on every session start.
 
 These asserts fail on the pre-fix code and pass on dedupe_identical_hooks().
+
+The same file pins the other copy that accumulates: a stale copy of a command the
+template ships (one that runs no owned script), pinned to an interpreter that has since
+gone, which dedupe_owned_hooks() collapses onto the template's own command.
 """
 from __future__ import annotations
 
@@ -177,6 +181,91 @@ for name, a, b in near_misses:
     c, r = inst.dedupe_identical_hooks(settings(a, b))
     check(f"near-miss-preserved-{name}", r == 0 and count(c) == 2)
 
+# --- a copy of a command the template ships, under another interpreter -------
+# These commands run no owned script, so dedupe_owned_hooks() had no way to tell a
+# copy from a hook of the user's own. merge_hooks() replaces only the FIRST match, so
+# a stale copy that sits after the live one stayed for good.
+LIVE = ("/live/bin/python3 ~/.claude/skills/ai-brain-starter/hooks/"
+        "surface-backup-status.py 2>/dev/null || echo '{}'")
+STALE = LIVE.replace("/live/bin/python3", "/gone/venv/bin/python3")
+SHIPPED = frozenset([LIVE])
+
+
+def commands(s):
+    return [h["command"] for groups in s.get("hooks", {}).values()
+            for g in groups for h in g.get("hooks", [])]
+
+
+check("premise-shipped-command-is-unowned", not inst._owned_basenames(LIVE))
+check("premise-the-stale-copy-is-the-same-hook", inst.is_same_command(LIVE, STALE))
+
+# The collapse folds copies onto the template's command. It can only do that safely if
+# no two DIFFERENT commands the template ships under one (event, matcher) read as the
+# same hook, or it would fold one shipped hook into another.
+slots: dict = {}
+for event, groups in json.loads((ROOT / "hooks.json").read_text(encoding="utf-8"))["hooks"].items():
+    for group in groups:
+        slots.setdefault((event, group.get("matcher")), []).extend(
+            h["command"] for h in group["hooks"] if h.get("command"))
+clashes = [(slot, a[:60], b[:60]) for slot, cmds in slots.items()
+           for i, a in enumerate(cmds) for b in cmds[i + 1:]
+           if a != b and inst.is_same_command(a, b)]
+check("premise-no-two-template-commands-read-as-one-hook", not clashes and len(slots) > 0)
+
+for position, order in (("after", (LIVE, STALE)), ("before", (STALE, LIVE))):
+    cleaned, removed = inst.dedupe_owned_hooks(settings(*order), preferred=SHIPPED)
+    check(f"stale-copy-{position}-the-live-one-is-removed",
+          removed == 1 and commands(cleaned) == [LIVE])
+
+two_groups = {"hooks": {"SessionStart": [
+    {"hooks": [{"type": "command", "command": LIVE}]},
+    {"hooks": [{"type": "command", "command": STALE}]},
+]}}
+cleaned, removed = inst.dedupe_owned_hooks(two_groups, preferred=SHIPPED)
+check("stale-copy-in-another-group-with-the-same-matcher-is-removed",
+      removed == 1 and commands(cleaned) == [LIVE])
+check("group-emptied-by-the-collapse-is-dropped", len(cleaned["hooks"]["SessionStart"]) == 1)
+
+cleaned, removed = inst.dedupe_owned_hooks(settings(LIVE, STALE))
+check("without-the-template-nothing-is-a-copy-of-anything",
+      removed == 0 and count(cleaned) == 2)
+
+cleaned, removed = inst.dedupe_owned_hooks(settings(STALE), preferred=SHIPPED)
+check("a-lone-copy-stays-for-merge-to-replace", removed == 0 and commands(cleaned) == [STALE])
+
+other_matcher = {"hooks": {"PreToolUse": [
+    {"matcher": "Bash", "hooks": [{"type": "command", "command": LIVE}]},
+    {"matcher": "Write", "hooks": [{"type": "command", "command": STALE}]},
+]}}
+cleaned, removed = inst.dedupe_owned_hooks(other_matcher, preferred=SHIPPED)
+check("another-matcher-is-another-registration", removed == 0 and count(cleaned) == 2)
+
+other_args = STALE.replace("surface-backup-status.py", "surface-backup-status.py --test")
+cleaned, removed = inst.dedupe_owned_hooks(settings(LIVE, other_args), preferred=SHIPPED)
+check("same-script-with-other-arguments-is-another-hook", removed == 0 and count(cleaned) == 2)
+
+# A hook of the user's own, a same-named script from the user's own folder, and hooks
+# that carry no command at all are never touched. The last case needs the template to
+# hold a command-less hook too, as it may: its empty command must not read as a copy.
+mine = ["echo mine", "/usr/bin/python3 ~/mine/hook.py",
+        "python3 ~/.claude/hooks/surface-backup-status.py"]
+cleaned, removed = inst.dedupe_owned_hooks(settings(LIVE, *mine, STALE), preferred=SHIPPED)
+check("a-user-hook-beside-the-copies-is-untouched",
+      removed == 1 and commands(cleaned) == [LIVE, *mine])
+prompt_hooks = {"hooks": {"Stop": [{"hooks": [
+    {"type": "prompt", "prompt": "a"}, {"type": "prompt", "prompt": "b"}]}]}}
+cleaned, removed = inst.dedupe_owned_hooks(prompt_hooks, preferred=frozenset([LIVE, ""]))
+check("hooks-with-no-command-are-untouched", removed == 0 and count(cleaned) == 2)
+
+once, _ = inst.dedupe_owned_hooks(settings(LIVE, STALE, STALE), preferred=SHIPPED)
+twice, again = inst.dedupe_owned_hooks(once, preferred=SHIPPED)
+check("the-template-copy-collapse-is-a-fixed-point",
+      again == 0 and twice == once and commands(once) == [LIVE])
+src = settings(LIVE, STALE)
+before = json.dumps(src, sort_keys=True)
+inst.dedupe_owned_hooks(src, preferred=SHIPPED)
+check("the-template-copy-collapse-leaves-its-input-alone", json.dumps(src, sort_keys=True) == before)
+
 # --- WIRING: main() must actually CALL the collapse --------------------------
 # Everything above tests the function in isolation, so all of it still passes if
 # the call site in main() is deleted or its result discarded. In a repo that
@@ -187,6 +276,21 @@ import subprocess             # noqa: E402
 import sys as _sys            # noqa: E402
 import tempfile               # noqa: E402
 
+
+def sandbox_env(home) -> dict:
+    """Environment for a child that runs the hook installer for real, shaped as
+    tests/integration/lib/sandbox_home.sh run_sandboxed shapes it.
+
+    --settings moves only the hook merge. The same run links Claude Code's memory into
+    $VAULT_ROOT and schedules the daily maintenance job, so the child gets a throwaway
+    HOME (and USERPROFILE, which is what Windows reads), no VAULT_ROOT, and the
+    installer's own opt-out from scheduling."""
+    env = dict(os.environ, HOME=str(home), USERPROFILE=str(home),
+               HOMEDRIVE="", HOMEPATH="", ABS_NO_AUTO_GC="1")
+    env.pop("VAULT_ROOT", None)
+    return env
+
+
 with tempfile.TemporaryDirectory() as td:
     home = Path(td) / "home"
     (home / ".claude").mkdir(parents=True)
@@ -195,20 +299,33 @@ with tempfile.TemporaryDirectory() as td:
     # the new pass can remove them.
     target.write_text(json.dumps(settings(*[UNOWNED] * 6)), encoding="utf-8")
 
-    env = dict(os.environ)
-    env.update(USERPROFILE=str(home), HOME=str(home),
-               HOMEDRIVE=str(home)[:2], HOMEPATH=str(home)[2:])
-    proc = subprocess.run(
-        [_sys.executable, str(ROOT / "scripts" / "install-hooks-user-level.py"),
-         "--settings", str(target), "--quiet"],
-        capture_output=True, env=env, timeout=180,
-    )
+    # A developer's shell often exports VAULT_ROOT, and the installer takes its vault
+    # from it when none is given: it would link Claude Code's memory into that vault.
+    # The decoy sits under the temp dir, where the installer never schedules anything.
+    decoy_vault = Path(td) / "elsewhere" / "vault"
+    decoy_vault.mkdir(parents=True)
+    # vault-root-ok: saves the caller's value to restore it below; nothing resolves a vault from it.
+    saved_vault_root = os.environ.get("VAULT_ROOT")
+    os.environ["VAULT_ROOT"] = str(decoy_vault)
+    try:
+        proc = subprocess.run(
+            [_sys.executable, str(ROOT / "scripts" / "install-hooks-user-level.py"),
+             "--settings", str(target), "--quiet"],
+            capture_output=True, env=sandbox_env(home), timeout=180,
+        )
+    finally:
+        if saved_vault_root is None:
+            os.environ.pop("VAULT_ROOT", None)
+        else:
+            os.environ["VAULT_ROOT"] = saved_vault_root
     after = json.loads(target.read_text(encoding="utf-8"))
     survivors = [h for groups in after.get("hooks", {}).values()
                  for g in groups for h in g.get("hooks", [])
                  if h.get("command") == UNOWNED]
     check("WIRING-installer-run-succeeded", proc.returncode == 0)
     check("WIRING-installer-collapses-identical-copies", len(survivors) == 1)
+    check("WIRING-an-exported-VAULT_ROOT-does-not-reach-the-installer",
+          not any(decoy_vault.iterdir()))
 
 # --- report ----------------------------------------------------------------
 if FAILS:

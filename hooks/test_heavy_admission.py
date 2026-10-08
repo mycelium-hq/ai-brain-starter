@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Controls for hooks/_lib/heavy_admission.py (MYC-5053), folded into
 retry-budget.py's PreToolUse(Bash) hook. Stdlib-only plain script, exit 0 =
-all pass. Legs: D/C corpora; A decision order, fail-open, bypass, memory arms;
+all pass. Legs: D/C corpora; A decision order, fail-open, bypass, memory arms; O the load arm and the install class;
 M counting on synthetic rows plus real plants for the ps parse; G git push;
 L a planted token through the REAL reader and a matched row, with a positive
 control; N attribute-patch mutants that must flip a verdict; H the real
@@ -64,7 +64,7 @@ def _admit(mod, command: str, cwd=None):
     return rc, out.getvalue() + err.getvalue(), fires
 
 IDLE = {"platform": "darwin", "pressure_level": 1, "memorystatus_level": 57,
-        "swap_used": 1 * 2 ** 30, "ram": 16 * 2 ** 30}
+        "swap_used": 1 * 2 ** 30, "ram": 16 * 2 ** 30, "load1": 0.5, "cpus": 10}
 CRITICAL = {**IDLE, "pressure_level": 4}
 
 MUST_ADMIT = [
@@ -238,6 +238,39 @@ def leg_decision() -> None:
     check("A the Linux arm: MemAvailable under 10% denies, 50% does not", linux(9) and not linux(50))
     sig = _load("heavy_admission_a_reader").read_signal()  # the REAL reader, on this host
     check("A the real memory reader parses this host", sig["platform"] != "darwin" or sig["ram"] > 0, str(sig))
+    check("A the real reader parses this host's load and CPUs",
+          sig["platform"] == "other" or (sig.get("load1", -1) >= 0 and sig.get("cpus", 0) >= 1), str(sig))
+
+
+# --------------------------------------------- O: the load arm, installs ---
+def leg_load() -> None:
+    mod = _load("heavy_admission_o")
+    mod._count_running = lambda cls, snap: 0
+    at = lambda load, cpus=10: (lambda: {**IDLE, "load1": load, "cpus": cpus})  # noqa: E731
+    mod.read_signal = at(40.0)
+    rc, out, _fires = _admit(mod, "next build")
+    check("O a load at 4 x CPUs denies, with memory healthy", rc == 2 and "machine load is critical" in out, out)
+    check("O the refusal names the load reading and the wait path",
+          "1-minute load 40 (limit 40 on 10 CPUs)" in out and "uptime" in out, out)
+    mod.read_signal = at(39.9)
+    check("O just under the limit admits", _admit(mod, "next build")[0] == 0)
+    mod.read_signal = at(7.9, cpus=1)
+    check("O the floor of 8 holds on a small machine (7.9 on 1 CPU admits)", _admit(mod, "next build")[0] == 0)
+    mod.read_signal = at(8.0, cpus=1)
+    check("O ...and 8 on 1 CPU denies", _admit(mod, "next build")[0] == 2)
+    os.environ["CI_PARITY_LOAD_RATIO"] = "2"
+    try:
+        mod.read_signal = at(20.0)
+        check("O ci-test's CI_PARITY_LOAD_RATIO moves this limit too", _admit(mod, "next build")[0] == 2)
+    finally:
+        os.environ.pop("CI_PARITY_LOAD_RATIO", None)
+    mod.read_signal = at(400.0)
+    check("O a light command is never load-gated", _admit(mod, "ls -la")[0] == 0)
+    for cmd in ("npm ci", "npm install", "npm i", "pnpm install --offline", "yarn install"):
+        check(f"O {cmd!r} classifies as an install", mod.detect_class(cmd) == "install", str(mod.detect_class(cmd)))
+    check("O `npm run ci` is a script named ci, not an install", mod.detect_class("npm run ci") != "install")
+    mod.read_signal, mod._count_running = at(0.5), (lambda cls, snap: 2 if cls == "install" else 0)
+    check("O a third concurrent install waits (cap 2)", _admit(mod, "npm ci")[0] == 2)
 
 
 # ------------------------------------------------------- M: counting logic ---
@@ -488,7 +521,7 @@ def leg_pathprobe() -> None:
             (d / "ps").write_text(f'#!/bin/sh\necho hit >> "{marker}"\n', encoding="utf-8")
             (d / "sysctl").write_text(
                 f'#!/bin/sh\necho hit >> "{marker}"\n'
-                'printf "1\\n57\\ntotal = 0.00M  used = 0.00M  free = 0.00M\\n17179869184\\n"\n',
+                'printf "1\\n57\\ntotal = 0.00M  used = 0.00M  free = 0.00M\\n17179869184\\n{ 0.10 0.10 0.10 }\\n10\\n"\n',
                 encoding="utf-8")
             for name in ("git", "ps", "sysctl"):
                 (d / name).chmod(0o755)
@@ -659,7 +692,7 @@ def leg_fifo_hook() -> None:
     home = Path(tempfile.mkdtemp(prefix="heavy-admission-fifo-home-"))
     stub = home / "bin"
     stub.mkdir()
-    for name, body in (("ps", ""), ("sysctl", "printf '1\\n57\\ntotal = 0.00M  used = 0.00M  free = 0.00M\\n17179869184\\n'")):
+    for name, body in (("ps", ""), ("sysctl", "printf '1\\n57\\ntotal = 0.00M  used = 0.00M  free = 0.00M\\n17179869184\\n{ 0.10 0.10 0.10 }\\n10\\n'")):
         (stub / name).write_text(f"#!/bin/sh\n{body}\n", encoding="utf-8")
         (stub / name).chmod(0o755)
     env = {**os.environ, "HOME": str(home), "USERPROFILE": str(home), "TMPDIR": str(home),
@@ -766,7 +799,7 @@ def leg_hook_level_via_retry_budget() -> None:
     home = Path(tempfile.mkdtemp(prefix="heavy-admission-hook-home-"))
     stub = home / "bin"  # an empty ps and an idle sysctl: the verdict can't depend on this machine
     stub.mkdir()
-    for name, body in (("ps", ""), ("sysctl", "printf '1\\n57\\ntotal = 0.00M  used = 0.00M  free = 0.00M\\n17179869184\\n'")):
+    for name, body in (("ps", ""), ("sysctl", "printf '1\\n57\\ntotal = 0.00M  used = 0.00M  free = 0.00M\\n17179869184\\n{ 0.10 0.10 0.10 }\\n10\\n'")):
         (stub / name).write_text(f"#!/bin/sh\n{body}\n", encoding="utf-8")
         (stub / name).chmod(0o755)
     env = {**os.environ, "HOME": str(home), "USERPROFILE": str(home), "TMPDIR": str(home),
@@ -787,7 +820,7 @@ def leg_hook_level_via_retry_budget() -> None:
 
 def main() -> int:
     print("heavy_admission controls")
-    for leg in (leg_corpora, leg_decision, leg_counting, leg_git_push, leg_pathprobe,
+    for leg in (leg_corpora, leg_decision, leg_load, leg_counting, leg_git_push, leg_pathprobe,
                 leg_win32_pathprobe, leg_forwarded_prefix_leak, leg_fifo_hook, leg_leak_control,
                 leg_negative_controls, leg_hook_level_via_retry_budget):
         leg()

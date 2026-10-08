@@ -113,6 +113,9 @@ EN_POSITIVE=(
     "had a meeting just now"              # postfix "just now" temporal anchor
     "just did a call with the client"     # "did" as a completion verb
     "finished a call with the client"     # bare finished + core meeting noun
+    # "sync" with a person stays a meeting signal in the unanchored forms
+    "the sync with Dana is done"
+    "sync with Sam just ended"
 )
 for p in "${EN_POSITIVE[@]}"; do
     out=$(run_hook "$p")
@@ -213,6 +216,14 @@ NEGATIVE=(
     # meeting signal. Guards NOUN_EN_CORE excluding review/session/chat.
     "finished the review of the contract"
     "ended the session early"
+    # "sync" as a data/vault/calendar sync, and status questions. Both
+    # fired the full cascade before NOUN_EN_UNANCHORED / QUESTION_LEAD.
+    "Check if the sync is finished."
+    "the sync is done"
+    "is the Drive sync finished yet"
+    "the sync's done"
+    "Dropbox's sync is done"
+    "check if the meeting is finished"
     "saca un café"
     "trae el café"
 )

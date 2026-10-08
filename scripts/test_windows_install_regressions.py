@@ -167,6 +167,20 @@ def test_ascii_safe_win_path(ins) -> None:
 # --------------------------------------------------------------------------
 # 3. home-hook deploy
 # --------------------------------------------------------------------------
+def _sandbox_env(home) -> dict:
+    """Environment for a child that runs the hook installer for real.
+
+    --settings moves only the hook merge. The same run links Claude Code's memory
+    into $VAULT_ROOT and schedules the daily maintenance job under whatever HOME it
+    is given, and launchd keys that job by label for the whole account. So the child
+    gets a throwaway HOME (and USERPROFILE, which is what Windows reads), no
+    VAULT_ROOT, and the installer's own opt-out from scheduling."""
+    env = dict(os.environ, HOME=str(home), USERPROFILE=str(home),
+               HOMEDRIVE="", HOMEPATH="", ABS_NO_AUTO_GC="1")
+    env.pop("VAULT_ROOT", None)
+    return env
+
+
 def test_home_hooks_deployed(ins) -> None:
     with tempfile.TemporaryDirectory() as td:
         cfg = Path(td) / ".claude"
@@ -176,7 +190,7 @@ def test_home_hooks_deployed(ins) -> None:
             [sys.executable, str(INSTALLER),
              "--hooks-source", str(ROOT / "hooks.json"),
              "--settings", str(cfg / "settings.json"), "--quiet"],
-            capture_output=True, timeout=180, **ins._TEXT_UTF8)
+            capture_output=True, timeout=180, env=_sandbox_env(td), **ins._TEXT_UTF8)
         missing = [n for n in ins.HOME_HOOKS_INSTALLER_DEPLOYS
                    if not (cfg / "hooks" / n).is_file()]
         if missing:
@@ -201,7 +215,7 @@ def test_home_hooks_deployed(ins) -> None:
             [sys.executable, str(INSTALLER),
              "--hooks-source", str(ROOT / "hooks.json"),
              "--settings", str(cfg / "settings.json"), "--quiet"],
-            capture_output=True, timeout=180, **ins._TEXT_UTF8)
+            capture_output=True, timeout=180, env=_sandbox_env(td), **ins._TEXT_UTF8)
         baks = list((cfg / "hooks").glob("*.bak-*"))
         if baks:
             bad("re-running does not back up unchanged hooks", str([b.name for b in baks]))

@@ -87,17 +87,21 @@ REAL_RESULT="$(bash "$PROBE_HARNESS")"
 # ── 3 + 4: git broken -> yellow (never red), and the IT-request text appears ──
 # --json mode buckets messages by severity, so this is immune to whatever
 # else is red/yellow in this environment (network, Claude Code, disk space).
+# "git" is matched as a whole word: with the network down, red holds
+# "GitHub NOT reachable at https://github.com", which a substring check
+# reads as the git message.
 JSON_OUT="$TMP/broken.json"
 PATH="$BROKEN_GIT_DIR:$PATH" bash "$PREFLIGHT" --json > "$JSON_OUT" 2>/dev/null || true
 python3 - "$JSON_OUT" <<'PY' || fail "3: git-broken JSON assertions failed (see stderr)"
-import json, sys
+import json, re, sys
 data = json.load(open(sys.argv[1]))
 yellow = "\n".join(data["lines"]["yellow"])
 red = "\n".join(data["lines"]["red"])
-if "git" not in yellow.lower():
+git_word = re.compile(r"\bgit\b", re.IGNORECASE)
+if not git_word.search(yellow):
     print("git message not found in lines.yellow: " + yellow, file=sys.stderr)
     sys.exit(1)
-if "git" in red.lower():
+if git_word.search(red):
     print("git message found in lines.red (must never block — the archive-entry "
           "fetch already works without git): " + red, file=sys.stderr)
     sys.exit(1)
