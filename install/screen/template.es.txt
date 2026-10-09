@@ -8,7 +8,7 @@ Si decís que sí, esto queda en tu computadora:
     corre solo, en cada sesión.
 ?vault_hooks     {vault_hooks} más cuando exista tu vault.
 ?allow_hooks     Algunos aprueban ("allow") ediciones de archivos y comandos de
-?allow_hooks     shell que pasan sus chequeos, así que Claude Code no te pregunta.
+?allow_hooks     shell, así que Claude Code deja de preguntarte por esos.
   Skills en ~/.claude/skills, comandos slash en ~/.claude/commands.
   Marketplaces de plugins: {marketplaces}
   Plugins activados: {plugins}

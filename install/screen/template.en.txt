@@ -7,8 +7,8 @@ If you say yes, this stays on your computer:
   {hooks} hooks in ~/.claude/settings.json: scripts that Claude Code
     runs on its own, in every session.
 ?vault_hooks     {vault_hooks} more once your vault exists.
-?allow_hooks     Some of them approve ("allow") file edits and shell commands that
-?allow_hooks     pass their checks, so Claude Code stops asking you about those.
+?allow_hooks     Some of them approve ("allow") file edits and shell commands,
+?allow_hooks     so Claude Code stops asking you about those.
   Skills in ~/.claude/skills, slash commands in ~/.claude/commands.
   Plugin marketplaces: {marketplaces}
   Plugins switched on: {plugins}
