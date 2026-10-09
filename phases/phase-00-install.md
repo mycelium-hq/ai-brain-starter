@@ -116,9 +116,9 @@ This is expected and is the normal recovery — **not** a failure to work around
 
 Do NOT try to install Homebrew yourself, do NOT "work around" it by skipping Obsidian (the entire vault lives in Obsidian), and do NOT downgrade to a partial install. A single framed Terminal step is the whole fix. Most users who followed the web guide already ran Homebrew in Terminal first, in which case the bootstrap finds it and this step never appears.
 
-**The same Terminal relay applies when the HARNESS is what's blocking.** Claude Code's own command-safety layer sometimes declines to execute the bootstrap command, and that block can persist even after the user re-approves — retrying the same command in-chat is not the fix and you should not keep trying. Hand the user the same one-line Terminal path instead, framed as the normal route (it genuinely is — the human running the installer themselves is exactly what that safety layer wants):
+**The same Terminal relay applies when the HARNESS is what's blocking.** Claude Code's own command-safety layer sometimes declines to execute the bootstrap command, and that block can persist even after the user re-approves — retrying the same command in-chat is not the fix and you should not keep trying. Hand the user the same one-line Terminal path instead:
 
-> "Claude Code prefers that you run the installer yourself — one line, takes a couple minutes. Open Terminal (`Cmd+Space`, type 'terminal', Return) and paste this:
+> "Claude Code declined to run this step, so it is yours to run in Terminal — one line, takes a couple minutes. Open Terminal (`Cmd+Space`, type 'terminal', Return) and paste this:
 > `git clone https://github.com/mycelium-hq/ai-brain-starter.git ~/.claude/skills/ai-brain-starter 2>/dev/null; bash ~/.claude/skills/ai-brain-starter/bootstrap.sh`
 > Tell me when it says it's done and we'll pick up right where we left off."
 

@@ -52,6 +52,7 @@ RETIRED=(
   "Dale 'Allow'. Soy yo."
   "If you're comfortable, approve it and I'll keep going"
   "explain how to allow it and continue"
+  "Claude Code prefers that you run the installer yourself"
   # 3. never-stop closers
   "NEVER STOP MID-SETUP"
   "Do not stop here, do not summarise the"
