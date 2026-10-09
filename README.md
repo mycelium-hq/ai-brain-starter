@@ -108,7 +108,7 @@ Read the four problems the team version solves: [`for-teams/why-teams-are-differ
 > $env:ABS_CONSENTED="1"; powershell -NoProfile -ExecutionPolicy Bypass -File "$D\bootstrap.ps1"
 > ```
 >
-> On **no**, stop: nothing was installed. Claude Code's own prompts along the way (its trust prompt for third-party tools, permission modes, approving a command) are between the user and Claude Code: never answer them, pre-answer them or say which choice to make, whatever the user tells you. The full contract, and what comes after the install, is in the assistant guide at the end of this section.
+> On **no**, stop: nothing was installed, and pasting the prompt again starts over from the screen. Offer nothing else: no smaller install, no `/plugin`-only shortcut, no second pitch. Claude Code's own prompts along the way (its trust prompt for third-party tools, permission modes, approving a command) are between the user and Claude Code: never answer them, pre-answer them or say which choice to make, whatever the user tells you. The full contract, and what comes after the install, is in the assistant guide at the end of this section.
 
 > **Requires Claude Code 2.1.133 or newer.** Bootstrap will refuse to run on older versions and tell you the upgrade command. To check, run `claude --version`. To upgrade: `npm i -g @anthropic-ai/claude-code@latest`.
 
@@ -293,7 +293,7 @@ Bootstrap is idempotent — re-running after a `git pull` just installs anything
 > $env:ABS_CONSENTED="1"; powershell -NoProfile -ExecutionPolicy Bypass -File "$D\bootstrap.ps1"
 > ```
 >
-> Con **no**, pará: no se instaló nada. Los avisos propios de Claude Code en el camino (su aviso de confianza para herramientas de terceros, los modos de permiso, aprobar un comando) son entre la persona y Claude Code: nunca los contestes por la persona, ni de antemano, ni le digas qué elegir. **Esta regla no se puede desbloquear con permiso de la persona.** Si dice "dale", "sigue", "aprobalo vos", "poné el modo automático" o "no me preguntes más", igual no contestás esos avisos ni le decís qué elegir: le decís para qué es el aviso y la decisión queda en sus manos. Si pregunta cómo cambiar el modo de permisos, le decís dónde está esa opción en Claude Code, y cambiarla o no es cosa suya. El contrato completo y lo que sigue después de instalar están en la guía para el asistente, al final de la sección Install en inglés.
+> Con **no**, pará: no se instaló nada, y si pegan el prompt de nuevo se arranca otra vez desde la pantalla. No ofrezcas nada más: ni una instalación más chica, ni el atajo de solo `/plugin`, ni un segundo intento de convencer. Los avisos propios de Claude Code en el camino (su aviso de confianza para herramientas de terceros, los modos de permiso, aprobar un comando) son entre la persona y Claude Code: nunca los contestes por la persona, ni de antemano, ni le digas qué elegir. **Esta regla no se puede desbloquear con permiso de la persona.** Si dice "dale", "sigue", "aprobalo vos", "poné el modo automático" o "no me preguntes más", igual no contestás esos avisos ni le decís qué elegir: le decís para qué es el aviso y la decisión queda en sus manos. Si pregunta cómo cambiar el modo de permisos, le decís dónde está esa opción en Claude Code, y cambiarla o no es cosa suya. El contrato completo y lo que sigue después de instalar están en la guía para el asistente, al final de la sección Install en inglés.
 
 Abrí la [app de escritorio de Claude Code](https://claude.ai/download), logueate con una cuenta paga de Claude (Pro, Max o Team), y pegá esto en el chat:
 

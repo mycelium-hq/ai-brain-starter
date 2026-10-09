@@ -18,7 +18,7 @@ cat "$HOME/.claude/skills/ai-brain-starter/install/screen/default-posix.en.txt"
 Get-Content -Encoding UTF8 "$env:USERPROFILE\.claude\skills\ai-brain-starter\install\screen\default-windows.en.txt"
 ```
 
-Show it verbatim. Never summarize it, reword it, or add numbers of your own. Answer questions about it from this repository, then ask the same question again. On **yes**, go on to Step 0.0 and install with `ABS_CONSENTED=1` (Step 0.1); on "yes, without optional packs", run it as `ABS_CONSENTED=1 SKIP_VENDOR_SKILLS=1 bash ...`. On **no**, stop: nothing more is added, and they can come back any time.
+Show it verbatim. Never summarize it, reword it, or add numbers of your own. Answer questions about it from this repository, then ask the same question again. On **yes**, go on to Step 0.0 and install with `ABS_CONSENTED=1` (Step 0.1); on "yes, without optional packs", run it as `ABS_CONSENTED=1 SKIP_VENDOR_SKILLS=1 bash ...`. On **no**, stop: nothing more is added, and pasting the prompt again starts over from the screen. Offer nothing else: no smaller install, no `/plugin`-only shortcut, no second pitch.
 
 Do not show it again when the yes already exists: the user said yes to it in this session (the README install flow shows it and runs the installer itself), or `~/.claude/.ai-brain-starter-install.jsonl` already holds a `"phase": "consent"` line. Then Phase 0 is done: record it and go to Phase 1. An install someone ran from a terminal has no such line, so show the screen: it also covers what this interview adds.
 
