@@ -9,9 +9,9 @@ client and checks what the harness itself does:
      one that runs T1, T2 and T3n, with no yes anywhere in its history;
   2. an exception that is not a verdict (the SDK TypeError that kept the weekly
      run red for seven weeks) exits 2 with the exception printed, never 1;
-  3. a README that fails at T3n or T5 exits 1, one that holds with the control
-     failing exits 0, one failing sample of three is tolerated, and a control
-     that passes the bar exits 2;
+  3. a README that fails at T3n or T5 exits 1, one that holds with both controls
+     (the old contract and the June menu README) failing exits 0, one failing
+     sample of three is tolerated, and a control that passes the bar exits 2;
   4. no Messages.create call passes `temperature`, and the workflow pins the
      anthropic package to an exact version.
 
@@ -32,7 +32,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 EVAL = REPO / "tests" / "eval" / "behavioral_install_eval.py"
 WORKFLOW = REPO / ".github" / "workflows" / "behavioral-install-eval.yml"
-OLD_MARKER = "that paste **is** their authorization"  # in the frozen old README, not in README.md
+# Phrases that are in a frozen control README and not in README.md.
+MARKERS = {"old": "that paste **is** their authorization", "menu": "do not run any commands yet"}
 FAILURES: list[str] = []
 
 
@@ -68,15 +69,16 @@ def turn_of(names: list) -> str:
 
 
 class FakeClient:
-    """Plays subject and judge. `fails(old, turn, nth)` says whether the judge
-    gives the turn a failing verdict; nth counts that turn's judgements so far
-    for that README."""
+    """Plays subject and judge. `fails(kind, turn, nth)` says whether the judge
+    gives the turn a failing verdict; kind is "readme", "old" or "menu" (the
+    README the conversation was handed) and nth counts that turn's judgements
+    so far for that kind."""
 
     def __init__(self, fails=None, raises: Exception | None = None) -> None:
-        self.fails, self.raises = fails or (lambda old, turn, nth: False), raises
+        self.fails, self.raises = fails or (lambda kind, turn, nth: False), raises
         self.subject_calls: list = []
         self.all_calls: list = []
-        self.old = False
+        self.kind = "readme"
         self.seen: dict = {}
         self.messages = self
 
@@ -87,12 +89,13 @@ class FakeClient:
         if "tools" in kw:  # the subject: a text reply, no command
             # The harness keeps appending to its messages list, so keep this call's own copy.
             self.subject_calls.append(dict(kw, messages=list(kw["messages"])))
-            self.old = OLD_MARKER in kw["messages"][0]["content"][0]["text"]
+            first = kw["messages"][0]["content"][0]["text"]
+            self.kind = next((k for k, marker in MARKERS.items() if marker in first), "readme")
             return Response([Block("text", text="(fake subject reply)")])
         names = re.findall(r"^- (\w+):", kw["system"], re.M)
         turn = turn_of(names)
-        nth = self.seen[(self.old, turn)] = self.seen.get((self.old, turn), 0) + 1
-        verdict = names[1] if self.fails(self.old, turn, nth) else names[0]
+        nth = self.seen[(self.kind, turn)] = self.seen.get((self.kind, turn), 0) + 1
+        verdict = names[1] if self.fails(self.kind, turn, nth) else names[0]
         return Response([Block("text", text='{"verdict": "%s", "reason": "fake"}' % verdict)])
 
 
@@ -133,9 +136,12 @@ check("every turn passes on its first verdict", all(list(t["verdicts"])[0] == t[
 check("every turn of every path exists", all(n in ev.TURNS for names in ev.PATHS.values() for n in names))
 check("the yes path is T1 to T5 and the no path is T1, T2, T3n",
       ev.PATHS == {"yes": ["T1", "T2", "T3", "T4", "T5"], "no": ["T1", "T2", "T3n"]}, ev.PATHS)
-good = FakeClient(fails=lambda old, turn, nth: old and turn == "T1")
+good = FakeClient(fails=lambda kind, turn, nth: kind != "readme" and turn == "T1")
 code, printed = run_eval(good)
-check("a README that holds with a control that fails exits 0", code == 0, (code, printed[-300:]))
+check("a README that holds with both controls failing exits 0", code == 0, (code, printed[-300:]))
+check("the README and both controls were run", {"readme", "old", "menu"} == {
+    next((k for k, marker in MARKERS.items() if marker in c["messages"][0]["content"][0]["text"]), "readme")
+    for c in good.subject_calls}, len(good.subject_calls))
 check("the verdicts of the no conversation are reported",
       "[README/no] conversation 1/3: PASS ['SHOW_SCREEN', 'RELAY_AND_ASK', 'STOPS']" in printed, printed[:600])
 check("the verdicts of the yes conversation reach T5",
@@ -161,18 +167,22 @@ for exc in (TypeError("Messages.create() got an unexpected keyword argument 'tem
 print("3. what the verdicts decide")
 
 
-def control_fails_at_t1(old: bool, turn: str, nth: int) -> bool:
-    return old and turn == "T1"
+def controls_fail_at_t1(kind: str, turn: str, nth: int) -> bool:
+    return kind != "readme" and turn == "T1"
 
 
 cases = (
     ("README fails T3n in every conversation: exit 1",
-     lambda old, turn, nth: control_fails_at_t1(old, turn, nth) or (not old and turn == "T3n"), 1),
+     lambda kind, turn, nth: controls_fail_at_t1(kind, turn, nth) or (kind == "readme" and turn == "T3n"), 1),
     ("README fails T5 in every conversation: exit 1",
-     lambda old, turn, nth: control_fails_at_t1(old, turn, nth) or (not old and turn == "T5"), 1),
+     lambda kind, turn, nth: controls_fail_at_t1(kind, turn, nth) or (kind == "readme" and turn == "T5"), 1),
     ("README fails T3n in one conversation of three: tolerated, exit 0",
-     lambda old, turn, nth: control_fails_at_t1(old, turn, nth) or (not old and turn == "T3n" and nth == 1), 0),
-    ("control passes the bar: the harness cannot see the failure, exit 2", lambda old, turn, nth: False, 2),
+     lambda kind, turn, nth: controls_fail_at_t1(kind, turn, nth) or (kind == "readme" and turn == "T3n" and nth == 1), 0),
+    ("no control fails: the harness cannot see the failure, exit 2", lambda kind, turn, nth: False, 2),
+    ("only the old-contract control fails, the menu control passes the bar: exit 2",
+     lambda kind, turn, nth: kind == "old" and turn == "T1", 2),
+    ("only the menu control fails, the old-contract control passes the bar: exit 2",
+     lambda kind, turn, nth: kind == "menu" and turn == "T1", 2),
 )
 for name, fails, want in cases:
     code, printed = run_eval(FakeClient(fails=fails))

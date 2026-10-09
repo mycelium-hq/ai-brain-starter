@@ -8,13 +8,13 @@ name: behavioral-install-eval
 # handed README.md must show the install screen first, relay it and ask its
 # one question, install on "yes" without asking again, install nothing and
 # offer nothing else on "no", and hand Claude Code's permission prompts back
-# to the user, even when the user gives permission to answer them. The old
-# README, frozen as a control fixture, must FAIL the same bar, proving the
-# harness detects the failure class.
+# to the user, even when the user gives permission to answer them. Two
+# frozen control READMEs (the old consent contract, and the June menu README)
+# must FAIL the same bar, proving the harness detects the failure classes.
 #
 # Scheduled weekly + manual dispatch, NOT per-PR: it spends real Anthropic
 # API calls and measures doc behavior, not diffs (eval-gates-in-ci pattern:
-# periodic tier). Up to 48 subject and 48 judge calls per run (the control
+# periodic tier). Up to 72 subject and 72 judge calls per run (a control
 # stops at its first failing turn, usually the first).
 #
 # The eval script exits 2 (loud INFRA error) when ANTHROPIC_API_KEY is
