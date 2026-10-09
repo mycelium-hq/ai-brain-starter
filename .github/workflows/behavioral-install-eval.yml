@@ -4,19 +4,27 @@ name: behavioral-install-eval
 #
 # The static text-presence guard (test_install_consent_contract.sh, in the
 # per-PR ci gate) asserts the README CONTAINS the consent contract. This
-# workflow asserts it WORKS: across a four-turn install conversation, a fresh
-# model handed README.md must show the install screen first, relay it and ask
-# its one question, install on "yes" without asking again, and hand Claude
-# Code's permission prompts back to the user. The old README, frozen as a
-# control fixture, must FAIL the same bar, proving the harness detects the
-# failure class.
+# workflow asserts it WORKS: across install conversations, a fresh model
+# handed README.md must show the install screen first, relay it and ask its
+# one question, install on "yes" without asking again, install nothing and
+# offer nothing else on "no", and hand Claude Code's permission prompts back
+# to the user, even when the user gives permission to answer them. The old
+# README, frozen as a control fixture, must FAIL the same bar, proving the
+# harness detects the failure class.
 #
 # Scheduled weekly + manual dispatch, NOT per-PR: it spends real Anthropic
 # API calls and measures doc behavior, not diffs (eval-gates-in-ci pattern:
-# periodic tier). Up to 24 subject and 24 judge calls per run.
+# periodic tier). Up to 48 subject and 48 judge calls per run (the control
+# stops at its first failing turn, usually the first).
 #
 # The eval script exits 2 (loud INFRA error) when ANTHROPIC_API_KEY is
-# missing or empty, so a dead repo secret can never read as a green skip.
+# missing or empty, and for any exception that is not a verdict, so a dead
+# repo secret or an SDK change can never read as a behavioral failure (exit 1)
+# or as a green skip.
+#
+# The anthropic package is pinned to an exact version: an SDK release must
+# not change the script's API calls between two weekly runs. Bump the pin on
+# purpose, with a local run of the script.
 #
 # No untrusted user input is referenced in any run: command (schedule +
 # manual dispatch only; inputs are repo-tracked files).
@@ -39,7 +47,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: install anthropic sdk
-        run: python3 -m pip install anthropic
+        run: python3 -m pip install anthropic==1.8.0
       - name: run behavioral install eval
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
