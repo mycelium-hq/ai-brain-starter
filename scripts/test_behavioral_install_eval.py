@@ -96,8 +96,9 @@ class FakeClient:
         return Response([Block("text", text='{"verdict": "%s", "reason": "fake"}' % verdict)])
 
 
-def run_eval(client: FakeClient) -> tuple[int, str]:
-    """evaluate the harness main() against the fake client, return (exit code, what it printed)."""
+def run_eval(client: FakeClient) -> tuple[object, str]:
+    """Run the harness main() against the fake client: (exit code, what it printed).
+    A main() that raises instead of returning is reported as its exception, not a crash."""
     fake_sdk = types.ModuleType("anthropic")
     fake_sdk.Anthropic = lambda: client
     saved = (sys.modules.get("anthropic"), os.environ.get("ANTHROPIC_API_KEY"))
@@ -106,6 +107,8 @@ def run_eval(client: FakeClient) -> tuple[int, str]:
     try:
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             code = ev.main()
+    except Exception as e:  # noqa: BLE001
+        code = f"raised {type(e).__name__}: {e}"
     finally:
         for name, old in zip(("anthropic", "ANTHROPIC_API_KEY"), saved):
             store = sys.modules if name == "anthropic" else os.environ
