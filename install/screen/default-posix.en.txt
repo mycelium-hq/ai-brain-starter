@@ -2,7 +2,7 @@ AI Brain Starter on macOS or Linux: what this install adds
 Nothing has been installed or changed yet.
 
 If you say yes, this stays on your computer:
-  73 hooks in ~/.claude/settings.json: scripts that Claude Code
+  74 hooks in ~/.claude/settings.json: scripts that Claude Code
     runs on its own, in every session.
     3 more once your vault exists.
   AI Brain Starter's skills in ~/.claude/skills and its slash

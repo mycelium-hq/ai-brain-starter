@@ -3,7 +3,7 @@ Corporate profile.
 Nothing has been installed or changed yet.
 
 If you say yes, this stays on your computer:
-  70 hooks in ~/.claude/settings.json: scripts that Claude Code
+  71 hooks in ~/.claude/settings.json: scripts that Claude Code
     runs on its own, in every session.
   AI Brain Starter's skills in ~/.claude/skills and its slash
     commands in ~/.claude/commands.
