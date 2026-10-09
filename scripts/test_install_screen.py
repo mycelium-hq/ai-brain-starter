@@ -80,7 +80,7 @@ with tempfile.TemporaryDirectory() as tmp:
         check(f"{platform}: the screen shows the raised count", f"  {plus} hooks in " in text, text[:300])
 
 print("3. layout")
-# Why the default screen may run to 48 lines when the ticket asked for 40: the
+# Why the default screen may run to 48 lines, not the 40 first proposed: the
 # names are the consent. The default install adds a long list of marketplaces,
 # plugins, skill repos, remote MCP servers and tools, and a yes is only as
 # informed as that list is complete, so cutting it to fit 40 would cut the
