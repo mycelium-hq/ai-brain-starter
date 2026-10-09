@@ -7,23 +7,27 @@ Si decís que sí, esto queda en tu computadora:
   {hooks} hooks en ~/.claude/settings.json: scripts que Claude Code
     corre solo, en cada sesión.
 ?vault_hooks     {vault_hooks} más cuando exista tu vault.
-  Las skills de AI Brain Starter en ~/.claude/skills y sus comandos
-    en ~/.claude/commands.
+?allow_hooks     Algunos aprueban ("allow") ediciones de archivos y comandos de
+?allow_hooks     shell que pasan sus chequeos, así que Claude Code no te pregunta.
+  Skills en ~/.claude/skills, comandos slash en ~/.claude/commands.
   Marketplaces de plugins: {marketplaces}
   Plugins activados: {plugins}
   Skills copiadas de GitHub: {clones}
-?mcp   Servidores MCP en ~/.claude/.mcp.json: {mcp}
-  Herramientas, sólo las que te faltan: {tools}
+?mcp   Servidores MCP remotos en ~/.claude/.mcp.json:
+*mcp     {name} ({host}): recibe tu conversación cuando se usa
+  Herramientas, si faltan: {tools}
 ?it_tools   Quedan para tu equipo de IT, si faltan: {it_tools}
-?default   Actualizaciones: AI Brain Starter se actualiza solo desde GitHub
-?default     cada pocos días, hooks nuevos incluidos.
+?default   Se actualiza solo desde GitHub cada pocos días, con hooks nuevos.
 ?corporate   Actualizaciones y telemetría: apagadas, en ~/.claude/settings.json.
 
-El mismo sí cubre lo que agrega la entrevista de setup que sigue: tu
-vault, sus plugins de Obsidian y sus hooks, y tareas programadas
-(insights, respaldos, mantenimiento diario). Aparte te pregunto por los
-conectores como email, calendario o Slack, y por el registro opcional
-por email del final.
+El mismo sí cubre lo que agrega la entrevista: tu vault, sus plugins de
+Obsidian y hooks, un recordatorio del diario, un respaldo del vault, y:
+?posix   Tarea diaria, desde su segunda corrida: borra ramas de git fusionadas,
+?posix     worktrees y archivos de build en ~/dev. Para omitirla, poné antes
+?posix     ABS_NO_AUTO_GC=1.
+  Semanal y mensual (insights): Claude Code corre sin supervisión, con
+    permiso para editar archivos y correr comandos de shell.
+Aparte: conectores (email, calendario, Slack) y registro por email.
 
 Sin versión fija: las partes de terceros instalan su versión más nueva.
 Respaldos: los archivos de configuración se copian antes de cada cambio.

@@ -5,8 +5,9 @@ If you say yes, this stays on your computer:
   74 hooks in ~/.claude/settings.json: scripts that Claude Code
     runs on its own, in every session.
     3 more once your vault exists.
-  AI Brain Starter's skills in ~/.claude/skills and its slash
-    commands in ~/.claude/commands.
+    Some of them approve ("allow") file edits and shell commands that
+    pass their checks, so Claude Code stops asking you about those.
+  Skills in ~/.claude/skills, slash commands in ~/.claude/commands.
   Plugin marketplaces: getsentry/sentry-skills, trailofbits/skills,
     stripe/agent-toolkit, cloudflare/skills, AgriciDaniel/claude-seo,
     obra/superpowers, coreyhaines31/marketingskills,
@@ -19,17 +20,21 @@ If you say yes, this stays on your computer:
   Skills copied from GitHub: adelaidasofia/humanizer, obra/superpowers,
     yvgude/lean-ctx, CyberZenithX/Rich-Elicitation-Skill,
     vercel-labs/agent-skills
-  MCP servers in ~/.claude/.mcp.json: granola, chatprd
-  Tools, only the ones you are missing: Homebrew (macOS), git, Python,
-    Node, pipx, gh, Claude Code, Obsidian, graphify, fastmcp,
-    skill-seekers
-  Updates: AI Brain Starter updates itself from GitHub every few
-    days, new hooks included.
+  MCP servers in ~/.claude/.mcp.json, both remote:
+    granola (mcp.granola.ai): receives conversation content when used
+    chatprd (app.chatprd.ai): receives conversation content when used
+  Tools, if missing: Homebrew (macOS), git, Python, Node, pipx, gh,
+    Claude Code, Obsidian, graphify, fastmcp, skill-seekers
+  It updates itself from GitHub every few days, new hooks included.
 
-The same yes covers what the setup interview adds next: your vault,
-its Obsidian plugins and hooks, and scheduled jobs (insights, backups,
-daily upkeep). I will ask separately about connectors such as email,
-calendar or Slack, and about the optional email sign-up at the end.
+The same yes covers what the setup interview adds: your vault, its
+Obsidian plugins and hooks, a journal reminder, a vault backup, and:
+  Daily job, from its second run: deletes merged git branches, worktrees
+    and build output under ~/dev. Opt out: set ABS_NO_AUTO_GC=1 first.
+  Weekly and monthly insights: Claude Code runs unattended, allowed
+    to edit files and run shell commands.
+I will ask separately about connectors (email, calendar, Slack) and the
+optional email sign-up.
 
 Not pinned: third-party parts install their newest version.
 Backups: settings files are copied before every edit.

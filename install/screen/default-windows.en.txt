@@ -4,21 +4,25 @@ Nothing has been installed or changed yet.
 If you say yes, this stays on your computer:
   71 hooks in ~/.claude/settings.json: scripts that Claude Code
     runs on its own, in every session.
-  AI Brain Starter's skills in ~/.claude/skills and its slash
-    commands in ~/.claude/commands.
+    Some of them approve ("allow") file edits and shell commands that
+    pass their checks, so Claude Code stops asking you about those.
+  Skills in ~/.claude/skills, slash commands in ~/.claude/commands.
   Plugin marketplaces: kepano/obsidian-skills
   Plugins switched on: obsidian, context7, playwright
   Skills copied from GitHub: adelaidasofia/humanizer
-  MCP servers in ~/.claude/.mcp.json: granola, chatprd
-  Tools, only the ones you are missing: git, Python, Node, pipx, gh,
-    Claude Code, Obsidian, graphify, fastmcp
-  Updates: AI Brain Starter updates itself from GitHub every few
-    days, new hooks included.
+  MCP servers in ~/.claude/.mcp.json, both remote:
+    granola (mcp.granola.ai): receives conversation content when used
+    chatprd (app.chatprd.ai): receives conversation content when used
+  Tools, if missing: git, Python, Node, pipx, gh, Claude Code, Obsidian,
+    graphify, fastmcp
+  It updates itself from GitHub every few days, new hooks included.
 
-The same yes covers what the setup interview adds next: your vault,
-its Obsidian plugins and hooks, and scheduled jobs (insights, backups,
-daily upkeep). I will ask separately about connectors such as email,
-calendar or Slack, and about the optional email sign-up at the end.
+The same yes covers what the setup interview adds: your vault, its
+Obsidian plugins and hooks, a journal reminder, a vault backup, and:
+  Weekly and monthly insights: Claude Code runs unattended, allowed
+    to edit files and run shell commands.
+I will ask separately about connectors (email, calendar, Slack) and the
+optional email sign-up.
 
 Not pinned: third-party parts install their newest version.
 Backups: settings files are copied before every edit.

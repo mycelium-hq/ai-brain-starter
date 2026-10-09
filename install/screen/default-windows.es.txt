@@ -4,22 +4,24 @@ Todavía no se instaló ni se cambió nada.
 Si decís que sí, esto queda en tu computadora:
   71 hooks en ~/.claude/settings.json: scripts que Claude Code
     corre solo, en cada sesión.
-  Las skills de AI Brain Starter en ~/.claude/skills y sus comandos
-    en ~/.claude/commands.
+    Algunos aprueban ("allow") ediciones de archivos y comandos de
+    shell que pasan sus chequeos, así que Claude Code no te pregunta.
+  Skills en ~/.claude/skills, comandos slash en ~/.claude/commands.
   Marketplaces de plugins: kepano/obsidian-skills
   Plugins activados: obsidian, context7, playwright
   Skills copiadas de GitHub: adelaidasofia/humanizer
-  Servidores MCP en ~/.claude/.mcp.json: granola, chatprd
-  Herramientas, sólo las que te faltan: git, Python, Node, pipx, gh,
-    Claude Code, Obsidian, graphify, fastmcp
-  Actualizaciones: AI Brain Starter se actualiza solo desde GitHub
-    cada pocos días, hooks nuevos incluidos.
+  Servidores MCP remotos en ~/.claude/.mcp.json:
+    granola (mcp.granola.ai): recibe tu conversación cuando se usa
+    chatprd (app.chatprd.ai): recibe tu conversación cuando se usa
+  Herramientas, si faltan: git, Python, Node, pipx, gh, Claude Code,
+    Obsidian, graphify, fastmcp
+  Se actualiza solo desde GitHub cada pocos días, con hooks nuevos.
 
-El mismo sí cubre lo que agrega la entrevista de setup que sigue: tu
-vault, sus plugins de Obsidian y sus hooks, y tareas programadas
-(insights, respaldos, mantenimiento diario). Aparte te pregunto por los
-conectores como email, calendario o Slack, y por el registro opcional
-por email del final.
+El mismo sí cubre lo que agrega la entrevista: tu vault, sus plugins de
+Obsidian y hooks, un recordatorio del diario, un respaldo del vault, y:
+  Semanal y mensual (insights): Claude Code corre sin supervisión, con
+    permiso para editar archivos y correr comandos de shell.
+Aparte: conectores (email, calendario, Slack) y registro por email.
 
 Sin versión fija: las partes de terceros instalan su versión más nueva.
 Respaldos: los archivos de configuración se copian antes de cada cambio.
