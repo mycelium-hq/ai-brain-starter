@@ -75,6 +75,20 @@ The Python helper `scripts/_claude_router.py` had the same blind spot: when `cla
 
 ---
 
+## 2026-10-02: scripts you run by name stopped at `permission denied`
+
+**Who this affects:** anyone who runs a script from this repo by its path, with no `bash` or `python3` in front. The clearest case is `vault-safe-commit.sh`, whose own usage line shows it run that way.
+
+To run by name, a script needs a first line naming the program that runs it (the shebang) and the executable bit, which git stores for each file. Git had that bit off for 222 shebang files under `scripts/` and `hooks/`. Called by name, each of them stopped before its first line with `permission denied`. For `vault-safe-commit.sh` that meant nothing got committed, and anything chained after it without checking the result carried on as if the commit had happened.
+
+The 193 of them that are programs are now executable. The other 29 are libraries that other scripts load: the note-metadata extractors, a few shared helpers, and the session-close guard that the close scripts source. Nobody runs those on their own, so they stay as they were.
+
+A new test, `scripts/test_shebang_scripts_executable.py`, fails when a program under `scripts/` or `hooks/` that starts with a shebang is checked in without the executable bit. It reads the mode git will commit rather than the one on your disk, and it proves itself against the real `vault-safe-commit.sh` with the bit taken off.
+
+**If you worked around it with `chmod +x`:** git counts that as a local edit, and the auto-updater holds every update while it is there. Undo it with `git -C ~/.claude/skills/ai-brain-starter restore <the file you changed>`. The next update then brings the file in executable.
+
+---
+
 ## 2026-10-01: the session-close check and the close-time commit now look at your session's files only, not every session on the same checkout
 
 **Who this affects:** anyone who runs two Claude Code sessions at once on the same vault, whether on the plain checkout or inside one shared worktree.
