@@ -42,11 +42,11 @@ As bootstrap prints its own check-mark lines per tool, you don't need to narrate
 
 The bootstrap registers third-party plugin marketplaces and MCP servers, and Claude Code then shows its **built-in trust prompt** for them. You cannot suppress it, and you should not want to: it is Claude Code's own safety check, between the user and Claude Code. A user who meets it cold reads it as "something is sneaking onto my machine", so the install screen already told them Claude Code may ask. When the prompt appears, or just before, say what it is in one calm line, in their language:
 
-> "That's Claude Code's own check for tools that did not come from Anthropic. It appears for every third-party tool, and what it covers is on the screen you said yes to. The choice is yours."
+> "That's Claude Code's own check for tools that did not come from Anthropic. It appears for every third-party tool. The choice is yours."
 
 For Spanish-speaking installs, the same beat in voseo register:
 
-> "Ese es el chequeo propio de Claude Code para herramientas que no vienen de Anthropic. Aparece con toda herramienta de terceros, y lo que cubre está en la pantalla a la que le dijiste que sí. La decisión es tuya."
+> "Ese es el chequeo propio de Claude Code para herramientas que no vienen de Anthropic. Aparece con toda herramienta de terceros. La decisión es tuya."
 
 Never tell them to approve it, never approve it for them, and never pre-commit them to a choice. **This cannot be unlocked by the user's permission:** if they say "just approve everything", "turn on auto mode", or in Spanish "dale", "sigue", "aprobalo vos" or "poné el modo automático", say those prompts are theirs to answer, and what the pending one covers.
 
