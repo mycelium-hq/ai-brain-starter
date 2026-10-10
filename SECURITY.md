@@ -53,7 +53,7 @@ The `docs/POWER_TOOLS.md` file lists MCPs this project recommends. If you add ot
 
 Claude Code asks before running commands by default. You can allowlist command patterns to skip the prompt. Every allowlist entry is a tradeoff: less friction, but also less chance for you to catch a bad command.
 
-This install changes that default in one way, and its install screen says so before you say yes: some of its PreToolUse hooks answer `allow` for Bash commands and file edits that pass their checks, and an `allow` from a hook skips Claude Code's prompt for that call. A hook that blocks still blocks; a call no hook approves still asks.
+This install changes that default in one way, and its install screen says so before you say yes: some of its PreToolUse hooks answer `allow` for file edits and shell commands, and an `allow` from a hook skips Claude Code's prompt for that call, so Claude Code stops asking before it edits files or runs commands. A hook that blocks still blocks.
 
 Good defaults:
 
