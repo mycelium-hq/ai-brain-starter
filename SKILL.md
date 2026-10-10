@@ -47,7 +47,7 @@ These improvisations look helpful in the moment but break the install. Catch you
 `outcome` ∈ {`completed`, `skipped_on_user_no`, `errored`}. Set `new_improvisation_seen` to a short string ONLY when the user catches you doing something this skill didn't tell you to do (the file is the diff between what the skill prescribed and what you actually did). That string is the maintainer's signal for the next BANNED PATTERNS row. Use the `append-install-event` helper at `scripts/install-telemetry.py` when present; fall back to `jq -c .` from bash if not.
 </details>
 
-**Update check:** Before starting, check if this skill is up to date by running `cd ~/.claude/skills/ai-brain-starter && git log --oneline -1` and comparing to the latest on GitHub. If behind, update it: the install screen's yes covers updates, so do not ask again. Run `git pull`, read `docs/CHANGELOG.md`, and summarize what's new in plain English. If `~/.claude/.ai-brain-starter-pinned` exists, the corporate profile froze this install: leave it as is and say so.
+**Update check:** After the install-screen yes (Phase 0 Step 0.0a), never before it, check if this skill is up to date by running `cd ~/.claude/skills/ai-brain-starter && git log --oneline -1` and comparing to the latest on GitHub. If behind, update it: that yes covers updates, so do not ask again. Run `git pull`, read `docs/CHANGELOG.md`, and summarize what's new in plain English. If `~/.claude/.ai-brain-starter-pinned` exists, the corporate profile froze this install: leave it as is and say so.
 
 ## Already Set Up? Use This Instead
 
