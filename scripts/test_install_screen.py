@@ -7,7 +7,7 @@ screen tells the truth about the install, from the code that runs it:
   1. the committed screens are what scripts/install-screen.py renders now;
   2. the hook count is the installer's: one hook added to a copy of hooks.json
      raises the number on the screen by one (a hand-typed count fails this);
-  3. layout: 72 columns, 48 lines (40 for corporate), English ASCII-only, no "!"
+  3. layout: 72 columns, 50 lines (40 for corporate), English ASCII-only, no "!"
      or em dash;
   4. bootstrap.sh --dry-run, per profile, would add exactly the marketplaces,
      plugins, cloned repos and MCP servers its screen names (POSIX only; the
@@ -80,14 +80,17 @@ with tempfile.TemporaryDirectory() as tmp:
         check(f"{platform}: the screen shows the raised count", f"  {plus} hooks in " in text, text[:300])
 
 print("3. layout")
-# Why the default screen may run to 48 lines, not the 40 first proposed: the
+# Why the default screen may run to 50 lines, not the 40 first proposed: the
 # names are the consent. The default install adds a long list of marketplaces,
 # plugins, skill repos, remote MCP servers and tools, and a yes is only as
 # informed as that list is complete, so cutting it to fit 40 would cut the
 # consent, and the plain-words facts about hooks and scheduled jobs it must
-# also carry would be next. The corporate profile installs a handful of parts
-# and has no such list, so it keeps the original 40.
-LINE_LIMIT = {"default": 48, "corporate": 40}
+# also carry would be next. The first wording of those jobs fit in 48; saying
+# truthfully where the daily job runs, when it starts deleting, how to leave
+# it out, and that Claude runs the journal check-in takes two more lines. The
+# corporate profile installs a handful of parts and has no such list, so it
+# keeps the original 40.
+LINE_LIMIT = {"default": 50, "corporate": 40}
 for profile, platform in screen.SETS:
     for lang in screen.LANGS:
         path = screen.screen_path(profile, platform, lang)
