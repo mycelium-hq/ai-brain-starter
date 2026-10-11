@@ -21,7 +21,8 @@ Si decís que sí, esto queda en tu computadora:
 ?corporate   Actualizaciones y telemetría: apagadas, en ~/.claude/settings.json.
 
 El mismo sí cubre lo que agrega la entrevista: tu vault, sus plugins de
-Obsidian y hooks, un recordatorio del diario, un respaldo del vault, y:
+Obsidian y hooks, un respaldo del vault, un chequeo diario para tu
+diario que Claude corre a una hora programada, y:
 ?posix   Tarea diaria, desde su segunda corrida: borra ramas de git fusionadas,
 ?posix     worktrees y archivos de build en ~/dev. Para omitirla, poné antes
 ?posix     ABS_NO_AUTO_GC=1.

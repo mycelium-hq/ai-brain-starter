@@ -21,7 +21,8 @@ If you say yes, this stays on your computer:
 ?corporate   Updates and telemetry: off, set in ~/.claude/settings.json.
 
 The same yes covers what the setup interview adds: your vault, its
-Obsidian plugins and hooks, a journal reminder, a vault backup, and:
+Obsidian plugins and hooks, a vault backup, a daily journal check-in
+that Claude runs on a schedule, and:
 ?posix   Daily job, from its second run: deletes merged git branches, worktrees
 ?posix     and build output under ~/dev. Opt out: set ABS_NO_AUTO_GC=1 first.
   Weekly and monthly insights: Claude Code runs unattended, allowed

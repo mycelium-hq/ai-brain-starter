@@ -18,7 +18,8 @@ Si decís que sí, esto queda en tu computadora:
   Se actualiza solo desde GitHub cada pocos días, con hooks nuevos.
 
 El mismo sí cubre lo que agrega la entrevista: tu vault, sus plugins de
-Obsidian y hooks, un recordatorio del diario, un respaldo del vault, y:
+Obsidian y hooks, un respaldo del vault, un chequeo diario para tu
+diario que Claude corre a una hora programada, y:
   Semanal y mensual (insights): Claude Code corre sin supervisión, con
     permiso para editar archivos y correr comandos de shell.
 Aparte: conectores (email, calendario, Slack) y registro por email.
