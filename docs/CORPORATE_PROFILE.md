@@ -83,13 +83,14 @@ install gets the same additions. The install screen lists them under the same ye
 - Obsidian community plugins in the vault: Dataview, Templater, Tasks, Local REST
   API and Custom Sort. Local REST API serves the vault over a local HTTP port; if you
   enforce Restricted Mode (below), these plugins do not load.
-- A daily journal reminder at a time the user picks.
+- A daily journal check-in that Claude runs on a schedule, at a time the user picks.
 - Weekly and monthly insight reports: unattended Claude Code runs that read the
   journal and write notes, with file edits and commands allowed.
 - On macOS and Linux, a daily job at 04:30 that, besides vault upkeep, tidies git
   repos under `~/dev`: it removes merged branches, finished worktrees, old
   checkpoint stashes and rebuildable build files, and fast-forwards their main
-  checkouts. Set `ABS_NO_AUTO_GC=1` before the interview to leave it out.
+  checkouts. To leave it out, say so before answering the install screen: the
+  assistant sets `ABS_NO_AUTO_GC=1` in `~/.claude/settings.json`, and updates keep it.
 
 ### Excluded by default (and why)
 
