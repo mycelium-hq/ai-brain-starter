@@ -30,8 +30,9 @@ Si decís que sí, esto queda en tu computadora:
 El mismo sí cubre lo que agrega la entrevista: tu vault, sus plugins de
 Obsidian y hooks, un respaldo del vault, un chequeo diario para tu
 diario que Claude corre a una hora programada, y:
-  Tarea diaria, desde su segunda corrida: borra ramas de git fusionadas,
-    worktrees y archivos de build en ~/dev. Para omitirla, poné antes
+  Tarea diaria: borra ramas de git fusionadas y worktrees en tu vault.
+    En ~/dev borra lo mismo y archivos de build, desde su segunda
+    corrida. Para omitirla, avisame antes de responder y yo pongo
     ABS_NO_AUTO_GC=1.
   Semanal y mensual (insights): Claude Code corre sin supervisión, con
     permiso para editar archivos y correr comandos de shell.
