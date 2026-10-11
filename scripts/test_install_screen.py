@@ -175,7 +175,7 @@ check("second run stopped after phase 3", not runs[1]["finished"] and runs[1]["l
 check("third run never completed a phase", not runs[2]["finished"] and runs[2]["last"] is None, runs[2])
 
 print("7. the screen says hooks approve edits and commands exactly when a wired hook can")
-APPROVES = '("allow")'  # how both languages name it
+APPROVES = '"allow"'  # how both languages name it
 # The line follows the count. A screen without it while a wired hook can answer
 # "allow" leaves the README's sentence about it untrue; one with it when none can
 # says something false. The fix that stops those hooks answering reads 0 here and

@@ -5,8 +5,8 @@ Si decís que sí, esto queda en tu computadora:
   74 hooks en ~/.claude/settings.json: scripts que Claude Code
     corre solo, en cada sesión.
     3 más cuando exista tu vault.
-    Algunos aprueban ("allow") ediciones de archivos y comandos de
-    shell, así que Claude Code deja de preguntarte por esos.
+    Algunos responden "allow" para editar archivos y correr comandos de
+    shell, así que Claude Code deja de preguntarte antes de hacerlo.
   Skills en ~/.claude/skills, comandos slash en ~/.claude/commands.
   Marketplaces de plugins: getsentry/sentry-skills, trailofbits/skills,
     stripe/agent-toolkit, cloudflare/skills, AgriciDaniel/claude-seo,
