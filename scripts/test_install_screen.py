@@ -154,7 +154,7 @@ for consented, dry, corporate, expect in (("1", "0", "0", "default"), ("1", "0",
                                           ("0", "0", "0", None), ("1", "1", "0", None)):
     with tempfile.TemporaryDirectory() as tmp:
         os.makedirs(Path(tmp) / ".claude")
-        env = dict(os.environ, HOME=tmp, ABS_CONSENTED=consented, DRY_RUN=dry, CORPORATE_PROFILE=corporate)
+        env = dict(os.environ, HOME=tmp, USERPROFILE=tmp, ABS_CONSENTED=consented, DRY_RUN=dry, CORPORATE_PROFILE=corporate)
         bash(block.group(1) if block else "exit 3", env=env)
         log = Path(tmp) / ".claude" / ".ai-brain-starter-install.jsonl"
         lines = log.read_text(encoding="utf-8").splitlines() if log.is_file() else []

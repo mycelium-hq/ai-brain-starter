@@ -333,7 +333,7 @@ Environment:
   SKIP_VENDOR_SKILLS=1          Skip third-party plugin marketplaces (air-gapped)
   CORPORATE_PROFILE=1           Same as --profile corporate (hardened/compliance install)
   ABS_CONSENTED=1               The user said yes on the install screen (install/screen/):
-                                records that yes in ~/.claude/.ai-brain-starter-install.jsonl.
+                                records that yes (in ~/.claude/.ai-brain-starter-install.jsonl).
                                 Changes nothing else. An env var, not a flag, so an older
                                 installer already on disk ignores it instead of failing.
   REQUIRED_CLAUDE_VERSION       Override the minimum Claude Code version (default 2.1.133)
