@@ -6,7 +6,7 @@ Si decís que sí, esto queda en tu computadora:
   74 hooks en ~/.claude/settings.json: scripts que Claude Code
     corre solo, en cada sesión.
     3 más cuando exista tu vault.
-    Algunos responden "allow" para editar archivos y correr comandos de
+    Algunos responden "allow" a ediciones de archivos y comandos de
     shell, así que Claude Code deja de preguntarte antes de hacerlo.
   Skills en ~/.claude/skills, comandos slash en ~/.claude/commands.
   Marketplaces de plugins: kepano/obsidian-skills
@@ -18,8 +18,8 @@ Si decís que sí, esto queda en tu computadora:
   Actualizaciones y telemetría: apagadas, en ~/.claude/settings.json.
 
 El mismo sí cubre lo que agrega la entrevista: tu vault, sus plugins de
-Obsidian y hooks, un respaldo del vault, un chequeo diario para tu
-diario que Claude corre a una hora programada, y:
+Obsidian y hooks, un respaldo del vault, un chequeo de tu diario que
+Claude corre cada día a una hora programada, y:
   Tarea diaria: borra ramas de git fusionadas y worktrees en tu vault.
     En ~/dev hace fetch y fast-forward de checkouts limpios de main,
     y desde su segunda corrida borra lo mismo y archivos de build. Para

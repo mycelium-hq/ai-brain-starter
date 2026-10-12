@@ -7,7 +7,7 @@ Si decís que sí, esto queda en tu computadora:
   {hooks} hooks en ~/.claude/settings.json: scripts que Claude Code
     corre solo, en cada sesión.
 ?vault_hooks     {vault_hooks} más cuando exista tu vault.
-?allow_hooks     Algunos responden "allow" para editar archivos y correr comandos de
+?allow_hooks     Algunos responden "allow" a ediciones de archivos y comandos de
 ?allow_hooks     shell, así que Claude Code deja de preguntarte antes de hacerlo.
   Skills en ~/.claude/skills, comandos slash en ~/.claude/commands.
   Marketplaces de plugins: {marketplaces}
@@ -21,8 +21,8 @@ Si decís que sí, esto queda en tu computadora:
 ?corporate   Actualizaciones y telemetría: apagadas, en ~/.claude/settings.json.
 
 El mismo sí cubre lo que agrega la entrevista: tu vault, sus plugins de
-Obsidian y hooks, un respaldo del vault, un chequeo diario para tu
-diario que Claude corre a una hora programada, y:
+Obsidian y hooks, un respaldo del vault, un chequeo de tu diario que
+Claude corre cada día a una hora programada, y:
 ?posix   Tarea diaria: borra ramas de git fusionadas y worktrees en tu vault.
 ?posix     En ~/dev hace fetch y fast-forward de checkouts limpios de main,
 ?posix     y desde su segunda corrida borra lo mismo y archivos de build. Para
