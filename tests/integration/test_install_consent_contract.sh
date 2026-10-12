@@ -87,10 +87,18 @@ REQUIRED=(  # file|literal
   "README.md|\"ABS_NO_AUTO_GC\": \"1\""
   "README.md|still parses as JSON"
   "README.md|run step 2's last line with"
+  # an opt-out also removes a daily job that is already scheduled: the plist
+  # name and the crontab marker are the ones scripts/install-vault-daily-maintenance.sh writes
+  "README.md|com.abs.vault-daily-maintenance.plist"
+  "README.md|# ai-brain-starter: vault-daily-maintenance"
   "SKILL.md|That rule cannot be unlocked by the user's permission."
   "phases/phase-00-install.md|### Step 0.0a. Show the install screen and ask once"
   "phases/phase-00-install.md|This cannot be unlocked by the user's permission"
   "phases/phase-00-install.md|ABS_CONSENTED=1 bash"
+  # Phase 0 applies the opt-out on the yes, never before it, and removes an existing job
+  "phases/phase-00-install.md|On their yes, before Step 0.1"
+  "phases/phase-00-install.md|com.abs.vault-daily-maintenance.plist"
+  "phases/phase-00-install.md|# ai-brain-starter: vault-daily-maintenance"
   "bootstrap.sh|may pause to ask you to approve these tools"
   "bootstrap.ps1|may pause to ask you to approve these tools"
 )
