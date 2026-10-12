@@ -38,7 +38,7 @@ not run the script (it exited without the probe's output), or when it cannot
 be executed at all (missing, not executable, not a program). Anything that only
 says the machine is struggling is no verdict on the candidate, and it is kept:
 a probe that times out, one killed by a signal (an OOM killer), one that could
-not start because fork hit a process limit. Skipping on those would hand a
+not start because fork hit a process limit or memory ran out. Skipping on those would hand a
 script to an interpreter the hook never used, which on a loaded machine is the
 3.9 interpreter of the incident above. When no candidate runs a script,
 `sys.executable`: the hook is running, so it exists.
@@ -113,13 +113,16 @@ def _probe(interpreter: str, script: str, out_path: str):
         return None
     except OSError as exc:
         return False if exc.errno in _EXEC_IMPOSSIBLE else None
+    except (ValueError, TypeError):
+        return False  # an argv this candidate can never be run with
     except Exception:
-        return False
+        return None  # MemoryError and the like: the machine, not the candidate
     if proc.returncode < 0:
         return None  # killed by a signal: says nothing about the candidate
     try:
         with open(out_path, "rb") as fh:
-            ran = _SENTINEL.encode("ascii") in fh.read(4096)
+            # A wrapper may print a banner first; read well past it, but bounded.
+            ran = _SENTINEL.encode("ascii") in fh.read(1 << 20)
     except OSError:
         return None
     return proc.returncode == 0 and ran

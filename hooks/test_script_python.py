@@ -140,10 +140,13 @@ def witness_python(d: Path) -> Path:
 
 # --- 1. the resolver ------------------------------------------------------------------
 
-def resolve(path_entries, timeout=None, mkdtemp=None, cwd=None, run=None, os_name=None) -> str:
+def resolve(path_entries, timeout=None, mkdtemp=None, cwd=None, run=None, os_name=None, env=None) -> str:
     saved = (os.environ.get("PATH"), sp.PROBE_TIMEOUT_SEC, sp.tempfile.mkdtemp, os.getcwd(),
              sp.subprocess.run, sp.os.name)
+    saved_env = {k: os.environ.get(k) for k in (env or {})}
     try:
+        for k, v in (env or {}).items():
+            os.environ[k] = v
         os.environ["PATH"] = os.pathsep.join(str(p) for p in path_entries)
         sp._resolved = None
         if timeout is not None:
@@ -159,6 +162,11 @@ def resolve(path_entries, timeout=None, mkdtemp=None, cwd=None, run=None, os_nam
         return sp.script_python()
     finally:
         old_path, sp.PROBE_TIMEOUT_SEC, sp.tempfile.mkdtemp, old_cwd, sp.subprocess.run, sp.os.name = saved
+        for k, v in saved_env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
         os.chdir(old_cwd)
         if old_path is None:
             os.environ.pop("PATH", None)
@@ -246,14 +254,16 @@ def resolver_legs(tmp: Path) -> None:
     check("a candidate that cannot be executed at all is skipped",
           got == str(real), "got %s" % got)
 
-    # Windows: the old call went through CreateProcess, which appends .exe only.
+    # Windows: the old call went through CreateProcess, which appends .exe only. A
+    # WORKING python3.BAT sits earlier on PATH and PATHEXT names it, so a resolver
+    # that walked PATHEXT (as the first version did) would pick it.
     win = tmp / "win"
-    _exe(win / "python3.bat", "#!/bin/sh\nexit 1\n")
+    _exe(win / "python3.BAT", '#!/bin/sh\nexec "%s" "$@"\n' % REAL)
     exe = real_python(tmp / "winexe")
     exe_named = exe.parent / "python3.exe"
     exe.rename(exe_named)
-    got = resolve([win, exe_named.parent], os_name="nt")
-    check("on Windows only python3.exe is a candidate (.bat/.cmd never)",
+    got = resolve([win, exe_named.parent], os_name="nt", env={"PATHEXT": ".BAT"})
+    check("on Windows only python3.exe is a candidate, even past a working python3.BAT",
           got == str(exe_named), "got %s" % got)
 
 

@@ -278,6 +278,8 @@ SELF_CASES = [
      'import subprocess, sys\nsubprocess.run(["python3" or sys.executable, fp])\n', 1),
     ("argv: another name first, a bare name as its fallback, is flagged",
      'import subprocess\nsubprocess.run([PY or "python3", fp])\n', 1),
+    ("argv: sys.executable and a bare name (and, not or) is flagged",
+     'import subprocess, sys\nsubprocess.run([sys.executable and "python3", fp])\n', 1),
     ("ok: a version probe",
      'import subprocess\nsubprocess.run(["python3", "--version"])\n', 0),
     ("ok: argparse choices of plain words",

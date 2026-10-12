@@ -155,13 +155,21 @@ FILE_WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 #     `cat <<EOF >"$V/memo.md"`, json.dump / write_bytes / writelines / shutil.copy
 #     in a heredoc'd script, `git apply <<EOF`), and a `>` in a script body
 #     (`if len(l) > 80:`) or a `sys.stdout.write(` still read as a write.
-# So: heredoc bodies are split from the command's own lines; redirect and tee
-# TARGETS are read from the command's lines only; a script (a heredoc body, or the
-# line itself for `python3 -c`) counts only if it calls a file-writing API; a
-# heredoc fed to `git apply` / `patch` counts as the files it changes. Only that
-# text is matched against an artifact's name. Still not seen: cp, mv, sed -i and
-# other commands that write without a redirect (FILE_WRITE_TOOLS covers the
-# sessions that author files the usual way). Bug class:
+# So the command is split into its own lines and the heredoc bodies they open, each
+# body kept with the line that opens it. What counts as a write:
+#   - a redirect or tee TARGET on the command's own lines. A target that cannot be
+#     pinned down (a $variable, a backtick) counts the whole command, which is
+#     usually where the variable is set (`F=...; cat > "$F" <<EOF`, a for-list);
+#   - a line of the command, or a heredoc'd script, that calls a file-writing API.
+#     Writing to stdout or stderr is printing, not authoring. A writing script also
+#     brings its opener line, which can carry the target (`python3 - "$p" <<PY`);
+#   - a heredoc fed to a shell (`bash <<EOF`), read again as shell commands;
+#   - a heredoc fed to `git apply` / `patch`, as the files it changes (not a dry run).
+# Only that text is matched against an artifact's name. Still not seen: cp, mv,
+# sed -i and other commands that write without a redirect (FILE_WRITE_TOOLS covers
+# the sessions that author files the usual way), and a multi-line `python3 -c`
+# whose path and write call sit on different lines. A script that reads one file
+# and writes another counts as naming both. Bug class:
 # READ-CLASSIFIED-AS-AUTHORSHIP (family: MYC-766 false-block).
 
 # A heredoc opener and its delimiter word, quoted or not. A here-string (<<<) is not one.
@@ -170,21 +178,29 @@ _HEREDOC_START = re.compile(r"(?<!<)<<(?!<)-?\s*([\"']?)([A-Za-z_][\w.-]*)\1")
 # Not an fd duplication (>&2, 2>&1).
 _REDIRECT = re.compile(r"(?:^|[^<>&\d])(?:\d*|&)>>?(?!&)\s*(\"[^\"\n]*\"|'[^'\n]*'|[^\s;|&<>()]+)")
 _TEE = re.compile(r"\btee\b((?:[ \t]+(?:\"[^\"\n]*\"|'[^'\n]*'|[^\s;|&<>()]+))+)")
-# Script text that writes a file. Writing to stdout/stderr is printing, not authoring.
+_UNPINNED = re.compile(r"[$`]")
+# Script text that writes a file. Writing to stdout or stderr is printing, not authoring.
 _CODE_WRITE = re.compile(
-    r"write_text\s*\(|write_bytes\s*\(|(?<!stdout)(?<!stderr)\.write\s*\(|\.writelines\s*\("
-    r"|json\.dump\s*\(|shutil\.(?:copy\w*|move)\s*\(|os\.(?:replace|rename)\s*\("
-    r"|\bprint\s*\(.*\bfile\s*=|\bopen\s*\([^)]*,\s*(?:mode\s*=\s*)?[\"'][wax]"
+    r"write_text\s*\(|write_bytes\s*\(|\.writelines\s*\("
+    r"|(?<!stdout)(?<!stderr)(?<!stdout\.buffer)(?<!stderr\.buffer)\.write\s*\("
+    r"|\.(?:safe_)?dump\s*\(|shutil\.(?:copy\w*|move)\s*\(|os\.(?:replace|rename)\s*\("
+    r"|\bprint\s*\(.*\bfile\s*=(?!\s*sys\.(?:stdout|stderr)\b)"
+    r"|\bopen\s*\(.*,\s*(?:mode\s*=\s*)?[\"'][wax]"
 )
-# A heredoc fed to one of these names the files it changes.
-_PATCH_FEEDER = re.compile(r"\b(?:git\s+apply|patch)\b")
+# A heredoc fed to a shell is shell commands.
+_SHELL_FEEDER = re.compile(r"\b(?:bash|sh|zsh|dash|ksh)\b[^;&|\n]*<<")
+# A heredoc fed to one of these names the files it changes, unless it is a dry run.
+_PATCH_FEEDER = re.compile(
+    r"\bgit\s+apply\b(?![^\n]*\s--(?:check|stat|numstat|summary)\b)"
+    r"|\bpatch\b(?![^\n]*\s--dry-run\b)"
+)
 
 
-def _split_heredocs(cmd: str) -> tuple[str, list[str]]:
-    """(the command's own lines, the heredoc bodies they open), as bash reads them."""
+def _split_heredocs(cmd: str) -> tuple[str, list[tuple[str, str]]]:
+    """(the command's own lines, [(opener line, heredoc body), ...]), as bash reads them."""
     lines = cmd.split("\n")
     shell: list[str] = []
-    bodies: list[str] = []
+    bodies: list[tuple[str, str]] = []
     i = 0
     while i < len(lines):
         line = lines[i]
@@ -197,26 +213,35 @@ def _split_heredocs(cmd: str) -> tuple[str, list[str]]:
                 body.append(lines[i])
                 i += 1
             i += 1  # the delimiter line
-            bodies.append("\n".join(body))
+            bodies.append((line, "\n".join(body)))
     return "\n".join(shell), bodies
 
 
-def _bash_writes(cmd: str) -> str:
-    """The text of what this Bash command WRITES, to match artifact names against:
-    its redirect and tee targets, any script of its that calls a file-writing API,
-    and any patch it applies. Empty when the command only reads."""
+def _bash_writes(cmd: str, depth: int = 0) -> str:
+    """The text of what this Bash command WRITES, to match artifact names against.
+    Empty when the command only reads. See the comment above _HEREDOC_START."""
     shell, bodies = _split_heredocs(cmd)
     parts: list[str] = []
+    unpinned = False
     for m in _REDIRECT.finditer(shell):
         target = m.group(1).strip("\"'")
         if target and target != "/dev/null":
             parts.append(target)
-    parts += [m.group(1) for m in _TEE.finditer(shell)]
-    if _CODE_WRITE.search(shell):
-        parts.append(shell)  # e.g. python3 -c "...write_text(...)"
-    feeds_patch = bool(_PATCH_FEEDER.search(shell))
-    parts += [b for b in bodies if feeds_patch or _CODE_WRITE.search(b)]
-    return "\n".join(parts)
+            unpinned = unpinned or bool(_UNPINNED.search(target))
+    for m in _TEE.finditer(shell):
+        parts.append(m.group(1))
+        unpinned = unpinned or bool(_UNPINNED.search(m.group(1)))
+    if unpinned:
+        parts.append(shell)
+    parts += [line for line in shell.split("\n") if _CODE_WRITE.search(line)]
+    for opener, body in bodies:
+        if depth < 3 and _SHELL_FEEDER.search(opener):
+            parts.append(_bash_writes(body, depth + 1))
+        elif _PATCH_FEEDER.search(opener):
+            parts.append(body)
+        elif _CODE_WRITE.search(body):
+            parts += [opener, body]
+    return "\n".join(p for p in parts if p)
 
 
 def _norm(p: str | Path) -> str:

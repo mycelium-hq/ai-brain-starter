@@ -188,5 +188,36 @@ bash_case "a heredoc reading a sibling, output redirected elsewhere, soft-notes"
 print(open('$VAULT/skills/sibling.md').read())
 PY"
 
+# 16-21. Second review round. Writes the bare-<< regex caught and a target-only
+#    reader would lose (a variable target, a heredoc fed to a shell, a target passed
+#    as an argument, a path built with os.path.join), and reads that only print to
+#    stderr or only dry-run a patch.
+bash_case "cat > \"\$F\" with F set to our artifact blocks" 2 "$GAP_OURS" "F=\"$VAULT/skills/ours.md\"; cat > \"\$F\" <<'EOF'
+x
+EOF"
+bash_case "a heredoc fed to bash that redirects into our artifact blocks" 2 "$GAP_OURS" "bash <<'EOF'
+echo x > $VAULT/skills/ours.md
+EOF"
+bash_case "a heredoc'd script writing to the path in its argv blocks" 2 "$GAP_OURS" "python3 - \"$VAULT/skills/ours.md\" <<'PY'
+import sys
+open(sys.argv[1], 'w').write('x')
+PY"
+bash_case "a heredoc'd yaml.safe_dump into open(os.path.join(...), 'w') blocks" 2 "$GAP_OURS" "python3 - <<'PY'
+import os, yaml
+with open(os.path.join('$VAULT/skills', 'ours.md'), 'w') as f:
+    yaml.safe_dump({}, f)
+PY"
+bash_case "a heredoc that prints a sibling's file to stderr soft-notes" 0 "$GAP_THEIRS" "python3 - <<'PY'
+import sys
+print(open('$VAULT/skills/sibling.md').read(), file=sys.stderr)
+PY"
+bash_case "git apply --check (a dry run) of a sibling's patch soft-notes" 0 "$GAP_THEIRS" "git apply --check <<'EOF'
+--- a/skills/sibling.md
++++ b/skills/sibling.md
+@@ -1 +1 @@
+-a
++b
+EOF"
+
 echo
 echo "All assertions passed. verify-discoverability-on-close partition (MYC-766) holds."
