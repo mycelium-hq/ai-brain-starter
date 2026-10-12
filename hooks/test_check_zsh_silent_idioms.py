@@ -69,8 +69,8 @@ Detector 1 again:
       <rev>:<path> spec too.
   23. The detector-1 refusal says the unbraced form is unpredictable, and does
       not claim the command prints nothing (zsh can also fail outright).
-  24. Refspecs too: `git push` / `git fetch` with `"$b:refs/…"` deny. The
-      witnessed push sent `claude/<b>efs/rescue/…`: zsh read `:r` as a modifier.
+  24. Refspecs too: `git push` / `git fetch` with `"$b:refs/..."` deny. The
+      witnessed push sent `claude/<b>efs/rescue/...`: zsh read `:r` as a modifier.
 
 Stdlib only. Exit 0 = all pass.
 """

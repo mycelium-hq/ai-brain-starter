@@ -6,7 +6,7 @@ Two independent detectors (one raising never disarms the other), one bypass.
 
 1. git-ref, in any shell. An unbraced `$VAR:` plus a letter in a git object read
    (show, cat-file, grep, diff, log, archive, rev-parse, ls-tree) or a refspec
-   (push, fetch: `"claude/$b:refs/…"` pushes `…/$b` + `efs/…`). zsh can read
+   (push, fetch: `"claude/$b:refs/..."` pushes `.../$b` + `efs/...`). zsh can read
    it as a history modifier, so the result is unpredictable: `"$SHA:src/app.py"` is
    a bad substitution, `"$SHA:hooks/x"` reads `.ooks/x`. A silent miss looks
    exactly like "that path does not exist at that ref". The braced
