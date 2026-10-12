@@ -9,6 +9,22 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-10-12: hooks that run one of your scripts get past a session's `python3` shim
+
+**Who this affects:** anyone who runs this repo's hook tests inside a Claude Code session, on a machine where a plugin puts its own `python3` first on the PATH (the trailofbits modern-python plugin does). In normal use the hooks are unaffected: Claude Code runs them with a PATH that has no such shim.
+
+Two hooks run a Python script they do not ship. `verify-discoverability-on-close.py` runs your vault's discoverability verifier, and `check-rule-conflicts-on-write.py` runs your vault's rule-conflict detector. Both started it as `python3 <script>`. The shim refuses exactly that form: it prints advice and exits 1. The script never ran, each hook read the empty result as "nothing to report", and a test run inside a session passed or failed for the wrong reason.
+
+They now run the script with the first `python3` on the PATH that actually runs a script file, checked by running a tiny script and reading its output back. Where nothing on the PATH does, they use the Python that is running the hook. Outside a session this is the same Python the hooks used before. The obvious alternative, the hook's own Python in every case, would have broken them: a hook can be registered under an older Python than the script it runs needs, and the verifier then fails before printing anything, which reads the same as a clean result.
+
+Four places that start a script shipped in this repo now use the running Python, with no fallback to `python3` on the PATH: `pre-write-settings-lint.py`, `coach-auto-prescribe-on-journal.py`, the agentic-OS eval harness and the hookify rule-test template. The check that looks for this pattern now reads every tracked Python file, not only `scripts/` and `skills/`.
+
+`verify-discoverability-on-close.py` also stops treating a heredoc as a sign that the session wrote a file. A session that used `python3 - <<PY` only to read another session's file used to be blocked from closing on that session's gap. A heredoc that writes a file (`cat > memo.md <<EOF`, or a script that calls `write_text`) still counts.
+
+Not covered: `check-rule-conflicts-on-write.py` reads a field the detector does not produce, so it reports no conflicts with or without this change. That is a separate fix.
+
+---
+
 ## 2026-10-05: the maintenance installer leaves your launchd job alone under a different HOME
 
 **Who this affects:** anyone who runs this repo's tests on a Mac whose shell exports `VAULT_ROOT`, and anyone on a Mac who runs the daily-maintenance installer (`scripts/install-vault-daily-maintenance.sh`, directly or through the hook installer) under a `HOME` that is not the home directory their account's user record names: a `HOME` set by hand, say, or the same folder spelled with different capitals. The first group no longer reaches their real job. For the second, the job is now written but not loaded, and the installer says so.
