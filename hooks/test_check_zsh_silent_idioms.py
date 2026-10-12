@@ -69,6 +69,8 @@ Detector 1 again:
       <rev>:<path> spec too.
   23. The detector-1 refusal says the unbraced form is unpredictable, and does
       not claim the command prints nothing (zsh can also fail outright).
+  24. Refspecs too: `git push` / `git fetch` with `"$b:refs/…"` deny. The
+      witnessed push sent `claude/<b>efs/rescue/…`: zsh read `:r` as a modifier.
 
 Stdlib only. Exit 0 = all pass.
 """
@@ -451,6 +453,14 @@ def main() -> int:
           "unpredictable" in reason)
     check("23b reason does not claim the command prints nothing",
           "prints NOTHING" not in reason)
+
+    # --- 24: refspecs carry the same hazard ----------------------------------
+    expect_deny("24a git push refspec, the witnessed command",
+                'git push -q origin "claude/$b:refs/rescue/2026-10-12/$b"')
+    expect_deny("24b git fetch refspec", 'git fetch origin "$BRANCH:refs/remotes/x"')
+    expect_silent("24c braced push refspec",
+                  'git push -q origin "claude/${b}:refs/rescue/2026-10-12/${b}"')
+    expect_silent("24d plain push", "git push -q origin claude/catalog-english-body")
 
     if FAILURES:
         print(f"FAIL: {len(FAILURES)} of {CHECKS} control(s) failed")

@@ -5,7 +5,8 @@ PreToolUse Bash hook: bash idioms that silently do the wrong thing under zsh.
 Two independent detectors (one raising never disarms the other), one bypass.
 
 1. git-ref, in any shell. An unbraced `$VAR:` plus a letter in a git object read
-   (show, cat-file, grep, diff, log, archive, rev-parse, ls-tree). zsh can read
+   (show, cat-file, grep, diff, log, archive, rev-parse, ls-tree) or a refspec
+   (push, fetch: `"claude/$b:refs/…"` pushes `…/$b` + `efs/…`). zsh can read
    it as a history modifier, so the result is unpredictable: `"$SHA:src/app.py"` is
    a bad substitution, `"$SHA:hooks/x"` reads `.ooks/x`. A silent miss looks
    exactly like "that path does not exist at that ref". The braced
@@ -101,10 +102,10 @@ def _mask_quotes(code: str, kinds: str = "'\"") -> str:
 # Detector 1: unbraced `$VAR:path` in a git object read (fires in any shell).
 # ---------------------------------------------------------------------------
 
-# A git read that resolves a <rev>:<path> object spec.
+# A git command that resolves a <rev>:<path> object spec or a <src>:<dst> refspec.
 GIT_OBJECT_READ = re.compile(
     r"\bgit\b[^\n|;&]{0,200}?"
-    r"\b(show|cat-file|grep|diff|log|archive|rev-parse|ls-tree)\b"
+    r"\b(show|cat-file|grep|diff|log|archive|rev-parse|ls-tree|push|fetch)\b"
 )
 # `$VAR:` with NO braces, then a LETTER. zsh modifiers are letters, so `$PATH:/opt`,
 # `$HOST:8080` and `$SHA:.gitignore` are plain text in every shell and never match.
@@ -143,7 +144,7 @@ def detect_unbraced_git_ref(command: str, zsh: bool) -> list:
     if first is None:
         return []
     return [
-        f"BLOCKED by {GUARD}: `${first}:` is unbraced in a git object read.\n\n"
+        f"BLOCKED by {GUARD}: `${first}:` is unbraced in a git object read or refspec.\n\n"
         f"Under zsh, `$VAR:` followed by a letter can be read as a HISTORY MODIFIER, so the "
         f"unbraced form is unpredictable: it can fail outright or read an empty or "
         f"wrong path, and the braced form is always right. A silent miss looks "
