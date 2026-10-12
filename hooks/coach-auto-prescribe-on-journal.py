@@ -352,10 +352,8 @@ def main() -> int:
                 try:
                     proc = subprocess.run(
                         # sys.executable, not /usr/bin/python3: that absolute
-                        # path exists only on macOS/Linux. Not a bare "python3"
-                        # either: a session's PATH shim refuses `python3 <script>`.
-                        # The script ships in this repo (MYC-5434).
-                        [sys.executable, str(script),
+                        # path exists only on macOS/Linux.
+                        [sys.executable or "python3", str(script),
                          "--start", yesterday.isoformat(), "--end", yesterday.isoformat(),
                          "--vault-root", vroot, "--llm-model", "python"],
                         capture_output=True, text=True, timeout=30, check=False,

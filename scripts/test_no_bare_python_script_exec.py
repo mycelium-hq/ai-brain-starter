@@ -39,6 +39,9 @@ WHAT IT FLAGS (an AST scan; the literal shapes, not data flow across functions)
 WHAT IT LEAVES ALONE
     - `-c` and `-m` forms: the shim forwards them, and they run code, not a path.
     - sys.executable and absolute interpreter paths: not looked up on PATH.
+    - `sys.executable or "python3"`: the bare name is only the fallback for an
+      interpreter that cannot name its own path (sys.executable empty or None),
+      and every process a hook harness or a test launches by path has one.
     - Lists of plain words (argparse choices, interpreter candidate names).
     - Text a program PRINTS for a person to run. That is a different defect
       (the printed command is run by a session, not by this code), and it is
@@ -46,10 +49,11 @@ WHAT IT LEAVES ALONE
 
 SCOPE, STATED SO A CLEAN RUN IS NOT READ AS MORE THAN IT IS
     Every tracked .py file, listed by git. Until MYC-5434 it scanned scripts/
-    and skills/ only; the six older sites outside them (four in hooks/, one each
-    in tests/eval/ and templates/) were fixed before it widened. Two of the hook
-    sites ran vault scripts through a bare python3, so inside a session the
-    child was refused and the hook failed open.
+    and skills/ only. Of the six older sites outside them, four were fixed
+    before it widened (two hooks that ran vault scripts through a bare python3,
+    so inside a session the child was refused and the hook failed open, and one
+    each in tests/eval/ and templates/); the other two are the
+    `sys.executable or "python3"` shape above, which this suite now leaves alone.
 
 AN EXEMPTION
     A genuine exception carries `# bare-python-ok: <reason>` on the flagged line
@@ -90,6 +94,12 @@ def _func_name(call: ast.Call) -> str:
     return getattr(f, "id", "")
 
 
+def _is_sys_executable(node: ast.AST) -> bool:
+    """`sys.executable`, spelled through the module."""
+    return (isinstance(node, ast.Attribute) and node.attr == "executable"
+            and isinstance(node.value, ast.Name) and node.value.id == "sys")
+
+
 def _is_bare_interp(node: ast.AST, bound: set) -> bool:
     """Does this expression statically evaluate to a bare interpreter name?"""
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
@@ -99,6 +109,8 @@ def _is_bare_interp(node: ast.AST, bound: set) -> bool:
     if isinstance(node, ast.IfExp):
         return _is_bare_interp(node.body, bound) or _is_bare_interp(node.orelse, bound)
     if isinstance(node, ast.BoolOp):
+        if isinstance(node.op, ast.Or) and _is_sys_executable(node.values[0]):
+            return False  # the running interpreter first; the rest only if it has no path
         return any(_is_bare_interp(v, bound) for v in node.values)
     if isinstance(node, ast.Call) and _func_name(node) in ("which", "get", "getenv"):
         return any(_is_bare_interp(a, bound) for a in node.args)
@@ -260,6 +272,12 @@ SELF_CASES = [
      'import subprocess\nsubprocess.run(["python3", "-m", "pytest", "tests/x.py"])\n', 0),
     ("ok: absolute interpreter path",
      'import subprocess\nsubprocess.run(["/usr/bin/python3", fp])\n', 0),
+    ("ok: sys.executable first, a bare name only as its fallback",
+     'import subprocess, sys\nsubprocess.run([sys.executable or "python3", fp])\n', 0),
+    ("argv: a bare name first, sys.executable only as its fallback, is flagged",
+     'import subprocess, sys\nsubprocess.run(["python3" or sys.executable, fp])\n', 1),
+    ("argv: another name first, a bare name as its fallback, is flagged",
+     'import subprocess\nsubprocess.run([PY or "python3", fp])\n', 1),
     ("ok: a version probe",
      'import subprocess\nsubprocess.run(["python3", "--version"])\n', 0),
     ("ok: argparse choices of plain words",

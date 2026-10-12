@@ -76,11 +76,8 @@ def main() -> int:
 
     label = f"<pretooluse:{Path(file_path).name}>"
     result = subprocess.run(
-        # sys.executable, not "python3": Windows installs have no python3 on PATH,
-        # and inside a session a PATH shim can refuse `python3 <script>`. The lint
-        # script ships beside this hook, so this hook's own interpreter is the one
-        # it is maintained for (MYC-5434).
-        [sys.executable, str(LINT_SCRIPT),
+        # sys.executable, not "python3": Windows installs have no python3 on PATH.
+        [sys.executable or "python3", str(LINT_SCRIPT),
          "--strict", "--content", projected, "--label", label],
         capture_output=True,
         text=True,

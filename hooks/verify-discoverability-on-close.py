@@ -141,21 +141,82 @@ _resolve_vault_context("")
 # These are the primary "this session wrote X" signal.
 FILE_WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 
-# A Bash command only joins the "ours" fallback blob when it actually WRITES a
-# file (heredoc / redirect / tee / *.write_text()). A pure read that merely
-# NAMES an artifact — `git log -- discovery_foo_audited.md`, `rg foo MEMORY.md`,
-# `cat sibling.md` — must NOT mark that artifact as ours; doing so re-introduces
-# the exact false-block MYC-766 fixes. Safe direction: under-match (a write we
-# miss falls back to the reliable FILE_WRITE_TOOLS path-set) over over-match.
-# Bare `<<` is deliberately NOT a write hint. It matched ANY heredoc, including
-# `python3 - <<PY` used to deliver a READ-ONLY script, so a session that merely
-# inspected a sibling's artifact got it classified as authored and was
-# hard-blocked on someone else's gap (measured live: a close blocked on a sibling
-# session's audit memo, 16h older than the session and never edited by it).
-# Heredoc AUTHORSHIP is still caught: `cat > memo.md <<EOF` by `>\s`, a heredoc'd
-# script that writes by `write_text(` / `.write(`. Bug class:
+# A Bash command joins the "ours" fallback blob only for what it actually WRITES.
+# A pure read that merely NAMES an artifact — `git log -- discovery_foo_audited.md`,
+# `rg foo MEMORY.md`, `cat sibling.md` — must NOT mark that artifact as ours;
+# doing so re-introduces the exact false-block MYC-766 fixes.
+#
+# The command is read structurally, because one regex over the whole text was
+# wrong both ways (MYC-5434 review, measured):
+#   - a bare `<<` hint counted EVERY heredoc, so a `python3 - <<PY` that only read
+#     a sibling's memo hard-blocked the close on that sibling's gap (measured live:
+#     a memo 16h older than the session, never edited by it);
+#   - dropping `<<` lost real heredoc writes (`cat >memo.md <<EOF`,
+#     `cat <<EOF >"$V/memo.md"`, json.dump / write_bytes / writelines / shutil.copy
+#     in a heredoc'd script, `git apply <<EOF`), and a `>` in a script body
+#     (`if len(l) > 80:`) or a `sys.stdout.write(` still read as a write.
+# So: heredoc bodies are split from the command's own lines; redirect and tee
+# TARGETS are read from the command's lines only; a script (a heredoc body, or the
+# line itself for `python3 -c`) counts only if it calls a file-writing API; a
+# heredoc fed to `git apply` / `patch` counts as the files it changes. Only that
+# text is matched against an artifact's name. Still not seen: cp, mv, sed -i and
+# other commands that write without a redirect (FILE_WRITE_TOOLS covers the
+# sessions that author files the usual way). Bug class:
 # READ-CLASSIFIED-AS-AUTHORSHIP (family: MYC-766 false-block).
-_BASH_WRITE_HINT = re.compile(r"(?:\btee\b|write_text\s*\(|\.write\s*\(|>>|>\s)")
+
+# A heredoc opener and its delimiter word, quoted or not. A here-string (<<<) is not one.
+_HEREDOC_START = re.compile(r"(?<!<)<<(?!<)-?\s*([\"']?)([A-Za-z_][\w.-]*)\1")
+# A redirect that writes: >, >>, N>, &>, with or without a space before the target.
+# Not an fd duplication (>&2, 2>&1).
+_REDIRECT = re.compile(r"(?:^|[^<>&\d])(?:\d*|&)>>?(?!&)\s*(\"[^\"\n]*\"|'[^'\n]*'|[^\s;|&<>()]+)")
+_TEE = re.compile(r"\btee\b((?:[ \t]+(?:\"[^\"\n]*\"|'[^'\n]*'|[^\s;|&<>()]+))+)")
+# Script text that writes a file. Writing to stdout/stderr is printing, not authoring.
+_CODE_WRITE = re.compile(
+    r"write_text\s*\(|write_bytes\s*\(|(?<!stdout)(?<!stderr)\.write\s*\(|\.writelines\s*\("
+    r"|json\.dump\s*\(|shutil\.(?:copy\w*|move)\s*\(|os\.(?:replace|rename)\s*\("
+    r"|\bprint\s*\(.*\bfile\s*=|\bopen\s*\([^)]*,\s*(?:mode\s*=\s*)?[\"'][wax]"
+)
+# A heredoc fed to one of these names the files it changes.
+_PATCH_FEEDER = re.compile(r"\b(?:git\s+apply|patch)\b")
+
+
+def _split_heredocs(cmd: str) -> tuple[str, list[str]]:
+    """(the command's own lines, the heredoc bodies they open), as bash reads them."""
+    lines = cmd.split("\n")
+    shell: list[str] = []
+    bodies: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        shell.append(line)
+        i += 1
+        for m in _HEREDOC_START.finditer(line):
+            delim = m.group(2)
+            body: list[str] = []
+            while i < len(lines) and lines[i].strip() != delim:
+                body.append(lines[i])
+                i += 1
+            i += 1  # the delimiter line
+            bodies.append("\n".join(body))
+    return "\n".join(shell), bodies
+
+
+def _bash_writes(cmd: str) -> str:
+    """The text of what this Bash command WRITES, to match artifact names against:
+    its redirect and tee targets, any script of its that calls a file-writing API,
+    and any patch it applies. Empty when the command only reads."""
+    shell, bodies = _split_heredocs(cmd)
+    parts: list[str] = []
+    for m in _REDIRECT.finditer(shell):
+        target = m.group(1).strip("\"'")
+        if target and target != "/dev/null":
+            parts.append(target)
+    parts += [m.group(1) for m in _TEE.finditer(shell)]
+    if _CODE_WRITE.search(shell):
+        parts.append(shell)  # e.g. python3 -c "...write_text(...)"
+    feeds_patch = bool(_PATCH_FEEDER.search(shell))
+    parts += [b for b in bodies if feeds_patch or _CODE_WRITE.search(b)]
+    return "\n".join(parts)
 
 
 def _norm(p: str | Path) -> str:
@@ -176,7 +237,9 @@ def _get_last_assistant_text(transcript_path: str) -> str:
     if not transcript_path or not os.path.exists(transcript_path):
         return ""
     try:
-        with open(transcript_path) as f:
+        # The transcript is UTF-8 JSONL; the locale encoding (cp1252 on a stock
+        # Windows box) would mis-read every non-ASCII character without raising.
+        with open(transcript_path, encoding="utf-8", errors="replace") as f:
             lines = f.readlines()
     except Exception:
         return ""
@@ -220,7 +283,7 @@ def _session_written_paths(transcript_path: str) -> tuple[set[str], str]:
     if not transcript_path or not os.path.exists(transcript_path):
         return (written, "")
     try:
-        with open(transcript_path) as f:
+        with open(transcript_path, encoding="utf-8", errors="replace") as f:
             lines = f.readlines()
     except Exception:
         return (written, "")
@@ -245,10 +308,13 @@ def _session_written_paths(transcript_path: str) -> tuple[set[str], str]:
                     written.add(_norm(fp))
             elif name == "Bash":
                 cmd = inp.get("command", "")
-                # Only WRITE-style Bash joins the fallback blob — a read that
-                # names an artifact must not claim it as ours (MYC-766 false-block).
-                if isinstance(cmd, str) and cmd and _BASH_WRITE_HINT.search(cmd):
-                    bash_blob_parts.append(cmd)
+                # Only what the command WRITES joins the fallback blob — a read
+                # that names an artifact must not claim it as ours (MYC-766
+                # false-block). See _bash_writes.
+                if isinstance(cmd, str) and cmd:
+                    writes = _bash_writes(cmd)
+                    if writes:
+                        bash_blob_parts.append(writes)
     return (written, "\n".join(bash_blob_parts).lower())
 
 
@@ -287,7 +353,9 @@ def _run_verifier() -> list[dict]:
     try:
         result = subprocess.run(
             [script_python(), str(VERIFIER), "--hours", "24", "--json"],
-            capture_output=True, text=True, timeout=30,
+            # Explicit UTF-8: the gap paths are vault paths ("⚙️ Meta/..."), and a
+            # locale decode that raised here would read as "no gaps".
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
         )
     except Exception:
         return []

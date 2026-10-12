@@ -33,19 +33,31 @@ runs a tiny script FILE and must print that script's own output back, so any
 wrapper that refuses, or prints advice and exits 0, is judged by what it does
 rather than by where it lives.
 
-NO VERDICT IS NOT A REFUSAL. A candidate whose probe times out (a loaded
-machine) is kept: a refusing shim answers at once, and keeping it repeats the
-old behaviour instead of jumping to an interpreter the hook never used. When no
-candidate runs a script, `sys.executable`: the hook is running, so it exists.
+ONLY A REFUSAL SKIPS A CANDIDATE. A candidate is skipped when it ran and did
+not run the script (it exited without the probe's output), or when it cannot
+be executed at all (missing, not executable, not a program). Anything that only
+says the machine is struggling is no verdict on the candidate, and it is kept:
+a probe that times out, one killed by a signal (an OOM killer), one that could
+not start because fork hit a process limit. Skipping on those would hand a
+script to an interpreter the hook never used, which on a loaded machine is the
+3.9 interpreter of the incident above. When no candidate runs a script,
+`sys.executable`: the hook is running, so it exists.
 
 An empty or relative PATH entry is skipped. It resolves against the hook's cwd,
 which is wherever the session is standing, and a cloned repo can put a
-`bin/python3` there.
+`bin/python3` there. On Windows only `python3.exe` is considered: the old call
+went through CreateProcess, which appends `.exe` and nothing else, and a
+`.bat` or `.cmd` candidate would hand the script's arguments to cmd.exe.
+
+The probe writes into a file, not a pipe, so a grandchild that keeps a pipe
+open cannot hold a timed-out probe (on Windows, subprocess.run waits on the
+pipe after the kill with no timeout).
 
 Never raises. Stdlib only; Python 3.9+; POSIX and Windows.
 """
 from __future__ import annotations
 
+import errno
 import os
 import shutil
 import subprocess
@@ -57,19 +69,20 @@ import tempfile
 _SENTINEL = "__script_python_runs_ok__"
 
 # Seconds one probe may run before it counts as "no verdict" (kept, see above).
-# A refusing shim answers in milliseconds, so this only bounds what a loaded
-# machine can add to the hook; the verdict on timeout is the old behaviour anyway.
+# It bounds each probe, not the whole resolution: with one shim on PATH (the
+# usual case) a hook waits for one refusal, which takes milliseconds, and then
+# for one probe of the interpreter it goes on to use.
 PROBE_TIMEOUT_SEC = 5.0
+
+# An exec that cannot happen: the candidate will never run this script.
+_EXEC_IMPOSSIBLE = frozenset({errno.ENOENT, errno.ENOTDIR, errno.EACCES, errno.EPERM, errno.ENOEXEC})
 
 _resolved = None  # per process: a hook resolves once, however many scripts it runs
 
 
 def _candidates(name: str = "python3") -> list:
     """Absolute `name` executables on PATH, in PATH order, each listed once."""
-    if os.name == "nt":
-        exts = [e for e in os.environ.get("PATHEXT", ".COM;.EXE;.BAT;.CMD").split(os.pathsep) if e]
-    else:
-        exts = [""]
+    exts = [".exe"] if os.name == "nt" else [""]
     found = []
     for entry in os.environ.get("PATH", "").split(os.pathsep):
         if not entry or not os.path.isabs(entry):
@@ -81,22 +94,35 @@ def _candidates(name: str = "python3") -> list:
     return found
 
 
-def _probe(interpreter: str, script: str):
-    """True: it ran the script. False: it refused or could not start. None: no verdict."""
+def _probe(interpreter: str, script: str, out_path: str):
+    """True: it ran the script. False: it refused, or can never run it. None: no verdict."""
     try:
-        proc = subprocess.run(
-            [interpreter, script],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            timeout=PROBE_TIMEOUT_SEC,
-        )
+        out = open(out_path, "wb")
+    except OSError:
+        return None  # our own temp file, not the candidate
+    try:
+        with out:
+            proc = subprocess.run(
+                [interpreter, script],
+                stdin=subprocess.DEVNULL,
+                stdout=out,
+                stderr=subprocess.DEVNULL,
+                timeout=PROBE_TIMEOUT_SEC,
+            )
     except subprocess.TimeoutExpired:
         return None
+    except OSError as exc:
+        return False if exc.errno in _EXEC_IMPOSSIBLE else None
     except Exception:
         return False
-    # Bytes, not text: decoding a refusing wrapper's output must not be able to raise.
-    return proc.returncode == 0 and _SENTINEL.encode("ascii") in proc.stdout
+    if proc.returncode < 0:
+        return None  # killed by a signal: says nothing about the candidate
+    try:
+        with open(out_path, "rb") as fh:
+            ran = _SENTINEL.encode("ascii") in fh.read(4096)
+    except OSError:
+        return None
+    return proc.returncode == 0 and ran
 
 
 def _resolve():
@@ -115,8 +141,9 @@ def _resolve():
         probe = os.path.join(probe_dir, "probe.py")
         with open(probe, "w", encoding="ascii") as fh:
             fh.write("print(%r)\n" % _SENTINEL)
-        for candidate in candidates:
-            if _probe(candidate, probe) is not False:
+        for i, candidate in enumerate(candidates):
+            out_path = os.path.join(probe_dir, "out-%d" % i)
+            if _probe(candidate, probe, out_path) is not False:
                 return candidate
         return None
     except Exception:

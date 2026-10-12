@@ -65,7 +65,9 @@ with open(sys.argv[3],'w',encoding='utf-8') as f:
 " "$text" "$wrote" "$tpath"
   printf '{"gaps": %s}' "$gaps" > "$TMP/gaps.json"
   local stdin_json
-  stdin_json=$(python3 -c "import json,sys; print(json.dumps({'transcript_path':sys.argv[1]}))" "$tpath")
+  # cwd = the test vault: the hook resolves its vault from the payload's cwd first,
+  # so without it a vault-shaped directory the test is RUN from outranks VAULT_ROOT.
+  stdin_json=$(python3 -c "import json,sys; print(json.dumps({'transcript_path':sys.argv[1],'cwd':sys.argv[2]}))" "$tpath" "$VAULT")
   set +e
   printf '%s' "$stdin_json" | env -u DISCOVERABILITY_VERIFIER_BYPASS \
     VAULT_ROOT="$VAULT" \
@@ -144,6 +146,47 @@ PY"
 rc=$(run_hook "$CLOSING" "" "[$GAP_OURS]")
 unset TRANSCRIPT_BASH
 assert_rc "heredoc that writes our artifact still hard-blocks" 2 "$rc"
+
+# 9-15. The command is read structurally: redirect and tee targets on its own
+#    lines, file-writing calls in a script body, a patch it applies. Each of these
+#    was mis-read by one regex over the whole text (MYC-5434 review): the first four
+#    are writes a no-`<<` regex lost, the last three are reads it still took for writes.
+bash_case() {  # label expected-rc gap command
+  export TRANSCRIPT_BASH="$4"
+  local rc
+  rc=$(run_hook "$CLOSING" "" "[$3]")
+  unset TRANSCRIPT_BASH
+  assert_rc "$1" "$2" "$rc"
+}
+bash_case "cat >ours.md <<EOF (no space before the target) blocks" 2 "$GAP_OURS" "cat >$VAULT/skills/ours.md <<'EOF'
+x
+EOF"
+bash_case "cat <<EOF >\"ours.md\" (redirect after the heredoc opener) blocks" 2 "$GAP_OURS" "cat <<'EOF' >\"$VAULT/skills/ours.md\"
+x
+EOF"
+bash_case "a heredoc'd json.dump(..., open(ours, 'w')) blocks" 2 "$GAP_OURS" "python3 - <<'PY'
+import json
+json.dump({}, open('$VAULT/skills/ours.md', 'w'))
+PY"
+bash_case "git apply <<EOF of a patch to ours.md blocks" 2 "$GAP_OURS" "git apply <<'EOF'
+--- a/skills/ours.md
++++ b/skills/ours.md
+@@ -1 +1 @@
+-a
++b
+EOF"
+bash_case "a heredoc that sys.stdout.write()s a sibling's file soft-notes" 0 "$GAP_THEIRS" "python3 - <<'PY'
+import sys
+sys.stdout.write(open('$VAULT/skills/sibling.md').read())
+PY"
+bash_case "a '>' comparison inside a heredoc body is not a redirect" 0 "$GAP_THEIRS" "python3 - <<'PY'
+for l in open('$VAULT/skills/sibling.md'):
+    if len(l) > 80:
+        print(l)
+PY"
+bash_case "a heredoc reading a sibling, output redirected elsewhere, soft-notes" 0 "$GAP_THEIRS" "python3 - <<'PY' > /tmp/scan.txt
+print(open('$VAULT/skills/sibling.md').read())
+PY"
 
 echo
 echo "All assertions passed. verify-discoverability-on-close partition (MYC-766) holds."

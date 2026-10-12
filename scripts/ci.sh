@@ -1708,8 +1708,9 @@ PY_DIRECT=(
   hooks/test_check_zsh_silent_idioms.py
   # Hooks that run a script they do not ship (MYC-5434): past a refusing python3
   # shim first on PATH, and under PATH's python3 rather than the hook's own
-  # interpreter. Each hook leg carries a control that puts the old spawn back and
-  # shows the leg then fails. Its resolver legs pin hooks/_lib/script_python.py.
+  # interpreter. Each leg for a hook whose spawn changed carries a control that puts
+  # the old spawn back and shows the leg then fails. Its resolver legs pin
+  # hooks/_lib/script_python.py.
   hooks/test_script_python.py
 )
 dormant_py=()

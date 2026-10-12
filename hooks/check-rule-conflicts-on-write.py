@@ -112,6 +112,10 @@ def main():
             [script_python(), detector, file_path, "--json"],
             capture_output=True,
             text=True,
+            # text=True alone decodes with the LOCALE encoding, so a cp1252
+            # console turns the detector's vault paths into a crash.
+            encoding="utf-8",
+            errors="replace",
             timeout=8,
             env=env,
         )
@@ -167,4 +171,10 @@ def main():
 
 
 if __name__ == "__main__":
+    # Windows cp1252-console safety: the message carries vault paths and rule text.
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8")  # Python 3.7+
+        except (AttributeError, ValueError):
+            pass
     main()

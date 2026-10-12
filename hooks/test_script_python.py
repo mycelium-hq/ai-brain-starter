@@ -15,8 +15,11 @@ WHAT THIS PINS
   1. hooks/_lib/script_python.py: past a refusing shim; the first python3 when
      there is none (the old call's choice); sys.executable when nothing on PATH
      runs a script; relative PATH entries ignored; a wrapper that prints advice
-     and exits 0 is skipped; a probe that times out keeps its candidate; no temp
-     dir keeps the first candidate.
+     and exits 0 is skipped. Only a refusal skips: a probe that times out, one
+     killed by a signal, and one that cannot fork right now (EAGAIN) all keep
+     their candidate, while a candidate that cannot be executed at all is
+     skipped; no temp dir keeps the first candidate. On Windows only
+     python3.exe is a candidate (simulated by setting os.name).
   2. verify-discoverability-on-close.py, refusing shim first on PATH: the
      verifier still runs and the hook blocks on this session's gap. The same hook
      with ["python3", ...] put back does not block. That control is what makes
@@ -29,8 +32,10 @@ WHAT THIS PINS
      where no pre-3.12 interpreter is installed.
   5. check-rule-conflicts-on-write.py, refusing shim first on PATH: the vault
      detector runs and its result is surfaced; the old form surfaces nothing.
-  6. pre-write-settings-lint.py (its lint ships beside it, so sys.executable)
-     still blocks a duplicate-key write with a refusing shim first on PATH.
+  6. pre-write-settings-lint.py (its lint ships beside it, so
+     `sys.executable or "python3"`, unchanged) still blocks a duplicate-key
+     write with a refusing shim first on PATH. A regression check, not a
+     control: its spawn did not change.
 
 Fake interpreters are /bin/sh scripts, so this runs on POSIX only and prints a
 SKIP line on Windows. Plain script, no pytest; registered in scripts/ci.sh
@@ -38,6 +43,7 @@ PY_DIRECT. Stdlib only; Python 3.9+.
 """
 from __future__ import annotations
 
+import errno
 import json
 import os
 import shutil
@@ -113,6 +119,19 @@ def stalled_python(d: Path) -> Path:
     return _exe(d / "python3", '#!/bin/sh\nexec "%s" 30\n' % sleep)
 
 
+def killed_once_python(d: Path) -> Path:
+    """Killed by a signal the first time it runs (an OOM killer, as far as a probe can tell), healthy after."""
+    marker = d / "killed-once"
+    return _exe(d / "python3",
+                '#!/bin/sh\nif [ ! -e "%s" ]; then : > "%s"; kill -9 $$; fi\nexec "%s" "$@"\n'
+                % (marker, marker, REAL))
+
+
+def unexecutable_python(d: Path) -> Path:
+    """Marked executable, but its interpreter line names nothing: the exec itself fails."""
+    return _exe(d / "python3", "#!/nonexistent/interpreter\n")
+
+
 def witness_python(d: Path) -> Path:
     """A python3 that runs scripts and marks the environment it ran them in."""
     return _exe(d / "python3",
@@ -121,8 +140,9 @@ def witness_python(d: Path) -> Path:
 
 # --- 1. the resolver ------------------------------------------------------------------
 
-def resolve(path_entries, timeout=None, mkdtemp=None, cwd=None) -> str:
-    saved = (os.environ.get("PATH"), sp.PROBE_TIMEOUT_SEC, sp.tempfile.mkdtemp, os.getcwd())
+def resolve(path_entries, timeout=None, mkdtemp=None, cwd=None, run=None, os_name=None) -> str:
+    saved = (os.environ.get("PATH"), sp.PROBE_TIMEOUT_SEC, sp.tempfile.mkdtemp, os.getcwd(),
+             sp.subprocess.run, sp.os.name)
     try:
         os.environ["PATH"] = os.pathsep.join(str(p) for p in path_entries)
         sp._resolved = None
@@ -132,9 +152,13 @@ def resolve(path_entries, timeout=None, mkdtemp=None, cwd=None) -> str:
             sp.tempfile.mkdtemp = mkdtemp
         if cwd is not None:
             os.chdir(cwd)
+        if run is not None:
+            sp.subprocess.run = run
+        if os_name is not None:
+            sp.os.name = os_name
         return sp.script_python()
     finally:
-        old_path, sp.PROBE_TIMEOUT_SEC, sp.tempfile.mkdtemp, old_cwd = saved
+        old_path, sp.PROBE_TIMEOUT_SEC, sp.tempfile.mkdtemp, old_cwd, sp.subprocess.run, sp.os.name = saved
         os.chdir(old_cwd)
         if old_path is None:
             os.environ.pop("PATH", None)
@@ -197,6 +221,41 @@ def resolver_legs(tmp: Path) -> None:
     except Exception as exc:  # noqa: BLE001 - the contract is "never raises"
         bad("the resolver never raises", "%s: %s" % (type(exc).__name__, exc))
 
+    # Only a refusal skips a candidate. Skipping on a struggling machine would hand
+    # the script to an interpreter the hook never used (the 3.9 of the incident).
+    killed = killed_once_python(tmp / "killed")
+    got = resolve([killed.parent, real.parent])
+    check("a probe killed by a signal keeps its candidate (no verdict, not a refusal)",
+          got == str(killed), "got %s" % got)
+
+    real_run = subprocess.run
+    calls = {"n": 0}
+
+    def eagain_first(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise BlockingIOError(errno.EAGAIN, "Resource temporarily unavailable")
+        return real_run(*args, **kwargs)
+
+    got = resolve([real.parent, other.parent], run=eagain_first)
+    check("a probe that cannot fork right now (EAGAIN) keeps its candidate",
+          got == str(real), "got %s" % got)
+
+    broken = unexecutable_python(tmp / "broken")
+    got = resolve([broken.parent, real.parent])
+    check("a candidate that cannot be executed at all is skipped",
+          got == str(real), "got %s" % got)
+
+    # Windows: the old call went through CreateProcess, which appends .exe only.
+    win = tmp / "win"
+    _exe(win / "python3.bat", "#!/bin/sh\nexit 1\n")
+    exe = real_python(tmp / "winexe")
+    exe_named = exe.parent / "python3.exe"
+    exe.rename(exe_named)
+    got = resolve([win, exe_named.parent], os_name="nt")
+    check("on Windows only python3.exe is a candidate (.bat/.cmd never)",
+          got == str(exe_named), "got %s" % got)
+
 
 # --- hooks under test -----------------------------------------------------------------
 
@@ -225,7 +284,8 @@ def hook_env(path_entries, **extra) -> dict:
 
 def run_hook(interpreter: str, hook: Path, payload: dict, env: dict, cwd: Path):
     return subprocess.run([interpreter, str(hook)], input=json.dumps(payload), env=env,
-                          cwd=str(cwd), capture_output=True, text=True, timeout=180)
+                          cwd=str(cwd), capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", timeout=180)
 
 
 GAP = {"artifact": {"repo": "vault", "path": "skills/ours.md", "kind": "skill",
@@ -306,7 +366,8 @@ def verify_legs(tmp: Path) -> None:
         if os.path.isfile(cand) and os.access(cand, os.X_OK):
             try:
                 ver = subprocess.run([cand, "-c", "import sys; print(sys.version_info[:2] < (3, 12))"],
-                                     capture_output=True, text=True, timeout=30).stdout.strip()
+                                     capture_output=True, text=True, encoding="utf-8",
+                                     errors="replace", timeout=30).stdout.strip()
             except (OSError, subprocess.SubprocessError):
                 continue
             if ver == "True":
@@ -365,7 +426,7 @@ def rule_conflict_legs(tmp: Path) -> None:
 
 
 def settings_lint_legs(tmp: Path) -> None:
-    print("=== 6. pre-write-settings-lint: sys.executable, unaffected by the shim ===")
+    print("=== 6. pre-write-settings-lint: sys.executable first, unaffected by the shim (regression check) ===")
     hook = HOOKS / "pre-write-settings-lint.py"
     shim = refusing_shim(tmp / "lshim")
     target = tmp / "proj" / ".claude" / "settings.json"
@@ -400,4 +461,10 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # Windows cp1252-console safety: failure messages can quote vault paths.
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8")  # Python 3.7+
+        except (AttributeError, ValueError):
+            pass
     sys.exit(main())
