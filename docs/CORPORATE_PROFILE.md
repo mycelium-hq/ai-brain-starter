@@ -92,8 +92,8 @@ install gets the same additions. The install screen lists them under the same ye
   second run it also removes merged branches, finished worktrees, old checkpoint
   stashes and rebuildable build files. To leave it out, say so before answering
   the install screen: after your yes the assistant sets `ABS_NO_AUTO_GC=1` in
-  `~/.claude/settings.json`, and updates keep it. A job that is already scheduled
-  is removed.
+  `~/.claude/settings.json`, and updates keep it. Leaving it out also removes a
+  job that is already scheduled.
 
 ### Excluded by default (and why)
 
