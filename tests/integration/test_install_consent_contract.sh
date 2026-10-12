@@ -80,6 +80,13 @@ REQUIRED=(  # file|literal
   "README.md|The first rule cannot be unlocked by the user's permission."
   "README.md|What Claude will ask you"
   "README.md|Qué te va a preguntar Claude"
+  # the screen invites "tell me before you answer" to leave out the daily job;
+  # the README chat install is the main path and this guide bullet is the only
+  # thing that tells the assistant how to keep that promise
+  "README.md|If the user asked to leave out the daily job"
+  "README.md|\"ABS_NO_AUTO_GC\": \"1\""
+  "README.md|still parses as JSON"
+  "README.md|run step 2's last line with"
   "SKILL.md|That rule cannot be unlocked by the user's permission."
   "phases/phase-00-install.md|### Step 0.0a. Show the install screen and ask once"
   "phases/phase-00-install.md|This cannot be unlocked by the user's permission"
