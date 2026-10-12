@@ -165,8 +165,11 @@ The installer can't make these choices for you — they depend on your environme
   `.obsidian/community-plugins.json` as `[]`). No third-party Obsidian plugin
   code runs in Restricted Mode — the simplest defense against the shell-plugin
   abuse class above.
-- **Review `settings.json` permission allowlists** before broad rollout. Prefer
-  narrow command patterns over wildcards. (See [SECURITY.md](../SECURITY.md).)
+- **Review `settings.json` `ask` and `deny` rules** before broad rollout. Some of
+  this install's hooks answer `allow` for file edits and shell commands, so
+  narrowing an allowlist no longer brings the prompt back; a matching `ask` rule
+  still prompts and a matching `deny` rule still blocks, whatever a hook
+  returns, and updates do not change them. (See [SECURITY.md](../SECURITY.md).)
 
 ---
 
