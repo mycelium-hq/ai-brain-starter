@@ -219,5 +219,17 @@ bash_case "git apply --check (a dry run) of a sibling's patch soft-notes" 0 "$GA
 +b
 EOF"
 
+# 22-25. Third review round. A variable target counts only through a value the
+#    same command assigns; open(..., 'w') is never matched past the call's end; a
+#    heredoc is shell commands only when its opener runs a shell or pipes into one.
+bash_case "a read of a sibling logged to \"\$OUT\" (set elsewhere) soft-notes" 0 "$GAP_THEIRS" "cat $VAULT/skills/sibling.md > \"\$OUT\""
+bash_case "print(open(sibling).read().replace('a', 'x')) soft-notes" 0 "$GAP_THEIRS" "python3 -c \"print(open('$VAULT/skills/sibling.md').read().replace('a', 'x'))\""
+bash_case "a heredoc into bash-tips.md that only SHOWS a redirect soft-notes" 0 "$GAP_THEIRS" "cat > $VAULT/notes/bash-tips.md <<'EOF'
+Read $VAULT/skills/sibling.md first, then: echo \"\$x\" > \"\$out\"
+EOF"
+bash_case "cat <<EOF | bash that redirects into our artifact blocks" 2 "$GAP_OURS" "cat <<'EOF' | bash
+echo x > $VAULT/skills/ours.md
+EOF"
+
 echo
 echo "All assertions passed. verify-discoverability-on-close partition (MYC-766) holds."

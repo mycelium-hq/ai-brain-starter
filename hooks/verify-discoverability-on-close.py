@@ -157,13 +157,17 @@ FILE_WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 #     (`if len(l) > 80:`) or a `sys.stdout.write(` still read as a write.
 # So the command is split into its own lines and the heredoc bodies they open, each
 # body kept with the line that opens it. What counts as a write:
-#   - a redirect or tee TARGET on the command's own lines. A target that cannot be
-#     pinned down (a $variable, a backtick) counts the whole command, which is
-#     usually where the variable is set (`F=...; cat > "$F" <<EOF`, a for-list);
-#   - a line of the command, or a heredoc'd script, that calls a file-writing API.
-#     Writing to stdout or stderr is printing, not authoring. A writing script also
-#     brings its opener line, which can carry the target (`python3 - "$p" <<PY`);
-#   - a heredoc fed to a shell (`bash <<EOF`), read again as shell commands;
+#   - a redirect or tee TARGET on the command's own lines. A target that is a
+#     $variable counts as the value the SAME command assigns it (`F=...; cat > "$F"`,
+#     `for f in ...; do cat > "$f"`); a variable set elsewhere adds nothing, so a
+#     read logged to `"$OUT"` stays a read;
+#   - a line of the command, or a heredoc'd script, that calls a file-writing API:
+#     open(..., 'w') (never matched past the call's closing paren), write_text,
+#     .write, a .dump() handed a stream. Writing to stdout or stderr is printing,
+#     not authoring. A writing script also brings its opener line, which can carry
+#     the target (`python3 - "$p" <<PY`);
+#   - a heredoc whose opener runs a shell or pipes into one (`bash <<EOF`,
+#     `cat <<EOF | sh`), read again as shell commands;
 #   - a heredoc fed to `git apply` / `patch`, as the files it changes (not a dry run).
 # Only that text is matched against an artifact's name. Still not seen: cp, mv,
 # sed -i and other commands that write without a redirect (FILE_WRITE_TOOLS covers
@@ -178,17 +182,25 @@ _HEREDOC_START = re.compile(r"(?<!<)<<(?!<)-?\s*([\"']?)([A-Za-z_][\w.-]*)\1")
 # Not an fd duplication (>&2, 2>&1).
 _REDIRECT = re.compile(r"(?:^|[^<>&\d])(?:\d*|&)>>?(?!&)\s*(\"[^\"\n]*\"|'[^'\n]*'|[^\s;|&<>()]+)")
 _TEE = re.compile(r"\btee\b((?:[ \t]+(?:\"[^\"\n]*\"|'[^'\n]*'|[^\s;|&<>()]+))+)")
-_UNPINNED = re.compile(r"[$`]")
+# Variables the command itself sets, and the references a target makes to them.
+_ASSIGN = re.compile(r"(?:^|[\s;&|(])([A-Za-z_]\w*)=(\"[^\"\n]*\"|'[^'\n]*'|[^\s;&|]*)")
+_FOR_IN = re.compile(r"\bfor\s+([A-Za-z_]\w*)\s+in\s+([^;\n]*)")
+_VAR_REF = re.compile(r"\$\{?([A-Za-z_]\w*)")
+# One call argument, nested calls allowed (two levels) but never past the call's end.
+_NESTED = r"\((?:[^()]|\([^()]*\))*\)"
+_ARG = r"(?:[^(),\n]|" + _NESTED + r")*"
 # Script text that writes a file. Writing to stdout or stderr is printing, not authoring.
 _CODE_WRITE = re.compile(
     r"write_text\s*\(|write_bytes\s*\(|\.writelines\s*\("
     r"|(?<!stdout)(?<!stderr)(?<!stdout\.buffer)(?<!stderr\.buffer)\.write\s*\("
-    r"|\.(?:safe_)?dump\s*\(|shutil\.(?:copy\w*|move)\s*\(|os\.(?:replace|rename)\s*\("
+    r"|\.(?:safe_)?dump\s*\(" + _ARG + r",\s*(?!sys\.(?:stdout|stderr)\b)[^)\s]"
+    r"|shutil\.(?:copy\w*|move)\s*\(|os\.(?:replace|rename)\s*\("
     r"|\bprint\s*\(.*\bfile\s*=(?!\s*sys\.(?:stdout|stderr)\b)"
-    r"|\bopen\s*\(.*,\s*(?:mode\s*=\s*)?[\"'][wax]"
+    r"|\bopen\s*\(" + _ARG + r",\s*(?:mode\s*=\s*)?[\"'][wax]"
 )
-# A heredoc fed to a shell is shell commands.
-_SHELL_FEEDER = re.compile(r"\b(?:bash|sh|zsh|dash|ksh)\b[^;&|\n]*<<")
+# A heredoc is shell commands when its opener runs a shell or pipes into one.
+_SHELLS = r"(?:\S*/)?(?:bash|sh|zsh|dash|ksh)\b"
+_SHELL_FEEDER = re.compile(r"(?:^\s*(?:\w+=\S*\s+)*(?:sudo\s+)?" + _SHELLS + r"|\|\s*" + _SHELLS + ")")
 # A heredoc fed to one of these names the files it changes, unless it is a dry run.
 _PATCH_FEEDER = re.compile(
     r"\bgit\s+apply\b(?![^\n]*\s--(?:check|stat|numstat|summary)\b)"
@@ -221,18 +233,24 @@ def _bash_writes(cmd: str, depth: int = 0) -> str:
     """The text of what this Bash command WRITES, to match artifact names against.
     Empty when the command only reads. See the comment above _HEREDOC_START."""
     shell, bodies = _split_heredocs(cmd)
+    assigned: dict[str, list[str]] = {}
+    for m in _ASSIGN.finditer(shell):
+        assigned.setdefault(m.group(1), []).append(m.group(2))
+    for m in _FOR_IN.finditer(shell):
+        assigned.setdefault(m.group(1), []).append(m.group(2))
     parts: list[str] = []
-    unpinned = False
+
+    def target(text: str) -> None:
+        parts.append(text)
+        for name in _VAR_REF.findall(text):
+            parts.extend(assigned.get(name, []))  # a variable set elsewhere adds nothing
+
     for m in _REDIRECT.finditer(shell):
-        target = m.group(1).strip("\"'")
-        if target and target != "/dev/null":
-            parts.append(target)
-            unpinned = unpinned or bool(_UNPINNED.search(target))
+        t = m.group(1).strip("\"'")
+        if t and t != "/dev/null":
+            target(t)
     for m in _TEE.finditer(shell):
-        parts.append(m.group(1))
-        unpinned = unpinned or bool(_UNPINNED.search(m.group(1)))
-    if unpinned:
-        parts.append(shell)
+        target(m.group(1))
     parts += [line for line in shell.split("\n") if _CODE_WRITE.search(line)]
     for opener, body in bodies:
         if depth < 3 and _SHELL_FEEDER.search(opener):
