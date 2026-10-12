@@ -87,10 +87,13 @@ install gets the same additions. The install screen lists them under the same ye
 - Weekly and monthly insight reports: unattended Claude Code runs that read the
   journal and write notes, with file edits and commands allowed.
 - On macOS and Linux, a daily job at 04:30 that, besides vault upkeep, tidies git
-  repos under `~/dev`: it removes merged branches, finished worktrees, old
-  checkpoint stashes and rebuildable build files, and fast-forwards their main
-  checkouts. To leave it out, say so before answering the install screen: the
-  assistant sets `ABS_NO_AUTO_GC=1` in `~/.claude/settings.json`, and updates keep it.
+  repos under `~/dev`. From its first run it fetches each repo and fast-forwards
+  the clean checkouts that sit on their default branch (usually `main`). From its
+  second run it also removes merged branches, finished worktrees, old checkpoint
+  stashes and rebuildable build files. To leave it out, say so before answering
+  the install screen: after your yes the assistant sets `ABS_NO_AUTO_GC=1` in
+  `~/.claude/settings.json`, and updates keep it. A job that is already scheduled
+  is removed.
 
 ### Excluded by default (and why)
 
