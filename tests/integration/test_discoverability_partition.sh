@@ -49,13 +49,17 @@ run_hook() {
   local text="$1" wrote="$2" gaps="$3"; shift 3
   local tpath="$TMP/transcript.jsonl"
   # Transcript: an assistant text message (the closing claim) + a tool_use that
-  # WROTE $wrote (empty string = wrote nothing this session).
+  # WROTE $wrote (empty string = wrote nothing this session), + a Bash tool_use
+  # running $TRANSCRIPT_BASH when that is exported (unset = no Bash call).
   python3 -c "
-import json,sys
+import json,os,sys
 text, wrote = sys.argv[1], sys.argv[2]
 recs = [{'type':'assistant','message':{'content':[{'type':'text','text':text}]}}]
 if wrote:
     recs.append({'type':'assistant','message':{'content':[{'type':'tool_use','name':'Write','input':{'file_path':wrote}}]}})
+bash = os.environ.get('TRANSCRIPT_BASH', '')
+if bash:
+    recs.append({'type':'assistant','message':{'content':[{'type':'tool_use','name':'Bash','input':{'command':bash}}]}})
 with open(sys.argv[3],'w',encoding='utf-8') as f:
     for r in recs: f.write(json.dumps(r)+'\n')
 " "$text" "$wrote" "$tpath"
@@ -121,6 +125,25 @@ assert_rc "non-closing claim skipped" 0 "$rc"
 # 6. Bypass -> skipped even with an authored gap.
 rc=$(run_hook "$CLOSING" "$OURS_ABS" "[$GAP_OURS]" DISCOVERABILITY_VERIFIER_BYPASS=1)
 assert_rc "DISCOVERABILITY_VERIFIER_BYPASS skips" 0 "$rc"
+
+# 7. A heredoc that only READS a sibling's artifact is not authorship. Bare `<<`
+#    used to count as a write hint, so this session was hard-blocked on someone
+#    else's gap for having looked at it (READ-CLASSIFIED-AS-AUTHORSHIP).
+export TRANSCRIPT_BASH="python3 - <<'PY'
+print(open('$VAULT/skills/sibling.md').read())
+PY"
+rc=$(run_hook "$CLOSING" "" "[$GAP_THEIRS]")
+unset TRANSCRIPT_BASH
+assert_rc "read-only heredoc naming a sibling artifact soft-notes, never blocks" 0 "$rc"
+
+# 8. A heredoc'd script that WRITES our artifact is still authorship.
+export TRANSCRIPT_BASH="python3 - <<'PY'
+from pathlib import Path
+Path('$VAULT/skills/ours.md').write_text('x')
+PY"
+rc=$(run_hook "$CLOSING" "" "[$GAP_OURS]")
+unset TRANSCRIPT_BASH
+assert_rc "heredoc that writes our artifact still hard-blocks" 2 "$rc"
 
 echo
 echo "All assertions passed. verify-discoverability-on-close partition (MYC-766) holds."
