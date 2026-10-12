@@ -79,6 +79,16 @@ except Exception:  # fail-open: if the lib cannot load, fall back to env/home
     def resolve_vault_root(cwd: Path, env_vault_root: str | None) -> Path:  # type: ignore
         return Path(env_vault_root) if env_vault_root else (cwd or Path.home() / "vault")
 
+# MYC-5434: the verifier is a vault script this hook does not ship. It runs under
+# the python3 a plain shell would pick, never under a session's PATH shim (which
+# refuses `python3 <script>`, so the hook saw no gaps) and never under this hook's
+# own interpreter (which can be too old for it). See _lib/script_python.py.
+try:
+    from _lib.script_python import script_python  # noqa: E402
+except Exception:  # fail-open: the pre-MYC-5434 PATH lookup, so a missing lib changes nothing
+    def script_python() -> str:  # type: ignore
+        return "python3"
+
 DEV_ROOT = Path.home() / "dev"
 
 # Import-time placeholders so the module stays importable without a hook
@@ -137,7 +147,15 @@ FILE_WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 # `cat sibling.md` — must NOT mark that artifact as ours; doing so re-introduces
 # the exact false-block MYC-766 fixes. Safe direction: under-match (a write we
 # miss falls back to the reliable FILE_WRITE_TOOLS path-set) over over-match.
-_BASH_WRITE_HINT = re.compile(r"(?:\btee\b|write_text\s*\(|\.write\s*\(|>>|>\s|<<)")
+# Bare `<<` is deliberately NOT a write hint. It matched ANY heredoc, including
+# `python3 - <<PY` used to deliver a READ-ONLY script, so a session that merely
+# inspected a sibling's artifact got it classified as authored and was
+# hard-blocked on someone else's gap (measured live: a close blocked on a sibling
+# session's audit memo, 16h older than the session and never edited by it).
+# Heredoc AUTHORSHIP is still caught: `cat > memo.md <<EOF` by `>\s`, a heredoc'd
+# script that writes by `write_text(` / `.write(`. Bug class:
+# READ-CLASSIFIED-AS-AUTHORSHIP (family: MYC-766 false-block).
+_BASH_WRITE_HINT = re.compile(r"(?:\btee\b|write_text\s*\(|\.write\s*\(|>>|>\s)")
 
 
 def _norm(p: str | Path) -> str:
@@ -268,7 +286,7 @@ def _run_verifier() -> list[dict]:
         return []
     try:
         result = subprocess.run(
-            ["python3", str(VERIFIER), "--hours", "24", "--json"],
+            [script_python(), str(VERIFIER), "--hours", "24", "--json"],
             capture_output=True, text=True, timeout=30,
         )
     except Exception:

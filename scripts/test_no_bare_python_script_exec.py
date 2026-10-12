@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Python under scripts/ and skills/ must not launch a Python SCRIPT through a bare
-interpreter name.
+No tracked Python file may launch a Python SCRIPT through a bare interpreter
+name.
 
 THE BUG CLASS
     `subprocess.run(["python3", path, ...])` looks the interpreter up on PATH.
@@ -14,12 +14,16 @@ THE BUG CLASS
     journal-preflight.py started its message fetcher this way, and on such a
     machine the /journal digest lost its MESSAGES section.
     tests/integration/test_journal_preflight_shim_safe_fetch.sh pins that one
-    site end to end. This suite is the class half: it reads every Python file
-    under scripts/ and skills/ and fails on any new site of the same shape, so
-    the next one is caught where it is written and not on a user's machine.
+    site end to end. This suite is the class half: it reads every tracked
+    Python file and fails on any new site of the same shape, so the next one is
+    caught where it is written and not on a user's machine.
 
     The fix is almost always the interpreter already running the caller:
-    sys.executable, as most of this tree already does.
+    sys.executable, as most of this tree already does. The exception is a hook
+    that runs a script it does not ship (a vault script, another repo's): its
+    own interpreter can be older than that script, so it spawns
+    hooks/_lib/script_python.py's answer instead, the python3 a plain shell
+    would run (MYC-5434).
 
 WHAT IT FLAGS (an AST scan; the literal shapes, not data flow across functions)
     1. An argv list whose first element is a bare python / python3 / python3.N
@@ -41,9 +45,11 @@ WHAT IT LEAVES ALONE
       not an execution, so it is out of this suite's scope.
 
 SCOPE, STATED SO A CLEAN RUN IS NOT READ AS MORE THAN IT IS
-    Scans scripts/ and skills/ only. hooks/ and tests/eval/ hold older sites of
-    the same shape that this suite does not look at; widening it needs those
-    fixed or pinned first, not a silent pass over them.
+    Every tracked .py file, listed by git. Until MYC-5434 it scanned scripts/
+    and skills/ only; the six older sites outside them (four in hooks/, one each
+    in tests/eval/ and templates/) were fixed before it widened. Two of the hook
+    sites ran vault scripts through a bare python3, so inside a session the
+    child was refused and the hook failed open.
 
 AN EXEMPTION
     A genuine exception carries `# bare-python-ok: <reason>` on the flagged line
@@ -63,7 +69,9 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-SCAN_ROOTS = ("scripts", "skills")
+# Every tracked Python file. A list of roots is a list of places a new site can
+# hide; a git pathspec glob matches at any depth.
+SCAN_PATHSPEC = ("*.py",)
 
 BARE_NAME = re.compile(r"^(?:python|python3|python3\.\d+)$")
 # A shell string that STARTS with a bare interpreter followed by a non-flag word.
@@ -205,14 +213,14 @@ def find_violations(source: str, filename: str = "<src>") -> list:
 
 
 def python_files(root: Path = REPO) -> list:
-    """Tracked .py files under SCAN_ROOTS, listed by git (the same source ci.sh gate (a) uses)."""
+    """Every tracked .py file, listed by git (the same source ci.sh gate (a) uses)."""
     # A caller's git-location variables (a git-hook context exports them) would point
     # `git -C` at a different repo than the one being scanned.
     drop = {"GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY",
             "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_NAMESPACE", "GIT_CEILING_DIRECTORIES",
             "GIT_DISCOVERY_ACROSS_FILESYSTEM", "GIT_PREFIX"}
     env = {k: v for k, v in os.environ.items() if k not in drop}
-    proc = subprocess.run(["git", "-C", str(root), "ls-files", "-z", "--"] + list(SCAN_ROOTS),
+    proc = subprocess.run(["git", "-C", str(root), "ls-files", "-z", "--"] + list(SCAN_PATHSPEC),
                           capture_output=True, timeout=60, env=env)
     if proc.returncode != 0:
         raise RuntimeError("git ls-files failed: " + proc.stderr.decode("utf-8", "replace").strip())
@@ -308,14 +316,17 @@ def main() -> int:
         print("=== summary: %d passed, %d failed ===" % (passed, failed))
         return 1
     names = {str(p.relative_to(REPO)).replace(os.sep, "/") for p in files}
-    if len(files) >= 25:
-        ok("scanned %d python files under %s" % (len(files), "/ and ".join(SCAN_ROOTS) + "/"))
+    # 446 tracked .py files when the scan widened (MYC-5434); a listing that
+    # shrinks far below that has lost a directory, not cleaned one.
+    if len(files) >= 300:
+        ok("scanned %d tracked python files" % len(files))
     else:
-        bad("scan reaches the tree", "only %d python files found; did scripts/ move?" % len(files))
-    if "scripts/journal-preflight.py" in names:
-        ok("scripts/journal-preflight.py is in scope")
-    else:
-        bad("journal-preflight in scope", "not found under the scanned roots")
+        bad("scan reaches the tree", "only %d tracked python files found; did the listing break?" % len(files))
+    for must in ("scripts/journal-preflight.py", "hooks/verify-discoverability-on-close.py"):
+        if must in names:
+            ok("%s is in scope" % must)
+        else:
+            bad("%s in scope" % must, "not in the git listing the scan reads")
 
     print("=== 3. the historical defect, in the real file ===")
     pf = REPO / "scripts" / "journal-preflight.py"
@@ -332,6 +343,25 @@ def main() -> int:
     else:
         bad("negative control", "scripts/journal-preflight.py is missing")
 
+    # MYC-5434: the hook site that made hooks/ worth scanning. The replacement must
+    # hit exactly one argv, or the control would pass on an unrelated edit (or a
+    # file that no longer parses).
+    vh = REPO / "hooks" / "verify-discoverability-on-close.py"
+    if vh.is_file():
+        src = vh.read_text(encoding="utf-8")
+        old_call, new_call = "[script_python(), ", '["python3", '
+        if src.count(old_call) != 1:
+            bad("hook negative control can be built",
+                "expected exactly one %r in %s, found %d" % (old_call, vh.name, src.count(old_call)))
+        elif find_violations(src, str(vh)):
+            bad("hook negative control is attributable", "%s is already flagged before the revert" % vh.name)
+        elif find_violations(src.replace(old_call, new_call), str(vh)):
+            ok("the hook's old bare-python3 spawn, put back in the real file, is flagged")
+        else:
+            bad("hook negative control bites", "the scanner missed the bare python3 in a copy of the hook")
+    else:
+        bad("hook negative control", "hooks/verify-discoverability-on-close.py is missing")
+
     print("=== 4. the tree itself is clean ===")
     dirty = []
     for p in files:
@@ -343,11 +373,12 @@ def main() -> int:
         for lineno, reason in find_violations(text, str(p)):
             dirty.append("%s:%d: %s" % (str(p.relative_to(REPO)).replace(os.sep, "/"), lineno, reason))
     if dirty:
-        bad("no bare-interpreter script launches under scripts/ or skills/",
+        bad("no bare-interpreter script launches in any tracked python file",
             "\n      " + "\n      ".join(dirty)
-            + "\n      Use sys.executable (see the header), or add `# bare-python-ok: <reason>`.")
+            + "\n      Use sys.executable, or hooks/_lib/script_python.py for a script the caller"
+              " does not ship (see the header), or add `# bare-python-ok: <reason>`.")
     else:
-        ok("no bare-interpreter script launches under scripts/ or skills/")
+        ok("no bare-interpreter script launches in any tracked python file")
 
     print()
     print("=== summary: %d passed, %d failed ===" % (passed, failed))

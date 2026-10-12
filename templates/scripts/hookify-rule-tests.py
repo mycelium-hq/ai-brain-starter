@@ -127,7 +127,10 @@ def run_test(
 
     try:
         proc = subprocess.run(
-            ["python3", str(HOOKIFY_PRETOOLUSE_PATH)],
+            # The interpreter running this harness, not a PATH "python3": inside a
+            # Claude Code session a PATH shim can refuse `python3 <script>`, which
+            # would read as every rule failing to fire.
+            [sys.executable, str(HOOKIFY_PRETOOLUSE_PATH)],
             input=json.dumps(payload),
             capture_output=True,
             text=True,

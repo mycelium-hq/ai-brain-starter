@@ -210,7 +210,9 @@ def hook_emits(ws: Path, file_path: str) -> str | None:
     """
     hook = ws / ".claude" / "hooks" / "paths_scoped_rules.py"
     proc = subprocess.run(
-        ["python3", str(hook)],
+        # The eval's own interpreter: the hook ships with this repo, and a session's
+        # PATH shim can refuse `python3 <script>`, which would read as a broken hook.
+        [sys.executable, str(hook)],
         input=json.dumps({"tool_input": {"file_path": file_path}}),
         cwd=ws, capture_output=True, text=True, timeout=30,
     )

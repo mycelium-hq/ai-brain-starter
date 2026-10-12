@@ -28,6 +28,17 @@ import re
 import subprocess
 import sys
 
+# MYC-5434: the detector is a vault script this hook does not ship. It runs under
+# the python3 a plain shell would pick, never under a session's PATH shim (which
+# refuses `python3 <script>`) and never under this hook's own interpreter (which
+# can be older than the script). See _lib/script_python.py.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from _lib.script_python import script_python  # noqa: E402
+except Exception:  # fail-open: the pre-MYC-5434 PATH lookup, so a missing lib changes nothing
+    def script_python() -> str:  # type: ignore
+        return "python3"
+
 
 CODIFIED_RULE_PATTERNS = (
     r"CLAUDE\.md$",
@@ -98,7 +109,7 @@ def main():
         env = dict(os.environ)
         env["VAULT_ROOT"] = vault_root
         result = subprocess.run(
-            ["python3", detector, file_path, "--json"],
+            [script_python(), detector, file_path, "--json"],
             capture_output=True,
             text=True,
             timeout=8,
