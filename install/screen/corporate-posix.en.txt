@@ -23,7 +23,7 @@ that Claude runs on a schedule, and:
   Daily job: deletes merged git branches and worktrees in your vault.
     Under ~/dev it fetches and fast-forwards clean main checkouts, and
     from its second run deletes the same, plus build output.
-    Opt out: tell me before you answer, I set ABS_NO_AUTO_GC=1.
+    Opt out: tell me before you answer; I'll set ABS_NO_AUTO_GC=1.
   Weekly and monthly insights: Claude Code runs unattended, allowed
     to edit files and run shell commands.
 Asked separately: connectors (email, calendar, Slack), email sign-up.
