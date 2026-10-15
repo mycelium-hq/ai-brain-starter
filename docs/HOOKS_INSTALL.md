@@ -22,7 +22,7 @@ Preview without writing:
 python3 ~/.claude/skills/ai-brain-starter/scripts/install-hooks-user-level.py --dry-run
 ```
 
-Install, then verify every referenced script is on disk (this WRITES settings.json):
+Install, then verify that every referenced script, and the Python the installer wrote in front of it, is on disk (this WRITES settings.json):
 ```bash
 python3 ~/.claude/skills/ai-brain-starter/scripts/install-hooks-user-level.py --verify
 ```

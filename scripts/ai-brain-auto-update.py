@@ -409,8 +409,10 @@ def _minimal_env(extra: dict[str, str] | None = None) -> dict[str, str]:
     particular -- WinSock init can fail without it), ABS_WIN_LAUNCHER (a
     real user escape hatch, not test-only), and the explicit config both
     real scripts (VAULT_ROOT; sync-skills.py's own child sync-vault-
-    scripts.sh reads it too) and THIS file's OWN hermetic-test overrides
-    (ABS_SKILL_DIR, ABS_UPDATE_STATE_DIR, ABS_UPDATE_INTERVAL_DAYS,
+    scripts.sh reads it too; ABS_NO_AUTO_GC, the opt-out from the daily
+    cleanup job that install-hooks-user-level.py schedules whenever it
+    has a vault path -- MYC-4705 H3) and THIS file's OWN hermetic-test
+    overrides (ABS_SKILL_DIR, ABS_UPDATE_STATE_DIR, ABS_UPDATE_INTERVAL_DAYS,
     ABS_UPDATE_DEPLOY_TIMEOUT, ABS_UPDATE_MIN_DEPLOY_DELAY_SECONDS) read by
     name -- passed through ONLY if the parent already had them, never
     invented. Dropping those would silently break test isolation: a stub
@@ -432,7 +434,7 @@ def _minimal_env(extra: dict[str, str] | None = None) -> dict[str, str]:
     keep_upper = {
         "PATH", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA",
         "SYSTEMROOT", "WINDIR", "COMSPEC", "TEMP", "TMP", "TMPDIR",
-        "VAULT_ROOT",
+        "VAULT_ROOT", "ABS_NO_AUTO_GC",
         "ABS_SYNC_STARTER_DIR", "ABS_SYNC_INSTALL_DIR",
         "ABS_FORCE_WINDOWS", "ABS_WIN_UTF8_MODE", "ABS_WIN_LAUNCHER",
         "ABS_WIN_ABS_INTERPRETER",

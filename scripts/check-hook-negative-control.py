@@ -138,7 +138,6 @@ NO_TEST_BASELINE: Set[str] = {
     "surface-orphan-worktree-snapshots",
     "surface-dependabot-backlog",
     # -- lifecycle / nudges --
-    "first-week-checkin",
     "install-ping",
     "sunday-review-nudge",
     "imessage-mcp-auto-export",
@@ -164,7 +163,12 @@ NO_TEST_BASELINE: Set[str] = {
 # (hooks/test_block_secret_in_note.py), and the cap had been left one above
 # the list's length (24 entries, cap 25), a slot of exactly the slack the
 # paragraph above forbids. Both close here.
-NO_TEST_MAX = 23
+#
+# 23 -> 22: while that was open, main's #728 gave `first-week-checkin` a test
+# surface (tests/integration/test_install_consent_contract.sh) and took it off
+# the list without lowering the cap. Merged, the list holds 22 and the cap one
+# more. The cap follows it down again.
+NO_TEST_MAX = 22
 
 
 def is_test_surface(path: Path) -> bool:

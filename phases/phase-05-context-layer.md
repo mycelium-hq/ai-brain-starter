@@ -253,7 +253,14 @@ if [ -z "$WORKTREE_NAME" ] && [ -f "$PWD_PATH/.git" ]; then
 fi
 [ -z "$WORKTREE_NAME" ] && WORKTREE_NAME="main-$$"
 
-SESSION_FILE="$SESSIONS_DIR/${TIMESTAMP_FILE}-${WORKTREE_NAME}.md"
+# Tag the file with the session id from the hook's stdin (PID if absent):
+# timestamp + worktree alone is shared by two sessions in the same worktree
+# closing in the same minute, and the second one writes over the first.
+HOOK_INPUT="$(cat 2>/dev/null || true)"
+SESSION_TAG=$(printf '%s' "$HOOK_INPUT" | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1 | tr -cd 'A-Za-z0-9' | cut -c1-8)
+[ -z "$SESSION_TAG" ] && SESSION_TAG="$$"
+
+SESSION_FILE="$SESSIONS_DIR/${TIMESTAMP_FILE}-${WORKTREE_NAME}-${SESSION_TAG}.md"
 
 mkdir -p "$SESSIONS_DIR" 2>>"$ERROR_LOG"
 mkdir -p "$ARCHIVE_DIR" 2>>"$ERROR_LOG"
@@ -459,18 +466,22 @@ type: meta
 
 ## → Next phase (the install is not finished)
 
-You have just completed **Phase 5**. Do not stop here, do not summarise the
-install as complete, and do not wait to be asked to continue.
+You have just completed **Phase 5**. The yes on the install screen covers
+the next phase too, so start it now; nothing on the screen needs asking again.
 
-1. **Record progress.** Write `~/.claude/.ai-brain-starter-progress.json`:
+1. **Record progress.** Run `scripts/install-telemetry.py append 5 completed`
+   from this skill's own directory with Python 3. It writes the progress file
+   a resumed install reads, and the install log. If that fails, write
+   `~/.claude/.ai-brain-starter-progress.json` yourself:
    `{"last_completed_phase": "5", "ts": "<ISO-8601 timestamp for now>", "version": 1}`
-   This one line is what lets a resumed install pick up here instead of starting over.
 2. **Run the next phase.** Read `phases/phase-06-09-tools-templates.md` from this skill's own directory
    and execute **Phase 6-9**.
 
-If you are running low on context, say so out loud and tell the user to open a
-fresh session and ask to resume the ai-brain-starter install; the progress file
-above is what makes that work. Ending here silently leaves them with a
-half-built brain that looks finished.
+Pause only if the user says stop, a step failed and needs them, or Claude Code
+is asking them something; then say where the install stands and that "continue
+my brain setup" picks it up. If you are running low on context, say so and tell
+the user to open a fresh session and ask to resume; the progress file is what
+makes that work. Ending silently leaves them with a half-built brain that looks
+finished.
 
 <!-- phase-chain: next=phase-06-09-tools-templates.md -->

@@ -171,7 +171,7 @@ function T([string]$en, [string]$es) {
 # ─── Corporate / hardened install profile ─────────────────────────────────────
 # Mirrors bootstrap.sh --profile corporate. Enabled via `-Profile corporate` or
 # $env:CORPORATE_PROFILE = "1": minimal named plugin set, no external-egress MCPs,
-# telemetry OFF, versions pinned, user-space only. Full spec + manifest:
+# telemetry OFF, no auto-update, user-space only. Full spec + manifest:
 # docs/CORPORATE_PROFILE.md.
 $CorporateProfile = ($Profile -eq "corporate") -or ($env:CORPORATE_PROFILE -eq "1")
 if ($Profile -and $Profile -ne "corporate") {
@@ -183,8 +183,27 @@ if ($CorporateProfile) {
     $env:MYCELIUM_NO_PING  = "1"   # no install-ping to myceliumai.co
     Write-Host ""
     Write-Host "=== CORPORATE / HARDENED PROFILE ACTIVE ===" -ForegroundColor Yellow
-    Write-Host "  No external-egress MCPs | telemetry OFF | versions pinned | user-space only." -ForegroundColor Yellow
+    Write-Host "  No external-egress MCPs | telemetry OFF | no auto-update | user-space only." -ForegroundColor Yellow
     Write-Host "  Reviewable component manifest emitted at the end. Full spec: docs/CORPORATE_PROFILE.md" -ForegroundColor Yellow
+}
+
+# The yes from the install screen (install/screen/), written by the installer
+# itself so install-telemetry.py can tell "said yes, install never finished"
+# from "never said yes". No Python yet: this runs before anything is installed.
+# ASCII, not UTF8: Windows PowerShell 5.1 writes a BOM with UTF8, and a BOM on
+# the first line of a .jsonl breaks the JSON parse of that line. An env var,
+# not a -Consented switch: an older bootstrap.ps1 already on disk would fail
+# to bind an unknown parameter and never run at all.
+if ($env:ABS_CONSENTED -eq "1" -and -not $DryRun) {
+    $consentProfile = if ($CorporateProfile) { "corporate" } else { "default" }
+    $consentTs = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    try {
+        New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude" | Out-Null
+        Add-Content -Path "$env:USERPROFILE\.claude\.ai-brain-starter-install.jsonl" -Encoding ASCII `
+            -Value ('{"ts": "' + $consentTs + '", "phase": "consent", "outcome": "yes_recorded", "profile": "' + $consentProfile + '"}')
+    } catch {
+        Warn "could not record the install-screen yes: $_"
+    }
 }
 
 # ─── Optional signup (the install never blocks on it) ──────────────────────
@@ -1809,13 +1828,12 @@ if ($env:CLAUDE_CODE_ENTRYPOINT) {
         Write-Host "      Por favor configurá mi AI Brain Starter completo en esta sesión."
         Write-Host "      La skill ai-brain-starter ya está instalada en"
         Write-Host "      ~/.claude/skills/ai-brain-starter. Empezá la entrevista de setup"
-        Write-Host "      corriendo la skill setup-brain y guiame por cada fase sin parar."
+        Write-Host "      corriendo la skill setup-brain y guiame por cada fase."
     } else {
         Write-Host "      Please set up my AI Brain Starter end-to-end in this session. The"
         Write-Host "      ai-brain-starter skill is already installed at"
         Write-Host "      ~/.claude/skills/ai-brain-starter. Start the setup interview by"
-        Write-Host "      running the setup-brain skill and walk me through every phase"
-        Write-Host "      without stopping."
+        Write-Host "      running the setup-brain skill and walk me through every phase."
     }
     Write-Host ""
     Write-Host ("  " + (T "Claude will ask where your vault should live and build everything" `
@@ -1847,7 +1865,7 @@ if ($CorporateProfile) {
 # AI Brain Starter - Corporate Install Manifest
 Generated: $stamp | Profile: corporate (hardened) | Host: Windows $([System.Environment]::OSVersion.Version) $env:PROCESSOR_ARCHITECTURE
 
-## Pinned versions (no auto-update)
+## Versions (frozen at install: no auto-update; none is pinned to a reviewed revision)
 - ai-brain-starter skill : rev $absRev - https://github.com/mycelium-hq/ai-brain-starter
   Self-update hook DISABLED via sentinel ~/.claude/.ai-brain-starter-pinned (delete it to re-enable updates).
 - Claude Code CLI        : $ccVer - autoupdater off (DISABLE_AUTOUPDATER=1 + CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1)
@@ -1858,8 +1876,11 @@ Generated: $stamp | Profile: corporate (hardened) | Host: Windows $([System.Envi
 - context7                 - documentation lookup MCP
 
 ## First-party skills
-- Bundled IN the pinned ai-brain-starter revision above (graphify, daily-journal, insights, patterns,
+- Bundled IN the ai-brain-starter revision above (graphify, daily-journal, insights, patterns,
   meeting-todos, second-brain-mapping, ...). Ship in-repo - no per-skill network fetch.
+
+## Skill repos copied from GitHub (newest at install, then no auto-update)
+- adelaidasofia/humanizer
 
 ## EXCLUDED by this profile (reason)
 - Third-party marketplaces : sentry, stripe, cloudflare, claude-seo, superpowers, marketingskills (dev/marketing)
@@ -1890,5 +1911,21 @@ Generated: $stamp | Profile: corporate (hardened) | Host: Windows $([System.Envi
         }
     } else {
         Dry "would write manifest to $manifestPath"
+    }
+}
+
+# ─── Install screen ───────────────────────────────────────────────────────────
+# The file the assistant shows before asking for the one yes (install/screen/,
+# rendered by scripts/install-screen.py). Printed LAST in a dry run so the dry
+# run and the screen are the same words and the same numbers.
+if ($DryRun) {
+    $screenName = "install\screen\" + $(if ($CorporateProfile) { "corporate" } else { "default" }) + "-windows." + (T "en" "es") + ".txt"
+    $screenPath = Join-Path $PSScriptRoot $screenName
+    if (-not (Test-Path $screenPath)) { $screenPath = Join-Path $SkillDir $screenName }
+    Hdr (T "Install screen" "Pantalla de instalación")
+    if (Test-Path $screenPath) {
+        Get-Content -Path $screenPath -Encoding UTF8 | ForEach-Object { Write-Host $_ }
+    } else {
+        Warn "install screen not found: $screenName"
     }
 }

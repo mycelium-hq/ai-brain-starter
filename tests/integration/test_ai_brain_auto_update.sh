@@ -92,6 +92,8 @@
 #                                         is refused                       [GATE]
 #   T42 F4: ABS_POSIX_PYTHON/ABS_HOOK_RUNNER dropped from _minimal_env;
 #                                         ABS_WIN_LAUNCHER still forwarded  [GATE]
+#   T43 MYC-4705 H3: ABS_NO_AUTO_GC (the daily-job opt-out) reaches the hook
+#                                         installer through _minimal_env    [GATE]
 #
 # Run: bash tests/integration/test_ai_brain_auto_update.sh  (0 = pass, 1 = fail)
 set -uo pipefail
@@ -1494,6 +1496,45 @@ if says_lit 'POSIX=ABSENT' && says_lit 'HOOKRUNNER=ABSENT' && says_lit 'WINLAUNC
   ok "T42: ABS_POSIX_PYTHON/ABS_HOOK_RUNNER dropped from the sync-skills env; ABS_WIN_LAUNCHER still forwarded"
 else
   no "T42: minimal-env keep-list regression: $(printf '%s' "$OUT" | head -c 300)"
+fi
+
+# ---- T43. MYC-4705 H3: ABS_NO_AUTO_GC reaches the hook INSTALLER ----------
+# install-hooks-user-level.py schedules the daily cleanup job whenever it has a
+# vault path (VAULT_ROOT is on the keep-list), unless ABS_NO_AUTO_GC=1 is in the
+# environment of the process that schedules it. This updater runs that installer
+# under _minimal_env(), so an opt-out the user keeps in ~/.claude/settings.json
+# env only survives an update if the name is on the keep-list. T42's fixture, but
+# the stub INSTALLER (the process that has to see the name) reports what it got.
+T43DIR=$(mktemp -d "$SKILLS_ROOT/fx.XXXXXX")
+T43ORIGIN="$T43DIR/origin.git"
+T43CO="$T43DIR/checkout"
+T43STATE="$T43DIR/state"; mkdir -p "$T43STATE"
+git -c init.defaultBranch=main init -q --bare "$T43ORIGIN"
+git -c init.defaultBranch=main clone -q "$T43ORIGIN" "$T43CO" 2>/dev/null
+(
+  cd "$T43CO" || exit 1
+  git config user.email t@t; git config user.name t
+  git symbolic-ref HEAD refs/heads/main
+  mkdir -p scripts
+  touch scripts/ai-brain-auto-update.py   # F3 identity check (MYC-4907)
+  printf 'echo "sync ok"\n' > scripts/sync-skills.sh
+  printf '#!/usr/bin/env python3\nimport os, pathlib\nd=os.environ.get("ABS_UPDATE_STATE_DIR", os.path.expanduser("~/.claude"))\npathlib.Path(d, "INSTALLER_SAW").write_text("GC=" + os.environ.get("ABS_NO_AUTO_GC", "ABSENT"))\n' > scripts/install-hooks-user-level.py
+  printf 'seed\n' > seed.txt
+  git add -A; git commit -qm seed
+  git push -q -u origin main
+  printf 'upstream\n' > upstream.txt; git add upstream.txt; git commit -qm "upstream ahead"
+  git push -q origin main
+  git reset -q --hard HEAD~1
+)
+SID=sess-A run_upd "$T43STATE" "$T43CO"
+export ABS_NO_AUTO_GC=1
+SID=sess-B run_upd "$T43STATE" "$T43CO"
+unset ABS_NO_AUTO_GC
+T43SAW="$(cat "$T43STATE/INSTALLER_SAW" 2>/dev/null || echo 'the installer did not run')"
+if [ "$T43SAW" = "GC=1" ]; then
+  ok "T43: ABS_NO_AUTO_GC reaches the hook installer, so the daily-job opt-out survives a self-update"
+else
+  no "T43: the installer did not receive the opt-out (it saw: $T43SAW)"
 fi
 
 echo

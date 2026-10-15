@@ -6,17 +6,17 @@ Run the full panel setup as written below. Every user gets the advisory panel �
 
 ---
 
-#### Step 6: Confirm the enrichment (the entry is already saved)
+#### Step 6: Show the panel, then write it (the entry is already saved)
 
-By now the entry was already written to disk at Step 1.5 (capture-first — see Phase 10a's Capture-First Contract). This step only confirms the enrichment and shows the panel before it lands in the file.
+By now the entry was already written to disk at Step 1.5 (capture-first — see Phase 10a's Capture-First Contract), with its first-take panel. This step shows the full panel before it lands in the file.
 
-If the panel ran, show the full panel section inline, then: "Okay, here's the panel, and I'd tag this [Floor]. Approve as-is, or swap/edit a voice?" On confirmation, UPDATE the saved file (Step 7).
+Show the full panel section inline, exactly as it will appear, then UPDATE the saved file in the same turn (Step 7) and say: "Here's the panel, and I'd tag this [Floor]. Edit, swap or add a voice?" Show any edited or added panel text before writing it, too. Never wait for approval before writing.
 
-If the user opted out of the panel or disengaged, the captured entry stands as-is. Confirm what was saved and let them go. Never hold the entry until after the panel — the capture already happened.
+Skip the panel only when the user explicitly declines it this session or the crisis protocol is active; that session's block is then a one-line note saying so. Earlier sessions' blocks are never edited. Disengaging is not a decline: the first-take panel written at capture stands. Never hold the capture until after the panel; it already happened.
 
 #### Step 7: Finalize the entry (in-place update of the file from Step 1.5)
 
-**This is an UPDATE of the file already written at capture time, not a fresh create.** Rewrite it in place with the finalized floor, the enriched body, the accountability line, and — only if the panel ran — the `## Panel dialogue` section. Never create a second file for the same session. If you refined the filename to match the day's theme, rename in place rather than leaving a stale duplicate.
+**This is an UPDATE of the file already written at capture time, not a fresh create.** Rewrite it in place with the finalized floor, the enriched body, the accountability line, and the `## Panel dialogue` section (always present: one block per session, each a panel or its one-line declined / crisis note; the full panel replaces this session's first take). Never create a second file for the same session. If you refined the filename to match the day's theme, rename in place rather than leaving a stale duplicate.
 
 **File location:** `[VAULT_PATH]/📓 Journals/` — use the vault path from setup. This MUST be the user's actual vault path, verified during Phase 3. The folder is created with the 📓 emoji prefix in Phase 3 — do not save to a plain `Journals/` folder.
 
@@ -50,7 +50,7 @@ floor_level: [low/middle/high]
 
 [Short staged exchange among the 3–5 selected panelists — actual dialogue, not parallel bullets. Panelists talk to each other and to the user. At least one dissent must be clearly visible. Keep it tight.]
 
-**Dissent:** [One line naming who pushed back and what they challenged. Always present — this is not optional.]
+**Dissent:** [One line naming who pushed back and what they challenged. Always present in a panel — this is not optional.]
 **Omission flagged:** [One line, only if the omission pass surfaced something — otherwise remove this line entirely]
 
 ---
@@ -101,7 +101,7 @@ Tell them the file name and floor. Connect to patterns when possible:
 
 #### Step 9: Auto-log panel dissents and omissions to the panel feedback log
 
-If Step 5 surfaced a **dissent** or an **omission flag**, automatically append it to a panel feedback log at `[VAULT_PATH]/Home/Panel Feedback Log.md` (or whichever path the user set up during Phase 4 for this log — check CLAUDE.md). If the file doesn't exist, create it with a short header explaining it's a cross-context log of every real and synthetic panel reaction.
+If this session's panel (first take or full) surfaced a **dissent** or an **omission flag**, automatically append it to a panel feedback log at `[VAULT_PATH]/Home/Panel Feedback Log.md` (or whichever path the user set up during Phase 4 for this log — check CLAUDE.md). If the file doesn't exist, create it with a short header explaining it's a cross-context log of every real and synthetic panel reaction.
 
 Append format:
 
@@ -117,7 +117,7 @@ Append format:
 **Entry:** [[{filename without .md}]]
 ```
 
-**This is automatic — never ask the user to approve the log append.** The point is to close the loop between daily journal pushback and the broader panel feedback record so patterns become visible over time (if three different daily entries all got the same dissent, that's a real pattern to act on, not a random note). If there's no dissent or omission from the entry (which shouldn't happen if Step 5 was followed correctly — dissent is required), skip the log append silently.
+**This is automatic — never ask the user to approve the log append.** The point is to close the loop between daily journal pushback and the broader panel feedback record so patterns become visible over time (if three different daily entries all got the same dissent, that's a real pattern to act on, not a random note). If there's no dissent or omission from the entry (which shouldn't happen — every panel, first take included, requires a dissent; a one-line declined or crisis note has nothing to log), skip the log append silently.
 
 **Important principles for the generated skill:**
 - Write the entry AS the user, not about them
@@ -157,7 +157,7 @@ Use whichever scheduling system is available in this Claude Code install. Try th
 
 2. **`mcp__scheduled-tasks__create_scheduled_task`** (fallback — scheduled-tasks MCP). Call with equivalent parameters (`name`, `cron` or `schedule`, `prompt`).
 
-3. **Cron fallback** (if neither is available): write a bash wrapper at `[VAULT_PATH]/⚙️ Meta/scripts/run-daily-journal.sh` that checks for today's entry and invokes `claude --print` headlessly with the task body as the prompt. Use the same pattern as `run-insights.sh` in Phase 18. Install it with a `crontab -e` line: `30 19 * * * /bin/bash "/path/to/vault/⚙️ Meta/scripts/run-daily-journal.sh"` (adjusting the `30 19` to match the user's chosen time in their local timezone, and converting to UTC if the system uses UTC cron). Note: cron can only run headless — it will create the entry directly instead of having a back-and-forth conversation. Tell the user this tradeoff explicitly if you have to fall back to cron.
+3. **Cron fallback** (if neither is available): write a bash wrapper at `[VAULT_PATH]/⚙️ Meta/scripts/run-daily-journal.sh` that checks for today's entry and invokes `claude --print` headlessly with the task body as the prompt. Use the same pattern as `run-insights.sh` in Phase 18. Install it with a `crontab -e` line: `30 19 * * * /bin/bash "/path/to/vault/⚙️ Meta/scripts/run-daily-journal.sh"` (adjusting the `30 19` to match the user's chosen time in their local timezone, and converting to UTC if the system uses UTC cron). Note: cron can only run headless, and a headless run has no one to answer, so it saves no entry (an entry needs the user's own words, and a panel has to be shown before it is written); it can only remind the user to open the journal. Tell the user this tradeoff explicitly if you have to fall back to cron.
 
 **Task body (the prompt the scheduler runs at the chosen time):**
 
@@ -176,7 +176,7 @@ Check if the user already has a journal entry for today before doing anything el
 
 STEP 2 — Start the journal conversation.
 
-Invoke the Skill tool with `skill: "daily-journal"` and begin the interview as normal. The skill will greet the user, ask the opening question, and save the entry.
+Invoke the Skill tool with `skill: "daily-journal"` and begin the interview as normal. The skill will greet the user, ask the opening question, and save the entry. If no one can answer (a headless cron run), save nothing: a journal entry needs the user's own words.
 
 The user is expecting this prompt at [HH:MM their local time], so lead with a warm opening from the daily-journal skill — don't start with meta-talk like "the scheduled task ran."
 
@@ -198,18 +198,22 @@ Substitute `[VAULT_PATH]` and the time placeholders with the actual values saved
 
 ## → Next phase (the install is not finished)
 
-You have just completed **Phase 10b**. Do not stop here, do not summarise the
-install as complete, and do not wait to be asked to continue.
+You have just completed **Phase 10b**. The yes on the install screen covers
+the next phase too, so start it now; nothing on the screen needs asking again.
 
-1. **Record progress.** Write `~/.claude/.ai-brain-starter-progress.json`:
+1. **Record progress.** Run `scripts/install-telemetry.py append 10b completed`
+   from this skill's own directory with Python 3. It writes the progress file
+   a resumed install reads, and the install log. If that fails, write
+   `~/.claude/.ai-brain-starter-progress.json` yourself:
    `{"last_completed_phase": "10b", "ts": "<ISO-8601 timestamp for now>", "version": 1}`
-   This one line is what lets a resumed install pick up here instead of starting over.
 2. **Run the next phase.** Read `phases/phase-11-external-tools.md` from this skill's own directory
    and execute **Phase 11**.
 
-If you are running low on context, say so out loud and tell the user to open a
-fresh session and ask to resume the ai-brain-starter install; the progress file
-above is what makes that work. Ending here silently leaves them with a
-half-built brain that looks finished.
+Pause only if the user says stop, a step failed and needs them, or Claude Code
+is asking them something; then say where the install stands and that "continue
+my brain setup" picks it up. If you are running low on context, say so and tell
+the user to open a fresh session and ask to resume; the progress file is what
+makes that work. Ending silently leaves them with a half-built brain that looks
+finished.
 
 <!-- phase-chain: next=phase-11-external-tools.md -->

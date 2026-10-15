@@ -1,0 +1,32 @@
+AI Brain Starter en Windows: lo que agrega esta instalación
+Perfil corporativo.
+Todavía no se instaló ni se cambió nada.
+
+Si decís que sí, esto queda en tu computadora:
+  71 hooks en ~/.claude/settings.json: scripts que Claude Code
+    corre solo, en cada sesión.
+    Algunos responden "allow" a ediciones de archivos y comandos de
+    shell, así que Claude Code deja de preguntarte antes de hacerlo.
+  Skills en ~/.claude/skills, comandos slash en ~/.claude/commands.
+  Marketplaces de plugins: kepano/obsidian-skills
+  Plugins activados: obsidian, context7
+  Skills copiadas de GitHub: adelaidasofia/humanizer
+  Herramientas, si faltan: pipx, gh, Claude Code, graphify, fastmcp
+  Quedan para tu equipo de IT, si faltan: git, Python, Node, Obsidian
+  Actualizaciones y telemetría: apagadas, en ~/.claude/settings.json.
+
+El mismo sí cubre lo que agrega la entrevista: tu vault, sus plugins de
+Obsidian y hooks, un respaldo del vault, un chequeo de tu diario que
+Claude corre cada día a una hora programada, y:
+  Semanal y mensual (insights): Claude Code corre sin supervisión, con
+    permiso para editar archivos y correr comandos de shell.
+Aparte: conectores (email, calendario, Slack) y registro por email.
+
+Sin versión fija: las partes de terceros instalan su versión más nueva.
+Respaldos: los archivos de configuración se copian antes de cada cambio.
+
+Claude Code te puede pedir permiso para algunos de estos pasos. Esos
+avisos son entre vos y Claude Code. No los voy a contestar por vos ni
+te voy a decir qué elegir.
+
+Respondé "sí" para instalar todo esto, o "no" para no instalar nada.
