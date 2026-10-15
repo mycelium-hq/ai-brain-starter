@@ -39,12 +39,10 @@ TWO ACTIVATION CHANNELS, both real -- checking only one false-positives:
 
 WHAT THIS CHECK DELIBERATELY DOES NOT DO. It does not judge whether a wired
 hook can still deliver a verdict. That is
-scripts/check-hook-block-protocol.py's job (#405: a blocking hook under the
-allow-fallback wrapper is rewritten into an ALLOW), and
-scripts/check-hook-emission-channel.py's (MYC-3246: a warning written to a
-stderr the wiring discards). Three checks, three disjoint questions -- is it
-wired, is it owned, can it speak. Overlapping them would double-report one file
-and let the duplicated rule drift into conflicting advice.
+scripts/check-hook-emission-channel.py's job (MYC-3246: a warning written to a
+stderr the wiring discards). Two checks, two disjoint questions -- is it wired
+and owned, can it speak. Overlapping them would double-report one file and let
+the duplicated rule drift into conflicting advice.
 
 BASELINE RATCHET. Both assertions carry pre-existing debt, so they run as
 ratchets: listed names are tolerated, the count may never GROW, and a name that

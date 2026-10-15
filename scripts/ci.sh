@@ -60,26 +60,19 @@
 #                           so an edit to any of them reds this gate.
 #                           A dedicated lint.yml 'utf8-console-guard' job is
 #                           authoritative in CI; here it runs locally (pure stdlib).
-#   (e2) Hook block-protocol - scripts/check-hook-block-protocol.py fails a hook
-#                           registered with the allow-fallback wrapper
-#                           (`... || echo '{...permissionDecision:allow}'`) that
-#                           blocks by exiting non-zero: the `||` fires on ANY
-#                           non-zero exit, so the block is rewritten into an
-#                           ALLOW and the guard is structurally unable to say no
-#                           (#405). Pure stdlib.
 #   (e3) VAULT_ROOT reads - scripts/check-vault-root-reads.py fails code that
 #                           reads the VAULT_ROOT env var outside a sanctioned
 #                           resolver. A globally-exported VAULT_ROOT names ONE
 #                           vault: unset, the usual ~/vault default makes a guard
 #                           inert on every vault not named "vault"; set, it
 #                           overrides the vault the caller meant. Same
-#                           SILENT-NO-OP family as (e)/(e2); pure stdlib.
+#                           SILENT-NO-OP family as (e); pure stdlib.
 #   (e4) home-hook deploy - scripts/check-home-hook-deploy.py fails when hooks.json
 #                           wires a hook from ~/.claude/hooks/ that no route ever
 #                           copies there. The `[ -f ]` guard on those commands makes
 #                           a never-deployed hook look identical to one the user
 #                           switched off, so it never fires and nothing says so.
-#                           Same SILENT-NO-OP family as (e)/(e2)/(e3); pure stdlib.
+#                           Same SILENT-NO-OP family as (e)/(e3); pure stdlib.
 #   (e5) subprocess decode - scripts/check-utf8-subprocess.py is the READ half of (e).
 #   (e6) py3.9 annotation parity - scripts/check-py39-annotations.py fails `X | None`
 #        without `from __future__ import annotations`. This job pins 3.9, where that
@@ -1282,25 +1275,14 @@ echo "==> (e1b) baseline burn-down headers: $PY scripts/_baseline_sections.py --
 # visible in the gate output instead of being indistinguishable from a pass.
 "$PY" scripts/_baseline_sections.py --check-all scripts
 
-# ---- (e2) Hook block-protocol ----------------------------------------------
-# scripts/check-hook-block-protocol.py fails a hook that is registered with the
-# allow-fallback wrapper (`... || echo '{...permissionDecision:allow}'`) but
-# blocks by exiting non-zero. That `||` fires on ANY non-zero exit, so such a
-# hook is rewritten into an ALLOW: present, registered, auditable, and unable to
-# block anything. Caught live on validate-handoff-frontmatter.py (#375) -- the
-# WIRED-BUT-NEUTERED sibling of ARTIFACT-WITHOUT-ACTIVATION. Pure stdlib, so it
-# always runs here.
-echo "==> (e2) hook block-protocol: $PY scripts/check-hook-block-protocol.py"
-"$PY" scripts/check-hook-block-protocol.py
-
 # ---- (e2b) Hook activation --------------------------------------------------
 # scripts/check-hook-activation.py fails a hook that ships in hooks/ but is wired
 # in NO activation channel (dormant on every install), and a hook we DO wire that
 # the installer does not own (a re-install duplicates a hand-wired copy instead of
 # replacing it, and verify_paths_on_disk() skips it). Three guards shipped dormant
 # before this existed: MYC-1017, MYC-1031, and MYC-782 / #371.
-# The ARTIFACT-WITHOUT-ACTIVATION half of the family whose WIRED-BUT-NEUTERED half
-# is (e2) and whose wired-but-never-deployed half is (e4). Pure stdlib.
+# The ARTIFACT-WITHOUT-ACTIVATION half of the family whose wired-but-never-deployed
+# half is (e4). Pure stdlib.
 # scripts/check-exit-contract.py fails a tracked non-test CLI under scripts/
 # that carries no exit-contract marker, an ENFORCING file with no non-zero exit
 # token, or an ADVISORY/NOT-A-CHECKER file whose reason is too short to be a
@@ -1372,7 +1354,7 @@ echo "==> (e2b) hook activation: $PY scripts/check-hook-activation.py"
 # ~/vault (inert on every vault not literally named "vault"), SET it overrides
 # the vault the caller actually meant. hooks/validate-handoff-frontmatter.py
 # shipped that way and was inert on every install (#375/#404) -- the same
-# SILENT-NO-OP family as (e) and (e2). Twin of the naive *Meta glob ban
+# SILENT-NO-OP family as (e). Twin of the naive *Meta glob ban
 # (scripts/check-meta-resolution.sh, a lint.yml step). The pre-existing
 # population is byte-pinned in scripts/vault-root-read-baseline.txt, so a NEW or
 # EDITED file fails while the backlog burns down. Pure stdlib, always runs here.
@@ -1387,7 +1369,7 @@ echo "==> (e3) vault-root reads: $PY scripts/check-vault-root-reads.py"
 # turned off. pre-write-settings-lint.py, lint-claude-settings.py and
 # check-claude-code-version.sh shipped that way -- wired in 11 places on a real
 # settings.json, present on disk 0 times, and reported OK by the installer's own
-# verification. Same SILENT-NO-OP family as (e), (e2) and (e3). Pure stdlib.
+# verification. Same SILENT-NO-OP family as (e) and (e3). Pure stdlib.
 echo "==> (e4) home-hook deploy: $PY scripts/check-home-hook-deploy.py"
 "$PY" scripts/check-home-hook-deploy.py
 
@@ -1767,4 +1749,4 @@ done
 echo "    OK - ${#PY_DIRECT[@]} hooks/+tests/ direct suite(s) passed; dormancy invariant clean"
 
 echo
-echo "All gates passed: py_compile ($count file(s)) + ${#INTEGRATION_TESTS[@]} integration tests + $unit_count scripts/ + ${#PY_DIRECT[@]} hooks/tests unit suite(s) + shellcheck [$shellcheck_note] + stat portability [passed] + powershell [$pssa_note] + phase-doc python [$phasepy_note] + repo python [$ruffgate_note] + utf8 console guard [$utf8_note] + hook block-protocol [passed] + vault-root reads [passed] + home-hook deploy [passed] + subprocess decode [passed] + py3.9 annotation parity [passed] + ps1 encoding [passed]."
+echo "All gates passed: py_compile ($count file(s)) + ${#INTEGRATION_TESTS[@]} integration tests + $unit_count scripts/ + ${#PY_DIRECT[@]} hooks/tests unit suite(s) + shellcheck [$shellcheck_note] + stat portability [passed] + powershell [$pssa_note] + phase-doc python [$phasepy_note] + repo python [$ruffgate_note] + utf8 console guard [$utf8_note] + vault-root reads [passed] + home-hook deploy [passed] + subprocess decode [passed] + py3.9 annotation parity [passed] + ps1 encoding [passed]."

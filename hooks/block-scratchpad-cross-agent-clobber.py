@@ -173,11 +173,9 @@ def warn(message: str) -> None:
 
     additionalContext on STDOUT with NO permissionDecision -- the shape
     block-git-mutation-mid-operation.py already ships on PreToolUse. A
-    PreToolUse hook does NOT warn by exiting non-zero: under an allow-fallback
-    wrapper a non-zero exit is rewritten into an allow (check-hook-block-
-    protocol.py), and under a plain wrapper it voids the tool call outright.
-    Omitting permissionDecision is also the conservative half -- this tier has
-    no opinion on permission, so it must not auto-approve the write.
+    PreToolUse hook does NOT warn by exiting non-zero: exit 2 blocks the call
+    outright. Omitting permissionDecision is also the conservative half -- this
+    tier has no opinion on permission, so it must not auto-approve the write.
     """
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse", "additionalContext": message}}))
