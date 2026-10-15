@@ -16,12 +16,18 @@ if it stays flat, the install is too long and the BANNED PATTERNS table
 is treating symptoms instead of the cause.
 
 Usage:
-  install-telemetry.py append PHASE OUTCOME [--workshop] [--new-improvisation STR] [--redirected]
-  install-telemetry.py summarize [--since YYYY-MM-DD] [--workshop-only]
+  install-telemetry.py append PHASE OUTCOME [--new-improvisation STR] [--redirected]
+  install-telemetry.py summarize [--since YYYY-MM-DD]
 
-Outcomes: completed | skipped_on_user_no | errored
+Outcomes: completed | skipped_on_user_no | errored | yes_recorded
 
 PHASE is a string identifier like "0", "10a", "23.5", "24".
+
+`yes_recorded` (phase "consent") is written by bootstrap itself when the user
+said yes on the install screen. `summarize` splits the log at each yes and
+counts the installs that never reached the last phase after one: "said yes,
+install incomplete" means the install stopped on the assistant's side, which
+is the opposite problem from a user who never said yes.
 
 No network. No third-party deps. Stdlib only. Safe to call from bash.
 """
@@ -43,7 +49,8 @@ from typing import Any
 LOG_PATH = pathlib.Path.home() / ".claude" / ".ai-brain-starter-install.jsonl"
 PROGRESS_PATH = pathlib.Path.home() / ".claude" / ".ai-brain-starter-progress.json"
 PROGRESS_VERSION = 1
-VALID_OUTCOMES = {"completed", "skipped_on_user_no", "errored"}
+VALID_OUTCOMES = {"completed", "skipped_on_user_no", "errored", "yes_recorded"}
+TERMINAL_PHASE = "24.5"  # the last phase; phases/phase-19-23-finish.md
 
 
 def _now_iso() -> str:
@@ -152,7 +159,8 @@ def cmd_summarize(args: argparse.Namespace) -> int:
     for e in events:
         phase = str(e.get("phase", "?"))
         outcome = str(e.get("outcome", "?"))
-        by_phase[phase][outcome] += 1
+        if outcome != "yes_recorded":  # reported per run below, not as a phase
+            by_phase[phase][outcome] += 1
         imp = e.get("new_improvisation_seen")
         if isinstance(imp, str) and imp.strip():
             new_improvisations.append((str(e.get("ts", "")), phase, imp.strip()))
@@ -180,7 +188,28 @@ def cmd_summarize(args: argparse.Namespace) -> int:
         for ts, phase, msg in new_improvisations[-20:]:
             print(f"  {ts}  phase={phase}  {msg}")
 
+    runs = consent_runs(events)
+    if runs:
+        incomplete = [r for r in runs if not r["finished"]]
+        print()
+        print(f"install screen: {len(runs)} yes recorded, {len(incomplete)} with the install incomplete")
+        for r in incomplete[-20:]:
+            print(f"  yes at {r['ts']}  last phase completed after it: {r['last'] or 'none'}")
+
     return 0
+
+
+def consent_runs(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One run per install-screen yes, with the last phase completed before the
+    next yes and whether that run reached TERMINAL_PHASE."""
+    runs: list[dict[str, Any]] = []
+    for e in events:
+        if e.get("outcome") == "yes_recorded":
+            runs.append({"ts": str(e.get("ts", "?")), "last": None, "finished": False})
+        elif runs and e.get("outcome") == "completed":
+            runs[-1]["last"] = str(e.get("phase"))
+            runs[-1]["finished"] = runs[-1]["finished"] or runs[-1]["last"] == TERMINAL_PHASE
+    return runs
 
 
 def main(argv: list[str] | None = None) -> int:

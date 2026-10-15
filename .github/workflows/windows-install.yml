@@ -356,12 +356,15 @@ jobs:
       # desktop app is absent (always true on a CI runner); preflight is not where
       # the regressions live and preflight.ps1 is already parse-checked in lint.yml.
       # EMAIL_GATE_BYPASS=1 keeps the optional signup path inert (no env token is
-      # set, so it is skipped anyway).
+      # set, so it is skipped anyway). ABS_CONSENTED=1 is what the README sets
+      # after the user's yes on the install screen; the last step checks the
+      # line it records.
       - name: run bootstrap.ps1 (Windows PowerShell 5.1, gh unauthenticated)
         shell: powershell
         env:
           PREFLIGHT_BYPASS: "1"
           EMAIL_GATE_BYPASS: "1"
+          ABS_CONSENTED: "1"
         run: |
           $env:GH_TOKEN = $null
           $env:GITHUB_TOKEN = $null
@@ -487,4 +490,65 @@ jobs:
           }
           Write-Host ""
           Write-Host "Windows install gate passed: bootstrap completed, UserPromptSubmit hooks wired, MCP servers registered."
+          exit 0
+
+      # The install screen is the consent the assistant asks for, so it must tell
+      # the truth about what this install did. The POSIX screens are checked
+      # against a real dry-run by scripts/test_install_screen.py; this is the one
+      # place a real Windows install exists to check the Windows screen against:
+      # the hook count it states, and every marketplace, plugin, MCP server and
+      # copied skill repo the install registered. Also checks that ABS_CONSENTED=1
+      # recorded one yes line that parses, with no BOM in front of it (Windows
+      # PowerShell 5.1 writes a BOM with -Encoding UTF8).
+      - name: assert the Windows install screen matches this install
+        shell: pwsh
+        run: |
+          $fail = @()
+          $claude = Join-Path $env:USERPROFILE ".claude"
+          $screen = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $env:GITHUB_WORKSPACE "install/screen/default-windows.en.txt")
+          $s = Get-Content -Raw -LiteralPath (Join-Path $claude "settings.json") | ConvertFrom-Json
+
+          $n = 0
+          foreach ($ev in $s.hooks.PSObject.Properties) {
+            foreach ($g in @($ev.Value)) { if ($g.hooks) { $n += @($g.hooks).Count } }
+          }
+          Write-Host "hooks wired in settings.json: $n"
+          if ($screen -notmatch "(?m)^  $n hooks in ~/.claude/settings.json") {
+            $fail += "settings.json has $n hooks, but the Windows install screen states a different count"
+          }
+
+          $names = @()
+          if ($s.extraKnownMarketplaces) {
+            foreach ($m in $s.extraKnownMarketplaces.PSObject.Properties) { $names += $m.Value.source.repo }
+          }
+          if ($s.enabledPlugins) {
+            foreach ($p in $s.enabledPlugins.PSObject.Properties.Name) { $names += ($p -split '@')[0] }
+          }
+          $mcp = Get-Content -Raw -LiteralPath (Join-Path $claude ".mcp.json") | ConvertFrom-Json
+          if ($mcp.mcpServers) { $names += @($mcp.mcpServers.PSObject.Properties.Name) }
+          if (Test-Path -LiteralPath (Join-Path $claude "skills/humanizer")) { $names += "humanizer" }
+          if ($names.Count -eq 0) { $fail += "found nothing registered to compare - the check would be vacuous" }
+          foreach ($name in $names) {
+            if (-not $screen.Contains($name)) { $fail += "the install registered '$name', but the Windows install screen does not name it" }
+          }
+          Write-Host "names checked against the screen: $($names -join ', ')"
+
+          $log = Join-Path $claude ".ai-brain-starter-install.jsonl"
+          if (-not (Test-Path -LiteralPath $log)) {
+            $fail += "ABS_CONSENTED=1 was set but no install log was written at $log"
+          } else {
+            $bytes = [System.IO.File]::ReadAllBytes($log)
+            if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+              $fail += "the install log starts with a BOM, which breaks the JSON parse of its first line"
+            }
+            $yes = @(Get-Content -LiteralPath $log | Where-Object { $_.Trim() } | ForEach-Object { $_ | ConvertFrom-Json } |
+                     Where-Object { $_.phase -eq "consent" -and $_.outcome -eq "yes_recorded" -and $_.profile -eq "default" })
+            if ($yes.Count -ne 1) { $fail += "expected exactly one yes_recorded line in the install log, found $($yes.Count)" }
+          }
+
+          if ($fail.Count -gt 0) {
+            foreach ($f in $fail) { Write-Host "::error::$f" }
+            exit 1
+          }
+          Write-Host "Windows install screen matches the install, and the yes was recorded."
           exit 0

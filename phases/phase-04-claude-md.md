@@ -121,7 +121,7 @@ You are not a yes-machine. You are a thinking partner. Act like one.
 1. Start: Read this file. Don't ask what we were doing — you should already know. Also read `⚙️ Meta/Last Session.md` which is **auto-generated** by `aggregate-sessions.py` from `⚙️ Meta/Sessions/*.md` — never edit it directly.
 2. **Run the daily AI brain setup update check** — see the "Session start — daily update check" section below. Once per day, automatically check if there's an update available and, if so, summarize it in plain English and offer to install it.
 3. During: If new concepts come up, create notes in the right folder — but check the Vault Map first. For decisions, create per-decision files in `⚙️ Meta/Decisions/` (see End below).
-4. End: Run the **session-end capture cascade** — see the "Session end — capture cascade" section below. **Write session content to a per-worktree file at `⚙️ Meta/Sessions/YYYY-MM-DDTHH-MM-{worktree}.md`** (the session-end hook creates a stub for you to fill in). **Write decisions to per-decision files at `⚙️ Meta/Decisions/YYYY-MM-DDTHH-MM-{slug}.md`**. Never write to `Last Session.md` or `Decision Log.md` directly — those are auto-generated aggregator views rebuilt from the per-worktree source files. Race-safe against concurrent worktrees: unique filenames eliminate write contention, aggregator output is deterministic from sorted input. See [mycelium-hq/ai-brain-starter#5](https://github.com/mycelium-hq/ai-brain-starter/issues/5) for the full design rationale.
+4. End: Run the **session-end capture cascade** — see the "Session end — capture cascade" section below. **Write session content to a per-worktree file at `⚙️ Meta/Sessions/YYYY-MM-DDTHH-MM-{worktree}-{session}.md`** (the session-end hook creates a stub for you to fill in). **Write decisions to per-decision files at `⚙️ Meta/Decisions/YYYY-MM-DDTHH-MM-{slug}.md`**. Never write to `Last Session.md` or `Decision Log.md` directly — those are auto-generated aggregator views rebuilt from the per-worktree source files. Race-safe against concurrent worktrees: unique filenames eliminate write contention, aggregator output is deterministic from sorted input. See [mycelium-hq/ai-brain-starter#5](https://github.com/mycelium-hq/ai-brain-starter/issues/5) for the full design rationale.
 ```
 
 **After writing the template above, do TWO things:**
@@ -171,18 +171,22 @@ Tell them: "Your memory file is created. From now on, every Claude session in th
 
 ## → Next phase (the install is not finished)
 
-You have just completed **Phase 4**. Do not stop here, do not summarise the
-install as complete, and do not wait to be asked to continue.
+You have just completed **Phase 4**. The yes on the install screen covers
+the next phase too, so start it now; nothing on the screen needs asking again.
 
-1. **Record progress.** Write `~/.claude/.ai-brain-starter-progress.json`:
+1. **Record progress.** Run `scripts/install-telemetry.py append 4 completed`
+   from this skill's own directory with Python 3. It writes the progress file
+   a resumed install reads, and the install log. If that fails, write
+   `~/.claude/.ai-brain-starter-progress.json` yourself:
    `{"last_completed_phase": "4", "ts": "<ISO-8601 timestamp for now>", "version": 1}`
-   This one line is what lets a resumed install pick up here instead of starting over.
 2. **Run the next phase.** Read `phases/phase-05-context-layer.md` from this skill's own directory
    and execute **Phase 5**.
 
-If you are running low on context, say so out loud and tell the user to open a
-fresh session and ask to resume the ai-brain-starter install; the progress file
-above is what makes that work. Ending here silently leaves them with a
-half-built brain that looks finished.
+Pause only if the user says stop, a step failed and needs them, or Claude Code
+is asking them something; then say where the install stands and that "continue
+my brain setup" picks it up. If you are running low on context, say so and tell
+the user to open a fresh session and ask to resume; the progress file is what
+makes that work. Ending silently leaves them with a half-built brain that looks
+finished.
 
 <!-- phase-chain: next=phase-05-context-layer.md -->

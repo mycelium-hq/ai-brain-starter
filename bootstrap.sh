@@ -312,9 +312,10 @@ Install or update the ai-brain-starter setup. Safe to re-run.
 Options:
   --dry-run, -n                 Show what would be installed without making changes
   --profile corporate           Hardened/compliance install: minimal named plugin set,
-                                no external-egress MCPs, telemetry OFF, versions pinned,
-                                user-space only (no sudo). Emits a reviewable manifest.
-                                Pair with --dry-run to review before installing.
+                                no external-egress MCPs, telemetry OFF, no auto-update
+                                (versions freeze at install; none is pinned to a
+                                reviewed revision), user-space only (no sudo). Emits a
+                                reviewable manifest. Pair with --dry-run to review first.
                                 Full spec: docs/CORPORATE_PROFILE.md
   --uninstall                   Remove everything bootstrap installed (with confirmation)
   --force                       Skip the uninstall confirmation prompt
@@ -331,6 +332,10 @@ Environment:
   PREFLIGHT_BYPASS=1            Skip the preflight check (development)
   SKIP_VENDOR_SKILLS=1          Skip third-party plugin marketplaces (air-gapped)
   CORPORATE_PROFILE=1           Same as --profile corporate (hardened/compliance install)
+  ABS_CONSENTED=1               The user said yes on the install screen (install/screen/):
+                                records that yes (in ~/.claude/.ai-brain-starter-install.jsonl).
+                                Changes nothing else. An env var, not a flag, so an older
+                                installer already on disk ignores it instead of failing.
   REQUIRED_CLAUDE_VERSION       Override the minimum Claude Code version (default 2.1.133)
 
 Logs: every run is appended to ~/.claude/.bootstrap.log (closes #3).
@@ -369,9 +374,20 @@ printf "\n=== bootstrap run %s (PID %d) ===\n" "$(date +%Y-%m-%dT%H:%M:%S)" "$$"
 
 if [[ "$CORPORATE_PROFILE" == "1" ]]; then
   printf "\n\033[1;33m━━━ CORPORATE / HARDENED PROFILE ACTIVE ━━━\033[0m\n"
-  printf "  No third-party marketplaces · no external-egress MCPs · telemetry OFF · versions pinned · user-space only.\n"
+  printf "  No third-party marketplaces · no external-egress MCPs · telemetry OFF · no auto-update · user-space only.\n"
   printf "  Reviewable component manifest is emitted at the end. Full spec: docs/CORPORATE_PROFILE.md\n"
 fi
+
+# The yes from the install screen (install/screen/), written by the installer
+# itself so install-telemetry.py can tell "said yes, install never finished"
+# from "never said yes". No Python yet: this runs before anything is installed.
+# ai-brain:consent-record:start
+if [[ "${ABS_CONSENTED:-0}" == "1" && $DRY_RUN -eq 0 ]]; then
+  printf '{"ts": "%s", "phase": "consent", "outcome": "yes_recorded", "profile": "%s"}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$([[ "$CORPORATE_PROFILE" == "1" ]] && echo corporate || echo default)" \
+    >> "$HOME/.claude/.ai-brain-starter-install.jsonl" 2>/dev/null || true
+fi
+# ai-brain:consent-record:end
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -951,7 +967,7 @@ git_clone_safe() {
   local dest="$2"
   local desc="${3:-clone $url}"
   if [[ $DRY_RUN -eq 1 ]]; then
-    dry "would: $desc → $dest"
+    dry "would: $desc ($url) → $dest"
     return 0
   fi
   if [[ -d "$dest/.git" ]]; then
@@ -2339,10 +2355,10 @@ if [[ -f "$USER_HOOK_INSTALLER" ]] && [[ "$DRY_RUN" -eq 0 ]]; then
   elif [[ "$rc" -eq 1 ]]; then
     err "User-level hook verification FAILED — settings.json references scripts not on disk. Most likely your local ai-brain-starter clone is on a divergent fork that the pull step skipped. See log above for the missing paths. Recover: cd $SKILL_DIR && git pull --rebase origin main && python3 $USER_HOOK_INSTALLER"
   else
-    err "User-level hook install FAILED — meeting trigger + 6 other UserPromptSubmit hooks WILL NOT FIRE until resolved. See $BOOTSTRAP_LOG. Re-run manually: python3 $USER_HOOK_INSTALLER"
+    err "User-level hook install FAILED — the hooks on the install screen, the meeting trigger among them, WILL NOT FIRE until resolved. See $BOOTSTRAP_LOG. Re-run manually: python3 $USER_HOOK_INSTALLER"
   fi
 elif [[ -f "$USER_HOOK_INSTALLER" ]] && [[ "$DRY_RUN" -eq 1 ]]; then
-  dry "would run: python3 $USER_HOOK_INSTALLER --quiet --fail-on-missing  # wires + verifies 7 UserPromptSubmit hooks incl. meeting-workflow trigger"
+  dry "would run: python3 $USER_HOOK_INSTALLER --quiet --fail-on-missing  # wires + verifies the hooks the install screen counts"
 fi
 
 # ───────────────────────────────────────────────────────────────────────────────
@@ -2427,9 +2443,9 @@ if [[ -n "${CLAUDE_CODE_ENTRYPOINT:-}" ]]; then
   primera pregunta es lo próximo que vas a ver. Sin comandos que tipear,
   sin carpetas que abrir.
 
-  ⌘↩ vs tipear: cuando veas un cuadro gris de aprobación de herramienta,
-  presioná ⌘↩ (Mac) o Ctrl+Enter (Windows). Cuando Claude te haga una pregunta,
-  solo tipeá tu respuesta y presioná Enter.
+  Cuando Claude Code muestre un cuadro gris pidiendo permiso para un paso,
+  la decisión es tuya: ⌘↩ (Mac) o Ctrl+Enter (Windows) lo permite, Esc lo
+  rechaza. Cuando Claude te haga una pregunta, tipeá tu respuesta y Enter.
 
   Cuando tu vault personal esté corriendo, podés pedirle a Claude cualquiera
   de estas para conectar la versión de equipo:
@@ -2447,9 +2463,9 @@ EOF
   Tools are ready. Your setup interview starts now: the first question is
   the next thing you'll see. No commands to type, no folders to open.
 
-  ⌘↩ vs typing: when you see a gray tool-approval box, press ⌘↩ (Mac) or
-  Ctrl+Enter (Windows). When Claude asks you a question, just type your
-  answer and press Enter.
+  When Claude Code shows a gray box asking to allow a step, the choice is
+  yours: ⌘↩ (Mac) or Ctrl+Enter (Windows) allows it, Esc declines it. When
+  Claude asks you a question, type your answer and press Enter.
 
   When your personal vault is running, you can ask Claude any of these to
   wire up the team version:
@@ -2474,7 +2490,7 @@ else
       Por favor configurá mi AI Brain Starter completo en esta sesión.
       La skill ai-brain-starter ya está instalada en
       ~/.claude/skills/ai-brain-starter. Empezá la entrevista de setup
-      corriendo la skill setup-brain y guiame por cada fase sin parar.
+      corriendo la skill setup-brain y guiame por cada fase.
 
   Claude te va a preguntar dónde vivirá tu vault y va a construir todo
   alrededor de tus respuestas. No necesitás tipear ningún otro comando.
@@ -2491,8 +2507,7 @@ EOF
       Please set up my AI Brain Starter end-to-end in this session. The
       ai-brain-starter skill is already installed at
       ~/.claude/skills/ai-brain-starter. Start the setup interview by
-      running the setup-brain skill and walk me through every phase
-      without stopping.
+      running the setup-brain skill and walk me through every phase.
 
   Claude will ask where your vault should live and build everything
   around your answers. You don't need to type any other commands.
@@ -2522,7 +2537,7 @@ if [[ "$CORPORATE_PROFILE" == "1" ]]; then
 # AI Brain Starter — Corporate Install Manifest
 Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ) · Profile: corporate (hardened) · Host: $(uname -sm 2>/dev/null)
 
-## Pinned versions (no auto-update)
+## Versions (frozen at install: no auto-update; none is pinned to a reviewed revision)
 - ai-brain-starter skill : ${ABS_DESC} (rev ${ABS_REV}) — https://github.com/mycelium-hq/ai-brain-starter
   Self-update hook DISABLED via sentinel ~/.claude/.ai-brain-starter-pinned (delete it to re-enable updates).
 - Claude Code CLI        : ${CC_VER} — autoupdater off (DISABLE_AUTOUPDATER=1 + CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1)
@@ -2533,8 +2548,11 @@ Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ) · Profile: corporate (hardened) · Ho
 - context7                 — documentation lookup MCP
 
 ## First-party skills
-- Bundled IN the pinned ai-brain-starter revision above (graphify, daily-journal, insights, patterns,
+- Bundled IN the ai-brain-starter revision above (graphify, daily-journal, insights, patterns,
   meeting-todos, second-brain-mapping, …). Ship in-repo — no per-skill network fetch.
+
+## Skill repos copied from GitHub (newest at install, then no auto-update)
+- adelaidasofia/humanizer, obra/superpowers (the superpowers skills folder; its marketplace stays excluded)
 
 ## EXCLUDED by this profile (reason)
 - Third-party marketplaces : sentry, stripe, cloudflare, claude-seo, superpowers, marketingskills (dev/marketing, not knowledge-worker)
@@ -2566,4 +2584,17 @@ MANIFEST
   else
     dry "would write manifest to $MANIFEST_PATH"
   fi
+fi
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Install screen — the file the assistant shows before asking for the one yes
+# (install/screen/, rendered by scripts/install-screen.py). Printed LAST in a
+# dry-run so the dry-run and the screen are the same words and the same numbers.
+# ───────────────────────────────────────────────────────────────────────────────
+if [[ $DRY_RUN -eq 1 ]]; then
+  _screen="install/screen/$([[ "$CORPORATE_PROFILE" == "1" ]] && echo corporate || echo default)-posix.$(t en es).txt"
+  _screen_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+  [[ -f "$_screen_dir/$_screen" ]] || _screen_dir="$SKILL_DIR"
+  hdr "$(t "Install screen" "Pantalla de instalación")"
+  cat "$_screen_dir/$_screen" 2>/dev/null || warn "install screen not found: $_screen"
 fi

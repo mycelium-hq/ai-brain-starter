@@ -90,9 +90,9 @@ run_checks() {
 
   # 4. Interview AUTO-RUNS after install — the handoff forces same-turn continuation.
   _has "$README" "README Step-2 prompt demands the interview (EN)" \
-    "run the full setup interview without stopping"
+    "install it and run the full setup interview"
   _has "$README" "README Step-2 prompt demands the interview (ES)" \
-    "corré la entrevista de setup completa sin parar"
+    "instalalo y corré la entrevista de setup completa"
   _has "$README" "README step 3 forces continuation (step one of two)" \
     "step one of two"
   _has "$README" "README step 3 names the immediate next action" \
@@ -120,7 +120,7 @@ mkdir -p "$TMP/docs"
 # strengthened Step-2 prompt line.
 grep -vF "Continue the setup interview in THIS session" "$REPO_ROOT/README.md" \
   | grep -vF "step one of two" \
-  | grep -vF "run the full setup interview without stopping" > "$TMP/README.md" || true
+  | grep -vF "install it and run the full setup interview" > "$TMP/README.md" || true
 # SKILL.md: drop the wrong-surface row and the stop-after-install row.
 grep -vF "Continue Phase 1 HERE" "$REPO_ROOT/SKILL.md" \
   | grep -vF "The install is step one; the interview is the rest" > "$TMP/SKILL.md" || true

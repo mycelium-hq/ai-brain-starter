@@ -39,6 +39,9 @@ File format (Decisions/ entries):
     - creationDate (ISO 8601)
     - type: decision
     - worktree: {name}  (or "main")
+    - session_id: "<id>"  (optional; written at session close so the close
+      commit and close gate can tell this session's decisions from a
+      parallel session's on the same checkout)
     - decision_date: YYYY-MM-DD
     - floor: {emotional floor at decision time}
     - stakes: Low | Medium | High

@@ -127,6 +127,12 @@
 #                           repo - every install of THIS repo read "handled
 #                           elsewhere" and got nothing. Self-test first, then the
 #                           fleet. Pure stdlib.
+#   (e11) install screens - scripts/install-screen.py fails when a committed screen
+#                           (install/screen/) differs from what the installer's own
+#                           functions render. A hook added to hooks.json without
+#                           `python3 scripts/install-screen.py --write` leaves every
+#                           screen stating the old count, and the screen is the
+#                           consent the assistant asks for. Pure stdlib.
 #   (f) Python unit tests - the scripts/test_*.py stdlib suites (the claude-router
 #                           structured-envelope gate, the graph-liveness
 #                           STAMP-GREEN-WHILE-GONE guard). Gate (a) py_compiles them,
@@ -285,7 +291,7 @@ INTEGRATION_TESTS=(
   test_session_coordination_guards
   test_gh_safe_session_coordination
   test_cd_worktree_guard_wiring
-  test_trust_prompt_preframing
+  test_install_consent_contract
   test_onboarding_wrong_surface_and_nudge
   test_post_update_email_ask
   test_installer_retires_email_gate
@@ -1471,6 +1477,16 @@ echo "==> (e9) defer targets: $PY scripts/check-defer-targets.py"
 "$PY" scripts/check-defer-targets.py --self-test >/dev/null
 "$PY" scripts/check-defer-targets.py
 
+# ---- (e11) Install screens -------------------------------------------------
+# The screens the assistant shows before the one yes are rendered from the
+# installer's own hook wiring (scripts/install-screen.py), so a hook added to
+# hooks.json makes every committed screen state the wrong count until they are
+# regenerated. The same check runs inside scripts/test_install_screen.py in (f);
+# calling it here says so first, in one line, with the command that fixes it.
+# Pure stdlib, always runs here.
+echo "==> (e11) install screens: $PY scripts/install-screen.py"
+"$PY" scripts/install-screen.py
+
 # ---- (f) Python unit tests (scripts/ + hooks/ + tests/) --------------------
 # Every Python unit suite in the repo, run under the SAME interpreter as the rest
 # of the gate. Gate (a) py_compiles them (proves they parse); this proves their
@@ -1631,6 +1647,10 @@ PY_DIRECT=(
   # personal vocabulary again.
   hooks/test_vault_context_signals.py
   hooks/test_close_catchall_not_silent.py
+  # Two sessions on one checkout closing in the same minute were both handed
+  # `<minute>-main.md`; the second wrote over the first, and the first one's
+  # commit carried the other's note (witnessed 2026-10-01).
+  hooks/test_session_file_unique_per_session.py
   # block-raw-vault-git resolved a `cd` only when it was the first token of the
   # whole command, because it split statements on && || ; but not on a NEWLINE.
   # `set -e` on line 1 was enough to make the cd invisible, so the hook read the
@@ -1693,6 +1713,14 @@ PY_DIRECT=(
   # DOES retrieve the token) proving the check isn't vacuous; and
   # negative-control mutants that must each flip a verdict.
   hooks/test_heavy_admission.py
+  # The close gate and the close commit scoped by WORKTREE, and every session
+  # on a plain checkout is `main`: session A's gate passed on session B's note,
+  # A was blocked on B's uncommitted one, and A's close commit staged B's
+  # decisions. Two real sessions per scenario, driven through the real hooks
+  # (verify-session-close-cascade.py, session-end-hook.sh,
+  # detect-closing-signal.py) with negative controls that the gate still
+  # blocks on A's own uncommitted note and decision.
+  hooks/test_close_gate_scoped_to_session.py
   # check-zsh-silent-idioms.py: bash idioms that silently do the wrong thing under
   # zsh (an unbraced $VAR:path in a git read; an unsplit $VAR in `set --` / `for`).
   # Drives the real hook over real stdin and asserts the PARSED decision, because

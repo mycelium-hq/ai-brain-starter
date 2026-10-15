@@ -1221,7 +1221,9 @@ def _runner_path() -> str:
     return str(local)
 
 
-def platformize_template_for_windows(template: dict) -> tuple[dict, list[str]]:
+def platformize_template_for_windows(
+    template: dict, launcher: list[str] | None = None
+) -> tuple[dict, list[str]]:
     """Rewrite the (already vault-substituted) template's POSIX shell commands
     into a form native Windows can execute.
 
@@ -1268,10 +1270,18 @@ def platformize_template_for_windows(template: dict) -> tuple[dict, list[str]]:
         the thing that wedged. merge_hooks() replaces the whole entry dict, so
         an existing install picks it up on the next run with no migration.
 
+    `launcher` is the interpreter tokens to bake into every command. None, the
+    default and the only value the installer itself passes, resolves them from
+    THIS machine with _windows_launcher(). A caller that needs the shape of the
+    result and will never run a command from it passes its own: the install
+    screen counts how many hooks Windows wires from a macOS or Linux host that
+    has no Windows interpreter to probe (scripts/install-screen.py).
+
     Returns (rewritten_template, skipped_labels). If no launcher can be
     resolved, returns the template unchanged with a loud warning — failing
     toward the status quo rather than silently unwiring everything."""
-    launcher = _windows_launcher()
+    if launcher is None:
+        launcher = _windows_launcher()
     skipped: list[str] = []
     if launcher is None:
         print("WARNING: no Python launcher found on PATH (tried py, python, "
