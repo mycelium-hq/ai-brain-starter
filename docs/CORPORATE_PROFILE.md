@@ -167,7 +167,7 @@ The installer can't make these choices for you — they depend on your environme
   abuse class above.
 - **Review `settings.json` `ask` and `deny` rules** before broad rollout. This
   install's hooks never answer Claude Code's permission prompt for you: they can
-  block a call or add a warning, and otherwise print nothing, so your allowlist,
+  block a call or add a warning, and otherwise make no decision, so your allowlist,
   your `ask` and `deny` rules and your permission mode decide what Claude Code
   asks, and updates do not change them. (See [SECURITY.md](../SECURITY.md).)
 

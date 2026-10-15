@@ -75,7 +75,7 @@ Pass 2 (invocation-time capability sandboxing):
 - A skill that does not declare `tool_access`, or declares it as a non-list, gets a no-op (sandbox not enforced).
 - Bypass with `SKILL_SANDBOX_BYPASS=1`.
 
-Both passes are fail-open: any internal error (PyYAML missing, schema file missing, unexpected exception) prints nothing rather than spuriously blocking the user. Printing nothing leaves Claude Code's own permission prompt in charge; the hook never answers it. Performance budget is <200ms total.
+Both passes are fail-open: any internal error (PyYAML missing, schema file missing, unexpected exception) makes no decision rather than spuriously blocking the user. Making no decision leaves Claude Code's own permission prompt in charge; the hook never answers it. Performance budget is <200ms total.
 
 To wire the hook into your harness, add an entry to `settings.json` under `hooks.PreToolUse` matching tool names `Write|Edit|MultiEdit` AND a second entry matching the broader set of tool names you want sandboxed (or use `*`). Both entries can point at the same script. Pass 1 is a no-op when the file path does not match `skills/**/SKILL.md`; pass 2 is a no-op when no active skill is set.
 
@@ -100,7 +100,7 @@ Schema validation pass:
 echo '{"tool_name":"Write","tool_input":{"file_path":"/tmp/test-skill/SKILL.md","content":"---\ntype: skill\nname: test\n---\n"}}' | python3 hooks/validate-skill-frontmatter.py
 ```
 
-A valid skill prints nothing: the hook makes no decision. A malformed one returns `permissionDecision: deny` with the schema violation in `permissionDecisionReason`.
+A valid skill passes: the hook makes no decision. A malformed one returns `permissionDecision: deny` with the schema violation in `permissionDecisionReason`.
 
 Capability sandbox pass:
 
@@ -117,4 +117,4 @@ echo '{"tool_name":"Write","tool_input":{"file_path":"/tmp/x.md","content":"x"}}
     python3 hooks/validate-skill-frontmatter.py
 ```
 
-The first call returns `permissionDecision: deny` with the SKILL SANDBOX message. The second prints nothing.
+The first call returns `permissionDecision: deny` with the SKILL SANDBOX message. The second makes no decision.
