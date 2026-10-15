@@ -124,36 +124,36 @@
           {
             "_comment": "A missing script makes no decision, and the script's exit code and stderr reach Claude Code. The old `|| echo <allow>` tail answered the permission prompt for the user and turned a block into an allow.",
             "type": "command",
-            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/warn-journal-saved-without-context.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/warn-journal-saved-without-context.py; fi"
+            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/warn-journal-saved-without-context.py ] && [ -r ~/.claude/skills/ai-brain-starter/hooks/warn-journal-saved-without-context.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/warn-journal-saved-without-context.py; fi"
           },
           {
             "_comment": "Warn-only. One Bash call chaining git commit/push, gh pr create/merge or gh release after '&&' AND piping to tail/head: '&&' short-circuits, so a truncated tail shows the FAILING step's error text while the agent infers the earlier steps landed. Bypass: CHAINED_STATE_CMD_BYPASS=1. A missing script makes no decision, and the script's exit code and stderr reach Claude Code. The old `|| echo <allow>` tail answered the permission prompt for the user and turned a block into an allow.",
             "type": "command",
-            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/warn-chained-state-command-truncated.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/warn-chained-state-command-truncated.py; fi"
+            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/warn-chained-state-command-truncated.py ] && [ -r ~/.claude/skills/ai-brain-starter/hooks/warn-chained-state-command-truncated.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/warn-chained-state-command-truncated.py; fi"
           },
           {
             "_comment": "BLOCKING gate (CONCURRENT-SESSION-HEAD-DRIFT). From a worktree-rooted session, blocks `cd`/`pushd` into the MAIN checkout, which shares one .git/HEAD with every other main-checkout session. No-op unless cwd matches <main>/.claude/worktrees/<slug>. Wired in the `if [ -f ]` form on purpose: this hook signals by EXIT CODE 2 and writes its remediation prose to STDERR, so the usual `<script> 2>/dev/null || echo <allow>` idiom would discard the message AND convert the block into an allow. Bypass: WORKTREE_CD_BYPASS=1.",
             "type": "command",
-            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/check-cd-outside-worktree.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/check-cd-outside-worktree.py; fi"
+            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/check-cd-outside-worktree.py ] && [ -r ~/.claude/skills/ai-brain-starter/hooks/check-cd-outside-worktree.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/check-cd-outside-worktree.py; fi"
           },
           {
             "_comment": "BLOCKING gate (GIT-MUTATION-INTO-IN-FLIGHT-OPERATION). Refuses a git-mutating command when the TARGET repo has an operation already in flight: rebase-merge/, rebase-apply/, MERGE_HEAD, CHERRY_PICK_HEAD, REVERT_HEAD, BISECT_LOG in the resolved git-dir. Pure git-STATE check, deliberately independent of session liveness: session-lock.py gates the rebase VERB while a sibling is live, but an ABANDONED rebase is indistinguishable from 'no session' to any heartbeat check. Incident 2026-07-28: a rebase stalled 22+ hours, ~22 commits landed on its detached HEAD, and six commits from four sessions fell off main. Costs one substring test on non-git calls; resolves the git-dir only when a mutating verb is present. Resolution verbs (--abort/--continue/--skip/--quit), `git tag` and `git branch` stay ALLOWED on purpose - blocking them would trap the repo and make the bypass the only exit. Same `if [ -f ]` form as the gate above and for the same reason: it signals by EXIT CODE 2 with its prose on STDERR, so the `2>/dev/null || echo <allow>` idiom would discard the message AND convert the block into an allow. Bypass: GIT_INFLIGHT_OP_BYPASS=1.",
             "type": "command",
-            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/block-git-mutation-mid-operation.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/block-git-mutation-mid-operation.py; fi"
+            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/block-git-mutation-mid-operation.py ] && [ -r ~/.claude/skills/ai-brain-starter/hooks/block-git-mutation-mid-operation.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/block-git-mutation-mid-operation.py; fi"
           },
           {
             "_comment": "BLOCKING gate (MCP-SECRET-LEAK-VIA-ARGV). Blocks `claude mcp add ... --env NAME=<secret>`: every Claude Code child spawn carries the full MCP config via `--mcp-config '<json>'` argv, so `ps aux` / `pgrep -fl` / `lsof` on the running claude process dumps the secret in plaintext. Past incident: 2026-05-19 github-mcp PAT leaked via `pgrep -fl chrome-devtools-mcp`. Same `if [ -f ]` form as the two gates above and for the same reason: it signals by EXIT CODE 2 with its remediation prose on STDERR, so the `2>/dev/null || echo <allow>` idiom would discard the message AND convert the block into an allow. Bypass: MCP_INLINE_SECRET_BYPASS=1.",
             "type": "command",
-            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/block-claude-mcp-inline-secret.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/block-claude-mcp-inline-secret.py; fi"
+            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/block-claude-mcp-inline-secret.py ] && [ -r ~/.claude/skills/ai-brain-starter/hooks/block-claude-mcp-inline-secret.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/block-claude-mcp-inline-secret.py; fi"
           },
           {
             "_comment": "BLOCKING gate (MYC-4988). Blocks a Bash command that prints environment VALUES into the session transcript: bare env/printenv, bare export/set, declare/typeset with no operands or a -p flag, ps with an environment flag, a pgrep listing form combining -l with -f (or carrying -a/--list-full) that exposes a titled process's (npm, Node) leading environment strings, /proc/<pid>/environ, an echo/printf that expands a secret-shaped variable, and the remote secret-dump vocabulary (heroku config, fly secrets list, vercel env pull, etc). Presence/length checks (`[ -n \"${NAME:-}\" ]`, `echo ${#NAME}`) and the three value-stripping pipeline extractors (`env | cut -d= -f1`, `sed 's/=.*//'`, `awk -F= '{print $1}'`) stay allowed. Same `if [ -f ]` form as the gate above and for the same reason: it signals by EXIT CODE 2 with its remediation prose on STDERR, so the `2>/dev/null || echo <allow>` idiom would discard the message AND convert the block into an allow. Bypass: ENV_DUMP_BYPASS=1.",
             "type": "command",
-            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/block-env-dump.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/block-env-dump.py; fi"
+            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/block-env-dump.py ] && [ -r ~/.claude/skills/ai-brain-starter/hooks/block-env-dump.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/block-env-dump.py; fi"
           },
           {
             "type": "command",
-            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/block-skip-prefix-in-vault-write.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/block-skip-prefix-in-vault-write.py; fi"
+            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/block-skip-prefix-in-vault-write.py ] && [ -r ~/.claude/skills/ai-brain-starter/hooks/block-skip-prefix-in-vault-write.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/block-skip-prefix-in-vault-write.py; fi"
           },
           {
             "type": "command",
@@ -167,7 +167,7 @@
           {
             "_comment": "A missing script makes no decision, and the script's exit code and stderr reach Claude Code. The old `|| echo <allow>` tail answered the permission prompt for the user and turned a block into an allow.",
             "type": "command",
-            "command": "if [ -f ~/.claude/hooks/validate-mcp-json.py ]; then [PYTHON] ~/.claude/hooks/validate-mcp-json.py; fi"
+            "command": "if [ -f ~/.claude/hooks/validate-mcp-json.py ] && [ -r ~/.claude/hooks/validate-mcp-json.py ]; then [PYTHON] ~/.claude/hooks/validate-mcp-json.py; fi"
           },
           {
             "type": "command",
@@ -176,57 +176,57 @@
           {
             "_comment": "A missing script makes no decision, and the script's exit code and stderr reach Claude Code. The old `|| echo <allow>` tail answered the permission prompt for the user and turned a block into an allow.",
             "type": "command",
-            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/lint-vault-frontmatter.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/lint-vault-frontmatter.py; fi"
+            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/lint-vault-frontmatter.py ] && [ -r ~/.claude/skills/ai-brain-starter/hooks/lint-vault-frontmatter.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/lint-vault-frontmatter.py; fi"
           },
           {
             "_comment": "A missing script makes no decision, and the script's exit code and stderr reach Claude Code. The old `|| echo <allow>` tail answered the permission prompt for the user and turned a block into an allow.",
             "type": "command",
-            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/validate-skill-frontmatter.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/validate-skill-frontmatter.py; fi",
+            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/validate-skill-frontmatter.py ] && [ -r ~/.claude/skills/ai-brain-starter/hooks/validate-skill-frontmatter.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/validate-skill-frontmatter.py; fi",
             "statusMessage": "Validating skill frontmatter (skill.json schema)..."
           },
           {
             "_comment": "A missing script makes no decision, and the script's exit code and stderr reach Claude Code. The old `|| echo <allow>` tail answered the permission prompt for the user and turned a block into an allow.",
             "type": "command",
-            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/block-secret-in-note.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/block-secret-in-note.py; fi",
+            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/block-secret-in-note.py ] && [ -r ~/.claude/skills/ai-brain-starter/hooks/block-secret-in-note.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/block-secret-in-note.py; fi",
             "statusMessage": "Checking for live secrets in note writes..."
           },
           {
             "_comment": "A missing script makes no decision, and the script's exit code and stderr reach Claude Code. The old `|| echo <allow>` tail answered the permission prompt for the user and turned a block into an allow.",
             "type": "command",
-            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/validate-handoff-frontmatter.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/validate-handoff-frontmatter.py; fi",
+            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/validate-handoff-frontmatter.py ] && [ -r ~/.claude/skills/ai-brain-starter/hooks/validate-handoff-frontmatter.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/validate-handoff-frontmatter.py; fi",
             "statusMessage": "Checking handoff files declare consumes_when..."
           },
           {
             "_comment": "A missing script makes no decision, and the script's exit code and stderr reach Claude Code. The old `|| echo <allow>` tail answered the permission prompt for the user and turned a block into an allow.",
             "type": "command",
-            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/block-populated-public-skill.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/block-populated-public-skill.py; fi",
+            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/block-populated-public-skill.py ] && [ -r ~/.claude/skills/ai-brain-starter/hooks/block-populated-public-skill.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/block-populated-public-skill.py; fi",
             "statusMessage": "Checking template purity (populated data in a public skill)..."
           },
           {
             "_comment": "A missing script makes no decision, and the script's exit code and stderr reach Claude Code. The old `|| echo <allow>` tail answered the permission prompt for the user and turned a block into an allow.",
             "type": "command",
-            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/warn-learning-to-tool-private-memory.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/warn-learning-to-tool-private-memory.py; fi",
+            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/warn-learning-to-tool-private-memory.py ] && [ -r ~/.claude/skills/ai-brain-starter/hooks/warn-learning-to-tool-private-memory.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/warn-learning-to-tool-private-memory.py; fi",
             "statusMessage": "Checking memory routing (team learning vs tool-private)..."
           },
           {
             "_comment": "A missing script makes no decision, and the script's exit code and stderr reach Claude Code. The old `|| echo <allow>` tail answered the permission prompt for the user and turned a block into an allow.",
             "type": "command",
-            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/warn-workflow-call-permission-elevation.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/warn-workflow-call-permission-elevation.py; fi",
+            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/warn-workflow-call-permission-elevation.py ] && [ -r ~/.claude/skills/ai-brain-starter/hooks/warn-workflow-call-permission-elevation.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/warn-workflow-call-permission-elevation.py; fi",
             "statusMessage": "Checking reusable-workflow permissions (callee cannot exceed caller)..."
           },
           {
             "_comment": "A missing script makes no decision, and the script's exit code and stderr reach Claude Code. The old `|| echo <allow>` tail answered the permission prompt for the user and turned a block into an allow.",
             "type": "command",
-            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/warn-journal-saved-without-context.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/warn-journal-saved-without-context.py; fi"
+            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/warn-journal-saved-without-context.py ] && [ -r ~/.claude/skills/ai-brain-starter/hooks/warn-journal-saved-without-context.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/warn-journal-saved-without-context.py; fi"
           },
           {
             "_comment": "BLOCKING gate (MCP-SECRET-LEAK-VIA-CONFIG-FILE). Blocks a Write/Edit/MultiEdit to an MCP config file (~/.claude.json, **/.mcp.json, .claude/settings*.json) whose new content contains a secret-shaped value. Closes the direct-file-edit gap block-claude-mcp-inline-secret.py cannot see (that one only catches `claude mcp add` Bash commands). Past incidents: 2026-05-19 + 2026-05-23 github PAT leaks via this exact path. Wired in the `if [ -f ]` form for the same reason as the Bash-matcher blocking gates above: it signals by EXIT CODE 2 with its remediation prose on STDERR, so the `2>/dev/null || echo <allow>` idiom would discard the message AND convert the block into an allow. Bypass: MCP_CONFIG_SECRET_BYPASS=1.",
             "type": "command",
-            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/block-mcp-config-inline-secret.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/block-mcp-config-inline-secret.py; fi"
+            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/block-mcp-config-inline-secret.py ] && [ -r ~/.claude/skills/ai-brain-starter/hooks/block-mcp-config-inline-secret.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/block-mcp-config-inline-secret.py; fi"
           },
           {
             "type": "command",
-            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/block-skip-prefix-in-vault-write.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/block-skip-prefix-in-vault-write.py; fi"
+            "command": "if [ -f ~/.claude/skills/ai-brain-starter/hooks/block-skip-prefix-in-vault-write.py ] && [ -r ~/.claude/skills/ai-brain-starter/hooks/block-skip-prefix-in-vault-write.py ]; then [PYTHON] ~/.claude/skills/ai-brain-starter/hooks/block-skip-prefix-in-vault-write.py; fi"
           },
           {
             "type": "command",

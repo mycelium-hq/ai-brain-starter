@@ -2,19 +2,21 @@
 """The installed PreToolUse hooks never answer Claude Code's permission prompt.
 
 Claude Code's contract: a PreToolUse hook that prints permissionDecision "allow"
-skips the permission prompt; one that prints nothing leaves the normal flow
+skips the permission prompt; one that makes no decision leaves the normal flow
 alone. Our hooks may deny or warn, never answer for the user. Before this test
 18 hooks.json commands fell back to an allow, and 8 hook scripts printed one on
 every ordinary pass, so a free install quietly stopped Claude Code asking.
 
-What it runs: every command under hooks.PreToolUse in hooks.json, with
-[PYTHON] rendered to this interpreter and ~ pointed at a temp HOME that holds the
-repo's hooks, against one benign payload per tool (a Write to notes.txt, an Edit
-of it, a Bash ls). Then the same commands again with the hook files ABSENT, which
-is the fallback path. The respelling removed the `||` that used to swallow a
-hook's exit code, so a hook that exits non-zero on a benign call now shows an
-error on every call and one that exits 2 would block a benign write: both are
-asserted as well.
+What it proves, and what it does not. It runs every command under
+hooks.PreToolUse in hooks.json, with [PYTHON] rendered to this interpreter and ~
+pointed at a temp HOME that holds the repo's hooks, and fails if one of those runs
+prints an allow. The runs are: a benign payload per tool (a Write to notes.txt, an
+Edit of it, a Bash ls); the same commands with the hook files ABSENT (the fallback
+path); and the same commands with each hook file present but UNREADABLE (mode 000).
+An allow printed on some other payload is not covered. The respelling removed the `||`
+that used to swallow a hook's exit code, so a hook that exits non-zero on a benign
+call now shows an error on every call and one that exits 2 would block a benign
+write: both are asserted as well.
 
 Mutants and the check that kills each:
   M1  a pass path prints allow                        -> the "present" legs
@@ -23,9 +25,14 @@ Mutants and the check that kills each:
       call now that nothing masks it
   M4  this test can never fail                        -> a planted copy of
       hooks.json (an echoed allow, an allow reachable only when the file is
-      absent, an exit 2) must be reported by the matching leg and only by it
+      absent, an exit 2, a `[ -f X ]` with no `[ -r X ]`) must be reported by the
+      matching leg and only by it
   M5  the sandbox runs no real hook (a vacuous green) -> every script a command
-      names exists in the "present" HOME and is missing from the "absent" one
+      names exists in the "present" HOME, is missing from the "absent" one and
+      cannot be read in the "unreadable" one
+  M12 an entry drops `[ -r X ]`, so a hook file that exists but cannot be read
+      makes Python exit 2, which blocks the call -> the unreadable leg must give
+      rc 0 and no decision on every command
 
 Section 3 runs the shipped skill-validator command on every shipped
 skills/**/SKILL.md (a Write of its own content) and on planted files:
@@ -63,6 +70,13 @@ REPO = Path(__file__).resolve().parent.parent
 HOOKS_JSON = REPO / "hooks.json"
 FAILURES = []
 DECISION = '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow"}}'
+CONTINUE = '{"continue":true,"suppressOutput":true}'
+
+# PreToolUse wirings that still test `[ -f X ]` alone, so a script that exists but cannot be read makes
+# them exit non-zero. They are not among the 18 commands that were respelled, and they are left as they
+# were. The set only shrinks: each member must still fail the unreadable leg (a respelled one has to be
+# removed), and nothing is ever added.
+UNREADABLE_GAP = frozenset({"validate-calendar-timezone.py", "sdd-cache-pre.sh"})
 
 
 def check(name, cond, detail=""):
@@ -71,39 +85,75 @@ def check(name, cond, detail=""):
         FAILURES.append(name)
 
 
-def answers_allow(stdout):
-    """True if stdout would make Claude Code skip its prompt: a permissionDecision
-    of allow in any spelling (quotes and backslashes tolerated: a miss costs more
-    than a false alarm), or the legacy top-level decision approve/allow."""
-    if re.search(r"""permissionDecision[\\"']*\s*[:=]\s*[\\"']*allow""", stdout, re.I):
-        return True
-    decoder, i = json.JSONDecoder(), stdout.find("{")
+def objects(stdout):
+    """Every JSON object printed on stdout, in order."""
+    found, decoder, i = [], json.JSONDecoder(), stdout.find("{")
     while 0 <= i < len(stdout):
         try:
             obj, end = decoder.raw_decode(stdout, i)
         except ValueError:
             i = stdout.find("{", i + 1)
             continue
-        if isinstance(obj, dict) and str(obj.get("decision", "")).lower() in ("approve", "allow"):
-            return True
+        if isinstance(obj, dict):
+            found.append(obj)
         i = stdout.find("{", end)
-    return False
+    return found
+
+
+def decisions(stdout):
+    """Every permission decision stdout carries: hookSpecificOutput.permissionDecision, or the legacy
+    top-level decision. An empty list means the hook made no decision."""
+    out = []
+    for obj in objects(stdout):
+        hs = obj.get("hookSpecificOutput")
+        if isinstance(hs, dict) and "permissionDecision" in hs:
+            out.append(str(hs["permissionDecision"]).lower())
+        if "decision" in obj:
+            out.append(str(obj["decision"]).lower())
+    return out
+
+
+def context(stdout):
+    """The additionalContext text stdout carries, if any."""
+    return " ".join(str(o["hookSpecificOutput"]["additionalContext"]) for o in objects(stdout)
+                    if isinstance(o.get("hookSpecificOutput"), dict) and "additionalContext" in o["hookSpecificOutput"])
+
+
+def answers_allow(stdout):
+    """True if stdout would make Claude Code skip its prompt: a permissionDecision
+    of allow in any spelling (quotes and backslashes tolerated: a miss costs more
+    than a false alarm), or the legacy top-level decision approve/allow."""
+    if re.search(r"""permissionDecision[\\"']*\s*[:=]\s*[\\"']*allow""", stdout, re.I):
+        return True
+    return any(d in ("approve", "allow") for d in decisions(stdout))
+
+
+def script_names(command):
+    """Basenames of the hook scripts a command runs through ~/."""
+    return {rel.rsplit("/", 1)[-1] for rel in re.findall(r"~/(\S+?\.(?:py|sh))\b", command)}
 
 
 class Sandbox:
-    """Two throwaway HOMEs: one holding the repo's hooks, one holding none."""
+    """Three throwaway HOMEs: one holding the repo's hooks, one holding none, one whose hook files cannot be read."""
 
     def __init__(self, root):
         root = Path(root)
         self.work = root / "work"
         self.work.mkdir()
         (self.work / "notes.txt").write_text("hello\n", encoding="utf-8")
-        self.homes = {"present": root / "present", "absent": root / "absent"}
+        self.homes = {"present": root / "present", "absent": root / "absent", "unreadable": root / "unreadable"}
         present = self.homes["present"] / ".claude"
         (present / "skills").mkdir(parents=True)
         (present / "skills" / "ai-brain-starter").symlink_to(REPO)
         (present / "hooks").symlink_to(REPO / "hooks")
         (self.homes["absent"] / ".claude").mkdir(parents=True)
+        (self.homes["unreadable"] / ".claude").mkdir(parents=True)
+        # root, or an account with CAP_DAC_OVERRIDE, reads a mode 000 file, so nothing can be made unreadable to it.
+        probe = self.homes["unreadable"] / ".claude" / "probe"
+        probe.write_text("x", encoding="utf-8")
+        probe.chmod(0)
+        self.can_hide = not os.access(str(probe), os.R_OK)
+        probe.unlink()
         # A working python3 first on PATH, so a machine whose python3 is a shim that
         # refuses script files cannot change what a hook that shells out to it does.
         (root / "bin").mkdir()
@@ -143,9 +193,23 @@ class Sandbox:
             self.cache[key] = self.run_payload(command, self.payload(tool), scenario)
         return self.cache[key]
 
+    def hide_scripts(self, command):
+        """Put a mode 000 stand-in for each script the command names into the unreadable HOME. Returns
+        whether the command names any script at all."""
+        rels = re.findall(r"~/(\S+?\.(?:py|sh))\b", command)
+        for rel in rels:
+            stand_in = self.homes["unreadable"] / rel
+            if not stand_in.exists():
+                stand_in.parent.mkdir(parents=True, exist_ok=True)
+                stand_in.write_text("# stand-in: an unreadable hook must never run\n", encoding="utf-8")
+                stand_in.chmod(0)
+        return bool(rels)
+
     def unfaithful(self, command, scenario):
-        """Scripts the command names whose presence does not match the scenario."""
+        """Scripts the command names whose state does not match the scenario: present, absent or unreadable."""
         named = [self.homes[scenario] / rel for rel in re.findall(r"~/(\S+?\.(?:py|sh))\b", command)]
+        if scenario == "unreadable":
+            return [p for p in named if not p.exists() or os.access(str(p), os.R_OK)]
         return [p for p in named if p.exists() != (scenario == "present")]
 
 
@@ -153,22 +217,33 @@ def scan(sb, hooks_json):
     """Run every PreToolUse command in hooks_json on every leg that applies.
 
     Returns a dict of lists of (scenario, tool, command, detail): `allow` (printed
-    an allow), `nonzero` (exit != 0 or a traceback), `unfaithful` (sandbox wrong),
-    plus `legs` (how many runs there were, per scenario)."""
+    an allow), `nonzero` (exit != 0 or a traceback, hook present or absent),
+    `unreadable` (the hook file cannot be read and the command did anything but exit
+    0 with no output or the pass-through), `unfaithful` (sandbox wrong), plus `legs`
+    (how many runs there were, per scenario)."""
     doc = json.loads(Path(hooks_json).read_text(encoding="utf-8"))
-    found = {"allow": [], "nonzero": [], "unfaithful": [], "legs": {"present": 0, "absent": 0}}
+    found = {"allow": [], "nonzero": [], "unreadable": [], "unfaithful": [], "legs": {"present": 0, "absent": 0}}
+    if sb.can_hide:
+        found["legs"]["unreadable"] = 0
     for group in doc["hooks"]["PreToolUse"]:
         matcher = group.get("matcher") or ".*"
         for hook in group["hooks"]:
             command = hook["command"]
             legs = [("present", t) for t in ("Write", "Edit", "Bash") if re.fullmatch(matcher, t)]
             legs.append(("absent", "Bash"))  # no script runs when it is absent: any payload will do
+            if sb.can_hide and sb.hide_scripts(command):
+                legs.append(("unreadable", "Bash"))  # nor when it cannot be read
             for scenario, tool in legs:
                 rc, out, err = sb.run(command, tool, scenario)
                 found["legs"][scenario] += 1
                 if answers_allow(out):
                     found["allow"].append((scenario, tool, command, out.strip()[:80]))
-                if rc != 0 or "Traceback" in err:
+                if scenario == "unreadable":
+                    # All an unreadable hook may leave behind is nothing, or the pass-through some wirings print.
+                    if rc != 0 or out.strip() not in ("", CONTINUE):
+                        found["unreadable"].append((scenario, tool, command, "rc=%d out=%s %s" % (
+                            rc, out.strip()[:40], err.strip()[-80:])))
+                elif rc != 0 or "Traceback" in err:
                     found["nonzero"].append((scenario, tool, command, "rc=%d %s" % (rc, err.strip()[-100:])))
                 if sb.unfaithful(command, scenario):
                     found["unfaithful"].append((scenario, tool, command, "script presence"))
@@ -257,12 +332,20 @@ def main():
 
         print("1. the shipped hooks.json")
         real = scan(sb, HOOKS_JSON)
-        check("both legs ran: hooks present and hooks absent", all(real["legs"].values()), real["legs"])
-        check("M5 the sandbox is faithful: scripts exist when present, are missing when absent",
+        check("every leg ran: hooks present, absent and unreadable", all(real["legs"].values()), real["legs"])
+        check("M5 the sandbox is faithful: scripts exist when present, are missing when absent, cannot be read when unreadable",
               not real["unfaithful"], show(real["unfaithful"]))
-        check("M1/M2 no command prints an allow, hook present or absent", not real["allow"], show(real["allow"]))
+        check("M1/M2 no command prints an allow, hook present, absent or unreadable", not real["allow"], show(real["allow"]))
         check("M3 every command exits 0 on every benign payload, hook present or absent",
               not real["nonzero"], show(real["nonzero"]))
+        if sb.can_hide:
+            gap = [x for x in real["unreadable"] if script_names(x[2]) & UNREADABLE_GAP]
+            check("M12 a hook file that exists but cannot be read (mode 000) gives rc 0 and no decision, on every command",
+                  not [x for x in real["unreadable"] if x not in gap], show([x for x in real["unreadable"] if x not in gap]))
+            stale = sorted(UNREADABLE_GAP - {n for x in gap for n in script_names(x[2])})
+            check("M12 each wiring left out of that rule still fails it, so the list only shrinks", not stale, stale)
+        else:
+            print("  skip M12: this account can read a mode 000 file (root?), so no file can be made unreadable to it")
 
         print("2. a planted copy of hooks.json is caught, by the right leg")
         planted = {
@@ -271,6 +354,9 @@ def main():
             "fallback": ("if [ -f ~/.claude/hooks/retry-budget.py ]; then [PYTHON] ~/.claude/hooks/retry-budget.py; "
                          "else echo '%s'; fi" % DECISION),
             "exit2": "[PYTHON] -c 'import sys; sys.exit(2)'",
+            # The shape the 18 commands had before `[ -r X ]` was added: a script that exists but cannot be
+            # read makes Python exit 2.
+            "unreadable": "if [ -f ~/.claude/hooks/retry-budget.py ]; then [PYTHON] ~/.claude/hooks/retry-budget.py; fi",
         }
         doc = json.loads(HOOKS_JSON.read_text(encoding="utf-8"))
         next(g for g in doc["hooks"]["PreToolUse"] if g.get("matcher") == "Bash")["hooks"].extend(
@@ -286,9 +372,14 @@ def main():
         check("M4 an allow reachable only when the file is absent is reported on the absent leg only",
               by("allow", "fallback") == ["absent"], by("allow", "fallback"))
         check("M4 an exit 2 on a benign payload is reported", bool(by("nonzero", "exit2")), by("nonzero", "exit2"))
-        check("M4 nothing else is reported: the shipped entries stay clean in the planted copy",
-              all(c in planted.values() for _, _, c, _ in bad["allow"] + bad["nonzero"]),
-              show([x for x in bad["allow"] + bad["nonzero"] if x[2] not in planted.values()]))
+        if sb.can_hide:
+            check("M4/M12 a `[ -f X ]` with no `[ -r X ]` is reported on the unreadable leg and nowhere else",
+                  by("unreadable", "unreadable") == ["unreadable"] and not by("allow", "unreadable")
+                  and not by("nonzero", "unreadable"),
+                  (by("unreadable", "unreadable"), by("allow", "unreadable"), by("nonzero", "unreadable")))
+        stray = [x for x in bad["allow"] + bad["nonzero"] + bad["unreadable"]
+                 if x[2] not in planted.values() and not script_names(x[2]) & UNREADABLE_GAP]
+        check("M4 nothing else is reported: the shipped entries stay clean in the planted copy", not stray, show(stray))
 
         print("3. the skill validator, as wired, on every shipped SKILL.md and on planted files")
         skill_validator_leg(sb)
