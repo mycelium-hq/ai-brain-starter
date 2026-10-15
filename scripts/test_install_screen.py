@@ -218,7 +218,14 @@ with tempfile.TemporaryDirectory() as tmp:
                  for name, path in (("quiet", quiet), ("script", script), ("fallback", fallback))}
         check(f"{platform}: hooks that never answer allow are not counted", count["quiet"] == 0, count)
         check(f"{platform}: a planted script that answers allow raises the count", count["script"] == 1, count)
-        check(f"{platform}: a planted allow fallback raises the count", count["fallback"] == 1, count)
+        if platform == "posix":
+            check("posix: a planted allow fallback raises the count", count["fallback"] == 1, count)
+        else:
+            rendered = [h["command"] for g in screen._wired("windows", True, fallback)[0]["hooks"]["PreToolUse"]
+                        for h in g["hooks"]]
+            check("windows: a planted allow fallback is rendered --fallback silent, so it is not counted",
+                  count["fallback"] == 0 and bool(rendered)
+                  and all("--fallback silent" in c and "allow" not in c for c in rendered), (count, rendered))
         shown = {name: APPROVES in screen.render("default", platform, "en", path, tmp / "hooks")
                  for name, path in (("quiet", quiet), ("script", script))}
         check(f"{platform}: the planted script puts the line on the screen, quiet hooks do not",

@@ -1266,8 +1266,8 @@ def platformize_template_for_windows(
         `lint-claude-settings.py --test` platformize to a byte-identical copy of
         the plain entry, so dedup collapsed the pair and the linter's self-test
         never ran on Windows.
-      - fallback flavor: `allow` when the original masked to a PreToolUse
-        permissionDecision, else `silent`.
+      - fallback flavor: always `silent`. No hook answers Claude Code's
+        permission prompt, so the runner has no allow form to select.
       - every rewritten entry carries "timeout": WINDOWS_HOOK_TIMEOUT_SECONDS.
         The POSIX shell forms never needed one; the runner form does, because
         `subprocess.run(..., timeout=45)` went away with the child process
@@ -1324,10 +1324,9 @@ def platformize_template_for_windows(
                 target = _ascii_safe_win_path(str(Path(target)))
                 if not target.isascii():
                     non_ascii.add(target)
-                fb = "allow" if "permissionDecision" in cmd else "silent"
                 h = dict(h)
                 h["command"] = " ".join(
-                    [*launcher, f'"{runner}"', "--fallback", fb, f'"{target}"',
+                    [*launcher, f'"{runner}"', "--fallback", "silent", f'"{target}"',
                      *(_win_quote_arg(a) for a in _hook_script_args(cmd))])
                 h["timeout"] = WINDOWS_HOOK_TIMEOUT_SECONDS
                 new_hooks.append(h)

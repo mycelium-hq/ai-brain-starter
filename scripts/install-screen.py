@@ -122,11 +122,11 @@ def hook_counts(platform: str, hooks_json: Path = HOOKS_JSON) -> tuple[int, int]
 
 def can_allow(text: str) -> bool:
     """True if a hook command, or the script it runs, can print the decision that
-    makes Claude Code skip its permission prompt: `--fallback allow` (Windows) or a
-    text that names permissionDecision and has a quoted "allow". It would rather
-    count a hook that never prints it than miss one that does."""
-    return "--fallback allow" in text or (
-        "permissionDecision" in text and re.search(r"""["']allow["']""", text) is not None)
+    makes Claude Code skip its permission prompt: a text that names permissionDecision
+    and has a quoted "allow". It would rather count a hook that never prints it than
+    miss one that does. The Windows runner has no allow form, so `--fallback allow`
+    does not count."""
+    return "permissionDecision" in text and re.search(r"""["']allow["']""", text) is not None
 
 
 @functools.lru_cache(maxsize=None)

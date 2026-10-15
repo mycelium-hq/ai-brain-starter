@@ -326,13 +326,11 @@ PARITY_CASES = [
      'sys.exit(2)\n', "silent", ()),
     ("crash: unhandled exception",
      'raise RuntimeError("boom")\n', "silent", ()),
-    ("crash: unhandled exception, allow fallback",
-     'raise RuntimeError("boom")\n', "allow", ()),
     ("exit 1 with noise on both streams (must be swallowed)",
      'import sys\nsys.stdout.write("noisy")\nsys.stderr.write("noisier")\n'
      'sys.exit(1)\n', "silent", ()),
     ("exit 3", "import sys\nsys.exit(3)\n", "silent", ()),
-    ("exit 255", "import sys\nsys.exit(255)\n", "allow", ()),
+    ("exit 255", "import sys\nsys.exit(255)\n", "silent", ()),
     ("sys.exit() with no argument", "import sys\nsys.exit()\n", "silent", ()),
     ("sys.exit(None)", "import sys\nsys.exit(None)\n", "silent", ()),
     ("sys.exit with a message string",
@@ -446,9 +444,11 @@ def test_exit_code_protocol(h: Harness) -> None:
     else:
         bad("missing target", f"{res.returncode} {res.stdout!r}")
 
+    # An entry an older release wrote says `--fallback allow`. The runner has no allow form, so a crash must
+    # fall back to the silent JSON; a restored allow mode would answer Claude Code's permission prompt.
     res = h.run(h.hook("crash2.py", "raise RuntimeError('x')\n"), fallback="allow")
-    if res.returncode == 0 and ALLOW in res.stdout.decode():
-        ok("--fallback allow emits the PreToolUse allow form on a crash")
+    if res.returncode == 0 and SILENT in res.stdout.decode() and ALLOW not in res.stdout.decode():
+        ok("a stale --fallback allow entry falls back to the silent JSON on a crash, never to an allow")
     else:
         bad("--fallback allow", f"{res.returncode} {res.stdout!r}")
 
