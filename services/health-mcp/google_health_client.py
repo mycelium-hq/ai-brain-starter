@@ -33,7 +33,7 @@ Field names below were checked 2026-09-09 against developers.google.com/health
 (data-types index, the vitals + calories pages, and the dataTypes.dataPoints
 REST reference). steps, active-energy-burned, total-calories, heart-rate,
 weight, height, blood-glucose, and body-fat are CONFIRMED against those pages
-(three were wrong as first written — steps and body-fat were already right).
+(six were wrong as first written — steps and body-fat were already right).
 The remaining rows (distance, active-minutes, floors,
 daily-resting-heart-rate, daily-heart-rate-variability,
 daily-oxygen-saturation, daily-respiratory-rate, daily-vo2-max) are still
