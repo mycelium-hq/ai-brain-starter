@@ -75,7 +75,7 @@ TIER 2 -- BARE /tmp (MYC-4822). WARN, never deny.
   forever about a file that is gone.
 
 Contract: stdin JSON; stdout hookSpecificOutput (permissionDecision for tier 1,
-additionalContext for tier 2); exit 0 always.
+additionalContext for tier 2); exit 0 always. A pass prints nothing.
 Fails OPEN on every error -- a guard that breaks the session is worse than the bug.
 
 Bypass: SCRATCHPAD_CLOBBER_BYPASS=1 (exported OR inline `VAR=1 <cmd>`).
@@ -162,10 +162,6 @@ def _emit(decision: str, reason: str | None = None) -> None:
         out["hookSpecificOutput"]["permissionDecisionReason"] = reason
     print(json.dumps(out))
     sys.exit(0)
-
-
-def allow() -> None:
-    _emit("allow")
 
 
 def deny(reason: str) -> None:
@@ -343,7 +339,7 @@ def suggest(rel: str, me: str) -> str:
 def evaluate(payload: dict) -> tuple[str, str | None]:
     """Pure decision core. Returns (decision, message).
 
-    decision is "deny" (tier 1), "warn" (tier 2) or "allow". Tier 1 is checked
+    decision is "deny" (tier 1), "warn" (tier 2) or "pass" (say nothing). Tier 1 is checked
     first: a scratchpad collision is always a defect, and its verdict must not
     be diluted by a tier-2 warning on the same path.
     """
@@ -352,11 +348,11 @@ def evaluate(payload: dict) -> tuple[str, str | None]:
     command = ti.get("command") or ""
 
     if os.environ.get(BYPASS) == "1" or inline_bypass(command, BYPASS):
-        return "allow", None
+        return "pass", None
 
     targets = tool_write_targets(tool_name, ti)
     if not targets:
-        return "allow", None
+        return "pass", None
 
     scratch = payload.get("scratchpad_dir")
     sdir = None
@@ -428,7 +424,7 @@ def evaluate(payload: dict) -> tuple[str, str | None]:
             f"    {steer}\n"
             f"Not blocking -- /tmp has legitimate traffic and this is a heads-up, not a gate."
         )
-    return "allow", None
+    return "pass", None
 
 
 def _selftest() -> int:
@@ -455,39 +451,39 @@ def _selftest() -> int:
 
     log = f"{sdir}/verify-run.log"
     # 1. first writer claims -> allowed
-    check("agent A first write", evaluate(payload("AAA", f"npm run verify > {log}"))[0], "allow")
+    check("agent A first write", evaluate(payload("AAA", f"npm run verify > {log}"))[0], "pass")
     # 2. NEGATIVE CONTROL: a different agent must be DENIED
     check("agent B clobber (must deny)", evaluate(payload("BBB", f"npm run verify > {log}"))[0], "deny")
     # 3. POSITIVE CONTROL: same agent re-writing its own file must be ALLOWED
-    check("agent A self-rewrite", evaluate(payload("AAA", f"npm run verify > {log}"))[0], "allow")
+    check("agent A self-rewrite", evaluate(payload("AAA", f"npm run verify > {log}"))[0], "pass")
     # 4. append by a foreign agent is corruption too
     check("agent B append (must deny)", evaluate(payload("BBB", f"echo x >> {log}"))[0], "deny")
     # 5. reads are never blocked
-    check("agent B read", evaluate(payload("BBB", f"cat {log}"))[0], "allow")
+    check("agent B read", evaluate(payload("BBB", f"cat {log}"))[0], "pass")
     # 6. Write tool is attributed the same way
     wf = f"{sdir}/commit-msg.txt"
-    check("Write tool, agent C claims", evaluate(payload("CCC", fp=wf, tool="Write"))[0], "allow")
+    check("Write tool, agent C claims", evaluate(payload("CCC", fp=wf, tool="Write"))[0], "pass")
     check("Write tool, agent D clobber (must deny)", evaluate(payload("DDD", fp=wf, tool="Write"))[0], "deny")
     # 7. paths outside the scratchpad are none of our business
-    check("outside scratchpad", evaluate(payload("BBB", f"echo x > {tmp}/elsewhere.log"))[0], "allow")
+    check("outside scratchpad", evaluate(payload("BBB", f"echo x > {tmp}/elsewhere.log"))[0], "pass")
     # 8. inline bypass must actually reach the command string
-    check("inline bypass", evaluate(payload("BBB", f"{BYPASS}=1 npm run verify > {log}"))[0], "allow")
+    check("inline bypass", evaluate(payload("BBB", f"{BYPASS}=1 npm run verify > {log}"))[0], "pass")
     # 9. /dev/null is never a claimable target
-    check("/dev/null never claimed", evaluate(payload("BBB", "echo x > /dev/null"))[0], "allow")
+    check("/dev/null never claimed", evaluate(payload("BBB", "echo x > /dev/null"))[0], "pass")
     # 10. the PARENT session (no agent_id) owns files exactly like any subagent
     mf = f"{sdir}/parent-notes.md"
-    check("main session claims", evaluate(payload(None, f"echo x > {mf}"))[0], "allow")
+    check("main session claims", evaluate(payload(None, f"echo x > {mf}"))[0], "pass")
     check("subagent clobbers main (must deny)", evaluate(payload("EEE", f"echo y > {mf}"))[0], "deny")
 
     # 11. REGRESSION: the shell-variable form that slipped past the live run
     vlog = "vars-run.log"
     pre = f"SP={sdir}"
-    check("var form claims", evaluate(payload("FFF", f"{pre}; echo a > $SP/{vlog}"))[0], "allow")
+    check("var form claims", evaluate(payload("FFF", f"{pre}; echo a > $SP/{vlog}"))[0], "pass")
     check("var form clobber (must deny)",
           evaluate(payload("GGG", f"{pre}; echo b > $SP/{vlog}"))[0], "deny")
     check("braced var form clobber (must deny)",
           evaluate(payload("GGG", f'{pre}; echo b > "${{SP}}/{vlog}"'))[0], "deny")
-    check("var form self-rewrite", evaluate(payload("FFF", f"{pre}; echo c > $SP/{vlog}"))[0], "allow")
+    check("var form self-rewrite", evaluate(payload("FFF", f"{pre}; echo c > $SP/{vlog}"))[0], "pass")
 
     # --- TIER 2: bare /tmp. Isolate the ledger from the real ~/.claude. -----
     prev_cfg = os.environ.get("CLAUDE_CONFIG_DIR")
@@ -498,17 +494,17 @@ def _selftest() -> int:
                     "tool_input": {"command": cmd}}
 
         recap = "/tmp/close-recap-mycelium.md"
-        check("tmp: session A claims", evaluate(tpay("s-A", f"echo x > {recap}"))[0], "allow")
+        check("tmp: session A claims", evaluate(tpay("s-A", f"echo x > {recap}"))[0], "pass")
         # NEGATIVE CONTROL: a different SESSION must be warned, never denied.
         check("tmp: session B collides (must warn)",
               evaluate(tpay("s-B", f"echo y > {recap}"))[0], "warn")
         # POSITIVE CONTROL: the owner rewriting its own file stays silent.
-        check("tmp: session A self-rewrite", evaluate(tpay("s-A", f"echo z > {recap}"))[0], "allow")
+        check("tmp: session A self-rewrite", evaluate(tpay("s-A", f"echo z > {recap}"))[0], "pass")
         # A disambiguated name cannot collide, so it is never governed.
         uniq = "/tmp/tmp.NvyF0REjpV/notes.md"
-        check("tmp: mktemp-style claim", evaluate(tpay("s-C", f"echo a > {uniq}"))[0], "allow")
-        check("tmp: mktemp-style second session", evaluate(tpay("s-D", f"echo b > {uniq}"))[0], "allow")
-        check("tmp: read is never governed", evaluate(tpay("s-B", f"cat {recap}"))[0], "allow")
+        check("tmp: mktemp-style claim", evaluate(tpay("s-C", f"echo a > {uniq}"))[0], "pass")
+        check("tmp: mktemp-style second session", evaluate(tpay("s-D", f"echo b > {uniq}"))[0], "pass")
+        check("tmp: read is never governed", evaluate(tpay("s-B", f"cat {recap}"))[0], "pass")
         check("tmp: ledger is NOT in /tmp", Path("/tmp", TMP_LEDGER).exists(), False)
         check("tmp: ledger is under the config dir",
               (Path(os.environ["CLAUDE_CONFIG_DIR"]) / TMP_LEDGER).is_file(), True)
@@ -529,13 +525,11 @@ def main() -> None:
     try:
         payload = json.load(sys.stdin)
     except Exception:
-        allow()
-        return
+        return                                         # no decision
     try:
         decision, reason = evaluate(payload)
     except Exception:
-        allow()                                        # fail OPEN, always
-        return
+        return                                         # fail OPEN, always: no decision
     if decision == "deny":
         try:
             log_fire(NAME, status="blocked", agent=payload.get("agent_id") or "main")
@@ -549,7 +543,7 @@ def main() -> None:
         except Exception:
             pass
         warn(reason or "bare /tmp collision")
-    allow()
+    # "pass": say nothing, so Claude Code's own permission flow decides.
 
 
 if __name__ == "__main__":

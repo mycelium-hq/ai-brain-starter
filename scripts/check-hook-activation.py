@@ -358,10 +358,9 @@ UNOWNED_BASELINE: Set[str] = {
     "surface-connector-liveness.py",
     "surface-orphan-claude-branches.py",
     "surface-stranded-session-artifacts.py",
-    "validate-skill-frontmatter.py",
 }
 
-UNOWNED_MAX = 9
+UNOWNED_MAX = 8
 
 
 PHASE_HOOK_RE = re.compile(r"hooks/([\w.-]+\.(?:py|sh))")

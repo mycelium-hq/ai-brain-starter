@@ -151,13 +151,14 @@ assert_eq "cd to a sibling worktree ALLOWS" \
   "$(run "$wt" "cd $main/.claude/worktrees/other")" 0
 
 # --- 5. MISSING-FILE FALLBACK: absent script must not wedge Bash -------------
-# The `if [ -f ]` guard's else-branch. If the file is missing the hook must emit
-# allow-JSON and exit 0, never a shell error that blocks every Bash call.
+# The `if [ -f ]` guard has no else-branch. If the file is missing the command
+# must print nothing and exit 0: no shell error that blocks every Bash call, and
+# no allow-JSON that would answer Claude Code's permission prompt for the user.
 absent="${resolved//$REPO_ROOT\/hooks/\/nonexistent-abs-path}"
 out="$(printf '{"tool_name":"Bash","cwd":"/tmp","tool_input":{"command":"cd /tmp"}}' \
   | bash -c "$absent" 2>/dev/null && echo "|rc=0" || echo "|rc=$?")"
 case "$out" in
-  *'"permissionDecision":"allow"'*'|rc=0') pass "missing script falls back to allow (exit 0)" ;;
+  '|rc=0') pass "missing script makes no decision (no output, exit 0)" ;;
   *) fail "missing-script fallback wrong: $out" ;;
 esac
 

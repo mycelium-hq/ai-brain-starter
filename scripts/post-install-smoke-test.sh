@@ -128,10 +128,10 @@ fi
 LINTER="$SKILL_DIR/hooks/lint-vault-frontmatter.py"
 if [[ -f "$LINTER" ]]; then
   resp=$(echo '{"tool_name":"Read","tool_input":{}}' | python3 "$LINTER" 2>/dev/null)
-  if echo "$resp" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); assert d.get('hookSpecificOutput',{}).get('permissionDecision')=='allow'" 2>/dev/null; then
-    ok "lint-vault-frontmatter.py allows non-Write tools"
+  if [[ -z "$resp" ]]; then
+    ok "lint-vault-frontmatter.py stays silent on non-Write tools"
   else
-    fail "lint-vault-frontmatter.py wrong response for Read tool"
+    fail "lint-vault-frontmatter.py answered a Read tool (it must print nothing): $resp"
   fi
 fi
 

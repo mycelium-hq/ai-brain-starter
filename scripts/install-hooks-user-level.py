@@ -111,10 +111,12 @@ WINDOWS_HOOK_TIMEOUT_SECONDS = 60
 #   1. an entry in hooks.json  <- this is what actually installs it
 #   2. an entry here (+ ABS_OWNED_BASENAMES) so re-installs dedup it properly
 #
-# If it signals by EXIT CODE 2 (a blocking gate), wire it in hooks.json as
-# `if [ -f <path> ]; then <path>; else <allow-json>; fi` — the common
-# `<path> 2>/dev/null || echo <allow-json>` idiom discards the stderr message
-# AND rewrites the block into an allow.
+# Wire a PreToolUse hook in hooks.json as `if [ -f <path> ]; then <interpreter> <path>; fi`.
+# A missing script then makes NO decision, and a gate that signals by EXIT CODE 2
+# keeps its block and its stderr message. Never end a command in an allow: the
+# common `<path> 2>/dev/null || echo <allow-json>` idiom answers Claude Code's
+# permission prompt for the user, discards the stderr message AND rewrites a block
+# into an allow. scripts/test_hooks_json_never_answers_allow.py fails on it.
 #
 # This comment replaced "Extend this list when adding new hooks", which read as
 # the complete instruction and is how the most recent dormant hook happened:
@@ -131,6 +133,10 @@ ABS_FINGERPRINTS = [
     "ai-brain-starter/hooks/detect-closing-signal.py",
     "ai-brain-starter/hooks/verify-session-close-cascade.py",
     "ai-brain-starter/hooks/lint-vault-frontmatter.py",
+    # Owned so an update REPLACES the old registration instead of adding a second
+    # beside it: the old one carried an allow fallback that answered the permission
+    # prompt, and would have stayed on every existing install.
+    "ai-brain-starter/hooks/validate-skill-frontmatter.py",
     "ai-brain-starter/hooks/log-skill-usage.py",
     "ai-brain-starter/hooks/first-week-checkin.py",
     "ai-brain-starter/hooks/migrate-to-user-level.py",
@@ -285,7 +291,7 @@ ABS_OWNED_BASENAMES = {
     "validate-subagent-return.py",
     "scrub-session-jsonl-secrets.py",
     "detect-closing-signal.py", "verify-session-close-cascade.py",
-    "lint-vault-frontmatter.py", "log-skill-usage.py",
+    "lint-vault-frontmatter.py", "log-skill-usage.py", "validate-skill-frontmatter.py",
     "first-week-checkin.py", "migrate-to-user-level.py",
     "inject-love-language-context.py", "inject-meeting-workflow-on-trigger.py",
     "session-end-hook.sh", "email-gate-hook.py", "graph-context-hook.sh",

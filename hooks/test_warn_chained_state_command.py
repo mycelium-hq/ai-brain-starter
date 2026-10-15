@@ -3,8 +3,9 @@
 
 Fires on the exact shape that hid the incident: a state-changing command
 chained after `&&` in one Bash call whose output is piped through tail/head.
-Warn-only, so the assertion is on the presence of the advisory message, and on
-the decision NEVER being a deny.
+Warn-only, so the assertion is on the presence of the advisory message in
+additionalContext, and on there being NO permission decision at all: neither a
+deny, nor an allow, which would skip Claude Code's own permission prompt.
 
 Stdlib only. Exit 0 = all pass.
 """
@@ -49,10 +50,14 @@ def expect_warn(label: str, command: str):
         FAIL += 1
         print(f"FAIL  {label} :: no warning emitted")
         return
-    decision = d.get("hookSpecificOutput", {}).get("permissionDecision")
-    if decision != "allow":
+    hs = d.get("hookSpecificOutput", {})
+    if "permissionDecision" in hs:
         FAIL += 1
-        print(f"FAIL  {label} :: warn hook must never deny (got {decision!r})")
+        print(f"FAIL  {label} :: warn hook must make no permission decision (got {hs['permissionDecision']!r})")
+        return
+    if not hs.get("additionalContext"):
+        FAIL += 1
+        print(f"FAIL  {label} :: the advisory must ride on additionalContext")
         return
     PASS += 1
     print(f"PASS  {label}")

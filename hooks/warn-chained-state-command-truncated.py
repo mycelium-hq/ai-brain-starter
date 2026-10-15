@@ -23,6 +23,10 @@ re-read the remote instead of trusting the tail. The Stop-side guard
 (check-fabricated-verification.py, Detector C) is what actually enforces the
 read-of-record before a landed-state claim.
 
+The warning rides on additionalContext with NO permissionDecision: it reaches
+the agent, and Claude Code's own permission prompt stays in charge of the call.
+(It used to answer allow, with the text as the reason, which skipped the prompt.)
+
 Bypass: CHAINED_STATE_CMD_BYPASS=1.
 """
 
@@ -161,8 +165,7 @@ def main() -> None:
             print(json.dumps({
                 "hookSpecificOutput": {
                     "hookEventName": "PreToolUse",
-                    "permissionDecision": "allow",
-                    "permissionDecisionReason": cmsg,
+                    "additionalContext": cmsg,
                 },
             }))
             sys.exit(0)
@@ -199,8 +202,7 @@ def main() -> None:
         print(json.dumps({
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
-                "permissionDecision": "allow",
-                "permissionDecisionReason": vmsg,
+                "additionalContext": vmsg,
             },
         }))
         sys.exit(0)
@@ -229,8 +231,7 @@ def main() -> None:
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
-            "permissionDecision": "allow",
-            "permissionDecisionReason": msg,
+            "additionalContext": msg,
         },
     }))
     sys.exit(0)

@@ -54,8 +54,9 @@ def check(name, cond, detail=""):
 
 def answers_allow(stdout):
     """True if stdout would make Claude Code skip its prompt: a permissionDecision
-    of allow in any spelling, or the legacy top-level decision approve/allow."""
-    if re.search(r"""permissionDecision["']?\s*[:=]\s*["']?allow""", stdout, re.I):
+    of allow in any spelling (quotes and backslashes tolerated: a miss costs more
+    than a false alarm), or the legacy top-level decision approve/allow."""
+    if re.search(r"""permissionDecision[\\"']*\s*[:=]\s*[\\"']*allow""", stdout, re.I):
         return True
     decoder, i = json.JSONDecoder(), stdout.find("{")
     while 0 <= i < len(stdout):

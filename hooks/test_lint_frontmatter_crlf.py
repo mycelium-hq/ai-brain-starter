@@ -2,10 +2,12 @@
 """Controls for lint-vault-frontmatter.py's frontmatter delimiter gate.
 
 THE NEGATIVE CONTROL IS THE POINT. This hook's failure mode is not "it crashes",
-it is "it allows everything" -- it is fail-open by design, so a broken build, a
+it is "it passes everything" -- it is fail-open by design, so a broken build, a
 missing PyYAML, or an over-permissive pattern all look identical to a green run
-that only asserts allows. Every leg below that expects ALLOW is therefore paired
-with a leg that expects DENY on the same code path.
+that only asserts passes. Every leg below that expects a PASS is therefore paired
+with a leg that expects DENY on the same code path. A pass is SILENCE: the hook
+prints nothing, so Claude Code's own permission prompt stays in charge. A leg
+that sees an allow instead fails, because the hook must never answer the prompt.
 
 The regression this locks: #409 fixed the CRLF total-denial incident in
 scripts/vault-schema-validator.py, and #431 locked it there with a test. The
@@ -16,13 +18,13 @@ CRLF content is still rejected as "'---' delimiter not properly closed", and the
 validator's fix is never reached. Same incident, one layer out.
 
 Legs:
-   1. LF frontmatter          -> ALLOW   <- baseline
-   2. CRLF frontmatter        -> ALLOW   <- the regression; LF-only pattern fails HERE
+   1. LF frontmatter          -> PASS    <- baseline
+   2. CRLF frontmatter        -> PASS    <- the regression; LF-only pattern fails HERE
    3. Malformed YAML          -> DENY    <- negative control: gate still bites
    4. Unclosed delimiter      -> DENY    <- negative control on this exact pattern
    5. CRLF + malformed YAML   -> DENY    <- the fix widens line endings, not the schema
-   6. Non-vault path          -> ALLOW   <- scoped; not every .md is linted
-   7. Bypass env              -> ALLOW   <- escape hatch intact
+   6. Non-vault path          -> PASS    <- scoped; not every .md is linted
+   7. Bypass env              -> PASS    <- escape hatch intact
 
 Negative control, verified: reverting the pattern to the LF-only form fails
 exactly leg 2 and exits 1; restoring it returns 7/7.
@@ -55,7 +57,8 @@ UNCLOSED_LF = "---\n" + BODY + "\n\nbody with no closing delimiter\n"
 
 
 def decide(content: str, path: str = VAULT_MD, env_extra: dict | None = None) -> str:
-    """Run the hook and return 'allow', 'deny', or a diagnostic string."""
+    """Run the hook and return 'silent' (it printed nothing), 'deny', 'allow' (a bug) or a
+    diagnostic string."""
     env = dict(os.environ)
     env.pop("VAULT_LINT_BYPASS", None)
     if env_extra:
@@ -67,8 +70,10 @@ def decide(content: str, path: str = VAULT_MD, env_extra: dict | None = None) ->
         [sys.executable, HOOK], input=payload, capture_output=True, text=True,
         encoding="utf-8", errors="replace", env=env, timeout=30,
     )
+    if not proc.stdout.strip():
+        return "silent"
     try:
-        out = json.loads(proc.stdout or "{}")
+        out = json.loads(proc.stdout)
     except json.JSONDecodeError:
         return f"NON-JSON stdout={proc.stdout!r} stderr={proc.stderr!r}"
     return out.get("hookSpecificOutput", {}).get("permissionDecision", "MISSING")
@@ -76,14 +81,14 @@ def decide(content: str, path: str = VAULT_MD, env_extra: dict | None = None) ->
 
 def main() -> int:
     legs = [
-        ("LF frontmatter allowed", lambda: decide(GOOD_LF), "allow"),
-        ("CRLF frontmatter allowed (the regression)", lambda: decide(GOOD_CRLF), "allow"),
+        ("LF frontmatter passes silently", lambda: decide(GOOD_LF), "silent"),
+        ("CRLF frontmatter passes silently (the regression)", lambda: decide(GOOD_CRLF), "silent"),
         ("malformed YAML denied", lambda: decide(BAD_YAML_LF), "deny"),
         ("unclosed delimiter denied", lambda: decide(UNCLOSED_LF), "deny"),
         ("CRLF + malformed YAML still denied", lambda: decide(BAD_YAML_CRLF), "deny"),
-        ("non-vault path allowed", lambda: decide(BAD_YAML_LF, path=OUTSIDE_MD), "allow"),
+        ("non-vault path passes silently", lambda: decide(BAD_YAML_LF, path=OUTSIDE_MD), "silent"),
         ("bypass honored", lambda: decide(BAD_YAML_LF,
-                                          env_extra={"VAULT_LINT_BYPASS": "1"}), "allow"),
+                                          env_extra={"VAULT_LINT_BYPASS": "1"}), "silent"),
     ]
 
     # PyYAML absent means every deny leg silently becomes an allow, which would

@@ -22,13 +22,13 @@ Skill-context detection (in order):
 
 Hook contract (Claude Code PreToolUse):
   Input (stdin JSON): {"tool_name": "...", "tool_input": {...}}
-  Output (stdout JSON):
-    - {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"}} -> allow
+  Output (stdout JSON), only when it blocks:
     - {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "..."}} -> block
+  Every other path prints nothing, so Claude Code's own permission prompt stays in charge.
 
 Pass 1 behavior:
   - Only fires on files matching skills/**/SKILL.md
-  - Silent allow for any other file
+  - Silent for any other file
   - Projects the post-edit content (current file + Edit substitution) before linting
   - Blocks with a clear stderr message naming the schema violation
   - Bypass: SKILL_VALIDATION_BYPASS=1 in env
@@ -38,7 +38,7 @@ Pass 2 behavior:
   - Reads the named skill's SKILL.md and resolves tool_access
   - Blocks tool_name not on the whitelist with a sandbox-specific message
   - Bypass: SKILL_SANDBOX_BYPASS=1 in env
-  - Fail-open: any internal error returns allow (never blocks the user spuriously)
+  - Fail-open: any internal error says nothing (never blocks the user spuriously)
 
 Both passes are fail-open on internal errors. Performance budget: <200ms.
 
@@ -58,15 +58,6 @@ from pathlib import Path
 def log_debug(msg: str) -> None:
     if os.environ.get("SKILL_VALIDATION_DEBUG") == "1":
         print(f"[validate-skill-frontmatter] {msg}", file=sys.stderr)
-
-
-def emit_allow() -> None:
-    print(json.dumps({
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "allow",
-        }
-    }))
 
 
 def emit_deny(reason: str) -> None:
@@ -239,20 +230,17 @@ def load_skill_tool_access(skill_md_path: Path) -> tuple[list[str] | None, str |
 def run_schema_validation(tool_name: str, tool_input: dict) -> int:
     """Pass 1: schema validation on Write|Edit|MultiEdit to skills/**/SKILL.md.
 
-    Returns the process exit code. Emits the hook decision JSON.
+    Returns the process exit code. Emits the deny JSON when blocking; prints nothing otherwise.
     """
     if tool_name not in ("Write", "Edit", "MultiEdit"):
-        emit_allow()
         return 0
 
     file_path = tool_input.get("file_path", "")
     if not is_skill_md(file_path):
-        emit_allow()
         return 0
 
     projected = project_post_edit_content(tool_name, tool_input)
     if projected is None:
-        emit_allow()
         return 0
 
     fm_text, fm_err = extract_frontmatter(projected)
@@ -267,7 +255,6 @@ def run_schema_validation(tool_name: str, tool_input: dict) -> int:
         import yaml  # type: ignore
     except ImportError:
         log_debug("PyYAML not installed; skipping validation")
-        emit_allow()
         return 0
 
     try:
@@ -289,21 +276,18 @@ def run_schema_validation(tool_name: str, tool_input: dict) -> int:
     schema_path = find_schema()
     if not schema_path:
         log_debug("schema file not found; skipping validation")
-        emit_allow()
         return 0
 
     try:
         schema = json.loads(schema_path.read_text(encoding="utf-8", errors="replace"))
     except (OSError, json.JSONDecodeError) as e:
         log_debug(f"schema load failed: {e}")
-        emit_allow()
         return 0
 
     try:
         import jsonschema  # type: ignore
     except ImportError:
         log_debug("jsonschema not installed; skipping validation")
-        emit_allow()
         return 0
 
     try:
@@ -311,7 +295,6 @@ def run_schema_validation(tool_name: str, tool_input: dict) -> int:
         errors = sorted(validator.iter_errors(parsed), key=lambda e: list(e.absolute_path))
     except jsonschema.SchemaError as e:
         log_debug(f"schema is itself invalid: {e}")
-        emit_allow()
         return 0
 
     if errors:
@@ -328,7 +311,6 @@ def run_schema_validation(tool_name: str, tool_input: dict) -> int:
         )
         return 1
 
-    emit_allow()
     return 0
 
 
@@ -339,8 +321,8 @@ def run_capability_sandbox(tool_name: str) -> int:
     declared tool_access whitelist. No-op when no active skill is set or
     when the skill does not declare tool_access.
 
-    Returns the process exit code. Emits the hook decision JSON only when
-    blocking; allow is left to the caller so we do not emit twice.
+    Returns the process exit code. Emits the deny JSON only when blocking;
+    prints nothing otherwise.
     """
     if os.environ.get("SKILL_SANDBOX_BYPASS") == "1":
         return 0
@@ -372,18 +354,15 @@ def run_capability_sandbox(tool_name: str) -> int:
 def main() -> int:
     if os.environ.get("SKILL_VALIDATION_BYPASS") == "1" and \
        os.environ.get("SKILL_SANDBOX_BYPASS") == "1":
-        emit_allow()
         return 0
 
     try:
         raw = sys.stdin.read()
         if not raw.strip():
-            emit_allow()
             return 0
         data = json.loads(raw)
     except (json.JSONDecodeError, OSError) as e:
         log_debug(f"hook input read failed: {e}")
-        emit_allow()
         return 0
 
     tool_name = data.get("tool_name", "")
@@ -398,7 +377,6 @@ def main() -> int:
             return sandbox_rc
 
     if os.environ.get("SKILL_VALIDATION_BYPASS") == "1":
-        emit_allow()
         return 0
 
     return run_schema_validation(tool_name, tool_input)
@@ -409,5 +387,4 @@ if __name__ == "__main__":
         sys.exit(main())
     except Exception as e:
         log_debug(f"unexpected error: {e!r}")
-        emit_allow()
         sys.exit(0)
