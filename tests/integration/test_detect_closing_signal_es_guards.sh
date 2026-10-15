@@ -113,6 +113,9 @@ for p in \
   "¿ya cerraste la sesión?" \
   "¿la sesión quedó cerrada?" \
   "qué significa chao?" \
+  "cierra el archivo y seguimos" \
+  "cierra el modal antes de guardar" \
+  "cerrá la pestaña de Chrome" \
 ; do
   assert_no_fire "$p" || failed=$((failed+1))
 done
@@ -121,6 +124,10 @@ done
 for p in \
   "cierra esta sesión" \
   "cierra la sesión" \
+  "cierra" \
+  "Cierra." \
+  "cerrá" \
+  "cerra!" \
   "cierro sesión" \
   "cierro la sesión" \
   "cierren la sesión" \

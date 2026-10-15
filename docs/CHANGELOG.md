@@ -9,6 +9,16 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-10-14: "cierra" on its own closes the session in Spanish
+
+**Who this affects:** Spanish speakers who end a session with the bare imperative: «cierra», «cerrá» (voseo), with or without a period or exclamation mark.
+
+The Spanish pack already closed on «cierra esta sesión», «cierro sesión» and «cerremos», but the one-word command matched nothing. The user typed «cierra», the session-close cascade never ran, and the close fell back to the manual protocol. Two `high_confidence` patterns now cover it, anchored to the whole message (`^cierra[!.\s]*$`, `^cerr[áa][!.\s]*$`), the same discipline as the anchored «ya está». So «cierra el archivo y seguimos» or «cerrá la pestaña de Chrome» still close nothing.
+
+`tests/integration/test_detect_closing_signal_es_guards.sh` gains four must-fire cases and three must-not-fire controls. The four new cases fail on the pack from before this change.
+
+---
+
 ## 2026-10-05: the maintenance installer leaves your launchd job alone under a different HOME
 
 **Who this affects:** anyone who runs this repo's tests on a Mac whose shell exports `VAULT_ROOT`, and anyone on a Mac who runs the daily-maintenance installer (`scripts/install-vault-daily-maintenance.sh`, directly or through the hook installer) under a `HOME` that is not the home directory their account's user record names: a `HOME` set by hand, say, or the same folder spelled with different capitals. The first group no longer reaches their real job. For the second, the job is now written but not loaded, and the installer says so.
