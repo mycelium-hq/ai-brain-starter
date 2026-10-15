@@ -12,11 +12,11 @@ By now the entry was already written to disk at Step 1.5 (capture-first — see 
 
 Show the full panel section inline, exactly as it will appear, then UPDATE the saved file in the same turn (Step 7) and say: "Here's the panel, and I'd tag this [Floor]. Edit, swap or add a voice?" Show any edited or added panel text before writing it, too. Never wait for approval before writing.
 
-Skip the panel only when the user explicitly declined it for this entry (`panel: declined`) or the crisis protocol is active (`panel: skipped-crisis`); the section then keeps a one-line stub. Disengaging is not a decline: the first-take panel written at capture stands. Never hold the capture until after the panel; it already happened.
+Skip the panel only when the user explicitly declines it this session or the crisis protocol is active; that session's block is then a one-line note saying so. Earlier sessions' blocks are never edited. Disengaging is not a decline: the first-take panel written at capture stands. Never hold the capture until after the panel; it already happened.
 
 #### Step 7: Finalize the entry (in-place update of the file from Step 1.5)
 
-**This is an UPDATE of the file already written at capture time, not a fresh create.** Rewrite it in place with the finalized floor, the enriched body, the accountability line, and the `## Panel dialogue` section (always present: a panel, or the one-line declined / crisis stub; the full panel replaces this session's first take). Never create a second file for the same session. If you refined the filename to match the day's theme, rename in place rather than leaving a stale duplicate.
+**This is an UPDATE of the file already written at capture time, not a fresh create.** Rewrite it in place with the finalized floor, the enriched body, the accountability line, and the `## Panel dialogue` section (always present: one block per session, each a panel or its one-line declined / crisis note; the full panel replaces this session's first take). Never create a second file for the same session. If you refined the filename to match the day's theme, rename in place rather than leaving a stale duplicate.
 
 **File location:** `[VAULT_PATH]/📓 Journals/` — use the vault path from setup. This MUST be the user's actual vault path, verified during Phase 3. The folder is created with the 📓 emoji prefix in Phase 3 — do not save to a plain `Journals/` folder.
 
@@ -32,7 +32,6 @@ Skip the panel only when the user explicitly declined it for this entry (`panel:
 creationDate: YYYY-MM-DDTHH:MM
 floor: [Floor name]
 floor_level: [low/middle/high]
-panel: [pending/first-take/full/declined/skipped-crisis]
 [any habit fields they requested, e.g. exercise_count: 3, sleep_time: 11pm, reading_mins: 30]
 ---
 
@@ -51,7 +50,7 @@ panel: [pending/first-take/full/declined/skipped-crisis]
 
 [Short staged exchange among the 3–5 selected panelists — actual dialogue, not parallel bullets. Panelists talk to each other and to the user. At least one dissent must be clearly visible. Keep it tight.]
 
-**Dissent:** [One line naming who pushed back and what they challenged. Always present — this is not optional.]
+**Dissent:** [One line naming who pushed back and what they challenged. Always present in a panel — this is not optional.]
 **Omission flagged:** [One line, only if the omission pass surfaced something — otherwise remove this line entirely]
 
 ---
@@ -102,7 +101,7 @@ Tell them the file name and floor. Connect to patterns when possible:
 
 #### Step 9: Auto-log panel dissents and omissions to the panel feedback log
 
-If the entry's panel (first take or full) surfaced a **dissent** or an **omission flag**, automatically append it to a panel feedback log at `[VAULT_PATH]/Home/Panel Feedback Log.md` (or whichever path the user set up during Phase 4 for this log — check CLAUDE.md). If the file doesn't exist, create it with a short header explaining it's a cross-context log of every real and synthetic panel reaction.
+If this session's panel (first take or full) surfaced a **dissent** or an **omission flag**, automatically append it to a panel feedback log at `[VAULT_PATH]/Home/Panel Feedback Log.md` (or whichever path the user set up during Phase 4 for this log — check CLAUDE.md). If the file doesn't exist, create it with a short header explaining it's a cross-context log of every real and synthetic panel reaction.
 
 Append format:
 
@@ -118,7 +117,7 @@ Append format:
 **Entry:** [[{filename without .md}]]
 ```
 
-**This is automatic — never ask the user to approve the log append.** The point is to close the loop between daily journal pushback and the broader panel feedback record so patterns become visible over time (if three different daily entries all got the same dissent, that's a real pattern to act on, not a random note). If there's no dissent or omission from the entry (which shouldn't happen — every panel, first take included, requires a dissent), skip the log append silently.
+**This is automatic — never ask the user to approve the log append.** The point is to close the loop between daily journal pushback and the broader panel feedback record so patterns become visible over time (if three different daily entries all got the same dissent, that's a real pattern to act on, not a random note). If there's no dissent or omission from the entry (which shouldn't happen — every panel, first take included, requires a dissent; a one-line declined or crisis note has nothing to log), skip the log append silently.
 
 **Important principles for the generated skill:**
 - Write the entry AS the user, not about them
@@ -158,7 +157,7 @@ Use whichever scheduling system is available in this Claude Code install. Try th
 
 2. **`mcp__scheduled-tasks__create_scheduled_task`** (fallback — scheduled-tasks MCP). Call with equivalent parameters (`name`, `cron` or `schedule`, `prompt`).
 
-3. **Cron fallback** (if neither is available): write a bash wrapper at `[VAULT_PATH]/⚙️ Meta/scripts/run-daily-journal.sh` that checks for today's entry and invokes `claude --print` headlessly with the task body as the prompt. Use the same pattern as `run-insights.sh` in Phase 18. Install it with a `crontab -e` line: `30 19 * * * /bin/bash "/path/to/vault/⚙️ Meta/scripts/run-daily-journal.sh"` (adjusting the `30 19` to match the user's chosen time in their local timezone, and converting to UTC if the system uses UTC cron). Note: cron can only run headless — it will create the entry directly instead of having a back-and-forth conversation. A headless run has no chat to show a panel in, so it writes the entry with `panel: pending`; the next interactive session writes the first take before anything else. Tell the user this tradeoff explicitly if you have to fall back to cron.
+3. **Cron fallback** (if neither is available): write a bash wrapper at `[VAULT_PATH]/⚙️ Meta/scripts/run-daily-journal.sh` that checks for today's entry and invokes `claude --print` headlessly with the task body as the prompt. Use the same pattern as `run-insights.sh` in Phase 18. Install it with a `crontab -e` line: `30 19 * * * /bin/bash "/path/to/vault/⚙️ Meta/scripts/run-daily-journal.sh"` (adjusting the `30 19` to match the user's chosen time in their local timezone, and converting to UTC if the system uses UTC cron). Note: cron can only run headless — it will create the entry directly instead of having a back-and-forth conversation. A headless run has no chat to show a panel in, and its entry holds no words from the user: it still writes the panel, opening with `*Written by a scheduled run; not seen yet.*`, and the next interactive session adds its own block. Tell the user this tradeoff explicitly if you have to fall back to cron.
 
 **Task body (the prompt the scheduler runs at the chosen time):**
 
