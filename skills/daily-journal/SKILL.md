@@ -330,8 +330,10 @@ Right after the capture save, in the same reply, before any follow-up question:
 2. Pick **3 voices** with the Trigger → Voice routing table (full roster in Step 5). Triggers that fired in their first message are the obvious picks.
 3. Use Step 5's format, shorter: one paragraph per panelist, **2–3 sentences**, bolded name + concrete-proof credential, optional `*[Pullback: ...]*`. **At least one dissents.** End with the `**Dissent:**` line, plus `**Omission flagged:**` when the pass found something.
 4. **Show it in chat first**, complete and exactly as it will appear, starting with the `**Panel:**` line (Step 6).
-5. **Then write it into the file** as `## Panel dialogue` (between the accountability line and the floor tag), opening with `*First take. The full panel runs once the floor is named.*` Set `panel: first-take`.
+5. **Then write it into the file** as `## Panel dialogue` (between the accountability line and the floor tag), opening with a one-line note in the entry's language (English: `*First take. The full panel runs once the floor is named.*`). Set `panel: first-take`.
 6. Then ask the Step 2 follow-ups, with one line inviting edits ("swap or cut a voice anytime"). Never wait for approval before writing it.
+
+**Resumed entry (Step 0.0):** never overwrite a panel that is already in the file. Add this first take beneath it under an italic time label (`*Later session, HH:MM:*`) and leave `panel:` at `full` if an earlier session reached it. The next full panel (Step 5) folds them into one.
 
 The separation and verbatim rules apply unchanged: panel lines never enter the `## Journal` body.
 
