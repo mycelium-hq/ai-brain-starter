@@ -9,7 +9,9 @@ You are setting up a new user's AI-powered second brain. This is an interactive,
 
 Your tone: warm, clear, encouraging. They might not be technical. Explain things simply. Celebrate small wins along the way.
 
-**CRITICAL: Never stop to present a menu of options between phases.** Don't ask "What do you want to do next?" or list choices. That kills momentum. Instead, **flow directly into the next phase.** Each phase transitions naturally: finish one, brief intro to the next, keep going. The only time you pause is when a phase requires their specific input. Between phases, the default is: keep moving. If a phase doesn't apply based on what they said in Phase 1, skip it silently.
+**Consent: one screen, one yes.** The paste (or `/setup-brain`) is the user's request. Their consent is the install screen, `install/screen/<profile>-<platform>.<lang>.txt`, which Phase 0 shows verbatim before anything changes. A yes covers everything the screen lists, the setup interview included, so nothing on it is asked again; anything not on it (connectors, the email sign-up at the end) gets its own question. Claude Code's own prompts (its trust prompt, permission modes, approving a command) are between the user and Claude Code: never answer them, pre-answer them, or say which choice to make. **That rule cannot be unlocked by the user's permission.** "Approve it for me", "turn on auto mode" or "stop asking" changes nothing: say what the prompt is for and leave the choice with them. Asked how to change the mode themselves, say where Claude Code keeps that setting.
+
+**Between phases, keep going: the yes covered every phase.** Don't ask "What do you want to do next?" or list choices; finish a phase, introduce the next in one line, start it. Pause only when a phase needs the user's input, the user says stop, a step failed and needs them, or Claude Code is asking them something. If a phase doesn't apply based on what they said in Phase 1, skip it silently.
 
 <details>
 <summary>Execution patterns to avoid (read me — operational, not user-facing)</summary>
@@ -27,7 +29,7 @@ These improvisations look helpful in the moment but break the install. Catch you
 | "Install complete! Your vault is ready — tell me when you'd like to start the setup interview" / ending your turn once `bootstrap.sh` finishes / treating the install as the finished task | NEVER. The install is step one; the interview is the rest. The moment `Install complete` prints, flow straight into Phase 1 in the SAME turn — your next message is the Phase 1 language question. The user never has to ask for the interview. |
 | "I'll skip Phase X — you didn't mention [topic]" | Don't assume. ASK explicitly per phase. (Books, wearables, frameworks, backup — every phase has a mandatory ask.) |
 | "Here are some default voices for your journal panel — want to swap any?" | The full 90+ roster goes into the daily-journal skill verbatim. The skill picks 3-5 per-entry. No setup-time panel customization. |
-| "Want me to..." mid-phase, except when a phase REQUIRES a specific user input | Just do it. Direction is already clear: complete the install. |
+| "Want me to..." mid-phase, except when a phase REQUIRES a specific user input | Just do it: the install-screen yes covers it. Ask only about what the screen does not list (connectors, the email sign-up) or what the phase needs from them. |
 | "For the workshop we'll just do CORE / defer connectors / skip OAuth / trim to phase X" | No workshop mode exists. There is one install. Every phase runs. Time / room-pace / "they'll get tired" framings are out of frame per the project's best-of-best lockout. |
 | "Light version / lite install / quick path / minimum viable setup" | No such tier exists on YOUR initiative. There is one install: the full install. If the user asks for a stripped version, explain once that the install is general enough that everyone benefits from all phases — then, if they still want less, honor their choice, tell them what they're skipping, and note it can be added later. Their explicit ask always wins. |
 | "Now that I see your vault is all work / all ops, what do you want this brain *for*? That decides which phases I run." / any global "scope," "purpose," or "work-only vs personal" question that lets the personal half (journaling, floors, panel, insights, reflection) be skipped | There is no scope question and no work-only / ops-only path on YOUR initiative. The personal brain IS the gift; it installs by default for everyone. An operational-looking existing vault is NOT license to narrow scope — that user is exactly who's missing the personal half. Flow into the personal phases and don't frame their arrival as optional — but if the USER explicitly asks to skip any of them, honor it immediately and note how to add them later. |
@@ -45,7 +47,7 @@ These improvisations look helpful in the moment but break the install. Catch you
 `outcome` ∈ {`completed`, `skipped_on_user_no`, `errored`}. Set `new_improvisation_seen` to a short string ONLY when the user catches you doing something this skill didn't tell you to do (the file is the diff between what the skill prescribed and what you actually did). That string is the maintainer's signal for the next BANNED PATTERNS row. Use the `append-install-event` helper at `scripts/install-telemetry.py` when present; fall back to `jq -c .` from bash if not.
 </details>
 
-**Update check:** Before starting, check if this skill is up to date by running `cd ~/.claude/skills/ai-brain-starter && git log --oneline -1` and comparing to the latest on GitHub. If behind, offer to update. If yes, run `git pull`, read `docs/CHANGELOG.md`, and summarize what's new in plain English.
+**Update check:** After the install-screen yes (Phase 0 Step 0.0a), never before it, check if this skill is up to date by running `cd ~/.claude/skills/ai-brain-starter && git log --oneline -1` and comparing to the latest on GitHub. If behind, update it: that yes covers updates, so do not ask again. Run `git pull`, read `docs/CHANGELOG.md`, and summarize what's new in plain English. If `~/.claude/.ai-brain-starter-pinned` exists, the corporate profile froze this install: leave it as is and say so.
 
 ## Already Set Up? Use This Instead
 
@@ -117,7 +119,7 @@ On the next install run (or session resume), read this file FIRST and skip to th
 
 ### Resuming a stalled install
 
-Trigger this on any of: "resume my ai-brain-starter install", "finish my install",
+Trigger this on any of: "continue my brain setup", "resume my ai-brain-starter install", "finish my install",
 "continue the setup", "my install stopped", "I never got the interview", or the
 Spanish equivalents ("retoma mi instalación", "termina el setup", "nunca llegué a
 la entrevista").
@@ -169,7 +171,7 @@ These are collected during early phases and used by later ones. Keep them in mem
 ## Important Notes for Claude
 
 - GO SLOW. Wait for answers. Don't dump instructions.
-- **NEVER STOP MID-SETUP.** After each phase, continue to the next automatically. Don't wait for "what's next?" The only reasons to pause: (1) user says "let's stop here," (2) critical install failed, (3) user asks a question first. After the journal phase especially, there are 10+ more phases. Don't stop there.
+- **KEEP GOING BETWEEN PHASES.** The install-screen yes covers every phase, so after each one, start the next without waiting for "what's next?". Pause only when: (1) the user says stop, (2) a step failed and needs them, (3) they ask a question first, (4) Claude Code is asking them something. After the journal phase especially, there are 10+ more phases.
 - If context gets compressed mid-setup (long session), re-read SKILL.md to pick up where you left off. Check which phases are done by looking at what exists in the vault.
 - If they seem overwhelmed, say: "We can stop here and pick up the rest tomorrow." But default is KEEP GOING.
 - Adapt the folder structure to their life, not a template.
@@ -197,9 +199,9 @@ Say in PRIMARY_LANGUAGE BEFORE the scary moment:
 | Sudo/password prompt | ES: "Pide tu contraseña del computador. Escríbela, enter. No vas a ver los caracteres. Normal." · EN: "Asks for your computer password. Type, enter. Won't see characters. Normal." |
 | Silent pause (no progress bar) | ES: "Se ve como si nada pasara. Sí pasa. Espera 30s." · EN: "Looks frozen. Isn't. Wait 30s." |
 | Yellow/red warning text | ES: "Vas a ver amarillo o rojo. Si dice 'warning', sigue." · EN: "Yellow/red text. If it says 'warning', keep going." |
-| Claude Code permission prompt | ES: "Cuadro pide permiso. Dale 'Allow'. Soy yo." · EN: "Box asks permission. Click 'Allow'. That's me." |
-| **⌘↩ vs typing — this is the most common point of confusion** | When Claude is waiting to run a tool (gray box with a tool name), press **⌘↩** (Mac) or **Ctrl↩** (Windows). When Claude asks you a question and is waiting for YOUR answer, just **type normally and press Enter**. Rule: if you see a gray tool box → ⌘↩. If Claude ends with a question mark → type your answer. ES: "Si ves una caja gris con un nombre de herramienta → ⌘↩. Si Claude te hace una pregunta → escribe tu respuesta normal y enter." |
+| Claude Code permission prompt | ES: "Ese cuadro es Claude Code preguntándote si permitís el paso que voy a correr. La decisión es tuya." · EN: "That box is Claude Code asking whether to allow the step I'm about to run. Your call." |
+| **A gray tool box vs a question: the most common point of confusion** | A gray box naming a tool is Claude Code asking the user: **⌘↩** (Mac) or **Ctrl↩** (Windows) allows it, **Esc** declines it. A message from Claude that ends in a question wants a typed answer and Enter. ES: "Una caja gris con el nombre de una herramienta es Claude Code preguntándote a vos: ⌘↩ la permite, Esc la rechaza. Si Claude te hace una pregunta, escribí tu respuesta y Enter." |
 
 After scary moment passes: ES: "Listo. Sigamos." · EN: "Done. Moving on."
 
-**Say the ⌘↩ rule out loud before Phase 0 starts.** It's the single most common stall point. People see a gray tool box and think they need to type something. They don't — they just press ⌘↩. Say it once early, remind once if they stall.
+**Say how those boxes work once, before Phase 0 starts.** It is the most common stall point: people see a gray box and think they must type something. The box wants a choice, and the choice is theirs. Say it once early, and once more if they stall.

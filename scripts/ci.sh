@@ -127,6 +127,12 @@
 #                           repo - every install of THIS repo read "handled
 #                           elsewhere" and got nothing. Self-test first, then the
 #                           fleet. Pure stdlib.
+#   (e11) install screens - scripts/install-screen.py fails when a committed screen
+#                           (install/screen/) differs from what the installer's own
+#                           functions render. A hook added to hooks.json without
+#                           `python3 scripts/install-screen.py --write` leaves every
+#                           screen stating the old count, and the screen is the
+#                           consent the assistant asks for. Pure stdlib.
 #   (f) Python unit tests - the scripts/test_*.py stdlib suites (the claude-router
 #                           structured-envelope gate, the graph-liveness
 #                           STAMP-GREEN-WHILE-GONE guard). Gate (a) py_compiles them,
@@ -285,7 +291,7 @@ INTEGRATION_TESTS=(
   test_session_coordination_guards
   test_gh_safe_session_coordination
   test_cd_worktree_guard_wiring
-  test_trust_prompt_preframing
+  test_install_consent_contract
   test_onboarding_wrong_surface_and_nudge
   test_post_update_email_ask
   test_installer_retires_email_gate
@@ -1464,6 +1470,16 @@ echo "==> (e8) file I/O encoding: $PY scripts/check-utf8-file-io.py"
 echo "==> (e9) defer targets: $PY scripts/check-defer-targets.py"
 "$PY" scripts/check-defer-targets.py --self-test >/dev/null
 "$PY" scripts/check-defer-targets.py
+
+# ---- (e11) Install screens -------------------------------------------------
+# The screens the assistant shows before the one yes are rendered from the
+# installer's own hook wiring (scripts/install-screen.py), so a hook added to
+# hooks.json makes every committed screen state the wrong count until they are
+# regenerated. The same check runs inside scripts/test_install_screen.py in (f);
+# calling it here says so first, in one line, with the command that fixes it.
+# Pure stdlib, always runs here.
+echo "==> (e11) install screens: $PY scripts/install-screen.py"
+"$PY" scripts/install-screen.py
 
 # ---- (f) Python unit tests (scripts/ + hooks/ + tests/) --------------------
 # Every Python unit suite in the repo, run under the SAME interpreter as the rest

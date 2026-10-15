@@ -1,0 +1,38 @@
+AI Brain Starter on macOS or Linux: what this install adds
+Corporate profile.
+Nothing has been installed or changed yet.
+
+If you say yes, this stays on your computer:
+  74 hooks in ~/.claude/settings.json: scripts that Claude Code
+    runs on its own, in every session.
+    3 more once your vault exists.
+    Some of them answer "allow" for file edits and shell commands, so
+    Claude Code stops asking you before it edits files or runs commands.
+  Skills in ~/.claude/skills, slash commands in ~/.claude/commands.
+  Plugin marketplaces: kepano/obsidian-skills
+  Plugins switched on: obsidian, context7
+  Skills copied from GitHub: adelaidasofia/humanizer, obra/superpowers
+  Tools, if missing: Python, Node, pipx, gh, Claude Code, Obsidian,
+    graphify, fastmcp
+  Left for your IT team, if missing: Homebrew (macOS), git
+  Updates and telemetry: off, set in ~/.claude/settings.json.
+
+The same yes covers what the setup interview adds: your vault, its
+Obsidian plugins and hooks, a vault backup, a daily journal check-in
+that Claude runs on a schedule, and:
+  Daily job: deletes merged git branches and worktrees in your vault.
+    Under ~/dev it fetches and fast-forwards clean main checkouts; from
+    its second run it deletes merged branches, worktrees, build output.
+    Opt out: tell me before you answer; I'll set ABS_NO_AUTO_GC=1.
+  Weekly and monthly insights: Claude Code runs unattended, allowed
+    to edit files and run shell commands.
+Asked separately: connectors (email, calendar, Slack), email sign-up.
+
+Not pinned: third-party parts install their newest version.
+Backups: settings files are copied before every edit.
+
+Claude Code may ask you to allow some of these steps. Those prompts are
+between you and Claude Code. I will not answer them for you or tell
+you which to pick.
+
+Reply "yes" to install all of this, or "no" to install nothing.

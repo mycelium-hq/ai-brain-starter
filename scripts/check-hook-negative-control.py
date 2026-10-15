@@ -137,7 +137,6 @@ NO_TEST_BASELINE: Set[str] = {
     "surface-orphan-worktree-snapshots",
     "surface-dependabot-backlog",
     # -- lifecycle / nudges --
-    "first-week-checkin",
     "install-ping",
     "sunday-review-nudge",
     "imessage-mcp-auto-export",

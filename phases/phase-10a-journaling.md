@@ -313,10 +313,12 @@ The generated skill MUST save the entry from the user's first substantive messag
 
 Bake these into the generated skill verbatim:
 
-- **Step 1.5 (immediate save).** The moment the user gives real content — pasted with `/journal` or typed in answer to the Step 1 opener — write a complete, valid entry: provisional floor, their words in their voice, the accountability line as known, floor tag, concepts. No panel section yet. If the session ends right there, that file is a finished entry on its own. Do not block this save on any data pull or MCP call.
+- **Step 1.5 (immediate save).** The moment the user gives real content — pasted with `/journal` or typed in answer to the Step 1 opener — write a complete, valid entry: provisional floor, their words in their voice, the accountability line as known, floor tag, concepts. If the session ends right there, that file is still a real entry. Do not block this save on any data pull or MCP call. Then, in the same reply and before any follow-up, a first-take panel (3 voices, 2–3 sentences each, at least one dissent): shown in chat first, then written into the file as `## Panel dialogue`. Order: save, then first take, then any data pulls. On a resumed entry, each session appends its own panel block (opening with a session label) beneath the earlier ones and never edits them; a later full panel replaces only that session's first take.
 - **Enrich in place.** Steps 2–9 update the SAME file. Step 7 ("save") becomes an in-place update, never a second file.
 - **Resume, don't duplicate.** At the start, check whether today already has an entry (a journal index or a date-scan of the journal folder); if it exists, UPDATE it instead of creating a second file. One calendar day = one journal entry that grows across sessions.
-- **Graceful exit at every later step.** If the user says "that's it" / goes quiet / declines the panel, finalize the existing file as-is, do a quick floor re-check, and let them go. Never hold the entry hostage to the panel or any later step. A captured-and-abandoned entry, with no panel section, is valid and complete.
+- **Graceful exit at every later step.** If the user says "that's it" / goes quiet / wants to wrap, finalize the existing file as-is (its first-take panel is already there), do a quick floor re-check, and let them go. Never hold the entry hostage to any later step.
+- **Panel-Always Rule.** Every entry has a `## Panel dialogue` section, and every session that saves to it adds its own block there. Blocks are append-only: a session edits only its own block. Only two cases leave a session without a panel: an explicit decline this session and the crisis protocol. Each leaves a one-line block saying so (a decline replaces whatever this session's block holds and stops panel work for the session unless the user asks for one; in a crisis, a panel already written stays). A run with no one to answer (a scheduled headless one) saves no entry at all, because an entry needs the user's own words. The capture save writes this session's block as a one-line placeholder that the first take replaces, so a cut-off reply still leaves a marker; a decline or crisis capture writes its note there instead. Leaving early is not a decline. The full panel runs no later than the reply that names the floor and replaces that session's first take. Show every panel, and every edited or added panel line, in chat before writing it, then write it in the same turn; never wait for approval to write. Reason: when the panel was the last, optional step, sessions that ended early saved entries with no panel.
+- **Crisis protocol (overrides every other step, the panel included).** If the user's language flips to total-self statements ("I'm worthless," "I hate myself"), somatic dysregulation ("can't breathe," "drowning"), acute grief, or crisis ideation ("I want to disappear," not wanting to be alive): stop the mechanics (no panel, no accountability, no gratitude staging, no door) and stay with them in plain, warm language, witness first; ask gently, "Who or what would you get up for right now, even if you can't get up for yourself?" and don't push past a non-answer; surface support once: "If you're in real danger, please tell one person or reach a crisis line — in the US call or text 988, any hour," adapted to their country; still save their words verbatim with the floor you heard, and run no further panel this session. When in doubt, apply it.
 
 #### Standing Rules — Panel Behavior (applies throughout the interview)
 
@@ -462,6 +464,8 @@ Based on everything they said, identify the PRIMARY floor:
 
 #### Step 5: Advisory panel dialogue (3 voices, up to 5)
 
+**Timing:** never defer it past the reply that names the floor. It replaces this session's first-take panel; earlier sessions' blocks stay as they were. No full panel while the crisis protocol is active. After a decline this session, none unless the user asks for one.
+
 Based on what came up in Steps 1–3 AND which triggers fired mid-interview (see Standing Rules), select the **3–5 most relevant advisors** from the full roster below. Default to 3; go up to 5 only when multiple domains got triggered. **Do NOT re-interview the user** — Steps 1–3 already did the interviewing. Work from what's already on the table.
 
 **Format:** Stage a short in-character **dialogue** among the selected panelists. **Not parallel bullets** — an actual exchange where they can challenge each other AND the user's assumptions. Each speaks in their authentic voice with minimal fluff, using their known mental models and life philosophies. Panelists can ask the user questions back if needed.
@@ -534,18 +538,22 @@ Rick Rubin (creativity via presence, subtractive genius, trust the muse) · Eliz
 
 ## → Next phase (the install is not finished)
 
-You have just completed **Phase 10a**. Do not stop here, do not summarise the
-install as complete, and do not wait to be asked to continue.
+You have just completed **Phase 10a**. The yes on the install screen covers
+the next phase too, so start it now; nothing on the screen needs asking again.
 
-1. **Record progress.** Write `~/.claude/.ai-brain-starter-progress.json`:
+1. **Record progress.** Run `scripts/install-telemetry.py append 10a completed`
+   from this skill's own directory with Python 3. It writes the progress file
+   a resumed install reads, and the install log. If that fails, write
+   `~/.claude/.ai-brain-starter-progress.json` yourself:
    `{"last_completed_phase": "10a", "ts": "<ISO-8601 timestamp for now>", "version": 1}`
-   This one line is what lets a resumed install pick up here instead of starting over.
 2. **Run the next phase.** Read `phases/phase-10b-panel-roster.md` from this skill's own directory
    and execute **Phase 10b**.
 
-If you are running low on context, say so out loud and tell the user to open a
-fresh session and ask to resume the ai-brain-starter install; the progress file
-above is what makes that work. Ending here silently leaves them with a
-half-built brain that looks finished.
+Pause only if the user says stop, a step failed and needs them, or Claude Code
+is asking them something; then say where the install stands and that "continue
+my brain setup" picks it up. If you are running low on context, say so and tell
+the user to open a fresh session and ask to resume; the progress file is what
+makes that work. Ending silently leaves them with a half-built brain that looks
+finished.
 
 <!-- phase-chain: next=phase-10b-panel-roster.md -->
