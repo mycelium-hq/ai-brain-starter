@@ -27,6 +27,24 @@ Mutants and the check that kills each:
   M5  the sandbox runs no real hook (a vacuous green) -> every script a command
       names exists in the "present" HOME and is missing from the "absent" one
 
+Section 3 runs the shipped skill-validator command on every shipped
+skills/**/SKILL.md (a Write of its own content) and on planted files:
+  M6  a shipped SKILL.md is refused (schema too strict) -> all of them must print
+      nothing and exit 0
+  M7  extract_frontmatter is LF-only again, so a Windows file is refused on
+      every edit -> a CRLF copy of a shipped file must pass
+  M8  a PyYAML parse error is a deny again, though Claude Code reads such
+      frontmatter -> a planted description with an unquoted ": " must pass
+  M9  a deny exits non-zero, which the docs treat as a non-blocking error ->
+      the planted denies must exit 0 with the deny on stdout
+  M10 the schema branch never runs (PyYAML or jsonschema missing, so every file
+      passes vacuously) -> this section FAILS, it never skips, when the hook's
+      Python lacks either, and a planted tool_access string must be denied
+  M11 the validator stops refusing a broken file -> a planted frontmatter with
+      no closing --- must still be denied
+It needs PyYAML and jsonschema in this interpreter; scripts/ci.sh and
+.github/workflows/lint.yml install them on GitHub Actions.
+
 POSIX only (the hook commands are shell one-liners). Plain script, no pytest.
 """
 from __future__ import annotations
@@ -35,6 +53,7 @@ import json
 import os
 import re
 import shlex
+import site
 import subprocess
 import sys
 import tempfile
@@ -100,21 +119,28 @@ class Sandbox:
         return {"session_id": "t", "cwd": str(self.work), "hook_event_name": "PreToolUse",
                 "tool_name": tool, "tool_input": tool_input, "tool_use_id": "toolu_t"}
 
+    def env(self, scenario):
+        home = self.homes[scenario]
+        # PYTHONUSERBASE: `pip install --user` packages (PyYAML, jsonschema on a runner) live under
+        # the REAL home, and the hook runs under a sandbox HOME.
+        return {"PATH": self.path, "HOME": str(home), "USERPROFILE": str(home),
+                "CLAUDE_CONFIG_DIR": str(home / ".claude"), "LANG": "C.UTF-8",
+                "PYTHONUTF8": "1", "PYTHONDONTWRITEBYTECODE": "1", "PYTHONUSERBASE": site.getuserbase()}
+
+    def run_payload(self, command, payload, scenario="present"):
+        rendered = command.replace("[PYTHON]", shlex.quote(sys.executable))
+        try:
+            p = subprocess.run(["/bin/sh", "-c", rendered], input=json.dumps(payload),
+                               capture_output=True, text=True, encoding="utf-8", errors="replace",
+                               env=self.env(scenario), cwd=str(self.work), timeout=60)
+            return (p.returncode, p.stdout, p.stderr)
+        except subprocess.TimeoutExpired:
+            return (124, "", "timed out")
+
     def run(self, command, tool, scenario):
         key = (command, tool, scenario)
         if key not in self.cache:
-            home = self.homes[scenario]
-            env = {"PATH": self.path, "HOME": str(home), "USERPROFILE": str(home),
-                   "CLAUDE_CONFIG_DIR": str(home / ".claude"), "LANG": "C.UTF-8",
-                   "PYTHONUTF8": "1", "PYTHONDONTWRITEBYTECODE": "1"}
-            rendered = command.replace("[PYTHON]", shlex.quote(sys.executable))
-            try:
-                p = subprocess.run(["/bin/sh", "-c", rendered], input=json.dumps(self.payload(tool)),
-                                   capture_output=True, text=True, encoding="utf-8", errors="replace",
-                                   env=env, cwd=str(self.work), timeout=60)
-                self.cache[key] = (p.returncode, p.stdout, p.stderr)
-            except subprocess.TimeoutExpired:
-                self.cache[key] = (124, "", "timed out")
+            self.cache[key] = self.run_payload(command, self.payload(tool), scenario)
         return self.cache[key]
 
     def unfaithful(self, command, scenario):
@@ -151,6 +177,75 @@ def scan(sb, hooks_json):
 
 def show(items):
     return "%d:\n    %s" % (len(items), "\n    ".join("%s/%s %s  [%s]" % (s, t, c[:100], d) for s, t, c, d in items))
+
+
+def skill_validator_leg(sb):
+    """Section 3: the shipped skill-validator command, on every shipped SKILL.md and on planted files."""
+    doc = json.loads(HOOKS_JSON.read_text(encoding="utf-8"))
+    commands = [h["command"] for g in doc["hooks"]["PreToolUse"] for h in g["hooks"]
+                if "validate-skill-frontmatter.py" in h["command"]]
+    check("hooks.json runs the skill validator once", len(commands) == 1, commands)
+    deps = subprocess.run([sys.executable, "-c", "import yaml, jsonschema"], capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", env=sb.env("present"))
+    check("M10 the hook's Python has PyYAML and jsonschema, so the schema branch runs (this fails, it never skips)",
+          deps.returncode == 0, "install them: python3 -m pip install pyyaml jsonschema (" + ([""] + deps.stderr.strip().splitlines())[-1] + ")")
+    if len(commands) != 1 or deps.returncode != 0:
+        return
+    import yaml  # the probe above proved this interpreter has it
+    command, planted_dir = commands[0], sb.work / "skills" / "planted"
+
+    def ask(path, text):
+        rc, out, _ = sb.run_payload(command, {"session_id": "t", "cwd": str(sb.work), "hook_event_name": "PreToolUse",
+                                              "tool_name": "Write", "tool_use_id": "toolu_t",
+                                              "tool_input": {"file_path": str(path), "content": text}})
+        reason = ""
+        if out.strip():
+            try:
+                hs = json.loads(out)["hookSpecificOutput"]
+                reason = hs["permissionDecision"] + ": " + hs.get("permissionDecisionReason", "")
+            except (ValueError, KeyError, TypeError):
+                reason = "unreadable: " + out.strip()[:100]
+        return rc, reason
+
+    # Tracked files, listed by git rather than walked: shipped means committed, and a recursive walk that
+    # reads file content is what scripts/check-cloud-safe-file-walkers.py (a gate) refuses.
+    listed = subprocess.run(["git", "-C", str(REPO), "ls-files", "-z", "--", "skills"], capture_output=True,
+                            text=True, encoding="utf-8", errors="replace")
+    skills = sorted(REPO / n for n in listed.stdout.split("\0") if n.endswith("/SKILL.md"))
+    texts = {p: p.read_text(encoding="utf-8") for p in skills}
+    refused = [(p.relative_to(REPO).as_posix(), rc, reason[:150]) for p in skills
+               for rc, reason in [ask(p, texts[p])] if rc != 0 or reason]
+    check("M6 all %d shipped SKILL.md pass the shipped command: no decision, exit 0" % len(skills),
+          bool(skills) and not refused, refused)
+
+    def parses(text):
+        m = re.match(r"^---\n(.*?)\n---", text, re.DOTALL)
+        try:
+            return bool(m) and isinstance(yaml.safe_load(m.group(1)), dict)
+        except yaml.YAMLError:
+            return False
+
+    sample = next((p for p in skills if parses(texts[p])), None)
+    rc, reason = ask(sample, texts[sample].replace("\n", "\r\n")) if sample else (1, "no parseable shipped SKILL.md")
+    check("M7 a CRLF copy of a shipped SKILL.md passes: no decision, exit 0", rc == 0 and not reason, (sample, reason[:150]))
+
+    unparseable = "---\nname: planted\ndescription: Use when X: do Y\n---\n\nbody\n"
+    try:
+        yaml.safe_load("name: planted\ndescription: Use when X: do Y")
+        precondition = False
+    except yaml.YAMLError:
+        precondition = True
+    rc, reason = ask(planted_dir / "SKILL.md", unparseable)
+    check("M8 a planted description PyYAML cannot parse is not refused", precondition and rc == 0 and not reason,
+          (precondition, rc, reason[:150]))
+
+    rc, reason = ask(planted_dir / "SKILL.md", "---\nname: planted\ntool_access: Read\n---\n\nbody\n")
+    check("M9/M10 a planted tool_access string is denied by the schema, with exit 0",
+          rc == 0 and reason.startswith("deny:") and "tool_access" in reason, (rc, reason[:150]))
+
+    rc, reason = ask(planted_dir / "SKILL.md", "---\nname: planted\n\nbody with no closing delimiter\n")
+    check("M11 a planted frontmatter with no closing --- is still denied, with exit 0",
+          rc == 0 and reason.startswith("deny:") and "not properly closed" in reason, (rc, reason[:150]))
 
 
 def main():
@@ -194,6 +289,9 @@ def main():
         check("M4 nothing else is reported: the shipped entries stay clean in the planted copy",
               all(c in planted.values() for _, _, c, _ in bad["allow"] + bad["nonzero"]),
               show([x for x in bad["allow"] + bad["nonzero"] if x[2] not in planted.values()]))
+
+        print("3. the skill validator, as wired, on every shipped SKILL.md and on planted files")
+        skill_validator_leg(sb)
 
     if FAILURES:
         print("\n%d check(s) failed" % len(FAILURES))

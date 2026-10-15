@@ -83,8 +83,11 @@ jobs:
       # where the same --fail-on high command exits 1 on a box that has
       # PyYAML). The auditor now exits 2 when it cannot parse, so this install
       # is what keeps those steps meaningful rather than merely quiet.
-      - name: install PyYAML (guards that parse YAML or frontmatter need it)
-        run: python3 -m pip install --user pyyaml
+      #
+      # jsonschema rides along: scripts/test_hooks_json_never_answers_allow.py runs
+      # the skill validator's schema branch, and fails (it never skips) without it.
+      - name: install PyYAML and jsonschema (guards that parse YAML or frontmatter need them)
+        run: python3 -m pip install --user pyyaml jsonschema
 
       # ---- instant checks first (byte / JSON scans, no tooling) -------------
 

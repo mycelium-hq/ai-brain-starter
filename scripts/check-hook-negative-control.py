@@ -130,7 +130,6 @@ NO_TEST_BASELINE: Set[str] = {
     "route-suggest",
     # -- validators (assert a shape; a dead one passes everything) --
     "validate-mcp-json",
-    "validate-skill-frontmatter",
     "validate-subagent-return",
     "validate-calendar-timezone",
     # -- session-stop / worktree surfacers --
@@ -158,7 +157,11 @@ NO_TEST_BASELINE: Set[str] = {
 # the list down to the new length rather than keeping either freed slot as
 # slack -- slack is silently re-appendable, which is the exact hole the
 # ratchet closed.
-NO_TEST_MAX = 25
+#
+# 25 -> 22: `validate-skill-frontmatter` gained a test surface (the hooks.json
+# property test runs it over every shipped SKILL.md), and the cap again follows
+# the list down to its length; it had been left 2 above it.
+NO_TEST_MAX = 22
 
 
 def is_test_surface(path: Path) -> bool:

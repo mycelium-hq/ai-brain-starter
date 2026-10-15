@@ -30,7 +30,9 @@ Pass 1 behavior:
   - Only fires on files matching skills/**/SKILL.md
   - Silent for any other file
   - Projects the post-edit content (current file + Edit substitution) before linting
-  - Blocks with a clear stderr message naming the schema violation
+  - Blocks (deny JSON, exit 0) a missing or unclosed frontmatter block, and fields of the
+    wrong shape for templates/schemas/skill.json when PyYAML and jsonschema are importable
+  - Frontmatter PyYAML cannot parse is NOT refused: Claude Code reads it. CRLF is accepted.
   - Bypass: SKILL_VALIDATION_BYPASS=1 in env
 
 Pass 2 behavior:
@@ -135,7 +137,7 @@ def extract_frontmatter(text: str) -> tuple[str | None, str | None]:
     """Extract frontmatter block. Returns (frontmatter_text, error)."""
     if not text.startswith("---"):
         return None, "missing frontmatter (file does not start with '---')"
-    m = re.match(r"^---\n(.*?)\n---\s*", text, re.DOTALL)
+    m = re.match(r"^---\r?\n(.*?)\r?\n---\s*", text, re.DOTALL)
     if not m:
         return None, "frontmatter delimiter '---' not properly closed"
     return m.group(1), None
@@ -230,7 +232,8 @@ def load_skill_tool_access(skill_md_path: Path) -> tuple[list[str] | None, str |
 def run_schema_validation(tool_name: str, tool_input: dict) -> int:
     """Pass 1: schema validation on Write|Edit|MultiEdit to skills/**/SKILL.md.
 
-    Returns the process exit code. Emits the deny JSON when blocking; prints nothing otherwise.
+    Returns the process exit code, always 0: a deny is the JSON on stdout, which
+    Claude Code reads on exit 0. Prints nothing when it does not block.
     """
     if tool_name not in ("Write", "Edit", "MultiEdit"):
         return 0
@@ -249,7 +252,7 @@ def run_schema_validation(tool_name: str, tool_input: dict) -> int:
             f"Skill validator: {fm_err} in {Path(file_path).name}. "
             f"Bypass with SKILL_VALIDATION_BYPASS=1 if intentional."
         )
-        return 1
+        return 0
 
     try:
         import yaml  # type: ignore
@@ -260,18 +263,17 @@ def run_schema_validation(tool_name: str, tool_input: dict) -> int:
     try:
         parsed = yaml.safe_load(fm_text)
     except yaml.YAMLError as e:
-        emit_deny(
-            f"Skill validator: YAML parse error in {Path(file_path).name}: {e}\n"
-            f"Bypass with SKILL_VALIDATION_BYPASS=1 if intentional."
-        )
-        return 1
+        # Claude Code reads frontmatter that PyYAML rejects (an unquoted ": " in a
+        # description, say), so a PyYAML error does not mean the skill is broken.
+        log_debug(f"YAML parse error, not refusing: {e}")
+        return 0
 
     if parsed is None or not isinstance(parsed, dict):
         emit_deny(
             f"Skill validator: frontmatter in {Path(file_path).name} must be a YAML mapping, "
             f"got {type(parsed).__name__ if parsed is not None else 'null'}."
         )
-        return 1
+        return 0
 
     schema_path = find_schema()
     if not schema_path:
@@ -309,7 +311,7 @@ def run_schema_validation(tool_name: str, tool_input: dict) -> int:
             + "\n".join(details)
             + f"\nFix the frontmatter or bypass with SKILL_VALIDATION_BYPASS=1."
         )
-        return 1
+        return 0
 
     return 0
 

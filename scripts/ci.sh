@@ -208,15 +208,17 @@ if [ -z "$(git config user.email 2>/dev/null || true)" ]; then
   export GIT_COMMITTER_NAME="ci" GIT_COMMITTER_EMAIL="ci@example.com"
 fi
 
-# PyYAML, in CI only. The metadata extractors and the insight engine `import
-# yaml`, and test_extractors_localized_vault runs them end to end; setup-python
-# ships without PyYAML, so on the runner that suite would SKIP forever. On a
-# contributor's machine nothing is installed: the test finds an interpreter that
-# has yaml or says SKIP, and running the extractors already required it anyway.
-if [ -n "${GITHUB_ACTIONS:-}" ] && ! python3 -c "import yaml" >/dev/null 2>&1; then
-  python3 -m pip install --user --quiet pyyaml >/dev/null 2>&1 \
-    || python3 -m pip install --quiet pyyaml >/dev/null 2>&1 \
-    || echo "    (PyYAML install failed; test_extractors_localized_vault will SKIP)"
+# PyYAML and jsonschema, in CI only. The metadata extractors and the insight engine
+# `import yaml`, and test_extractors_localized_vault runs them end to end; setup-python
+# ships without PyYAML, so on the runner that suite would SKIP forever. jsonschema is
+# the skill validator's second dependency: scripts/test_hooks_json_never_answers_allow.py
+# runs its schema branch and FAILS (it never skips) without both. On a contributor's
+# machine nothing is installed: the extractors test finds an interpreter that has yaml
+# or says SKIP, but that leg needs both in the interpreter that runs it.
+if [ -n "${GITHUB_ACTIONS:-}" ] && ! python3 -c "import yaml, jsonschema" >/dev/null 2>&1; then
+  python3 -m pip install --user --quiet pyyaml jsonschema >/dev/null 2>&1 \
+    || python3 -m pip install --quiet pyyaml jsonschema >/dev/null 2>&1 \
+    || echo "    (PyYAML/jsonschema install failed; test_extractors_localized_vault will SKIP and the skill-validator leg will FAIL)"
 fi
 
 # Pinned HERE (before HOME goes decoy) and exported: run_sandboxed swaps

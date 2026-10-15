@@ -4,13 +4,11 @@
   "type": "object",
   "_comment": "Schema for skill primitives. A skill is a STRUCTURED executable object, not just SKILL.md prose. Declares tool_access (allowed tools), policy_constraints (rules + exception handling), required_inputs (what callers must pass), and output_shape (what callers receive). Validator: hooks/validate-skill-frontmatter.py blocks malformed Write/Edit at skills/**/SKILL.md. Bypass: SKILL_VALIDATION_BYPASS=1. Includes the cross-type frontmatter contract (provenance, confidence, freshness_days, last_verified, source_count) shared across all 6 typed memory primitives.",
   "required": [
-    "type",
     "name"
   ],
   "properties": {
     "type": {
-      "type": "string",
-      "const": "skill"
+      "type": "string"
     },
     "name": {
       "type": "string",
@@ -25,8 +23,11 @@
       "description": "Slash command or invocation hint (e.g. '/diagnose')."
     },
     "argument-hint": {
-      "type": "string",
-      "description": "Free-form hint shown to the user about expected arguments."
+      "type": ["string", "array"],
+      "items": {
+        "type": "string"
+      },
+      "description": "Free-form hint shown to the user about expected arguments: a string, or a list of strings."
     },
     "tool_access": {
       "type": "array",
