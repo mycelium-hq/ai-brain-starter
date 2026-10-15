@@ -109,12 +109,12 @@ SKIP_PARTS = {".git", "node_modules", "__pycache__", ".venv"}
 # surface anywhere in the repo -- nothing that could distinguish it working
 # from it being dead. Ordered worst-first by blast radius.
 #
-# The two secret-handling guards at the top are the reason this check exists:
-# a secret guard nobody has proven can fire is indistinguishable from no secret
-# guard at all, and it fails silently in the one direction that matters.
+# The secret-handling guards that sat at the top were the reason this check
+# exists: a secret guard nobody has proven can fire is indistinguishable from no
+# secret guard at all, and it fails silently in the one direction that matters.
+# The last of them, block-secret-in-note, now has a test surface (the hooks.json
+# property test sends it a clean note and an AWS example key), so none is left here.
 NO_TEST_BASELINE: Set[str] = {
-    # -- secret / data-exposure guards (highest stakes) --
-    "block-secret-in-note",
     # -- correctness / process guards --
     "agent-briefing-check",
     "check-rule-conflicts-on-write",
@@ -129,7 +129,6 @@ NO_TEST_BASELINE: Set[str] = {
     "inject-love-language-context",
     "route-suggest",
     # -- validators (assert a shape; a dead one passes everything) --
-    "validate-mcp-json",
     "validate-subagent-return",
     "validate-calendar-timezone",
     # -- session-stop / worktree surfacers --
@@ -161,7 +160,11 @@ NO_TEST_BASELINE: Set[str] = {
 # 25 -> 22: `validate-skill-frontmatter` gained a test surface (the hooks.json
 # property test runs it over every shipped SKILL.md), and the cap again follows
 # the list down to its length; it had been left 2 above it.
-NO_TEST_MAX = 22
+#
+# 22 -> 20: `block-secret-in-note` and `validate-mcp-json` gained a test surface
+# (the same property test sends each a payload from its own scope and a control
+# that must still be denied), and the cap follows the list down again.
+NO_TEST_MAX = 20
 
 
 def is_test_surface(path: Path) -> bool:
