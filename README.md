@@ -201,7 +201,7 @@ No browser tab. No Terminal. No email required to install. Paste, read the scree
 
 Before anything is installed, Claude shows you the install screen and asks one question. The screen lists what stays on your computer: hooks (small scripts Claude Code runs on its own), skills, plugins and the marketplaces they come from, MCP servers, tools, and how updates work. A yes covers what the screen lists and nothing else. Connectors such as email or calendar, and the email sign-up at the end, are asked about separately.
 
-While the installer runs, Claude Code may ask you to allow a step, and it shows its own prompt for plugins and tools that did not come from Anthropic. That prompt appears for any third-party tool, so seeing it here is expected. Claude will tell you what a prompt is for if you ask. It will not answer one for you or tell you which choice to make. After the install, some of its hooks approve file edits and shell commands, so Claude Code stops asking you before it edits files or runs commands; the screen says so before you answer.
+While the installer runs, Claude Code may ask you to allow a step, and it shows its own prompt for plugins and tools that did not come from Anthropic. That prompt appears for any third-party tool, so seeing it here is expected. Claude will tell you what a prompt is for if you ask. It will not answer one for you or tell you which choice to make. The hooks this install adds can block a call or warn, and they never answer one of Claude Code's prompts for you.
 
 A compact approval receipt for this install:
 
@@ -340,7 +340,7 @@ Imprime qué está, qué falta, y un estado: verde, advertencias, o bloqueos. Ni
 
 Antes de instalar nada, Claude te muestra la pantalla de instalación y te hace una sola pregunta. La pantalla lista lo que queda en tu computadora: hooks (scripts chicos que Claude Code corre solo), skills, plugins y los marketplaces de donde vienen, servidores MCP, herramientas, y cómo funcionan las actualizaciones. Un sí cubre lo que lista la pantalla y nada más. Los conectores como email o calendario, y el registro por email del final, se preguntan aparte.
 
-Mientras corre el instalador, Claude Code te puede pedir permiso para un paso, y muestra su propio aviso para plugins y herramientas que no vienen de Anthropic. Ese aviso aparece con cualquier herramienta de terceros, así que verlo acá es esperable. Si preguntás, Claude te dice para qué es un aviso. No lo va a contestar por vos ni te va a decir qué elegir. Después de instalar, algunos de sus hooks aprueban ediciones de archivos y comandos de shell, así que Claude Code deja de preguntarte antes de editar archivos o correr comandos; la pantalla lo dice antes de que respondas.
+Mientras corre el instalador, Claude Code te puede pedir permiso para un paso, y muestra su propio aviso para plugins y herramientas que no vienen de Anthropic. Ese aviso aparece con cualquier herramienta de terceros, así que verlo acá es esperable. Si preguntás, Claude te dice para qué es un aviso. No lo va a contestar por vos ni te va a decir qué elegir. Los hooks que agrega la instalación pueden bloquear una llamada o avisar, y nunca contestan por vos un aviso de Claude Code.
 
 Nada de esto manda tus archivos a ningún lado. Es una instalación local; tu vault no sale de tu máquina. Para saltearte los paquetes de terceros en macOS o Linux, respondé "sí, sin paquetes opcionales".
 

@@ -133,7 +133,10 @@ followed by quoted arguments.** Rules that follow from this:
    `hook_runner.py` reproduces the shell forms' failure-masking (missing script
    -> fallback JSON; exit 2 blocks propagate; other failures -> fallback JSON).
    New hooks need NO Windows-specific wiring as long as they are plain
-   `python3 <script> 2>/dev/null || echo '<json>'` template commands.
+   `if [ -f <script> ]; then python3 <script>; fi` template commands. The shipped
+   template renders every command with `--fallback silent`: no hook answers
+   Claude Code's permission prompt, so nothing selects `allow`
+   (scripts/test_hooks_json_never_answers_allow.py enforces it).
 
    `<interpreter>` is resolved ONCE at install (MYC-3877). `py -3` is a launcher
    STUB that re-reads the PEP 514 registry on every spawn (+21 ms per hook), so

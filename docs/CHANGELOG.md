@@ -9,6 +9,16 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-10-15: Claude Code asks before it edits your files again
+
+**Who this affects:** anyone who installed or updated this skill before today. Some of its hooks answered Claude Code's own permission question with "allow" on ordinary file edits and on some shell commands, and an "allow" from a hook skips Claude Code's prompt for that call. So Claude Code stopped asking before it edited a file or ran those commands, in every project. After this update it asks again in its default mode.
+
+The hooks now say nothing unless they block a call or warn, which leaves the question to Claude Code. Its permission mode and your own allow, ask and deny rules in its settings decide what it asks. Whether to let it stop asking is your choice to make there, not this install's. The auto-update rewrites the hook lines on its own; if you pinned your install or turned auto-update off, run the installer again. The install screen no longer has the line that said hooks approve edits and commands.
+
+What this does not change: deny paths. Every guard that blocked before still blocks the same way, and warnings still warn. One guard now blocks that never did: the skill-file check (`hooks/validate-skill-frontmatter.py`). The same fallback that answered "allow" was appended after its block, so Claude Code never applied the block. Now a write to a `SKILL.md` whose frontmatter is missing or not closed is refused, and so is one that fails the skill schema when PyYAML and jsonschema are installed for the hook's Python. The refusal says what is wrong and that `SKILL_VALIDATION_BYPASS=1` skips it. No guard that blocks with exit code 2 changed: those were already wired to pass the code through, and no other hook that lost its fallback uses it.
+
+---
+
 ## 2026-10-05: the maintenance installer leaves your launchd job alone under a different HOME
 
 **Who this affects:** anyone who runs this repo's tests on a Mac whose shell exports `VAULT_ROOT`, and anyone on a Mac who runs the daily-maintenance installer (`scripts/install-vault-daily-maintenance.sh`, directly or through the hook installer) under a `HOME` that is not the home directory their account's user record names: a `HOME` set by hand, say, or the same folder spelled with different capitals. The first group no longer reaches their real job. For the second, the job is now written but not loaded, and the installer says so.
