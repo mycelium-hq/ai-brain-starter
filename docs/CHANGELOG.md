@@ -11,7 +11,7 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ## 2026-10-15: Claude Code asks before it edits your files again
 
-**Who this affects:** anyone who installed or updated this skill before today. Its hooks answered Claude Code's own permission question with "allow" on every file edit and every shell command that none of its guards blocked, and an "allow" from a hook skips Claude Code's prompt for that call. So Claude Code stopped asking before it edited a file or ran a command, in every project. After this update it asks again in its default mode.
+**Who this affects:** anyone who installed or updated this skill before today. Its hooks answered Claude Code's own permission question with "allow" on every Write, Edit and MultiEdit and every shell command that none of its guards blocked, and an "allow" from a hook skips Claude Code's prompt for that call. So Claude Code stopped asking before it edited a file or ran a command, in every project. After this update it asks again in its default mode.
 
 The hooks now block a call or warn and otherwise make no decision, which leaves the question to Claude Code. Its permission mode and your own allow, ask and deny rules in its settings decide what it asks. Whether to let it stop asking is your choice to make there, not this install's. The auto-update rewrites the hook lines on its own; if you pinned your install or turned auto-update off, run the installer again. The install screen no longer has the line that said hooks approve edits and commands.
 

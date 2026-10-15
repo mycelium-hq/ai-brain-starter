@@ -33,8 +33,9 @@ Mutants and the check that kills each:
       names exists in the "present" HOME, is missing from the "absent" one and
       cannot be read in the "unreadable" one
   M12 an entry drops `[ -r X ]`, so a hook file that exists but cannot be read
-      makes Python exit 2, which blocks the call -> the unreadable leg must give
-      rc 0 and no decision on every command
+      makes Python exit 2, which blocks the call (bash exits 126, an error on
+      every call) -> the unreadable leg must give rc 0 and no decision on every
+      PreToolUse command, with no exceptions
 
 Section 3 runs the shipped skill-validator command on every shipped
 skills/**/SKILL.md (a Write of its own content) and on planted files:
@@ -90,14 +91,6 @@ FAILURES = []
 DECISION = '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow"}}'
 CONTINUE = '{"continue":true,"suppressOutput":true}'
 
-# PreToolUse wirings that were already `if [ -f X ]; then ...; else echo ...; fi` and still test `-f` alone,
-# so a script that exists but cannot be read makes them exit non-zero. They are not among the 18 commands
-# that were respelled, and they are left as they were. They are found by the shape of the command, not by
-# hook name, and counted: respelling one means lowering this number, a third one means raising it in
-# review, and each must still fail the unreadable leg.
-UNREADABLE_GAP_COUNT = 2
-OLD_IF_ELSE = re.compile(r"if \[ -f \S+ \]; then .+; else echo ")
-
 
 def check(name, cond, detail=""):
     print(("  ok   " if cond else "  FAIL ") + name + ("" if cond else "  -> " + str(detail)))
@@ -146,11 +139,6 @@ def answers_allow(stdout):
     if re.search(r"""permissionDecision[\\"']*\s*[:=]\s*[\\"']*allow""", stdout, re.I):
         return True
     return any(d in ("approve", "allow") for d in decisions(stdout))
-
-
-def in_gap(command):
-    """True for a wiring in the known unreadable-file gap: the old if/else shape with no `[ -r X ]`."""
-    return bool(OLD_IF_ELSE.match(command)) and "[ -r " not in command
 
 
 class Sandbox:
@@ -459,16 +447,8 @@ def main():
         check("M3 every command exits 0 on every benign payload, hook present or absent",
               not real["nonzero"], show(real["nonzero"]))
         if sb.can_hide:
-            gap = [x for x in real["unreadable"] if in_gap(x[2])]
-            rest = [x for x in real["unreadable"] if not in_gap(x[2])]
             check("M12 a hook file that exists but cannot be read (mode 000) gives rc 0 and no decision, on every command",
-                  not rest, show(rest))
-            wired = [h["command"] for g in json.loads(HOOKS_JSON.read_text(encoding="utf-8"))["hooks"]["PreToolUse"]
-                     for h in g["hooks"]]
-            check("M12 the wirings left out of that rule are the %d known if/else ones, and each still fails it"
-                  % UNREADABLE_GAP_COUNT,
-                  sorted(c for c in wired if in_gap(c)) == sorted({x[2] for x in gap}) and len({x[2] for x in gap}) == UNREADABLE_GAP_COUNT,
-                  (UNREADABLE_GAP_COUNT, sorted({x[2][:70] for x in gap}), sum(in_gap(c) for c in wired)))
+                  not real["unreadable"], show(real["unreadable"]))
         else:
             print("  skip M12: this account can read a mode 000 file (root?), so no file can be made unreadable to it")
 
@@ -502,8 +482,7 @@ def main():
                   by("unreadable", "unreadable") == ["unreadable"] and not by("allow", "unreadable")
                   and not by("nonzero", "unreadable"),
                   (by("unreadable", "unreadable"), by("allow", "unreadable"), by("nonzero", "unreadable")))
-        stray = [x for x in bad["allow"] + bad["nonzero"] + bad["unreadable"]
-                 if x[2] not in planted.values() and not in_gap(x[2])]
+        stray = [x for x in bad["allow"] + bad["nonzero"] + bad["unreadable"] if x[2] not in planted.values()]
         check("M4 nothing else is reported: the shipped entries stay clean in the planted copy", not stray, show(stray))
 
         print("3. the skill validator, as wired, on every shipped SKILL.md and on planted files")

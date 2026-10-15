@@ -35,13 +35,13 @@ WARN, NOT BLOCK. A workflow edit is not destructive and the consequence lands
 at release time, not now. This surfaces the problem at authoring time with the
 exact fix; a repo that wants a hard stop should also run the check in CI.
 
-THE WARNING GOES ON STDOUT. This hook used to be wired as
-`<script> 2>/dev/null || echo <allow-json>`, which discarded stderr before
-Claude Code ever read it, so a diagnostic written there was deployed,
-registered, green in its own tests, and MUTE in production (MYC-3246). The
-wiring keeps stderr now; the warning stays a stdout payload anyway. Case 9 of
-the test suite pins the channel, and the harness captures stdout only so the
-behavioural cases fail the same way production would.
+THE WARNING GOES ON STDOUT. Claude Code never shows an exit-0 hook's stderr to
+the model; a warning reaches it only as a stdout payload
+(hookSpecificOutput.additionalContext). This hook used to be wired as
+`<script> 2>/dev/null || echo <allow-json>`, and a diagnostic written to stderr
+was deployed, registered, green in its own tests, and MUTE in production
+(MYC-3246). Case 9 of the test suite pins the channel, and the harness captures
+stdout only so the behavioural cases fail the same way production would.
 
 Bypass: WORKFLOW_PERMS_BYPASS=1
 """
@@ -242,10 +242,10 @@ def main() -> int:
         "Bypass: WORKFLOW_PERMS_BYPASS=1\n"
     )
 
-    # STDOUT, as hookSpecificOutput.additionalContext -- NOT stderr. The hook used to
-    # be wired as `2>/dev/null || echo <allow>`, which left a diagnostic written to
-    # stderr registered, tested green, and PERMANENTLY SILENT in production
-    # (MYC-3246). The wiring keeps stderr now; the warning stays a stdout payload.
+    # STDOUT, as hookSpecificOutput.additionalContext -- NOT stderr. Claude Code never
+    # shows an exit-0 hook's stderr to the model, so this payload is the only way the
+    # warning reaches it. A diagnostic written to stderr was registered, tested green,
+    # and PERMANENTLY SILENT in production (MYC-3246).
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
