@@ -659,7 +659,7 @@ def test_hang_is_at_least_as_killable(h: Harness) -> None:
         bad("hanging hook starts under the new runner", "no pid file")
         proc.kill()
         return
-    hook_pid = int(pidfile.read_text())
+    hook_pid = int(pidfile.read_text(encoding="utf-8"))
     same_process = hook_pid == proc.pid
     proc.terminate()
     try:
@@ -685,7 +685,7 @@ def test_hang_is_at_least_as_killable(h: Harness) -> None:
         bad("hanging hook starts under the pre-fix runner", "no pid file")
         proc.kill()
         return
-    old_hook_pid = int(pidfile.read_text())
+    old_hook_pid = int(pidfile.read_text(encoding="utf-8"))
     proc.terminate()
     try:
         proc.wait(timeout=30)
