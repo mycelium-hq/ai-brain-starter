@@ -313,10 +313,11 @@ The generated skill MUST save the entry from the user's first substantive messag
 
 Bake these into the generated skill verbatim:
 
-- **Step 1.5 (immediate save).** The moment the user gives real content — pasted with `/journal` or typed in answer to the Step 1 opener — write a complete, valid entry: provisional floor, their words in their voice, the accountability line as known, floor tag, concepts. No panel section yet. If the session ends right there, that file is a finished entry on its own. Do not block this save on any data pull or MCP call.
+- **Step 1.5 (immediate save).** The moment the user gives real content — pasted with `/journal` or typed in answer to the Step 1 opener — write a complete, valid entry: provisional floor, their words in their voice, the accountability line as known, floor tag, concepts. If the session ends right there, that file is a finished entry on its own. Do not block this save on any data pull or MCP call. Then, in the same reply and before any follow-up, a first-take panel (3 voices, 2–3 sentences each, at least one dissent): shown in chat first, then written into the file as `## Panel dialogue`, with `panel: first-take` in frontmatter.
 - **Enrich in place.** Steps 2–9 update the SAME file. Step 7 ("save") becomes an in-place update, never a second file.
 - **Resume, don't duplicate.** At the start, check whether today already has an entry (a journal index or a date-scan of the journal folder); if it exists, UPDATE it instead of creating a second file. One calendar day = one journal entry that grows across sessions.
-- **Graceful exit at every later step.** If the user says "that's it" / goes quiet / declines the panel, finalize the existing file as-is, do a quick floor re-check, and let them go. Never hold the entry hostage to the panel or any later step. A captured-and-abandoned entry, with no panel section, is valid and complete.
+- **Graceful exit at every later step.** If the user says "that's it" / goes quiet / wants to wrap, finalize the existing file as-is (its first-take panel is already there), do a quick floor re-check, and let them go. Never hold the entry hostage to any later step.
+- **Panel-Always Rule.** Every saved entry has a `## Panel dialogue` section and a `panel:` frontmatter value (`first-take`, `full`, `declined`, `skipped-crisis`). Only an explicit decline for this entry or the crisis protocol skips the panel, and either one is recorded; leaving early is not a decline. The full panel runs in the same reply that names the floor and replaces the first take. Show every panel in chat before writing it, then write it in the same turn; never wait for approval to write. Reason: when the panel was the last, optional step, every session that ended early saved no panel.
 
 #### Standing Rules — Panel Behavior (applies throughout the interview)
 
@@ -461,6 +462,8 @@ Based on everything they said, identify the PRIMARY floor:
 - Peace — Stillness, presence, nothing to fix, enough as-is
 
 #### Step 5: Advisory panel dialogue (3 voices, up to 5)
+
+**Timing:** run it in the same reply that names the floor, never in a later turn or behind the accountability questions. It replaces the first-take panel written at Step 1.5 (set `panel: full`).
 
 Based on what came up in Steps 1–3 AND which triggers fired mid-interview (see Standing Rules), select the **3–5 most relevant advisors** from the full roster below. Default to 3; go up to 5 only when multiple domains got triggered. **Do NOT re-interview the user** — Steps 1–3 already did the interviewing. Work from what's already on the table.
 

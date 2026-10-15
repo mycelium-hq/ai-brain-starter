@@ -6,17 +6,17 @@ Run the full panel setup as written below. Every user gets the advisory panel �
 
 ---
 
-#### Step 6: Confirm the enrichment (the entry is already saved)
+#### Step 6: Show the panel, then write it (the entry is already saved)
 
-By now the entry was already written to disk at Step 1.5 (capture-first — see Phase 10a's Capture-First Contract). This step only confirms the enrichment and shows the panel before it lands in the file.
+By now the entry was already written to disk at Step 1.5 (capture-first — see Phase 10a's Capture-First Contract), with its first-take panel. This step shows the full panel before it lands in the file.
 
-If the panel ran, show the full panel section inline, then: "Okay, here's the panel, and I'd tag this [Floor]. Approve as-is, or swap/edit a voice?" On confirmation, UPDATE the saved file (Step 7).
+Show the full panel section inline, exactly as it will appear, then UPDATE the saved file in the same turn (Step 7) and say: "Here's the panel, and I'd tag this [Floor]. Edit, swap or add a voice?" Apply edits in place. Never wait for approval before writing.
 
-If the user opted out of the panel or disengaged, the captured entry stands as-is. Confirm what was saved and let them go. Never hold the entry until after the panel — the capture already happened.
+Skip the panel only when the user explicitly declined it for this entry (`panel: declined`) or the crisis protocol is active (`panel: skipped-crisis`). Disengaging is not a decline: the first-take panel written at capture stands. Never hold the capture until after the panel; it already happened.
 
 #### Step 7: Finalize the entry (in-place update of the file from Step 1.5)
 
-**This is an UPDATE of the file already written at capture time, not a fresh create.** Rewrite it in place with the finalized floor, the enriched body, the accountability line, and — only if the panel ran — the `## Panel dialogue` section. Never create a second file for the same session. If you refined the filename to match the day's theme, rename in place rather than leaving a stale duplicate.
+**This is an UPDATE of the file already written at capture time, not a fresh create.** Rewrite it in place with the finalized floor, the enriched body, the accountability line, and the `## Panel dialogue` section (always present; the full panel replaces the first take). Never create a second file for the same session. If you refined the filename to match the day's theme, rename in place rather than leaving a stale duplicate.
 
 **File location:** `[VAULT_PATH]/📓 Journals/` — use the vault path from setup. This MUST be the user's actual vault path, verified during Phase 3. The folder is created with the 📓 emoji prefix in Phase 3 — do not save to a plain `Journals/` folder.
 
@@ -32,6 +32,7 @@ If the user opted out of the panel or disengaged, the captured entry stands as-i
 creationDate: YYYY-MM-DDTHH:MM
 floor: [Floor name]
 floor_level: [low/middle/high]
+panel: [first-take/full/declined/skipped-crisis]
 [any habit fields they requested, e.g. exercise_count: 3, sleep_time: 11pm, reading_mins: 30]
 ---
 
