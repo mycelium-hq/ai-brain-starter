@@ -6,15 +6,17 @@ Type: `person`.
 Cross-vault fields: mention count + last-journal-iso are computed by scanning
 all journals for backlinks to this person. Expensive per-file, cached per-run.
 """
-import glob
 import os
 import re
+import sys
 import yaml
 
 from _base import (
     VAULT, iso_date_from, count_words, ExtractionResult,
+    is_inside_vault, iter_vault_markdown,
 )
 from _floors import floor_num_from_fm
+from _lib.safe_read import safe_read_text
 
 
 AUTO_FIELDS = (
@@ -41,7 +43,7 @@ PUBLIC_FIGURE_RELATIONSHIP_HINTS = {
 # person_journal_mention_count = 0 and an empty person_floor_cooccurrence,
 # which in turn switched off the lucky-charm / drag-people / stale-relationship
 # sections of the insight engine for the whole vault. Pick the first candidate
-# that exists; fall back to the English default so the glob below still yields
+# that exists; fall back to the English default so the walk below still yields
 # nothing (rather than crashing) on a vault with no journal folder at all.
 _JOURNAL_CANDIDATES = (
     "📓 Journals", "Journals",       # en (Phase 3 default)
@@ -59,8 +61,52 @@ JOURNALS_ROOT = os.environ.get("JOURNALS_FOLDER") or next(
     os.path.join(VAULT, _JOURNAL_CANDIDATES[0]),
 )
 
+# This walk covers a VAULT, and a vault commonly lives in a cloud-synced folder
+# (Drive / iCloud / Dropbox). There, an ordinary-looking `.md` can be a
+# dataless placeholder or sit on a stalled mount, and a plain `open().read()`
+# blocks forever with no timeout — hanging the whole extraction run on one
+# file. safe_read_text bounds every read in wall-clock and size.
+JOURNAL_READ_TIMEOUT_S = 5.0
+# 1 MB, the same cap scripts/relocate-sweep.py uses, and ~4.1x the largest
+# journal measured in a real 2,329-journal vault (242,896 B). Note this cap can
+# never hand back a CLIPPED journal: safe_read_text does not truncate — a file
+# over the cap returns status "too-large" and is skipped whole, so frontmatter
+# is either parsed intact or the file is reported as unread, never silently
+# half-read.
+JOURNAL_MAX_BYTES = 1_000_000
+
 # Per-run cache: person_name → [(journal_iso, floor_num), ...]
 _JOURNAL_INDEX = None
+
+
+def _warn_unread(fp, result):
+    """Name a journal we could not read, without ever raising.
+
+    The print is guarded because this module is imported, not run: it does not
+    own the `reconfigure(encoding="utf-8")` guard that _dispatcher.py applies at
+    its CLI entry (#313). On a cp1252 or C-locale stderr, interpolating a vault
+    path — which routinely contains "📓" — raises UnicodeEncodeError, and an
+    unguarded warning would turn a skipped file into a crashed run. That is the
+    exact inversion this change exists to prevent.
+    """
+    detail = f" ({result.detail})" if result.detail else ""
+    try:
+        print(f"WARNING: journal not indexed [{result.status}{detail}]: {fp}",
+              file=sys.stderr)
+    except Exception:
+        try:
+            print(f"WARNING: journal not indexed [{result.status}]: "
+                  f"{os.fsencode(fp)!r}", file=sys.stderr)
+        except Exception:
+            pass
+
+
+def _warn(message):
+    """Print a warning to stderr without ever raising: this module is imported, not run."""
+    try:
+        print(message, file=sys.stderr)
+    except Exception:
+        pass
 
 
 def _build_journal_index():
@@ -72,12 +118,30 @@ def _build_journal_index():
     _JOURNAL_INDEX = {}
     wikilink_re = re.compile(r"\[\[([^\]|#]+?)(?:\|[^\]]+)?\]\]")
 
-    for fp in glob.glob(os.path.join(JOURNALS_ROOT, "**", "*.md"), recursive=True):
-        try:
-            with open(fp, "r", encoding="utf-8") as f:
-                content = f.read()
-        except Exception:
+    if os.path.isdir(JOURNALS_ROOT) and not is_inside_vault(JOURNALS_ROOT):
+        # JOURNALS_FOLDER, or a journal folder that is itself a link, pointing out
+        # of the vault. Nothing in it is read, so say so rather than let every
+        # person read as "no mentions".
+        _warn(f"WARNING: journal folder resolves outside the vault, not indexed: {JOURNALS_ROOT}")
+
+    for fp in iter_vault_markdown(JOURNALS_ROOT):
+        result = safe_read_text(
+            fp, timeout=JOURNAL_READ_TIMEOUT_S, max_bytes=JOURNAL_MAX_BYTES,
+        )
+        if not result.ok:
+            # Skipping is still correct — one bad file must not abort a
+            # 2,000-journal run, which is what the old bare `except: continue`
+            # bought. What it also bought was SILENCE: an unread journal and a
+            # journal with no mentions produced the identical result (a person's
+            # count silently short by one), and that is the half worth keeping
+            # loud. safe_read_text returns its failures as a status rather than
+            # raising, so timeout / offline-placeholder / too-large / binary /
+            # decode-error all skip exactly as before, now named.
+            # "missing" stays quiet: the walk legitimately races a delete.
+            if result.status != "missing":
+                _warn_unread(fp, result)
             continue
+        content = result.text
         if not content.startswith("---"):
             continue
         end = content.find("\n---", 3)
@@ -89,6 +153,11 @@ def _build_journal_index():
             continue
 
         date_iso = fm.get("date_iso") or iso_date_from(fm.get("creationDate"))
+        # PyYAML parses an unquoted `date_iso: 2026-08-12` into datetime.date,
+        # while the creationDate fallback yields a str. Mixed types reach max()
+        # below and raise TypeError, aborting the whole run. Normalize to str.
+        if date_iso is not None and not isinstance(date_iso, str):
+            date_iso = date_iso.isoformat() if hasattr(date_iso, "isoformat") else str(date_iso)
         # The journal writes the floor's NAME (`floor: Hope` / `floor: Esperanza`);
         # `floor_num` only exists once the journal extractor has run, and on an
         # older scale if it ran long ago. Translate the name first, then fall

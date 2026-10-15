@@ -31,6 +31,7 @@ edits to an already-contextualized entry.
 import json
 import os
 import re
+import shlex
 import sys
 import datetime
 from pathlib import Path
@@ -303,15 +304,22 @@ date_iso = dm.group(1) if dm else _target_today()
 if _marker_exists(vault, date_iso):
     sys.exit(0)  # preflight ran for this date -> allow
 
+# Step 1 is a command the session will run, so it has to work THERE: this hook's
+# own interpreter (a PATH shim can refuse `python3 <script>`) and an absolute path
+# (a session's cwd is rarely the vault root), in whichever meta folder exists.
+meta_dir = next((m for m in ("⚙️ Meta", "Meta")
+                 if os.path.isdir(os.path.join(vault, m))), "⚙️ Meta")
+preflight = os.path.join(vault, meta_dir, "scripts", "journal-preflight.py")
+
 err = (
     "BLOCKED by warn-journal-saved-without-context hook.\n\n"
     f"No preflight marker for {date_iso} at\n"
-    f"  {vault}/⚙️ Meta/.journal-context/{date_iso}.json\n"
+    f"  {vault}/{meta_dir}/.journal-context/{date_iso}.json\n"
     "-> Step 0's context pull never ran, so this journal would ship with no\n"
     "calendar / messages / RescueTime / activity context. That is the exact\n"
     "2026-07-07 failure this guard exists to stop.\n\n"
     "Fix (do this, then re-issue the save):\n"
-    '  1. python3 "⚙️ Meta/scripts/journal-preflight.py"\n'
+    f"  1. {shlex.quote(sys.executable)} {shlex.quote(preflight)}\n"
     "  2. Make the calendar + email + Slack + health MCP pulls it prints.\n"
     "  3. Fold the context into ## Today + a context_sources: frontmatter block.\n\n"
     "Bypass (addendum / pre-contextualized entry): JOURNAL_CONTEXT_BYPASS=1"

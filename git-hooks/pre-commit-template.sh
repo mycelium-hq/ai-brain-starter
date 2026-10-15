@@ -15,6 +15,10 @@
 #    ...and ship the strand guard alongside it (chained by this hook):
 #      cp guard-session-artifacts-on-default-branch.sh ~/.git-hooks/
 #      chmod +x ~/.git-hooks/guard-session-artifacts-on-default-branch.sh
+#    ...and its pre-merge-commit sibling (a conflict-free `git merge` fires
+#    pre-merge-commit, never pre-commit -- see that file's header):
+#      cp pre-merge-commit-template.sh ~/.git-hooks/pre-merge-commit
+#      chmod +x ~/.git-hooks/pre-merge-commit
 #
 # 2. Create your personal token list (the strings the hook should refuse to publish):
 #      cp scrub-personal-tokens.txt.example ~/.scrub-personal-tokens.txt

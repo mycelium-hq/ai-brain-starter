@@ -1,0 +1,1061 @@
+#!/usr/bin/env python3
+"""PreToolUse hook: block Bash commands that print environment VALUES.
+
+Pattern this prevents: `env`, `printenv`, bare `export`/`set`, `declare -p`,
+a `ps` invocation with an environment flag, a `pgrep` listing form combining
+`-l` with `-f` (or carrying `-a`/`--list-full`), `/proc/<pid>/environ`, or an
+`echo $SECRET_VAR` put a live credential's VALUE into the session
+transcript (~/.claude/projects/.../*.jsonl), where it persists and leaks
+permanently -- a value in a transcript cannot be un-persisted. Unlike a
+stdout scan (detect-secrets-in-bash-output.py, PostToolUse -- by the time it
+runs, the value already landed), this runs PreToolUse and refuses the
+command before it ever executes. Ticket MYC-4988.
+
+Presence and length checks are NOT dumps and stay allowed: `[ -n
+"${NAME:-}" ]`, `echo ${#NAME}`, `compgen -e` (names only), and `env | cut
+-d= -f1` / `sed 's/=.*//'` / `awk -F= '{print $1}'` (the three extractors
+that provably strip every value before anything downstream ever sees it).
+
+Also folds in the REMOTE secret-dump vocabulary (heroku config, aws ssm
+get-parameter, gcloud secrets versions access, vercel env pull, doppler
+secrets download, fly secrets list, fly/flyctl ssh -C '...printenv/env...')
+ported VERBATIM from the hookify rule `block-secret-dump-command-class`
+(~/.claude/hookify.block-secret-dump-command-class.local.md) so one guard
+owns the whole class instead of splitting it across a personal hookify rule
+and a substrate hook.
+
+Parses with hooks/_lib/shell_parse.py (quote-aware segments, heredoc-body
+and comment-tail stripping) rather than a regex over the raw string -- the
+lesson of MYC-4626: a naive regex reads a dangerous command out of a quoted
+string, a comment, or a heredoc body and calls it code, or misses one
+hidden behind a heredoc.
+
+Out of scope, deliberately:
+  - Deliberate obfuscation that hides the command WORD itself from the
+    tokenizer's word-based dispatch: `P=pgrep; $P -fl foo` (the verb is a
+    variable expansion, never the literal string "pgrep"), `$(printf
+    '\x65\x6e\x76')` and similar build-the-command-as-a-string tricks. This
+    hook resolves a real command word per segment; it does not evaluate
+    shell expansions to discover what a variable or a substitution would
+    expand to at runtime.
+  - Secret-file readers beyond cat/head/tail (less, more, vim, code, an
+    editor opened directly on a `.env` file, a language's own file-read
+    call). That is a DIFFERENT guard's job (a secret-file-read guard, not
+    an environment-VALUE-in-a-command guard); folding it in here would
+    blur what this hook is responsible for.
+  - The shared tokenizer's (hooks/_lib/shell_parse.py) quadratic cost on
+    one huge token. That is a hooks/_lib issue shared by every tokenizing
+    Bash hook, not specific to this one -- fixed there, not duplicated
+    here.
+
+Bypass: ENV_DUMP_BYPASS=1, PER SEGMENT (inline `VAR=1 <cmd>` prefix, or
+`export VAR=1` which then carries to every LATER segment, matching real
+shell semantics) or session env (applies to the whole command).
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "_lib"))
+try:
+    from shell_parse import (
+        ENV_ASSIGN_RE,
+        WRAPPER_PREFIXES,
+        split_segments_with_seps,
+        strip_heredoc_bodies,
+        strip_noncode,
+        tokens,
+    )
+    _LIB_OK = True
+except Exception as _lib_exc:
+    _LIB_OK = False
+    print(
+        "[block-env-dump] WARNING: hooks/_lib import failed "
+        f"({type(_lib_exc).__name__}: {_lib_exc}); running DEGRADED -- only "
+        "the /proc/<pid>/environ check still runs, every per-verb check "
+        "(env/printenv/export/set/declare/ps/pgrep/echo/gh/security/cat/"
+        "docker/python/node) is OFF until _lib is restored beside this hook",
+        file=sys.stderr,
+    )
+
+# Transparent wrappers to skip past when looking for the real command word.
+# `env` and `sudo` are EXCLUDED on purpose: `env` is also one of the
+# commands this hook inspects directly (a bare `env` dumps values; `env CMD`
+# does not); `sudo` takes its OWN flags (`-E`, `-H`, `-u USER`) that this
+# generic, flag-blind skip cannot consume, so `sudo -E env` left it stopped
+# on the literal token "-E" (matching nothing) instead of resolving through
+# to `env`. Both are peeled with full flag-awareness by
+# `_peel_local_wrappers` below instead.
+_SKIP_WRAPPERS = (WRAPPER_PREFIXES - {"env", "sudo"}) if _LIB_OK else set()
+
+# Shell keywords that precede a real command word without being one
+# themselves: `if env; then` / `while env; do` run env as their condition,
+# `do env; done` and `{ env; }` run it as their body, `! env` negates its
+# exit status -- none of these change WHAT runs, only when/whether.
+_SKIP_KEYWORDS = {"then", "do", "else", "elif", "if", "while", "until", "{", "!", "("}
+
+# Substrings that mark a NAME as secret wherever they appear, even glued to
+# other text with no "_" boundary (PGPASSWORD, DATABASE_URL is a separate
+# suffix rule below since neither half is one of these words on its own).
+_SECRET_NAME_SUBSTRINGS = ("PASSWORD", "PASSWD", "SECRET", "TOKEN", "APIKEY", "CREDENTIAL")
+
+# Name components (NAME split on "_") that mark it secret only as a WHOLE
+# component -- "KEY"/"PAT"/"DSN" as substrings alone would false-positive on
+# ordinary words (PATCH, KEYCHAIN). Exempt when the LAST component reads as
+# a path to the secret rather than the secret itself (SSH_KEY_PATH).
+_SECRET_NAME_COMPONENTS = {"KEY", "PAT", "DSN"}
+_PATH_LIKE_LAST_COMPONENT = {"PATH", "FILE", "DIR"}
+
+# `${!NAME}` / `${!NAME*}` / `${!NAME@}` -- bash indirect expansion: NAME
+# holds the NAME of another variable. `${!NAME}` expands to THAT variable's
+# VALUE (the target is not statically knowable, so this counts unconditionally
+# regardless of how NAME itself looks); `*`/`@` list matching variable NAMES
+# only, never a value, and stay allowed.
+_INDIRECT_VAR_RE = re.compile(r"\$\{!([A-Za-z_][A-Za-z0-9_]*)(\*|@)?\}")
+
+# `${NAME<suffix>}`, NOT the length form `${#NAME}` (negative lookahead on
+# `#`) and NOT indirect (negative lookahead on `!`, handled above). `suffix`
+# is captured so the caller can exempt `:+x` / `+x` (substitutes a LITERAL
+# alternate, never reveals NAME's real value) while still denying `:-` / `-`
+# (expands to the real value whenever NAME is actually set) and substring
+# extraction (`:0:8`).
+_BRACE_VAR_RE = re.compile(r"\$\{(?!#)(?!!)([A-Za-z_][A-Za-z0-9_]*)([^}]*)\}")
+
+# Bare `$NAME` (no braces, so no parameter-expansion suffix is possible).
+_BARE_VAR_RE = re.compile(r"\$([A-Za-z_][A-Za-z0-9_]*)")
+
+# echo/printf piped into one of these still puts the value in the visible
+# transcript (or reformats/greps it there); piped into anything else (a
+# non-printer like `docker login --password-stdin`) is allowed.
+_ECHO_PRINTERS = {
+    "cat", "grep", "head", "tail", "sed", "awk", "cut", "tr", "sort",
+    "uniq", "tee", "less", "xxd", "od", "base64", "jq",
+}
+
+# `os.environ` / `process.env` used as a BARE reference -- print(os.environ),
+# dict(os.environ), console.log(process.env), JSON.stringify(process.env) --
+# prints the WHOLE environment. NOT flagged when it is narrowed to one
+# variable via subscript/attribute (os.environ["HOME"], os.environ.get(...),
+# process.env.FOO), which the negative lookahead excludes.
+_WHOLE_ENV_SCRIPT_RE = re.compile(r"os\.environ\b(?!\s*[.\[])|process\.env\b(?!\s*[.\[])")
+
+# node's inline-script flags that make `-e`'s WHOLE_ENV_SCRIPT_RE content
+# check apply: `-e`/`--eval` (run a script), `-p`/`--print` (run a script and
+# print its result), and the combined `-pe` (real node idiom: print + eval in
+# one flag). `--eval` and `--print` were previously invisible to this check
+# (only the exact token `-e` was tested), and `-p`/`--print`/`-pe` were not
+# checked at all.
+_NODE_INLINE_SCRIPT_FLAGS = {"-e", "--eval", "-p", "--print", "-pe", "-ep"}
+
+# A bare os.environ/process.env used as the right-hand side of an `in` TEST
+# (`"HOME" in process.env`) produces a boolean, never a value -- but this
+# exemption is scoped to a STRING-LITERAL left operand ONLY. `for k in
+# os.environ:` / `for (const k in process.env)` also end in `in\s*`, and
+# that is ITERATION, not membership -- round 4's regression (a reviewer's
+# evasion driver): the old, unscoped `\bin\s*$` exempted both alike, so a
+# for-in loop's bare env reference went undetected.
+_ENV_MEMBERSHIP_LITERAL_RE = re.compile(r"""(?:"[^"]*"|'[^']*')\s+in\s*$""")
+
+# `len(os.environ)` (a count) or the sole argument to a names-only wrapper
+# (`Object.keys(process.env)` in JS, `list(os.environ)`/`sorted(...)`/
+# `tuple(...)`/`set(...)` in Python -- iterating a mapping yields its KEYS,
+# never its values) produces an int or a name list, never a value -- exempt
+# even though nothing narrows the reference itself via `.`/`[`. Checked
+# against the text immediately BEFORE the match (Python's `re` lookbehind
+# must be fixed-width, and "any amount of whitespace" is not, so this is a
+# plain preceding-text regex instead of a lookbehind assertion).
+_ENV_LEN_OR_NAMES_ONLY_WRAP_RE = re.compile(
+    r"(\blen\(\s*|\bObject\.keys\(\s*|\b(?:list|sorted|tuple|set)\(\s*)$"
+)
+
+# A VARIABLE-keyed lookup -- `process.env[k]`, `os.environ[k]`,
+# `os.environ.get(k)`, `os.getenv(k)` -- denies unconditionally: the same
+# rule as awk's `ENVIRON[<var>]` (item 6) applied to node/python. Only a
+# quote character right after the opening bracket/paren (a STRING LITERAL
+# key: `process.env["HOME"]`, `os.environ.get("HOME")`) is exempt; a bare
+# identifier or expression key means the loop/comprehension that produced
+# it is reading every value in turn, which is exactly the shape
+# `Object.keys(...)`/`list(...)` being names-only on their OWN cannot see
+# -- round 4's regression, part 2.
+_ENV_VARIABLE_KEYED_RE = re.compile(
+    r"process\.env\[\s*(?!['\"])"
+    r"|os\.environ\[\s*(?!['\"])"
+    r"|os\.environ\.get\(\s*(?!['\"])"
+    r"|os\.getenv\(\s*(?!['\"])"
+)
+
+# Python `os.environ.items()` / `.values()` / `.copy()` -- each exposes every
+# VALUE (a full k=v pair, a bare value, or a live copy of the whole mapping),
+# unlike `.keys()` (names only, left off this list on purpose) or `.get()` /
+# `.setdefault()` (single-name). Matched independently of whatever narrows
+# `os.environ` from _WHOLE_ENV_SCRIPT_RE's point of view -- `.items()` reads
+# as "narrowed" to that check (something follows the `.`), but the exposure
+# is in the METHOD, not the missing narrowing.
+_ENV_VALUE_METHOD_RE = re.compile(r"os\.environ\.(items|values|copy)\s*\(")
+
+# `from os import environ` aliases the whole-mapping object to a bare name;
+# every check above is written against `os.environ` / `process.env`
+# literally, so without this the aliased form (`print(environ)`) is
+# invisible to all of them.
+_FROM_OS_IMPORT_ENVIRON_RE = re.compile(r"\bfrom\s+os\s+import\s+environ\b")
+_BARE_ENVIRON_TOKEN_RE = re.compile(r"(?<![.\w])environ\b")
+
+
+def _normalize_environ_alias(text: str) -> str:
+    """Rewrite every standalone `environ` token to `os.environ` when the
+    text imports it bare (`from os import environ`), so the existing
+    os.environ detection (bare-vs-narrowed, membership/len/names-only
+    exemptions, the value-method check) applies to the aliased name too
+    without a second, parallel set of patterns to keep in sync."""
+    if not _FROM_OS_IMPORT_ENVIRON_RE.search(text):
+        return text
+    return _BARE_ENVIRON_TOKEN_RE.sub("os.environ", text)
+
+# `env`'s own no-argument options. `-u NAME` is handled separately below (it
+# consumes the following token too).
+_ENV_OPT_NO_ARG = {"-i", "-0"}
+
+# A redirect operator, with everything shlex glues to it in ONE token: shlex
+# has no notion of `<`/`>` as shell metacharacters, so `env>out.txt`,
+# `2>/dev/null` and `>>x` all survive tokenization as a single token apiece
+# (verified against shlex.split directly). `prefix` is what came before the
+# operator in the SAME token; `tail` is what came after (a filename, a dup-fd
+# `&1`, or nothing when the target is a separate following token).
+_REDIR_TOKEN_RE = re.compile(r"^(?P<prefix>[^><]*)(?P<op>&?(?:>>|<<|>|<))(?P<tail>.*)$")
+
+
+def _is_redirect_fd_prefix(prefix: str) -> bool:
+    """True when `prefix` is an fd number or empty -- part of the operator
+    itself (`2>`), never a real command/argument word."""
+    return prefix == "" or prefix.isdigit()
+
+
+def _is_bare_redirect_token(tok: str) -> bool:
+    """True when `tok` is purely a redirect operator (`>`, `2>`, `>>`, `<`,
+    ...), with nothing real glued to it. Used by `_peel_local_wrappers` so a
+    wrapper's own redirect (`env > file`, `env 2>/dev/null`) is never
+    mistaken for "a real command follows" -- the bug this guards against:
+    without it, `env > /tmp/leak.txt` peeled `env` "through" to `>` as if
+    it were the wrapped command, and the bare-env dump went undetected."""
+    if "<" not in tok and ">" not in tok:
+        return False
+    m = _REDIR_TOKEN_RE.match(tok)
+    return bool(m) and _is_redirect_fd_prefix(m.group("prefix"))
+
+
+def _strip_redirect_tokens(toks: list) -> list:
+    """Drop every redirect clause from an already-tokenized argument list:
+    a bare operator plus its separate target token (`>` `/tmp/x`), and an
+    attached form glued by shlex into one token (`2>/dev/null`, `>>x`). A
+    non-fd word glued to the operator in an ARGUMENT position is kept (rare,
+    but `_split_glued_redirect` below is the one that matters for the verb
+    itself)."""
+    out, i, n = [], 0, len(toks)
+    while i < n:
+        t = toks[i]
+        if "<" not in t and ">" not in t:
+            out.append(t)
+            i += 1
+            continue
+        m = _REDIR_TOKEN_RE.match(t)
+        prefix, tail = m.group("prefix"), m.group("tail")
+        if prefix and not _is_redirect_fd_prefix(prefix):
+            out.append(prefix)
+        skip_next = not tail and i + 1 < n
+        i += 2 if skip_next else 1
+    return out
+
+
+def _split_glued_redirect(word: str, rest: list) -> tuple:
+    """As `_strip_redirect_tokens`, but for the CANDIDATE COMMAND WORD itself
+    (`env>out.txt`, `export>file`): returns the real word (or "" when the
+    token is entirely a redirect, e.g. a bare `>out.txt` in word position)
+    plus `rest` with a separate target token consumed when the operator had
+    nothing attached in the same token."""
+    if "<" not in word and ">" not in word:
+        return word, rest
+    m = _REDIR_TOKEN_RE.match(word)
+    prefix, tail = m.group("prefix"), m.group("tail")
+    if not tail and rest:
+        rest = rest[1:]
+    return ("" if _is_redirect_fd_prefix(prefix) else prefix), rest
+
+# /proc/<pid>/environ, /proc/self/environ, /proc/$$/environ, /proc/*/environ
+# -- anywhere in UNQUOTED text (the caller masks quotes first, so a mention
+# inside a commit message or grep pattern never matches).
+_PROC_ENVIRON_RE = re.compile(r"/proc/[^/\s]+/environ")
+
+# Remote secret-dump vocabulary, ported VERBATIM from the `pattern:` field of
+# ~/.claude/hookify.block-secret-dump-command-class.local.md
+# (rule: block-secret-dump-command-class) so one guard owns the whole class.
+# Do NOT reword -- keep this byte-identical to the source hookify rule.
+_REMOTE_DUMP_RE = re.compile(
+    r"""(heroku\s+(config(\s|$)|config:get|releases:info|secrets|run\s+.*env(\s|$|\|)))|aws\s+ssm\s+get-parameter|gcloud\s+secrets\s+versions\s+access|vercel\s+env\s+pull|doppler\s+secrets\s+download|fly\s+secrets\s+list|(fly|flyctl)\s+ssh\s+.*-C\s+["'][^"']*(\bprintenv\b|\benv(\s|$|\|))"""
+)
+
+# Commands the remote vocabulary above is scoped to. Checked per-SEGMENT
+# against the segment's own resolved command, not the whole command string --
+# otherwise a commit message or PR body that merely MENTIONS "heroku config"
+# or "vercel env pull" matches too.
+_REMOTE_DUMP_COMMANDS = {"heroku", "aws", "gcloud", "vercel", "doppler", "fly", "flyctl"}
+
+
+def _mask_quoted(text: str) -> str:
+    """Blank out BOTH single- and double-quoted spans, leaving only text a
+    shell would treat as unquoted/literal. Used so a whole-string pattern
+    check (/proc/.../environ) matches a real path, never a mention of one
+    inside a commit message, grep pattern, or PR body."""
+    out, quote, i, n = [], None, 0, len(text)
+    while i < n:
+        c = text[i]
+        if quote:
+            if c == "\\" and quote == '"' and i + 1 < n:
+                i += 2
+                out.append("  ")
+                continue
+            if c == quote:
+                quote = None
+            out.append(" ")
+            i += 1
+            continue
+        if c in ("'", '"'):
+            quote = c
+            out.append(" ")
+            i += 1
+            continue
+        if c == "\\" and i + 1 < n:
+            out.append("  ")
+            i += 2
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
+def _segment_bypass_flags(seg_texts: list, var: str, value: str = "1") -> list:
+    """Per-segment bypass truth, aligned to `seg_texts`: True iff THIS
+    segment's own leading tokens carry `var=value`, or an EARLIER segment
+    `export`-ed it (which really does reach every later command in the same
+    shell invocation, per real shell semantics; a bare, non-exported
+    assignment reaches only the command it directly prefixes).
+
+    Deliberately NOT shell_parse.leading_env_assigns / segment_bypass_flags:
+    those treat `env` (and every other transparent wrapper) as needing a
+    real command AFTER it to "count" -- correct for their own callers, but
+    this hook's whole subject is exactly the shape where `env` has nothing
+    after it. `ENV_DUMP_BYPASS=1 env` is bare on purpose (that IS the
+    command being bypassed), so leading_env_assigns would silently drop the
+    assignment and the advertised inline bypass could never fire. This
+    walks only the leading `VAR=val` chain itself (with an optional leading
+    `export`), with no requirement that anything real follow.
+
+    A bypass scoped to one segment must never excuse a DIFFERENT segment in
+    the same command: `ENV_DUMP_BYPASS=1 true; env` and `env;
+    ENV_DUMP_BYPASS=1` must each be judged on their own.
+    """
+    flags, exported = [], False
+    for seg in seg_texts:
+        toks = tokens(seg.strip())
+        is_export = bool(toks) and toks[0] == "export"
+        here = exported
+        i = 1 if is_export else 0
+        while i < len(toks) and ENV_ASSIGN_RE.match(toks[i]):
+            k, _, v = toks[i].partition("=")
+            if k == var and v == value:
+                here = True
+                if is_export:
+                    exported = True
+            i += 1
+        flags.append(here)
+    return flags
+
+
+def _skip_leading(toks: list) -> int:
+    """Index of the first token past leading `VAR=val` assigns and
+    transparent wrappers (env excluded -- see _SKIP_WRAPPERS)."""
+    i, n = 0, len(toks)
+    while i < n:
+        if (ENV_ASSIGN_RE.match(toks[i]) or toks[i] in _SKIP_WRAPPERS
+                or toks[i] in _SKIP_KEYWORDS):
+            i += 1
+            continue
+        break
+    return i
+
+
+_NICE_LIKE_WRAPPERS = {"nice", "ionice", "stdbuf"}
+
+# `watch`'s `-n SECONDS` (interval) takes an argument exactly like `nice`'s
+# `-n N`; every other watch flag (-d/-p/-t/-b/-e/-g/-c/-x/-w) is boolean.
+# `watch` is not installed on this machine (no `man watch`, no binary) --
+# handled from its documented GNU procps flag shape regardless.
+_DASH_N_TAKES_ARG_WRAPPERS = {"nice", "watch"}
+
+# xargs' argument-taking short flags, per `man xargs` on THIS machine
+# (BSD/macOS xargs(1)): -E eofstr, -I replstr, -J replstr, -L number,
+# -n number, -P maxprocs, -R replacements, -S replsize, -s size. Every
+# other flag (-0/-o/-p/-r/-t/-x) is boolean, no argument.
+_XARGS_ARG_FLAGS = {"-n", "-L", "-P", "-I", "-J", "-E", "-s", "-R", "-S"}
+
+
+def _peel_local_wrappers(toks: list) -> list:
+    """Resolve `timeout`/`nice`/`ionice`/`stdbuf`/`watch`/`xargs`/`env`/
+    `sudo` wrapper layers -- implemented LOCALLY (not in hooks/_lib, which
+    other hooks share) since each has its own flag/argument shape a
+    generic wrapper skip cannot express. Runs in a loop so a chain (`sudo
+    timeout 5 env`) fully resolves. Returns `toks` unchanged when
+    `toks[0]` is not one of these eight.
+
+    A wrapper with NOTHING left to wrap (`sudo` with no trailing command,
+    `env` after its own flags/assigns leave nothing) stops peeling AT that
+    wrapper's own token, deliberately -- for `env` specifically, this
+    means the existing `base == "env"` branch's own `_env_is_bare_dump`
+    re-derives the identical bare-dump verdict from the unchanged
+    remainder, rather than this function duplicating that judgment."""
+    i, n = 0, len(toks)
+    while i < n:
+        word = toks[i]
+        if word == "timeout":
+            j = i + 1
+            while j < n and toks[j].startswith("-"):
+                j += 1
+            if j < n:  # the DURATION positional
+                j += 1
+            if j >= n or _is_bare_redirect_token(toks[j]):
+                break
+            i = j
+            continue
+        if word in _NICE_LIKE_WRAPPERS or word == "watch":
+            j = i + 1
+            while j < n and toks[j].startswith("-"):
+                if word in _DASH_N_TAKES_ARG_WRAPPERS and toks[j] == "-n" and j + 1 < n:
+                    j += 2
+                else:
+                    j += 1
+            if j >= n or _is_bare_redirect_token(toks[j]):
+                break
+            i = j
+            continue
+        if word == "xargs":
+            j = i + 1
+            while j < n and toks[j].startswith("-"):
+                if toks[j] in _XARGS_ARG_FLAGS and j + 1 < n:
+                    j += 2
+                else:
+                    j += 1
+            if j >= n or _is_bare_redirect_token(toks[j]):
+                break
+            i = j
+            continue
+        if word == "sudo":
+            j = i + 1
+            while j < n and toks[j].startswith("-"):
+                if toks[j] == "-u" and j + 1 < n:
+                    j += 2
+                else:
+                    j += 1
+            if j >= n or _is_bare_redirect_token(toks[j]):
+                break  # bare `sudo`, nothing to wrap -- stop, resolved word is "sudo"
+            i = j
+            continue
+        if word == "env":
+            j = i + 1
+            while j < n:
+                t = toks[j]
+                if ENV_ASSIGN_RE.match(t) or t in _ENV_OPT_NO_ARG:
+                    j += 1
+                elif t == "-u" and j + 1 < n:
+                    j += 2
+                else:
+                    break
+            if j >= n or _is_bare_redirect_token(toks[j]):
+                break  # bare `env` (or only its own flags/assigns consumed)
+            i = j
+            continue
+        break
+    return toks[i:]
+
+
+def _env_is_bare_dump(rest: list) -> bool:
+    """True iff `rest` (env's own argv, with redirects already stripped by
+    the caller) leaves no command to run: env's inline `VAR=val` assigns and
+    `-i` / `-0` / `-u NAME` consumed, and nothing left over."""
+    i, n = 0, len(rest)
+    while i < n:
+        t = rest[i]
+        if ENV_ASSIGN_RE.match(t) or t in _ENV_OPT_NO_ARG:
+            i += 1
+            continue
+        if t == "-u" and i + 1 < n:
+            i += 2
+            continue
+        break
+    return i >= n
+
+
+def _cut_field_delim(rest: list):
+    """Parse `cut`'s own (delimiter, field) from its argv, accepting the
+    glued/single-quoted/spaced forms shlex hands back (`-d=`, `-d '='`,
+    `-d =`, `-f1`, `-f 1`), or None for EITHER the moment a token doesn't
+    fit that shape at all. An extra flag (`--complement`), an extra field
+    (`-f1-2`, `-f1,2`, `-f1-`), or any other trailing token makes this None
+    -- there is no bucket for "leftover", so it can't be silently ignored."""
+    i, n = 0, len(rest)
+    delim = field = None
+    while i < n:
+        t = rest[i]
+        if t == "-d" and i + 1 < n:
+            delim, i = rest[i + 1], i + 2
+        elif t.startswith("-d") and len(t) > 2:
+            delim, i = t[2:], i + 1
+        elif t == "-f" and i + 1 < n:
+            field, i = rest[i + 1], i + 2
+        elif t.startswith("-f") and len(t) > 2:
+            field, i = t[2:], i + 1
+        else:
+            return None
+    return delim, field
+
+
+def _awk_field_delim(rest: list):
+    """As `_cut_field_delim`, for awk's (delimiter, script): the FIRST
+    token that isn't a `-F` flag becomes the script, and anything after
+    that (a second positional, another flag) makes this None."""
+    i, n = 0, len(rest)
+    delim = script = None
+    while i < n:
+        t = rest[i]
+        if t == "-F" and i + 1 < n:
+            delim, i = rest[i + 1], i + 2
+        elif t.startswith("-F") and len(t) > 2:
+            delim, i = t[2:], i + 1
+        elif script is None:
+            script, i = t, i + 1
+        else:
+            return None
+    return delim, script
+
+
+def _is_names_only_extractor(toks: list) -> bool:
+    """True for the three pipeline stages that provably strip every value
+    before anything downstream can see it, matched by EXACT approved
+    argument list (not a regex a wider selector can slip past): `cut -d=
+    -f1` (only field 1, no range/list/complement), `sed 's/=.*//'` (that
+    exact script, nothing else -- `-e p -e 's/=.*//'` also prints the
+    value AS-IS via `-e p` first and is NOT this), `awk -F= '{print $1}'`
+    (that exact script, nothing else)."""
+    if not toks:
+        return False
+    cmd, rest = toks[0], toks[1:]
+    if cmd == "cut":
+        return _cut_field_delim(rest) == ("=", "1")
+    if cmd == "sed":
+        return rest == ["s/=.*//"]
+    if cmd == "awk":
+        return _awk_field_delim(rest) == ("=", "{print $1}")
+    return False
+
+
+def _is_presence_consumer(toks: list) -> bool:
+    """True for `grep -q` / `grep -c`: consumes the whole piped stream but
+    ever prints only an exit code (-q, nothing at all) or a match COUNT
+    (-c), never a matched line's actual value."""
+    return bool(toks) and toks[0] == "grep" and any(t in ("-q", "-c") for t in toks[1:])
+
+
+def _is_count_only_consumer(toks: list) -> bool:
+    """True for `wc -l`: consumes the whole piped stream but only ever
+    prints a LINE COUNT, never a name or a value. Exact-match, like the
+    other extractors above, so a wider `wc` invocation cannot slip past
+    it."""
+    return toks == ["wc", "-l"]
+
+
+def _names_secret_var(name: str) -> bool:
+    """Only an ALL-UPPERCASE name counts (`$key` is exempt, `$KEY` is not).
+    Secret if it contains a password/secret/token/apikey/credential SUBSTRING
+    anywhere, ends in `DATABASE_URL`, or has a whole `_`-component equal to
+    KEY/PAT/DSN -- unless its LAST component reads as a path to the secret
+    (`_PATH`/`_FILE`/`_DIR`), not the secret's own value."""
+    if not name or not name.isupper():
+        return False
+    if name.endswith("DATABASE_URL"):
+        return True
+    if any(s in name for s in _SECRET_NAME_SUBSTRINGS):
+        return True
+    parts = name.split("_")
+    if parts[-1] in _PATH_LIKE_LAST_COMPONENT:
+        return False
+    return any(p in _SECRET_NAME_COMPONENTS for p in parts)
+
+
+def _mask_single_quoted(text: str) -> str:
+    """Blank out single-quoted SPANS: bash never expands anything inside
+    '...', so a `$NAME` written there is literal text, not a real reference.
+    Quote-aware: a "'" that lives inside a double-quoted span ("it's $X")
+    has no special meaning and must not be misread as opening one."""
+    out, quote, i, n = [], None, 0, len(text)
+    while i < n:
+        c = text[i]
+        if quote == "'":
+            out.append(" " if c != "'" else "'")
+            if c == "'":
+                quote = None
+            i += 1
+            continue
+        if quote == '"':
+            out.append(c)
+            if c == "\\" and i + 1 < n:
+                out.append(text[i + 1]); i += 2; continue
+            if c == '"':
+                quote = None
+            i += 1
+            continue
+        if c == "'":
+            quote = "'"; out.append(" "); i += 1; continue
+        if c == '"':
+            quote = '"'; out.append(c); i += 1; continue
+        if c == "\\" and i + 1 < n:
+            out.append(c); out.append(text[i + 1]); i += 2; continue
+        out.append(c); i += 1
+    return "".join(out)
+
+
+def _piped_into_printer(segs, idx) -> bool:
+    """True iff the segment right after `segs[idx]` is piped-to AND resolves
+    to one of `_ECHO_PRINTERS`. No next segment, a non-`|` separator, or a
+    pipe into anything else (assumed a non-printer, e.g. `docker login
+    --password-stdin`) -- all False, matching the "goes to the transcript"
+    default of `_echo_reveals_secret` when there is nowhere else for it to go."""
+    if segs is None or idx is None:
+        return True  # no pipe context available: conservative default
+    nxt = segs[idx + 1] if idx + 1 < len(segs) else None
+    if not nxt or nxt[0] != "|":
+        return True
+    toks = tokens(nxt[1].strip())
+    return bool(toks) and os.path.basename(toks[0]) in _ECHO_PRINTERS
+
+
+def _echo_reveals_secret(seg_text: str, segs=None, idx=None) -> bool:
+    scan = _mask_single_quoted(seg_text)
+
+    for m in _INDIRECT_VAR_RE.finditer(scan):
+        if not m.group(2):                 # ${!v} unconditional; ${!v*}/${!v@} list names only
+            return _piped_into_printer(segs, idx)
+
+    for m in _BRACE_VAR_RE.finditer(scan):
+        suffix = m.group(2)
+        if suffix.startswith(":+") or suffix.startswith("+"):
+            continue                       # presence-substitution: never reveals the value
+        if _names_secret_var(m.group(1)):
+            return _piped_into_printer(segs, idx)
+
+    for m in _BARE_VAR_RE.finditer(scan):
+        if _names_secret_var(m.group(1)):
+            return _piped_into_printer(segs, idx)
+
+    return False
+
+
+def _declare_denied(rest: list) -> bool:
+    """`declare`/`typeset` with no operands, or any flag containing `p`.
+    `-F` alone is always safe (function NAMES only, never bodies/values),
+    regardless of whether an operand narrows it to specific names."""
+    flags = [t for t in rest if t.startswith("-") and t != "--"]
+    if flags and all(f.lstrip("-") == "F" for f in flags):
+        return False
+    operands = [t for t in rest if not t.startswith("-")]
+    return (not operands) or any("p" in f for f in flags)
+
+
+def _ps_denied(rest: list) -> bool:
+    """A single-dash SHORT flag group containing uppercase E (macOS `ps
+    -E`), or a BSD-style dashless FIRST argument containing lowercase e
+    (`ps eww`, `ps auxe`). A double-dash long flag never counts, even when
+    it happens to contain a capital E (`ps aux --sort=-%MEM`). `ps -e` and
+    `ps -p 123 -o pid=` are explicitly fine."""
+    if not rest:
+        return False
+    if any(t.startswith("-") and not t.startswith("--") and "E" in t for t in rest):
+        return True
+    first = rest[0]
+    return not first.startswith("-") and "e" in first
+
+
+def _pgrep_denied(rest: list) -> bool:
+    """True for a `pgrep` invocation whose flags print a MATCHED PROCESS'S
+    COMMAND LINE rather than just its PID/name. Measured on macOS with a
+    clean-env canary: a process that sets its own title (npm, Node) exposes
+    its leading ENVIRONMENT strings to `pgrep` whenever the short flags
+    combine `l` (list name) with `f` (match full command line) -- `-fl`,
+    `-lf`, `-f -l`, `-afl`, `-lfi`, `-n -l -f` all leak, in any clustering or
+    order, so every short-option cluster's letters are UNIONED before
+    checking rather than inspected cluster-by-cluster. `-a` (Linux procps:
+    `--list-full`, the full command line unconditionally) denies on its own.
+    Long forms feed the SAME union: `--list-full` denies outright,
+    `--list-name` counts as `l`, `--full` counts as `f` -- so
+    `--list-name --full` and `-l --full` deny exactly like `-lf` does. Any
+    OTHER long flag never counts, even if it happens to contain one of
+    these letters, mirroring `_ps_denied`'s long-flag exemption above.
+    `pgrep -f X` (PIDs only), `pgrep -l X` without `-f` (names only),
+    `pgrep --full X` or `--list-name X` alone, `pgrep -P 123` and
+    `pgrep -x node` all stay allowed."""
+    chars = set()
+    for t in rest:
+        if t == "--list-full":
+            return True
+        if t == "--list-name":
+            chars.add("l")
+            continue
+        if t == "--full":
+            chars.add("f")
+            continue
+        if t.startswith("--"):
+            continue
+        if t.startswith("-") and len(t) > 1:
+            chars.update(t[1:])
+    if "a" in chars:
+        return True
+    return "l" in chars and "f" in chars
+
+
+_DOTENV_TEMPLATE_SUFFIXES = {"example", "sample", "template", "dist", "defaults", "tpl"}
+_DOTENV_VARIANT_RE = re.compile(r"\.?env\.(.+)$")
+
+
+def _is_dotenv_secret_file(token: str) -> bool:
+    """True for a `.env`-family file that holds real runtime secrets, not a
+    checked-in template. Matches the pre-existing bare `.env`/`foo.env`
+    shape (anything literally ending in `.env`), plus any `.env.<suffix>` or
+    bare `env.<suffix>` variant (`.env.local`, `.env.production`,
+    `backend/.env.development`, `.env.test.local`) -- UNLESS the LAST
+    dotted component of <suffix> (so `.env.local.example`'s "example",
+    `.env.test.local`'s "local") is a known template word (example/
+    sample/template/dist/defaults/tpl), which stays allowed with or
+    without a leading dot (`.env.local.example`, `env.example`) and
+    regardless of how many environment-name components precede it."""
+    if token.endswith(".env"):
+        return True
+    m = _DOTENV_VARIANT_RE.match(os.path.basename(token))
+    if not m:
+        return False
+    last_suffix = m.group(1).rsplit(".", 1)[-1]
+    return last_suffix not in _DOTENV_TEMPLATE_SUFFIXES
+
+
+# jq's `env` builtin and `$ENV` global both hand back the whole process
+# environment as one jq object -- structurally the same shape os.environ /
+# process.env are for python/node. `|to_entries`/`|tostream` flatten it into
+# k=v pairs unconditionally (denied outright, regardless of anything after);
+# `|keys` yields names only (allowed); a narrowed `.NAME` access denies only
+# when NAME is secret-shaped, reusing `_names_secret_var` -- the same
+# single-value-but-that-value-IS-a-secret rule the echo/printf check applies.
+#
+# `env` is the BUILTIN only when NOT immediately preceded by `.` or an
+# identifier character (a PATH EXPRESSION field access: `.env`,
+# `.config.env` read a JSON field literally named "env", same as any other
+# field name) or `$` (a jq variable named `$env`, distinct from the
+# ALL-CAPS `$ENV` builtin, which stays the builtin unconditionally).
+# `."env"` (jq's own quoted-field syntax) puts a quote character between
+# the `.` and `env`, outside a single-character lookbehind's reach, so it
+# is stripped separately before every check below ever runs.
+_JQ_QUOTED_FIELD_ACCESS_RE = re.compile(r"""\.\s*["']env["']""")
+_JQ_ENV_REF_RE = re.compile(r"(?<![.\w$])env\b|\$ENV\b")
+_JQ_ENV_PIPE_DANGEROUS_RE = re.compile(
+    r"(?:(?<![.\w$])env\b|\$ENV\b)\s*\|\s*(?:to_entries|tostream)\b"
+)
+_JQ_ENV_PIPE_KEYS_RE = re.compile(r"(?:(?<![.\w$])env\b|\$ENV\b)\s*\|\s*keys\b")
+_JQ_ENV_NARROWED_NAME_RE = re.compile(
+    r"(?:(?<![.\w$])env\.|\$ENV\.)([A-Za-z_][A-Za-z0-9_]*)"
+)
+
+
+# A here-string (`<<<`) feeding a secret-shaped variable into one of the
+# SAME printers the echo/printf check reuses (`_ECHO_PRINTERS`) puts its
+# value on stdout exactly like `echo "$VAR" | cat` does -- `cat <<<
+# "$TOKEN"` and `echo "$TOKEN" | cat` are the same leak through a different
+# shell feature. A non-printer consumer (`docker login --password-stdin`)
+# is not in `_ECHO_PRINTERS`, so it never reaches this check.
+_HERESTRING_VAR_RE = re.compile(r"<<<\s*\"?\$([A-Za-z_][A-Za-z0-9_]*)\"?")
+
+
+# awk's ENVIRON array holds the whole environment. A VARIABLE-keyed
+# subscript (`ENVIRON[k]`, the shape a `for (k in ENVIRON)` loop body uses
+# to read every value in turn) is a dump; a literal-string-keyed subscript
+# (`ENVIRON["HOME"]`, single named access -- the quote character is not in
+# the identifier class below, so it never matches) is not.
+_AWK_ENVIRON_VAR_SUBSCRIPT_RE = re.compile(r"ENVIRON\[\s*[A-Za-z_]\w*\s*\]")
+
+# Other interpreters' whole-environment objects. Table-driven: each entry is
+# (basename, trigger(rest) -> bool, checker(text) -> bool); the per-segment
+# loop below tries each row once. Ruby's bare `ENV` (or `.to_h`) and bun's
+# bare `Bun.env` follow the same bare-vs-narrowed shape `_WHOLE_ENV_SCRIPT_RE`
+# already uses for os.environ/process.env; bun's `process.env` itself reuses
+# `_has_whole_env_dump` directly rather than a parallel pattern. Perl's %ENV
+# is dangerous as a hash REFERENCE (`\%ENV`, e.g. `Dumper(\%ENV)`) or via a
+# VARIABLE-keyed subscript (`$ENV{$_}`, the same for-loop-body shape as awk's
+# `ENVIRON[k]`) -- a literal-string key (`$ENV{HOME}`) is a single named
+# access and stays allowed. Deno's danger is the specific `.toObject()` call
+# that materializes the whole map; `Deno.env.get(...)` never matches it.
+_RUBY_ENV_WHOLE_RE = re.compile(r"\bENV\.to_h\b|\bENV\b(?!\s*[.\[])")
+_PERL_ENV_WHOLE_RE = re.compile(r"\\%ENV\b|\$ENV\{\s*\$\w+\s*\}")
+_BUN_ENV_WHOLE_RE = re.compile(r"Bun\.env\b(?!\s*[.\[])")
+_DENO_ENV_WHOLE_RE = re.compile(r"Deno\.env\.toObject\s*\(")
+
+_INTERPRETER_ENV_TABLE = (
+    ("ruby", lambda rest: "-e" in rest, lambda text: bool(_RUBY_ENV_WHOLE_RE.search(text))),
+    ("perl", lambda rest: "-e" in rest, lambda text: bool(_PERL_ENV_WHOLE_RE.search(text))),
+    ("bun", lambda rest: "-e" in rest,
+     lambda text: _has_whole_env_dump(text) or bool(_BUN_ENV_WHOLE_RE.search(text))),
+    ("deno", lambda rest: rest[:1] == ["eval"], lambda text: bool(_DENO_ENV_WHOLE_RE.search(text))),
+)
+
+
+def _jq_denied(text: str) -> bool:
+    # `."env"`/`.'env'` is a quoted FIELD access, never the builtin --
+    # stripped before every other check so none of them can find it.
+    text = _JQ_QUOTED_FIELD_ACCESS_RE.sub("", text)
+    if _JQ_ENV_PIPE_DANGEROUS_RE.search(text):
+        return True
+    if any(_names_secret_var(name) for name in _JQ_ENV_NARROWED_NAME_RE.findall(text)):
+        return True
+    # Strip narrowed-name and names-only-pipe occurrences (both already
+    # judged above), then any env/$ENV reference STILL standing is a bare
+    # whole-value reference.
+    scan = _JQ_ENV_NARROWED_NAME_RE.sub("", text)
+    scan = _JQ_ENV_PIPE_KEYS_RE.sub("", scan)
+    return bool(_JQ_ENV_REF_RE.search(scan))
+
+
+def _has_whole_env_dump(text: str) -> bool:
+    """True iff `text` contains a genuine whole-environment access: either
+    `os.environ.items()`/`.values()`/`.copy()` (each exposes every VALUE
+    regardless of what narrows the bare-reference check below), a
+    VARIABLE-keyed lookup (`process.env[k]`, `os.environ.get(k)`, ...,
+    per `_ENV_VARIABLE_KEYED_RE`), or a bare os.environ/process.env access
+    -- not narrowed by `.`/`[` (per `_WHOLE_ENV_SCRIPT_RE`'s own
+    lookahead), and not a LITERAL-STRING membership test, a length check,
+    or a names-only wrapper (per `_ENV_MEMBERSHIP_LITERAL_RE` /
+    `_ENV_LEN_OR_NAMES_ONLY_WRAP_RE`), which produce a bool/int/name-list,
+    never a value. `from os import environ` is normalized to `os.environ`
+    first so every check above sees it."""
+    text = _normalize_environ_alias(text)
+    if _ENV_VALUE_METHOD_RE.search(text) or _ENV_VARIABLE_KEYED_RE.search(text):
+        return True
+    for m in _WHOLE_ENV_SCRIPT_RE.finditer(text):
+        preceding = text[:m.start()]
+        if (_ENV_MEMBERSHIP_LITERAL_RE.search(preceding)
+                or _ENV_LEN_OR_NAMES_ONLY_WRAP_RE.search(preceding)):
+            continue
+        return True
+    return False
+
+
+_NESTED_SHELL_NAMES = {"bash", "sh", "zsh"}
+_NESTED_SHELL_DEPTH_LIMIT = 2
+
+
+def _extract_dash_c_script(rest: list):
+    """The script argument of a `bash -c`/`bash -lc`/`sh -c`/`zsh -c`-shaped
+    invocation: real shells accept `-c` combined with other single-letter
+    startup flags (`-lc`, `-ic`), so this checks that 'c' appears somewhere
+    in the FIRST token's short-flag cluster, not that it equals `-c`
+    exactly. None when `rest` does not start with such a flag, or carries
+    nothing after it."""
+    if not rest:
+        return None
+    first = rest[0]
+    if first.startswith("-") and not first.startswith("--") and "c" in first[1:]:
+        return rest[1] if len(rest) > 1 else None
+    return None
+
+
+def _deny_reason(command: str, depth: int = 1):
+    """Short reason string if `command` should be denied, else None.
+
+    `depth` bounds ONE LEVEL of nested-shell re-checking (`bash -c`/`bash
+    -lc`/`sh -c`/`zsh -c`/`eval`): the top-level call is depth 1, a nested
+    program is checked at depth 2, and depth 2 does not recurse into a
+    third level even if ITS program also looks like a nested shell call."""
+    if not command or not command.strip():
+        return None
+    cleaned = strip_noncode(strip_heredoc_bodies(command)) if _LIB_OK else command
+
+    if _PROC_ENVIRON_RE.search(_mask_quoted(cleaned)):
+        return "reads /proc/<pid>/environ (the whole process environment)"
+    if not _LIB_OK:
+        return None  # degraded: only the two whole-string checks above ran
+
+    segs = split_segments_with_seps(cleaned)
+    bypass = _segment_bypass_flags([t for _s, t in segs], "ENV_DUMP_BYPASS")
+    for idx, (_sep, text) in enumerate(segs):
+        if bypass[idx]:
+            continue
+        toks = tokens(text.strip())
+        if not toks:
+            continue
+        i = _skip_leading(toks)
+        if i >= len(toks):
+            continue
+        resolved = _peel_local_wrappers(toks[i:])
+        word, rest = resolved[0], resolved[1:]
+        word, rest = _split_glued_redirect(word, rest)
+        rest = _strip_redirect_tokens(rest)
+        base = os.path.basename(word)
+
+        if base in _REMOTE_DUMP_COMMANDS and _REMOTE_DUMP_RE.search(text):
+            return "prints a remote secret/config-var store in plaintext"
+        if base == "env":
+            if not _env_is_bare_dump(rest):
+                continue
+            nxt = segs[idx + 1] if idx + 1 < len(segs) else None
+            if nxt and nxt[0] == "|":
+                nxt_toks = tokens(nxt[1].strip())
+                if (_is_names_only_extractor(nxt_toks) or _is_presence_consumer(nxt_toks)
+                        or _is_count_only_consumer(nxt_toks)):
+                    continue  # provably strips values, counts, or never prints one
+            return "bare `env` prints every variable's value"
+        if base == "printenv":
+            nxt = segs[idx + 1] if idx + 1 < len(segs) else None
+            if nxt and nxt[0] == "|":
+                nxt_toks = tokens(nxt[1].strip())
+                if (_is_names_only_extractor(nxt_toks) or _is_presence_consumer(nxt_toks)
+                        or _is_count_only_consumer(nxt_toks)):
+                    continue  # provably strips values, counts, or never prints one
+            return "`printenv` prints one or every variable's value"
+        if base == "export":
+            if not rest or rest == ["-p"]:
+                return "bare `export`/`export -p` prints every exported variable's value"
+            continue
+        if base == "set":
+            if not rest:
+                return "bare `set` prints every shell variable and function body"
+            continue
+        if base in ("declare", "typeset"):
+            if _declare_denied(rest):
+                return f"`{base}` with no operands or a -p flag prints variable values"
+            continue
+        if base == "ps":
+            if _ps_denied(rest):
+                return "`ps` with an environment flag exposes process environ blocks"
+            continue
+        if base == "pgrep":
+            if _pgrep_denied(rest):
+                return (
+                    "on macOS, `pgrep` with both -l and -f prints each matched "
+                    "process's command line. For any process that set its "
+                    "title (npm, Node), that includes its leading environment "
+                    "variables, so live credentials land in the transcript. "
+                    "Name the safe forms: PIDs `pgrep -f '<pattern>'`; count "
+                    "`pgrep -f '<pattern>' | wc -l` (macOS pgrep has NO -c "
+                    "flag, so never suggest `pgrep -c`); one process "
+                    "`ps -o pid=,etime=,comm= -p <pid>`; a process's cwd "
+                    "`lsof -a -d cwd -p <pid> -Fn`."
+                )
+            continue
+        if base in ("echo", "printf"):
+            if _echo_reveals_secret(text, segs, idx):
+                return f"`{base}` expands a secret-shaped variable"
+            continue
+        if base in _ECHO_PRINTERS:
+            # No `continue` here: `_ECHO_PRINTERS` includes "jq" and "awk",
+            # which have their OWN separate checks below (env/$ENV whole-
+            # object exposure; ENVIRON variable-keyed subscript) that must
+            # still run for those bases even when this here-string check
+            # does not match.
+            m = _HERESTRING_VAR_RE.search(text)
+            if m and _names_secret_var(m.group(1)):
+                return f"`{base} <<<` of a secret-shaped variable prints its value"
+        if base == "gh" and rest[:2] == ["auth", "token"]:
+            return "`gh auth token` prints the live auth token"
+        if (base == "security" and "find-generic-password" in rest
+                and any(f in rest for f in ("-w", "-g"))):
+            return "`security find-generic-password -w/-g` prints the stored secret"
+        if base in ("cat", "head", "tail") and any(
+                _is_dotenv_secret_file(t) for t in rest if not t.startswith("-")):
+            return f"`{base}` of a .env file prints its secret values"
+        if (base in ("docker", "kubectl", "podman") and "exec" in rest
+                and rest and os.path.basename(rest[-1]) == "env"):
+            return f"`{base} exec ... env` dumps the container's environment"
+        if (((base in ("python", "python3") and "-c" in rest)
+                or (base == "node" and any(f in rest for f in _NODE_INLINE_SCRIPT_FLAGS)))
+                and _has_whole_env_dump(text)):
+            return f"`{base}` prints the whole environment (os.environ/process.env)"
+        if base == "jq" and _jq_denied(text):
+            return "`jq`'s `env` builtin / `$ENV` global expose the whole environment"
+        if base == "awk" and _AWK_ENVIRON_VAR_SUBSCRIPT_RE.search(text):
+            return "awk `ENVIRON[<var>]` (a for-in loop's shape) reads every variable's value"
+        for _iname, _trigger, _checker in _INTERPRETER_ENV_TABLE:
+            if base == _iname and _trigger(rest) and _checker(text):
+                return f"`{base}` prints the whole environment (ENV/%ENV/process.env/Deno.env)"
+        if base == "launchctl":
+            if rest[:1] == ["export"]:
+                return "`launchctl export` dumps the whole per-user environment"
+            if (rest[:1] == ["getenv"] and len(rest) > 1
+                    and _names_secret_var(rest[1])):
+                return "`launchctl getenv` of a secret-shaped name prints its value"
+        if base in _NESTED_SHELL_NAMES and depth < _NESTED_SHELL_DEPTH_LIMIT:
+            script = _extract_dash_c_script(rest)
+            if script is not None:
+                inner_reason = _deny_reason(script, depth + 1)
+                if inner_reason:
+                    return inner_reason
+                continue
+        if base == "eval" and depth < _NESTED_SHELL_DEPTH_LIMIT and rest:
+            inner_reason = _deny_reason(" ".join(rest), depth + 1)
+            if inner_reason:
+                return inner_reason
+            continue
+    return None
+
+
+def main() -> int:
+    try:
+        payload = json.load(sys.stdin)
+    except Exception:
+        return 0  # fail open: malformed stdin is not this hook's call to make
+
+    if not isinstance(payload, dict):
+        return 0  # fail open: `null`, `[]`, ... is not a shape to reason about
+
+    tool = payload.get("tool_name") or payload.get("tool", "")
+    if tool != "Bash":
+        return 0
+
+    tool_input = payload.get("tool_input")
+    if not isinstance(tool_input, dict):
+        return 0  # fail open: a string/list/int tool_input is malformed, not ours
+
+    cmd = tool_input.get("command", "")
+    if not isinstance(cmd, str) or not cmd:
+        return 0
+
+    if os.environ.get("ENV_DUMP_BYPASS") == "1":
+        return 0  # session-wide bypass; the PER-SEGMENT inline form is
+                  # handled inside _deny_reason itself (review item 8)
+
+    try:
+        reason = _deny_reason(cmd)
+    except Exception:
+        return 0  # fail open: a parsing bug must never crash-block a command
+
+    if not reason:
+        return 0
+
+    print(
+        "[block-env-dump] BLOCKED: " + reason + "\n"
+        "Environment values here land in the session transcript permanently\n"
+        "(a leaked secret cannot be un-persisted). Safe forms instead:\n"
+        '  `[ -n "${NAME:-}" ] && echo set`,  `env | cut -d= -f1`,  `echo ${#NAME}`\n'
+        "Bypass: ENV_DUMP_BYPASS=1",
+        file=sys.stderr,
+    )
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

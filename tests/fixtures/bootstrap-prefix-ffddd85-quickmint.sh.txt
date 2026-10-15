@@ -1,0 +1,80 @@
+# FROZEN FIXTURE - do not edit, do not 'update' to match bootstrap.sh.
+#
+# The five console helpers (log/ok/warn/err/t) plus the EMAIL+NAME inline
+# quick-mint sub-block of bootstrap.sh exactly as they stood at commit
+# ffddd85 (origin/main, 2026-09-27) -- the commit MYC-5093 branched from, and
+# the last commit BEFORE the quick-mint-reused-is-a-warning fix. At that SHA,
+# a resubmit for an email with an already-live token came back
+# {ok:true, reused:true, resent:<bool>} with no "token" field. The inline
+# mint block only recognized a 32-hex "token" field: anything else -- this
+# reply included -- fell through to err("Inline mint failed. Falling back to
+# form."), landing on the FAILED list and telling the end-of-run summary the
+# install needs a re-run, which re-sends the welcome email every time.
+#
+# Extracted verbatim with `git show ffddd85:bootstrap.sh | sed -n '...'`,
+# never retyped and never hand-edited, so this can't silently drift from the
+# real pre-fix source (same technique as
+# tests/fixtures/bootstrap-prefix-e9f80e0.sh.txt and
+# tests/fixtures/bootstrap-prefix-27d5243-parent.sh.txt).
+#
+# Used by tests/integration/test_bootstrap_quick_mint_reused.sh as the
+# NEGATIVE CONTROL "before" source: the harness built from this fixture must
+# call err() and must NOT recognize a reused+resent reply, proving the test
+# would have caught the bug it exists to catch.
+#
+# A pinned commit SHA is immutable, but a shallow CI checkout may not have it
+# in its object store -- so this is a vendored file, never `git show
+# ffddd85:bootstrap.sh` run live in the test itself.
+
+# ── console helpers (log/ok/warn/err/t), verbatim from ffddd85 ──
+log()  { printf "  \033[36m·\033[0m %s\n" "$*"; }
+ok()   { printf "  \033[32m✓\033[0m %s\n" "$*"; }
+warn() { printf "  \033[33m!\033[0m %s\n" "$*"; }
+err()  { printf "  \033[31m✗\033[0m %s\n" "$*"; FAILED+=("$*"); }
+t() { [[ "$LANG_CODE" == "es" ]] && echo "$2" || echo "$1"; }
+
+# ── EMAIL+NAME inline quick-mint sub-block, verbatim from ffddd85 ──
+  if [[ -z "${TOKEN:-}" && -n "${EMAIL:-}" && -n "${NAME:-}" ]]; then
+    QM_LANG="${LANG_HINT:-en}"
+    [[ "$QM_LANG" != "en" && "$QM_LANG" != "es" ]] && QM_LANG="en"
+    QM_OS="mac-arm"
+    case "$(uname -sm 2>/dev/null)" in
+      Darwin*arm64*) QM_OS="mac-arm" ;;
+      Darwin*x86_64*) QM_OS="mac-intel" ;;
+      Linux*) QM_OS="linux" ;;
+    esac
+    log "$(t "Minting install token for $EMAIL via $INSTALL_API_BASE..." \
+            "Generando token de instalación para $EMAIL en $INSTALL_API_BASE...")"
+    QM_PAYLOAD="$(EMAIL="$EMAIL" NAME="$NAME" QM_LANG="$QM_LANG" QM_OS="$QM_OS" "$PY" <<'PY'
+import json, os
+print(json.dumps({
+  "email": os.environ.get("EMAIL",""),
+  "name": os.environ.get("NAME",""),
+  "lang": os.environ.get("QM_LANG","en"),
+  "os": os.environ.get("QM_OS","mac-arm"),
+  "consentRequired": True,
+}))
+PY
+)"
+    set +e
+    QM_RESP="$(curl -sSL -m 12 -X POST "$INSTALL_API_BASE/api/install/quick-mint" \
+      -H "content-type: application/json" \
+      -d "$QM_PAYLOAD" 2>/dev/null)"
+    set -e
+    QM_TOKEN="$(printf '%s' "${QM_RESP:-}" | "$PY" -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    print(d.get("token","") if d.get("ok") else "")
+except Exception:
+    print("")
+' 2>/dev/null)"
+    if [[ -z "$QM_TOKEN" || ! "$QM_TOKEN" =~ ^[a-f0-9]{32}$ ]]; then
+      err "$(t "Inline mint failed. Falling back to form." \
+              "Falló la generación inline. Caemos al formulario.")"
+    else
+      ok "$(t "Token minted inline. No browser needed." \
+              "Token generado en línea. Sin navegador.")"
+      TOKEN="$QM_TOKEN"
+    fi
+  fi

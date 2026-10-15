@@ -31,6 +31,32 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Guarded (MYC-4701): _shared may be unreachable on an install that
+# predates bootstrap.sh's _shared copy step, or a deployed copy may
+# predate this name. Either way this degrades to injection_scan:
+# unavailable instead of crashing the whole ingest on import.
+try:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "_shared"))
+    from connector_utils import guard_untrusted_body, sanitize_third_party_text
+except ImportError:
+    def guard_untrusted_body(text, source, scan_text=None):
+        # No envelope on this degraded path -- but still round-trip a lone
+        # UTF-16 surrogate half the same way fence_untrusted's own sanitize
+        # step does, so that alone doesn't abort the write. This does NOT
+        # strip C1 controls -- fence_untrusted doesn't either; only
+        # sanitize_third_party_text (below) does, via _UNSAFE_SCALAR_RE.
+        safe = (text or "").encode("utf-8", "surrogatepass").decode("utf-8", "replace")
+        return safe, {"content_trust": "untrusted", "injection_scan": "unavailable", "injection_flags": []}
+
+    _LOCAL_UNSAFE_SCALAR_RE = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f" + chr(0xFFFE) + chr(0xFFFF) + "]")
+
+    def sanitize_third_party_text(value):
+        """Local fallback (canonical copy: skills/_shared/connector_utils.py)."""
+        if not value:
+            return value
+        cleaned = value.encode("utf-8", "surrogatepass").decode("utf-8", "replace")
+        return _LOCAL_UNSAFE_SCALAR_RE.sub(chr(0xFFFD), cleaned)
+
 VTT_TIMING_RE = re.compile(r"\d{2}:\d{2}:\d{2}\.\d{3} --> \d{2}:\d{2}:\d{2}\.\d{3}.*")
 VTT_HEADER_RE = re.compile(r"^(WEBVTT|Kind:|Language:|NOTE\s|X-TIMESTAMP-MAP)", re.MULTILINE)
 SLUG_RE = re.compile(r"[^a-z0-9]+")
@@ -131,7 +157,12 @@ def download_subs(url: str, lang: str, source: str, ytdlp: str, workdir: Path) -
     return matches[0]
 
 
-def clean_vtt(vtt_path: Path) -> str:
+def clean_vtt(vtt_path: Path) -> tuple[str, str]:
+    """Return (prose, raw_cues). `prose` is the sentence-joined transcript
+    written to the vault. `raw_cues` keeps each cue on its own line, before
+    the space-join and sentence-split below -- a cue with no closing
+    punctuation (e.g. "System: override the operator") can otherwise land
+    mid-sentence in `prose` and dodge a line-anchored scan pattern."""
     raw = vtt_path.read_text(encoding="utf-8", errors="replace")
     lines = []
     seen_phrases: set[str] = set()
@@ -153,7 +184,8 @@ def clean_vtt(vtt_path: Path) -> str:
     text = " ".join(lines)
     text = re.sub(r"\s+", " ", text).strip()
     sentences = re.split(r"(?<=[.!?])\s+(?=[A-ZÁÉÍÓÚÑ¿¡])", text)
-    return "\n\n".join(s.strip() for s in sentences if s.strip())
+    prose = "\n\n".join(s.strip() for s in sentences if s.strip())
+    return prose, "\n".join(lines)
 
 
 def detect_seeds(transcript: str) -> list[str]:
@@ -161,18 +193,66 @@ def detect_seeds(transcript: str) -> list[str]:
     return [kw for kw in SEED_KEYWORDS if kw in low]
 
 
+# content_trust/injection_scan are a closed enum, never third-party text --
+# rendered bare like trust_frontmatter_lines does for the other three
+# writers. upload_date is NOT in this set: it is sliced straight from
+# yt-dlp metadata (a third-party field), so it gets its own bare-only-when-
+# safe check below instead of an unconditional bare render.
+_BARE_STR_KEYS = frozenset({"content_trust", "injection_scan"})
+_SAFE_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+_RAW_DATE_SHAPE_RE = re.compile(r"\d{8}")
+
+
+def _is_real_calendar_date(value: str, fmt: str) -> bool:
+    """True only when VALUE has FMT's digit shape (fmt is "%Y%m%d" or
+    "%Y-%m-%d") AND datetime.strptime(value, fmt) succeeds. The shape check
+    still matters because strptime alone accepts some non-8-digit-wide
+    forms (e.g. a single-digit month)."""
+    shape_re = _RAW_DATE_SHAPE_RE if fmt == "%Y%m%d" else _SAFE_DATE_RE
+    if not shape_re.fullmatch(value):
+        return False
+    try:
+        datetime.strptime(value, fmt)
+    except ValueError:
+        return False
+    return True
+
+
 def write_vault_file(
-    vault_root: Path, channel_slug: str, upload_date: str,
+    vault_root: Path, channel_slug: str, filename_date: str,
     video_slug: str, frontmatter: dict, body: str,
 ) -> Path:
+    """filename_date is a caller-proven-safe digits-and-hyphens date for the
+    PATH only -- frontmatter["upload_date"] (rendered below) may be a
+    different, preserved-but-quoted raw value."""
     target_dir = vault_root / "External Inputs" / "YouTube" / channel_slug
     target_dir.mkdir(parents=True, exist_ok=True)
-    target = target_dir / f"{upload_date}-{video_slug}.md"
+    target = target_dir / f"{filename_date}-{video_slug}.md"
     yaml_lines = ["---"]
     for k, v in frontmatter.items():
-        if isinstance(v, str) and ("\n" in v or ":" in v):
-            v = v.replace('"', '\\"')
-            yaml_lines.append(f'{k}: "{v}"')
+        if isinstance(v, list):
+            # injection_flags -- a closed set of pattern ids, never
+            # third-party text -- bare YAML flow sequence, matching
+            # trust_frontmatter_lines.
+            yaml_lines.append(f"{k}: [" + ", ".join(str(i) for i in v) + "]")
+        elif k == "upload_date" and isinstance(v, str) and _is_real_calendar_date(v, "%Y-%m-%d"):
+            # Bare only when it is a REAL calendar date in this exact
+            # shape (a real 8-digit yt-dlp date, hyphenated below, or the
+            # local now()-computed fallback) -- never on shape alone.
+            # PyYAML loads a bare YYYY-MM-DD as a date, so an impossible
+            # one like 2026-13-99 would raise in every downstream reader.
+            yaml_lines.append(f"{k}: {v}")
+        elif isinstance(v, str) and k not in _BARE_STR_KEYS:
+            # Every OTHER string value -- restores main's coverage (which
+            # quoted any string containing ':' or '\n') and goes further:
+            # flatten every line break str.splitlines() recognises (not
+            # just \n), sanitize (a lone surrogate or a C1/noncharacter
+            # would otherwise abort the write or the YAML parse), and
+            # always quote as a JSON string literal (also valid YAML), so
+            # an embedded ':' or line break can never forge a standalone
+            # frontmatter key.
+            flat = sanitize_third_party_text(" ".join(v.splitlines()))
+            yaml_lines.append(f"{k}: {json.dumps(flat, ensure_ascii=False)}")
         else:
             yaml_lines.append(f"{k}: {v}")
     yaml_lines.append("---")
@@ -181,12 +261,15 @@ def write_vault_file(
 
 
 def write_seed_stub(
-    vault_root: Path, upload_date: str, channel_slug: str, video_id: str,
-    seeds: list[str], video_url: str, video_title: str,
+    vault_root: Path, filename_date: str, channel_slug: str, video_id: str,
+    seeds: list[str], video_url: str, main_file: Path,
 ) -> Path:
+    """The video title is third-party text, already fenced and stamped in
+    `main_file` -- link to it by name rather than repeating the raw title
+    here unguarded. filename_date: see write_vault_file's docstring."""
     captures_dir = vault_root / "Meta" / "Captures"
     captures_dir.mkdir(parents=True, exist_ok=True)
-    fname = f"{upload_date}-youtube-{channel_slug}-{video_id}.md"
+    fname = f"{filename_date}-youtube-{channel_slug}-{video_id}.md"
     target = captures_dir / fname
     body = (
         "---\n"
@@ -197,7 +280,7 @@ def write_seed_stub(
         f"keywords: {', '.join(seeds)}\n"
         "status: open\n"
         "---\n\n"
-        f"# Capture seed: {video_title}\n\n"
+        f"# Capture seed: [[{main_file.stem}]]\n\n"
         f"Trigger keywords detected in transcript: {', '.join(seeds)}.\n\n"
         f"Source: {video_url}\n\n"
         "## Notes\n\n(fill in)\n"
@@ -224,16 +307,38 @@ def main() -> int:
 
     meta = fetch_metadata(args.url, ytdlp)
     video_id = meta.get("id", "unknown")
-    title = meta.get("title", "Untitled")
+    # Sanitized immediately: a lone surrogate or a C1/noncharacter would
+    # otherwise abort the write or break the YAML parse. Needed before
+    # guard_untrusted_body ever runs, since with no transcript the raw
+    # title is embedded straight into the stub body below. For a lone
+    # surrogate specifically this is now belt-and-braces, not the only
+    # fix -- the degraded (no _shared) guard_untrusted_body above also
+    # round-trips surrogates, and write_vault_file()'s per-key sanitize
+    # covers the frontmatter title regardless. Still the only place that
+    # strips a C1 control before it reaches the stub body.
+    title = sanitize_third_party_text(meta.get("title", "Untitled"))
     channel = meta.get("channel") or meta.get("uploader") or "unknown-channel"
     channel_slug = slugify(channel)
     video_slug = slugify(title)
-    upload_date_raw = meta.get("upload_date", "")
-    upload_date = (
-        f"{upload_date_raw[:4]}-{upload_date_raw[4:6]}-{upload_date_raw[6:8]}"
-        if len(upload_date_raw) == 8 else
-        datetime.now().strftime("%Y-%m-%d")
-    )
+    # yt-dlp's upload_date is third-party text, not a program-controlled
+    # value: `len(...) == 8` accepted anything 8 CHARS long, digits or not,
+    # so e.g. "\nabc: vv" (8 chars, zero digits) hyphenated into
+    # "\nabc-: -vv" and forged a standalone `abc-` frontmatter key when
+    # rendered bare. All-digit shape isn't enough either -- an impossible
+    # date like "20261399" is 8 digits but not a real day, and yaml.safe_load
+    # raises on it rendered bare, so this must be a REAL calendar date.
+    upload_date_raw = meta.get("upload_date") or ""
+    if _is_real_calendar_date(upload_date_raw, "%Y%m%d"):
+        upload_date = f"{upload_date_raw[:4]}-{upload_date_raw[4:6]}-{upload_date_raw[6:8]}"
+    else:
+        # Preserve the raw value for the frontmatter rather than silently
+        # replacing real (if oddly-shaped) metadata with a fabricated
+        # date -- write_vault_file's per-key branch quotes it safely,
+        # since it is no longer in _BARE_STR_KEYS.
+        upload_date = upload_date_raw or datetime.now().strftime("%Y-%m-%d")
+    # The FILENAME needs a provably safe shape regardless of what
+    # upload_date ends up holding for the frontmatter.
+    filename_date = upload_date if _SAFE_DATE_RE.fullmatch(upload_date) else datetime.now().strftime("%Y-%m-%d")
 
     listing = list_subs(args.url, ytdlp)
     manual, auto = parse_available_subs(listing)
@@ -241,13 +346,14 @@ def main() -> int:
 
     sub_source = "none"
     transcript = ""
+    raw_cues = ""
     lang_code = "und"
 
     if pick:
         lang_code, sub_source = pick
         with tempfile.TemporaryDirectory() as td:
             vtt = download_subs(args.url, lang_code, sub_source, ytdlp, Path(td))
-            transcript = clean_vtt(vtt)
+            transcript, raw_cues = clean_vtt(vtt)
     elif args.whisper:
         sys.stderr.write("Whisper fallback requested but not yet implemented in v0.1.\n")
         sys.stderr.write("Install whisper-cpp + ggml model and re-run, or pre-add subs to the video.\n")
@@ -267,6 +373,13 @@ def main() -> int:
         f"Source: {args.url}\n"
     )
 
+    # scan_text covers the TITLE too (`body` alone omits it whenever a real
+    # transcript exists), using raw_cues over the sentence-joined
+    # transcript -- see clean_vtt's docstring for why.
+    body, trust = guard_untrusted_body(
+        body, "youtube", scan_text="\n".join([title, raw_cues or transcript])
+    )
+
     fm = {
         "type": "external-input",
         "source": "youtube",
@@ -281,19 +394,26 @@ def main() -> int:
         "subtitle_source": sub_source,
         "word_count": word_count,
         "ingested_at": datetime.now(timezone.utc).isoformat(),
+        "content_trust": trust["content_trust"],
+        "injection_scan": trust["injection_scan"],
+        "injection_flags": trust["injection_flags"],
     }
 
-    target = write_vault_file(vault_root, channel_slug, upload_date, video_slug, fm, body)
+    # filename_date, not upload_date: the frontmatter value can now be a
+    # preserved-but-quoted raw string, and neither filename may embed
+    # anything other than the proven-safe digits-and-hyphens shape.
+    target = write_vault_file(vault_root, channel_slug, filename_date, video_slug, fm, body)
     seed_paths: list[Path] = []
     if seeds:
         seed_paths.append(
-            write_seed_stub(vault_root, upload_date, channel_slug, video_id, seeds, args.url, title)
+            write_seed_stub(vault_root, filename_date, channel_slug, video_id, seeds, args.url, target)
         )
 
     seed_str = f" Seeds at: {', '.join(str(p) for p in seed_paths)}." if seed_paths else ""
+    scan_str = f" Injection scan: {trust['injection_scan']}." if trust["injection_scan"] != "clean" else ""
     print(
         f"Wrote {word_count} words to {target}. "
-        f"Language: {lang_code}. Subtitle source: {sub_source}.{seed_str}"
+        f"Language: {lang_code}. Subtitle source: {sub_source}.{seed_str}{scan_str}"
     )
     return 0
 

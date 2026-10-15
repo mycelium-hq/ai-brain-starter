@@ -312,9 +312,10 @@ Install or update the ai-brain-starter setup. Safe to re-run.
 Options:
   --dry-run, -n                 Show what would be installed without making changes
   --profile corporate           Hardened/compliance install: minimal named plugin set,
-                                no external-egress MCPs, telemetry OFF, versions pinned,
-                                user-space only (no sudo). Emits a reviewable manifest.
-                                Pair with --dry-run to review before installing.
+                                no external-egress MCPs, telemetry OFF, no auto-update
+                                (versions freeze at install; none is pinned to a
+                                reviewed revision), user-space only (no sudo). Emits a
+                                reviewable manifest. Pair with --dry-run to review first.
                                 Full spec: docs/CORPORATE_PROFILE.md
   --uninstall                   Remove everything bootstrap installed (with confirmation)
   --force                       Skip the uninstall confirmation prompt
@@ -331,6 +332,10 @@ Environment:
   PREFLIGHT_BYPASS=1            Skip the preflight check (development)
   SKIP_VENDOR_SKILLS=1          Skip third-party plugin marketplaces (air-gapped)
   CORPORATE_PROFILE=1           Same as --profile corporate (hardened/compliance install)
+  ABS_CONSENTED=1               The user said yes on the install screen (install/screen/):
+                                records that yes (in ~/.claude/.ai-brain-starter-install.jsonl).
+                                Changes nothing else. An env var, not a flag, so an older
+                                installer already on disk ignores it instead of failing.
   REQUIRED_CLAUDE_VERSION       Override the minimum Claude Code version (default 2.1.133)
 
 Logs: every run is appended to ~/.claude/.bootstrap.log (closes #3).
@@ -369,9 +374,20 @@ printf "\n=== bootstrap run %s (PID %d) ===\n" "$(date +%Y-%m-%dT%H:%M:%S)" "$$"
 
 if [[ "$CORPORATE_PROFILE" == "1" ]]; then
   printf "\n\033[1;33m━━━ CORPORATE / HARDENED PROFILE ACTIVE ━━━\033[0m\n"
-  printf "  No third-party marketplaces · no external-egress MCPs · telemetry OFF · versions pinned · user-space only.\n"
+  printf "  No third-party marketplaces · no external-egress MCPs · telemetry OFF · no auto-update · user-space only.\n"
   printf "  Reviewable component manifest is emitted at the end. Full spec: docs/CORPORATE_PROFILE.md\n"
 fi
+
+# The yes from the install screen (install/screen/), written by the installer
+# itself so install-telemetry.py can tell "said yes, install never finished"
+# from "never said yes". No Python yet: this runs before anything is installed.
+# ai-brain:consent-record:start
+if [[ "${ABS_CONSENTED:-0}" == "1" && $DRY_RUN -eq 0 ]]; then
+  printf '{"ts": "%s", "phase": "consent", "outcome": "yes_recorded", "profile": "%s"}\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$([[ "$CORPORATE_PROFILE" == "1" ]] && echo corporate || echo default)" \
+    >> "$HOME/.claude/.ai-brain-starter-install.jsonl" 2>/dev/null || true
+fi
+# ai-brain:consent-record:end
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Helpers
@@ -788,15 +804,46 @@ PY
       -H "content-type: application/json" \
       -d "$QM_PAYLOAD" 2>/dev/null)"
     set -e
-    QM_TOKEN="$(printf '%s' "${QM_RESP:-}" | "$PY" -c '
-import json, sys
+    # Field order is reused|resent|token, untrusted token LAST, and the
+    # token is hex-validated here (never emitted at all if it doesn't
+    # match) -- belt and suspenders. `read` with 3 target vars dumps every
+    # extra "|"-delimited chunk into the LAST variable, so if token were
+    # first and unvalidated, a token shaped like "abc|1|def" would shift
+    # "1" into the reused slot regardless of the server's real reused
+    # value -- the split happens before any regex could validate it. With
+    # the flags first (never containing "|", they are script-computed "0"
+    # or "1") and the token last and pre-validated, neither failure mode
+    # is reachable.
+    QM_PARSED="$(printf '%s' "${QM_RESP:-}" | "$PY" -c '
+import json, re, sys
 try:
     d = json.load(sys.stdin)
-    print(d.get("token","") if d.get("ok") else "")
 except Exception:
-    print("")
+    d = {}
+ok = bool(d.get("ok"))
+token = d.get("token","") if ok else ""
+if not re.match(r"^[a-f0-9]{32}$", token):
+    token = ""
+reused = "1" if (ok and d.get("reused") is True) else "0"
+resent = "1" if (ok and d.get("resent") is True) else "0"
+print("%s|%s|%s" % (reused, resent, token))
 ' 2>/dev/null)"
-    if [[ -z "$QM_TOKEN" || ! "$QM_TOKEN" =~ ^[a-f0-9]{32}$ ]]; then
+    IFS='|' read -r QM_REUSED QM_RESENT QM_TOKEN <<< "$QM_PARSED"
+    # A resubmit for an email that already has a live token comes back
+    # {ok:true, reused:true, resent:<bool>} with NO token -- the endpoint is
+    # public/unauthenticated and never re-hands out an existing token. This
+    # is not a failure: warn and continue tokenless, same as a fresh install
+    # with no email offered at all. Never err() here (see FAILED list below)
+    # and never retry the mint.
+    if [[ "$QM_REUSED" == "1" ]]; then
+      if [[ "$QM_RESENT" == "1" ]]; then
+        warn "$(t "You already started an install with this email. I sent the link to your inbox again." \
+                  "Ya empezaste una instalación con este email. Te reenvié el link a tu bandeja de entrada.")"
+      else
+        warn "$(t "You already started an install with this email. The link is in your inbox from last time." \
+                  "Ya empezaste una instalación con este email. El link está en tu bandeja de entrada de la última vez.")"
+      fi
+    elif [[ -z "$QM_TOKEN" || ! "$QM_TOKEN" =~ ^[a-f0-9]{32}$ ]]; then
       err "$(t "Inline mint failed. Falling back to form." \
               "Falló la generación inline. Caemos al formulario.")"
     else
@@ -920,7 +967,7 @@ git_clone_safe() {
   local dest="$2"
   local desc="${3:-clone $url}"
   if [[ $DRY_RUN -eq 1 ]]; then
-    dry "would: $desc → $dest"
+    dry "would: $desc ($url) → $dest"
     return 0
   fi
   if [[ -d "$dest/.git" ]]; then
@@ -1718,6 +1765,48 @@ if [[ ${#SKILLS_TO_SYNC[@]} -gt 0 ]]; then
   fi
 fi
 
+# _shared ships the guard helpers ingest-github/ingest-youtube import
+# (guard_untrusted_body/fence_untrusted). It carries no SKILL.md, so it is
+# deliberately outside the named "for sub in ...; do" list above (and that
+# list's own parity guard, scripts/test_bootstrap_install_parity.py, which
+# requires every listed name to ship one). Without this, a fresh per-skill
+# install never lands a sibling _shared dir, so every third-party write
+# from those two skills silently degrades to injection_scan: unavailable.
+shared_src="$SKILL_DIR/skills/_shared"
+shared_dst="$HOME/.claude/skills/_shared"
+if [[ -L "$shared_dst" ]]; then
+  warn "_shared is a SYMLINK — bootstrap will NOT write through it"
+elif [[ -d "$shared_dst/.git" ]]; then
+  log "_shared has its own .git/ directory — detected as YOUR FORK, skipping entirely"
+elif [[ -d "$shared_src" ]]; then
+  if [[ $DRY_RUN -eq 1 ]]; then
+    dry "would sync _shared → $shared_dst (with backup-before-overwrite)"
+  else
+    mkdir -p "$shared_dst"
+    # File-by-file sync with backup-before-overwrite (mirrors the sub-skill loop above)
+    STAMP="$(date +%Y-%m-%d-%H%M)"
+    SHARED_BACKED_UP=0
+    SHARED_CREATED=0
+    while IFS= read -r srcfile; do
+      rel="${srcfile#$shared_src/}"
+      dstfile="$shared_dst/$rel"
+      mkdir -p "$(dirname "$dstfile")"
+      if [[ -f "$dstfile" ]]; then
+        if ! cmp -s "$srcfile" "$dstfile"; then
+          cp "$dstfile" "$dstfile.bak-$STAMP"
+          BACKUPS+=("$dstfile.bak-$STAMP")
+          cp "$srcfile" "$dstfile"
+          SHARED_BACKED_UP=$((SHARED_BACKED_UP + 1))
+        fi
+      else
+        cp "$srcfile" "$dstfile"
+        SHARED_CREATED=$((SHARED_CREATED + 1))
+      fi
+    done < <(find "$shared_src" -type f)
+    ok "_shared: $SHARED_CREATED new, $SHARED_BACKED_UP backed up"
+  fi
+fi
+
 # Summary of what was protected this section
 [[ ${#SKILL_FORKS[@]} -gt 0 ]] && log "Forks preserved untouched: ${SKILL_FORKS[*]}"
 [[ ${#SKILL_SYMLINKS[@]} -gt 0 ]] && log "Symlinks preserved untouched: ${#SKILL_SYMLINKS[@]} skill(s)"
@@ -1730,6 +1819,7 @@ fi
 # This was the surface bug behind the 2026-05-14 install report where
 # /second-brain-mapping didn't appear in the palette after install completed.
 # ───────────────────────────────────────────────────────────────────────────────
+# ai-brain:slash-commands:start
 hdr "Installing slash commands"
 COMMANDS_SRC="$SKILL_DIR/commands"
 COMMANDS_DST="$HOME/.claude/commands"
@@ -1738,12 +1828,40 @@ if [[ -d "$COMMANDS_SRC" ]]; then
   COMMAND_COUNT=0
   COMMAND_BACKED_UP=0
   STAMP="$(date +%Y-%m-%d-%H%M)"
+  # Provenance: every blob this repo ever shipped under commands/. An installed
+  # command that differs from the incoming one is either a stale copy of an
+  # older upstream version (replace it, backup first) or a command the user
+  # wrote (keep it). Before this, the only way to keep a customized command was
+  # to put the same edit in the checkout's commands/ too — and a dirty checkout
+  # blocks every auto-update from then on, silently, for weeks. On a non-git or
+  # shallow checkout provenance is unknowable: SHIPPED_BLOBS stays empty and
+  # every differing copy is replaced with a backup, exactly as before. The
+  # empty --show-prefix means SKILL_DIR is the repo's own root, so an archive
+  # install that sits inside some OTHER repo (a version-controlled ~/.claude)
+  # never reads that repo's history.
+  SHIPPED_BLOBS=""
+  if cmd_prefix="$(git -C "$SKILL_DIR" rev-parse --show-prefix 2>/dev/null)" \
+     && [[ -z "$cmd_prefix" ]] \
+     && [[ "$(git -C "$SKILL_DIR" rev-parse --is-shallow-repository 2>/dev/null)" == "false" ]]; then
+    SHIPPED_BLOBS="$(git -C "$SKILL_DIR" log --format= --raw --no-abbrev -- commands/ 2>/dev/null \
+      | awk 'NF >= 4 { print $3; print $4 }' | sort -u)" || SHIPPED_BLOBS=""
+  fi
   for cmd_src in "$COMMANDS_SRC"/*.md; do
     [[ -f "$cmd_src" ]] || continue
     cmd_name="$(basename "$cmd_src")"
     cmd_dst="$COMMANDS_DST/$cmd_name"
     if [[ -f "$cmd_dst" ]]; then
       if ! cmp -s "$cmd_src" "$cmd_dst"; then
+        if [[ -n "$SHIPPED_BLOBS" ]]; then
+          # --path applies the repo's attributes (eol), so a CRLF copy of a
+          # shipped file still hashes to the blob that shipped it.
+          dst_blob="$(git -C "$SKILL_DIR" hash-object --path="commands/$cmd_name" "$cmd_dst" 2>/dev/null || true)"
+          if [[ -n "$dst_blob" ]] && ! printf '%s\n' "$SHIPPED_BLOBS" | grep -qxF "$dst_blob"; then
+            warn "commands: kept your /${cmd_name%.md} — you wrote it, so it is not replaced. Upstream's version: $cmd_src"
+            SKIPPED+=("/${cmd_name%.md} slash command (yours; upstream's version at $cmd_src)")
+            continue
+          fi
+        fi
         cp "$cmd_dst" "$cmd_dst.bak-$STAMP"
         BACKUPS+=("$cmd_dst.bak-$STAMP")
         cp "$cmd_src" "$cmd_dst"
@@ -1763,6 +1881,7 @@ if [[ -d "$COMMANDS_SRC" ]]; then
 else
   warn "commands/ directory not found at $COMMANDS_SRC — slash commands will not appear in palette"
 fi
+# ai-brain:slash-commands:end
 
 # ───────────────────────────────────────────────────────────────────────────────
 # Humanizer
@@ -2236,10 +2355,10 @@ if [[ -f "$USER_HOOK_INSTALLER" ]] && [[ "$DRY_RUN" -eq 0 ]]; then
   elif [[ "$rc" -eq 1 ]]; then
     err "User-level hook verification FAILED — settings.json references scripts not on disk. Most likely your local ai-brain-starter clone is on a divergent fork that the pull step skipped. See log above for the missing paths. Recover: cd $SKILL_DIR && git pull --rebase origin main && python3 $USER_HOOK_INSTALLER"
   else
-    err "User-level hook install FAILED — meeting trigger + 6 other UserPromptSubmit hooks WILL NOT FIRE until resolved. See $BOOTSTRAP_LOG. Re-run manually: python3 $USER_HOOK_INSTALLER"
+    err "User-level hook install FAILED — the hooks on the install screen, the meeting trigger among them, WILL NOT FIRE until resolved. See $BOOTSTRAP_LOG. Re-run manually: python3 $USER_HOOK_INSTALLER"
   fi
 elif [[ -f "$USER_HOOK_INSTALLER" ]] && [[ "$DRY_RUN" -eq 1 ]]; then
-  dry "would run: python3 $USER_HOOK_INSTALLER --quiet --fail-on-missing  # wires + verifies 7 UserPromptSubmit hooks incl. meeting-workflow trigger"
+  dry "would run: python3 $USER_HOOK_INSTALLER --quiet --fail-on-missing  # wires + verifies the hooks the install screen counts"
 fi
 
 # ───────────────────────────────────────────────────────────────────────────────
@@ -2324,9 +2443,9 @@ if [[ -n "${CLAUDE_CODE_ENTRYPOINT:-}" ]]; then
   primera pregunta es lo próximo que vas a ver. Sin comandos que tipear,
   sin carpetas que abrir.
 
-  ⌘↩ vs tipear: cuando veas un cuadro gris de aprobación de herramienta,
-  presioná ⌘↩ (Mac) o Ctrl+Enter (Windows). Cuando Claude te haga una pregunta,
-  solo tipeá tu respuesta y presioná Enter.
+  Cuando Claude Code muestre un cuadro gris pidiendo permiso para un paso,
+  la decisión es tuya: ⌘↩ (Mac) o Ctrl+Enter (Windows) lo permite, Esc lo
+  rechaza. Cuando Claude te haga una pregunta, tipeá tu respuesta y Enter.
 
   Cuando tu vault personal esté corriendo, podés pedirle a Claude cualquiera
   de estas para conectar la versión de equipo:
@@ -2344,9 +2463,9 @@ EOF
   Tools are ready. Your setup interview starts now: the first question is
   the next thing you'll see. No commands to type, no folders to open.
 
-  ⌘↩ vs typing: when you see a gray tool-approval box, press ⌘↩ (Mac) or
-  Ctrl+Enter (Windows). When Claude asks you a question, just type your
-  answer and press Enter.
+  When Claude Code shows a gray box asking to allow a step, the choice is
+  yours: ⌘↩ (Mac) or Ctrl+Enter (Windows) allows it, Esc declines it. When
+  Claude asks you a question, type your answer and press Enter.
 
   When your personal vault is running, you can ask Claude any of these to
   wire up the team version:
@@ -2371,7 +2490,7 @@ else
       Por favor configurá mi AI Brain Starter completo en esta sesión.
       La skill ai-brain-starter ya está instalada en
       ~/.claude/skills/ai-brain-starter. Empezá la entrevista de setup
-      corriendo la skill setup-brain y guiame por cada fase sin parar.
+      corriendo la skill setup-brain y guiame por cada fase.
 
   Claude te va a preguntar dónde vivirá tu vault y va a construir todo
   alrededor de tus respuestas. No necesitás tipear ningún otro comando.
@@ -2388,8 +2507,7 @@ EOF
       Please set up my AI Brain Starter end-to-end in this session. The
       ai-brain-starter skill is already installed at
       ~/.claude/skills/ai-brain-starter. Start the setup interview by
-      running the setup-brain skill and walk me through every phase
-      without stopping.
+      running the setup-brain skill and walk me through every phase.
 
   Claude will ask where your vault should live and build everything
   around your answers. You don't need to type any other commands.
@@ -2419,7 +2537,7 @@ if [[ "$CORPORATE_PROFILE" == "1" ]]; then
 # AI Brain Starter — Corporate Install Manifest
 Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ) · Profile: corporate (hardened) · Host: $(uname -sm 2>/dev/null)
 
-## Pinned versions (no auto-update)
+## Versions (frozen at install: no auto-update; none is pinned to a reviewed revision)
 - ai-brain-starter skill : ${ABS_DESC} (rev ${ABS_REV}) — https://github.com/mycelium-hq/ai-brain-starter
   Self-update hook DISABLED via sentinel ~/.claude/.ai-brain-starter-pinned (delete it to re-enable updates).
 - Claude Code CLI        : ${CC_VER} — autoupdater off (DISABLE_AUTOUPDATER=1 + CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1)
@@ -2430,8 +2548,11 @@ Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ) · Profile: corporate (hardened) · Ho
 - context7                 — documentation lookup MCP
 
 ## First-party skills
-- Bundled IN the pinned ai-brain-starter revision above (graphify, daily-journal, insights, patterns,
+- Bundled IN the ai-brain-starter revision above (graphify, daily-journal, insights, patterns,
   meeting-todos, second-brain-mapping, …). Ship in-repo — no per-skill network fetch.
+
+## Skill repos copied from GitHub (newest at install, then no auto-update)
+- adelaidasofia/humanizer, obra/superpowers (the superpowers skills folder; its marketplace stays excluded)
 
 ## EXCLUDED by this profile (reason)
 - Third-party marketplaces : sentry, stripe, cloudflare, claude-seo, superpowers, marketingskills (dev/marketing, not knowledge-worker)
@@ -2463,4 +2584,17 @@ MANIFEST
   else
     dry "would write manifest to $MANIFEST_PATH"
   fi
+fi
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Install screen — the file the assistant shows before asking for the one yes
+# (install/screen/, rendered by scripts/install-screen.py). Printed LAST in a
+# dry-run so the dry-run and the screen are the same words and the same numbers.
+# ───────────────────────────────────────────────────────────────────────────────
+if [[ $DRY_RUN -eq 1 ]]; then
+  _screen="install/screen/$([[ "$CORPORATE_PROFILE" == "1" ]] && echo corporate || echo default)-posix.$(t en es).txt"
+  _screen_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+  [[ -f "$_screen_dir/$_screen" ]] || _screen_dir="$SKILL_DIR"
+  hdr "$(t "Install screen" "Pantalla de instalación")"
+  cat "$_screen_dir/$_screen" 2>/dev/null || warn "install screen not found: $_screen"
 fi

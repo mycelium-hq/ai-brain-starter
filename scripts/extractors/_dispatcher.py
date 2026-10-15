@@ -41,6 +41,7 @@ from _base import (  # noqa: E402
     VAULT, SKIP_PARTS,
     parse_frontmatter, strip_auto_fields, reassemble_file,
     render_fields, get_crm_names,
+    is_inside_vault, iter_vault_markdown,
 )
 
 # Types that exist in frontmatter but should NEVER be auto-extracted.
@@ -148,10 +149,11 @@ def should_skip_path(path):
     return bool(parts & SKIP_PARTS)
 
 
-def list_vault_files(type_filter=None):
-    """All .md files in vault, minus SKIP_PARTS folders."""
-    pattern = os.path.join(VAULT, "**", "*.md")
-    for fp in glob.glob(pattern, recursive=True):  # Rule 36
+def list_vault_files(type_filter=None, skipped=None):
+    """All .md files in the vault, minus SKIP_PARTS folders and anything that
+    resolves outside the vault (a symlinked shared folder is never walked).
+    `skipped` receives what iter_vault_markdown() left out for that reason."""
+    for fp in iter_vault_markdown(skipped=skipped):
         if should_skip_path(fp):
             continue
         yield fp
@@ -159,6 +161,12 @@ def list_vault_files(type_filter=None):
 
 def process_file(filepath, registry, context, dry_run=False, force=False):
     """Extract metadata for one file. Returns status string for logging."""
+    # Guard at the write site, so it holds for any caller and any file list.
+    # The fields written here are derived from the owner's private notes (dates,
+    # mention counts, floors) and must never land in, or be read from, a file
+    # that resolves outside the vault, such as a shared team or cloud folder.
+    if not is_inside_vault(filepath):
+        return "OUTSIDE_VAULT"
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             content = f.read()
@@ -223,6 +231,10 @@ def process_file(filepath, registry, context, dry_run=False, force=False):
 
 def _peek_type(filepath):
     """Read only the frontmatter header and return the type string (lowercase) or None."""
+    # The same boundary as process_file, which comes after this on the --type and
+    # --sample paths: a note that resolves outside the vault is never opened.
+    if not is_inside_vault(filepath):
+        return None
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             head = f.read(2048)
@@ -296,14 +308,15 @@ def main():
     counters = {
         "WROTE": 0, "DRY_OK": 0, "SKIP_ALREADY_TAGGED": 0,
         "NO_TYPE": 0, "NO_FRONTMATTER": 0, "INFRASTRUCTURE": 0,
-        "EXTRACTOR_SKIPPED": 0, "NO_FIELDS_EMITTED": 0,
+        "EXTRACTOR_SKIPPED": 0, "NO_FIELDS_EMITTED": 0, "OUTSIDE_VAULT": 0,
     }
     no_extractor_types = {}
     errors = []
 
     # Materialize file list (needed for sample + progress total). For very large vaults,
-    # this is one glob over .md files — cheap compared to per-file frontmatter parsing.
-    all_files = list(list_vault_files())
+    # this is one walk over .md files — cheap compared to per-file frontmatter parsing.
+    skipped = []
+    all_files = list(list_vault_files(skipped=skipped))
 
     if args.sample is not None:
         scan_files = select_sample(all_files, registry, args.sample)
@@ -364,6 +377,18 @@ def main():
     print(f"  Infrastructure:      {counters['INFRASTRUCTURE']}")
     print(f"  No frontmatter:      {counters['NO_FRONTMATTER']}")
     print(f"  Extractor skipped:   {counters['EXTRACTOR_SKIPPED']}")
+    if counters["OUTSIDE_VAULT"]:
+        print(f"  ⚠ REFUSED, resolves outside the vault (symlink): {counters['OUTSIDE_VAULT']}")
+    if skipped:
+        # A folder or note linked in from outside the vault is never walked. Say so,
+        # and which, rather than leave it out without a word.
+        folders = sum(1 for kind, _ in skipped if kind == "folder")
+        print(f"  Skipped, resolve outside the vault: {folders} folder(s), "
+              f"{len(skipped) - folders} note(s)")
+        for kind, path in skipped[:5]:
+            print(f"    {kind}: {os.path.relpath(path, VAULT)}")
+        if len(skipped) > 5:
+            print(f"    … and {len(skipped) - 5} more")
 
     if no_extractor_types:
         print("\n  Types present but no extractor registered:")

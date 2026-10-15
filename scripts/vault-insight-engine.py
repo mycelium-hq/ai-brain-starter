@@ -15,7 +15,6 @@ Runs after /second-brain-mapping. Safe to run standalone.
 Each insight category is a pluggable function. Add a new finder → new insight.
 """
 import argparse
-import glob
 import os
 import sys
 from collections import Counter, defaultdict
@@ -33,14 +32,16 @@ _REAL_EXTRACTORS = os.path.join(os.path.dirname(os.path.realpath(__file__)), "ex
 if _REAL_EXTRACTORS not in sys.path:
     sys.path.insert(1, _REAL_EXTRACTORS)
 
-from _base import VAULT, SKIP_PARTS, iso_date_from  # noqa: E402
+from _base import VAULT, SKIP_PARTS, iso_date_from, iter_vault_markdown  # noqa: E402
 from _floors import floor_num_from_fm  # noqa: E402
 
 # scripts/ -> repo root -> hooks/_lib. Reach the ONE audited safe_read
-# primitive rather than a local reader: the recursive vault-wide glob in
+# primitive rather than a local reader: the vault-wide walk in
 # load_vault_index() below must survive a cloud placeholder / stalled mount /
-# FIFO, and scripts/check-cloud-safe-file-walkers.py refuses to trust
-# anything else. Same convention as scripts/build-journal-index.py.
+# FIFO. The walk itself is iter_vault_markdown() in extractors/_base.py, and
+# scripts/check-cloud-safe-file-walkers.py counts a call to it as a walk, so a
+# raw open() added to load_vault_index() fails that check. Keep every read on
+# safe_read_text. Same convention as scripts/build-journal-index.py.
 #
 # This script is ALSO run from a bare copy of scripts/ that has no sibling
 # hooks/ dir: tests/integration/test_extractors_localized_vault.sh makes "a
@@ -198,10 +199,16 @@ def load_scope_paths(scope_file):
     return paths
 
 
-def load_vault_index():
-    """One-pass scan: for every file, return (filepath, type, frontmatter dict)."""
+def load_vault_index(skipped=None):
+    """One-pass scan: for every file, return (filepath, type, frontmatter dict).
+
+    Only notes that live inside the vault are indexed: iter_vault_markdown() does
+    not follow a symlinked folder, and drops a note that is itself a link out, so
+    a shared team or cloud folder linked into the vault never reaches the report.
+    `skipped` receives what it left out for that reason.
+    """
     index = []
-    for fp in glob.glob(os.path.join(VAULT, "**", "*.md"), recursive=True):
+    for fp in iter_vault_markdown(skipped=skipped):
         parts = set(fp.split(os.sep))
         if parts & SKIP_PARTS:
             continue
@@ -684,8 +691,13 @@ def main():
     scope_paths = load_scope_paths(args.scope_files)
 
     print(f"vault-insight-engine  loading index…", flush=True)
-    index = load_vault_index()
+    skipped = []
+    index = load_vault_index(skipped)
     print(f"  {len(index):,} typed files loaded across {len(set(x['type'] for x in index))} types.")
+    if skipped:
+        folders = sum(1 for kind, _ in skipped if kind == "folder")
+        print(f"  not indexed, resolve outside the vault: {folders} folder(s), "
+              f"{len(skipped) - folders} note(s)")
 
     scoped_n, total_n = mark_scope(index, scope_paths)
     if scope_paths is not None:

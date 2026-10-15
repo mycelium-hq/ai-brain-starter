@@ -9,6 +9,177 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-10-05: the maintenance installer leaves your launchd job alone under a different HOME
+
+**Who this affects:** anyone who runs this repo's tests on a Mac whose shell exports `VAULT_ROOT`, and anyone on a Mac who runs the daily-maintenance installer (`scripts/install-vault-daily-maintenance.sh`, directly or through the hook installer) under a `HOME` that is not the home directory their account's user record names: a `HOME` set by hand, say, or the same folder spelled with different capitals. The first group no longer reaches their real job. For the second, the job is now written but not loaded, and the installer says so.
+
+macOS keeps one launchd job per label for the whole account, whatever `HOME` is. The hook installer takes its vault from `VAULT_ROOT` when none is given, and for a vault outside the temporary directory it runs `scripts/install-vault-daily-maintenance.sh`, which unloads and then loads the `com.abs.vault-daily-maintenance` job. A test that gave the installer a throwaway `HOME` still reached that job, and four tests never changed `HOME` at all, so on such a Mac they could unload your real job and load one that runs from a folder about to be deleted.
+
+Three changes close this. The script now calls `launchctl` only when `HOME` is the home directory your account's user record names. Under any other `HOME` it still writes the plist, prints one line saying it skipped loading, and leaves launchd alone. The line goes to stderr, so the hook installer shows it even when it runs with `--quiet`, as `bootstrap.sh` runs it. The test helper `run_sandboxed` drops `VAULT_ROOT` and sets `ABS_NO_AUTO_GC=1` unless a test names them. And the four tests that ran the installer under your real `HOME` (`test_install_path_verification.sh`, `test_verify_fallback_chain_optional.sh`, `scripts/test-memory-routing-guard.sh` and `scripts/test_windows_install_regressions.py`) now run it under a throwaway one.
+
+`tests/integration/test_sandbox_cannot_reach_host_scheduler.sh` checks the first two with a recording `launchctl` in place of the real one, and checks that the skip line reaches the user under `--quiet`. Not covered: on Linux the same script writes a cron entry, and `crontab` belongs to the user rather than to `HOME`, so that path has no such check. A test that runs the installer under your real `HOME` is not stopped by any of this either. The four above are the ones that were found and changed. `scripts/test-hooks-in-worktree.sh` also runs the installer under your real `HOME`, and was left as it was.
+
+---
+
+## 2026-10-04: an update run from a project's virtualenv no longer ties your hooks to it
+
+**Who this affects:** anyone on macOS or Linux who ran the installer, or an update, from inside a Python virtualenv: under `uv run`, or with a project's `.venv` activated. Anyone whose Python changed between two installs (Homebrew to the system Python, say) is affected too: an update used to leave a second copy of 11 hook lines beside the old one and now rewrites them in place, as it always did for the other 59. If you had edited the Python on one of those 11 lines yourself, the update now puts the installer's choice back.
+
+The installer writes one absolute Python path into every hook command, so a stand-in `python3` on your PATH cannot quietly disable the hooks. It took the first working `python3` on the PATH, and inside a virtualenv that is the project's own copy. When that project was deleted, or its virtualenv rebuilt, every hook pointed at a file that was gone. A hook that fails to start blocks nothing, so the guards that keep secrets and environment dumps out of a session stopped guarding. On the machine where this was found, twelve hooks were tied to one project's virtualenv, the secret and environment-dump blockers among them.
+
+The installer now skips a Python that sits inside a virtualenv (every `venv`, `virtualenv` and `uv` environment has a `pyvenv.cfg` file at its top) and takes the next one on the PATH. If the virtualenv's Python is the only one it can find, it uses the Python that virtualenv was built from, at the path the virtualenv's own `pyvenv.cfg` records, and that Python stays when the project goes. A hook command cannot carry a path with a space in it, so if that recorded path has one, the installer uses the path the virtualenv's Python resolves to instead.
+
+Four cases are not covered. A PATH entry that is a symlink pointing into a virtualenv is still taken as an ordinary Python. A conda environment (it has no `pyvenv.cfg`) and a pyenv shim are accepted as before. On Windows the launcher has the same pin and was not changed. A hook tied to one of these still breaks the same way when it goes away. The fourth: a virtualenv that holds a copy of its Python, and records a base path with a space in it, leaves the installer nothing it can name, so it writes a bare `python3`, which a stand-in on your PATH can still intercept.
+
+To repair an install that is already affected, run the update once from outside a virtualenv. It rewrites each hook line the installer ships so it points at a working Python, and removes a dead copy of one that an earlier update left behind. Before this fix an update did that for 59 of the 70 hook lines that run Python, and for each of the other 11 it added a second, working copy and left the dead one in place. Now all 70 are rewritten in place and a dead copy is removed.
+
+The installer's own check now reads the Python in front of each hook line the installer ships, not only the script it runs. It used to look at the script alone, so a hook tied to a deleted virtualenv read as healthy. Now `install-hooks-user-level.py --verify-only` lists the hooks whose Python is gone, and with `--fail-on-missing` (which `bootstrap.sh` uses) it exits 1. It does not read a hook you wrote yourself, or the Windows launcher.
+
+The installer test now puts a real virtualenv first on the PATH, then makes it the only Python on the PATH (for a virtualenv that links to its Python, one that holds a copy, and one whose recorded base path has a space in it), and fails if that virtualenv's Python ends up in a hook. A further check installs under a virtualenv, deletes it, runs the installer again from outside, and fails if a hook line still names the deleted virtualenv or any line was added twice. A last one builds the history the other way round, with the dead copies after the working ones and hooks of the user's own mixed in, and fails if an update leaves a dead copy, changes one of the user's hooks, or lets the installer's check pass while a hook still names the deleted virtualenv. Each of these fails on the installer from before this change.
+
+---
+
+## 2026-10-04: asking whether a sync has finished no longer starts the meeting workflow
+
+**Who this affects:** anyone who syncs files, a vault or a calendar and asks Claude about it, and anyone who asks whether a meeting is over.
+
+The meeting-workflow hook treated "sync" as a meeting, so "check if the sync is finished" or "the sync's done" told Claude a meeting had just ended and to run the whole post-meeting cascade (find the transcript, update CRM files, to-dos, the Decision Log). A question like "check if the meeting is finished" did the same, because the hook read it as a report rather than a question.
+
+Now a bare "sync" only counts as a meeting when you say you just had or wrapped one up ("I just had a sync", "wrapped up the sync") or name who it was with ("the sync with Dana is done"). A phrase that comes right after "if" or "whether" is read as a question and does not start the workflow. Everything that started it before still does, including "I just had a meeting", "the kickoff is done" and "sync with Sam just ended".
+
+---
+
+## 2026-10-04: text from outside can no longer end a note's frontmatter early or add a line to it
+
+**Who this affects:** anyone who writes a skill on the shared frontmatter helper `yaml_escape` (in `skills/_shared/connector_utils.py`), and anyone who runs `ingest-github` with a repo name that came from somewhere untrusted (its `repo` field is the one place this repo calls the helper directly). Everyone else sees no difference.
+
+`yaml_escape` turns a piece of text into a value that is safe to put on a `key: value` line in a note's frontmatter. When a value needed quoting it was wrapped in double quotes, but a line break inside it was left as it was. So text that came from outside (a web page, a caption, a field in an API payload) could end the frontmatter early with a line holding only `---`, or add a line of its own such as `injection_scan: clean`, the stamp this repo uses to say whether a note's body was scanned for planted instructions. Only a plain newline was even noticed: a lone carriage return, the Unicode next-line character, the two Unicode line and paragraph separators, vertical tab and form feed did not trigger the quoting at all. A control character that is not a line break (a bell, an escape, a NUL byte) made PyYAML refuse the whole header, and `split_frontmatter` then returns an empty header, which hides the stamp too.
+
+Now each of these is written as its YAML escape (`\n`, `\x07`, `\L` and so on) and makes the value quoted: the C0 control characters, DEL, the C1 control characters, the two Unicode separators, and U+FFFE and U+FFFF, which PyYAML's reader rejects even inside quotes. A tab is left as it is but also makes the value quoted, because PyYAML's default loader cannot read a tab in an unquoted value. A value that holds any of these characters comes back as one physical line, and `yaml.safe_load` returns the exact original. A value with none of them renders exactly as before.
+
+One case is not covered: a lone surrogate half, the leftover of a cut emoji. It cannot be written to a file as UTF-8 at all, so an escape cannot save it. `sanitize_third_party_text` replaces it, and text from outside should go through that first.
+
+`tests/integration/test_untrusted_ingest_guard.sh` (T18) takes the list of characters from the Unicode database instead of from the helper's own table. It fails if any one of them is dropped from the table, if backslashes are escaped after the control characters instead of before, or if a tab stops forcing quotes. It also fails if either file holds one of the invisible characters raw, so an editor that normalizes whitespace cannot quietly rewrite the table.
+
+---
+
+## 2026-10-01: the version check now measures the Claude Code that is running your session, and says when your installed copies disagree
+
+**Who this affects:** anyone with more than one copy of Claude Code on the machine (an install per node version, Homebrew, the desktop app's own copy), and anyone who runs scheduled `claude -p` jobs. Everyone else sees no difference.
+
+The startup version check asked whichever `claude` your PATH found first, so it could tell a desktop session it was on one release while that session ran another, and it never looked at the copies your scheduled jobs use. Upgrading "the" install and checking it proved nothing about the others: two of three copies on one machine sat weeks behind while every upgrade was verified against the third.
+
+The check now asks the Claude Code process that started the session, and the line it prints says which file it asked (or that it fell back to PATH, and why). Its saved answer is kept per binary, so one copy's reading is not shown to a session running another. The one exception is a labeled fallback: when the running copy will not say its version, the copy on PATH is measured instead and that reading is saved for both. Upgrading the copy a session runs, or the copy on PATH, shows up straight away instead of after six hours. The upgrade hint names the install's own `--prefix`, because a plain `npm i -g` installs under whichever node comes first on PATH. When the copies it can find (on PATH and on each LaunchAgent's PATH, skipping any relative entry; in the usual install folders; and the newest desktop copy) are not all the same version, it prints one line naming the copies and their versions (up to eight). When they agree, it prints nothing, and a copy whose version it cannot read never counts as a different version. The `claude --version` runs are time-limited (this needs perl or `timeout`, which nearly every machine has): ten seconds each for the running copy and the PATH copy, five seconds each (twenty in all) for the copies the comparison checks, and thirty seconds for the whole comparison. The GitHub requests a refresh makes have no time limit, as before.
+
+The Python helper `scripts/_claude_router.py` had the same blind spot: when `claude` was not on PATH it tried one hardcoded node-version folder, which exists on exactly one machine. It now looks at every `~/local/node-*/bin/claude` plus the usual install folders and uses the newest, reading each version from the package file beside it without running it.
+
+---
+
+## 2026-10-02: scripts you run by name stopped at `permission denied`
+
+**Who this affects:** anyone who runs a script from this repo by its path, with no `bash` or `python3` in front. The clearest case is `vault-safe-commit.sh`, whose own usage line shows it run that way.
+
+To run by name, a script needs a first line naming the program that runs it (the shebang) and the executable bit, which git stores for each file. Git had that bit off for 222 shebang files under `scripts/` and `hooks/`. Called by name, each of them stopped before its first line with `permission denied`. For `vault-safe-commit.sh` that meant nothing got committed, and anything chained after it without checking the result carried on as if the commit had happened.
+
+The 193 of them that are programs are now executable. The other 29 are libraries that other scripts load: the note-metadata extractors, a few shared helpers, and the session-close guard that the close scripts source. Nobody runs those on their own, so they stay as they were.
+
+A new test, `scripts/test_shebang_scripts_executable.py`, fails when a program under `scripts/` or `hooks/` that starts with a shebang is checked in without the executable bit. It reads the mode git will commit rather than the one on your disk, and it proves itself against the real `vault-safe-commit.sh` with the bit taken off.
+
+**If you worked around it with `chmod +x`:** git counts that as a local edit, and the auto-updater holds every update while it is there. Undo it with `git -C ~/.claude/skills/ai-brain-starter restore <the file you changed>`. The next update then brings the file in executable.
+
+---
+
+## 2026-10-01: the session-close check and the close-time commit now look at your session's files only, not every session on the same checkout
+
+**Who this affects:** anyone who runs two Claude Code sessions at once on the same vault, whether on the plain checkout or inside one shared worktree.
+
+At goodbye, two things check your session's notes. A gate (`verify-session-close-cascade.py`) confirms you wrote a session note and committed it. Then the close-time commit (`session-end-hook.sh`) saves that note and any decisions you logged. Both picked files by worktree name. Every session on a plain checkout has the same worktree name, `main`, so they could not tell your files from a parallel session's:
+
+- Your gate could pass because another session had written a note, even when you hadn't.
+- Your gate could block you because another session still had an unsaved note or decision.
+- Your close-time commit could pick up another session's half-written decisions and save them under your session's name. It also saved anything the other session had already queued for its own commit.
+- On a plain checkout the gate didn't run at all, because it only knew how to tell sessions apart by worktree.
+
+Now both go by the session itself. When you say goodbye, the close hook records exactly which note is yours, and the gate checks that file. That record is cleared at the end of the goodbye turn. So if the gate blocks you and you try again, or you say goodbye a turn later, the gate finds your note by the session id in its header. That header line is written by the session-file naming fix (ai-brain-starter#712). Until that lands, a retry on a plain checkout is not checked, the same as before.
+
+The close-cascade instructions now ask for your session's id in each decision's header too. The commit saves only decisions that name your session, plus decisions that name no session at all, like one you wrote by hand. It commits only the files it picked, and leaves anything another session queued alone. The gate only counts a decision against you when the decision names your session. A short session that the close cascade tells to skip itself is not checked. When nothing identifies the session at all, the old worktree check runs.
+
+While fixing this we found two more problems. First, the gate read git's file list in a format that turns the `⚙️ Meta` folder name into escaped octal codes. That format also lists a folder with nothing committed in it as one line, not one line per file. Together these meant the "unsaved decisions" check could never fire in a vault using the default folder name. It now reads a format that prints every path as-is, one line per file. Second, on Windows the commit's new decision filter would have crashed on that same folder name and saved no decisions at all. It now reads paths as raw UTF-8.
+
+`hooks/test_close_gate_scoped_to_session.py` runs two sessions through the real hooks, on `main` and on a shared worktree. Against the old code, 25 of its 42 checks fail. Its negative controls confirm the gate still blocks when your own note or decision is unsaved.
+
+---
+
+## 2026-10-01: `/journal` dropped your messages on machines where `python3` refuses to run a script
+
+**Who this affects:** anyone who runs `/journal` with a message reader script in their vault (`journal-messages-fetch.py`), on a machine where a Python tool puts its own stand-in for `python3` first on the PATH. Some of those stand-ins answer `python3 some-script.py` with advice ("use `uv run python ...`") and exit with an error, while still running one-liners, so nothing looks broken.
+
+The `/journal` context pull (`journal-preflight.py`) gathers every source in one command. It started the message reader as a bare `python3 <script>`, which that stand-in refuses. The reader never ran, so where your WhatsApp and iMessage threads should have been, the digest held the stand-in's advice text, and the run record listed `messages` as failed. The RescueTime reader a few lines further down was already started with the interpreter running the pull itself, so the file disagreed with itself.
+
+The message reader now runs under the same interpreter as the pull. In the same edit, the pull reads its helper programs' output as UTF-8 instead of the console's code page, as the rest of this repo's scripts do.
+
+A new test runs the real pull with a script-refusing stand-in first on the PATH and checks that the messages arrive, and that putting the old call back turns it red. A second check reads every Python file under `scripts/` and `skills/` and fails when one starts another Python script through a bare `python3`, so the same mistake cannot return unnoticed.
+
+---
+
+## 2026-10-01: two sessions closing in the same minute no longer share one session note
+
+**Who this affects:** anyone who runs more than one Claude session on the same vault at a time.
+
+When you say goodbye, the close hook creates the session note Claude fills in. It named that note after the minute and the worktree, for example `2026-10-01T15-25-main.md`. Every session on a plain checkout has the worktree name `main`, so two sessions closing in the same minute were given the same note. The second session wrote over the first one's summary. On the machine where this was found, the first session then committed the note under its own commit message, so the history said one thing and the file said another. Nothing flagged it.
+
+Now the note's name ends with the first 8 characters of the session's id (`2026-10-01T15-25-main-12871536.md`), and the note records which session owns it. If a note with that name already exists and belongs to another session, it is left alone and the next free name is used. If it belongs to the same session (you said goodbye twice in one minute), that session keeps its own half-written note instead of starting a new one. A session with no id still gets a note of its own. The first-install copy of the session-end hook in Phase 5 tags its note the same way.
+
+`hooks/test_session_file_unique_per_session.py` covers it, with a negative control that fails if a session's second goodbye strands its own note.
+
+---
+
+## 2026-09-29: a slash command you rewrote is kept on update, so keeping it no longer freezes your updates
+
+**Who this affects:** anyone who has rewritten one of the slash commands this repo installs into `~/.claude/commands/`, for example to point `/cierre` at a different skill.
+
+Every install and update copied each shipped command over the one in `~/.claude/commands/` if the two differed. It backed yours up first, but it still replaced it. So the only way to keep your version was to make the same edit in the checkout's own `commands/` folder. That left the checkout with a local edit, and the auto-updater will not update a checkout with local edits. From then on no update arrived: not new features, and not the guard and security fixes. Nothing looked broken, because the update check still ran every day. On the machine where this was found, that went on for 41 days.
+
+Now the installer checks where your copy came from. If it matches any version of that command this repo ever shipped, it is an old copy and gets replaced, with a backup, as before. If it matches none of them, you wrote it: it is left exactly as it is, and the end-of-install summary lists it under "Skipped (your customizations preserved)", with the path to the shipped version so you can compare them. A copy saved with Windows line endings still counts as shipped. When there is no history to check against (an archive install, a shallow clone, or a folder that sits inside some other git repo), nothing changes: a differing copy is replaced with a backup, as before.
+
+**If you used the old workaround:** once you have this update, undo the checkout edit with `git -C ~/.claude/skills/ai-brain-starter restore commands/<name>.md`. Your copy in `~/.claude/commands/` stays, and automatic updates resume. Both installers (`bootstrap.sh` and `bootstrap.ps1`) behave the same way. `tests/integration/test_bootstrap_keeps_user_authored_commands.sh` and a new case in `test_bootstrap_ps1_slash_commands.ps1` cover it, each with a negative control that fails when the check is removed.
+
+---
+
+## 2026-09-25: merging main into a topic branch no longer trips the session-artifact guard, and `git merge` is guarded too
+
+**Who this affects:** anyone using `git-hooks/guard-session-artifacts-on-default-branch.sh`, the hook that refuses to commit session-close notes on a branch other than the default one, where they would strand instead of reaching it.
+
+Merging `origin/main` into a feature branch stages main's own session notes, unchanged, and the guard refused that merge, so the only way through was the bypass. A staged note is now let through when its content and file mode already match `origin/<default>`, or the commit being merged when that commit is already on the default branch. A new note, an edited one, a mode change, or a deletion the default branch does not have is still refused.
+
+A conflict-free `git merge` never runs the `pre-commit` hook, so a merge could bring another branch's session notes in with no check at all. `git-hooks/pre-merge-commit-template.sh` chains the same guard onto `pre-merge-commit`. Install it next to your pre-commit hook; its header has the two commands.
+
+The check now costs a fixed handful of `git` calls however many files are staged, reads every path byte for byte (quotes, tabs, newlines and a leading `:` included), and refuses rather than allows whenever git fails to list or compare what is staged.
+
+---
+
+## 2026-09-25: the weekly performance digest crashed when no session in its window got a reply
+
+**Who this affects:** anyone who runs `scripts/claude_performance_digest.py` over a window in which not one session got an assistant reply. That is likeliest on a fresh install, or with a short `--days` window.
+
+The digest's Project Allocation table shows how your assistant turns split across projects. Every project with a session in the window gets a row, even when that session never got an answer. Each row's percentage was the project's turns divided by the total, and nothing checked that the total was above zero. So when every session in the window had zero replies, the run stopped with a "division by zero" error before it saved the weekly report or applied any of its prescriptions, and that week's digest produced nothing.
+
+A zero total now shows each project at 0% and the run carries on, saving the report and applying prescriptions as usual. The activity and model-mix tables next to it already handled this case. A new test runs the digest over sessions with no replies, where it must finish and save the report, and over a mix with one normal session, where the real percentages must stay the same.
+
+## 2026-09-25: the retry limit blocked work that was not a loop, and on most installs it could not block at all
+
+**Who this affects:** everyone. The retry-budget hook is wired on every install.
+
+The retry-budget hook stops Claude after the 3rd identical Bash command in 30 minutes, so a failing command gets surfaced to you instead of retried forever. Three problems made it wrong in both directions.
+
+It told commands apart by their first 400 characters only. Commands that start with a long folder path, which is common when Claude works from a scratch folder, looked identical even when everything after the path was different, so a 4th *different* step could be blocked as a loop. It now compares the whole command.
+
+On a machine where a second installer also registered the hook, every Bash command was counted twice, so the block came on the 3rd command instead of the 4th. The hook now counts each command once, however many times it is registered.
+
+And the way `hooks.json` registered it (`... || true`) quietly turned the hook's "block" answer into "allow", so on Mac and Linux an install carrying only this repo's copy never blocked anything. (Windows runs hooks through its own launcher, which kept the block, so it was not affected.)
+
+Two smaller things came with it. If the hook's small tracking file is damaged, or the hook file itself cannot be read, it now stays out of the way instead of erroring (or blocking) on every command. And a machine that already had the hook registered twice ends up with exactly one registration after a single update. It is now registered in the same form as the other blocking hooks, and when the hook file is missing it stays out of the way instead of answering for the command.
+
 ## 2026-09-25: a Linux-only `stat` bug crashed both the version-check hook and the installer itself
 
 **Who this affects:** anyone running ai-brain-starter on Linux, or in CI on ubuntu. macOS was never affected.

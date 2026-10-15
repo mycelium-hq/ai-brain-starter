@@ -27,6 +27,8 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 INSTALLER="$REPO_ROOT/scripts/install-hooks-user-level.py"
+# shellcheck source=tests/integration/lib/sandbox_home.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/sandbox_home.sh"
 
 fail() {
     echo "FAIL: $1" >&2
@@ -35,7 +37,10 @@ fail() {
 
 [[ -f "$INSTALLER" ]] || fail "installer missing at $INSTALLER"
 
-# Throwaway HOME so we don't touch the real ~/.claude/settings.json.
+# Throwaway HOME so we don't touch the real ~/.claude/settings.json. Every installer
+# run below goes through run_sandboxed with it: --settings alone moves only the hook
+# merge, and the same run links Claude Code's memory into $VAULT_ROOT and schedules
+# the daily maintenance job under whatever HOME it is given.
 TMP_HOME="$(mktemp -d)"
 trap 'rm -rf "$TMP_HOME"' EXIT
 
@@ -91,7 +96,7 @@ echo "{}" > "$SETTINGS_PATH"
 
 # Case A: with MISSING_SCRIPT absent, --fail-on-missing should exit 1
 set +e
-OUT=$(python3 "$INSTALLER" --hooks-source "$SKILL_DIR/hooks.json" --settings "$SETTINGS_PATH" --fail-on-missing 2>&1)
+OUT=$(run_sandboxed "$TMP_HOME" python3 "$INSTALLER" --hooks-source "$SKILL_DIR/hooks.json" --settings "$SETTINGS_PATH" --fail-on-missing 2>&1)
 RC=$?
 set -e
 
@@ -119,7 +124,7 @@ echo "$SKIP_BLOCK" | grep -qF "$GATED_SCRIPT" || \
 # Reset settings.json so the merge fires fresh.
 echo "{}" > "$SETTINGS_PATH"
 set +e
-python3 "$INSTALLER" --hooks-source "$SKILL_DIR/hooks.json" --settings "$SETTINGS_PATH" --quiet > /dev/null 2>&1
+run_sandboxed "$TMP_HOME" python3 "$INSTALLER" --hooks-source "$SKILL_DIR/hooks.json" --settings "$SETTINGS_PATH" --quiet > /dev/null 2>&1
 RC=$?
 set -e
 [[ $RC -eq 0 ]] || fail "expected exit 0 without --fail-on-missing, got $RC"
@@ -131,7 +136,7 @@ print('{"continue": true}')
 EOF
 echo "{}" > "$SETTINGS_PATH"
 set +e
-python3 "$INSTALLER" --hooks-source "$SKILL_DIR/hooks.json" --settings "$SETTINGS_PATH" --fail-on-missing --quiet > /dev/null 2>&1
+run_sandboxed "$TMP_HOME" python3 "$INSTALLER" --hooks-source "$SKILL_DIR/hooks.json" --settings "$SETTINGS_PATH" --fail-on-missing --quiet > /dev/null 2>&1
 RC=$?
 set -e
 [[ $RC -eq 0 ]] || fail "expected exit 0 with all required scripts present, got $RC"
@@ -141,7 +146,7 @@ set -e
 rm -f "$MISSING_SCRIPT"
 echo "{}" > "$SETTINGS_PATH"
 set +e
-OUT=$(python3 "$INSTALLER" --hooks-source "$SKILL_DIR/hooks.json" --settings "$SETTINGS_PATH" --verify 2>&1)
+OUT=$(run_sandboxed "$TMP_HOME" python3 "$INSTALLER" --hooks-source "$SKILL_DIR/hooks.json" --settings "$SETTINGS_PATH" --verify 2>&1)
 RC=$?
 set -e
 [[ $RC -eq 0 ]] || fail "expected exit 0 with --verify alone, got $RC"

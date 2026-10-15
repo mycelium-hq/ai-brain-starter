@@ -1,0 +1,56 @@
+# FROZEN FIXTURE - do not edit, do not 'update' to match bootstrap.ps1.
+#
+# The EMAIL+NAME inline quick-mint sub-block of bootstrap.ps1 exactly as it
+# stood at commit ffddd85 (origin/main, 2026-09-27) -- the commit MYC-5093
+# branched from, and the last commit BEFORE the
+# quick-mint-reused-is-a-warning fix. At that SHA, a resubmit for an email
+# with an already-live token came back {ok:true, reused:true,
+# resent:<bool>} with no "token" property. The inline mint block only
+# recognized a 32-hex "token" property: anything else -- this reply
+# included -- fell through to Err("Inline mint returned no token. Falling
+# back."), landing on $script:Failed.
+#
+# Extracted verbatim with `git show ffddd85:bootstrap.ps1 | sed -n '...'`,
+# never retyped and never hand-edited, so this can't silently drift from
+# the real pre-fix source (same technique as
+# tests/fixtures/bootstrap-prefix-ffddd85-quickmint.sh.txt, applied here to
+# bootstrap.ps1's sibling block).
+#
+# Used by tests/integration/test_bootstrap_ps1_quick_mint_reused.ps1 as the
+# NEGATIVE CONTROL "before" source: dot-sourcing this fixture must call Err
+# and must NOT recognize a reused+resent reply, proving the test would have
+# caught the bug it exists to catch.
+#
+# A pinned commit SHA is immutable, but a shallow CI checkout may not have
+# it in its object store -- so this is a vendored file, never `git show
+# ffddd85:bootstrap.ps1` run live in the test itself.
+
+    if (-not $env:TOKEN -and $env:EMAIL -and $env:NAME) {
+        $qmLang = if ($env:LANG_HINT) { $env:LANG_HINT } else { "en" }
+        if ($qmLang -ne "en" -and $qmLang -ne "es") { $qmLang = "en" }
+        $qmOs = "windows"
+        Log (T "Minting install token for $($env:EMAIL) via $installApiBase..." `
+              "Generando token para $($env:EMAIL) en $installApiBase...")
+        try {
+            $qmBody = @{
+                email = $env:EMAIL
+                name = $env:NAME
+                lang = $qmLang
+                os = $qmOs
+                consentRequired = $true
+            } | ConvertTo-Json -Compress
+            $qmResp = Invoke-RestMethod -Uri "$installApiBase/api/install/quick-mint" `
+                -Method Post -ContentType "application/json" -Body $qmBody -TimeoutSec 12 -ErrorAction Stop
+            if ($qmResp.ok -and $qmResp.token -match '^[a-f0-9]{32}$') {
+                Ok (T "Token minted inline. No browser needed." `
+                      "Token generado en línea. Sin navegador.")
+                $env:TOKEN = $qmResp.token
+            } else {
+                Err (T "Inline mint returned no token. Falling back." `
+                      "Mint inline no devolvió token. Caemos al formulario.")
+            }
+        } catch {
+            Err (T "Inline mint failed: $_. Falling back." `
+                  "Falló mint inline: $_. Caemos al formulario.")
+        }
+    }

@@ -2,20 +2,29 @@ name: behavioral-install-eval
 
 # Weekly behavioral eval of the install surface (MYC-419).
 #
-# The static text-presence guard (test_trust_prompt_preframing.sh, in the
-# per-PR ci gate) asserts the README CONTAINS the install directives. This
-# workflow asserts they WORK: a fresh model handed README.md must commit to
-# RUNNING the install as its next action — not a menu, not a confirmation
-# stall, not a /plugin-only partial, not "let me review the script first".
-# A negative-control fixture (caution-primed menu README) must FAIL the same
-# bar, proving the harness detects the failure class.
+# The static text-presence guard (test_install_consent_contract.sh, in the
+# per-PR ci gate) asserts the README CONTAINS the consent contract. This
+# workflow asserts it WORKS: across install conversations, a fresh model
+# handed README.md must show the install screen first, relay it and ask its
+# one question, install on "yes" without asking again, install nothing and
+# offer nothing else on "no", and hand Claude Code's permission prompts back
+# to the user, even when the user gives permission to answer them. Two
+# frozen control READMEs (the old consent contract, and the June menu README)
+# must FAIL the same bar, proving the harness detects the failure classes.
 #
 # Scheduled weekly + manual dispatch, NOT per-PR: it spends real Anthropic
 # API calls and measures doc behavior, not diffs (eval-gates-in-ci pattern:
-# periodic tier). ~6 sonnet/haiku calls per run; negligible cost.
+# periodic tier). Up to 72 subject and 72 judge calls per run (a control
+# stops at its first failing turn, usually the first).
 #
 # The eval script exits 2 (loud INFRA error) when ANTHROPIC_API_KEY is
-# missing or empty, so a dead repo secret can never read as a green skip.
+# missing or empty, and for any exception that is not a verdict, so a dead
+# repo secret or an SDK change can never read as a behavioral failure (exit 1)
+# or as a green skip.
+#
+# The anthropic package is pinned to an exact version: an SDK release must
+# not change the script's API calls between two weekly runs. Bump the pin on
+# purpose, with a local run of the script.
 #
 # No untrusted user input is referenced in any run: command (schedule +
 # manual dispatch only; inputs are repo-tracked files).
@@ -38,7 +47,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: install anthropic sdk
-        run: python3 -m pip install anthropic
+        run: python3 -m pip install anthropic==1.8.0
       - name: run behavioral install eval
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
