@@ -51,6 +51,11 @@ skills/**/SKILL.md (a Write of its own content) and on planted files:
       Python lacks either, and a planted tool_access string must be denied
   M11 the validator stops refusing a broken file -> a planted frontmatter with
       no closing --- must still be denied
+  M16 the capability sandbox's deny exits 1 again (`return sandbox_rc`): Claude
+      Code applies it on POSIX, but hook_runner.py --fallback silent turns the
+      exit into the silent JSON on Windows -> an active skill whose tool_access
+      is [Read], sent a Write, must be denied with exit 0, directly and through
+      the runner
 It needs PyYAML and jsonschema in this interpreter; scripts/ci.sh and
 .github/workflows/lint.yml install them on GitHub Actions.
 
@@ -192,12 +197,12 @@ class Sandbox:
                 "CLAUDE_CONFIG_DIR": str(home / ".claude"), "LANG": "C.UTF-8",
                 "PYTHONUTF8": "1", "PYTHONDONTWRITEBYTECODE": "1", "PYTHONUSERBASE": site.getuserbase()}
 
-    def run_payload(self, command, payload, scenario="present"):
+    def run_payload(self, command, payload, scenario="present", extra_env=None):
         rendered = command.replace("[PYTHON]", shlex.quote(sys.executable))
         try:
             p = subprocess.run(["/bin/sh", "-c", rendered], input=json.dumps(payload),
                                capture_output=True, text=True, encoding="utf-8", errors="replace",
-                               env=self.env(scenario), cwd=str(self.work), timeout=60)
+                               env=dict(self.env(scenario), **(extra_env or {})), cwd=str(self.work), timeout=60)
             return (p.returncode, p.stdout, p.stderr)
         except subprocess.TimeoutExpired:
             return (124, "", "timed out")
@@ -336,6 +341,34 @@ def skill_validator_leg(sb):
     rc, reason = ask(planted_dir / "SKILL.md", "---\nname: planted\n\nbody with no closing delimiter\n")
     check("M11 a planted frontmatter with no closing --- is still denied, with exit 0",
           rc == 0 and reason.startswith("deny:") and "not properly closed" in reason, (rc, reason[:150]))
+
+    # Pass 2, the capability sandbox. An active skill whose tool_access is [Read] is sent a Write. Its deny has to leave
+    # the hook with exit 0, like Pass 1's: Claude Code applies a deny at any exit code, but hook_runner.py --fallback
+    # silent (the Windows wiring) turns every exit except 0 and 2 into the silent JSON, and the deny is lost.
+    active = sb.work / "active-skill" / "SKILL.md"
+    active.parent.mkdir(exist_ok=True)
+    active.write_text("---\nname: active-skill\ntool_access: [Read]\n---\n\nbody\n", encoding="utf-8")
+    sandbox_env = {"CLAUDE_ACTIVE_SKILL_PATH": str(active)}
+
+    def sandboxed(tool, tool_input):
+        return {"session_id": "t", "cwd": str(sb.work), "hook_event_name": "PreToolUse", "tool_name": tool,
+                "tool_use_id": "toolu_t", "tool_input": tool_input}
+
+    write = sandboxed("Write", {"file_path": str(sb.work / "notes.txt"), "content": "x"})
+    rc, out, _ = sb.run_payload(command, write, extra_env=sandbox_env)
+    check("M16 a tool outside an active skill's tool_access is denied by the sandbox, with exit 0",
+          rc == 0 and decisions(out) == ["deny"] and "SKILL SANDBOX" in out, (rc, out.strip()[:160]))
+    # The same payload through the Windows runner: the deny must come out of it, not the silent JSON.
+    runner = subprocess.run([sys.executable, str(REPO / "scripts" / "hook_runner.py"), "--fallback", "silent",
+                             str(REPO / "hooks" / "validate-skill-frontmatter.py")], input=json.dumps(write),
+                            capture_output=True, text=True, encoding="utf-8", errors="replace",
+                            env=dict(sb.env("present"), **sandbox_env), cwd=str(sb.work), timeout=60)
+    check("M16 the same deny survives hook_runner.py --fallback silent, the Windows wiring",
+          runner.returncode == 0 and decisions(runner.stdout) == ["deny"] and "SKILL SANDBOX" in runner.stdout,
+          (runner.returncode, runner.stdout.strip()[:160]))
+    rc, out, _ = sb.run_payload(command, sandboxed("Read", {"file_path": str(sb.work / "notes.txt")}),
+                                extra_env=sandbox_env)
+    check("M16 a tool on the list passes: no decision, exit 0", rc == 0 and not out.strip(), (rc, out.strip()[:160]))
 
 
 def in_scope_leg(sb):

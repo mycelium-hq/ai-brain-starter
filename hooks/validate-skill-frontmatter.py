@@ -323,8 +323,9 @@ def run_capability_sandbox(tool_name: str) -> int:
     declared tool_access whitelist. No-op when no active skill is set or
     when the skill does not declare tool_access.
 
-    Returns the process exit code. Emits the deny JSON only when blocking;
-    prints nothing otherwise.
+    Returns 1 when it denied (the deny JSON is already on stdout) and 0
+    otherwise; main() exits 0 either way, as Pass 1 does. Prints nothing
+    when it does not block.
     """
     if os.environ.get("SKILL_SANDBOX_BYPASS") == "1":
         return 0
@@ -374,9 +375,8 @@ def main() -> int:
     # sandbox blocks, emit deny and stop. If sandbox passes (or is not
     # active), run pass 1 only when applicable.
     if os.environ.get("SKILL_SANDBOX_BYPASS") != "1":
-        sandbox_rc = run_capability_sandbox(tool_name)
-        if sandbox_rc != 0:
-            return sandbox_rc
+        if run_capability_sandbox(tool_name) != 0:
+            return 0  # the deny is already on stdout; exit 0, as Pass 1 does
 
     if os.environ.get("SKILL_VALIDATION_BYPASS") == "1":
         return 0
