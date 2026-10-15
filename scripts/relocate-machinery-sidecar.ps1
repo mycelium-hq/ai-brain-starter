@@ -127,6 +127,18 @@ function Invoke-OrDry { param([string]$What, [scriptblock]$Action)
   if ($DryRun) { Write-Host "DRY   $What" } else { & $Action | Out-Null }
 }
 
+# On PS 5.1, a native command whose stderr is redirected (2>&1, 2>$null, *>$null)
+# THROWS NativeCommandError under $ErrorActionPreference = "Stop" the moment the
+# exe prints one stderr line - and the pipeline stop can kill the exe mid-write
+# (observed: `git worktree repair` killed while rewriting the .git file, leaving
+# "invalid gitfile format"). These call sites were written to CAPTURE or DISCARD
+# stderr, so scope EAP back to Continue around them; pwsh 7 is unaffected.
+function Invoke-Native { param([scriptblock]$Call)
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try { & $Call } finally { $ErrorActionPreference = $prev }
+}
+
 # Test-only fault injection for the interrupt matrix in
 # test-relocate-machinery-sidecar.ps1. Unset in production. Set to a step label
 # to hard-kill this process right after that step (no finally, no cleanup) - the
@@ -143,16 +155,23 @@ function Get-PyExe {
     $c = Get-Command $n -ErrorAction SilentlyContinue
     if ($c) {
       try {
-        $v = (& $c.Source -c "import sys;print(sys.version_info[0])" 2>$null)
+        $v = (Invoke-Native { & $c.Source -c "import sys;print(sys.version_info[0])" 2>$null })
         if ("$v".Trim() -eq "3") { $script:PyExe = $c.Source; return $script:PyExe }
       } catch { }
     }
   }
   Err "python 3 required for the move record"; exit 4
 }
+# PS 5.1 builds native command lines WITHOUT escaping embedded double quotes,
+# so `-c <code>` reaches python mangled (`if os.name == "nt"` arrives as
+# `if os.name == nt` -> NameError). Feed the code through a temp file instead;
+# the snippets only read sys.argv[1:], which is identical either way.
 function Invoke-Py { param([string]$Code, [object[]]$PyArgs = @())
   $py = Get-PyExe
-  return (& $py -c $Code @PyArgs)
+  $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("brain-sidecar-py-" + [System.Guid]::NewGuid().ToString("N") + ".py")
+  [System.IO.File]::WriteAllText($tmp, $Code, (New-Object System.Text.UTF8Encoding($false)))
+  try     { return (& $py $tmp @PyArgs) }
+  finally { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
 }
 function Get-AbsPath { param([string]$p)
   return (Invoke-Py 'import os,sys; print(os.path.abspath(os.path.expanduser(sys.argv[1])))' @($p))
@@ -177,10 +196,16 @@ print("1" if inside else "0")
 
 function Get-HomeBase { if ($env:USERPROFILE) { return $env:USERPROFILE } else { return $HOME } }
 
+# "Is this a LINK this tool could have made?", not "does it carry a reparse
+# tag". OneDrive Files-On-Demand stamps ordinary dirs/files with a cloud
+# reparse tag (0x9000xxxx, LinkType empty), so the raw attribute test made
+# Move-CacheDir report never-relocated placeholder dirs as "already a link".
+# Only the two link kinds New-DirLink creates count.
 function Test-ReparsePoint { param([string]$p)
   $it = Get-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue
   if (-not $it) { return $false }
-  return (($it.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)
+  if (($it.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) { return $false }
+  return ($it.LinkType -eq 'Junction' -or $it.LinkType -eq 'SymbolicLink')
 }
 
 # Remove ONLY the reparse point (junction/symlink), never the target's contents.
@@ -340,7 +365,7 @@ with open(man, "w", encoding="utf-8") as f:
 # ---- git probes (fail CLOSED: "could not look" != "nothing there") -----------
 $script:GitState = "unknown"
 function Get-GitState {   # repo | norepo | error
-  $out = & git -C $VaultAbs rev-parse --git-dir 2>&1
+  $out = Invoke-Native { & git -C $VaultAbs rev-parse --git-dir 2>&1 }
   if ($LASTEXITCODE -eq 0) { return "repo" }
   if ("$out" -match "not a git repository") { return "norepo" }
   Warn "git could not read ${VaultAbs}: $out"
@@ -352,15 +377,17 @@ function Get-GitState {   # repo | norepo | error
 function Get-TrackedCount { param([string]$Rel)
   if ($script:GitState -eq "norepo") { return 0 }
   if ($script:GitState -ne "repo")   { return -1 }
-  $out = & git -C $VaultAbs ls-files -- $Rel 2>$null
+  $out = Invoke-Native { & git -C $VaultAbs ls-files -- $Rel 2>$null }
   if ($LASTEXITCODE -ne 0) { return -1 }
   return @($out | Where-Object { "$_" -ne "" }).Count
 }
 
 function Get-LinkedWorktrees {   # @() = none; $null = the probe could not run
-  if ($script:GitState -eq "norepo") { return @() }
+  # ,@() - a bare @() unrolls to $null through the pipeline, and $null here
+  # means "probe failed", so a repo-less vault read as unprobeable and refused.
+  if ($script:GitState -eq "norepo") { return ,@() }
   if ($script:GitState -ne "repo")   { return $null }
-  $out = & git -C $VaultAbs worktree list --porcelain 2>&1
+  $out = Invoke-Native { & git -C $VaultAbs worktree list --porcelain 2>&1 }
   if ($LASTEXITCODE -ne 0) {
     Warn "could not list git worktrees in ${VaultAbs}: $out"
     return $null
@@ -377,6 +404,33 @@ function Get-LiveSessions {   # integer count; -1 = the lock could not be read
   if (-not (Test-Path -LiteralPath $lock)) { return 0 }
   $code = @'
 import json, os, sys, time
+if os.name == "nt":
+    import ctypes
+    KERNEL32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    KERNEL32.OpenProcess.restype = ctypes.c_void_p
+    KERNEL32.OpenProcess.argtypes = (ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32)
+
+def pid_alive(pid):
+    if os.name == "nt":
+        # os.kill(pid, 0) is NOT a probe on Windows - it TerminateProcess()es
+        # the target (exit code 0). Ask for a query handle instead.
+        h = KERNEL32.OpenProcess(0x1000, 0, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not h:
+            return ctypes.get_last_error() == 5   # denied -> exists; else -> gone
+        try:
+            code = ctypes.c_uint32(0)
+            ok = KERNEL32.GetExitCodeProcess(ctypes.c_void_p(h), ctypes.byref(code))
+            return bool(ok) and code.value == 259  # STILL_ACTIVE
+        finally:
+            KERNEL32.CloseHandle(ctypes.c_void_p(h))
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except Exception:
+        return True   # exists but unprobeable -> treat as live (fail closed)
+
 lock = sys.argv[1]
 try:
     with open(lock, encoding="utf-8") as f:
@@ -393,14 +447,7 @@ for s in sessions.values():
         continue
     pid = s.get("pid")
     la = s.get("last_activity_at")
-    alive = False
-    if isinstance(pid, int) and pid > 0 and pid != self_pid:
-        try:
-            os.kill(pid, 0); alive = True
-        except ProcessLookupError:
-            alive = False
-        except Exception:
-            alive = True
+    alive = isinstance(pid, int) and pid > 0 and pid != self_pid and pid_alive(pid)
     recent = isinstance(la, (int, float)) and la >= cut
     if alive or recent:
         n += 1
@@ -463,7 +510,7 @@ function Test-SidecarLocation {
   $out = ""
   try {
     $py = Get-PyExe
-    $out = "$(& $py $ccs --porcelain $Sidecar 2>$null)".Trim()
+    $out = "$(Invoke-Native { & $py $ccs --porcelain $Sidecar 2>$null })".Trim()
   } catch { $out = "" }
   if ($out -like 'CLOUD_SYNC_RISK*') {
     $svc = $out -replace '^CLOUD_SYNC_RISK:?\s*', ''
@@ -512,7 +559,7 @@ function Test-VaultTarget {
   $out = ""
   try {
     $py = Get-PyExe
-    $out = "$(& $py @pyArgs 2>$null)".Trim()
+    $out = "$(Invoke-Native { & $py @pyArgs 2>$null })".Trim()
   } catch { $out = "" }
 
   if ($out -eq 'OK_VAULT') { return $true }
@@ -615,7 +662,7 @@ function Move-GitDir {
     if (-not $DryRun -and -not (Test-Path -LiteralPath $gitpath -PathType Leaf)) {
       Err "  separate-git-dir did not produce a .git pointer file"; return $false
     }
-    Invoke-OrDry "git worktree repair" { & git -C $VaultAbs worktree repair *> $null }
+    Invoke-OrDry "git worktree repair" { Invoke-Native { & git -C $VaultAbs worktree repair *> $null } }
     Say "  . .git -> $SideGit (pointer file left in vault)"
     return $true
   }
@@ -652,8 +699,8 @@ function Restore-GitDir { param([string]$Target)
     Invoke-OrDry "restore .git dir from $Target" {
       if (Test-Path -LiteralPath $ptr) { Remove-Item -LiteralPath $ptr -Force }
       Move-Item -LiteralPath $Target -Destination $ptr
-      & git -C $VaultAbs config --unset core.worktree 2>$null | Out-Null
-      & git -C $VaultAbs worktree repair *> $null
+      Invoke-Native { & git -C $VaultAbs config --unset core.worktree 2>$null } | Out-Null
+      Invoke-Native { & git -C $VaultAbs worktree repair *> $null }
     }
   } catch {
     Err "  . .git NOT restored: $_"
@@ -783,7 +830,7 @@ $ccs = Join-Path $ScriptDir "check-cloud-sync.py"
 if (Test-Path -LiteralPath $ccs) {
   try {
     $py = Get-PyExe
-    $cloud = "$(& $py $ccs --porcelain $VaultAbs 2>$null)".Trim()
+    $cloud = "$(Invoke-Native { & $py $ccs --porcelain $VaultAbs 2>$null })".Trim()
   } catch { $cloud = "" }
 }
 
