@@ -38,7 +38,7 @@ Why: most people open `/journal`, type what happened, and leave. If the entry on
 
 **Panel-Always Rule.** Every entry carries a `## Panel dialogue` section, and every session that saves to the entry adds its own block there.
 - **Blocks are append-only.** A session writes and edits only its own block, never an earlier session's. On a resumed day each new block opens with an italic session label in the entry's language (`*Later session, HH:MM:*`), and the label stays when the full panel replaces the first take.
-- **Only two cases leave a session without a panel**, and each leaves a one-line block in the entry's language so the absence is never silent. If the user explicitly declines the panel, this session's block becomes `*Panel declined this session.*` and panel work stops for the session; if they later ask for one, run the full panel (Step 5) as this session's block. If the crisis protocol is active, no further panel runs this session; a first take already written stays, otherwise the block is `*No panel this session: crisis protocol.*`
+- **Only two cases leave a session without a panel**, and each writes a one-line note as this session's block, in the entry's language (after the session label on a resumed day), so the absence is never silent. If the user explicitly declines the panel, this session's block is written as `*Panel declined this session.*` (replacing this session's own first take if there is one, never an earlier block) and panel work stops for the session; if they later ask for one, run the full panel (Step 5) as this session's block. If the crisis protocol is active, no further panel runs this session; a first take already written stays, otherwise the block is `*No panel this session: crisis protocol.*` (A run with no chat at all, such as a scheduled headless one, also writes a one-line note: `*No panel yet: written by a scheduled run.*`)
 - Leaving early, going quiet, or wrapping up is not a decline; the first take already covers it.
 
 Why: when the panel was the last, optional step, sessions that ended early saved entries with no panel, and nobody noticed until the user asked where it went.
@@ -317,7 +317,7 @@ Capture their answer. After saving the journal entry (Step 9), update the weekly
 - **`## Journal — [user]'s voice`:** their content so far, in their voice, lightly shaped. This is a real entry, not a stub.
 - **`### My responses to the panel (verbatim...)`:** every message they have typed this session so far, word-for-word. The verbatim-capture rule applies from message one.
 - **Floor tag + `## Concepts`:** best-effort from the current content.
-- **`## Panel dialogue`:** written by Step 1.5b in this same reply, right after this save. The reply never ends without it.
+- **`## Panel dialogue`:** this save already includes this session's block as a one-line placeholder in the entry's language (`*First take not written yet.*`, after the session label on a resumed day), so even a reply cut off right here leaves a visible marker. Step 1.5b replaces it in this same reply.
 
 **Save it the same way Step 7 saves** (Bash `cat` heredoc into the monthly subfolder, then verify the file exists — never fail silently). Pick the filename now from the initial content using Step 7's filename rule (honoring `filename_format` from the config). You may refine the filename later ONLY if the day's theme clearly shifts — rename in place, never create a second file.
 
@@ -335,7 +335,7 @@ Right after the capture save, in the same reply, before any follow-up question:
 2. Pick **3 voices** with the Trigger → Voice routing table (full roster in Step 5). Triggers that fired in their first message are the obvious picks.
 3. Use Step 5's format, shorter: one paragraph per panelist, **2–3 sentences**, bolded name + concrete-proof credential, optional `*[Pullback: ...]*`. **At least one dissents.** End with the `**Dissent:**` line, plus `**Omission flagged:**` when the pass found something.
 4. **Show it in chat first**, complete and exactly as it will appear in the file, first-take note included (Step 6).
-5. **Then write it into the file** as `## Panel dialogue` (between the accountability line and the floor tag), opening with a one-line note in the entry's language (English: `*First take. The full panel runs once the floor is named.*`).
+5. **Then write it into the file**, replacing this session's placeholder line under `## Panel dialogue` (between the accountability line and the floor tag). The block opens with the session label on a resumed day, then a one-line note in the entry's language (English: `*First take. The full panel runs once the floor is named.*`).
 6. Append its Dissent and Omission lines to the Panel Feedback Log now (Step 9's format), so a session that ends here still logs them.
 7. Then ask the Step 2 follow-ups. Step 6's one-line invitation covers edits. Never wait for approval before writing the panel.
 
@@ -554,7 +554,7 @@ The arc is the point: the elevators are the lesson, the floors are just where th
 
 ### Step 5: Full Advisory Panel (replaces the first take)
 
-**Timing: never defer the full panel past the reply that names the floor (Step 4); run it in that same reply.** It replaces this session's first take (drop the first-take note, keep the session label); earlier sessions' blocks stay exactly as they were. If the user corrects the floor, show the adjusted lines before writing them (Step 6). If the session ends before Step 4, the first take stands. No full panel while the crisis protocol is active, or after a decline this session unless the user asks for one.
+**Timing: never defer the full panel past the reply that names the floor (Step 4); run it in that same reply.** It replaces this session's first take (drop the first-take note, keep the session label); earlier sessions' blocks stay exactly as they were. If the user corrects the floor, show the adjusted lines before writing them (Step 6). If the session ends before Step 4, the first take stands. No full panel while the crisis protocol is active. After a decline this session, none unless the user asks for one.
 
 Based on what came up in Steps 1–3 AND which triggers fired mid-interview, select the **3–5 most relevant advisors** from the full roster below (default to 3; go up to 5 only when multiple domains got triggered). Do NOT re-interview them — Steps 1–3 already did the interviewing. Use what's already on the table.
 
@@ -623,6 +623,8 @@ Applies to both the Step 1.5b first take and the Step 5 full panel.
 > "Panel's in the entry. Floor: [Floor]. Edit a voice, swap a panelist, or add one?"
 
 For a first take, leave the floor out: "Panel's in the entry. Swap or cut a voice anytime."
+
+After writing the full panel, update this session's Panel Feedback Log entry with its Dissent and Omission lines right away (Step 9), so a session that ends here logs the full panel, not the first take.
 
 Edits follow the same rule: show any changed or added panel text in chat, then write it. A cut voice can be written straight away; if it was the panel's only dissent, show the replacement dissent before writing it. Do NOT wait for approval before writing: showing first is the protection, and holding the write for a reply is how sessions ended with no panel saved.
 
@@ -733,6 +735,8 @@ deep_work: X                # blocks completed today
 ---
 
 ## Panel dialogue
+
+[One block per session, oldest first; never edit an earlier block. On a resumed day each block opens with `*Later session, HH:MM:*`; a first take then adds its first-take note. A declined, crisis, or headless session's block is its one-line note instead of a panel.]
 
 **Panel:** [Name] · [Name] · [Name]
 
@@ -880,7 +884,7 @@ Tell them the file name and floor. If relevant, connect it to a pattern from the
 - Gym count: "You're at [X]/4 this week. [Encouragement or push as appropriate.]"
 
 **Auto-log panel dissents and omissions:**
-Log only this session's panel, one log entry per session: Step 1.5b appends the first take's lines, and the full panel updates that same entry in place. If this session's panel surfaced a dissent or an omission flag that is not logged yet, automatically append it to the Panel Feedback Log (check CLAUDE.md for the path, e.g. `🏠 Home/Panel Feedback Log.md`) under the synthetic panel reactions section. Use this format:
+Log only this session's panel, one log entry per session: Step 1.5b appends the first take's lines, and the full panel updates that same entry in place right after it is written (Step 6). If a later cut or decline removes logged text, update the entry to match. If the log file does not exist yet, create it with a one-line header saying it collects synthetic panel reactions. If this session's panel surfaced a dissent or an omission flag that is not logged yet, automatically append it to the Panel Feedback Log (check CLAUDE.md for the path, e.g. `🏠 Home/Panel Feedback Log.md`) under the synthetic panel reactions section. Use this format:
 
 ```markdown
 ### YYYY-MM-DD — Daily journal dissent / omission

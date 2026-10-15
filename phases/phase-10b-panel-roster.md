@@ -157,7 +157,7 @@ Use whichever scheduling system is available in this Claude Code install. Try th
 
 2. **`mcp__scheduled-tasks__create_scheduled_task`** (fallback — scheduled-tasks MCP). Call with equivalent parameters (`name`, `cron` or `schedule`, `prompt`).
 
-3. **Cron fallback** (if neither is available): write a bash wrapper at `[VAULT_PATH]/⚙️ Meta/scripts/run-daily-journal.sh` that checks for today's entry and invokes `claude --print` headlessly with the task body as the prompt. Use the same pattern as `run-insights.sh` in Phase 18. Install it with a `crontab -e` line: `30 19 * * * /bin/bash "/path/to/vault/⚙️ Meta/scripts/run-daily-journal.sh"` (adjusting the `30 19` to match the user's chosen time in their local timezone, and converting to UTC if the system uses UTC cron). Note: cron can only run headless — it will create the entry directly instead of having a back-and-forth conversation. A headless run has no chat to show a panel in, and its entry holds no words from the user: it still writes the panel, opening with `*Written by a scheduled run; not seen yet.*`, and the next interactive session adds its own block. Tell the user this tradeoff explicitly if you have to fall back to cron.
+3. **Cron fallback** (if neither is available): write a bash wrapper at `[VAULT_PATH]/⚙️ Meta/scripts/run-daily-journal.sh` that checks for today's entry and invokes `claude --print` headlessly with the task body as the prompt. Use the same pattern as `run-insights.sh` in Phase 18. Install it with a `crontab -e` line: `30 19 * * * /bin/bash "/path/to/vault/⚙️ Meta/scripts/run-daily-journal.sh"` (adjusting the `30 19` to match the user's chosen time in their local timezone, and converting to UTC if the system uses UTC cron). Note: cron can only run headless — it will create the entry directly instead of having a back-and-forth conversation. A headless run has no chat to show a panel in, so its panel block is the one-line note `*No panel yet: written by a scheduled run.*`; the next interactive session adds its own block with a real panel, shown first as always. Tell the user this tradeoff explicitly if you have to fall back to cron.
 
 **Task body (the prompt the scheduler runs at the chosen time):**
 
@@ -176,7 +176,7 @@ Check if the user already has a journal entry for today before doing anything el
 
 STEP 2 — Start the journal conversation.
 
-Invoke the Skill tool with `skill: "daily-journal"` and begin the interview as normal. The skill will greet the user, ask the opening question, and save the entry.
+Invoke the Skill tool with `skill: "daily-journal"` and begin the interview as normal. The skill will greet the user, ask the opening question, and save the entry. If no one can answer (a headless cron run), write no panel: leave this session's panel block as the one-line note `*No panel yet: written by a scheduled run.*`
 
 The user is expecting this prompt at [HH:MM their local time], so lead with a warm opening from the daily-journal skill — don't start with meta-talk like "the scheduled task ran."
 
