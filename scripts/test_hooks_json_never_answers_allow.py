@@ -12,8 +12,10 @@ hooks.PreToolUse in hooks.json, with [PYTHON] rendered to this interpreter and ~
 pointed at a temp HOME that holds the repo's hooks, and fails if one of those runs
 prints an allow. The runs are: a benign payload per tool (a Write to notes.txt, an
 Edit of it, a Bash ls); the same commands with the hook files ABSENT (the fallback
-path); and the same commands with each hook file present but UNREADABLE (mode 000).
-An allow printed on some other payload is not covered. The respelling removed the `||`
+path); the same commands with each hook file present but UNREADABLE (mode 000);
+and, for each hook that used to answer allow on its own pass path, one valid
+payload from that hook's scope (section 4). An allow printed on some other payload,
+or built outside a hook's own file, is not covered. The respelling removed the `||`
 that used to swallow a hook's exit code, so a hook that exits non-zero on a benign
 call now shows an error on every call and one that exits 2 would block a benign
 write: both are asserted as well.
@@ -51,6 +53,17 @@ skills/**/SKILL.md (a Write of its own content) and on planted files:
       no closing --- must still be denied
 It needs PyYAML and jsonschema in this interpreter; scripts/ci.sh and
 .github/workflows/lint.yml install them on GitHub Actions.
+
+Section 4 gives each other hook that used to answer allow one valid payload from
+its own scope, where the right answer is "no decision", and a control from the
+same scope that must still be denied:
+  M13 a hook prints allow only on its in-scope pass path (invisible to the benign
+      payloads above, which no hook of this kind acts on) -> the pass payload
+  M14 a warning carries a permissionDecision again (it used to be an allow whose
+      reason was the warning text) -> the warn payload must carry additionalContext
+      and no permissionDecision
+  M15 the hook's scope drifts, so the pass payload never reaches the hook's logic
+      and "no decision" proves nothing -> the control must still be denied
 
 POSIX only (the hook commands are shell one-liners). Plain script, no pytest.
 """
@@ -323,6 +336,78 @@ def skill_validator_leg(sb):
           rc == 0 and reason.startswith("deny:") and "not properly closed" in reason, (rc, reason[:150]))
 
 
+def in_scope_leg(sb):
+    """Section 4: each hook that used to answer allow on its own pass path gets one valid payload from its
+    own scope, where the right answer is no decision, and a control from the same scope that must be denied."""
+    doc = json.loads(HOOKS_JSON.read_text(encoding="utf-8"))
+    wired = [(g.get("matcher") or ".*", h["command"]) for g in doc["hooks"]["PreToolUse"] for h in g["hooks"]]
+    probe = subprocess.run([sys.executable, "-c", "import yaml"], capture_output=True, env=sb.env("present"))
+    check("M13 PyYAML is importable, so lint-vault-frontmatter lints instead of skipping (this fails, it never skips)",
+          probe.returncode == 0, "install it: python3 -m pip install pyyaml")
+    w, scratch = sb.work, sb.work / "scratchpad"
+    scratch.mkdir(exist_ok=True)
+    (w / "Meta").mkdir(exist_ok=True)  # a vault marker: the handoff guard only denies inside a vault
+    aws_key = "AKIA" + "IOSFODNN7EXAMPLE"  # AWS's documented example key, split so no scanner flags this file
+    session = "---\ntype: session\nworktree: main\nsession_date: %s\nsession_label: wrap\n---\n\nbody\n"
+    agent_a = {"scratchpad_dir": str(scratch), "agent_id": "agent-a"}
+    agent_b = {"scratchpad_dir": str(scratch), "agent_id": "agent-b"}
+
+    def write(path, content):
+        return {"file_path": str(path), "content": content}
+
+    cases = [
+        {"hook": "validate-mcp-json.py", "tool": "Write",
+         "pass": write(w / ".mcp.json", '{"mcpServers": {}}\n'),
+         "control": write(w / ".mcp.json", '{"mcpServers": ')},
+        {"hook": "lint-vault-frontmatter.py", "tool": "Write",
+         "pass": write(w / "Sessions" / "2026-04-30-wrap.md", session % "2026-04-30"),
+         "control": write(w / "Sessions" / "2026-04-30-wrap.md", session % "April 30 2026")},
+        {"hook": "validate-handoff-frontmatter.py", "tool": "Write",
+         "pass": write(w / "Handoffs" / "2026-10-15-Handoff.md",
+                       "---\ntype: handoff\nconsumes_when: the follow-up ships\n---\n\nbody\n"),
+         "control": write(w / "Handoffs" / "2026-10-15-Handoff.md", "---\ntype: handoff\n---\n\nbody\n")},
+        {"hook": "block-populated-public-skill.py", "tool": "Write",
+         "pass": write(w / "ai-brain-starter" / "skills" / "demo" / "README.md", "---\nfloor: <floor-name>\n---\n\nbody\n"),
+         "control": write(w / "ai-brain-starter" / "skills" / "demo" / "README.md", "---\nfloor: Courage\n---\n\nbody\n")},
+        {"hook": "block-secret-in-note.py", "tool": "Write",
+         "pass": write(w / "note.md", "# Note\n\nNothing secret here.\n"),
+         "control": write(w / "note.md", "# Note\n\naws: %s\n" % aws_key)},
+        {"hook": "block-scratchpad-cross-agent-clobber.py", "tool": "Write",
+         "pass": write(scratch / "report.txt", "x\n"), "extra": agent_a,
+         "control": write(scratch / "report.txt", "y\n"), "control_extra": agent_b},
+        {"hook": "block-scratchpad-cross-agent-clobber.py", "tool": "Bash",
+         "pass": {"command": "echo x > %s" % (scratch / "run.log")}, "extra": agent_a,
+         "control": {"command": "echo y > %s" % (scratch / "run.log")}, "control_extra": agent_b},
+        {"hook": "warn-chained-state-command-truncated.py", "tool": "Bash",
+         "warn": {"command": "git add -A && git push origin main | tail -3"}},
+    ]
+
+    def ask(command, case, tool_input, extra):
+        payload = {"session_id": "t", "cwd": str(w), "hook_event_name": "PreToolUse", "tool_name": case["tool"],
+                   "tool_input": tool_input, "tool_use_id": "toolu_t"}
+        payload.update(extra)
+        return sb.run_payload(command, payload)
+
+    for case in cases:
+        who = "%s on %s" % (case["hook"], case["tool"])
+        commands = [c for m, c in wired if case["hook"] in c and re.fullmatch(m, case["tool"])]
+        check("%s is wired once" % who, len(commands) == 1, commands)
+        for command in commands:
+            if "warn" in case:
+                rc, out, _ = ask(command, case, case["warn"], {})
+                check("M14 %s: a push chained after && through tail warns on additionalContext, with no "
+                      "permissionDecision and exit 0" % who,
+                      rc == 0 and not decisions(out) and not answers_allow(out) and "git push" in context(out),
+                      (rc, out.strip()[:160]))
+                continue
+            rc, out, _ = ask(command, case, case["pass"], case.get("extra", {}))
+            check("M13 %s: a valid in-scope payload makes no decision, exit 0" % who,
+                  rc == 0 and not decisions(out) and not answers_allow(out), (rc, out.strip()[:160]))
+            rc, out, _ = ask(command, case, case["control"], case.get("control_extra", {}))
+            check("M15 %s: the control from the same scope is still denied, exit 0" % who,
+                  rc == 0 and decisions(out) == ["deny"], (rc, out.strip()[:160]))
+
+
 def main():
     if os.name == "nt":
         print("skip: the hook commands are POSIX shell one-liners")
@@ -383,6 +468,9 @@ def main():
 
         print("3. the skill validator, as wired, on every shipped SKILL.md and on planted files")
         skill_validator_leg(sb)
+
+        print("4. one in-scope payload for each other hook that used to answer allow, with a control that must deny")
+        in_scope_leg(sb)
 
     if FAILURES:
         print("\n%d check(s) failed" % len(FAILURES))
