@@ -1,6 +1,6 @@
 ## Phase 11: Connect External Tools
 
-**MANDATORY ASK — never skip, regardless of what the user mentioned earlier.** If the user listed Gmail / Google Calendar / Outlook / Slack / any other tool back in Phase 4 question 3, that's INFORMATION; this phase is where Claude actually wires the MCP. The known failure mode: model captures "Gmail" in CLAUDE.md `## Tools I Use` and then SKIPS this phase thinking the question is already answered. Phase 11 must fire even when prior phases already surfaced the tool name. The question changes from "do you use it?" to "you mentioned Gmail earlier — installing google-workspace-mcp now."
+**MANDATORY ASK — never skip, regardless of what the user mentioned earlier.** If the user listed Gmail / Google Calendar / Outlook / Slack / any other tool back in Phase 4 question 3, that's INFORMATION; this phase is where Claude actually wires the MCP. The known failure mode: model captures "Gmail" in CLAUDE.md `## Tools I Use` and then SKIPS this phase thinking the question is already answered. Phase 11 must fire even when prior phases already surfaced the tool name. The question changes from "do you use it?" to "you mentioned Gmail earlier: want me to connect it?" A mention is information, never a yes: connectors are the one thing the install screen leaves out, so each one is asked once, here.
 
 "Let's connect Claude to the tools you actually use. This is where the vault becomes an operating system, not just a notebook."
 
@@ -8,17 +8,15 @@
 
 ### Email & Calendar
 
-**First check what they said in Phase 4 question 3 (the tools answer).** If they named Gmail, Google Calendar, Google Drive, Google Docs, Google Sheets, or Google Meet anywhere in that answer, DO NOT re-ask. Skip directly to install:
+**First check what they said in Phase 4 question 3 (the tools answer).** If they named Gmail, Google Calendar, Google Drive, Google Docs, Google Sheets, or Google Meet anywhere in that answer, don't ask again whether they use it. Ask whether to connect it:
 
-> "You mentioned [Gmail / Google Calendar / etc.] back in the tools section, so I'm installing `google-workspace-mcp` now. One MCP that covers Gmail, Calendar, Drive, Docs, Sheets, and Meet. Supports multiple accounts (work + personal) and is token-efficient. I'll walk you through the Google Cloud OAuth setup."
+> "You mentioned [Gmail / Google Calendar / etc.] back in the tools section. Want me to connect it? `google-workspace-mcp` is one MCP that covers Gmail, Calendar, Drive, Docs, Sheets, and Meet, with work and personal accounts. It reads them through an app you create in your own Google account, and I'll walk you through that setup."
 
 **Otherwise ask:** "Do you use Gmail / Google Calendar / Google Drive / Google Docs? Or Outlook / Microsoft 365?"
 
-**If they use ANY Google Workspace surface (Gmail, Calendar, Drive, Docs, Sheets, Meet) — install `google-workspace-mcp` as the default.** Do NOT recommend Settings → Connectors first. The MCP covers all 5 surfaces in one install, supports multiple accounts, and is token-efficient.
+**If they use ANY Google Workspace surface (Gmail, Calendar, Drive, Docs, Sheets, Meet), `google-workspace-mcp` is the connector to offer.** Do NOT recommend Settings → Connectors first. The MCP covers all 5 surfaces in one install, supports multiple accounts, and is token-efficient.
 
-Tell them: "I'm going to install `google-workspace-mcp` — one MCP that covers Gmail, Calendar, Drive, Docs, and Sheets. It supports multiple Google accounts (work + personal) and uses fewer tokens than the official connectors. I'll walk you through the Google Cloud OAuth setup."
-
-Then install it directly (don't ask "want to install it?" — they already said they use Google):
+Using Google is not a yes to connecting it. Connectors are the one thing the install screen leaves out, so ask once: "Want me to connect it? It reads your Gmail, Calendar and Drive through an app you create in your own Google account." On yes, install it:
 
 1. Clone: `git clone https://github.com/adelaidasofia/google-workspace-mcp ~/.claude/google-workspace-mcp`
 2. Install deps: `cd ~/.claude/google-workspace-mcp && pip install -r requirements.txt`
@@ -242,18 +240,22 @@ Tell them: "You don't have to connect everything now. Start with email and calen
 
 ## → Next phase (the install is not finished)
 
-You have just completed **Phase 11**. Do not stop here, do not summarise the
-install as complete, and do not wait to be asked to continue.
+You have just completed **Phase 11**. The yes on the install screen covers
+the next phase too, so start it now; nothing on the screen needs asking again.
 
-1. **Record progress.** Write `~/.claude/.ai-brain-starter-progress.json`:
+1. **Record progress.** Run `scripts/install-telemetry.py append 11 completed`
+   from this skill's own directory with Python 3. It writes the progress file
+   a resumed install reads, and the install log. If that fails, write
+   `~/.claude/.ai-brain-starter-progress.json` yourself:
    `{"last_completed_phase": "11", "ts": "<ISO-8601 timestamp for now>", "version": 1}`
-   This one line is what lets a resumed install pick up here instead of starting over.
 2. **Run the next phase.** Read `phases/phase-12-17-imports-rules.md` from this skill's own directory
    and execute **Phase 12-17**.
 
-If you are running low on context, say so out loud and tell the user to open a
-fresh session and ask to resume the ai-brain-starter install; the progress file
-above is what makes that work. Ending here silently leaves them with a
-half-built brain that looks finished.
+Pause only if the user says stop, a step failed and needs them, or Claude Code
+is asking them something; then say where the install stands and that "continue
+my brain setup" picks it up. If you are running low on context, say so and tell
+the user to open a fresh session and ask to resume; the progress file is what
+makes that work. Ending silently leaves them with a half-built brain that looks
+finished.
 
 <!-- phase-chain: next=phase-12-17-imports-rules.md -->

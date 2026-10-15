@@ -316,6 +316,8 @@ def extract_worktree_slug(cwd: str) -> str:
 # carries it. Hand-edited spellings are tolerated: unquoted, single-quoted, or
 # with a trailing ` # comment`.
 _SESSION_ID_LINE = re.compile(r"^session_id:[ \t]*(.*?)[ \t]*$", re.MULTILINE)
+
+
 def _owner_value(raw: str) -> str:
     """The id out of a `session_id:` value: quoted, or bare up to a comment.
 

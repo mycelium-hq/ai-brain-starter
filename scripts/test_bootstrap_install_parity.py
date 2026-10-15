@@ -101,6 +101,15 @@ DEST_RE_SH = re.compile(r'(?:\$HOME|~)/\.claude/([A-Za-z0-9_.-]+)')
 DEST_RE_PS = re.compile(r'\.claude[/\\]([A-Za-z0-9_.-]+)')
 
 
+def dest_tokens(text: str, pattern: re.Pattern[str]) -> set[str]:
+    """The destination tokens in `text`, comment lines dropped. A path that ends
+    a sentence is followed by the sentence's period, which the token pattern
+    would keep as part of the name, so trailing periods are stripped."""
+    lines = [ln for ln in text.splitlines() if not ln.lstrip().startswith("#")]
+    found = (m.rstrip(".") for m in pattern.findall("\n".join(lines)))
+    return {m for m in found if m} - IGNORE
+
+
 def destinations(path: Path, pattern: re.Pattern[str]) -> set[str]:
     """Destination tokens this installer WRITES.
 
@@ -114,11 +123,7 @@ def destinations(path: Path, pattern: re.Pattern[str]) -> set[str]:
     if not path.is_file():
         print(f"FAIL: {path} not found - this guard cannot run", file=sys.stderr)
         raise SystemExit(1)
-    lines = [
-        ln for ln in path.read_text(encoding="utf-8", errors="replace").splitlines()
-        if not ln.lstrip().startswith("#")
-    ]
-    return {m for m in pattern.findall("\n".join(lines))} - IGNORE
+    return dest_tokens(path.read_text(encoding="utf-8", errors="replace"), pattern)
 
 # -----------------------------------------------------------------------------
 # SECOND CHECK: skill-list coverage.
@@ -337,6 +342,20 @@ def _self_test() -> None:
     )
     assert any("STALE AMNESTY" in f for f in fails(sh=no_extra_sh, ps=no_extra_ps)), \
         "control: an unused VERIFY_ONLY row must FAIL as stale"
+
+    # (8) a path that ends a sentence must not carry the period into its name.
+    #     The old tokenizer turned prose alone into "NEW Windows-blind
+    #     destination: ~/.claude/.install-audit.jsonl." Names with inner dots,
+    #     and a stem that ends in a hyphen (`.bak-$STAMP`), stay whole, and a
+    #     path inside a comment still does not count.
+    prose = "Each run appends to ~/.claude/.install-audit.jsonl.\n"
+    assert DEST_RE_SH.findall(prose) == [".install-audit.jsonl."], \
+        "control: the planted prose must reproduce the defect, else it proves nothing"
+    assert dest_tokens(prose, DEST_RE_SH) == {".install-audit.jsonl"}, \
+        "control: a sentence-final period must not become part of the destination"
+    kept = 'cp a "$HOME/.claude/settings.json.bak-$STAMP"\n# ~/.claude/.nope.log\n'
+    assert dest_tokens(kept, DEST_RE_SH) == {"settings.json.bak-"}, \
+        "control: inner dots and a trailing hyphen stay whole, a commented path does not count"
 
 
 def main() -> int:

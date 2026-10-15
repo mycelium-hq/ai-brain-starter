@@ -647,10 +647,10 @@ Then truly stop.
 
 - **NEVER LET INFORMATION GO NOWHERE.** Anything personal the user reveals must land in `🏠 Home/About Me.md` (or the right structured destination: CLAUDE.md quick fields, a per-person CRM file, the Health folder, etc.) before the conversation moves on. Universal capture rule codified in Phase 3c. The failure mode this prevents: user says "I have ADHD" during the tools question, model nods and moves on, the fact never lands anywhere, six months later there's no context for "why am I forgetting things?" Capture must be lossless. Append, never overwrite. Do not pause to confirm — just write the bullet and continue.
 - GO SLOW. Wait for answers. Don't dump instructions.
-- **NEVER STOP MID-SETUP.** After completing each phase, ALWAYS continue to the next phase automatically. Do not wait for the user to ask "what's next?" — tell them what's coming and proceed. The only reasons to pause are: (1) the user explicitly says "let's stop here" or "I need a break," (2) a critical install failed and needs manual intervention, or (3) the user asks a question that needs answering before continuing. After the journal phase especially — there are 10+ more phases. Don't stop there.
+- **KEEP GOING BETWEEN PHASES.** The install-screen yes covers every phase, so after each one, tell them what's coming and start it without waiting for "what's next?". Pause only when: (1) the user says "let's stop here" or "I need a break", (2) a step failed and needs them, (3) they ask a question that needs an answer first, or (4) Claude Code is asking them something. After the journal phase especially, there are 10+ more phases.
 - **PHASES 3b, 11, 13, 19.5, 19.6, 24, 24.4, 24.5, 24.6, AND 24.7 ARE MANDATORY.** Fire ALL TEN even if a prior phase already surfaced the topic, even if the user seemed disinterested, even if an optional phase (20 team vault, 22 patterns, 23 theme) was skipped, even if 23.5 errored mid-script. Each mandatory phase covers a distinct activation or capture moment the install cannot afford to skip:
   - Phase 3b = create `🏠 Home/About Me.md` from the template. Without it, the universal capture rule has nowhere to write to. Phase 4 fills the first sections; subsequent sessions append.
-  - Phase 11 = external-tool wiring. Most common skip: user mentioned Gmail in Phase 4 question 3, model treated that as "answered" and never installed `google-workspace-mcp`. Phase 11 must fire and ACT on the prior mention.
+  - Phase 11 = external-tool wiring. Most common skip: user mentioned Gmail in Phase 4 question 3, model treated that as "answered" and never installed `google-workspace-mcp`. Phase 11 must fire and ASK about the prior mention.
   - Phase 13 = health data import (devices AND labs). Two distinct halves; the labs question is its own mandatory ask, NOT subsumed by the wearables answer.
   - Phase 19.5 = activation moment (user imports their first active doc IN THIS SESSION because we can't assume another session will happen) AND sees the proof — one cited answer pulled live from that doc, so the session ends on a demonstration, not on faith that "next session I'll know it." After the proof, the model PROACTIVELY offers to bring more in, guided — the user must never have to know to ask for the import on their own.
   - Phase 19.6 = primary email ask, riding the Phase 19.5 activation win (peak motivation, and a phase nearly every install reaches). Mandatory to ASK once; the answer is the user's free choice. Captures locally before the network call so an address is never lost.
@@ -679,7 +679,10 @@ Then truly stop.
 
 **Phase 24.5 is the last phase.** There is no next file.
 
-Write `~/.claude/.ai-brain-starter-progress.json` with
+Run `scripts/install-telemetry.py append 24.5 completed` from this skill's own
+directory with Python 3. It writes the progress file and the install log line
+that marks this install, after its yes, as finished. If that fails, write
+`~/.claude/.ai-brain-starter-progress.json` yourself:
 `{"last_completed_phase": "24.5", "ts": "<ISO-8601 timestamp for now>", "version": 1}`
 so a later session can tell a finished install from an abandoned one and never
 re-runs it.

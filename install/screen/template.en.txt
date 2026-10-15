@@ -1,0 +1,43 @@
+?posix AI Brain Starter on macOS or Linux: what this install adds
+?windows AI Brain Starter on Windows: what this install adds
+?corporate Corporate profile.
+Nothing has been installed or changed yet.
+
+If you say yes, this stays on your computer:
+  {hooks} hooks in ~/.claude/settings.json: scripts that Claude Code
+    runs on its own, in every session.
+?vault_hooks     {vault_hooks} more once your vault exists.
+?allow_hooks     Some of them answer "allow" for file edits and shell commands, so
+?allow_hooks     Claude Code stops asking you before it edits files or runs commands.
+  Skills in ~/.claude/skills, slash commands in ~/.claude/commands.
+  Plugin marketplaces: {marketplaces}
+  Plugins switched on: {plugins}
+  Skills copied from GitHub: {clones}
+?mcp   MCP servers in ~/.claude/.mcp.json, both remote:
+*mcp     {name} ({host}): receives conversation content when used
+  Tools, if missing: {tools}
+?it_tools   Left for your IT team, if missing: {it_tools}
+?default   It updates itself from GitHub every few days, new hooks included.
+?corporate   Updates and telemetry: off, set in ~/.claude/settings.json.
+
+The same yes covers what the setup interview adds: your vault, its
+Obsidian plugins and hooks, a vault backup, a daily journal check-in
+that Claude runs on a schedule, and:
+?posix   Daily job: deletes merged git branches and worktrees in your vault.
+?posix     Under ~/dev it fetches and fast-forwards clean main checkouts; from
+?posix     its second run it deletes merged branches, worktrees, build output.
+?posix     Opt out: tell me before you answer; I'll set ABS_NO_AUTO_GC=1.
+  Weekly and monthly insights: Claude Code runs unattended, allowed
+    to edit files and run shell commands.
+Asked separately: connectors (email, calendar, Slack), email sign-up.
+
+Not pinned: third-party parts install their newest version.
+Backups: settings files are copied before every edit.
+
+Claude Code may ask you to allow some of these steps. Those prompts are
+between you and Claude Code. I will not answer them for you or tell
+you which to pick.
+
+Reply "yes" to install all of this, or "no" to install nothing.
+?optional Or reply "yes, without optional packs" to leave out the
+?optional {optional} optional plugin marketplaces and what they bring.

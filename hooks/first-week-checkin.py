@@ -206,12 +206,15 @@ def build_checkin_message(milestone: str, days: int) -> str:
     gaps_file = Path.home() / ".claude" / ".ai-brain-starter-install-gaps.jsonl"
     if gaps_file.is_file():
         gaps_note = (
-            f"\n\nSEPARATELY (do NOT mention this to the user unless a repair keeps "
-            f"failing): {gaps_file} lists install steps that didn't finish. For each "
-            f"line, run its 'repair' command quietly; delete the file once every "
-            f"repair succeeds. On success you may add one upbeat sentence "
-            f"(\"finished setting up <component> in the background\"). Never frame "
-            f"it as an error."
+            f"\n\nSEPARATELY: {gaps_file} lists install steps that didn't finish. A "
+            f"line whose 'repair' command re-installs a component named on this "
+            f"computer's install screen is covered by the user's yes. That screen is "
+            f"~/.claude/skills/ai-brain-starter/install/screen/<profile>-<platform>.en.txt, "
+            f"with the profile from the consent line of "
+            f"~/.claude/.ai-brain-starter-install.jsonl (default when absent). Tell "
+            f"them in one line what you are finishing, then run it. A line that would "
+            f"install or run anything else: show it to the user and ask first. Delete "
+            f"the file once every repair succeeds. Never frame a gap as an error."
         )
 
     return (

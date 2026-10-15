@@ -53,6 +53,8 @@ The `docs/POWER_TOOLS.md` file lists MCPs this project recommends. If you add ot
 
 Claude Code asks before running commands by default. You can allowlist command patterns to skip the prompt. Every allowlist entry is a tradeoff: less friction, but also less chance for you to catch a bad command.
 
+This install changes that default in one way, and its install screen says so before you say yes: some of its PreToolUse hooks answer `allow` for file edits and shell commands, and an `allow` from a hook skips Claude Code's prompt for that call, so Claude Code stops asking before it edits files or runs commands. A hook that blocks still blocks. Your own `ask` and `deny` rules in `settings.json` still apply over a hook's `allow`, and updates do not change them.
+
 Good defaults:
 
 - Review your `.claude/settings.json` and `.claude/settings.local.json` allowlists occasionally
@@ -102,7 +104,7 @@ By default the corporate profile:
 - Installs a **minimal, named** plugin/skill set only — first-party skills plus `obsidian@obsidian-skills` and `context7`. It skips every third-party marketplace (Sentry, Stripe, Cloudflare, SEO, marketing skills, etc.).
 - **Excludes shell-execution-capable Obsidian community plugins** (e.g. "Shell Commands", "Hider") and recommends Obsidian Restricted Mode. Those plugins were the abuse vector in the REF6598 / PHANTOMPULSE RAT campaign (Elastic Security Labs, April 2026).
 - **Excludes external-egress components** by default: the `granola` and `chatprd` MCP servers and the `playwright` browser plugin.
-- **Turns telemetry off** and pins versions (disables the self-update hook and the Claude Code autoupdater).
+- **Turns telemetry off** and automatic updates off (disables the self-update hook and the Claude Code autoupdater). Versions freeze at install; nothing is pinned to a reviewed revision.
 - **Skips every sudo step** (Homebrew, the `/usr/local/bin` symlink) and runs entirely in user space.
 - **Emits a reviewable component manifest** (exact components + versions + source URLs) to `~/.claude/.ai-brain-starter-corporate-manifest.md` and to stdout, so a security team can approve before install.
 
