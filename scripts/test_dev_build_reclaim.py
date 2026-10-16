@@ -268,7 +268,7 @@ def main() -> int:  # noqa: C901
          "import sys; sys.path.insert(0, sys.argv[1]); "
          "import _lib.worktree_safety as w; print(w.PROCESS_PROBE_TIMEOUT)",
          str(SCRIPTS.parent / "hooks")],
-        capture_output=True, text=True, timeout=60)
+        capture_output=True, encoding="utf-8", errors="replace", timeout=60)
     check("[18] a hook importing the module alone keeps the short 15 s cap",
           fresh.stdout.strip(), "15")
 
