@@ -532,6 +532,20 @@ def derive_worktree(cwd: Path) -> str:
     return "main"
 
 
+# Same token set as verify-session-close-cascade.py's safe_session_id and the
+# runner's own check: the id lands in a shell command and in a report path.
+_SAFE_SESSION_ID = re.compile(r"[A-Za-z0-9_-]+")
+
+
+def runner_session_arg(session_id: str | None) -> str:
+    """` --session <id>` for the runner command, or "" with no usable id."""
+    if not session_id or session_id == "unknown":
+        return ""
+    if not _SAFE_SESSION_ID.fullmatch(session_id):
+        return ""
+    return f" --session {session_id}"
+
+
 def find_meta_dir(vault_root: Path) -> Path:
     """Auto-detect Meta folder. Returns the canonical dir for THIS vault.
 
@@ -1165,14 +1179,24 @@ def _full_cascade_block(
     # without the script was pointed at a missing file as the "single most
     # important step."
     runner = meta_dir / "scripts" / "session-close-runner.sh"
+    # The runner writes a report of THIS session's own when it is told the id,
+    # and the close gate checks that report, so another session's run cannot
+    # clear this one. "unknown" is main()'s placeholder, not an id; anything but
+    # a plain token is left off rather than put into a shell command and a path.
+    runner_session = runner_session_arg(session_id)
+    session_note = (
+        "\nKeep the --session argument: it scopes the report to this session, and\n"
+        "another session's run does not clear this session's close gate.\n"
+        if runner_session else ""
+    )
     if runner.is_file():
         phase_0a = f"""PHASE 0a — RUN THE CANONICAL RUNNER FIRST. One bash call runs the
 deterministic aggregation (Phases 0c-0e + the session/decision aggregators) and
 writes the report the optional verify-session-close-cascade Stop hook checks. It
 runs whichever sub-scripts are installed and skips the rest (never fatal):
 
-  bash "{runner}"
-
+  bash "{runner}"{runner_session}
+{session_note}
 After it finishes, walk the remaining Phases (0b -> 1 -> 2 -> 2b -> 3) below. Do
 NOT re-walk 0c/0d/0e by hand — the runner already did those."""
     else:

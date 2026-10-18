@@ -4,7 +4,7 @@
 THE INCIDENT (MYC-3246). `warn-workflow-call-permission-elevation.py` shipped
 registered in hooks.json, deployed to disk, and passing 8/8 negative controls --
 and it could never warn anyone. It wrote its diagnostic to `sys.stderr`, and
-every hooks.json command in this repo is wired as:
+every hooks.json command in this repo was wired as:
 
     <script> 2>/dev/null || echo <allow-json>
 

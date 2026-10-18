@@ -127,11 +127,21 @@ fi
 
 LINTER="$SKILL_DIR/hooks/lint-vault-frontmatter.py"
 if [[ -f "$LINTER" ]]; then
-  resp=$(echo '{"tool_name":"Read","tool_input":{}}' | python3 "$LINTER" 2>/dev/null)
-  if echo "$resp" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); assert d.get('hookSpecificOutput',{}).get('permissionDecision')=='allow'" 2>/dev/null; then
-    ok "lint-vault-frontmatter.py allows non-Write tools"
+  # Exit code AND output: a linter that dies with a syntax error exits 1 with nothing on stdout, which
+  # the empty-output test alone would read as "no decision".
+  resp=$(echo '{"tool_name":"Read","tool_input":{}}' | python3 "$LINTER" 2>/dev/null); rc=$?
+  if [[ $rc -eq 0 && -z "$resp" ]]; then
+    ok "lint-vault-frontmatter.py makes no decision on non-Write tools"
   else
-    fail "lint-vault-frontmatter.py wrong response for Read tool"
+    fail "lint-vault-frontmatter.py must exit 0 and make no decision on a Read tool: rc=$rc $resp"
+  fi
+  # And it still refuses what it is there to refuse: an unclosed frontmatter in a session note.
+  resp=$(printf '%s\n' '{"tool_name":"Write","tool_input":{"file_path":"/nonexistent/Sessions/smoke.md","content":"---\ntype: session\nno closing delimiter\n"}}' \
+    | python3 "$LINTER" 2>/dev/null); rc=$?
+  if [[ $rc -eq 0 ]] && echo "$resp" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); assert d['hookSpecificOutput']['permissionDecision']=='deny'" 2>/dev/null; then
+    ok "lint-vault-frontmatter.py still denies an unclosed frontmatter (exit 0, deny on stdout)"
+  else
+    fail "lint-vault-frontmatter.py did not deny an unclosed frontmatter: rc=$rc $resp"
   fi
 fi
 

@@ -11,18 +11,18 @@ at the write boundary instead of silently corrupting aggregator output.
 
 Hook contract (Claude Code PreToolUse):
   Input (stdin JSON): {"tool_name": "Write|Edit", "tool_input": {...}}
-  Output (stdout JSON):
-    - {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"}} → allow
+  Output (stdout JSON), only when it blocks:
     - {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "..."}} → block
+  Every other path prints nothing, so Claude Code's own permission prompt stays in charge.
 
 Behavior:
   - Only fires on files in Sessions/, Decisions/, or journal folders
-  - Silent allow for any other file
+  - Silent for any other file
   - Auto-detects type by path
   - Projects the post-edit content (current file + Edit substitution) before linting
   - Blocks with a clear stderr message naming the schema violation
   - Bypass: VAULT_LINT_BYPASS=1 in env
-  - Fail-open: any internal error returns allow (never blocks the user spuriously)
+  - Fail-open: any internal error says nothing (never blocks the user spuriously)
 
 Performance budget: <200ms.
 """
@@ -39,15 +39,6 @@ from pathlib import Path
 def log_debug(msg: str) -> None:
     if os.environ.get("VAULT_LINT_DEBUG") == "1":
         print(f"[lint-vault-frontmatter] {msg}", file=sys.stderr)
-
-
-def emit_allow() -> None:
-    print(json.dumps({
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "allow",
-        }
-    }))
 
 
 def emit_deny(reason: str) -> None:
@@ -123,40 +114,33 @@ def find_validator() -> Path | None:
 
 def main() -> int:
     if os.environ.get("VAULT_LINT_BYPASS") == "1":
-        emit_allow()
         return 0
 
     try:
         raw = sys.stdin.read()
         if not raw.strip():
-            emit_allow()
             return 0
         data = json.loads(raw)
     except (json.JSONDecodeError, OSError) as e:
         log_debug(f"hook input read failed: {e}")
-        emit_allow()
         return 0
 
     tool_name = data.get("tool_name", "")
     tool_input = data.get("tool_input", {}) or {}
 
     if tool_name not in ("Write", "Edit", "MultiEdit"):
-        emit_allow()
         return 0
 
     file_path = tool_input.get("file_path", "")
     if not file_path or not file_path.endswith(".md"):
-        emit_allow()
         return 0
 
     type_name = detect_type(file_path)
     if not type_name:
-        emit_allow()
         return 0
 
     projected = project_post_edit_content(tool_name, tool_input)
     if projected is None:
-        emit_allow()
         return 0
 
     # Extract frontmatter from projected content
@@ -164,7 +148,6 @@ def main() -> int:
         # No frontmatter; many session/decision files require frontmatter though.
         # Be permissive on Write of partial files; only warn via stderr.
         log_debug(f"no frontmatter in projected {file_path}")
-        emit_allow()
         return 0
 
     # \r?\n, for the same reason scripts/vault-schema-validator.py carries it
@@ -192,7 +175,6 @@ def main() -> int:
         import yaml  # type: ignore
     except ImportError:
         log_debug("PyYAML not installed; skipping lint")
-        emit_allow()
         return 0
 
     try:
@@ -215,7 +197,6 @@ def main() -> int:
     validator = find_validator()
     if not validator:
         log_debug("validator script not found; skipping schema check")
-        emit_allow()
         return 0
 
     # Write projected content to a temp file and call validator
@@ -244,7 +225,6 @@ def main() -> int:
         )
     except Exception as e:
         log_debug(f"validator subprocess failed: {e}")
-        emit_allow()
         return 0
     finally:
         try:
@@ -253,7 +233,6 @@ def main() -> int:
             pass
 
     if result.returncode == 0:
-        emit_allow()
         return 0
 
     # Strict mode = exit 2 means schema violation
@@ -280,4 +259,3 @@ if __name__ == "__main__":
         main()
     except Exception as e:  # never block on unexpected errors
         log_debug(f"unexpected error: {e!r}")
-        emit_allow()

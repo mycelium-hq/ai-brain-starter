@@ -129,11 +129,17 @@ followed by quoted arguments.** Rules that follow from this:
 
 1. **hooks.json stays POSIX** — the installer (`install-hooks-user-level.py`)
    rewrites every command at install time on Windows into
-   `<interpreter> "<abs>/scripts/hook_runner.py" --fallback <silent|allow> "<abs>/<hook>.py"`.
+   `<interpreter> "<abs>/scripts/hook_runner.py" --fallback silent "<abs>/<hook>.py"`.
    `hook_runner.py` reproduces the shell forms' failure-masking (missing script
    -> fallback JSON; exit 2 blocks propagate; other failures -> fallback JSON).
    New hooks need NO Windows-specific wiring as long as they are plain
-   `python3 <script> 2>/dev/null || echo '<json>'` template commands.
+   `if [ -f <script> ] && [ -r <script> ]; then python3 <script>; fi` template
+   commands. The installer always renders `--fallback silent` and the runner has
+   no allow form (any other mode behaves as silent), so no Windows entry answers
+   Claude Code's permission prompt. tests/integration/test_windows_platformize.sh
+   (T9) and scripts/test_hook_runner_single_interpreter.py pin the runner side;
+   scripts/test_hooks_json_never_answers_allow.py is POSIX-only and does not
+   cover Windows rendering.
 
    `<interpreter>` is resolved ONCE at install (MYC-3877). `py -3` is a launcher
    STUB that re-reads the PEP 514 registry on every spawn (+21 ms per hook), so

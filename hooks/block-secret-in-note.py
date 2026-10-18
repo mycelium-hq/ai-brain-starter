@@ -26,11 +26,21 @@ removing/scrubbing a secret is never blocked.
 Bypass: SECRET_VAULT_WRITE_BYPASS=1  (self-referential docs: this rule, the hook
 itself, CLAUDE.md quoting the patterns, a note documenting AWS's example key).
 
+Only a deny speaks. Every other path prints nothing, so Claude Code's own
+permission prompt stays in charge of the write.
+
 WIRING (PreToolUse, matcher "Write|Edit|MultiEdit"):
   {"type": "command",
-   "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/block-secret-in-note.py 2>/dev/null || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'"}
+   "command": "if [ -f ${CLAUDE_PLUGIN_ROOT}/hooks/block-secret-in-note.py ]; then python3 ${CLAUDE_PLUGIN_ROOT}/hooks/block-secret-in-note.py; fi"}
 """
 from __future__ import annotations
+
+# utf8-stdout-ok: the only console write in this module is `print(json.dumps(...))`,
+# and json.dumps defaults to ensure_ascii=True, so non-ASCII in the deny reason is
+# escaped to \uXXXX before it reaches stdout -- there is no cp1252 console crash
+# to guard against here. Replaces this file's SEV-4-json-encoded row in
+# scripts/utf8-stdout-baseline.txt, per that file's rule: rows are DELETED, never
+# re-pinned to stay quiet.
 
 import json
 import os
@@ -57,12 +67,6 @@ BLOCK_NAMES = {
 NOTE_EXTS = {".md", ".markdown", ".mdx", ".txt"}
 
 
-def _allow() -> int:
-    print(json.dumps({"hookSpecificOutput": {
-        "hookEventName": "PreToolUse", "permissionDecision": "allow"}}))
-    return 0
-
-
 def _deny(reason: str) -> int:
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
@@ -73,16 +77,16 @@ def _deny(reason: str) -> int:
 
 def main() -> int:
     if os.environ.get("SECRET_VAULT_WRITE_BYPASS") == "1":
-        return _allow()
+        return 0
     try:
         data = json.loads(sys.stdin.read() or "{}")
     except json.JSONDecodeError:
-        return _allow()
+        return 0
 
     ti = data.get("tool_input") or {}
     fp = ti.get("file_path") or ti.get("path") or ""
     if Path(fp).suffix.lower() not in NOTE_EXTS:
-        return _allow()
+        return 0
 
     # The text being INTRODUCED (not pre-existing content): Write.content, or
     # Edit/MultiEdit new strings. Scanning only the new text means scrubbing a
@@ -96,7 +100,7 @@ def main() -> int:
         chunks.append(str((e or {}).get("new_string") or ""))
     text = "\n".join(chunks)
     if not text:
-        return _allow()
+        return 0
 
     for p in PATTERNS:
         if p.name in BLOCK_NAMES and p.regex.search(text):
@@ -108,7 +112,7 @@ def main() -> int:
                 f"If this is a placeholder / example / doc, set "
                 f"SECRET_VAULT_WRITE_BYPASS=1 for this write."
             )
-    return _allow()
+    return 0
 
 
 if __name__ == "__main__":
@@ -117,7 +121,5 @@ if __name__ == "__main__":
     except Exception:
         # Fail OPEN: a write-time convenience guard must never block legitimate
         # note-writing on a bug. Ingest-redaction + session-scrub remain the
-        # real safety net for anything that slips past.
-        print(json.dumps({"hookSpecificOutput": {
-            "hookEventName": "PreToolUse", "permissionDecision": "allow"}}))
+        # real safety net for anything that slips past. Open means no decision.
         sys.exit(0)

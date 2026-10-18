@@ -9,6 +9,16 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-10-15: Claude Code asks before it edits your files again
+
+**Who this affects:** anyone who installed or updated this skill before today. Its hooks answered Claude Code's own permission question with "allow" on every Write, Edit and MultiEdit and every shell command that none of its guards blocked, and an "allow" from a hook skips Claude Code's prompt for that call. So Claude Code stopped asking before it edited a file or ran a command, in every project. After this update it asks again in its default mode.
+
+The hooks now block a call or warn and otherwise make no decision, which leaves the question to Claude Code. Its permission mode and your own allow, ask and deny rules in its settings decide what it asks. Whether to let it stop asking is your choice to make there, not this install's. The auto-update rewrites the hook lines on its own; if you pinned your install or turned auto-update off, run the installer again. The install screen no longer has the line that said hooks approve edits and commands.
+
+What this does not change: deny paths. Every guard that blocked before still blocks the same way, and warnings still warn. One guard now blocks that never did: the skill-file check (`hooks/validate-skill-frontmatter.py`). The same fallback that answered "allow" was appended after its block, so Claude Code never applied the block. Now an edit that leaves a `SKILL.md`'s frontmatter missing or not closed is refused, and so is one whose fields have the wrong shape for the skill schema when PyYAML and jsonschema are installed for the hook's Python. Only `name` is required, `type` is optional, and frontmatter that PyYAML cannot parse is not refused, because Claude Code loads it. The refusal says what is wrong and that `SKILL_VALIDATION_BYPASS=1` skips it. No guard that blocks with exit code 2 changed: those were already wired to pass the code through, and no other hook that lost its fallback uses it.
+
+---
+
 ## 2026-10-05: the maintenance installer leaves your launchd job alone under a different HOME
 
 **Who this affects:** anyone who runs this repo's tests on a Mac whose shell exports `VAULT_ROOT`, and anyone on a Mac who runs the daily-maintenance installer (`scripts/install-vault-daily-maintenance.sh`, directly or through the hook installer) under a `HOME` that is not the home directory their account's user record names: a `HOME` set by hand, say, or the same folder spelled with different capitals. The first group no longer reaches their real job. For the second, the job is now written but not loaded, and the installer says so.
@@ -72,6 +82,20 @@ The startup version check asked whichever `claude` your PATH found first, so it 
 The check now asks the Claude Code process that started the session, and the line it prints says which file it asked (or that it fell back to PATH, and why). Its saved answer is kept per binary, so one copy's reading is not shown to a session running another. The one exception is a labeled fallback: when the running copy will not say its version, the copy on PATH is measured instead and that reading is saved for both. Upgrading the copy a session runs, or the copy on PATH, shows up straight away instead of after six hours. The upgrade hint names the install's own `--prefix`, because a plain `npm i -g` installs under whichever node comes first on PATH. When the copies it can find (on PATH and on each LaunchAgent's PATH, skipping any relative entry; in the usual install folders; and the newest desktop copy) are not all the same version, it prints one line naming the copies and their versions (up to eight). When they agree, it prints nothing, and a copy whose version it cannot read never counts as a different version. The `claude --version` runs are time-limited (this needs perl or `timeout`, which nearly every machine has): ten seconds each for the running copy and the PATH copy, five seconds each (twenty in all) for the copies the comparison checks, and thirty seconds for the whole comparison. The GitHub requests a refresh makes have no time limit, as before.
 
 The Python helper `scripts/_claude_router.py` had the same blind spot: when `claude` was not on PATH it tried one hardcoded node-version folder, which exists on exactly one machine. It now looks at every `~/local/node-*/bin/claude` plus the usual install folders and uses the newest, reading each version from the package file beside it without running it.
+
+---
+
+## 2026-10-02: one session's close no longer counts for another session
+
+**Who this affects:** anyone running more than one Claude Code session on the same vault, with the session-close cascade installed (`session-close-runner.sh` in your vault's `scripts/` folder).
+
+When a session closes, the close check (`verify-session-close-cascade.py`) asks three things. One of them is whether the close runner ran in the last 30 minutes. It answered that by reading one shared report file that every run overwrote. So if session B ran the runner, session A could close without ever running it, and the check let A through. A's notes and decision log were then not refreshed, and nothing said so.
+
+Now the close instructions run the runner with the session's own id (`--session <id>`). The runner writes a report for that session alone, and the check reads only that session's report. B's run no longer counts for A, and when A is blocked, the message gives the exact command to run, with the runner's full path and the id. (It used to give a path relative to the vault, which from a worktree could run that worktree's older copy of the runner, so following the instruction never cleared the block.)
+
+Two cases still use the shared report. A session that has no id uses it, as before. So does a vault whose copy of the runner is older than this change: that copy cannot write a per-session report, so requiring one would block every close until the vault's scripts update. Your next update (or `scripts/sync-vault-scripts.sh`) brings the new runner into the vault, and from then on each session needs its own run. The runner also now honors `ABS_RUNNER_REPORT`, the variable the check already read to find the report, so the two always look in the same place.
+
+`hooks/test_close_gate_runner_per_session.py` runs the real runner and the real check as two sessions. It covers A being blocked when only B ran, A passing once it ran too, and the exact command the close instructions inject. It also turns red if the per-session report or the runner's marker for it is removed.
 
 ---
 
@@ -1099,6 +1123,21 @@ The safety-net hooks that double-check a session actually got saved before letti
 **New tests:** `tests/integration/test_detect_closing_signal_repo_aware_vault.sh` and `tests/integration/test_verify_cascade_repo_aware_vault.sh` — both include a negative control that fails against the old behavior and passes against the fix.
 
 **What you should do:** nothing. The SessionStart auto-update flow picks this up on your next session (or `git pull` manually in `~/.claude/skills/ai-brain-starter/` to grab it immediately).
+
+---
+
+## 2026-06-30: Google Health connector replaces the retiring Fitbit sync
+
+Google is shutting down the Fitbit Web API and Google Fit REST API from **September 2026** — the pipes that fed `health_import_fitbit`. The replacement is the **Google Health API**, Google's new unified cloud health surface (Fitbit + Pixel Watch + third-party devices, one OAuth2 REST API).
+
+What changed:
+
+- **New tool `health_import_google_health(start, end)`** pulls all your daily metrics — steps, distance, active + basal energy, active minutes, floors, heart rate, resting HR, HRV, SpO2, respiratory rate, VO2max, weight, body fat, height, blood glucose — plus sleep stages, and files them into the same store as Apple Health so your recovery/sleep scores and `/coach` work unchanged.
+- **`health_import_fitbit` still works but is deprecated** — it now quietly runs through the Google Health API so any scheduled sync you set up keeps flowing past the Sept 2026 cutoff. Migrate when convenient.
+- **Setup guide:** run `health_vendor_setup_guide('google_health')` for the full Google Cloud + OAuth walkthrough.
+- **One thing to watch:** while your Google OAuth app is in "Testing" status, Google expires the login every **7 days**, which would break daily auto-sync weekly. Publish the app to Production (one click on the consent screen) and it stops. The connector's health check tells you plainly when this has happened.
+
+Note: Google *Health Connect* (the on-phone Android store) is a different thing with no cloud API — it can't be synced from here. The Google Health API is the cloud path, and it's what this uses. Workouts, ECG, and nutrition are a planned follow-up.
 
 ---
 

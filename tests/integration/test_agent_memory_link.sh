@@ -66,6 +66,33 @@ else
   pass "refused to clobber a foreign symlink (fail-loud)"
 fi
 
+echo "== case 5: plain Meta preserves the existing memory home =="
+VAULT4="$WORK/Plain Meta"
+mkdir -p "$VAULT4/.obsidian" "$VAULT4/Meta/Agent Memory"
+echo "existing-fact" > "$VAULT4/Meta/Agent Memory/MEMORY.md"
+KEY4="$(python3 "$ROOT/scripts/_project_key.py" "$VAULT4")"
+python3 "$LINKER" --vault "$VAULT4" --quiet
+echo "new-fact" > "$CLAUDE_HOME/projects/$KEY4/memory/new.md"
+[ -f "$VAULT4/Meta/Agent Memory/new.md" ] && pass "new memory reaches plain Meta" || fail "new memory misses plain Meta"
+grep -q existing-fact "$VAULT4/Meta/Agent Memory/MEMORY.md" && pass "existing plain Meta memory preserved" || fail "existing memory lost"
+[ ! -e "$VAULT4/⚙️ Meta" ] && pass "no competing emoji Meta created" || fail "competing emoji Meta created"
+python3 "$LINKER" --vault "$VAULT4" --quiet
+[ -f "$VAULT4/Meta/Agent Memory/new.md" ] && pass "plain Meta rerun preserves content" || fail "plain Meta rerun damaged content"
+
+echo "== case 6: empty plain Meta is used without creating a competing folder =="
+VAULT5="$WORK/Empty Plain Meta"
+mkdir -p "$VAULT5/.obsidian" "$VAULT5/Meta"
+python3 "$LINKER" --vault "$VAULT5" --quiet
+[ -d "$VAULT5/Meta/Agent Memory" ] && [ ! -e "$VAULT5/⚙️ Meta" ] && pass "empty plain Meta selected" || fail "empty plain Meta ignored"
+
+echo "== case 7: existing memory wins when both Meta variants exist =="
+VAULT6="$WORK/Both Meta"
+mkdir -p "$VAULT6/.obsidian" "$VAULT6/Meta/Agent Memory" "$VAULT6/⚙️ Meta"
+python3 "$LINKER" --vault "$VAULT6" --quiet
+KEY6="$(python3 "$ROOT/scripts/_project_key.py" "$VAULT6")"
+echo "chosen-fact" > "$CLAUDE_HOME/projects/$KEY6/memory/chosen.md"
+[ -f "$VAULT6/Meta/Agent Memory/chosen.md" ] && [ ! -e "$VAULT6/⚙️ Meta/Agent Memory" ] && pass "existing memory home wins over empty emoji Meta" || fail "existing memory home ignored"
+
 echo
 echo "RESULT: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

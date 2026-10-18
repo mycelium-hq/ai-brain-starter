@@ -56,6 +56,11 @@ sandbox_home "$TMP/home"
 
 SHIMDIR="$TMP/gnu-stat-shim"
 install_gnu_stat_shim "$SHIMDIR"
+# The script counts git writers across the whole machine (ps -ax), so another
+# session committing during the wait would decide case 2. This test is about the
+# lock's age, so it sees a machine with no git writers.
+printf '#!/bin/sh\necho "  PID COMMAND"\n' > "$SHIMDIR/ps"
+chmod +x "$SHIMDIR/ps"
 
 # make_vault DIR -- a throwaway git repo with one committed file, so a
 # genuine commit can proceed once the lock clears.

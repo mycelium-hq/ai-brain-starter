@@ -25,11 +25,21 @@ real data OUT of a public skill is never blocked.
 Bypass: TEMPLATE_PURITY_BYPASS=1  (self-referential docs: this hook, the detector
 module, a doc quoting a populated example, CLAUDE.md).
 
+Only a deny speaks. Every other path prints nothing, so Claude Code's own
+permission prompt stays in charge of the write.
+
 WIRING (PreToolUse, matcher "Write|Edit|MultiEdit"):
   {"type": "command",
-   "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/block-populated-public-skill.py 2>/dev/null || echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}'"}
+   "command": "if [ -f ${CLAUDE_PLUGIN_ROOT}/hooks/block-populated-public-skill.py ]; then python3 ${CLAUDE_PLUGIN_ROOT}/hooks/block-populated-public-skill.py; fi"}
 """
 from __future__ import annotations
+
+# utf8-stdout-ok: the only console write in this module is `print(json.dumps(...))`,
+# and json.dumps defaults to ensure_ascii=True, so non-ASCII in the deny reason is
+# escaped to \uXXXX before it reaches stdout -- there is no cp1252 console crash
+# to guard against here. Replaces this file's SEV-4-json-encoded row in
+# scripts/utf8-stdout-baseline.txt, per that file's rule: rows are DELETED, never
+# re-pinned to stay quiet.
 
 import json
 import os
@@ -56,12 +66,6 @@ def _public_roots() -> tuple:
     return _DEFAULT_PUBLIC_ROOTS + tuple(r for r in extra.split(":") if r.strip())
 
 
-def _allow() -> int:
-    print(json.dumps({"hookSpecificOutput": {
-        "hookEventName": "PreToolUse", "permissionDecision": "allow"}}))
-    return 0
-
-
 def _deny(reason: str) -> int:
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
@@ -80,16 +84,16 @@ def _is_public_skill_path(fp: str) -> bool:
 
 def main() -> int:
     if os.environ.get("TEMPLATE_PURITY_BYPASS") == "1" or scan_text is None:
-        return _allow()
+        return 0
     try:
         data = json.loads(sys.stdin.read() or "{}")
     except json.JSONDecodeError:
-        return _allow()
+        return 0
 
     ti = data.get("tool_input") or {}
     fp = ti.get("file_path") or ti.get("path") or ""
     if not _is_public_skill_path(fp):
-        return _allow()
+        return 0
 
     # Only the text being INTRODUCED (Write.content / Edit new strings). Scanning
     # new text means scrubbing real data OUT of a public skill is never blocked.
@@ -102,7 +106,7 @@ def main() -> int:
         chunks.append(str((e or {}).get("new_string") or ""))
     text = "\n".join(chunks)
     if not text.strip():
-        return _allow()
+        return 0
 
     violations = scan_text(text)
     if violations:
@@ -117,7 +121,7 @@ def main() -> int:
             "TEMPLATE_PURITY_BYPASS=1 for this write."
             % (Path(fp).name, v.rule, v.excerpt, v.line, more)
         )
-    return _allow()
+    return 0
 
 
 if __name__ == "__main__":
@@ -125,7 +129,6 @@ if __name__ == "__main__":
         sys.exit(main())
     except Exception:
         # Fail OPEN: a write-time convenience guard must never block legitimate
-        # writing on a bug. The CI gate (--skills) is the real backstop.
-        print(json.dumps({"hookSpecificOutput": {
-            "hookEventName": "PreToolUse", "permissionDecision": "allow"}}))
+        # writing on a bug. The CI gate (--skills) is the real backstop. Open means
+        # no decision.
         sys.exit(0)

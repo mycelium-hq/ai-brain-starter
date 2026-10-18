@@ -13,7 +13,7 @@ carrying a DIFFERENT PR's content, and a verify log reported a TypeScript error
 from a file in a different checkout. A sibling's green reads exactly like yours.
 
 Cases 1-6   the clobber and its variants (the guard must DENY).
-Cases 7-13  self-rewrites, reads, off-scratchpad writes, bypass (must ALLOW).
+Cases 7-13  self-rewrites, reads, off-scratchpad writes, bypass (must stay SILENT).
 Case 14     the shell-variable form, which slipped past the FIRST production run
             of this guard and is therefore the regression that matters most.
 
@@ -104,36 +104,36 @@ def main() -> int:
     msg = s / "commit-msg.txt"
 
     # --- the guard must FIRE -------------------------------------------------
-    check("1 agent A claims verify-run.log", decide(s, "AAA", command=f"npm run verify > {log}"), "allow")
+    check("1 agent A claims verify-run.log", decide(s, "AAA", command=f"npm run verify > {log}"), "silent")
     check("2 agent B truncating clobber", decide(s, "BBB", command=f"npm run verify > {log}"), "deny")
     check("3 agent B appending clobber", decide(s, "BBB", command=f"echo x >> {log}"), "deny")
     check("4 agent B via tee", decide(s, "BBB", command=f"npm run verify | tee {log}"), "deny")
     check("5 Write tool claim then clobber",
-          decide(s, "CCC", file_path=str(msg), tool="Write"), "allow")
+          decide(s, "CCC", file_path=str(msg), tool="Write"), "silent")
     check("6 Write tool foreign clobber",
           decide(s, "DDD", file_path=str(msg), tool="Write"), "deny")
 
     # --- the guard must STAY SILENT -----------------------------------------
-    check("7 agent A self-rewrite (retry loop)", decide(s, "AAA", command=f"npm run verify > {log}"), "allow")
-    check("8 agent A self-append", decide(s, "AAA", command=f"echo more >> {log}"), "allow")
-    check("9 foreign READ is never blocked", decide(s, "BBB", command=f"cat {log}"), "allow")
-    check("10 write outside the scratchpad", decide(s, "BBB", command=f"echo x > {tmp}/other.log"), "allow")
-    check("11 /dev/null is never claimed", decide(s, "BBB", command="echo x > /dev/null"), "allow")
-    check("12 unrelated command", decide(s, "BBB", command="git status --porcelain"), "allow")
+    check("7 agent A self-rewrite (retry loop)", decide(s, "AAA", command=f"npm run verify > {log}"), "silent")
+    check("8 agent A self-append", decide(s, "AAA", command=f"echo more >> {log}"), "silent")
+    check("9 foreign READ is never blocked", decide(s, "BBB", command=f"cat {log}"), "silent")
+    check("10 write outside the scratchpad", decide(s, "BBB", command=f"echo x > {tmp}/other.log"), "silent")
+    check("11 /dev/null is never claimed", decide(s, "BBB", command="echo x > /dev/null"), "silent")
+    check("12 unrelated command", decide(s, "BBB", command="git status --porcelain"), "silent")
     check("13 inline bypass is honored",
-          decide(s, "BBB", command=f"SCRATCHPAD_CLOBBER_BYPASS=1 npm run verify > {log}"), "allow")
+          decide(s, "BBB", command=f"SCRATCHPAD_CLOBBER_BYPASS=1 npm run verify > {log}"), "silent")
 
     # --- 14. REGRESSION: the form that slipped past the first production run --
     vlog = "vars-run.log"
     pre = f"SP={s}"
-    check("14a shell-var claim", decide(s, "FFF", command=f"{pre}; echo a > $SP/{vlog}"), "allow")
+    check("14a shell-var claim", decide(s, "FFF", command=f"{pre}; echo a > $SP/{vlog}"), "silent")
     check("14b shell-var clobber", decide(s, "GGG", command=f"{pre}; echo b > $SP/{vlog}"), "deny")
     check("14c braced shell-var clobber", decide(s, "GGG", command=f'{pre}; echo b > "${{SP}}/{vlog}"'), "deny")
-    check("14d shell-var self-rewrite", decide(s, "FFF", command=f"{pre}; echo c > $SP/{vlog}"), "allow")
+    check("14d shell-var self-rewrite", decide(s, "FFF", command=f"{pre}; echo c > $SP/{vlog}"), "silent")
 
     # --- the parent session is an owner exactly like any subagent ------------
     pf = s / "parent-notes.md"
-    check("15 main session claims", decide(s, None, command=f"echo x > {pf}"), "allow")
+    check("15 main session claims", decide(s, None, command=f"echo x > {pf}"), "silent")
     check("16 subagent clobbers main", decide(s, "EEE", command=f"echo y > {pf}"), "deny")
 
     # ==== BARE /tmp TIER (MYC-4822) =========================================
@@ -151,7 +151,7 @@ def main() -> int:
     recap = "/tmp/close-recap-mycelium.md"
 
     v, msg = tmp_decide(cfg, "sess-AAA", command=f"echo x > {recap}")
-    check("17 session A claims a bare /tmp name", v, "allow")
+    check("17 session A claims a bare /tmp name", v, "silent")
 
     v, msg = tmp_decide(cfg, "sess-BBB", command=f"echo y > {recap}")
     check("18 session B collides -> WARN (never deny)", v, "warn")
@@ -159,13 +159,13 @@ def main() -> int:
     check("18b steer is the session scratchpad", "scratchpad" in msg.lower(), True)
 
     check("19 session A rewrites its own /tmp file -> silent",
-          tmp_decide(cfg, "sess-AAA", command=f"echo z > {recap}")[0], "allow")
+          tmp_decide(cfg, "sess-AAA", command=f"echo z > {recap}")[0], "silent")
 
     # A subagent shares its parent's session_id, so it is the SAME owner. The
     # /tmp tier is cross-SESSION; keying it on agent_id would warn on every
     # subagent write of its own session's file.
     check("20 subagent of the owning session -> silent",
-          tmp_decide(cfg, "sess-AAA", agent="sub-1", command=f"echo z > {recap}")[0], "allow")
+          tmp_decide(cfg, "sess-AAA", agent="sub-1", command=f"echo z > {recap}")[0], "silent")
 
     # --- governed by PROPERTY: a name carrying no disambiguator -------------
     # Never a denylist of known-bad names; the next generic name a script picks
@@ -178,21 +178,21 @@ def main() -> int:
         ("21e epoch", "/tmp/verify-1758112233.log"),
     ]:
         check(f"{label} claim is silent",
-              tmp_decide(cfg, "sess-CCC", command=f"echo a > {path}")[0], "allow")
+              tmp_decide(cfg, "sess-CCC", command=f"echo a > {path}")[0], "silent")
         check(f"{label} second session still silent",
-              tmp_decide(cfg, "sess-DDD", command=f"echo b > {path}")[0], "allow")
+              tmp_decide(cfg, "sess-DDD", command=f"echo b > {path}")[0], "silent")
 
     # --- the Write tool is attributed the same way --------------------------
     body = "/tmp/pr-body.md"
-    check("22 Write tool claims", tmp_decide(cfg, "sess-EEE", file_path=body, tool="Write")[0], "allow")
+    check("22 Write tool claims", tmp_decide(cfg, "sess-EEE", file_path=body, tool="Write")[0], "silent")
     check("23 Write tool cross-session collides",
           tmp_decide(cfg, "sess-FFF", file_path=body, tool="Write")[0], "warn")
 
     # --- reads and non-/tmp writes are never governed -----------------------
     check("24 a bare /tmp READ is never governed",
-          tmp_decide(cfg, "sess-FFF", command=f"cat {recap}")[0], "allow")
+          tmp_decide(cfg, "sess-FFF", command=f"cat {recap}")[0], "silent")
     check("25 a write outside /tmp is never governed",
-          tmp_decide(cfg, "sess-FFF", command=f"echo x > {tmp}/elsewhere.md")[0], "allow")
+          tmp_decide(cfg, "sess-FFF", command=f"echo x > {tmp}/elsewhere.md")[0], "silent")
 
     # --- the ledger lives under ~/.claude, NEVER in the surface it governs ---
     check("26 ledger written under CLAUDE_CONFIG_DIR", (cfg / "tmp-owners.json").is_file(), True)
@@ -207,7 +207,7 @@ def main() -> int:
     sp2 = Path(tempfile.mkdtemp(prefix="sp-clobber-tmptier-", dir="/tmp"))
     dual = sp2 / "verify-run.log"
     check("28 scratchpad claim inside the /tmp tree",
-          tmp_decide(cfg, "sess-GGG", agent="ag-1", command=f"echo a > {dual}", scratch=sp2)[0], "allow")
+          tmp_decide(cfg, "sess-GGG", agent="ag-1", command=f"echo a > {dual}", scratch=sp2)[0], "silent")
     check("29 scratchpad stays DENY, not downgraded to warn",
           tmp_decide(cfg, "sess-GGG", agent="ag-2", command=f"echo b > {dual}", scratch=sp2)[0], "deny")
     shutil.rmtree(sp2, ignore_errors=True)
