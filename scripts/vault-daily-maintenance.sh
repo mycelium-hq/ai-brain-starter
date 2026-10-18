@@ -271,9 +271,17 @@ if [ -d "$VAULT/.git" ] || git -C "$VAULT" rev-parse --git-dir >/dev/null 2>&1; 
       [ -e "$p" ] && PATHS+=("$p")
     done
     if [ ${#PATHS[@]} -gt 0 ]; then
+      # Commit ONLY the close artifacts staged just above. A bare `git commit` takes the
+      # WHOLE index, so a file a sibling session had staged rode along. Name the staged
+      # FILES, not PATHS: a PATHS dir with nothing tracked yet (an empty Decisions/) makes
+      # `git commit -- PATHS` abort with "pathspec did not match any file(s) known to git".
+      # --no-renames lists a rename's old path too, so its deletion is not left staged.
       ( cd "$VAULT" && git add -- "${PATHS[@]}" 2>>"$LOG" \
-          && { git diff --cached --quiet \
-               || git commit -m "maint: reconcile deferred session-close $(date +%Y-%m-%d)" >/dev/null 2>>"$LOG"; } )
+          && { STAGED=()
+               while IFS= read -r -d '' f; do STAGED+=("$f"); done \
+                 < <(git diff --cached --name-only --no-renames --relative -z -- "${PATHS[@]}")
+               [ ${#STAGED[@]} -eq 0 ] \
+                 || git commit -m "maint: reconcile deferred session-close $(date +%Y-%m-%d)" -- "${STAGED[@]}" >/dev/null 2>>"$LOG"; } )
       log "[reconcile-commit] staged ${#PATHS[@]} close-artifact path(s)"
     fi
   else

@@ -1718,6 +1718,15 @@ PY_DIRECT=(
   # the repo it snapshots, so the hook never leaves vault artifacts in a product repo.
   # Pairs USERPROFILE with HOME for hermeticity. Plain script, stdlib only.
   hooks/test_snapshot_pending_outside_repo.py
+  # Three scripts staged their own paths and then ran a bare `git commit -m`, which
+  # commits the WHOLE index, so a file another session had staged in the same checkout
+  # rode along into the automated commit (7 unrelated files in one, 2026-10-18). Drives
+  # hookify-auto-commit, reconcile-worktree-shared and the reconcile-commit block lifted
+  # out of vault-daily-maintenance.sh against scratch repos that hold an unrelated staged
+  # file; a control proves a bare commit does sweep it. 4 of its 5 tests fail against the
+  # pre-fix revision, and the maintenance legs also pin the empty-directory, rename and
+  # subdirectory-vault cases that the naive `git commit -- "${PATHS[@]}"` gets wrong.
+  hooks/test_commit_only_own_paths.py
 )
 dormant_py=()
 while IFS= read -r -d '' f; do

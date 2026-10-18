@@ -17,6 +17,10 @@
 # in PRs that merged 22 minutes apart (#420, then #416), and the second one's
 # hand-written "77 remain" was already wrong by the time it landed. A ledger
 # that has to be hand-decremented is a ledger that lies.
+#   - hooks/reconcile-worktree-shared.py   `# utf8-stdout-ok` + unpinned. Edited so its
+#     fallback commit names the files it staged, which staled its row. Every console
+#     write in it is print(json.dumps(...)) with the default ensure_ascii=True, so its
+#     output is provably ASCII-only (the case the rule below reserves for the marker).
 #   - hooks/auto-capture-public-ships.py   guarded + unpinned in PR #420.
 #   - hooks/vault-command-nudges.py        guarded + unpinned in PR #416. It was
 #     edited there (the rm -rf rule now quotes the RESOLVED target back to the
@@ -103,7 +107,7 @@
 # ---- SEV-3-doc-only  (1 file(s)) ----
 ed1d68dba02ab76c99907e8efc27ac0aac8c98a14dad261da73fa5d8e1610369 SEV-3-doc-only hooks/_lib/template_purity.py
 
-# ---- SEV-4-json-encoded  (18 file(s)) ----
+# ---- SEV-4-json-encoded  (17 file(s)) ----
 b647243fdf0a358d46a6a79b0bf7f817ee121f68d5d685fabe4b0ee2a93af94d SEV-4-json-encoded hooks/check-fabricated-hook-attribution.py
 25d963d25e1e2e6844a35133bbad1d0aad8d03de424e29d4a406a67cb1d4c1cb SEV-4-json-encoded hooks/check-rule-conflicts-on-write.py
 85006d7e25f42ba787b2ce616bd1c71590c3990f89f3153a6f958156c93029ed SEV-4-json-encoded hooks/coach-auto-prescribe-on-journal.py
@@ -112,7 +116,6 @@ a04ec6c84be6756813f4cde517ff379338b57ec9bf4c9c4172172951e62f91c3 SEV-4-json-enco
 33804a89b8c6ac80575f93ea2a5e0f9f6e47aeb3bb6e8dab0413729fd3fc8c94 SEV-4-json-encoded hooks/inject-love-language-context.py
 ff65d244e721a3952150a2faf259728a64309c5855b71be54a0096972c3080a7 SEV-4-json-encoded hooks/list-wip-stashes-on-session-start.py
 adad427e89295283853dd1dfb9963e698eb45fe5c4ca3c302adce4a3d47b5b35 SEV-4-json-encoded hooks/nudge-checkpoint-after-pytest-pass.py
-056a2f7966b8c4f75a62e80be906bd899956f9871a92eb98738e262988bc8dc5 SEV-4-json-encoded hooks/reconcile-worktree-shared.py
 d293427274a02ef33d15ec50b17860aa305405adc9f372fde46a46454267becd SEV-4-json-encoded hooks/relocate-watch-surface.py
 8ed780b62186a0142813b71fb610ce0a1d2650ff900766fb08c4236ea1132f41 SEV-4-json-encoded hooks/route-suggest.py
 58eaf3668330264cdb9095dda2c7a425e3f69009c5ecbb1d764a6f40340f7ca8 SEV-4-json-encoded hooks/surface-connector-liveness.py
