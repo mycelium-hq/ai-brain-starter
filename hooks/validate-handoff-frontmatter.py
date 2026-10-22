@@ -146,12 +146,6 @@ def has_valid_consumes_when(content: str) -> bool:
     return bool(value)
 
 
-def _allow() -> int:
-    print(json.dumps({"hookSpecificOutput": {
-        "hookEventName": "PreToolUse", "permissionDecision": "allow"}}))
-    return 0
-
-
 def _deny(reason: str) -> int:
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
@@ -171,23 +165,23 @@ def simulate_edit(current: str, old_string: str, new_string: str,
 
 def main() -> int:
     if os.environ.get("HANDOFF_FRONTMATTER_BYPASS") == "1":
-        return _allow()
+        return 0
 
     try:
         payload = json.load(sys.stdin)
     except Exception:
-        return _allow()
+        return 0
 
     tool_name = payload.get("tool_name") or ""
     # MultiEdit is included deliberately: it can produce exactly the same final
     # content as Edit, so a guard that ignored it was bypassable by switching tool.
     if tool_name not in {"Write", "Edit", "MultiEdit"}:
-        return _allow()
+        return 0
 
     tool_input = payload.get("tool_input") or {}
     file_path_str = tool_input.get("file_path") or ""
     if not file_path_str:
-        return _allow()
+        return 0
 
     file_path = Path(file_path_str)
     # CHEAP GATES FIRST. This hook runs on every Write/Edit/MultiEdit, so the
@@ -196,7 +190,7 @@ def main() -> int:
     # majority of writes. A handoff is markdown by definition, so a non-markdown
     # path can exit before any I/O at all.
     if file_path.suffix.lower() not in MARKDOWN_EXTS:
-        return _allow()
+        return 0
 
     if tool_name == "Write":
         proposed = tool_input.get("content") or ""
@@ -210,11 +204,11 @@ def main() -> int:
                 "replace_all": bool(tool_input.get("replace_all")),
             }]
         if not edits or not file_path.exists():
-            return _allow()
+            return 0
         try:
             current = file_path.read_text(encoding="utf-8")
         except Exception:
-            return _allow()
+            return 0
         # Apply sequentially, exactly as the tool would. Any edit that does not
         # apply means we cannot model the result -> allow (fail open).
         for e in edits:
@@ -222,24 +216,25 @@ def main() -> int:
                                    e.get("new_string") or "",
                                    bool(e.get("replace_all")))
             if result is None:
-                return _allow()
+                return 0
             current = result
         proposed = current
 
     if not is_handoff(file_path, proposed):
-        return _allow()
+        return 0
 
     if has_valid_consumes_when(proposed):
-        return _allow()
+        return 0
 
     # Only a file that WOULD be denied pays for the vault walk.
     if not in_vault(file_path):
-        return _allow()
+        return 0
 
-    # DENY on stdout as JSON, exit 0. NOT stderr+exit 2: the canonical wrapper in
-    # hooks.json is `<hook> 2>/dev/null || echo '{...permissionDecision:allow}'`,
-    # so a non-zero exit is swallowed and REWRITTEN into an allow. A guard that
-    # blocked via exit 2 under that wrapper would be wired and still never block.
+    # DENY on stdout as JSON, exit 0, not stderr + exit 2. That is this hook's
+    # contract (tests/integration/test_handoff_frontmatter_guard.sh pins it). It
+    # was chosen when hooks.json's canonical wrapper was `<hook> 2>/dev/null ||
+    # echo <allow>`, which rewrote a non-zero exit into an allow; that wrapper is
+    # gone and the JSON form stays.
     return _deny(
         "HANDOFF FRONTMATTER MISSING `consumes_when:`\n"
         f"  file: {file_path}\n"
@@ -278,7 +273,6 @@ if __name__ == "__main__":
         sys.exit(main())
     except Exception:
         # FAIL OPEN: a write-time guard must never block a legitimate write on a
-        # bug of its own. Matches hooks/block-secret-in-note.py.
-        print(json.dumps({"hookSpecificOutput": {
-            "hookEventName": "PreToolUse", "permissionDecision": "allow"}}))
+        # bug of its own. Matches hooks/block-secret-in-note.py. Open means no
+        # decision.
         sys.exit(0)

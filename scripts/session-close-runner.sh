@@ -10,16 +10,34 @@
 # simply skips it.
 #
 # Invoked from the close cascade (hooks/detect-closing-signal.py, Phase 0a) as:
-#   bash "<vault>/<Meta>/scripts/session-close-runner.sh"
-# where <Meta> is the vault's meta folder ("⚙️ Meta" or plain "Meta").
+#   bash "<vault>/<Meta>/scripts/session-close-runner.sh" --session <session-id>
+# where <Meta> is the vault's meta folder ("⚙️ Meta" or plain "Meta"). The
+# cascade omits --session when the hook was given no usable session id.
 #
 # Report contract (consumed by hooks/verify-session-close-cascade.py):
-#   /tmp/abs-session-close-runner.report exists, is fresh (<30 min), and its last
-#   line is "RUNNER COMPLETE @ <timestamp>".
+#   The report exists, is fresh (<30 min), and its last line is
+#   "RUNNER COMPLETE @ <timestamp>". Where it lives:
+#     --session <id>  /tmp/abs-session-close-runner.<id>.report  (this session's)
+#     no --session    /tmp/abs-session-close-runner.report       (shared)
+#   Before 2026-10-02 every run wrote the shared report, so one session's run
+#   cleared every other session's close gate for 30 minutes: on a shared
+#   checkout session A could close without ever running this, because session B
+#   had. The gate now checks a session's OWN report, and reads the shared one
+#   only for a session with no id. An id that is not a plain token
+#   ([A-Za-z0-9_-]) is never put into a path; the run is treated as unscoped.
+#
+# The next line is the contract marker the gate looks for, verbatim, to know
+# this installed copy writes per-session reports. A vault copy that predates
+# it (sync-vault-scripts.sh has not re-synced it yet) keeps the shared report,
+# and the gate falls back to that instead of blocking every close forever.
+# abs-runner-contract: per-session-report
 #
 # Env:
-#   VAULT_ROOT  Optional. Defaults to two levels up from this script (the vault root
-#               when the script lives at <vault>/<Meta>/scripts/).
+#   VAULT_ROOT         Optional. Defaults to two levels up from this script (the
+#                      vault root when the script lives at <vault>/<Meta>/scripts/).
+#   ABS_RUNNER_REPORT  Optional. The shared report path; a per-session report is
+#                      derived from it. The gate honors the same variable, so
+#                      both sides move together (hermetic tests set it).
 
 set -uo pipefail
 
@@ -42,7 +60,25 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VAULT="${VAULT_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 export VAULT_ROOT="$VAULT"
-REPORT="/tmp/abs-session-close-runner.report"
+REPORT="${ABS_RUNNER_REPORT:-/tmp/abs-session-close-runner.report}"
+SESSION=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --session)   SESSION="${2-}"; shift; [ "$#" -gt 0 ] && shift ;;
+    --session=*) SESSION="${1#--session=}"; shift ;;
+    *)           shift ;;
+  esac
+done
+# The id becomes part of a path, so only a plain token is accepted. The set is
+# spelled out rather than written as ranges: a bracket range follows the
+# locale's collation in bash 3.2, and the gate's check is ASCII-only.
+SESSION_REJECTED=""
+_abs_id_chars='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-'
+case "$SESSION" in
+  "") ;;
+  *[!"$_abs_id_chars"]*) SESSION_REJECTED="$SESSION"; SESSION="" ;;
+  *) REPORT="${REPORT%.report}.${SESSION}.report" ;;
+esac
 TS="$(date '+%Y-%m-%dT%H:%M:%S%z')"
 # Pick an interpreter that RUNS, not merely one that resolves. `command -v`
 # answers "is this name on PATH", which is a weaker claim than "this executes
@@ -74,6 +110,16 @@ log() { printf '%s\n' "$1" | tee -a "$REPORT"; }
 : > "$REPORT"
 log "session-close-runner @ $TS"
 log "vault: $VAULT"
+if [ -n "$SESSION" ]; then
+  log "session: $SESSION"
+else
+  log "session: (none — shared report; clears only a session the gate has no id for)"
+fi
+if [ -n "$SESSION_REJECTED" ]; then
+  # The value itself is not echoed: it could carry a newline and a forged
+  # "RUNNER COMPLETE @" line into the report the gate parses.
+  log "  [warn]   ignored --session: not a plain [A-Za-z0-9_-] id (run treated as unscoped)"
+fi
 log "--- deterministic aggregation ---"
 
 run_step() {  # human-name  script-filename

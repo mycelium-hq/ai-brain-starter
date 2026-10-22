@@ -10,7 +10,7 @@
 #
 # The fix: install-hooks-user-level.py rewrites template commands on Windows
 # (ABS_FORCE_WINDOWS=1 makes POSIX CI take that path hermetically) into
-#   <launcher> "<abs>/scripts/hook_runner.py" --fallback <kind> "<abs>/<hook>.py"
+#   <launcher> "<abs>/scripts/hook_runner.py" --fallback silent "<abs>/<hook>.py"
 # and hook_runner.py reproduces the shell forms' masking semantics in Python.
 #
 #   T1  Windows install -> every owned command is runner-form (no shell-isms)
@@ -22,7 +22,7 @@
 #   T6  hook_runner: missing script -> silent JSON, exit 0
 #   T7  hook_runner: exit-2 block propagates (stderr + exit 2)
 #   T8  hook_runner: crash (exit 1) -> fallback JSON, exit 0
-#   T9  hook_runner: --fallback allow emits the PreToolUse allow form
+#   T9  hook_runner: a stale --fallback allow entry falls back to silent (no allow form)
 #   T10 sync-skills.py: creates, backs up before overwrite, skips .git forks
 #
 # Run: bash tests/integration/test_windows_platformize.sh  (0 = pass, 1 = fail)
@@ -185,9 +185,11 @@ else
   no "T8: rc=$RC out=$OUT"
 fi
 
+# An entry an older release wrote says `--fallback allow`. The runner has no allow form any more, so it
+# must fall back to the silent JSON: a restored allow mode would answer Claude Code's permission prompt.
 OUT=$(python3 "$RUNNER" --fallback allow "$TMPROOT/crasher.py" </dev/null 2>/dev/null); RC=$?
-if [ "$RC" = "0" ] && printf '%s' "$OUT" | grep -q '"permissionDecision":"allow"'; then
-  ok "T9: --fallback allow emits the PreToolUse allow form"
+if [ "$RC" = "0" ] && printf '%s' "$OUT" | grep -q suppressOutput && ! printf '%s' "$OUT" | grep -q permissionDecision; then
+  ok "T9: a stale --fallback allow entry falls back to silent: no permissionDecision, exit 0"
 else
   no "T9: rc=$RC out=$OUT"
 fi

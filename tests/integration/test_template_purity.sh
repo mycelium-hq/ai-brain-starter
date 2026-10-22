@@ -105,14 +105,14 @@ else
   _fail "write-time hook → expected deny (got: $hook_out)"
 fi
 
-# ── Test 5: write-time hook ALLOWS an empty template ─────────────────────────
+# ── Test 5: write-time hook stays SILENT on an empty template ────────────────
 allow_in="$(printf '{"tool_input":{"file_path":"%s/ai-brain-starter/skills/vertical-finance/EXAMPLE.md","content":%s}}' \
   "$TMP" "$(python3 -c 'import json,sys; print(json.dumps(open(sys.argv[1]).read()))' "$EMPTY")")"
 hook_out2="$(printf '%s' "$allow_in" | python3 "$HOOK" 2>/dev/null || true)"
-if echo "$hook_out2" | grep -q '"permissionDecision": *"allow"'; then
-  _ok "write-time hook → ALLOW on a pure template"
+if [ -z "$hook_out2" ]; then
+  _ok "write-time hook → silent on a pure template (no decision, no allow)"
 else
-  _fail "write-time hook → expected allow (got: $hook_out2)"
+  _fail "write-time hook → expected silence (got: $hook_out2)"
 fi
 
 # ── Test 6: the real public skills/ tree passes the guard (no self-DoS) ───────

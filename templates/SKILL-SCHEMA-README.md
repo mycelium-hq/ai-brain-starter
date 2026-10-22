@@ -27,8 +27,9 @@ A harness that wants per-skill capability scoping should set `CLAUDE_ACTIVE_SKIL
 
 ## Required fields
 
-- `type`: const `"skill"`. Identifies the primitive.
 - `name`: slug-style name, matching the skill folder.
+
+`type` is optional and may be any string. The skills that follow the structured contract below set it to `skill`; the validator does not require it.
 
 ## Recommended fields
 
@@ -63,7 +64,8 @@ Pass 1 (write-time schema validation):
 - Fires only on `skills/**/SKILL.md`.
 - Projects the post-edit file content (current file plus the Edit substitution) before validation.
 - Parses frontmatter, runs `jsonschema.Draft7Validator` against `templates/schemas/skill.json`.
-- Blocks malformed writes with a deny decision plus a stderr message naming the schema violation. Exit code is non-zero.
+- Blocks, with a deny decision plus a stderr message naming the problem, a write that leaves the frontmatter missing or not closed, and (when PyYAML and jsonschema are installed for the hook's Python) one whose fields have the wrong shape for the schema. The deny is the JSON on stdout and the exit code is 0.
+- Frontmatter that PyYAML cannot parse (an unquoted `: ` in a description, for example) is not refused: Claude Code reads it. Windows (CRLF) line endings are accepted.
 - Bypass with `SKILL_VALIDATION_BYPASS=1`.
 
 Pass 2 (invocation-time capability sandboxing):
@@ -73,7 +75,7 @@ Pass 2 (invocation-time capability sandboxing):
 - A skill that does not declare `tool_access`, or declares it as a non-list, gets a no-op (sandbox not enforced).
 - Bypass with `SKILL_SANDBOX_BYPASS=1`.
 
-Both passes are fail-open: any internal error (PyYAML missing, schema file missing, unexpected exception) returns allow rather than spuriously blocking the user. Performance budget is <200ms total.
+Both passes are fail-open: any internal error (PyYAML missing, schema file missing, unexpected exception) makes no decision rather than spuriously blocking the user. Making no decision leaves Claude Code's own permission prompt in charge; the hook never answers it. Performance budget is <200ms total.
 
 To wire the hook into your harness, add an entry to `settings.json` under `hooks.PreToolUse` matching tool names `Write|Edit|MultiEdit` AND a second entry matching the broader set of tool names you want sandboxed (or use `*`). Both entries can point at the same script. Pass 1 is a no-op when the file path does not match `skills/**/SKILL.md`; pass 2 is a no-op when no active skill is set.
 
@@ -81,7 +83,7 @@ To wire the hook into your harness, add an entry to `settings.json` under `hooks
 
 Existing skills shipped with descriptive frontmatter only (`name`, `description`, `trigger`, `argument-hint`). To bring a skill up to the structured contract:
 
-1. Add `type: skill` as the first frontmatter line. The validator requires it.
+1. Optionally add `type: skill` as the first frontmatter line, to mark the skill as following the structured contract. The validator does not require it.
 2. Add `tool_access`. Be conservative: list only the tools the skill actually calls. If the skill is pure analysis, use `[]`.
 3. Add `policy_constraints`. Transcribe the rules from the SKILL.md body that read like "never," "always," "do not." Pair each with the failure path the skill takes when the rule would be violated.
 4. Add `required_inputs`. Walk the skill's argument-hint and any input the body asks the user to provide.
@@ -98,7 +100,7 @@ Schema validation pass:
 echo '{"tool_name":"Write","tool_input":{"file_path":"/tmp/test-skill/SKILL.md","content":"---\ntype: skill\nname: test\n---\n"}}' | python3 hooks/validate-skill-frontmatter.py
 ```
 
-A valid skill returns `permissionDecision: allow`. A malformed one returns `permissionDecision: deny` with the schema violation in `permissionDecisionReason`.
+A valid skill passes: the hook makes no decision. A malformed one returns `permissionDecision: deny` with the schema violation in `permissionDecisionReason`.
 
 Capability sandbox pass:
 
@@ -115,4 +117,4 @@ echo '{"tool_name":"Write","tool_input":{"file_path":"/tmp/x.md","content":"x"}}
     python3 hooks/validate-skill-frontmatter.py
 ```
 
-The first call returns `permissionDecision: deny` with the SKILL SANDBOX message. The second returns `allow`.
+The first call returns `permissionDecision: deny` with the SKILL SANDBOX message. The second makes no decision.

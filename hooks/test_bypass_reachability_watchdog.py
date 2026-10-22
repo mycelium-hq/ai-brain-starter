@@ -322,7 +322,8 @@ def test_chained_state_command_fleet():
     r = _run(hook, {"tool_name": "Bash", "tool_input": {"command": risky_cmd}})
     check("chained-state: fires (prints an advisory) with no bypass "
           "(negative control)",
-          r.returncode == 0 and "permissionDecisionReason" in r.stdout)
+          r.returncode == 0 and "additionalContext" in r.stdout
+          and "permissionDecision" not in r.stdout)
 
     r = _run(hook, {"tool_name": "Bash",
                     "tool_input": {"command": "CHAINED_STATE_CMD_BYPASS=1 " + risky_cmd}})

@@ -36,6 +36,10 @@ Ported to the substrate with four controls the private original never had:
                                   only a prefix of the source, so it can call an
                                   actively-edited worktree idle — an unmeasurable
                                   worktree must read as in-use, and say so)
+ [18] process-probe cap        -> 120 s for this background job only (a 15 s
+                                  cap overran under load, failed closed, and
+                                  reclaimed nothing while the disk filled);
+                                  hooks importing the module keep 15 s
  [14] manifest honors the log-dir override (a test must never write into the
       operator's real audit trail, where a fixture is indistinguishable from a
       real reclaim)
@@ -228,25 +232,45 @@ def main() -> int:  # noqa: C901
         ok("[8] edited worktree preserved", (wt / "node_modules").is_dir())
 
     # ---- [9] the absolute ladder tightens as free space falls --------------
-    got = [mod.ladder_idle_days(f) for f in (500, 149, 79, 39, 19)]
-    check("[9] ladder: none/7/3/1/0 as free space falls",
-          got, [None, 7.0, 3.0, 1.0, 0.0])
+    # Rungs raised 2026-10-16 (was 20/40/80/150 GB -> 0/1/3/7 d): the old
+    # ladder held a 1 TB disk at ~5% free for days while worktrees arrived at
+    # 5-15 GB each faster than any reached 3 days idle.
+    got = [mod.ladder_idle_days(f) for f in (500, 249, 149, 79, 39)]
+    check("[9] ladder: none/3/1/0.5/0 as free space falls",
+          got, [None, 3.0, 1.0, 0.5, 0.0])
+    check("[9] 41-65 GB free (the measured stall) is the half-day rung, not 3d",
+          [mod.ladder_idle_days(f) for f in (41, 65)], [0.5, 0.5])
 
     # ---- [12] the ladder scales with the VOLUME, not one machine's disk ----
     # A flat 150 GB trigger is comfortable on a 500 GB laptop and a five-alarm
     # fire on a 4 TB workstation. Rungs are max(absolute, pct-of-volume).
-    check("[12] 4 TB volume: top rung triggers at 16% (~655 GB), not 150 GB",
-          round(mod.ladder_caps(4096.0)[-1]), 655)
+    check("[12] 4 TB volume: top rung triggers at 27% (~1106 GB), not 250 GB",
+          round(mod.ladder_caps(4096.0)[-1]), 1106)
     check("[12] 256 GB laptop keeps the absolute floors (proportional is smaller)",
-          mod.ladder_caps(256.0), [20.0, 40.0, 80.0, 150.0])
-    check("[12] 500 GB free on a 4 TB volume is PRESSURE (7d), not healthy",
-          mod.ladder_idle_days(500.0, 4096.0), 7.0)
-    check("[12] 300 GB free on a 4 TB volume (7%) tightens further, to 3d",
-          mod.ladder_idle_days(300.0, 4096.0), 3.0)
+          mod.ladder_caps(256.0), [40.0, 80.0, 150.0, 250.0])
+    check("[12] 500 GB free on a 4 TB volume is PRESSURE (1d), not healthy",
+          mod.ladder_idle_days(500.0, 4096.0), 1.0)
+    check("[12] 300 GB free on a 4 TB volume (7%) tightens further, to 0.5d",
+          mod.ladder_idle_days(300.0, 4096.0), 0.5)
     check("[12] the same 300 GB free on a 1 TB volume is healthy (no-op)",
           mod.ladder_idle_days(300.0, 1024.0), None)
     check("[12] a small disk still bottoms out at the 0-day rung",
           mod.ladder_idle_days(15.0, 256.0), 0.0)
+
+    # ---- [18] the process probe gets a background-job cap -----------------
+    # The shared 15 s cap is for interactive hooks. Under load lsof overran it,
+    # the probe failed closed, and reclaim did nothing while the disk filled.
+    ws = sys.modules.get("_lib.worktree_safety")
+    check("[18] reclaim widens the process-probe cap to 120 s",
+          getattr(ws, "PROCESS_PROBE_TIMEOUT", None), 120)
+    fresh = subprocess.run(
+        [sys.executable, "-I", "-c",
+         "import sys; sys.path.insert(0, sys.argv[1]); "
+         "import _lib.worktree_safety as w; print(w.PROCESS_PROBE_TIMEOUT)",
+         str(SCRIPTS.parent / "hooks")],
+        capture_output=True, encoding="utf-8", errors="replace", timeout=60)
+    check("[18] a hook importing the module alone keeps the short 15 s cap",
+          fresh.stdout.strip(), "15")
 
     # ---- [10] symlinked artifact unlinked, its target never followed -------
     with tempfile.TemporaryDirectory() as td:

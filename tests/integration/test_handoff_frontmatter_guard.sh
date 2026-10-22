@@ -34,11 +34,14 @@ mkdir -p "$VAULT/⚙️ Meta/Handoffs"
 REPO="$TMP/some-code-repo"
 mkdir -p "$REPO"; echo "# code" > "$REPO/CLAUDE.md"
 
-# decision(): run the hook and print allow / deny / crash.
+# decision(): run the hook and print silent / deny / crash. A pass prints nothing, so
+# Claude Code's own permission prompt stays in charge; a hook that printed an allow
+# instead would come back as "allow" here and fail every silent leg below.
 decision() {
   local out rc
   out="$(printf '%s' "$1" | python3 "$HOOK" 2>/dev/null)"; rc=$?
   [ $rc -ne 0 ] && { echo "crash"; return; }
+  [ -z "$out" ] && { echo "silent"; return; }
   printf '%s' "$out" | python3 -c 'import json,sys
 try: print(json.load(sys.stdin)["hookSpecificOutput"]["permissionDecision"])
 except Exception: print("nojson")'
@@ -65,8 +68,8 @@ r=$(decision "$(write_payload "$VAULT/⚙️ Meta/Handoffs/h.md" "$BAD_HANDOFF")
   || bad "vault-autodetected-denies-missing-consumes_when" deny "$r"
 
 r=$(decision "$(write_payload "$VAULT/⚙️ Meta/Handoffs/h.md" "$GOOD_HANDOFF")")
-[ "$r" = "allow" ] && ok "vault-autodetected-allows-valid-consumes_when" \
-  || bad "vault-autodetected-allows-valid-consumes_when" allow "$r"
+[ "$r" = "silent" ] && ok "vault-autodetected-allows-valid-consumes_when" \
+  || bad "vault-autodetected-allows-valid-consumes_when" silent "$r"
 
 echo "=== 2. deny speaks JSON on stdout (exit 0), not stderr+exit 2 ==="
 out="$(write_payload "$VAULT/⚙️ Meta/Handoffs/h.md" "$BAD_HANDOFF" | python3 "$HOOK" 2>/dev/null)"; rc=$?
@@ -76,12 +79,12 @@ printf '%s' "$out" | grep -q '"permissionDecision": *"deny"' \
 
 echo "=== 3. scoping: a code repo with CLAUDE.md but no Meta dir is NOT a vault ==="
 r=$(decision "$(write_payload "$REPO/some-handoff.md" "$BAD_HANDOFF")")
-[ "$r" = "allow" ] && ok "code-repo-not-treated-as-vault" \
-  || bad "code-repo-not-treated-as-vault" allow "$r"
+[ "$r" = "silent" ] && ok "code-repo-not-treated-as-vault" \
+  || bad "code-repo-not-treated-as-vault" silent "$r"
 
 echo "=== 4. fail OPEN when no vault can be identified ==="
 r=$(decision "$(write_payload "$TMP/loose-handoff.md" "$BAD_HANDOFF")")
-[ "$r" = "allow" ] && ok "no-vault-fails-open" || bad "no-vault-fails-open" allow "$r"
+[ "$r" = "silent" ] && ok "no-vault-fails-open" || bad "no-vault-fails-open" silent "$r"
 
 echo "=== 5. \$VAULT_ROOT is the FALLBACK for a vault with no Meta folder ==="
 FLAT="$TMP/FlatVault"; mkdir -p "$FLAT"
@@ -108,11 +111,11 @@ r=$(decision "$(write_payload "$VAULT/⚙️ Meta/notes.md" '---
 type: decision
 ---
 body')")
-[ "$r" = "allow" ] && ok "non-handoff-allowed" || bad "non-handoff-allowed" allow "$r"
+[ "$r" = "silent" ] && ok "non-handoff-allowed" || bad "non-handoff-allowed" silent "$r"
 
 echo "=== 8. bypass env ==="
 r=$(HANDOFF_FRONTMATTER_BYPASS=1 decision "$(write_payload "$VAULT/⚙️ Meta/Handoffs/h.md" "$BAD_HANDOFF")")
-[ "$r" = "allow" ] && ok "bypass-env-allows" || bad "bypass-env-allows" allow "$r"
+[ "$r" = "silent" ] && ok "bypass-env-allows" || bad "bypass-env-allows" silent "$r"
 
 echo
 echo "=== summary: $PASS passed, $FAIL failed ==="

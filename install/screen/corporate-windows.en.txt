@@ -5,8 +5,6 @@ Nothing has been installed or changed yet.
 If you say yes, this stays on your computer:
   71 hooks in ~/.claude/settings.json: scripts that Claude Code
     runs on its own, in every session.
-    Some of them answer "allow" for file edits and shell commands, so
-    Claude Code stops asking you before it edits files or runs commands.
   Skills in ~/.claude/skills, slash commands in ~/.claude/commands.
   Plugin marketplaces: kepano/obsidian-skills
   Plugins switched on: obsidian, context7

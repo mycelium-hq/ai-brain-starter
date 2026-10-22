@@ -325,10 +325,10 @@ err = (
     "Bypass (addendum / pre-contextualized entry): JOURNAL_CONTEXT_BYPASS=1"
 )
 # JSON-decision output (exit 0) — NOT exit 2. This is the public-installer-compatible
-# blocking form (mirrors block-secret-in-note.py): a hooks.json `... || echo '{allow}'`
-# crash-fallback then fails OPEN correctly, because a real block exits 0 (fallback never
-# fires) while only a crash exits non-zero (fallback allows). Works identically for the
-# personal registration (Claude Code honors permissionDecision=deny).
+# blocking form (mirrors block-secret-in-note.py): a real block exits 0 with the deny on
+# stdout, and a crash exits non-zero, which the wiring no longer masks, so it shows as a
+# non-blocking error and the call goes on to Claude Code's own permission prompt. Works
+# identically for the personal registration (Claude Code honors permissionDecision=deny).
 print(json.dumps({"hookSpecificOutput": {
     "hookEventName": "PreToolUse",
     "permissionDecision": "deny",

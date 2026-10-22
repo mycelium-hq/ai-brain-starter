@@ -41,11 +41,11 @@ and this wrapper reproduces the POSIX masking semantics in Python:
                                     the process hard-exits 0. See "A HANG IS
                                     BOUNDED" below.
 
-Fallback forms (--fallback):
-  silent  {"continue": true, "suppressOutput": true}          (default)
-  allow   {"hookSpecificOutput": {"hookEventName": "PreToolUse",
-           "permissionDecision": "allow"}}   — for PreToolUse guards that must
-           fail open rather than wedge every tool call.
+Fallback form (--fallback):
+  silent  {"continue": true, "suppressOutput": true}          (the only form, and the default)
+There is no allow form: no hook answers Claude Code's permission prompt for the
+user. Any other mode behaves as silent, so an entry an older release wrote with
+`--fallback allow` now makes no decision instead of answering the prompt.
 
 stdin (the hook payload JSON) is passed through to the target unchanged.
 Stdlib-only; usable on macOS/Linux too, though POSIX installs keep their
@@ -189,8 +189,6 @@ _REAL_GETSIGNAL = getattr(_signal, "getsignal", None)
 
 FALLBACKS = {
     "silent": '{"continue":true,"suppressOutput":true}',
-    "allow": ('{"hookSpecificOutput":{"hookEventName":"PreToolUse",'
-              '"permissionDecision":"allow"}}'),
 }
 
 # Claude Code's intentional-BLOCK signal. Never masked; see the docstring.
