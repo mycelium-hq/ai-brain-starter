@@ -355,10 +355,12 @@ def leg_duplicate_registration_reuses_the_verdict() -> None:
     sb = Sandbox()
     try:
         per_call = []
+        # Not a build: the hook asks heavy admission first, which reads the real
+        # machine's load, so a heavy command here would make this leg flaky.
+        cmd = "git log --oneline -- services/api/main.py"
         for i in range(1, 5):
             cid = f"toolu_pair_{i}"
-            per_call.append((run_hook(sb, "npm run build --workspace api", cid)[0],
-                             run_hook(sb, "npm run build --workspace api", cid)[0]))
+            per_call.append((run_hook(sb, cmd, cid)[0], run_hook(sb, cmd, cid)[0]))
         check("B3 each call answered identically by both registrations; only the 4th blocks",
               per_call == [(0, 0), (0, 0), (0, 0), (2, 2)] and sb.attempts() == 4,
               f"exit codes per call {per_call}, timestamps={sb.attempts()}")
@@ -393,7 +395,9 @@ def leg_concurrent_calls_share_one_file_safely() -> None:
     for rnd in range(3):
         sb = Sandbox()
         try:
-            cmds = [f"cargo build --package example-crate-{i} --release" for i in range(8)]
+            # Not builds, for the same reason as B3: under real machine load,
+            # heavy admission refused every `cargo build` here with exit 2.
+            cmds = [f"git log --oneline -- crates/example-crate-{i}/src/lib.rs" for i in range(8)]
             now = time.time()
             plant_state(sb, {fingerprint(c): [now - 20, now - 10] for c in cmds})
             jobs = []

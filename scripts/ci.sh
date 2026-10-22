@@ -60,26 +60,19 @@
 #                           so an edit to any of them reds this gate.
 #                           A dedicated lint.yml 'utf8-console-guard' job is
 #                           authoritative in CI; here it runs locally (pure stdlib).
-#   (e2) Hook block-protocol - scripts/check-hook-block-protocol.py fails a hook
-#                           registered with the allow-fallback wrapper
-#                           (`... || echo '{...permissionDecision:allow}'`) that
-#                           blocks by exiting non-zero: the `||` fires on ANY
-#                           non-zero exit, so the block is rewritten into an
-#                           ALLOW and the guard is structurally unable to say no
-#                           (#405). Pure stdlib.
 #   (e3) VAULT_ROOT reads - scripts/check-vault-root-reads.py fails code that
 #                           reads the VAULT_ROOT env var outside a sanctioned
 #                           resolver. A globally-exported VAULT_ROOT names ONE
 #                           vault: unset, the usual ~/vault default makes a guard
 #                           inert on every vault not named "vault"; set, it
 #                           overrides the vault the caller meant. Same
-#                           SILENT-NO-OP family as (e)/(e2); pure stdlib.
+#                           SILENT-NO-OP family as (e); pure stdlib.
 #   (e4) home-hook deploy - scripts/check-home-hook-deploy.py fails when hooks.json
 #                           wires a hook from ~/.claude/hooks/ that no route ever
 #                           copies there. The `[ -f ]` guard on those commands makes
 #                           a never-deployed hook look identical to one the user
 #                           switched off, so it never fires and nothing says so.
-#                           Same SILENT-NO-OP family as (e)/(e2)/(e3); pure stdlib.
+#                           Same SILENT-NO-OP family as (e)/(e3); pure stdlib.
 #   (e5) subprocess decode - scripts/check-utf8-subprocess.py is the READ half of (e).
 #   (e6) py3.9 annotation parity - scripts/check-py39-annotations.py fails `X | None`
 #        without `from __future__ import annotations`. This job pins 3.9, where that
@@ -208,15 +201,17 @@ if [ -z "$(git config user.email 2>/dev/null || true)" ]; then
   export GIT_COMMITTER_NAME="ci" GIT_COMMITTER_EMAIL="ci@example.com"
 fi
 
-# PyYAML, in CI only. The metadata extractors and the insight engine `import
-# yaml`, and test_extractors_localized_vault runs them end to end; setup-python
-# ships without PyYAML, so on the runner that suite would SKIP forever. On a
-# contributor's machine nothing is installed: the test finds an interpreter that
-# has yaml or says SKIP, and running the extractors already required it anyway.
-if [ -n "${GITHUB_ACTIONS:-}" ] && ! python3 -c "import yaml" >/dev/null 2>&1; then
-  python3 -m pip install --user --quiet pyyaml >/dev/null 2>&1 \
-    || python3 -m pip install --quiet pyyaml >/dev/null 2>&1 \
-    || echo "    (PyYAML install failed; test_extractors_localized_vault will SKIP)"
+# PyYAML and jsonschema, in CI only. The metadata extractors and the insight engine
+# `import yaml`, and test_extractors_localized_vault runs them end to end; setup-python
+# ships without PyYAML, so on the runner that suite would SKIP forever. jsonschema is
+# the skill validator's second dependency: scripts/test_hooks_json_never_answers_allow.py
+# runs its schema branch and FAILS (it never skips) without both. On a contributor's
+# machine nothing is installed: the extractors test finds an interpreter that has yaml
+# or says SKIP, but that leg needs both in the interpreter that runs it.
+if [ -n "${GITHUB_ACTIONS:-}" ] && ! python3 -c "import yaml, jsonschema" >/dev/null 2>&1; then
+  python3 -m pip install --user --quiet pyyaml jsonschema >/dev/null 2>&1 \
+    || python3 -m pip install --quiet pyyaml jsonschema >/dev/null 2>&1 \
+    || echo "    (PyYAML/jsonschema install failed; test_extractors_localized_vault will SKIP and the skill-validator leg will FAIL)"
 fi
 
 # Pinned HERE (before HOME goes decoy) and exported: run_sandboxed swaps
@@ -508,6 +503,12 @@ INTEGRATION_TESTS=(
   # to stdout and never writes the log, so a "(dry-run)" header IN the log was
   # unreachable except as a mislabel.
   test_sync_vault_scripts_dryrun_label
+  # A python3/python WRAPPER first on PATH (a Claude Code plugin ships one) left
+  # sync-vault-scripts.sh with no interpreter, so it installed nothing and still
+  # exited 0, silently under the --quiet its automated callers pass. Pins the
+  # file probe, the versioned + install-location ladder, AI_BRAIN_PYTHON as one
+  # path, and the stdin fallback when no probe file can be written.
+  test_sync_vault_scripts_shimmed_python
   # At-rest leg of the sync-clobber class. test_vault_script_sync.sh section 1b
   # PREVENTS a manifest gap; this detects vaults already damaged, plus the case
   # closure cannot see — a committed local patch silently overwritten by the sync
@@ -1280,25 +1281,14 @@ echo "==> (e1b) baseline burn-down headers: $PY scripts/_baseline_sections.py --
 # visible in the gate output instead of being indistinguishable from a pass.
 "$PY" scripts/_baseline_sections.py --check-all scripts
 
-# ---- (e2) Hook block-protocol ----------------------------------------------
-# scripts/check-hook-block-protocol.py fails a hook that is registered with the
-# allow-fallback wrapper (`... || echo '{...permissionDecision:allow}'`) but
-# blocks by exiting non-zero. That `||` fires on ANY non-zero exit, so such a
-# hook is rewritten into an ALLOW: present, registered, auditable, and unable to
-# block anything. Caught live on validate-handoff-frontmatter.py (#375) -- the
-# WIRED-BUT-NEUTERED sibling of ARTIFACT-WITHOUT-ACTIVATION. Pure stdlib, so it
-# always runs here.
-echo "==> (e2) hook block-protocol: $PY scripts/check-hook-block-protocol.py"
-"$PY" scripts/check-hook-block-protocol.py
-
 # ---- (e2b) Hook activation --------------------------------------------------
 # scripts/check-hook-activation.py fails a hook that ships in hooks/ but is wired
 # in NO activation channel (dormant on every install), and a hook we DO wire that
 # the installer does not own (a re-install duplicates a hand-wired copy instead of
 # replacing it, and verify_paths_on_disk() skips it). Three guards shipped dormant
 # before this existed: MYC-1017, MYC-1031, and MYC-782 / #371.
-# The ARTIFACT-WITHOUT-ACTIVATION half of the family whose WIRED-BUT-NEUTERED half
-# is (e2) and whose wired-but-never-deployed half is (e4). Pure stdlib.
+# The ARTIFACT-WITHOUT-ACTIVATION half of the family whose wired-but-never-deployed
+# half is (e4). Pure stdlib.
 # scripts/check-exit-contract.py fails a tracked non-test CLI under scripts/
 # that carries no exit-contract marker, an ENFORCING file with no non-zero exit
 # token, or an ADVISORY/NOT-A-CHECKER file whose reason is too short to be a
@@ -1370,7 +1360,7 @@ echo "==> (e2b) hook activation: $PY scripts/check-hook-activation.py"
 # ~/vault (inert on every vault not literally named "vault"), SET it overrides
 # the vault the caller actually meant. hooks/validate-handoff-frontmatter.py
 # shipped that way and was inert on every install (#375/#404) -- the same
-# SILENT-NO-OP family as (e) and (e2). Twin of the naive *Meta glob ban
+# SILENT-NO-OP family as (e). Twin of the naive *Meta glob ban
 # (scripts/check-meta-resolution.sh, a lint.yml step). The pre-existing
 # population is byte-pinned in scripts/vault-root-read-baseline.txt, so a NEW or
 # EDITED file fails while the backlog burns down. Pure stdlib, always runs here.
@@ -1385,7 +1375,7 @@ echo "==> (e3) vault-root reads: $PY scripts/check-vault-root-reads.py"
 # turned off. pre-write-settings-lint.py, lint-claude-settings.py and
 # check-claude-code-version.sh shipped that way -- wired in 11 places on a real
 # settings.json, present on disk 0 times, and reported OK by the installer's own
-# verification. Same SILENT-NO-OP family as (e), (e2) and (e3). Pure stdlib.
+# verification. Same SILENT-NO-OP family as (e) and (e3). Pure stdlib.
 echo "==> (e4) home-hook deploy: $PY scripts/check-home-hook-deploy.py"
 "$PY" scripts/check-home-hook-deploy.py
 
@@ -1721,6 +1711,14 @@ PY_DIRECT=(
   # detect-closing-signal.py) with negative controls that the gate still
   # blocks on A's own uncommitted note and decision.
   hooks/test_close_gate_scoped_to_session.py
+  # Close gate 2 read ONE shared runner report, so any session's run within
+  # 30 minutes cleared every other session's gate: session A closed without
+  # ever running session-close-runner.sh because session B had. Drives the
+  # REAL runner (--session) and the REAL gate as two sessions, through the
+  # exact command detect-closing-signal.py injects, with negative controls
+  # (A's own run passes; a no-id session and a legacy runner fall back to the
+  # shared report instead of blocking every close forever).
+  hooks/test_close_gate_runner_per_session.py
   # check-zsh-silent-idioms.py: bash idioms that silently do the wrong thing under
   # zsh (an unbraced $VAR:path in a git read; an unsplit $VAR in `set --` / `for`).
   # Drives the real hook over real stdin and asserts the PARSED decision, because
@@ -1728,6 +1726,19 @@ PY_DIRECT=(
   # gutted hook. Fire and silent legs for both detectors, the shell gate, the
   # bypass, and detector isolation. Plain script, stdlib only.
   hooks/test_check_zsh_silent_idioms.py
+  # snapshot-pending-work-on-stop.py: a snapshot of a working tree is written OUTSIDE
+  # the repo it snapshots, so the hook never leaves vault artifacts in a product repo.
+  # Pairs USERPROFILE with HOME for hermeticity. Plain script, stdlib only.
+  hooks/test_snapshot_pending_outside_repo.py
+  # Three scripts staged their own paths and then ran a bare `git commit -m`, which
+  # commits the WHOLE index, so a file another session had staged in the same checkout
+  # rode along into the automated commit (7 unrelated files in one, 2026-10-18). Drives
+  # hookify-auto-commit, reconcile-worktree-shared and the reconcile-commit block lifted
+  # out of vault-daily-maintenance.sh against scratch repos that hold an unrelated staged
+  # file; a control proves a bare commit does sweep it. 4 of its 5 tests fail against the
+  # pre-fix revision, and the maintenance legs also pin the empty-directory, rename and
+  # subdirectory-vault cases that the naive `git commit -- "${PATHS[@]}"` gets wrong.
+  hooks/test_commit_only_own_paths.py
 )
 dormant_py=()
 while IFS= read -r -d '' f; do
@@ -1771,4 +1782,4 @@ done
 echo "    OK - ${#PY_DIRECT[@]} hooks/+tests/ direct suite(s) passed; dormancy invariant clean"
 
 echo
-echo "All gates passed: py_compile ($count file(s)) + ${#INTEGRATION_TESTS[@]} integration tests + $unit_count scripts/ + ${#PY_DIRECT[@]} hooks/tests unit suite(s) + shellcheck [$shellcheck_note] + stat portability [passed] + powershell [$pssa_note] + phase-doc python [$phasepy_note] + repo python [$ruffgate_note] + utf8 console guard [$utf8_note] + hook block-protocol [passed] + vault-root reads [passed] + home-hook deploy [passed] + subprocess decode [passed] + py3.9 annotation parity [passed] + ps1 encoding [passed]."
+echo "All gates passed: py_compile ($count file(s)) + ${#INTEGRATION_TESTS[@]} integration tests + $unit_count scripts/ + ${#PY_DIRECT[@]} hooks/tests unit suite(s) + shellcheck [$shellcheck_note] + stat portability [passed] + powershell [$pssa_note] + phase-doc python [$phasepy_note] + repo python [$ruffgate_note] + utf8 console guard [$utf8_note] + vault-root reads [passed] + home-hook deploy [passed] + subprocess decode [passed] + py3.9 annotation parity [passed] + ps1 encoding [passed]."

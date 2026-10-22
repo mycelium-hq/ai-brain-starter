@@ -129,9 +129,20 @@ except ImportError as exc:
 # _lib makes this tool REFUSE deletions rather than fail to import and quietly
 # revert to the unguarded path.
 try:
+    from _lib import worktree_safety as _worktree_safety
     from _lib.worktree_safety import process_busy_reason as _process_busy_reason
 except Exception:  # pragma: no cover - depends on the deployed layout
+    _worktree_safety = None  # type: ignore[assignment]
     _process_busy_reason = None  # type: ignore[assignment]
+
+# The shared probe cap (15 s) suits interactive hooks, not this background job.
+# Under load `lsof` overran it on every run, the probe failed closed, and the
+# tool reclaimed nothing exactly while the disk was filling (measured
+# 2026-10-16: green every 4h at 5% free). The cap is a module global read at
+# call time, so widening it here affects this process only; hooks keep theirs.
+RECLAIM_PROCESS_PROBE_TIMEOUT = 120
+if _worktree_safety is not None:
+    _worktree_safety.PROCESS_PROBE_TIMEOUT = RECLAIM_PROCESS_PROBE_TIMEOUT
 
 
 def worktree_busy(wt: Path, cache: dict | None = None) -> str | None:
@@ -173,12 +184,19 @@ SKIP_SOURCE_NAMES = {".session-lock", ".session-lock.json"}
 # floors for small disks. Ascending caps, first match wins; above the last rung
 # the tool is a no-op, so a healthy disk keeps every build cache warm. The 0.0
 # rung exists so the floor is defended even when every worktree is freshly built.
+#
+# Raised 2026-10-16. The old ladder (20/40/80/150 GB -> 0/1/3/7 d) held a 1 TB
+# disk at 41-65 GB free (~5%) for days: Rust worktrees arrive at 5-15 GB each,
+# faster than any of them reaches 3 days idle. A 12-hour-idle manual pass
+# reclaimed 118 GB the 3-day rung could not see. The process probe and the
+# session lock, not idle age, protect a running build, so short rungs are safe;
+# the output is regenerable, and the cost of reclaiming early is a rebuild.
 #   (pct_of_volume, absolute_gb, idle_days)
 PRESSURE_LADDER = (
-    (0.02, 20.0, 0.0),
-    (0.04, 40.0, 1.0),
-    (0.09, 80.0, 3.0),
-    (0.16, 150.0, 7.0),
+    (0.04, 40.0, 0.0),
+    (0.09, 80.0, 0.5),
+    (0.16, 150.0, 1.0),
+    (0.27, 250.0, 3.0),
 )
 
 # Walk guard: a source tree is small once artifact dirs are skipped, but a

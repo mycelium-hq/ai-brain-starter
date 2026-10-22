@@ -56,6 +56,8 @@ BYPASS: WORKTREE_RECONCILE_BYPASS=1
 
 from __future__ import annotations
 
+# utf8-stdout-ok: every console write in this hook is print(json.dumps(...)) with the
+# default ensure_ascii=True, so stdout/stderr only ever carry ASCII (no raw non-ASCII write).
 import json
 import os
 import subprocess
@@ -263,8 +265,11 @@ def main() -> None:
             f"{main_branch} not possible — branch diverged)\n\n"
             + "\n".join(f"- {f}" for f in reconciled)
         )
+        # Commit ONLY the files staged above (`reconciled` is non-empty here): a bare
+        # `git commit` takes the whole index, so anything else staged on this branch
+        # would ride along.
         commit_result = subprocess.run(
-            ["git", "-C", str(wt), "commit", "-m", msg, "--quiet"],
+            ["git", "-C", str(wt), "commit", "-m", msg, "--quiet", "--", *reconciled],
             capture_output=True,
         )
         if commit_result.returncode == 0:

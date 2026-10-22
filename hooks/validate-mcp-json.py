@@ -7,11 +7,12 @@ entire MCP stack goes dark with no error surfaced.
 
 Hook contract (Claude Code PreToolUse):
   stdin: JSON with tool_name, tool_input
-  stdout: JSON with hookSpecificOutput.permissionDecision = "allow" | "deny"
+  stdout: JSON with hookSpecificOutput.permissionDecision = "deny", only when it blocks
   exit 0 always (decision conveyed in JSON, not exit code)
 
 Acts only on Write and Edit tools targeting paths ending in .mcp.json. Everything
-else is approved without comment.
+else passes without comment: it prints nothing, so Claude Code's own permission
+prompt stays in charge.
 
 For Edit, re-reads the file and applies the substitution to validate the final
 shape. Write is the common case and is handled fully.
@@ -21,16 +22,6 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-
-
-def allow():
-    print(json.dumps({
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "allow",
-        }
-    }))
-    sys.exit(0)
 
 
 def deny(reason: str):
@@ -48,7 +39,6 @@ def main():
     try:
         payload = json.load(sys.stdin)
     except Exception:
-        allow()
         return
 
     tool_name = payload.get("tool_name") or payload.get("toolName") or ""
@@ -56,7 +46,6 @@ def main():
     file_path = tool_input.get("file_path") or tool_input.get("filePath") or ""
 
     if not file_path.endswith(".mcp.json"):
-        allow()
         return
 
     if tool_name == "Write":
@@ -72,7 +61,6 @@ def main():
                 f"Validate with `python3 -c \"import json; json.loads(open('{file_path}').read())\"` before saving."
             )
             return
-        allow()
         return
 
     if tool_name == "Edit":
@@ -84,7 +72,6 @@ def main():
                 result = original.replace(old_s, new_s)
             else:
                 if original.count(old_s) != 1:
-                    allow()
                     return
                 result = original.replace(old_s, new_s, 1)
             try:
@@ -96,12 +83,8 @@ def main():
                 )
                 return
         except Exception:
-            allow()
             return
-        allow()
         return
-
-    allow()
 
 
 if __name__ == "__main__":

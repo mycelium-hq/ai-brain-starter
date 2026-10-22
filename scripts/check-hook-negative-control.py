@@ -109,17 +109,16 @@ SKIP_PARTS = {".git", "node_modules", "__pycache__", ".venv"}
 # surface anywhere in the repo -- nothing that could distinguish it working
 # from it being dead. Ordered worst-first by blast radius.
 #
-# The secret-handling guards that opened this list are the reason this check
+# The secret-handling guards that sat at the top were the reason this check
 # exists: a secret guard nobody has proven can fire is indistinguishable from no
 # secret guard at all, and it fails silently in the one direction that matters.
-# The last of them, `block-secret-in-note`, came off when it gained a test
-# surface, so the list no longer holds a secret guard.
+# The last of them, block-secret-in-note, now has a test surface (the hooks.json
+# property test sends it a clean note and an AWS example key), so none is left here.
 NO_TEST_BASELINE: Set[str] = {
     # -- correctness / process guards --
     "agent-briefing-check",
     "check-rule-conflicts-on-write",
     "session-turn-counter",
-    "snapshot-pending-work-on-stop",
     "list-wip-stashes-on-session-start",
     "permission-denied",
     "pre-compact-context",
@@ -129,8 +128,6 @@ NO_TEST_BASELINE: Set[str] = {
     "inject-love-language-context",
     "route-suggest",
     # -- validators (assert a shape; a dead one passes everything) --
-    "validate-mcp-json",
-    "validate-skill-frontmatter",
     "validate-subagent-return",
     "validate-calendar-timezone",
     # -- session-stop / worktree surfacers --
@@ -159,16 +156,14 @@ NO_TEST_BASELINE: Set[str] = {
 # slack -- slack is silently re-appendable, which is the exact hole the
 # ratchet closed.
 #
-# 25 -> 23: `block-secret-in-note` gained its first test surface
-# (hooks/test_block_secret_in_note.py), and the cap had been left one above
-# the list's length (24 entries, cap 25), a slot of exactly the slack the
-# paragraph above forbids. Both close here.
+# 25 -> 22: `validate-skill-frontmatter` gained a test surface (the hooks.json
+# property test runs it over every shipped SKILL.md), and the cap again follows
+# the list down to its length; it had been left 2 above it.
 #
-# 23 -> 22: while that was open, main's #728 gave `first-week-checkin` a test
-# surface (tests/integration/test_install_consent_contract.sh) and took it off
-# the list without lowering the cap. Merged, the list holds 22 and the cap one
-# more. The cap follows it down again.
-NO_TEST_MAX = 22
+# 22 -> 20: `block-secret-in-note` and `validate-mcp-json` gained a test surface
+# (the same property test sends each a payload from its own scope and a control
+# that must still be denied), and the cap follows the list down again.
+NO_TEST_MAX = 20
 
 
 def is_test_surface(path: Path) -> bool:

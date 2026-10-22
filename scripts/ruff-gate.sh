@@ -27,9 +27,10 @@
 # to be registered, and it fails OPEN when ruff is absent. A guard the repo
 # ships, tests, and never points at itself is not coverage.
 #
-# session-lock.py is the concurrency gate, and settings.json registers it behind
-# an allow-fallback wrapper. A NameError there does not fail loudly: the hook
-# crashes, the wrapper answers "allow", and the gate is silently open.
+# session-lock.py is the concurrency gate, and at the time settings.json
+# registered it behind an allow-fallback wrapper (this repo's hooks.json no longer
+# ships that wrapper). A NameError there did not fail loudly: the hook crashed,
+# the wrapper answered "allow", and the gate was silently open.
 #
 # Severity gate: E9,F63,F7,F82 -- ruff's standard error set (syntax errors,
 # undefined names, and the always-true assert/comparison class). This is the

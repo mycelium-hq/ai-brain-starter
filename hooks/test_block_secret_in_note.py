@@ -14,8 +14,8 @@ match, so until this file the two were indistinguishable here.
 
 What it checks
 --------------
-1. The guard, run as a subprocess under the hook contract: JSON on stdin, one
-   JSON decision on stdout, exit 0, including raw UTF-8 input (non-ASCII left
+1. The guard, run as a subprocess under the hook contract: JSON on stdin, a
+   JSON deny on stdout when it blocks and nothing at all otherwise, exit 0, including raw UTF-8 input (non-ASCII left
    unescaped, as a JSON.stringify writer sends it) on a cp1252 interpreter. A
    positive control on a long-blocked shape (AWS) comes first, so a harness
    that cannot see a deny cannot pass.
@@ -135,7 +135,13 @@ def expect(
 ) -> None:
     r = run_hook(tool_input, bypass=bypass, extra_env=extra_env, raw_utf8=raw_utf8)
     detail = f"-- rc={r['rc']} decision={r['decision']} reason={masked(str(r['reason']))!r}"
-    ok = r["rc"] == 0 and r["decision"] == want
+    # "allow" means the guard stays silent: since the hooks stopped answering
+    # Claude Code's permission prompt, only a deny prints, and an explicit
+    # `allow` decision would itself be the bug.
+    if want == "allow":
+        ok = r["rc"] == 0 and r["decision"] is None and not str(r["raw"]).strip()
+    else:
+        ok = r["rc"] == 0 and r["decision"] == want
     if ok and names:
         ok = names in str(r["reason"])
     check(label, ok, detail)

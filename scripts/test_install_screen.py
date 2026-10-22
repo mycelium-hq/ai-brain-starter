@@ -15,8 +15,9 @@ screen tells the truth about the install, from the code that runs it:
   5. ABS_CONSENTED=1 makes bootstrap.sh record one yes line, and nothing is
      written without it or under --dry-run;
   6. install-telemetry.py tells a finished run from one that stopped after a yes;
-  7. the screen says that hooks approve edits and commands exactly when one of the
-     wired hooks can, and a planted hook that answers "allow" is counted;
+  7. no wired hook can answer "allow", so no screen says that hooks approve edits
+     and commands; a planted hook that answers "allow" is counted and puts the
+     line back;
   8. each remote MCP server is named with the host bootstrap registers, and the
      jobs the interview schedules later are stated in plain words;
   9. every screen file the README and phase-00 point to is a committed file.
@@ -177,18 +178,20 @@ check("first run finished", runs[0]["finished"] and runs[0]["last"] == telemetry
 check("second run stopped after phase 3", not runs[1]["finished"] and runs[1]["last"] == "3", runs[1])
 check("third run never completed a phase", not runs[2]["finished"] and runs[2]["last"] is None, runs[2])
 
-print("7. the screen says hooks approve edits and commands exactly when a wired hook can")
+print("7. no wired hook answers allow, so no screen says hooks approve edits and commands")
 APPROVES = '"allow"'  # how both languages name it
-# The line follows the count. A screen without it while a wired hook can answer
-# "allow" leaves the README's sentence about it untrue; one with it when none can
-# says something false. The fix that stops those hooks answering reads 0 here and
-# the line goes away with no copy edit.
+# The count is 0: Claude Code's own permission prompt is the user's to answer, and
+# no hook the install wires answers it (scripts/test_hooks_json_never_answers_allow.py
+# runs the commands; this counts them from the command text and the hook sources).
+# Mutants: a hook answers allow again (n > 0), and a screen still carries the line
+# (stale, or edited by hand). The planted checks below keep the counting honest.
 for profile, platform in screen.SETS:
     n = screen.allow_hooks(platform)
+    check(f"{profile}-{platform}: no wired hook can answer allow", n == 0, n)
     for lang in screen.LANGS:
         text = screen.screen_path(profile, platform, lang).read_text(encoding="utf-8")
-        check(f"{profile}-{platform}.{lang}: names hooks that approve iff one can ({n} can)",
-              (APPROVES in text) == (n > 0), n)
+        check(f"{profile}-{platform}.{lang}: does not say hooks approve edits and commands",
+              APPROVES not in text, text[:200])
 with tempfile.TemporaryDirectory() as tmp:
     tmp = Path(tmp)
     (tmp / "hooks").mkdir()
@@ -215,7 +218,14 @@ with tempfile.TemporaryDirectory() as tmp:
                  for name, path in (("quiet", quiet), ("script", script), ("fallback", fallback))}
         check(f"{platform}: hooks that never answer allow are not counted", count["quiet"] == 0, count)
         check(f"{platform}: a planted script that answers allow raises the count", count["script"] == 1, count)
-        check(f"{platform}: a planted allow fallback raises the count", count["fallback"] == 1, count)
+        if platform == "posix":
+            check("posix: a planted allow fallback raises the count", count["fallback"] == 1, count)
+        else:
+            rendered = [h["command"] for g in screen._wired("windows", True, fallback)[0]["hooks"]["PreToolUse"]
+                        for h in g["hooks"]]
+            check("windows: a planted allow fallback is rendered --fallback silent, so it is not counted",
+                  count["fallback"] == 0 and bool(rendered)
+                  and all("--fallback silent" in c and "allow" not in c for c in rendered), (count, rendered))
         shown = {name: APPROVES in screen.render("default", platform, "en", path, tmp / "hooks")
                  for name, path in (("quiet", quiet), ("script", script))}
         check(f"{platform}: the planted script puts the line on the screen, quiet hooks do not",

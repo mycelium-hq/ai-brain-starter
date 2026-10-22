@@ -137,35 +137,119 @@ if [ -n "${ABS_CLONE_PATCHES_STASHED:-}" ]; then
 fi
 
 # --- pick a REAL python interpreter -------------------------------------------
-# Mirrors the probe sync-vault-scripts.ps1 uses (#313). Under git-bash / MSYS on
-# Windows a bare `python3` on PATH is usually the Microsoft Store
-# app-execution-alias shim: it satisfies `command -v`, but prints nothing and
-# pops the Store, so the resolver call came back EMPTY and this script misread
-# it as "no Meta folder" and silently no-opped (issue #375). Trust only a
-# candidate that actually reports major version 3.
+# Under git-bash / MSYS on Windows a bare `python3` on PATH is usually the
+# Microsoft Store app-execution-alias shim: it satisfies `command -v`, but
+# prints nothing and pops the Store, so the resolver call came back EMPTY and
+# this script misread it as "no Meta folder" and silently no-opped (issue
+# #375). Trust only a candidate that actually reports major version 3. (The
+# .ps1 twin, #313, still probes py/python/python3 with `-c`.)
+#
+# The same failure has a second cause on macOS/Linux: a Claude Code plugin can
+# put a WRAPPER named `python3` (and `python`) ahead of the real interpreter on
+# PATH. trailofbits/modern-python refuses the call outright ("Use
+# `uv run python3 ...` instead"). Both candidates then satisfy `command -v`,
+# both fail the probe, `py` does not exist off Windows, and PY_CMD ended up
+# EMPTY: the script reported "no vault resolved" or "no Meta folder", called it
+# non-fatal and exited 0, and its automated callers pass --quiet, so not even
+# that line showed. journal-preflight.py never reached the vault, leaving the
+# /journal Step-0 guard asking for a script that had never shipped (measured
+# 2026-08-30).
+#
+# The ladder follows pick_python() in bootstrap.sh. AI_BRAIN_PYTHON comes
+# first, read as ONE path the way bootstrap reads it (spaces included), and is
+# reported when it does not work. Then the bare names, then VERSIONED names,
+# which the shim dir does not ship (it carries python, python3, pip, pip3, pipx
+# and uv), then the usual absolute install locations, each skipped where it
+# does not exist, so a Mac whose only real Python is the system one is still
+# found. A path already probed with the same arguments is not probed again:
+# bare `python3` is often /usr/bin/python3, which the ladder also names
+# outright. Unlike bootstrap it
+# keeps `python` and the Windows `py` launcher and accepts any 3.x, as the code
+# it replaced did. The launcher's `-3` lives in PY_ARGS, so PY_CMD stays a
+# single path that callers quote.
+#
+# The probe runs a FILE, never `-c` or `-`: the asymmetric shim shape
+# documented in tests/integration/lib/real_python.sh forwards `-c`/`-`/`-m` to
+# the real interpreter and refuses only a script path, so a `-c` probe would
+# ADOPT such a wrapper and then die at the `_meta_resolver.py` call below. The
+# sentinel, not the exit code, is what decides -- a wrapper that exits 0
+# without running the file never prints it and is rejected. When no probe
+# file can be written (mktemp on a stale TMPDIR, a full or read-only temp dir)
+# it says so and probes on stdin instead of giving up: weaker, but no worse
+# than the `-c` probe this replaced, which needed no file at all.
 PY_CMD=""
-_probe_python() {
-  [ "$("$@" -c 'import sys; print(sys.version_info[0])' 2>/dev/null \
-        | head -n1 | tr -d '\r')" = "3" ]
-}
-for _cand in python3 python py; do
-  command -v "$_cand" >/dev/null 2>&1 || continue
-  if [ "$_cand" = "py" ]; then
-    # The Windows launcher needs -3 to guarantee a Python 3 interpreter.
-    _probe_python py -3 && { PY_CMD="py -3"; break; }
+PY_ARGS=""
+_probe_python() {  # $1 interpreter path, $2 "" or "-3", $3 probe file ("" = stdin)
+  local out
+  if [ -n "$3" ]; then
+    # shellcheck disable=SC2086  # $2 is "" or "-3"; word-splitting intended
+    out="$("$1" $2 "$3" 2>/dev/null | head -n1 | tr -d '\r')"
   else
-    _probe_python "$_cand" && { PY_CMD="$_cand"; break; }
+    # shellcheck disable=SC2086  # $2 is "" or "-3"; word-splitting intended
+    out="$(printf '%s\n' 'import sys' 'if sys.version_info[0] == 3:' \
+             '    print("__ai_brain_python_ok__")' \
+           | "$1" $2 - 2>/dev/null | head -n1 | tr -d '\r')"
   fi
-done
-unset _cand
+  [ "$out" = "__ai_brain_python_ok__" ]
+}
+_pick_python() {
+  local cand args resolved tried=":" probe_dir="" probe=""
+  probe_dir="$(mktemp -d 2>/dev/null)" || probe_dir=""
+  if [ -n "$probe_dir" ]; then
+    probe="$probe_dir/ai_brain_sync_probe.py"
+    # 2>/dev/null comes FIRST so a failing `>` (read-only or full temp dir)
+    # cannot print its own error ahead of the WARN below.
+    printf '%s\n' 'import sys' 'if sys.version_info[0] == 3:' \
+      '    print("__ai_brain_python_ok__")' 2>/dev/null > "$probe" || probe=""
+  fi
+  if [ -z "$probe" ]; then
+    echo "sync-vault-scripts: WARN: could not write a Python probe file to a" \
+      "temp dir; probing on stdin instead, which a python3 wrapper that" \
+      "refuses only script files can pass." >&2
+  fi
+  if [ -n "${AI_BRAIN_PYTHON:-}" ]; then
+    resolved="$(command -v "$AI_BRAIN_PYTHON" 2>/dev/null || true)"
+    [ -z "$resolved" ] || tried="$tried$resolved|:"
+    if [ -n "$resolved" ] && _probe_python "$resolved" "" "$probe"; then
+      PY_CMD="$resolved"
+    else
+      echo "sync-vault-scripts: WARN: AI_BRAIN_PYTHON=$AI_BRAIN_PYTHON is not" \
+        "a working Python 3; ignoring it." >&2
+    fi
+  fi
+  if [ -z "$PY_CMD" ]; then
+    for cand in python3 python py \
+                python3.15 python3.14 python3.13 python3.12 python3.11 \
+                python3.10 python3.9 \
+                /opt/homebrew/bin/python3 /usr/local/bin/python3 /usr/bin/python3; do
+      resolved="$(command -v "$cand" 2>/dev/null || true)"
+      [ -n "$resolved" ] || continue
+      args=""
+      # The Windows launcher needs -3 to guarantee a Python 3 interpreter.
+      if [ "$cand" = "py" ]; then args="-3"; fi
+      # One probe per path AND args: the launcher named by AI_BRAIN_PYTHON,
+      # probed bare, must not block its own -3 probe here.
+      case "$tried" in *":$resolved|$args:"*) continue ;; esac
+      tried="$tried$resolved|$args:"
+      if _probe_python "$resolved" "$args" "$probe"; then
+        PY_CMD="$resolved"
+        PY_ARGS="$args"
+        break
+      fi
+    done
+  fi
+  [ -z "$probe_dir" ] || rm -rf "$probe_dir"
+  [ -n "$PY_CMD" ]
+}
+_pick_python || true
 
 # --- Resolve the vault root ---------------------------------------------------
 resolve_vault_from_settings() {
   local settings="$HOME/.claude/settings.json"
   [ -f "$settings" ] || return 1
   [ -n "$PY_CMD" ] || return 1
-  # shellcheck disable=SC2086  # PY_CMD may be "py -3"; word-splitting intended
-  $PY_CMD - "$settings" <<'PY' 2>/dev/null
+  # shellcheck disable=SC2086  # PY_ARGS is "" or "-3" (py launcher); word-splitting intended
+  "$PY_CMD" $PY_ARGS - "$settings" <<'PY' 2>/dev/null
 import json, re, sys
 try:
     data = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -203,8 +287,8 @@ fi
 # resolution.sh bans re-implementing the glob in shell); it prefers whichever
 # Meta variant holds a known human subfolder. Disambiguate on folders the human
 # meta owns. It lives beside this script in the repo, so $SCRIPT_DIR resolves it.
-# shellcheck disable=SC2086  # PY_CMD may be "py -3"; word-splitting intended
-META="$([ -n "$PY_CMD" ] && $PY_CMD "$SCRIPT_DIR/_meta_resolver.py" "$VAULT" scripts Decisions Sessions 2>/dev/null || true)"
+# shellcheck disable=SC2086  # PY_ARGS is "" or "-3" (py launcher); word-splitting intended
+META="$([ -n "$PY_CMD" ] && "$PY_CMD" $PY_ARGS "$SCRIPT_DIR/_meta_resolver.py" "$VAULT" scripts Decisions Sessions 2>/dev/null || true)"
 if [ -z "$META" ]; then
   note "sync-vault-scripts: no Meta folder in $VAULT — skipping (non-fatal)."
   exit 0

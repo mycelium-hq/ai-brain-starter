@@ -167,8 +167,10 @@ def main() -> int:
 
     basename = file_path_obj.stem
     msg = f"hookify: auto-stage {basename} drift\n\nPosted by hookify-auto-commit hook."
+    # Commit ONLY the file staged above: a bare `git commit` takes the whole index,
+    # so a file another session staged in this checkout would ride along.
     commit = subprocess.run(
-        ["git", "-C", toplevel, "commit", "-m", msg],
+        ["git", "-C", toplevel, "commit", "-m", msg, "--", rel],
         capture_output=True,
         text=True,
         env=env,
