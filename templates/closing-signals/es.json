@@ -35,7 +35,9 @@
     "^gracias[!.\\s]*$",
     "^muchas gracias[!.\\s]*$",
     "\\bdale,?\\s+chao\\b",
-    "\\bok(ay)?,?\\s+chao\\b"
+    "\\bok(ay)?,?\\s+chao\\b",
+    "^cierra[!.\\s]*$",
+    "^cerr[áa][!.\\s]*$"
   ],
 
   "ambiguous": [

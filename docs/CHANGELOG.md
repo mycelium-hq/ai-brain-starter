@@ -19,6 +19,14 @@ What this does not change: deny paths. Every guard that blocked before still blo
 
 ---
 
+## 2026-10-14: "cierra" on its own closes the session in Spanish
+
+**Who this affects:** Spanish speakers who end a session with the bare imperative: «cierra», «cerrá» (voseo), with or without a period or exclamation mark.
+
+The Spanish pack already closed on «cierra esta sesión», «cierro sesión» and «cerremos», but the one-word command matched nothing. The user typed «cierra», the session-close cascade never ran, and the close fell back to the manual protocol. Two `high_confidence` patterns now cover it, anchored to the whole message (`^cierra[!.\s]*$`, `^cerr[áa][!.\s]*$`), the same discipline as the anchored «ya está». So «cierra el archivo y seguimos» or «cerrá la pestaña de Chrome» still close nothing.
+
+`tests/integration/test_detect_closing_signal_es_guards.sh` gains four must-fire cases and three must-not-fire controls. The four new cases fail on the pack from before this change.
+
 ## 2026-10-14: moving the machinery out of a cloud-synced vault works on Windows PowerShell 5.1 — and no longer kills the process it checks
 
 **Who this affects:** anyone on Windows who runs `scripts/relocate-machinery-sidecar.ps1` with the PowerShell that ships with Windows (5.1), and anyone on Windows whose relocation checks for live Claude sessions (the `.ps1`, or the `.sh` under Git Bash with a Windows Python).
