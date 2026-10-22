@@ -1555,7 +1555,7 @@ PY_DIRECT=(
   hooks/test_secret_patterns_nvidia.py
   hooks/test_secret_patterns_anthropic.py
   hooks/test_secret_patterns_google_oauth.py
-  # block-secret-in-note's first test surface. Runs the guard as a subprocess
+  # block-secret-in-note's own test surface. Runs the guard as a subprocess
   # under the hook contract, behind an AWS positive control, and fails when a
   # registry pattern has no block or detect-only decision: the gap that let
   # nvidia-api-key, npm-access-token and backblaze-b2-app-key into notes.

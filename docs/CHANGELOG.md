@@ -9,17 +9,7 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
-## 2026-10-15: Claude Code asks before it edits your files again
-
-**Who this affects:** anyone who installed or updated this skill before today. Its hooks answered Claude Code's own permission question with "allow" on every Write, Edit and MultiEdit and every shell command that none of its guards blocked, and an "allow" from a hook skips Claude Code's prompt for that call. So Claude Code stopped asking before it edited a file or ran a command, in every project. After this update it asks again in its default mode.
-
-The hooks now block a call or warn and otherwise make no decision, which leaves the question to Claude Code. Its permission mode and your own allow, ask and deny rules in its settings decide what it asks. Whether to let it stop asking is your choice to make there, not this install's. The auto-update rewrites the hook lines on its own; if you pinned your install or turned auto-update off, run the installer again. The install screen no longer has the line that said hooks approve edits and commands.
-
-What this does not change: deny paths. Every guard that blocked before still blocks the same way, and warnings still warn. One guard now blocks that never did: the skill-file check (`hooks/validate-skill-frontmatter.py`). The same fallback that answered "allow" was appended after its block, so Claude Code never applied the block. Now an edit that leaves a `SKILL.md`'s frontmatter missing or not closed is refused, and so is one whose fields have the wrong shape for the skill schema when PyYAML and jsonschema are installed for the hook's Python. Only `name` is required, `type` is optional, and frontmatter that PyYAML cannot parse is not refused, because Claude Code loads it. The refusal says what is wrong and that `SKILL_VALIDATION_BYPASS=1` skips it. No guard that blocks with exit code 2 changed: those were already wired to pass the code through, and no other hook that lost its fallback uses it.
-
----
-
-## 2026-10-06: the note guard now blocks NVIDIA keys, Google OAuth client secrets, npm tokens and Backblaze B2 keys
+## 2026-10-23: the note guard now blocks NVIDIA keys, Google OAuth client secrets, npm tokens and Backblaze B2 keys
 
 **Who this affects:** anyone with an NVIDIA build API key, a Google OAuth client of their own (for example from connecting Gmail and Calendar), an npm token or a Backblaze B2 key.
 
@@ -33,7 +23,41 @@ On Windows the guard waved through every write into a folder whose name has an e
 
 Google says a desktop app's client secret is not really secret, so why block it? Web-application clients get the same `GOCSPX-` prefix, Google says to keep theirs out of anywhere publicly accessible, and nothing in the value says which kind it is. A note is also never where a client secret needs to live.
 
-So the note guard cannot fall behind the scanner again, every credential pattern the scanner knows now has to be marked either "blocks in notes" or "does not, and here is why", and a test fails when a new one arrives without that decision. That test is also the first one that proves the guard fires at all. Three other checks keep their own lists and do not know these four kinds yet: the two that look for keys written straight into an MCP server's settings, and the secret-warn skill.
+So the note guard cannot fall behind the scanner again, every credential pattern the scanner knows now has to be marked either "blocks in notes" or "does not, and here is why", and a test fails when a new one arrives without that decision. Three other checks keep their own lists and do not know these four kinds yet: the two that look for keys written straight into an MCP server's settings, and the secret-warn skill.
+
+---
+
+## 2026-10-15: Claude Code asks before it edits your files again
+
+**Who this affects:** anyone who installed or updated this skill before today. Its hooks answered Claude Code's own permission question with "allow" on every Write, Edit and MultiEdit and every shell command that none of its guards blocked, and an "allow" from a hook skips Claude Code's prompt for that call. So Claude Code stopped asking before it edited a file or ran a command, in every project. After this update it asks again in its default mode.
+
+The hooks now block a call or warn and otherwise make no decision, which leaves the question to Claude Code. Its permission mode and your own allow, ask and deny rules in its settings decide what it asks. Whether to let it stop asking is your choice to make there, not this install's. The auto-update rewrites the hook lines on its own; if you pinned your install or turned auto-update off, run the installer again. The install screen no longer has the line that said hooks approve edits and commands.
+
+What this does not change: deny paths. Every guard that blocked before still blocks the same way, and warnings still warn. One guard now blocks that never did: the skill-file check (`hooks/validate-skill-frontmatter.py`). The same fallback that answered "allow" was appended after its block, so Claude Code never applied the block. Now an edit that leaves a `SKILL.md`'s frontmatter missing or not closed is refused, and so is one whose fields have the wrong shape for the skill schema when PyYAML and jsonschema are installed for the hook's Python. Only `name` is required, `type` is optional, and frontmatter that PyYAML cannot parse is not refused, because Claude Code loads it. The refusal says what is wrong and that `SKILL_VALIDATION_BYPASS=1` skips it. No guard that blocks with exit code 2 changed: those were already wired to pass the code through, and no other hook that lost its fallback uses it.
+
+---
+
+## 2026-10-14: "cierra" on its own closes the session in Spanish
+
+**Who this affects:** Spanish speakers who end a session with the bare imperative: «cierra», «cerrá» (voseo), with or without a period or exclamation mark.
+
+The Spanish pack already closed on «cierra esta sesión», «cierro sesión» and «cerremos», but the one-word command matched nothing. The user typed «cierra», the session-close cascade never ran, and the close fell back to the manual protocol. Two `high_confidence` patterns now cover it, anchored to the whole message (`^cierra[!.\s]*$`, `^cerr[áa][!.\s]*$`), the same discipline as the anchored «ya está». So «cierra el archivo y seguimos» or «cerrá la pestaña de Chrome» still close nothing.
+
+`tests/integration/test_detect_closing_signal_es_guards.sh` gains four must-fire cases and three must-not-fire controls. The four new cases fail on the pack from before this change.
+
+## 2026-10-14: moving the machinery out of a cloud-synced vault works on Windows PowerShell 5.1 — and no longer kills the process it checks
+
+**Who this affects:** anyone on Windows who runs `scripts/relocate-machinery-sidecar.ps1` with the PowerShell that ships with Windows (5.1), and anyone on Windows whose relocation checks for live Claude sessions (the `.ps1`, or the `.sh` under Git Bash with a Windows Python).
+
+Five things broke on Windows PowerShell 5.1. PowerShell 7 (`pwsh`, which CI runs) does not show the first four, which is why every check stayed green:
+
+1. **A native command that printed one line to stderr stopped the whole script.** Under `$ErrorActionPreference = "Stop"`, PS 5.1 turns a redirected stderr line into a terminating error, and the pipeline stop can kill the command mid-write. On the machine where this was found, `git worktree repair` died while rewriting the vault's `.git` file and left `invalid gitfile format`. The git, Python and cloud-sync probes now run inside a small `Invoke-Native` wrapper that sets the preference back to `Continue` for that one call.
+2. **Python code passed with `-c` arrived mangled.** PS 5.1 does not escape embedded double quotes when it builds a native command line, so `if os.name == "nt"` reached Python as `if os.name == nt` and raised a `NameError`. `Invoke-Py` now writes the code to a temp file and runs that.
+3. **OneDrive placeholders read as links.** Files-On-Demand stamps ordinary folders with a cloud reparse tag, so `Test-ReparsePoint` reported never-moved folders as "already relocated". It now counts only the two link kinds the script creates (junction, symbolic link).
+4. **A vault with no git repo was refused.** `return @()` unrolls to `$null` through the pipeline, and `$null` means "the probe failed". It now returns `,@()`.
+5. **The live-session check could terminate an unrelated process.** On Windows `os.kill(pid, 0)` is not a probe: it calls `TerminateProcess`, and the pid in the session lock is the short-lived hook's pid, so it hit whatever process Windows had since given that number. Both the `.ps1` and the `.sh` now ask Windows for a query handle (`OpenProcess` + `GetExitCodeProcess`) and keep `os.kill(pid, 0)` for POSIX. `scripts/gh-safe.py` already avoids this for the same reason.
+
+**Tested:** `scripts/test-relocate-machinery-sidecar.ps1` run under Windows PowerShell 5.1 (pointed at `powershell.exe` instead of `pwsh`): 22 of 22 pass with this change; the version on `main` crashes before the first assertion. Not covered: CI does not run the suite under 5.1, so nothing stops these from coming back.
 
 ---
 

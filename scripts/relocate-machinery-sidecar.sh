@@ -348,6 +348,33 @@ live_sessions() {  # prints an integer; returns 2 if the lock could not be read
   [ -f "$lock" ] || { printf '0\n'; return 0; }
   out="$(SELF_PID="$$" LOCK="$lock" "$PYBIN" - <<'PY'
 import json, os, sys, time
+if os.name == "nt":  # this same script runs under Git Bash with a Windows python
+    import ctypes
+    KERNEL32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    KERNEL32.OpenProcess.restype = ctypes.c_void_p
+    KERNEL32.OpenProcess.argtypes = (ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32)
+
+def pid_alive(pid):
+    if os.name == "nt":
+        # os.kill(pid, 0) is NOT a probe on Windows - it TerminateProcess()es
+        # the target (exit code 0). Ask for a query handle instead.
+        h = KERNEL32.OpenProcess(0x1000, 0, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not h:
+            return ctypes.get_last_error() == 5   # denied -> exists; else -> gone
+        try:
+            code = ctypes.c_uint32(0)
+            ok = KERNEL32.GetExitCodeProcess(ctypes.c_void_p(h), ctypes.byref(code))
+            return bool(ok) and code.value == 259  # STILL_ACTIVE
+        finally:
+            KERNEL32.CloseHandle(ctypes.c_void_p(h))
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except Exception:
+        return True   # exists but unprobeable -> treat as live (fail closed)
+
 lock = os.environ["LOCK"]
 try:
     with open(lock, encoding="utf-8") as f:
@@ -364,14 +391,7 @@ for s in sessions.values():
         continue
     pid = s.get("pid")
     la = s.get("last_activity_at")
-    alive = False
-    if isinstance(pid, int) and pid > 0 and pid != self_pid:
-        try:
-            os.kill(pid, 0); alive = True
-        except ProcessLookupError:
-            alive = False
-        except Exception:
-            alive = True
+    alive = isinstance(pid, int) and pid > 0 and pid != self_pid and pid_alive(pid)
     recent = isinstance(la, (int, float)) and la >= cut
     if alive or recent:
         n += 1
