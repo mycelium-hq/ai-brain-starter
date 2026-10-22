@@ -170,7 +170,9 @@ function Invoke-Py { param([string]$Code, [object[]]$PyArgs = @())
   $py = Get-PyExe
   $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("brain-sidecar-py-" + [System.Guid]::NewGuid().ToString("N") + ".py")
   [System.IO.File]::WriteAllText($tmp, $Code, (New-Object System.Text.UTF8Encoding($false)))
-  try     { return (& $py $tmp @PyArgs) }
+  # -I: running a file puts its folder first on sys.path, and the temp dir can be
+  # shared (/tmp under pwsh on Linux), so a planted json.py would run as us.
+  try     { return (& $py -I $tmp @PyArgs) }
   finally { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
 }
 function Get-AbsPath { param([string]$p)
