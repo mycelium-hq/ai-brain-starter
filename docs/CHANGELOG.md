@@ -9,6 +9,18 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-10-24: undoing the machinery move works again on Windows
+
+**Who this affects:** anyone on Windows who ran `scripts/relocate-machinery-sidecar.ps1` on a vault with an emoji in a folder name, such as `⚙️ Meta`, and later runs it with `-Rollback` to undo the move.
+
+The Windows PowerShell 5.1 fix that landed on 2026-10-22 (#741) runs the script's Python with `-I`, so a `json.py` planted in a shared temp folder cannot be imported. `-I` also makes Python ignore every `PYTHON*` environment variable, including the two the script sets so that Python writes UTF-8. On Windows, Python then writes its output in the console's codepage (cp1252), which has no emoji. When `-Rollback` read the move record and reached a `⚙️ Meta/...` path, Python stopped with an encoding error, and the script carried on as if the record were empty: it restored nothing, removed the record, and printed "Rollback complete: 0 restored, 0 already in place, 0 failed" with exit code 0. A rollback that should have reported INCOMPLETE reported success the same way.
+
+Python now runs with `-I -X utf8`. `-X utf8` is a command-line option, so `-I` keeps it, and the temp-folder protection stays.
+
+**Tested:** `scripts/test-relocate-machinery-sidecar.ps1` under Windows PowerShell 5.1: 53 of 53 pass with this change; on `main`, 48 pass and 5 fail, all in the rollback and failed-rollback cases. Not covered: CI runs this suite only under `pwsh` on Linux, where Python already writes UTF-8, so CI cannot see this bug.
+
+---
+
 ## 2026-10-23: the note guard now blocks NVIDIA keys, Google OAuth client secrets, npm tokens and Backblaze B2 keys
 
 **Who this affects:** anyone with an NVIDIA build API key, a Google OAuth client of their own (for example from connecting Gmail and Calendar), an npm token or a Backblaze B2 key.

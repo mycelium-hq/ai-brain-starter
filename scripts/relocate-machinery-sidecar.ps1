@@ -172,7 +172,11 @@ function Invoke-Py { param([string]$Code, [object[]]$PyArgs = @())
   [System.IO.File]::WriteAllText($tmp, $Code, (New-Object System.Text.UTF8Encoding($false)))
   # -I: running a file puts its folder first on sys.path, and the temp dir can be
   # shared (/tmp under pwsh on Linux), so a planted json.py would run as us.
-  try     { return (& $py -I $tmp @PyArgs) }
+  # -I also implies -E, so PYTHONUTF8 / PYTHONIOENCODING above are ignored here;
+  # -X utf8 is a command-line option, which -I keeps. Without it a piped stdout
+  # is cp1252 on Windows, and an emoji in a vault path raises
+  # UnicodeEncodeError, which left -Rollback restoring nothing while reporting rc 0.
+  try     { return (& $py -I -X utf8 $tmp @PyArgs) }
   finally { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
 }
 function Get-AbsPath { param([string]$p)
