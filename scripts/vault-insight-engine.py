@@ -562,6 +562,146 @@ def concept_theme_crossovers(index, min_overlap=3):
 
 # ── Report rendering ─────────────────────────────────────────────────
 
+
+# ── Message-channel findings ──────────────────────────────────────────
+# Added 2026-08-24. The findings above all interrogate journals and books.
+# A vault whose mass is message history rather than long-form notes gets an
+# empty report from every one of them, while the corpus that actually holds its
+# relationships goes unexamined. These three read what is there instead.
+#
+# All three skip files carrying `superseded_by` — the deduplicated twins.
+
+def _chat_rows(index, kind=None, min_msgs=0):
+    """Live (non-superseded) chat mirrors, optionally filtered by kind/size."""
+    out = []
+    for p in index:
+        if p["type"] not in ("whatsapp_chat", "whatsapp-chat"):
+            continue
+        if not p.get("in_scope", True):
+            continue
+        fm = p["fm"]
+        if fm.get("superseded_by"):
+            continue
+        n = fm.get("whatsapp_message_count") or 0
+        if n < min_msgs:
+            continue
+        if kind and fm.get("whatsapp_chat_kind") != kind:
+            continue
+        out.append(fm)
+    return out
+
+
+def _group_contact_map(index):
+    """name -> most recent ISO date of any GROUP they belong to.
+
+    A quiet one-to-one chat does not mean a quiet relationship: three people who
+    moved their conversation into a shared group look 47 days silent on the direct
+    thread while talking every week in the group. Group membership cannot be
+    derived from the export — WhatsApp writes privacy-style numeric sender ids for
+    group participants, which match no contact file — so each group note declares
+    its people in a `members:` frontmatter list.
+    """
+    last_seen = {}
+    for p in index:
+        if p["type"] not in ("whatsapp_chat", "whatsapp-chat"):
+            continue
+        fm = p["fm"]
+        if fm.get("superseded_by") or fm.get("whatsapp_chat_kind") != "group":
+            continue
+        members = fm.get("members") or []
+        if isinstance(members, str):
+            members = [members]
+        group_last = fm.get("whatsapp_last_iso")
+        if not group_last:
+            continue
+        for m in members:
+            m = str(m).strip().strip("[]")
+            if not m:
+                continue
+            if m not in last_seen or group_last > last_seen[m]:
+                last_seen[m] = group_last
+    return last_seen
+
+
+def cooling_relationships(index, min_msgs=100, stale_days=21):
+    """People with real history and no recent contact on ANY channel.
+
+    Reads the conversation record rather than journal mentions, so it reaches
+    people who never made it into an entry. Contact in a shared group counts:
+    someone active in a group with you is not cooling, whatever the direct
+    thread says.
+    """
+    group_last = _group_contact_map(index)
+    today = date.today()
+    out = []
+    for fm in _chat_rows(index, kind="direct", min_msgs=min_msgs):
+        name = fm.get("whatsapp_contact_name") or "?"
+        if _is_self_reference(name):
+            continue
+        direct_last = fm.get("whatsapp_last_iso")
+        via_group = group_last.get(name)
+        effective = max([d for d in (direct_last, via_group) if d], default=None)
+        if not effective:
+            continue
+        try:
+            dormant = (today - date.fromisoformat(effective)).days
+        except ValueError:
+            continue
+        if dormant <= stale_days:
+            continue
+        out.append({"name": name, "msgs": fm.get("whatsapp_message_count") or 0,
+                    "dormant": dormant, "last": effective,
+                    "via_group": bool(via_group and via_group == effective)})
+    out.sort(key=lambda r: -r["dormant"])
+    return out[:10]
+
+
+def one_sided_conversations(index, min_msgs=80, my_share=0.65):
+    """Direct chats where the user writes most of the messages.
+
+    Not a verdict — a load signal. Who are you carrying?
+    """
+    out = []
+    for fm in _chat_rows(index, kind="direct", min_msgs=min_msgs):
+        total = fm.get("whatsapp_message_count") or 0
+        mine = fm.get("whatsapp_my_msg_count") or 0
+        if not total or not mine:
+            continue
+        share = mine / total
+        if share < my_share:
+            continue
+        name = fm.get("whatsapp_contact_name") or "?"
+        if _is_self_reference(name):
+            continue
+        out.append({"name": name, "msgs": total, "mine": mine,
+                    "share": share, "dormant": fm.get("whatsapp_dormancy_days")})
+    out.sort(key=lambda r: -r["share"])
+    return out[:10]
+
+
+def work_decided_off_channel(index, min_msgs=100, min_density=10.0):
+    """Chats carrying company-specific vocabulary at meaningful density.
+
+    Ranks on `whatsapp_work_density` (hits per 1,000 messages), not raw volume.
+    Sorting by volume put a 2,115-message school group above a 259-message thread
+    with the finance analyst; density inverts that correctly.
+    """
+    out = []
+    for fm in _chat_rows(index, min_msgs=min_msgs):
+        density = fm.get("whatsapp_work_density")
+        if density is None or density < min_density:
+            continue
+        name = fm.get("whatsapp_contact_name") or "?"
+        if _is_self_reference(name):
+            continue
+        out.append({"name": name, "msgs": fm.get("whatsapp_message_count") or 0,
+                    "kind": fm.get("whatsapp_chat_kind") or "?",
+                    "density": density,
+                    "dormant": fm.get("whatsapp_dormancy_days")})
+    out.sort(key=lambda r: -r["density"])
+    return out[:12]
+
+
 def render_report(index, findings, baseline, scope_label=None, scoped_n=None, total_n=None, is_scoped=False):
     lines = []
     lines.append("---")
@@ -635,6 +775,21 @@ def render_report(index, findings, baseline, scope_label=None, scoped_n=None, to
          "*CRM priority=high, not in journals for 60+ days. Warm them or demote them.*",
          findings["high_priority_neglected_contacts"],
          lambda r: f"- **{r['name']}** — last journal: {r['last']}" + (f" — next step: _{r['next_step']}_" if r.get('next_step') else "")),
+
+        ("Relaciones que se enfrían — por historial de mensajes",
+         "*Más de 100 mensajes de historial y 3+ semanas sin contacto en NINGÚN canal. Cuenta también los grupos compartidos que declaren `members:` — hablarse en un grupo no es silencio. Lee la conversación real, no el diario, por eso alcanza gente que nunca llegó a una entrada.*",
+         findings["cooling_relationships"],
+         lambda r: f"- **{r['name']}** — {r['msgs']:,} mensajes, {r['dormant']} días en silencio (último: {r['last']})"),
+
+        ("Conversaciones que llevas tú",
+         "*Chats uno a uno donde escribes 65%+ de los mensajes. No es un veredicto: es señal de carga. ¿A quién estás sosteniendo?*",
+         findings["one_sided_conversations"],
+         lambda r: f"- **{r['name']}** — {int(r['share']*100)}% tuyo ({r['mine']:,} de {r['msgs']:,} mensajes)"),
+
+        ("Trabajo decidiéndose fuera del canal oficial",
+         "*Chats con lenguaje de acuerdos, pagos, precios o escalamientos. Si el sistema de registro es Slack, esto es trabajo sin rastro para el resto del equipo.*",
+         findings["work_decided_off_channel"],
+         lambda r: f"- **{r['name']}** ({r['kind']}) — densidad {r['density']} por cada 1,000 mensajes · {r['msgs']:,} mensajes en total"),
 
         ("Dormant concepts with historical weight",
          "*Concepts not linked in 180+ days that once had 5+ mentions. Buried gold.*",
@@ -712,6 +867,9 @@ def main():
         "lucky_charm_people": lucky_charm_people(index, baseline),
         "drag_people": drag_people(index, baseline),
         "high_priority_neglected_contacts": high_priority_neglected_contacts(index),
+        "cooling_relationships": cooling_relationships(index),
+        "one_sided_conversations": one_sided_conversations(index),
+        "work_decided_off_channel": work_decided_off_channel(index),
         "dormant_concepts": dormant_concepts(index),
         "resurrection_candidates": resurrection_candidates(index),
         "deep_processing_streaks": deep_processing_streaks(index, baseline),
@@ -733,6 +891,9 @@ def main():
         "lucky_charm_people": "Lucky-charm people (high-floor)",
         "drag_people": "Drag people (low-floor)",
         "high_priority_neglected_contacts": "High-priority contacts going cold",
+        "cooling_relationships": "Relaciones que se enfrían (mensajes)",
+        "one_sided_conversations": "Conversaciones que llevas tú",
+        "work_decided_off_channel": "Trabajo fuera del canal oficial",
         "dormant_concepts": "Dormant concepts with historical weight",
         "resurrection_candidates": "Resurrection candidates",
         "deep_processing_streaks": "Deep-processing streaks",
@@ -750,6 +911,12 @@ def main():
                 print(f"    • {r['name']}: {r['mentions']} mentions, {int(r['ratio']*100)}% matching")
             elif key == "high_priority_neglected_contacts":
                 print(f"    • {r['name']}: last {r['last']}")
+            elif key == "cooling_relationships":
+                print(f"    • {r['name']}: {r['msgs']:,} msgs, {r['dormant']}d en silencio")
+            elif key == "one_sided_conversations":
+                print(f"    • {r['name']}: {int(r['share']*100)}% tuyo ({r['mine']:,}/{r['msgs']:,})")
+            elif key == "work_decided_off_channel":
+                print(f"    • {r['name']}: densidad {r['density']}/1k ({r['msgs']:,} msgs)")
             elif key == "dormant_concepts":
                 print(f"    • {r['name']}: {r['mentions']} historical, last {r['last']}")
             elif key == "resurrection_candidates":
