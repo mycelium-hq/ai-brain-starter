@@ -9,6 +9,16 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-10-26: /repurpose-talk now turns articles into posts too
+
+**Who this affects:** anyone who writes articles, or who reads an article worth reacting to, and wants social content out of it.
+
+`/repurpose-talk` only worked from a talk: a recording, a transcript, slides or a brain-dump. Now you can also hand it an article, by link or file, and say "break this into posts". It reads the whole article, then asks whose it is. If it's yours, the posts can quote it freely and the link goes in the first comment. If it's someone else's, every piece names the source and adds your own take, and it never quotes more than a sentence or two, so nothing reads as if you came up with someone else's idea.
+
+For each claim in the article it looks in your vault for something you lived that connects to it, and asks you when it finds nothing. Claims with no angle of yours get dropped, because a plain summary of someone else's article is the weakest kind of post. You get LinkedIn posts, carousels, short-video scripts and short-form notes, saved as `Article Repurpose - [Title] - YYYY-MM-DD.md` in your Writing folder.
+
+---
+
 ## 2026-10-24: undoing the machinery move works again on Windows
 
 **Who this affects:** anyone on Windows who ran `scripts/relocate-machinery-sidecar.ps1` on a vault with an emoji in a folder name, such as `⚙️ Meta`, and later runs it with `-Rollback` to undo the move.

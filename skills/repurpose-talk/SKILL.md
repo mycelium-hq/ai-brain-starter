@@ -1,8 +1,8 @@
 ---
 name: repurpose-talk
-description: Use when the user just gave a talk, panel, fireside chat, keynote, workshop, podcast, or webinar and wants content made from it — triggers like "I just gave a talk", "the panel is done", "just finished speaking", "turn my talk into LinkedIn posts", "repurpose this recording/transcript into posts, notes, or clips", or /repurpose-talk. Works from a recording, transcript, slides, or a from-memory brain-dump.
+description: Use when the user just gave a talk, panel, fireside chat, keynote, workshop, podcast, or webinar and wants content made from it, or shares an article (their own published piece or someone else's) to break into posts, carousels, and short-video scripts — triggers like "I just gave a talk", "the panel is done", "just finished speaking", "turn my talk into LinkedIn posts", "repurpose this recording/transcript into posts, notes, or clips", "break this article into social posts", or /repurpose-talk. Works from a recording, transcript, slides, a from-memory brain-dump, or an article URL or file.
 trigger: /repurpose-talk
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Repurpose Talk
@@ -11,7 +11,7 @@ Turn a single speaking engagement into maximum content leverage. Run this after 
 
 ## Trigger
 
-`/repurpose-talk` or when the user says "I just gave a talk", "the panel is done", "just finished speaking"
+`/repurpose-talk` or when the user says "I just gave a talk", "the panel is done", "just finished speaking", or shares an article and asks to turn it into content
 
 ## Input
 
@@ -20,6 +20,20 @@ Ask for (in this order, skip any they don't have):
 2. **Transcript** - if available (check meeting note tools, Google Docs, or manual notes)
 3. **Slides** - if used
 4. **If none of the above**: ask them to brain-dump the key points, best audience reactions, and any quotes they remember
+5. **Article** (Article mode): a URL or file of an article. Read it in full with WebFetch. If the page blocks fetching, ask the user to paste the text. Never work from the headline or a summary alone.
+
+### Article mode
+
+When the input is an article instead of a talk, run the same phases with these changes:
+
+1. **Ask whose article it is** before extracting anything.
+   - **The user's own published piece:** posts can quote it freely, and the link goes in the first comment, not the post body.
+   - **Someone else's article:** every piece names the source and adds the user's own take or experience. Never restate the article as if it were the user's idea, and never quote more than one or two sentences from it.
+2. **Phase 1 extracts, for an article:** the thesis in one sentence, 3-5 claims with their data (keep the original source of every number), 1-2 examples or cases, and the questions the article leaves open.
+3. **Find the user's angle for each claim.** Search the vault (journals, meeting notes, project notes) for something the user lived that connects to the claim: a result, a mistake, a client story. If nothing connects, ask the user for one. A piece with no personal angle is a summary, and summaries of someone else's article underperform. Drop claims that end up with no angle rather than publishing them as summaries.
+4. **Phase 1.5** uses the same virality categories, applied to claims instead of clips.
+5. **Phase 2 package for an article:** 3-5 LinkedIn posts, 1-2 carousels (one slide per idea, 6-10 slides, title slide states the claim), 1-3 short-video scripts (hook in the first line, one idea, under 60 seconds read aloud), and 5-8 short-form notes. Skip the Video Clip Plan and the Article Seed.
+6. **Output** for an article: `Article Repurpose - [Article Title] - YYYY-MM-DD.md` in the Writing folder.
 
 ## Process
 
@@ -95,7 +109,7 @@ Open the main file in Obsidian when done (if Local REST API is available).
 
 ## Rules
 
-- Use the user's actual voice. Read 2-3 of their published posts first to calibrate tone.
+- Use the user's actual voice. If a voice-profile skill or note exists in the vault, load it first; otherwise read 2-3 of their published posts to calibrate tone.
 - No em dashes anywhere.
 - Run humanizer principles on every piece if the humanizer skill is available.
 - If the talk was in a non-English language, create content in BOTH languages (primary + secondary audience).
