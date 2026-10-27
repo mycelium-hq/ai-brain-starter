@@ -21,6 +21,25 @@ The guard now uses the same test as the linker: a symlink, or on Windows a repar
 
 ---
 
+## 2026-10-26: people you write about without a link now count as journal mentions
+
+**Who this affects:** anyone whose journals name people in plain text ("lunch with Maya") instead of linking them (`[[Maya Torres]]`), and anyone who uses the insight engine's people findings: who is going cold, who shows up on good or bad days.
+
+Metadata extraction counted a journal as a mention of a person only when it held the exact link to that person's CRM note. Most journals name people without a link most of the time, so a colleague seen every week could show 0 mentions, and the insight engine then reported them as a high-priority contact going cold.
+
+A journal now also counts when it names the person in plain text: the note's file name, or any name in its `aliases:` (for example `aliases: [Maya, "my manager"]`). A link to one of those aliases, such as `[[Maya]]`, counts too. A day that already counted through a link is not counted again. These rules keep it from crediting the wrong person:
+
+- A name or alias that two CRM notes claim, such as two people with the alias "Sam", is not used for either of them. They still count through links.
+- An alias with a capital letter does not count inside a longer name: "Ana" does not count in "Ana Maria", "Rosa Ana" or "Ana de la Fuente". At the start of a sentence or a line the capital is grammar, so "Yesterday Ana called" counts. That means "Rosa Ana" as the first words of a sentence still counts for Ana. The same applies to a file name of one word, such as a note called "Ana". A file name of two or more words is the full name and is taken as written.
+- A name inside a link to another existing note does not count: `[[Ana Lima|Ana]]` is about Ana Lima.
+- Only whole words count, with the same capitals as written in the note: "Anabel" is not "Ana", and "my manager" counts as written.
+
+Names and aliases shorter than three letters are not looked for. If a contact's name is also an ordinary word that starts sentences, such as "Will" or "Hope", the count can run high. `PERSON_PLAIN_TEXT_MENTIONS=0` turns the plain-text count off and goes back to links only.
+
+**Tested:** `tests/integration/test_person_plain_text_mentions.sh` builds a small vault and runs the real extraction. 3 assertions fail on `main` and all pass with this change; `tests/integration/test_extractors_localized_vault.sh` still passes. On a real Spanish-language vault with 86 CRM notes and 124 journals, total mentions went from 364 to 849, and people with zero mentions from 38 to 28. The rules miss some real mentions: "Name de Company" reads as a longer name, and a link to a note that is not the person's (such as a chat log named after them) is not counted.
+
+---
+
 ## 2026-10-26: /repurpose-talk now turns articles into posts too
 
 **Who this affects:** anyone who writes articles, or who reads an article worth reacting to, and wants social content out of it.

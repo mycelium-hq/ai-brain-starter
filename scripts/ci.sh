@@ -620,6 +620,13 @@ INTEGRATION_TESTS=(
   # it); says SKIP and exits 0 when no interpreter has it, and the CI-only
   # bootstrap near the top of this script installs it so CI never takes that path.
   test_extractors_localized_vault
+  # person.py counted a journal as a mention only through the exact wikilink, so
+  # people written by name or alias read as 0 mentions and fed the "going cold"
+  # finding. Asserts the plain-text pass and its guards (an alias two notes
+  # claim, an alias inside a longer name or on a link to another note, whole
+  # words only) plus the PERSON_PLAIN_TEXT_MENTIONS=0 switch; 3 assertions fail
+  # on the pre-fix person.py. Needs PyYAML, same SKIP rule as the suite above.
+  test_person_plain_text_mentions
   # claude_performance_digest.py divided each project's turns by total_turns
   # unguarded, and a session with no assistant record still gets a row, so a
   # window where no session had one crashed the weekly run before it wrote the
