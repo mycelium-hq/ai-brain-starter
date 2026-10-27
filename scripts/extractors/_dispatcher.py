@@ -177,6 +177,12 @@ def process_file(filepath, registry, context, dry_run=False, force=False):
     if fm_dict is None:
         return "NO_FRONTMATTER"
 
+    # Explicitly excluded: superseded duplicates, or anything the user has
+    # flagged. Writing metrics onto a superseded file makes every downstream
+    # count (insights, dataview, graph) double-count the same conversation.
+    if fm_dict.get("exclude_from_extraction") is True:
+        return "EXCLUDED"
+
     doc_type_raw = (fm_dict.get("type") or "").strip().lower()
     if not doc_type_raw:
         return "NO_TYPE"
@@ -308,7 +314,8 @@ def main():
     counters = {
         "WROTE": 0, "DRY_OK": 0, "SKIP_ALREADY_TAGGED": 0,
         "NO_TYPE": 0, "NO_FRONTMATTER": 0, "INFRASTRUCTURE": 0,
-        "EXTRACTOR_SKIPPED": 0, "NO_FIELDS_EMITTED": 0, "OUTSIDE_VAULT": 0,
+        "EXTRACTOR_SKIPPED": 0, "NO_FIELDS_EMITTED": 0,
+        "EXCLUDED": 0, "OUTSIDE_VAULT": 0,
     }
     no_extractor_types = {}
     errors = []
@@ -377,6 +384,7 @@ def main():
     print(f"  Infrastructure:      {counters['INFRASTRUCTURE']}")
     print(f"  No frontmatter:      {counters['NO_FRONTMATTER']}")
     print(f"  Extractor skipped:   {counters['EXTRACTOR_SKIPPED']}")
+    print(f"  Excluded (superseded): {counters['EXCLUDED']}")
     if counters["OUTSIDE_VAULT"]:
         print(f"  ⚠ REFUSED, resolves outside the vault (symlink): {counters['OUTSIDE_VAULT']}")
     if skipped:

@@ -56,10 +56,14 @@ ARCHIVE_STEM="vault-backup"
 
 # Dirs that are regenerable machine-exhaust — never worth backing up, and the
 # exact churn that would bloat the archive. Notes + .git history are kept.
+# A "./" entry is a path under the vault root. A bare name matches at ANY depth:
+# these caches sit next to whatever code made them, rarely at the vault root.
+# GNU tar (Linux, Git Bash) anchors "./__pycache__" to the root, so a nested
+# one went into the archive; bsdtar (macOS) already matched it anywhere.
 EXCLUDES=(
-  "./.claude/worktrees" "./.smart-env" "./.codegraph" "./node_modules"
-  "./.venv" "./__pycache__" "./.pytest_cache" "./.mypy_cache" "./.ruff_cache"
-  "./.trash" "./.DS_Store"
+  "./.claude/worktrees" ".smart-env" ".codegraph" "node_modules"
+  ".venv" "__pycache__" ".pytest_cache" ".mypy_cache" ".ruff_cache"
+  ".trash" ".DS_Store"
 )
 
 # ---------- tiny ui helpers (no-op color if not a tty) ----------
