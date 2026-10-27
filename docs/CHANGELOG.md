@@ -21,6 +21,18 @@ The guard now uses the same test as the linker: a symlink, or on Windows a repar
 
 ---
 
+## 2026-10-24: a Spanish "cierra la cesion" now closes the session, and /diagnose reads a Spanish "Mapa del vault"
+
+**Who this affects:** anyone who talks to Claude in Spanish, or whose vault was set up in Spanish.
+
+In most of Latin America, and in parts of Spain, "sesión" and "cesión" sound the same, so people type "cierra la cesion" or "cerremos la cesión". The Spanish close pack only knew the `s` spelling, so those messages did nothing and the session stayed open. The close phrases now accept either spelling.
+
+"Cesión" is also a real word (an assignment or transfer), so a message like "cerremos la cesión de derechos del contrato" is about a contract, not about ending the conversation. It is treated like "cierra la sesión de la base de datos": not a close. The same goes for a cesión of contracts, credits, a portfolio, shares, quotas, debt, goods or property.
+
+`/diagnose` looked for the literal heading `## Vault Map` in your `CLAUDE.md`. A vault set up in Spanish names that section `## Mapa del vault`, so `/diagnose` warned that the map was missing, with the advice "Claude will create duplicate folders without it", on a vault that had one. Both `diagnose.sh` and `diagnose.ps1` now accept `## Mapa del vault` and `## Mapa de la bóveda` as well. A `CLAUDE.md` with no map section still gets the warning. Other languages are not covered yet.
+
+---
+
 ## 2026-10-24: undoing the machinery move works again on Windows
 
 **Who this affects:** anyone on Windows who ran `scripts/relocate-machinery-sidecar.ps1` on a vault with an emoji in a folder name, such as `⚙️ Meta`, and later runs it with `-Rollback` to undo the move.
