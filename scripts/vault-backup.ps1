@@ -137,7 +137,15 @@ function New-Archive {
   New-Item -ItemType Directory -Force -Path $stage | Out-Null
   try {
     $xd = @()
-    foreach ($d in $ExcludeDirs) { $xd += "/XD"; $xd += (Join-Path $vault $d) }
+    # An entry with a separator (.claude\worktrees) is a path under the vault
+    # root. A bare name (__pycache__, node_modules) goes to robocopy as a NAME,
+    # which matches that directory at ANY depth: these caches sit next to
+    # whatever code made them, rarely at the vault root. Joining every entry to
+    # the vault path excluded only a root-level __pycache__ and copied the rest.
+    foreach ($d in $ExcludeDirs) {
+      $xd += "/XD"
+      if ($d.Contains([char]92) -or $d.Contains('/')) { $xd += (Join-Path $vault $d) } else { $xd += $d }
+    }
     # robocopy mirrors the tree minus excluded dirs; /NFL /NDL /NJH /NJS = quiet.
     & robocopy $vault $stage /E @xd /XF "*.zip" "*.zip.gpg" /NFL /NDL /NJH /NJS /NP | Out-Null
     # robocopy exit codes 0-7 are success; >=8 is failure.
