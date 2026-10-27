@@ -55,7 +55,10 @@ if (Test-Path -LiteralPath $claudeMd) {
   } else {
     Ok "CLAUDE.md present ($size bytes)"
   }
-  if (Select-String -LiteralPath $claudeMd -Pattern "## Vault Map" -Quiet) {
+  # A vault set up in Spanish names this section "## Mapa del vault" (the
+  # setup phases say to translate where idiomatic). Same content, different
+  # heading: an English-only pattern reports a real Vault Map as missing.
+  if (Select-String -LiteralPath $claudeMd -Pattern "## (Vault Map|Mapa del [Vv]ault|Mapa de la [Bb](o|ó)veda)" -Quiet) {
     Ok "Vault Map section present"
   } else {
     Warn "No '## Vault Map' section in CLAUDE.md" "Claude will create duplicate folders without it."
