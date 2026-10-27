@@ -116,6 +116,9 @@ for p in \
   "cierra el archivo y seguimos" \
   "cierra el modal antes de guardar" \
   "cerrá la pestaña de Chrome" \
+  "cerremos la cesión de derechos del contrato" \
+  "cierra la cesion del contrato con el cliente" \
+  "cierro la cesión de la cartera" \
 ; do
   assert_no_fire "$p" || failed=$((failed+1))
 done
@@ -143,6 +146,11 @@ for p in \
   "eso es todo" \
   "ya estuvo por hoy" \
   "¿puedes cerrar la sesión?" \
+  "cierra la cesion" \
+  "cierra esta cesion" \
+  "cierro cesion" \
+  "cerremos la cesión" \
+  "cerrar la cesion" \
 ; do
   assert_fires "$p" || failed=$((failed+1))
 done
