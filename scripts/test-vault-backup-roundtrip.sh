@@ -24,6 +24,13 @@ printf '# CLAUDE.md\nbrain memory\n' > "$V/CLAUDE.md"
 printf 'a private journal entry\n'   > "$V/journal.md"
 printf 'EXHAUST-should-not-appear\n' > "$V/.claude/worktrees/scratch/junk.md"
 printf 'EXHAUST-cache\n'             > "$V/.smart-env/cache.bin"
+# Nested exhaust: these caches sit next to whatever code made them, not at the
+# vault root. GNU tar anchors "./__pycache__" to the root, so they leaked there.
+mkdir -p "$V/⚙️ Meta/scripts/__pycache__" "$V/projects/app/node_modules/pkg"
+printf 'EXHAUST-nested-pyc\n'        > "$V/⚙️ Meta/scripts/__pycache__/tool.cpython-312.pyc"
+printf 'EXHAUST-nested-node\n'       > "$V/projects/app/node_modules/pkg/index.js"
+printf 'print("kept")\n'             > "$V/⚙️ Meta/scripts/tool.py"
+printf 'a note, not a cache\n'       > "$V/projects/node_modules notes.md"
 DEST="$ROOT/dest"
 
 # ---- 1. setup (non-interactive: --dest given, no encrypt, no schedule) ----
@@ -44,6 +51,17 @@ if printf '%s\n' "$listing" | grep -q 'worktrees\|smart-env\|codegraph'; then
   fail "machine-exhaust leaked into the archive"
 else
   pass "machine-exhaust (.claude/worktrees, .smart-env, .codegraph) excluded"
+fi
+if printf '%s\n' "$listing" | grep -q '/__pycache__/\|/node_modules/'; then
+  fail "nested machine-exhaust (__pycache__, node_modules below the root) leaked into the archive"
+else
+  pass "nested machine-exhaust (__pycache__, node_modules below the root) excluded"
+fi
+if printf '%s\n' "$listing" | grep -q 'scripts/tool.py' \
+   && printf '%s\n' "$listing" | grep -q 'projects/node_modules notes.md'; then
+  pass "files beside the excluded folders are kept, 'node_modules notes.md' included"
+else
+  fail "a file beside an excluded folder went missing from the archive"
 fi
 
 # ---- 4. detector now says BACKED_UP (exit 0) ----

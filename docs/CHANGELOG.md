@@ -28,6 +28,18 @@ Names and aliases shorter than three letters are not looked for. If a contact's 
 
 ---
 
+## 2026-10-26: backups leave out code caches wherever they sit in the vault, not only at the top
+
+**Who this affects:** anyone using the vault backup (`scripts/vault-backup.ps1` on Windows, `scripts/vault-backup.sh` on Linux or Git Bash) whose vault holds scripts or small code projects below the top folder.
+
+The backup skips folders that are only machine leftovers and can be rebuilt: `__pycache__`, `node_modules`, `.venv`, test and linter caches. It only skipped them at the top of the vault. On Windows, every name on the list was turned into a path under the vault root before it reached robocopy, and GNU tar read the `./__pycache__` form the same way. These caches sit next to whatever code made them, so in a real vault they are almost always deeper down, in a scripts folder or a project folder, and every one of them went into the archive. On macOS the same names already matched at any depth, because bsdtar reads them that way.
+
+A plain name on the list now matches a folder of that name at any depth, on every system. An entry with a path in it, such as `.claude/worktrees`, still means that path under the vault root. Notes are not affected: the match is on whole folder names, so a note called `node_modules notes.md` is still backed up.
+
+**Tested:** a new `tests/integration/test_vault_backup_ps1_nested_excludes.ps1` runs a real `vault-backup.ps1 run` on a test vault and opens the archive. Under Windows PowerShell 5.1 on Windows 11, all four cases pass with this change; on `main` the nested `__pycache__`, `node_modules` and `.venv` are in the archive. `scripts/test-vault-backup-roundtrip.sh` gains the same nested case for `vault-backup.sh`, which fails on `main` with GNU tar and passes with this change. Not covered: the `.ps1` suite skips off Windows, because it needs robocopy, and neither suite is part of the CI gate. Under Git Bash the roundtrip suite needs `TAR_OPTIONS=--force-local`, because GNU tar reads `C:\...` as a remote host; with it, the two other failures it shows on Windows are also on `main`.
+
+---
+
 ## 2026-10-24: a Spanish "cierra la cesion" now closes the session, and /diagnose reads a Spanish "Mapa del vault"
 
 **Who this affects:** anyone who talks to Claude in Spanish, or whose vault was set up in Spanish.
