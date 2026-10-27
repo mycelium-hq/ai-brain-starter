@@ -68,7 +68,10 @@ if [ -f "$VAULT/CLAUDE.md" ]; then
   else
     ok "CLAUDE.md present ($size bytes)"
   fi
-  if grep -q "## Vault Map" "$VAULT/CLAUDE.md"; then
+  # A vault set up in Spanish names this section "## Mapa del vault" (the
+  # setup phases say to translate where idiomatic). Same content, different
+  # heading: an English-only pattern reports a real Vault Map as missing.
+  if grep -qE "## (Vault Map|Mapa del [Vv]ault|Mapa de la [Bb](o|ó)veda)" "$VAULT/CLAUDE.md"; then
     ok "Vault Map section present"
   else
     warn "No '## Vault Map' section in CLAUDE.md" "Claude will create duplicate folders without it."
