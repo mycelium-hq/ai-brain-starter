@@ -43,6 +43,8 @@ Bypass: ``TOOL_PRIVATE_MEMORY_BYPASS=1`` (document why).
 """
 from __future__ import annotations
 
+# utf8-stdout-ok: the only console write is print(json.dumps(...)) with the default
+# ensure_ascii=True, so stdout only ever carries ASCII (no raw non-ASCII write).
 import json
 import os
 import sys
