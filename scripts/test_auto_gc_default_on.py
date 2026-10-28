@@ -146,6 +146,37 @@ def main() -> int:
           "the cron install is not idempotent — re-running would stack duplicate "
           "entries and run the GC N times a night")
 
+    # --- ...with the 30-minute disk check beside the daily pass, once -------
+    # The daily pass alone let Rust worktrees (about 60 GB a day) fill a disk
+    # between two runs. A stub crontab keeps the host's own table out of reach;
+    # it writes aside and renames, because truncating the table while
+    # `crontab -l` still reads it would hide a stacked entry.
+    with tempfile.TemporaryDirectory() as td:
+        stub = Path(td) / "bin"
+        stub.mkdir()
+        (stub / "uname").write_text("#!/bin/sh\necho Linux\n", encoding="utf-8")
+        (stub / "crontab").write_text(
+            '#!/bin/sh\nif [ "$1" = -l ]; then cat "$TAB" 2>/dev/null\n'
+            'else cat > "$TAB.new" && mv "$TAB.new" "$TAB"; fi\n',
+            encoding="utf-8")
+        for f in stub.iterdir():
+            f.chmod(0o755)
+        tab = Path(td) / "crontab.txt"
+        env = {"PATH": f"{stub}:/usr/bin:/bin", "HOME": td, "USERPROFILE": td, "TAB": str(tab)}
+        for _ in range(2):  # a re-install must not stack a second entry
+            subprocess.run(["/bin/bash", str(SCHED), td, "--quiet"], env=env,
+                           capture_output=True, text=True, encoding="utf-8", timeout=60)
+        lines = tab.read_text(encoding="utf-8").splitlines() if tab.exists() else []
+        pressure = [ln for ln in lines if "dev-build-reclaim.py" in ln]
+        check(len(lines) == 2 and len(pressure) == 1
+              and pressure[0].startswith("*/30 ") and "--auto-gc" in pressure[0],
+              f"cron does not hold the daily pass plus one 30-minute disk check: {lines}")
+        log = Path(td) / ".local" / "state" / "ai-brain-starter"
+        check(log.is_dir() and bool(pressure)
+              and f">>'{log}/dev-build-reclaim.out.log'" in pressure[0],
+              "the 30-minute check's cron output has no log it can write to, so a "
+              "failing redirect would stop the check without a word")
+
     # --- the scheduler honors the opt-out for real (behavior, not grep) -----
     with tempfile.TemporaryDirectory() as td:
         r = subprocess.run(["/bin/bash", str(SCHED), td, "--quiet"],

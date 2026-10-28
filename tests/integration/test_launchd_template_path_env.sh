@@ -64,11 +64,13 @@ EXPECTED_PATH="/opt/homebrew/bin:/usr/local/bin:/home/linuxbrew/.linuxbrew/bin:/
 # scripts/install-*.sh's own `sed -e "s|{{X}}|...|g"` invocations verbatim).
 TEMPLATE_NAMES=(
   "com.abs.closed-loop-daemon.plist.template"
+  "com.abs.dev-build-reclaim.plist.template"
   "com.abs.dev-hub-refresh.plist.template"
   "com.abs.vault-daily-maintenance.plist.template"
 )
 TEMPLATE_PLACEHOLDERS=(
   "REPO_ROOT VAULT_ROOT LOG_DIR"
+  "REPO_ROOT LOG_DIR"
   "REPO_ROOT LOG_DIR"
   "REPO_ROOT VAULT_ROOT LOG_DIR"
 )

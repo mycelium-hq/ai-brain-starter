@@ -30,7 +30,9 @@ Obsidian plugins and hooks, a vault backup, a daily journal check-in
 that Claude runs on a schedule, and:
   Daily job: deletes merged git branches and worktrees in your vault.
     Under ~/dev it fetches and fast-forwards clean main checkouts; from
-    its second run it deletes merged branches, worktrees, build output.
+    its second run it deletes merged branches and worktrees there and,
+    when the disk runs low, build output in checkouts not in use under
+    ~/dev and ~/code, checking the disk every 30 minutes.
     Opt out: tell me before you answer; I'll set ABS_NO_AUTO_GC=1.
   Weekly and monthly insights: Claude Code runs unattended, allowed
     to edit files and run shell commands.

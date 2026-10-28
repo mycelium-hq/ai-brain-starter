@@ -1573,6 +1573,8 @@ PY_DIRECT=(
   hooks/test_footprint_aggregate_bloat.py
   hooks/test_footprint_disk_floor.py
   hooks/test_unpushed_drift_surface.py
+  # Hooks that once hardcoded ~/dev read the configured dev root instead.
+  hooks/test_hooks_read_dev_root.py
   # Was hooks/_lib/standing_report.test.py and ran in NO job for its whole
   # life: both collectors and the dormant-suite invariant above glob
   # hooks/test_*.py + tests/test_*.py, so a suite under _lib/ named

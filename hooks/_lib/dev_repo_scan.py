@@ -93,17 +93,20 @@ def _config() -> dict:
     return doc if isinstance(doc, dict) else {}
 
 
+# The rule itself lives in the stdlib-only dev_root.py, so hooks on a hot path
+# can read the root without importing this module.
+try:
+    from .dev_root import resolve_dev_root as _resolve_dev_root
+except ImportError:  # loaded as a plain module (not a package)
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from dev_root import resolve_dev_root as _resolve_dev_root
+
+
 def resolve_dev_root() -> Path:
     """Where this install's code repos live: $ABS_DEV_ROOT, else the config's
     `dev_root`, else ~/dev. Resolved per call so a test (and a client who edits
     the config mid-session) sees the change without a reimport."""
-    env = os.environ.get("ABS_DEV_ROOT", "").strip()
-    if env:
-        return Path(env).expanduser()
-    cfg = _config().get("dev_root")
-    if isinstance(cfg, str) and cfg.strip():
-        return Path(cfg).expanduser()
-    return Path.home() / "dev"
+    return _resolve_dev_root(CONFIG_PATH)
 
 
 # Repos that legitimately ARE vaults (or ship vault scaffolding), so a

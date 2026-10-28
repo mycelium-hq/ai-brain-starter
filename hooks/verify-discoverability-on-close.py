@@ -79,7 +79,13 @@ except Exception:  # fail-open: if the lib cannot load, fall back to env/home
     def resolve_vault_root(cwd: Path, env_vault_root: str | None) -> Path:  # type: ignore
         return Path(env_vault_root) if env_vault_root else (cwd or Path.home() / "vault")
 
-DEV_ROOT = Path.home() / "dev"
+try:
+    from _lib.dev_root import resolve_dev_root  # noqa: E402
+except Exception:  # fail-open: the old default rather than a broken hook
+    def resolve_dev_root() -> Path:  # type: ignore
+        return Path.home() / "dev"
+
+DEV_ROOT = resolve_dev_root()
 
 # Import-time placeholders so the module stays importable without a hook
 # payload. main() calls _resolve_vault_context(cwd) right after confirming
@@ -158,7 +164,7 @@ def _get_last_assistant_text(transcript_path: str) -> str:
     if not transcript_path or not os.path.exists(transcript_path):
         return ""
     try:
-        with open(transcript_path) as f:
+        with open(transcript_path, encoding="utf-8") as f:
             lines = f.readlines()
     except Exception:
         return ""
@@ -202,7 +208,7 @@ def _session_written_paths(transcript_path: str) -> tuple[set[str], str]:
     if not transcript_path or not os.path.exists(transcript_path):
         return (written, "")
     try:
-        with open(transcript_path) as f:
+        with open(transcript_path, encoding="utf-8") as f:
             lines = f.readlines()
     except Exception:
         return (written, "")
@@ -269,7 +275,7 @@ def _run_verifier() -> list[dict]:
     try:
         result = subprocess.run(
             ["python3", str(VERIFIER), "--hours", "24", "--json"],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30,
         )
     except Exception:
         return []

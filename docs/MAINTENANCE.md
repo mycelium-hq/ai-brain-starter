@@ -51,6 +51,18 @@ ran and the machine only ever got fuller (MYC-2363). Nothing gates the VALUE
 behind a flag; `ABS_NO_AUTO_GC=1` turns it off for someone who drives reclaim by
 hand.
 
+The same installer adds a disk check that runs every 30 minutes
+(`com.abs.dev-build-reclaim` on macOS, a cron line ending in
+`# ai-brain-starter: dev-build-reclaim` elsewhere). It runs only
+`dev-build-reclaim.py --auto-gc`: while the disk has room it reads the free
+space and exits, and when space runs low it deletes build output
+(`node_modules`, `.venv`, Rust `target/`) from checkouts no session or build is
+using, under the dev root, `~/dev` and `~/code`. Once a day was too slow: Rust
+worktrees were measured arriving at about 60 GB a day. It skips the load,
+battery and idle gates below, since on a disk with room it only reads the free
+space and a running build or live session still protects its checkout. Like the
+daily pass, it reports first and deletes nothing until that report is a day old.
+
 Re-point or re-install it by hand with:
 
 ```bash
@@ -149,7 +161,7 @@ Edit the existing task by renaming the directory and updating the `name:` field 
 
 ### Daily Vault Maintenance + auto-GC (installed by default)
 - **What:** the resource-gated daily cron above (`vault-daily-maintenance.sh`): deferred-close reconciliation + heavy hygiene, off the interactive close path.
-- **Install:** automatic — the hook installer schedules it (launchd on macOS, cron elsewhere). Re-run by hand with `bash scripts/install-vault-daily-maintenance.sh /path/to/vault`; opt out with `ABS_NO_AUTO_GC=1`.
+- **Install:** automatic — the hook installer schedules it and the 30-minute disk check (launchd on macOS, cron elsewhere). Re-run by hand with `bash scripts/install-vault-daily-maintenance.sh /path/to/vault`; opt out with `ABS_NO_AUTO_GC=1`.
 - **Under another `HOME`:** on macOS the script calls `launchctl` only when `HOME` is your account's own home directory. Under any other `HOME` (a test sandbox, a throwaway checkout) it writes the plist, prints one line saying it skipped loading (on stderr, so the hook installer shows it even when it runs with `--quiet`), and leaves launchd alone, because launchd keys the job by label for the whole account.
 - **Why a launchd/cron job and not a Claude Code scheduled task:** this is a deterministic shell pass with no model judgment, and it must run at low IO/CPU priority even when no Claude session is open, exactly what launchd/cron does and a scheduled task does not.
 
