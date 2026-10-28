@@ -40,8 +40,14 @@ except Exception:  # fail-open: a SessionEnd capture must never break the close
     def vault_root_for(target: Path):  # type: ignore
         return None
 
+try:
+    from _lib.dev_root import resolve_dev_root  # noqa: E402
+except Exception:  # fail-open: the old default rather than a broken hook
+    def resolve_dev_root() -> Path:  # type: ignore
+        return Path.home() / "dev"
+
 PENDING_SUBPATH = ("🍄 the user's consulting brand", "📋 Pending Signals")
-DEV = Path.home() / "dev"
+DEV = resolve_dev_root()
 
 
 def resolve_tz() -> tzinfo:
@@ -125,6 +131,8 @@ def commits_today(repo: Path, since: datetime) -> list[str]:
             cwd=str(repo),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=10,
         )
         return [s for s in out.stdout.splitlines() if s.strip()]
@@ -135,7 +143,7 @@ def commits_today(repo: Path, since: datetime) -> list[str]:
 def existing_repos(file: Path) -> set[str]:
     if not file.exists():
         return set()
-    text = file.read_text()
+    text = file.read_text(encoding="utf-8")
     return {r for r in PUBLIC_REPOS if f"`{r}`" in text}
 
 
@@ -166,10 +174,11 @@ def append_bullets(pending: Path, bullets: list[str]) -> None:
     file = pending / f"{target_date()}.md"
     if not file.exists():
         file.write_text(
-            f"---\ntype: pending-signals\nworkspace: mycelium\ncreated: {target_date()}\n---\n\n"
+            f"---\ntype: pending-signals\nworkspace: mycelium\ncreated: {target_date()}\n---\n\n",
+            encoding="utf-8",
         )
-    text = file.read_text().rstrip() + "\n\n" + "\n\n".join(bullets) + "\n"
-    file.write_text(text)
+    text = file.read_text(encoding="utf-8").rstrip() + "\n\n" + "\n\n".join(bullets) + "\n"
+    file.write_text(text, encoding="utf-8")
 
 
 def main() -> int:
@@ -202,7 +211,7 @@ def main() -> int:
             body += f"; +{len(commits) - 6} more"
         bullets.append(
             f"- `{name}` shipped today ({len(commits)} commits): {body}. "
-            f"— source: `~/dev/{name}` git log · captured: {captured_at} (auto)"
+            f"— source: `{repo_path}` git log · captured: {captured_at} (auto)"
         )
 
     append_bullets(pending, bullets)
