@@ -86,8 +86,8 @@ fi
 # coreutils: `[ "<garbage>" -gt N ]` prints "integer expression expected" to
 # stderr on every run once the log exists, and always compares false --
 # trimming silently never fired on Linux.
-_log_size=$(stat -c %s "$LOG" 2>/dev/null)                        # GNU/Linux
-case "$_log_size" in ''|*[!0-9]*) _log_size=$(stat -f %z "$LOG" 2>/dev/null) ;; esac  # BSD/macOS
+_log_size=$(stat -c %s "$LOG" 2>/dev/null || true)                # GNU/Linux (|| true: set -e)
+case "$_log_size" in ''|*[!0-9]*) _log_size=$(stat -f %z "$LOG" 2>/dev/null || true) ;; esac  # BSD/macOS
 case "$_log_size" in ''|*[!0-9]*) _log_size="" ;; esac  # neither gave a plain integer -> unknown
 # Unknown size -> skip the trim rather than truncate on an unprovable read:
 # trimming discards log content, so acting on a bad read is strictly worse

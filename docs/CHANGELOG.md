@@ -9,6 +9,18 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-10-28: running the installer a second time on a Mac no longer quits without a word
+
+**Who this affects:** anyone on a Mac who runs `bootstrap.sh` more than once. That includes everyone without Homebrew, because the installer's "TERMINAL STEP NEEDED" message asks them to paste `bash bootstrap.sh` into Terminal, which is a second run.
+
+After its first run the installer keeps a log at `~/.claude/.bootstrap.log`. On every later run it checks that log's size, trying the Linux form of `stat` first. A Mac's `stat` has no Linux form, so that check failed, and because the installer stops on any failed command it quit there: exit code 1, nothing printed, nothing installed. It had been this way since 2026-09-25 (#694), which fixed the same check for Linux. `scripts/auto-snapshot.sh` had the same line: on a Mac it still committed the snapshot, then exited with an error and never trimmed its log.
+
+Both reads now carry on when one form of `stat` is missing, and fall through to the Mac form as intended. Nothing changes on Linux.
+
+**Tested:** `tests/integration/test_bootstrap_log_rotation_stat.sh` now also re-runs the installer with a prior log under the machine's own `stat`. On macOS it fails against `main` (exit 1, no output) and passes with this change. The macOS CI job now runs it. `auto-snapshot.sh` was checked by hand in a throwaway vault on macOS: exit 1 before, 0 after, with the snapshot committed both times.
+
+---
+
 ## 2026-10-26: the memory-routing nudge stops firing on Windows installs whose memory is already in the vault
 
 **Who this affects:** anyone on Windows whose Claude Code project memory is linked into the vault, which the installer does through `scripts/link-agent-memory.py`.

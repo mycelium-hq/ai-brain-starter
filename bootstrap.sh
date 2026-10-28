@@ -221,8 +221,10 @@ if [[ -f "$BOOTSTRAP_LOG" ]]; then
   # `log_size` ended up contaminated, and `[[ "$log_size" -gt N ]]` then hit
   # bash's arithmetic evaluator on a bare word under this script's
   # `set -u` -- an unbound-variable abort on every run once the log existed.
-  log_size=$(stat -c %s "$BOOTSTRAP_LOG" 2>/dev/null)                        # GNU/Linux
-  case "$log_size" in ''|*[!0-9]*) log_size=$(stat -f %z "$BOOTSTRAP_LOG" 2>/dev/null) ;; esac  # BSD/macOS
+  # `|| true`: under `set -e` a failed `stat` in a bare assignment aborts the
+  # script, so macOS (no `stat -c`) died silently on every re-run.
+  log_size=$(stat -c %s "$BOOTSTRAP_LOG" 2>/dev/null || true)                # GNU/Linux
+  case "$log_size" in ''|*[!0-9]*) log_size=$(stat -f %z "$BOOTSTRAP_LOG" 2>/dev/null || true) ;; esac  # BSD/macOS
   case "$log_size" in ''|*[!0-9]*) log_size="" ;; esac  # neither gave a plain integer -> unknown
   # Unknown size -> skip rotation rather than act on an unprovable read. The
   # log just keeps growing until the next successful check (self-healing,

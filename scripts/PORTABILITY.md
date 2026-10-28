@@ -57,6 +57,12 @@ case "$m" in ''|*[!0-9]*) m=$(stat -f %m "$1" 2>/dev/null) ;; esac # BSD/macOS
 case "$m" in ''|*[!0-9]*) m="" ;; esac   # neither gave a plain integer -> empty
 ```
 
+Under `set -e`, add `|| true` inside each `$(...)`. On macOS `stat -c` fails,
+and a bare assignment from a failing command exits the script on the spot.
+`bootstrap.sh` died silently on every Mac re-run this way. The reference
+function above is safe without it only because its callers run it inside
+`$(...)`, where bash does not apply `set -e`.
+
 A tracked shell script using the unsafe shape at any BSD format letter fails
 `scripts/check-stat-portability.py`, wired into `scripts/ci.sh` and
 `.github/workflows/lint.yml`.

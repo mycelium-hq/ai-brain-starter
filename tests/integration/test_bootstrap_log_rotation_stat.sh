@@ -83,4 +83,18 @@ if [ "$EXIT_CODE" -ne 0 ]; then
 fi
 
 echo "OK: bootstrap.sh reads its own log size correctly under GNU stat's -f %z behavior (no crash, exit 0)"
+
+# Same fixture, the host's own `stat`. On macOS (BSD) `stat -c` fails, and
+# without `|| true` `set -e` killed every re-run silently. The bash32-syntax
+# job runs this file on macos-latest for that reason.
+set +e
+EMAIL="ci@example.com" NAME="CI Test" LANG_HINT="en" \
+  bash "$TARGET" --dry-run > "$OUT_FILE" 2> "$ERR_FILE"
+EXIT_CODE=$?
+set -e
+if [ "$EXIT_CODE" -ne 0 ]; then
+  fail "bootstrap.sh --dry-run exited $EXIT_CODE under the host's stat ($(uname -s)) with a prior log (stderr tail: $(tail -5 "$ERR_FILE"))"
+fi
+
+echo "OK: bootstrap.sh re-runs with a prior log under the host's stat ($(uname -s))"
 echo "PASS: test_bootstrap_log_rotation_stat"
