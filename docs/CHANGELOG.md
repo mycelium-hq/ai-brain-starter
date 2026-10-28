@@ -9,6 +9,14 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-10-29: the no-backup warning says why Obsidian Sync does not count
+
+**Who this affects:** anyone who uses Obsidian Sync and still sees the "NO off-machine backup" warning at session start.
+
+Obsidian Sync normally uploads only while the Obsidian app is open. Notes Claude writes into your vault while the app is closed stay on your computer, sometimes for months, until you open the app again. So Sync is not counted as a backup, and the warning and `docs/BACKUP.md` now say why. The vault's own settings cannot tell either: Obsidian 1.14.5 switches its Sync plugin on by default, so `"sync": true` in `.obsidian/core-plugins.json` appears whether or not the vault was ever connected.
+
+---
+
 ## 2026-10-28: running the installer a second time on a Mac no longer quits without a word
 
 **Who this affects:** anyone on a Mac who runs `bootstrap.sh` more than once. That includes everyone without Homebrew, because the installer's "TERMINAL STEP NEEDED" message asks them to paste `bash bootstrap.sh` into Terminal, which is a second run.

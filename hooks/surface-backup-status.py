@@ -166,7 +166,8 @@ def main() -> int:
             f"one command:\n      {SETUP_CMD}\n"
             "Picks a destination you already have (an external disk or a cloud "
             "folder), writes one compressed daily snapshot (no sync-storm), "
-            "encrypts if you ask. See docs/BACKUP.md."
+            "encrypts if you ask. Obsidian Sync does not count: it normally uploads "
+            "only while the Obsidian app is open. See docs/BACKUP.md."
         )
 
     if token == "NO_BACKUP:configured-not-run":

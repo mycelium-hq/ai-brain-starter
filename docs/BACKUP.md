@@ -27,6 +27,9 @@ This page is how the brain makes sure that can't happen to you quietly.
   failure `docs/CLOUD_SYNC.md` exists to prevent. The fix below gives you the
   off-machine copy *without* the churn: one compressed file per day, not a live
   mirror of a million tiny objects.
+- **Obsidian Sync does not count.** It normally uploads only while the Obsidian
+  app is open, so notes written into the vault with the app closed stay on this
+  disk until you open it.
 
 ---
 
