@@ -21,6 +21,18 @@ Both reads now carry on when one form of `stat` is missing, and fall through to 
 
 ---
 
+## 2026-10-28: the disk cleanup now reaches repo copies kept inside a folder
+
+**Who this affects:** anyone whose coding sessions keep repo copies in groups, such as `~/dev/batch/<copy>` or a coding agent's `<day>/<chat>/work/<copy>`, rather than one level under the dev root.
+
+The daily cleanup frees rebuildable build output (`node_modules`, `.venv`, `.next`, `.turbo`, Rust `target/`) from copies nobody has touched for a while. It judged each folder directly under the dev root as one copy. A folder holding 25 copies was therefore judged as one big copy: kept whole while any one of them was in use, and kept whole again once it held more files than the cleanup measures. On a 1 TB laptop that left 90 GB of idle build output under one such folder, a folder the cleanup never reached.
+
+The cleanup now looks inside a folder that has no git history of its own, up to four levels down, and judges each copy it finds on its own: an idle copy is cleaned and a busy neighbor is left alone. A folder without a copy inside is handled as before. It never looks inside `node_modules` or another build folder, where a git dependency can look like a copy.
+
+**Tested:** `scripts/test_dev_build_reclaim.py` gains control [19]: an idle and a busy copy in one folder, an idle copy four levels down beside a busy one, a git dependency inside `node_modules`, and a link that points outside the dev root. The idle-copy check fails against `main` and passes with this change, and every earlier control still passes. A dry run on the laptop above found 86 GB reclaimable across 22 copies idle for a day, up from 40 GB across 13.
+
+---
+
 ## 2026-10-26: the memory-routing nudge stops firing on Windows installs whose memory is already in the vault
 
 **Who this affects:** anyone on Windows whose Claude Code project memory is linked into the vault, which the installer does through `scripts/link-agent-memory.py`.

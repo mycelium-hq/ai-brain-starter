@@ -43,6 +43,10 @@ Ported to the substrate with four controls the private original never had:
  [14] manifest honors the log-dir override (a test must never write into the
       operator's real audit trail, where a fixture is indistinguishable from a
       real reclaim)
+ [19] grouping folder          -> each checkout inside it judged on its own (one
+                                  active member must not shield idle siblings),
+                                  and a git dependency in node_modules is never
+                                  taken for a checkout
 
 Run: python3 scripts/test_dev_build_reclaim.py
 """
@@ -464,6 +468,41 @@ def main() -> int:  # noqa: C901
         ok("[17] a worktree finds the lock at its git-common-dir root", _live(wt))
         write_real_lock(main, age_sec=99_999)     # same lock, now stale
         ok("[17] a STALE root lock does not shield forever", not _live(wt))
+
+    # ---- [19] a folder that groups checkouts is judged per checkout ---------
+    with tempfile.TemporaryDirectory() as td, tempfile.TemporaryDirectory() as td2:
+        root = Path(td)
+        idle = mkwt(root / "batch", "idle-wt")
+        group = root / "day" / "chat" / "work" / "group"
+        deep = mkwt(group, "clone")
+        outside = mkwt(Path(td2), "outside-wt")
+        backdate(root, 30)
+        backdate(outside, 30)
+        active = mkwt(root / "batch", "active-wt")   # created after: in use
+        mkwt(group, "busy-clone")                    # so `day` is not idle whole
+        plain = root / "plain"                       # no .git: one unit, as before
+        (plain / "node_modules" / "dep" / ".git").mkdir(parents=True)
+        (plain / "index.js").write_text("x", encoding="utf-8")
+        backdate(plain, 30)
+        try:
+            (root / "batch" / "link").symlink_to(outside, target_is_directory=True)
+            linked = True
+        except (OSError, NotImplementedError):
+            linked = False
+        run(root, "--apply", "--min-idle-days", "7")
+        ok("[19] idle checkout in a grouping folder reclaimed",
+           not (idle / "node_modules").exists())
+        ok("[19] its active sibling preserved", (active / "node_modules").is_dir())
+        ok("[19] an idle checkout four levels below a busy one's group reclaimed",
+           not (deep / "node_modules").exists())
+        ok("[19] a git dependency in node_modules is not a checkout",
+           not (plain / "node_modules").exists())
+        ok("[19] source survives", (idle / "src" / "main.ts").is_file())
+        if linked:
+            ok("[19] a symlink in a grouping folder is never followed out of the root",
+               (outside / "node_modules").is_dir())
+        else:
+            print("  skip [19] symlinks unavailable on this platform")
 
     if FAILED:
         print(f"\nFAILED — dev-build-reclaim (MYC-3727): {len(FAILED)} control(s)")

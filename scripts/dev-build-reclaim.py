@@ -335,6 +335,37 @@ def find_artifacts(wt: Path):
                 yield full
 
 
+# How far below a dev-root entry to look for checkouts it only GROUPS
+# (`<root>/<batch>/<checkout>`, or an agent's `<day>/<chat>/work/<group>/<clone>`).
+GROUP_DEPTH = 4
+
+
+def is_checkout(p: Path) -> bool:
+    """A `.git` dir (clone) or `.git` file (linked worktree)."""
+    try:
+        return (p / ".git").exists()
+    except OSError:
+        return False
+
+
+def checkouts_within(d: Path, depth: int) -> list:
+    """Checkouts up to `depth` levels below d. Never enters a checkout or an
+    artifact dir: a git dependency in node_modules has a `.git` too."""
+    try:
+        subdirs = sorted(p for p in d.iterdir() if p.is_dir() and not is_link(p))
+    except OSError:
+        return []
+    out = []
+    for s in subdirs:
+        if s.name in ALWAYS or s.name in CONDITIONAL:
+            continue
+        if is_checkout(s):
+            out.append(s)
+        elif depth > 1:
+            out.extend(checkouts_within(s, depth - 1))
+    return out
+
+
 def plan(dev_root: Path, min_idle: float, now: float) -> tuple[list, list]:
     """(reclaimable artifacts, skipped-worktree notes). Never silently drops one."""
     out: list = []
@@ -350,10 +381,22 @@ def plan(dev_root: Path, min_idle: float, now: float) -> tuple[list, list]:
     except OSError as e:
         skipped.append(f"{dev_root}: unreadable ({e})")
         return out, skipped
-    for entry in entries:
-        wt = dev_root / entry
-        if not wt.is_dir() or is_link(wt):
+    # A folder that only GROUPS checkouts is judged per checkout. As one unit it
+    # read "active" while any member was in use, or overran MAX_SOURCE_ENTRIES
+    # and was preserved whole: ~25 idle checkouts (90 GB) under one such folder
+    # were never reclaimed (2026-10-28). Known limits, all regenerable: a session
+    # whose cwd is the group itself (not a member) no longer shields the members;
+    # a non-git project with a vendored clone has that clone judged alone; and
+    # build output loose beside the checkouts is left in place.
+    units = []
+    for name in entries:
+        top = dev_root / name
+        if not top.is_dir() or is_link(top):
             continue
+        grouped = [] if is_checkout(top) else checkouts_within(top, GROUP_DEPTH)
+        units.extend(grouped or [top])
+    for wt in units:
+        entry = os.path.relpath(wt, dev_root)
         age, unmeasurable = idle_days(wt, now)
         if unmeasurable:
             # Fail LOUD, not silent: an unmeasurable worktree is reported with
@@ -494,7 +537,7 @@ def main() -> int:
             for it in items:
                 busy = worktree_busy(Path(it["worktree"]), apply_probe_cache)
                 if busy:
-                    skipped.append(f"{os.path.basename(it['worktree'])}: "
+                    skipped.append(f"{os.path.relpath(it['worktree'], dev_root)}: "
                                    f"{busy} at apply time, preserved")
                     continue
                 try:
@@ -523,7 +566,7 @@ def main() -> int:
     for i in items:
         per_wt[i["worktree"]] = per_wt.get(i["worktree"], 0) + i["size_mb"]
     for wt, mb in sorted(per_wt.items(), key=lambda kv: -kv[1])[:12]:
-        print(f"  {mb/1024:6.1f} GB  {os.path.basename(wt)}")
+        print(f"  {mb/1024:6.1f} GB  {os.path.relpath(wt, dev_root)}")
 
     verb = "RECLAIMED" if a.apply else "WOULD RECLAIM"
     print(f"\n{verb}: {len(items)} dirs, {total_mb/1024:.1f} GB across "
