@@ -35,10 +35,16 @@ except Exception:  # fail-open: never break the Stop chain on an import error
     def vault_root_for(target: Path):  # type: ignore
         return None
 
+try:
+    from _lib.dev_root import resolve_dev_root  # noqa: E402
+except Exception:  # fail-open: the old default rather than a broken hook
+    def resolve_dev_root() -> Path:  # type: ignore
+        return Path.home() / "dev"
+
 BYPASS_ENV = "DEV_CHECKPOINT_BYPASS"
 PREFIX = "claude-checkpoint"
 MAX_CHECKPOINTS = 20
-DEV_ROOT = Path.home() / "dev"
+DEV_ROOT = resolve_dev_root()
 
 
 def run_git(repo: Path, args: list[str], timeout: int = 10) -> subprocess.CompletedProcess:
@@ -48,6 +54,8 @@ def run_git(repo: Path, args: list[str], timeout: int = 10) -> subprocess.Comple
             ["git", "-C", str(repo), *args],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
         )
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
@@ -72,7 +80,7 @@ def has_changes(repo: Path) -> bool:
 def checkpoint(repo: Path, message: str) -> bool:
     """Stash working tree without modifying it. Return True on success."""
     # Stage everything (needed for `stash create` to capture untracked files).
-    # SAFE in ~/dev/* repos (~1K files); explicitly banned in the 60K-file
+    # SAFE in dev-root code checkouts (~1K files); explicitly banned in the 60K-file
     # vault by block-raw-vault-git.py — this hook gates on DEV_ROOT first.
     add = run_git(repo, ["add", "-A"], timeout=30)
     if add.returncode != 0:

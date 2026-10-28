@@ -56,6 +56,7 @@ from pathlib import Path
 HOOK_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(HOOK_DIR))
 
+from _lib.dev_root import resolve_dev_root  # noqa: E402
 from _lib.safe_read import safe_read_text  # noqa: E402
 from _lib.worktree_safety import (  # noqa: E402
     WORKTREES_SEG,
@@ -901,8 +902,7 @@ def sibling_worktree_signal() -> str:
         warn_at = max(1, int(os.environ.get("DEV_WORKTREE_WARN", DEFAULT_SIBLING_WARN)))
     except ValueError:
         warn_at = DEFAULT_SIBLING_WARN
-    root = os.environ.get("ABS_DEV_ROOT", "").strip()
-    dev_root = Path(root).expanduser() if root else Path.home() / "dev"
+    dev_root = resolve_dev_root()
     try:
         if not dev_root.is_dir():
             return ""

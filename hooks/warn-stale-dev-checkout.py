@@ -61,16 +61,21 @@ for _stream in (sys.stdout, sys.stderr):
 THRESHOLD = 5          # commits behind origin/main before we warn
 FETCH_TIMEOUT = 8      # seconds; fail-open past this
 STALE_FETCH_DAYS = 3.0 # if last fetch older than this, also flag knowledge-staleness
+try:
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "_lib"))
+    from dev_root import resolve_dev_root
+except Exception:  # fail-open: a missing _lib must never break the guard
+    def resolve_dev_root():  # type: ignore
+        return Path.home() / "dev"
 # STALE_CHECKOUT_DEV_ROOT overrides the scanned root (tests point it at a tempdir).
-DEV = Path(os.environ.get("STALE_CHECKOUT_DEV_ROOT") or (Path.home() / "dev"))
+DEV = Path(os.environ.get("STALE_CHECKOUT_DEV_ROOT") or resolve_dev_root())
 SEEN_DIR = Path.home() / ".claude" / ".stale-dev-checkout-seen"
 
 # Telemetry so this guard's fire-count is measurable — the precondition for
 # RETIRING it once MYC-427 (merge queue) stops bare checkouts from rotting.
 # Fail-open: a missing _lib must never break the guard (or its tests).
 try:
-    sys.path.insert(0, str(Path(__file__).resolve().parent / "_lib"))
-    from guard_telemetry import log_fire
+    from guard_telemetry import log_fire  # _lib is on sys.path (above)
 except Exception:
     def log_fire(*_a, **_k):
         return
@@ -374,7 +379,7 @@ def _self_test() -> int:
         git("symbolic-ref", "HEAD", "refs/heads/main", cwd=upstream)
         git("config", "user.email", "t@example.invalid", cwd=upstream)
         git("config", "user.name", "selftest", cwd=upstream)
-        (upstream / "f.txt").write_text("1\n")
+        (upstream / "f.txt").write_text("1\n", encoding="utf-8")
         git("add", "f.txt", cwd=upstream)
         git("commit", "-qm", "c1", cwd=upstream)
 
@@ -389,13 +394,13 @@ def _self_test() -> int:
         git("worktree", "add", "-q", str(started), "-b", "wt/started", "HEAD", cwd=clone)
         git("config", "user.email", "t@example.invalid", cwd=started)
         git("config", "user.name", "selftest", cwd=started)
-        (started / "own.txt").write_text("own\n")
+        (started / "own.txt").write_text("own\n", encoding="utf-8")
         git("add", "own.txt", cwd=started)
         git("commit", "-qm", "own work", cwd=started)
 
         # ...then upstream moves on, which is the whole scenario.
         for i in range(2, 2 + THRESHOLD + 1):
-            (upstream / "f.txt").write_text(f"{i}\n")
+            (upstream / "f.txt").write_text(f"{i}\n", encoding="utf-8")
             git("add", "f.txt", cwd=upstream)
             git("commit", "-qm", f"c{i}", cwd=upstream)
         git("fetch", "-q", "origin", cwd=clone)

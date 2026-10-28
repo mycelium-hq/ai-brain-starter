@@ -94,6 +94,7 @@ FAKEHOME="$TMP/home"
 # every assertion at the real machine.
 CLEAN_ENV=(
   -u CLAUDE_CWD
+  -u ABS_DEV_ROOT
   -u AUTO_CAPTURE_SHIPS_BYPASS
   -u BUILD_RUNBOOK_BYPASS
   -u DEV_CHECKPOINT_BYPASS
