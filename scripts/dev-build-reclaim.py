@@ -67,11 +67,17 @@ Usage:
   dev-build-reclaim.py --apply              # execute
   dev-build-reclaim.py --min-idle-days 14   # pin the threshold (skips the ladder)
   dev-build-reclaim.py --min-free-gb 200    # no-op unless free space is below this
-  dev-build-reclaim.py --dev-root /path     # override the dev root for this run
-  dev-build-reclaim.py --json               # machine-readable plan
+  dev-build-reclaim.py --dev-root /path     # this root only, for this run
+  dev-build-reclaim.py --auto-gc            # the 30-minute check (see FIRST_REPORT_MARKER)
+  dev-build-reclaim.py --json               # machine-readable plan, one per root
 
-Config: the dev root resolves from $ABS_DEV_ROOT, else the install config's
+Roots: the dev root resolves from $ABS_DEV_ROOT, else the install config's
 `dev_root`, else ~/dev — so this is never hardcoded to one machine's layout.
+Without --dev-root, ~/dev and ~/code are covered too when they exist: sessions
+keep repo copies wherever they like, and one machine piled 180 GB of them into
+~/code in 3 days while the dev root was ~/dev. Only build output is reclaimed
+there; the legs that delete branches and worktrees keep the dev root alone.
+Each root is judged against the free space of its own volume.
 Log dir override: $DEV_BUILD_RECLAIM_LOG_DIR (tests point this at a temp dir so a
 run never writes a manifest into the operator's real audit trail).
 """
@@ -466,20 +472,52 @@ def log_dir() -> Path:
     return Path.home() / ".claude" / "logs" / "dev-repo-reaper"
 
 
+# Banked by the scheduled check's first run that finds something to reclaim.
+# --auto-gc applies once that report is a day old, so, like the daily pass, it
+# deletes nothing on the day it first reports. It keeps its own marker: the
+# daily pass banks one only after its idle gate, which a laptop that sleeps
+# through 04:30 and wakes to someone typing can defer for good.
+FIRST_REPORT_MARKER = Path.home() / ".claude" / ".build-reclaim-first-report"
+
+
+def reclaim_roots() -> list:
+    """The dev root, then ~/dev and ~/code when they exist, each listed once."""
+    roots = [resolve_dev_root()]
+    seen = {os.path.normcase(os.path.realpath(roots[0]))}
+    for extra in (Path.home() / "dev", Path.home() / "code"):
+        key = os.path.normcase(os.path.realpath(extra))
+        if key not in seen and extra.is_dir():
+            roots.append(extra)
+            seen.add(key)
+    return roots
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="Reclaim regenerable build artifacts from idle worktrees.")
     ap.add_argument("--apply", action="store_true", help="actually delete (default: dry-run)")
+    ap.add_argument("--auto-gc", action="store_true",
+                    help="the scheduled check: reports first, applies once that report is a day old")
     ap.add_argument("--min-idle-days", type=float, default=None,
                     help="pin the idle threshold; default scales with free space (PRESSURE_LADDER)")
     ap.add_argument("--min-free-gb", type=float, default=None,
                     help="no-op unless free space is below this (for cron: only act under pressure)")
-    ap.add_argument("--dev-root", help="override the dev root for this run")
-    ap.add_argument("--json", action="store_true", help="machine-readable plan")
+    ap.add_argument("--dev-root", help="this root only (default: the dev root, ~/dev, ~/code)")
+    ap.add_argument("--json", action="store_true", help="machine-readable plan, one per root")
     a = ap.parse_args()
 
-    dev_root = Path(a.dev_root).expanduser() if a.dev_root else resolve_dev_root()
+    if a.auto_gc:
+        try:
+            a.apply = a.apply or time.time() - FIRST_REPORT_MARKER.stat().st_mtime >= 86400
+        except OSError:  # no first report yet
+            pass
+    roots = [Path(a.dev_root).expanduser()] if a.dev_root else reclaim_roots()
+    return max(reclaim(a, root) for root in roots)
 
+
+def reclaim(a: argparse.Namespace, dev_root: Path) -> int:
+    if not a.json:
+        print(f"[{dev_root}]")
     usage = disk(dev_root)
     if usage is None:
         msg = f"cannot stat the volume holding {dev_root} — refusing to guess"
@@ -546,6 +584,9 @@ def main() -> int:
                     mf.write(json.dumps({**it, "ts": datetime.now(timezone.utc).isoformat()}) + "\n")
                 except OSError as e:
                     failed.append(f"{it['path']}: {e}")
+    if a.auto_gc and not a.apply and items and not FIRST_REPORT_MARKER.exists():
+        FIRST_REPORT_MARKER.parent.mkdir(parents=True, exist_ok=True)
+        FIRST_REPORT_MARKER.touch()
 
     after = (disk(dev_root) or usage).free / (1024 ** 3)
     result = {

@@ -40,6 +40,12 @@ Ported to the substrate with four controls the private original never had:
                                   cap overran under load, failed closed, and
                                   reclaimed nothing while the disk filled);
                                   hooks importing the module keep 15 s
+ [20] roots                    -> without --dev-root, ~/dev and ~/code too (one
+                                  machine filled ~/code while only ~/dev was
+                                  ever looked at)
+ [21] --auto-gc                -> the 30-minute check deletes nothing until
+                                  its first report is a day old, and is a
+                                  no-op on a disk with room
  [14] manifest honors the log-dir override (a test must never write into the
       operator's real audit trail, where a fixture is indistinguishable from a
       real reclaim)
@@ -52,7 +58,9 @@ Run: python3 scripts/test_dev_build_reclaim.py
 """
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import json
 import os
 import subprocess
@@ -60,6 +68,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from unittest import mock
 
 SCRIPTS = Path(__file__).resolve().parent
 TOOL = SCRIPTS / "dev-build-reclaim.py"
@@ -381,6 +390,77 @@ def main() -> int:  # noqa: C901
         r = run(root, "--apply", "--min-free-gb", "0")
         ok("[15] --min-free-gb 0 never deletes", (wt / "node_modules").is_dir())
         ok("[15] and reports the no-op", "no-op" in r.stdout)
+
+    # ---- [20] copies outside the configured root are reclaimed too ----------
+    # Sessions keep repo copies wherever they like. One machine piled 180 GB of
+    # them into ~/code in 3 days while the only root any leg read was ~/dev.
+    with tempfile.TemporaryDirectory() as td:
+        home = Path(td)
+        (home / ".claude").mkdir()
+        (home / ".claude" / "dev-hygiene.json").write_text(
+            json.dumps({"dev_root": str(home / "work")}), encoding="utf-8")
+        wts = {name: mkwt(home / name, "idle-wt") for name in ("work", "dev", "code")}
+        (home / "elsewhere").mkdir()
+        backdate(home, 30)
+        env = {k: v for k, v in os.environ.items() if k != "ABS_DEV_ROOT"}
+        env.update(HOME=td, USERPROFILE=td, DEV_BUILD_RECLAIM_LOG_DIR=str(home / "_logs"))
+
+        def run_home(*args: str):
+            return subprocess.run(
+                [sys.executable, str(TOOL), "--apply", "--min-idle-days", "7", *args],
+                capture_output=True, text=True, encoding="utf-8", env=env, timeout=120)
+
+        run_home("--dev-root", str(home / "elsewhere"))
+        ok("[20] --dev-root still names exactly one root",
+           all((wt / "node_modules").is_dir() for wt in wts.values()))
+        run_home()
+        for name, wt in wts.items():
+            ok(f"[20] an idle copy under ~/{name} reclaimed",
+               not (wt / "node_modules").exists())
+
+    # ---- [21] --auto-gc waits a day after its first report -----------------
+    # The 30-minute check keeps the install screen's "from its second run": its
+    # first run that finds something only reports, and it deletes nothing until
+    # that report is a day old, as the daily pass would.
+    with tempfile.TemporaryDirectory() as td:
+        home = Path(td)
+        wt = mkwt(home / "dev", "idle-wt")
+        backdate(wt, 30)
+        env = dict(os.environ, HOME=td, USERPROFILE=td,
+                   DEV_BUILD_RECLAIM_LOG_DIR=str(home / "_logs"))
+        argv = [sys.executable, str(TOOL), "--auto-gc", "--min-idle-days", "7",
+                "--dev-root", str(home / "dev")]
+        marker = home / ".claude" / ".build-reclaim-first-report"
+        r = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8",
+                           env=env, timeout=120)
+        ok("[21] its first run only reports, and banks the date",
+           (wt / "node_modules").is_dir() and "WOULD RECLAIM" in r.stdout
+           and marker.is_file())
+        first = marker.stat().st_mtime if marker.is_file() else None
+        subprocess.run(argv, capture_output=True, text=True, encoding="utf-8",
+                       env=env, timeout=120)
+        ok("[21] within the day it still only reports, keeping the first date",
+           (wt / "node_modules").is_dir() and marker.is_file()
+           and marker.stat().st_mtime == first)
+        if marker.is_file():
+            os.utime(marker, (time.time() - 2 * 86400,) * 2)
+        subprocess.run(argv, capture_output=True, text=True, encoding="utf-8",
+                       env=env, timeout=120)
+        ok("[21] once the first report is a day old it deletes",
+           not (wt / "node_modules").exists())
+        # The scheduled form (no pinned threshold) on a disk with room: the
+        # pressure ladder must stop it even though it is now applying.
+        wt2 = mkwt(home / "dev", "roomy-wt")
+        backdate(wt2, 30)
+        roomy = mock.Mock(total=1000 * 2**30, free=900 * 2**30)
+        with mock.patch.object(mod, "disk", return_value=roomy), \
+                mock.patch.object(mod, "FIRST_REPORT_MARKER", marker), \
+                mock.patch.dict(os.environ, {"DEV_BUILD_RECLAIM_LOG_DIR": str(home / "_logs")}), \
+                mock.patch.object(sys, "argv", ["dev-build-reclaim.py", "--auto-gc",
+                                                "--dev-root", str(home / "dev")]), \
+                contextlib.redirect_stdout(io.StringIO()):
+            mod.main()
+        ok("[21] on a disk with room it deletes nothing", (wt2 / "node_modules").is_dir())
 
     # ---- [17] the session lock is read in its REAL shape and REAL location ---
     # The guard that shipped probed `<wt>/.session-lock`. Measured 2026-08-06:

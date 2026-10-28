@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  com.abs.dev-build-reclaim.plist.template: the 30-minute disk-pressure check.
+  Runs scripts/dev-build-reclaim.py --auto-gc, which exits at once while the disk
+  has room. scripts/install-vault-daily-maintenance.sh fills in {{REPO_ROOT}} and
+  {{LOG_DIR}} and loads it beside the daily pass.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.abs.dev-build-reclaim</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/env</string>
+        <string>python3</string>
+        <string>{{REPO_ROOT}}/scripts/dev-build-reclaim.py</string>
+        <string>--auto-gc</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <key>StartInterval</key>
+    <integer>1800</integer>
+
+    <key>Nice</key>
+    <integer>10</integer>
+
+    <key>ProcessType</key>
+    <string>Background</string>
+
+    <key>LowPriorityIO</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>{{LOG_DIR}}/dev-build-reclaim.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>{{LOG_DIR}}/dev-build-reclaim.err.log</string>
+</dict>
+</plist>

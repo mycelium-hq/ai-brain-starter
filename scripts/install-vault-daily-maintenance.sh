@@ -4,15 +4,17 @@
 
 # install-vault-daily-maintenance.sh
 #
-# One-shot installer for the daily vault-maintenance launchd agent on macOS.
-# Substitutes the template plist with operator-specific paths, copies it to
-# ~/Library/LaunchAgents/, and loads it. The job runs once a day at 04:30 local,
-# at low CPU + IO priority, and is itself load-gated + mutex-serialized.
+# One-shot installer for the daily vault-maintenance launchd agent on macOS,
+# and for the 30-minute disk-pressure check beside it. Substitutes each template
+# plist with operator-specific paths, copies it to ~/Library/LaunchAgents/, and
+# loads it. The daily job runs at 04:30 local, at low CPU + IO priority, and is
+# itself load-gated + mutex-serialized. The check runs dev-build-reclaim.py only,
+# which exits at once while the disk has room.
 #
 # Usage:
 #   ./scripts/install-vault-daily-maintenance.sh /abs/path/to/vault
 #
-# Idempotent: re-running unloads the old plist before writing the new one.
+# Idempotent: re-running unloads each old plist before writing the new one.
 #
 # Calls launchctl only when $HOME is the home directory the user database records
 # for this uid. launchd keys a job by label for the whole account, so under any
@@ -53,6 +55,7 @@ if [[ "${ABS_NO_AUTO_GC:-0}" == "1" ]]; then
 fi
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+LOG_DIR="$HOME/.local/state/ai-brain-starter"
 
 # ---- Linux / non-macOS: a cron line, same job, same gates ------------------
 # Without this branch the whole daily pass is macOS-only, so a Linux install
@@ -65,23 +68,28 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
     fi
     MARKER="# ai-brain-starter: vault-daily-maintenance"
     LINE="30 4 * * * /bin/bash $REPO_ROOT/scripts/vault-daily-maintenance.sh --vault-root '$VAULT_ROOT' >/dev/null 2>&1 $MARKER"
-    # Idempotent: drop any previous line we installed, then append the current
-    # one, so a moved repo or vault re-points instead of accumulating entries.
-    ( crontab -l 2>/dev/null | grep -vF "$MARKER" || true; echo "$LINE" ) | crontab -
-    say "[install-vault-daily-maintenance] cron entry installed (daily 04:30 local)"
-    say "Stop: crontab -l | grep -vF '$MARKER' | crontab -"
+    RECLAIM_MARKER="# ai-brain-starter: dev-build-reclaim"
+    RECLAIM_LINE="*/30 * * * * nice -n 10 /usr/bin/env python3 '$REPO_ROOT/scripts/dev-build-reclaim.py' --auto-gc >>'$LOG_DIR/dev-build-reclaim.out.log' 2>&1 $RECLAIM_MARKER"
+    mkdir -p "$LOG_DIR"
+    # Idempotent: drop any previous lines we installed, then append the current
+    # ones, so a moved repo or vault re-points instead of accumulating entries.
+    ( crontab -l 2>/dev/null | grep -vF -e "$MARKER" -e "$RECLAIM_MARKER" || true
+      echo "$LINE"; echo "$RECLAIM_LINE" ) | crontab -
+    say "[install-vault-daily-maintenance] cron entries installed (daily 04:30 local; disk check every 30 minutes)"
+    say "Stop: crontab -l | grep -vF -e '$MARKER' -e '$RECLAIM_MARKER' | crontab -"
     exit 0
 fi
 
-TEMPLATE="$REPO_ROOT/templates/launchd/com.abs.vault-daily-maintenance.plist.template"
+TEMPLATES="$REPO_ROOT/templates/launchd"
 TARGET_DIR="$HOME/Library/LaunchAgents"
-TARGET_FILE="$TARGET_DIR/com.abs.vault-daily-maintenance.plist"
-LOG_DIR="$HOME/.local/state/ai-brain-starter"
+JOBS=(com.abs.vault-daily-maintenance com.abs.dev-build-reclaim)
 
-if [[ ! -f "$TEMPLATE" ]]; then
-    echo "template missing at $TEMPLATE" >&2
-    exit 2
-fi
+for job in "${JOBS[@]}"; do
+    if [[ ! -f "$TEMPLATES/$job.plist.template" ]]; then
+        echo "template missing at $TEMPLATES/$job.plist.template" >&2
+        exit 2
+    fi
+done
 
 mkdir -p "$TARGET_DIR" "$LOG_DIR"
 
@@ -104,29 +112,32 @@ if same_dir "$HOME" "$(account_home || true)"; then
     LOAD_JOB=1
 fi
 
-if [[ -f "$TARGET_FILE" && $LOAD_JOB -eq 1 ]]; then
-    say "[install-vault-daily-maintenance] unloading existing plist..."
-    launchctl unload "$TARGET_FILE" 2>/dev/null || true
-fi
-
-# Substitute placeholders. sed -i differs across macOS / GNU; use a temp file.
-sed \
-    -e "s|{{REPO_ROOT}}|$REPO_ROOT|g" \
-    -e "s|{{VAULT_ROOT}}|$VAULT_ROOT|g" \
-    -e "s|{{LOG_DIR}}|$LOG_DIR|g" \
-    "$TEMPLATE" > "$TARGET_FILE"
-
-say "[install-vault-daily-maintenance] wrote $TARGET_FILE"
+for job in "${JOBS[@]}"; do
+    target="$TARGET_DIR/$job.plist"
+    if [[ -f "$target" && $LOAD_JOB -eq 1 ]]; then
+        say "[install-vault-daily-maintenance] unloading existing $job..."
+        launchctl unload "$target" 2>/dev/null || true
+    fi
+    # Substitute placeholders. sed -i differs across macOS / GNU; use a temp file.
+    sed \
+        -e "s|{{REPO_ROOT}}|$REPO_ROOT|g" \
+        -e "s|{{VAULT_ROOT}}|$VAULT_ROOT|g" \
+        -e "s|{{LOG_DIR}}|$LOG_DIR|g" \
+        "$TEMPLATES/$job.plist.template" > "$target"
+    say "[install-vault-daily-maintenance] wrote $target"
+    if [[ $LOAD_JOB -eq 1 ]]; then
+        launchctl load "$target"
+    fi
+done
 if [[ $LOAD_JOB -eq 0 ]]; then
     # Printed even under --quiet, and on stderr: the hook installer runs this with --quiet
     # and shows a finished child's stderr but never its stdout. A job that was written and
     # not loaded is not a success.
-    echo "[install-vault-daily-maintenance] skipped loading $TARGET_FILE: HOME is not this account's home directory, and launchd would replace the account's real job" >&2
+    echo "[install-vault-daily-maintenance] skipped loading ${JOBS[*]} in $TARGET_DIR: HOME is not this account's home directory, and launchd would replace the account's real jobs" >&2
     exit 0
 fi
-launchctl load "$TARGET_FILE"
-say "[install-vault-daily-maintenance] loaded (runs daily at 04:30 local)"
+say "[install-vault-daily-maintenance] loaded (daily at 04:30 local; disk check every 30 minutes)"
 say
-say "Logs:           $LOG_DIR/vault-daily-maintenance.{out,err}.log"
+say "Logs:           $LOG_DIR/{vault-daily-maintenance,dev-build-reclaim}.{out,err}.log"
 say "Run now (test): bash $REPO_ROOT/scripts/vault-daily-maintenance.sh --vault-root $VAULT_ROOT --force"
-say "Stop:           launchctl unload $TARGET_FILE  (or ABS_NO_AUTO_GC=1 before re-install)"
+say "Stop:           launchctl unload each $TARGET_DIR/<job>.plist  (or ABS_NO_AUTO_GC=1 before re-install)"

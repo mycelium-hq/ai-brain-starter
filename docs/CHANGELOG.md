@@ -9,6 +9,23 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-10-29: the disk cleanup also looks in ~/code, and checks the disk every 30 minutes
+
+**Who this affects:** anyone on macOS or Linux whose AI coding sessions make their own copies of a repo, above all Rust projects, where each copy's build output runs to several gigabytes.
+
+When the disk starts to run low, the daily job deletes build output (`node_modules`, `.venv`, Rust `target/`) from copies no session or build is using; the less space is left, the more recently used a copy can be. Two gaps let a disk fill anyway:
+
+- It looked in one folder: `dev_root` in `~/.claude/dev-hygiene.json`, or `~/dev` when that is not set, and the installer never sets it. Copies kept anywhere else were never cleaned. On one laptop the sessions kept theirs in `~/code`, and 180 GB piled up there in 3 days.
+- It ran once a day. Rust copies were measured arriving at about 60 GB a day, so a disk could fill between two runs.
+
+The build-output cleanup (`scripts/dev-build-reclaim.py`) now also covers `~/dev` and `~/code` when they exist, besides the configured folder, and judges each one against the free space of its own disk. A second scheduled job (launchd on macOS, cron on Linux) runs that cleanup alone every 30 minutes. While the disk has room it reads the free space and exits, so it does not wait for the machine to be idle or plugged in. Like the daily job, it first reports what it would delete, and deletes nothing until that report is a day old. The steps that delete branches and worktrees are unchanged: they still look only at the configured folder, once a day.
+
+The install screen says so, and the steps for leaving out the daily job now remove the 30-minute check too. Nothing changes on Windows, where the installer schedules neither job yet.
+
+**Tested:** new controls in `scripts/test_dev_build_reclaim.py`: [20] cleans idle copies under `~/dev` and `~/code` while the config names a third folder, and `--dev-root` still means that one folder alone; [21] shows the 30-minute check only reports on its first run and for a day after, deletes once that report is a day old, and deletes nothing on a disk with room. `scripts/test_auto_gc_default_on.py` installs the cron path twice against a stub `crontab` and expects one daily line plus one 30-minute line. `tests/integration/test_sandbox_cannot_reach_host_scheduler.sh` expects both launchd jobs to be written and loaded. Each of these fails on `main`.
+
+---
+
 ## 2026-10-28: running the installer a second time on a Mac no longer quits without a word
 
 **Who this affects:** anyone on a Mac who runs `bootstrap.sh` more than once. That includes everyone without Homebrew, because the installer's "TERMINAL STEP NEEDED" message asks them to paste `bash bootstrap.sh` into Terminal, which is a second run.

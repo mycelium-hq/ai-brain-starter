@@ -91,6 +91,8 @@ REQUIRED=(  # file|literal
   # name and the crontab marker are the ones scripts/install-vault-daily-maintenance.sh writes
   "README.md|com.abs.vault-daily-maintenance.plist"
   "README.md|# ai-brain-starter: vault-daily-maintenance"
+  "README.md|com.abs.dev-build-reclaim.plist"
+  "README.md|# ai-brain-starter: dev-build-reclaim"
   "SKILL.md|That rule cannot be unlocked by the user's permission."
   "phases/phase-00-install.md|### Step 0.0a. Show the install screen and ask once"
   "phases/phase-00-install.md|This cannot be unlocked by the user's permission"
@@ -99,6 +101,8 @@ REQUIRED=(  # file|literal
   "phases/phase-00-install.md|On their yes, before Step 0.1"
   "phases/phase-00-install.md|com.abs.vault-daily-maintenance.plist"
   "phases/phase-00-install.md|# ai-brain-starter: vault-daily-maintenance"
+  "phases/phase-00-install.md|com.abs.dev-build-reclaim.plist"
+  "phases/phase-00-install.md|# ai-brain-starter: dev-build-reclaim"
   "bootstrap.sh|may pause to ask you to approve these tools"
   "bootstrap.ps1|may pause to ask you to approve these tools"
 )

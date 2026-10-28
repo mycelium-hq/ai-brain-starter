@@ -25,7 +25,9 @@ Obsidian y hooks, un respaldo del vault, un chequeo de tu diario que
 Claude corre cada día a una hora programada, y:
 ?posix   Tarea diaria: borra ramas de git fusionadas y worktrees en tu vault.
 ?posix     En ~/dev hace fetch y fast-forward de checkouts limpios de main;
-?posix     desde su segunda corrida borra ramas fusionadas, worktrees y builds.
+?posix     desde su segunda corrida borra ahí ramas fusionadas y worktrees y,
+?posix     si queda poco espacio en disco, builds de checkouts que no se usan
+?posix     en ~/dev y ~/code; revisa el espacio cada 30 minutos.
 ?posix     Para omitirla, avísame antes de responder; pondré ABS_NO_AUTO_GC=1.
   Semanal y mensual (insights): Claude Code corre sin supervisión, con
     permiso para editar archivos y correr comandos de shell.

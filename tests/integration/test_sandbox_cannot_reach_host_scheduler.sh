@@ -96,6 +96,12 @@ if [ "$(calls)" -eq 0 ]; then ok "launchctl was not called"
 else bad "launchctl" "$(calls) call(s) recorded: $(tr '\n' ';' < "$LOG")"; fi
 if grep -qF "$VAULT" "$PLIST2" 2>/dev/null; then ok "the plist is still written, inside the sandbox"
 else bad "plist" "the plist at $PLIST2 was not rewritten"; fi
+PLIST2R="$H2/Library/LaunchAgents/com.abs.dev-build-reclaim.plist"
+if grep -qF "<string>$REPO_ROOT/scripts/dev-build-reclaim.py</string>" "$PLIST2R" 2>/dev/null \
+   && grep -qF '<string>--auto-gc</string>' "$PLIST2R" && ! grep -qF '{{' "$PLIST2R" \
+   && grep -A1 '<key>StartInterval</key>' "$PLIST2R" | grep -qF '<integer>1800</integer>'; then
+  ok "the disk-pressure check's plist runs dev-build-reclaim.py --auto-gc every 30 minutes"
+else bad "pressure plist" "$PLIST2R is missing, or does not run $REPO_ROOT/scripts/dev-build-reclaim.py --auto-gc every 1800 s"; fi
 N="$(printf '%s\n' "$OUT" | grep -c 'skipped loading')"
 if [ "$N" -eq 1 ]; then ok "one line says loading was skipped"
 else bad "message" "expected exactly one 'skipped loading' line, got $N: $OUT"; fi
@@ -103,13 +109,15 @@ else bad "message" "expected exactly one 'skipped loading' line, got $N: $OUT"; 
 echo "=== 3. ...and it calls launchctl when HOME is the account's home (injected) ==="
 H3="$TMP/h3"; mkdir -p "$H3/Library/LaunchAgents"
 PLIST3="$H3/Library/LaunchAgents/com.abs.vault-daily-maintenance.plist"
+PLIST3R="$H3/Library/LaunchAgents/com.abs.dev-build-reclaim.plist"
 echo "an earlier install" > "$PLIST3"
+echo "an earlier install" > "$PLIST3R"
 : > "$LOG"
 run_sandboxed "$H3" env PATH="$STUB_PATH" LAUNCHCTL_LOG="$LOG" \
   STUB_PASSWD_HOME="$H3" ABS_NO_AUTO_GC=0 /bin/bash "$SCHED" "$VAULT" >/dev/null 2>&1
-EXPECT="$(printf 'unload %s\nload %s' "$PLIST3" "$PLIST3")"
-if [ "$(cat "$LOG")" = "$EXPECT" ]; then ok "unload, then load, on its own plist"
-else bad "launchctl" "recorded [$(tr '\n' ';' < "$LOG")], expected unload then load of $PLIST3"; fi
+EXPECT="$(printf 'unload %s\nload %s\nunload %s\nload %s' "$PLIST3" "$PLIST3" "$PLIST3R" "$PLIST3R")"
+if [ "$(cat "$LOG")" = "$EXPECT" ]; then ok "unload, then load, on each of its own plists"
+else bad "launchctl" "recorded [$(tr '\n' ';' < "$LOG")], expected unload then load of $PLIST3 and $PLIST3R"; fi
 # The same home spelled another way is still the account's home.
 ln -s "$H3" "$TMP/h3-link"
 for SPELLING in "$H3/" "$TMP/h3-link"; do

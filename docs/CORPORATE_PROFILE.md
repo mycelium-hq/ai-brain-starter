@@ -89,11 +89,13 @@ install gets the same additions. The install screen lists them under the same ye
 - On macOS and Linux, a daily job at 04:30 that, besides vault upkeep, tidies git
   repos under `~/dev`. From its first run it fetches each repo and fast-forwards
   the clean checkouts that sit on their default branch (usually `main`). From its
-  second run it also removes merged branches, finished worktrees, old checkpoint
-  stashes and rebuildable build files. To leave it out, say so before answering
-  the install screen: after your yes the assistant sets `ABS_NO_AUTO_GC=1` in
-  `~/.claude/settings.json`, and updates keep it. Leaving it out also removes a
-  job that is already scheduled.
+  second run it also removes merged branches, finished worktrees and old
+  checkpoint stashes, and, when the disk runs low, rebuildable build files under
+  `~/dev` and `~/code`, which a check every 30 minutes also removes between
+  daily runs. To leave it out, say so before answering the install screen: after
+  your yes the assistant sets `ABS_NO_AUTO_GC=1` in `~/.claude/settings.json`,
+  and updates keep it. Leaving it out also removes both jobs if already
+  scheduled.
 
 ### Excluded by default (and why)
 
