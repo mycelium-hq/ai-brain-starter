@@ -46,7 +46,9 @@ Last Session.md. A stub becomes a real entry once Claude fills in its body
 and changes the session_label.
 
 Determinism rules:
-  - Files sorted by filename descending (reverse ISO timestamp order)
+  - Files sorted newest first by the date and time in the filename
+    (2026-10-29T20-39-x.md, 20260603-1823-x.md and notes-2026-04-20.md
+    all count), ties by filename
   - Top N concatenated with "---" separators
   - Deterministic preamble + aggregator region markers
   - Same input → same output, always → concurrent runs are safe
@@ -163,8 +165,32 @@ def is_stub(content: str) -> bool:
     return False
 
 
+# A date in the file name, with an optional time: 2026-10-29T20-39-main.md,
+# notes-2026-04-20.md, or the compact 20260603-1823-slug.md.
+_NAME_TIMESTAMPS = (
+    re.compile(r"(\d{4})-(\d{2})-(\d{2})(?:T(\d{2})-(\d{2}))?"),
+    re.compile(r"(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})"),
+)
+
+
+def _session_sort_key(p: Path) -> tuple[str, str]:
+    """The date and time in the file name, then the name itself.
+
+    Sorting by the raw name put any file whose name does not start with
+    `YYYY-MM-DD-` or `YYYY-MM-DDT` ahead of every dated session: a letter,
+    or the month digit in `20260603-...`, sorts after the `-` that follows
+    the year. One such file pinned Last Session.md to the same old
+    sessions no matter how many newer ones were written."""
+    for pattern in _NAME_TIMESTAMPS:
+        m = pattern.search(p.name)
+        if m:
+            year, month, day, hour, minute = m.groups()
+            return (f"{year}-{month}-{day} {hour or '00'}:{minute or '00'}", p.name)
+    return ("", p.name)
+
+
 def gather_session_files(include_stubs: bool = False) -> list[Path]:
-    """Return session files sorted by filename descending (newest first).
+    """Return session files, newest first by the timestamp in each filename.
 
     By default, stub files are excluded. Pass include_stubs=True to
     include them."""
@@ -178,7 +204,7 @@ def gather_session_files(include_stubs: bool = False) -> list[Path]:
         all_files = [
             p for p in all_files if not is_stub(p.read_text(encoding="utf-8"))
         ]
-    return sorted(all_files, key=lambda p: p.name, reverse=True)
+    return sorted(all_files, key=_session_sort_key, reverse=True)
 
 
 def strip_frontmatter(content: str) -> str:
