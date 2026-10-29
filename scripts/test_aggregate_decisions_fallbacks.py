@@ -14,7 +14,9 @@ decision inline forever, so those entries could never rotate to the archive.
 The first block goes through build_toc() and split_inline_vs_archive(), which
 existed before the fix, and all three of its checks FAIL against the previous
 aggregate-decisions.py (verified by running this file against it). The later
-blocks pin the individual fallbacks.
+blocks pin the individual fallbacks, and the last one the order of the log:
+newest decision first, whatever the file name's shape (a compact
+`20260416-...` name used to sort above every `2026-10-...` one).
 
 Plain script, no pytest (the CI job runs scripts/test_*.py directly on 3.9).
 """
@@ -131,6 +133,21 @@ def main() -> int:
         title = ad.decision_title(ad.strip_frontmatter(p8.read_text(encoding="utf-8")), p8)
         check("the slug fallback drops the whole YYYY-MM-DDTHH-MM- prefix",
               title == "bare slug here", title)
+
+    print("Order")
+    with tempfile.TemporaryDirectory() as td2:
+        d2 = Path(td2)
+        _write(d2, "2026-10-29T20-39-newest.md", "---\ncreationDate: 2026-10-29 20:39\n---\n\n# Newest\n")
+        _write(d2, "2026-06-01T00-00-middle.md", "---\ncreationDate: 2026-06-01\n---\n\n# Middle\n")
+        nd = _write(d2, "20260519T2005-compact-no-date.md", "---\ntype: decision\n---\n\n# Compact\n")
+        _write(d2, "20260416-1805-compact-old.md", "---\ncreationDate: 2026-04-16\n---\n\n# Old\n")
+        ad.DECISIONS_DIR = d2
+        got = [p.name for p in ad.gather_decision_files()]
+        want = ["2026-10-29T20-39-newest.md", "2026-06-01T00-00-middle.md",
+                "20260519T2005-compact-no-date.md", "20260416-1805-compact-old.md"]
+        check("the log lists the newest decision first, whatever the name's shape", got == want, got)
+        check("a compact YYYYMMDD name with no frontmatter date gets its date",
+              ad.decision_date(ad.parse_frontmatter(nd.read_text(encoding="utf-8")), nd) == "2026-05-19")
 
     print()
     if FAILURES:

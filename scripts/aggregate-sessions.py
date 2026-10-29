@@ -165,13 +165,14 @@ def is_stub(content: str) -> bool:
     return False
 
 
-# A date in the file name, with an optional time: 2026-10-29T20-39-main.md,
-# 2026-05-01T0007-x.md and notes-2026-04-20.md anywhere in the name; the
-# compact 20260603-1823-slug.md and 20260503T2108-slug.md only at the start,
-# so a run of digits in a slug is never read as a date.
+# A date in the file name, with an optional time. The compact
+# 20260603-1823-slug.md and 20260503T2108-slug.md count only at the start of
+# the name and are tried first; the dashed 2026-10-29T20-39-main.md,
+# 2026-05-01T0007-x.md and notes-2026-04-20.md count anywhere, but never
+# glued to other digits.
 _NAME_TIMESTAMPS = (
-    re.compile(r"(\d{4})-(\d{2})-(\d{2})(?:T(\d{2})-?(\d{2}))?"),
     re.compile(r"^(\d{4})(\d{2})(\d{2})(?:[-T](\d{2})(\d{2}))?(?!\d)"),
+    re.compile(r"(?<!\d)(\d{4})-(\d{2})-(\d{2})(?:T(\d{2})-?(\d{2}))?(?!\d)"),
 )
 
 
@@ -182,12 +183,19 @@ def _session_sort_key(p: Path) -> tuple[str, str]:
     `YYYY-MM-DD-` or `YYYY-MM-DDT` ahead of every dated session: a letter,
     or the month digit in `20260603-...`, sorts after the `-` that follows
     the year. One such file pinned Last Session.md to the same old
-    sessions no matter how many newer ones were written."""
+    sessions no matter how many newer ones were written. A match that is
+    not a real date and time between 2000 and 2099 (`30102026-...` read as
+    month 20, `myc-4704-10-30.md` as year 4704) counts as no date, so it
+    sorts last instead of on top."""
     for pattern in _NAME_TIMESTAMPS:
-        m = pattern.search(p.name)
-        if m:
-            year, month, day, hour, minute = m.groups()
-            return (f"{year}-{month}-{day} {hour or '00'}:{minute or '00'}", p.name)
+        for m in pattern.finditer(p.name):
+            year, month, day, hour, minute = (int(g) if g else 0 for g in m.groups())
+            try:
+                stamp = dt.datetime(year, month, day, hour, minute)
+            except ValueError:
+                continue
+            if 2000 <= stamp.year <= 2099:
+                return (stamp.strftime("%Y-%m-%d %H:%M"), p.name)
     return ("", p.name)
 
 
