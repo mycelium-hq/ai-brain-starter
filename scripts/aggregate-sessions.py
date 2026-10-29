@@ -47,8 +47,8 @@ and changes the session_label.
 
 Determinism rules:
   - Files sorted newest first by the date and time in the filename
-    (2026-10-29T20-39-x.md, 20260603-1823-x.md and notes-2026-04-20.md
-    all count), ties by filename
+    (2026-10-29T20-39-x.md, 20260603-1823-x.md, 20260503T2108-x.md and
+    notes-2026-04-20.md all count), ties by filename
   - Top N concatenated with "---" separators
   - Deterministic preamble + aggregator region markers
   - Same input → same output, always → concurrent runs are safe
@@ -166,10 +166,12 @@ def is_stub(content: str) -> bool:
 
 
 # A date in the file name, with an optional time: 2026-10-29T20-39-main.md,
-# notes-2026-04-20.md, or the compact 20260603-1823-slug.md.
+# 2026-05-01T0007-x.md and notes-2026-04-20.md anywhere in the name; the
+# compact 20260603-1823-slug.md and 20260503T2108-slug.md only at the start,
+# so a run of digits in a slug is never read as a date.
 _NAME_TIMESTAMPS = (
-    re.compile(r"(\d{4})-(\d{2})-(\d{2})(?:T(\d{2})-(\d{2}))?"),
-    re.compile(r"(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})"),
+    re.compile(r"(\d{4})-(\d{2})-(\d{2})(?:T(\d{2})-?(\d{2}))?"),
+    re.compile(r"^(\d{4})(\d{2})(\d{2})(?:[-T](\d{2})(\d{2}))?(?!\d)"),
 )
 
 

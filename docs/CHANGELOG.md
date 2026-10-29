@@ -15,7 +15,7 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 `aggregate-sessions.py` builds `Last Session.md` from the newest session files, and it decided "newest" by sorting the file names as text. A name that does not start like `2026-10-29T20-39` sorts after every name that does, because a letter (or the month digit in `20260603`) comes after the `-` that follows the year. One such file was enough to pin `Last Session.md` to the same old sessions, and every newer session stayed out of it. It now sorts by the date and time read from each name, whatever its shape, so the newest sessions come first again. No file is renamed or moved.
 
-**Tested:** `scripts/test_aggregate_sessions_order.py` builds a Sessions folder with five name shapes and an unfilled stub, and checks the order. On `main` it fails with the two odd names on top, the same order one real vault's `Last Session.md` had shown for months.
+**Tested:** `scripts/test_aggregate_sessions_order.py` builds a Sessions folder with seven name shapes, an undated name and an unfilled stub, and checks the order. On `main` it fails with the two odd names on top, the same order one real vault's `Last Session.md` had shown for months.
 
 ---
 
