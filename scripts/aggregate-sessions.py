@@ -46,7 +46,9 @@ Last Session.md. A stub becomes a real entry once Claude fills in its body
 and changes the session_label.
 
 Determinism rules:
-  - Files sorted by filename descending (reverse ISO timestamp order)
+  - Files sorted newest first by the date and time in the filename
+    (2026-10-29T20-39-x.md, 20260603-1823-x.md, 20260503T2108-x.md and
+    notes-2026-04-20.md all count), ties by filename
   - Top N concatenated with "---" separators
   - Deterministic preamble + aggregator region markers
   - Same input → same output, always → concurrent runs are safe
@@ -163,8 +165,42 @@ def is_stub(content: str) -> bool:
     return False
 
 
+# A date in the file name, with an optional time. The compact
+# 20260603-1823-slug.md and 20260503T2108-slug.md count only at the start of
+# the name and are tried first; the dashed 2026-10-29T20-39-main.md,
+# 2026-05-01T0007-x.md and notes-2026-04-20.md count anywhere, but never
+# glued to other digits.
+_NAME_TIMESTAMPS = (
+    re.compile(r"^(\d{4})(\d{2})(\d{2})(?:[-T](\d{2})(\d{2}))?(?!\d)"),
+    re.compile(r"(?<!\d)(\d{4})-(\d{2})-(\d{2})(?:T(\d{2})-?(\d{2}))?(?!\d)"),
+)
+
+
+def _session_sort_key(p: Path) -> tuple[str, str]:
+    """The date and time in the file name, then the name itself.
+
+    Sorting by the raw name put any file whose name does not start with
+    `YYYY-MM-DD-` or `YYYY-MM-DDT` ahead of every dated session: a letter,
+    or the month digit in `20260603-...`, sorts after the `-` that follows
+    the year. One such file pinned Last Session.md to the same old
+    sessions no matter how many newer ones were written. A match that is
+    not a real date and time between 2000 and 2099 (`30102026-...` read as
+    month 20, `myc-4704-10-30.md` as year 4704) counts as no date, so it
+    sorts last instead of on top."""
+    for pattern in _NAME_TIMESTAMPS:
+        for m in pattern.finditer(p.name):
+            year, month, day, hour, minute = (int(g) if g else 0 for g in m.groups())
+            try:
+                stamp = dt.datetime(year, month, day, hour, minute)
+            except ValueError:
+                continue
+            if 2000 <= stamp.year <= 2099:
+                return (stamp.strftime("%Y-%m-%d %H:%M"), p.name)
+    return ("", p.name)
+
+
 def gather_session_files(include_stubs: bool = False) -> list[Path]:
-    """Return session files sorted by filename descending (newest first).
+    """Return session files, newest first by the timestamp in each filename.
 
     By default, stub files are excluded. Pass include_stubs=True to
     include them."""
@@ -178,7 +214,7 @@ def gather_session_files(include_stubs: bool = False) -> list[Path]:
         all_files = [
             p for p in all_files if not is_stub(p.read_text(encoding="utf-8"))
         ]
-    return sorted(all_files, key=lambda p: p.name, reverse=True)
+    return sorted(all_files, key=_session_sort_key, reverse=True)
 
 
 def strip_frontmatter(content: str) -> str:

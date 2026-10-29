@@ -9,6 +9,16 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-10-30: Last Session.md and the Decision Log list the newest first again
+
+**Who this affects:** anyone whose `⚙️ Meta/Sessions/` or `⚙️ Meta/Decisions/` folder holds a file whose name does not start with the usual dashed date, such as a hand-named `notes-2026-04-20.md` or an older compact `20260603-1823-….md`.
+
+Both aggregators decided "newest" by sorting the file names as text. A name that does not start like `2026-10-29` sorts after every name that does, because a letter (or the month digit in `20260603`) comes after the `-` that follows the year. One such file was enough to pin `Last Session.md` to the same old sessions, and a folder of compact-named decisions put April's decisions at the top of the Decision Log. Sessions now sort by the date and time read from each name, whatever its shape, and decisions by each decision's own date. A name whose digits are not a real date (a ticket number like `myc-4704-10-30`, or `30102026-…` read as month 20) counts as undated and sorts last, instead of on top. A compact-named decision with no date in its frontmatter now gets the date from its name, so it shows a date in the log and can rotate to the archive. No file is renamed or moved.
+
+**Tested:** `scripts/test_aggregate_sessions_order.py` builds a Sessions folder with every name shape, a same-minute pair, names that are not dates and an unfilled stub, and checks the order. A new block in `scripts/test_aggregate_decisions_fallbacks.py` does the same for decisions. Both fail on `main` with the odd names on top, the order one real vault had shown for months.
+
+---
+
 ## 2026-10-29: the vault backup can leave one big folder out
 
 **Who this affects:** anyone using `scripts/vault-backup.sh` (macOS, Linux, Git Bash) whose vault holds a folder that should not go into the daily archive: raw video, or a copy of a shared drive that is backed up on its own.

@@ -57,8 +57,8 @@ File format (Decisions/ entries):
     - a first heading that is only a template label ("## What", "## Qué")
       → the first sentence of the What section, then the filename slug.
 
-Determinism rules identical to aggregate-sessions.py: sorted filename
-descending → deterministic output → concurrent runs safe.
+Determinism: decisions sorted newest first by decision_date() (ties by
+filename descending) → deterministic output → concurrent runs safe.
 """
 # exit-contract: NOT-A-CHECKER -- concatenates decision files into the
 #   decision log
@@ -174,13 +174,26 @@ def preamble() -> str:
     )
 
 
+def _decision_sort_key(p: Path) -> tuple[str, str]:
+    try:
+        fm = parse_frontmatter(p.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError):
+        fm = {}
+    return (decision_date(fm, p), p.name)
+
+
 def gather_decision_files() -> list[Path]:
-    """Return decision files sorted by filename descending (newest first)."""
+    """Return decision files, newest first by each decision's own date
+    (decision_date()), ties by filename descending.
+
+    Sorting by the raw name put every compact `20260416-...` file above
+    every `2026-10-29-...` one (`0` sorts after `-`), so the log opened with
+    the oldest decisions."""
     if not DECISIONS_DIR.exists():
         return []
     return sorted(
         [p for p in DECISIONS_DIR.glob("*.md") if p.is_file()],
-        key=lambda p: p.name,
+        key=_decision_sort_key,
         reverse=True,
     )
 
@@ -305,20 +318,31 @@ def decision_title(body: str, path: Path) -> str:
     )
 
 
+_COMPACT_NAME_DATE = re.compile(r"^(\d{4})(\d{2})(\d{2})(?!\d)")
+
+
 def decision_date(fm: dict, path: Path) -> str:
-    """decision_date, else the date part of creationDate, else the date in
-    the filename (YYYY-MM-DDTHH-MM-slug.md). Session-close writes many
-    decisions with only creationDate; without the fallback they indexed as
-    ????-??-?? and, being undated, could never rotate to the archive."""
-    for candidate in (
-        fm.get("decision_date", ""),
-        fm.get("creationDate", "")[:10],
-        path.name[:10],
+    """decision_date, else the date part of creationDate, else the date that
+    starts the filename (YYYY-MM-DDTHH-MM-slug.md, or the compact
+    YYYYMMDD-HHMM-slug.md). Session-close writes many decisions with only
+    creationDate; without the fallback they indexed as ????-??-?? and, being
+    undated, could never rotate to the archive. A date read from the name
+    counts only between 2000 and 2099, as in aggregate-sessions.py, so an id
+    such as `19991231-...` is not taken for 1999 and archived."""
+    compact = _COMPACT_NAME_DATE.match(path.name)
+    for candidate, from_name in (
+        (fm.get("decision_date", ""), False),
+        (fm.get("creationDate", "")[:10], False),
+        (path.name[:10], True),
+        ("-".join(compact.groups()) if compact else "", True),
     ):
         try:
-            return dt.date.fromisoformat(candidate).isoformat()
+            day = dt.date.fromisoformat(candidate)
         except (ValueError, TypeError):
             continue
+        if from_name and not 2000 <= day.year <= 2099:
+            continue
+        return day.isoformat()
     return ""
 
 
