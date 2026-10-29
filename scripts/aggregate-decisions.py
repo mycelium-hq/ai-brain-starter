@@ -326,18 +326,23 @@ def decision_date(fm: dict, path: Path) -> str:
     starts the filename (YYYY-MM-DDTHH-MM-slug.md, or the compact
     YYYYMMDD-HHMM-slug.md). Session-close writes many decisions with only
     creationDate; without the fallback they indexed as ????-??-?? and, being
-    undated, could never rotate to the archive."""
+    undated, could never rotate to the archive. A date read from the name
+    counts only between 2000 and 2099, as in aggregate-sessions.py, so an id
+    such as `19991231-...` is not taken for 1999 and archived."""
     compact = _COMPACT_NAME_DATE.match(path.name)
-    for candidate in (
-        fm.get("decision_date", ""),
-        fm.get("creationDate", "")[:10],
-        path.name[:10],
-        "-".join(compact.groups()) if compact else "",
+    for candidate, from_name in (
+        (fm.get("decision_date", ""), False),
+        (fm.get("creationDate", "")[:10], False),
+        (path.name[:10], True),
+        ("-".join(compact.groups()) if compact else "", True),
     ):
         try:
-            return dt.date.fromisoformat(candidate).isoformat()
+            day = dt.date.fromisoformat(candidate)
         except (ValueError, TypeError):
             continue
+        if from_name and not 2000 <= day.year <= 2099:
+            continue
+        return day.isoformat()
     return ""
 
 

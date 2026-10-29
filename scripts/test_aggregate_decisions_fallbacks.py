@@ -148,6 +148,9 @@ def main() -> int:
         check("the log lists the newest decision first, whatever the name's shape", got == want, got)
         check("a compact YYYYMMDD name with no frontmatter date gets its date",
               ad.decision_date(ad.parse_frontmatter(nd.read_text(encoding="utf-8")), nd) == "2026-05-19")
+        odd = _write(d2, "19991231-id.md", "---\ntype: decision\n---\n\n# An id, not a date\n")
+        check("an 8-digit id outside 2000-2099 is not read as a date",
+              ad.decision_date(ad.parse_frontmatter(odd.read_text(encoding="utf-8")), odd) == "")
 
     print()
     if FAILURES:
