@@ -32,10 +32,16 @@
 #
 # Usage:
 #   bash vault-backup.sh setup  [--vault PATH] [--dest DIR] [--encrypt] [--keep N] [--schedule daily|none]
+#                               [--exclude PATH]...
 #   bash vault-backup.sh run    [--vault PATH]
 #   bash vault-backup.sh verify [--vault PATH]
 #   bash vault-backup.sh status [--vault PATH]
 #   bash vault-backup.sh schedule [--vault PATH]
+#
+# --exclude keeps one folder or file of THIS vault out of every archive (repeat it
+# for several). PATH is relative to the vault root, no wildcards. It is saved in
+# the config as "excludes", which is what the daily run reads, so it keeps holding
+# after setup. Passing --exclude to setup replaces the saved list.
 #
 # Config:  ~/.claude/.vault-backup.conf  (JSON, keyed by resolved vault path)
 # Marker:  ~/.claude/.vault-backup-last  (ISO8601 of the last successful run)
@@ -119,6 +125,57 @@ os.replace(tmp, conf_path)
 PY
 }
 
+# Per-vault excludes: folders or files of THIS vault that stay out of every archive
+# (a huge media folder, a copy of something that is already backed up elsewhere).
+# Stored as a JSON list under the vault's entry, so the scheduled `run` honours it
+# with no flag.
+conf_get_excludes() { # <vault-key> -> one saved path per line (nothing when unset)
+  python3 - "$CONF" "$1" <<'PY'
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+except Exception:
+    raise SystemExit(0)
+for p in ((d.get("vaults") or {}).get(sys.argv[2]) or {}).get("excludes") or []:
+    print(p)
+PY
+}
+
+conf_set_excludes() { # <vault-key> <path>...  (replaces the saved list)
+  local key="$1"; shift
+  python3 - "$CONF" "$key" "$@" <<'PY'
+import json, os, sys
+conf_path, key = sys.argv[1], sys.argv[2]
+try:
+    d = json.load(open(conf_path))
+except Exception:
+    d = {}
+d.setdefault("vaults", {}).setdefault(key, {})["excludes"] = sys.argv[3:]
+os.makedirs(os.path.dirname(conf_path), exist_ok=True)
+tmp = conf_path + ".tmp"
+json.dump(d, open(tmp, "w"), indent=2)
+os.replace(tmp, conf_path)
+PY
+}
+
+# An exclude is a path under the vault root ("Big Folder", "Archive/2019"). Prints it
+# normalised: no "./" prefix, no trailing "/", and a path that starts with the
+# vault's own path made relative. Returns 1, reason on stderr, for anything else.
+# No wildcards on purpose: tar reads "*" as a pattern, and one stray "*" would turn
+# the backup into an empty archive that still passes every integrity check.
+normalize_exclude() { # <entry> <vault> -> relative path on stdout
+  local rel="$1" vault="$2"
+  case "$rel" in "$vault"/*) rel="${rel#"$vault"/}";; esac
+  while :; do
+    case "$rel" in ./*) rel="${rel#./}";; */) rel="${rel%/}";; *) break;; esac
+  done
+  case "$rel" in
+    ''|.|/*|..|../*|*/..|*/../*) echo "not a path inside the vault: '$1'" >&2; return 1;;
+    *[*?[\\]*) echo "wildcards and backslashes are not supported in an exclude: '$1'" >&2; return 1;;
+  esac
+  printf '%s' "$rel"
+}
+
 realpath_py() { python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$1"; }
 
 slug_for() { # <vault-path> -> stable short slug for keychain acct / plist name
@@ -185,6 +242,23 @@ make_archive() { # <vault> <out-base-no-ext> <encrypt 0|1> <slug> <store-kind> -
   for e in "${EXCLUDES[@]}"; do excl+=("--exclude=$e"); done
   # Always exclude any prior archives that happen to live under the vault.
   excl+=("--exclude=./*.tar.gz" "--exclude=./*.tar.gz.gpg" "--exclude=./*.tar.gz.enc")
+
+  # This vault's own excludes from the config, anchored at the vault root: leaving
+  # out "Big Folder" must not also drop "Notes/Big Folder". GNU tar already anchors
+  # "./Big Folder"; bsdtar (macOS) matches it at any depth unless the pattern starts
+  # with "^", which GNU tar would read as a literal character. An entry that cannot be
+  # used, or a folder that is gone, only warns: backing up too much is the safe way
+  # for a backup tool to be wrong. The warnings go to stderr because the caller
+  # captures this function's stdout as the archive path.
+  local rel anchor="" tar_v; tar_v="$(tar --version 2>/dev/null)"
+  case "$tar_v" in *bsdtar*|*libarchive*) anchor="^";; esac
+  while IFS= read -r e; do
+    [ -n "$e" ] || continue
+    rel="$(normalize_exclude "$e" "$vault")" \
+      || { warn "ignoring the excludes entry '$e' (reason above)" >&2; continue; }
+    [ -e "$vault/$rel" ] || warn "excluded path is not in the vault (typo, or already gone?): $rel" >&2
+    excl+=("--exclude=$anchor./$rel")
+  done < <(conf_get_excludes "$vault")
 
   # FOREIGN CHECKOUTS NESTED IN THE VAULT — excluded by PROPERTY, not by name.
   #
@@ -272,7 +346,7 @@ human_size() { # <file>
 # ============================ subcommands ============================
 
 cmd_setup() {
-  local vault="" dest="" encrypt=0 keep=7 schedule="daily"
+  local vault="" dest="" encrypt=0 keep=7 schedule="daily" ex_given=()
   while [ $# -gt 0 ]; do
     case "$1" in
       --vault) vault="$2"; shift 2;;
@@ -280,11 +354,22 @@ cmd_setup() {
       --encrypt) encrypt=1; shift;;
       --keep) keep="$2"; shift 2;;
       --schedule) schedule="$2"; shift 2;;
+      --exclude) ex_given+=("$2"); shift 2;;
       *) die "unknown setup arg: $1";;
     esac
   done
   vault="$(resolve_vault "$vault")"
   say "${B}Backing up:${N} $vault"
+
+  # Check every --exclude before anything is prompted or written. A typo would
+  # otherwise only show up as the first snapshot trying to archive the very folder
+  # that was meant to be left out.
+  local ex rel ex_set=()
+  for ex in ${ex_given[@]+"${ex_given[@]}"}; do
+    rel="$(normalize_exclude "$ex" "$vault")" || die "unusable --exclude '$ex'"
+    [ -e "$vault/$rel" ] || die "--exclude '$ex' is not in the vault (looked for $vault/$rel). Check the spelling."
+    ex_set+=("$rel")
+  done
 
   # Destination — prompt if not given.
   if [ -z "$dest" ]; then
@@ -341,6 +426,10 @@ cmd_setup() {
   conf_set "$vault" \
     "dest=$dest" "archive_stem=$ARCHIVE_STEM" "encrypt=$([ "$encrypt" = 1 ] && echo true || echo false)" \
     "keep=$keep" "keychain_account=$slug" "store_kind=$store_kind"
+  if [ "${#ex_set[@]}" -gt 0 ]; then
+    conf_set_excludes "$vault" "${ex_set[@]}"
+    ok "Left out of every snapshot: ${ex_set[*]}"
+  fi
   ok "Saved config -> $CONF"
 
   # First snapshot immediately, so there is no configured-but-empty gap.
@@ -491,6 +580,9 @@ cmd_status() {
   else
     say "${B}Destination:${N} $dest $([ -d "$dest" ] && echo "(reachable)" || echo "${R}(UNREACHABLE)${N}")"
     say "${B}Encrypted:${N}   $(conf_get "$vault" encrypt)    ${B}Keep:${N} $(conf_get "$vault" keep)"
+    # What a snapshot does NOT contain is as much a part of the posture as where it goes.
+    local left; left="$(conf_get_excludes "$vault" | paste -sd '|' - | sed 's/|/, /g')"
+    [ -z "$left" ] || say "${B}Left out:${N}     $left"
     # Where the passphrase lives is part of the security posture, not a setup
     # detail. "Encrypted: true" on its own reads as safe even when the key fell
     # back to a file on the same disk as the backup. The setup-time warning is a
@@ -768,7 +860,7 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
     status)   cmd_status "$@";;
     schedule) cmd_schedule "$@";;
     -h|--help|help)
-      sed -n '2,45p' "$0" | sed 's/^# \{0,1\}//' ;;
+      sed -n '2,51p' "$0" | sed 's/^# \{0,1\}//' ;;
     *) die "unknown command: $CMD (use setup|run|verify|status|schedule)";;
   esac
 fi

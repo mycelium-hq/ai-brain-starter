@@ -155,6 +155,53 @@ else
   echo "SKIP  encrypted round-trip (no gpg/openssl)"
 fi
 
+# ---- 8. per-vault excludes: a path left out of EVERY snapshot ----
+# `setup --exclude` saves the list in the config and the scheduled `run` (which
+# takes no flags) must keep honouring it. A folder with the same name deeper in
+# the vault is a different path and stays.
+V4="$ROOT/Brain4"; DEST4="$ROOT/dest4"
+mkdir -p "$V4/Big Media/clips" "$V4/Notes/Big Media" "$V4/Archive/old"
+printf '# CLAUDE.md\n'            > "$V4/CLAUDE.md"
+printf 'EXCLUDED-media\n'         > "$V4/Big Media/clips/a.mp4"
+printf 'EXCLUDED-old\n'           > "$V4/Archive/old/b.md"
+printf 'kept, same name deeper\n' > "$V4/Notes/Big Media/keep.md"
+printf 'kept note\n'              > "$V4/Notes/n.md"
+bash "$BACKUP" setup --vault "$V4" --dest "$DEST4" --schedule none \
+  --exclude "Big Media" --exclude "./Archive/old/" >/dev/null 2>&1 \
+  && pass "setup --exclude ran" || fail "setup --exclude failed"
+sleep 1   # a second snapshot needs its own timestamped name
+bash "$BACKUP" run --vault "$V4" >/dev/null 2>&1   # what the schedule runs: no flags
+n4=$(ls -1 "$DEST4"/vault-backup-* 2>/dev/null | wc -l | tr -d ' ')
+[ "$n4" = "2" ] && pass "setup took one snapshot and the flag-less run a second" \
+  || fail "expected 2 snapshots, got $n4"
+for arc4 in "$DEST4"/vault-backup-*; do
+  l4="$(tar -tzf "$arc4" 2>/dev/null)"
+  if printf '%s\n' "$l4" | grep -q 'Big Media/clips\|Archive/old'; then
+    fail "an excluded path is in $(basename "$arc4")"
+  elif printf '%s\n' "$l4" | grep -q 'Notes/Big Media/keep.md' \
+       && printf '%s\n' "$l4" | grep -q 'Notes/n.md' \
+       && printf '%s\n' "$l4" | grep -q 'CLAUDE.md'; then
+    pass "$(basename "$arc4"): excluded paths out, same-named folder deeper and the notes kept"
+  else
+    fail "a path that should be kept is missing from $(basename "$arc4")"
+  fi
+done
+bash "$BACKUP" status --vault "$V4" 2>&1 | grep -q 'Big Media' \
+  && pass "status lists what is left out" || fail "status does not say what is left out"
+
+# Negative controls: setup must refuse an exclude that is a typo, a wildcard (one
+# stray "*" would empty the backup) or outside the vault, and write nothing.
+V5="$ROOT/Brain5"; DEST5="$ROOT/dest5"
+mkdir -p "$V5"; printf '# CLAUDE.md\n' > "$V5/CLAUDE.md"
+for bad in "Nope" "*" "../x"; do
+  rc=0; bash "$BACKUP" setup --vault "$V5" --dest "$DEST5" --schedule none --exclude "$bad" >/dev/null 2>&1 || rc=$?
+  if [ "$rc" -ne 0 ] && [ -z "$(ls -1 "$DEST5"/vault-backup-* 2>/dev/null)" ]; then
+    pass "setup refuses --exclude '$bad' (rc=$rc, no snapshot)"
+  else
+    fail "setup accepted --exclude '$bad' (rc=$rc)"
+  fi
+done
+
 echo
 if [ "$fails" -gt 0 ]; then echo "FAILED: $fails"; exit 1; fi
 echo "ALL TESTS PASSED"

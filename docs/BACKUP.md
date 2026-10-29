@@ -63,6 +63,28 @@ Then `setup`:
 Provider-agnostic: the destination is just a folder path. Nothing is hard-wired
 to one cloud.
 
+### A folder that is too big, or already safe somewhere else
+
+Some folders do not belong in a daily archive: a pile of raw video, or a copy of a
+shared drive that has its own backup. Name them once, at setup:
+
+```bash
+bash ~/.claude/skills/ai-brain-starter/scripts/vault-backup.sh setup \
+  --exclude "Raw footage" --exclude "Projects/Shared drive copy"
+```
+
+Each one is a folder or file path **relative to the vault root**, with no
+wildcards. It is saved in the config as `excludes`, which is what the daily run
+reads, so the folder stays out of every snapshot without repeating the flag. Only
+that exact path is left out: a folder with the same name deeper in the vault is
+still backed up. `status` lists what is left out, and `setup` refuses a path that
+is not in the vault, so a typo cannot quietly leave the folder in.
+
+Running `setup --exclude` again replaces the list; to clear it, delete the
+`excludes` line from the config. What you leave out is in no snapshot, so make sure
+it is safe somewhere else first. macOS and Linux only for now: `vault-backup.ps1`
+does not read `excludes`.
+
 ### Sensitive vault? Encrypt it.
 
 If your vault holds journals, health data, or client/CRM notes, add `--encrypt`:
