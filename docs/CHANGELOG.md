@@ -9,6 +9,18 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-10-29: the vault backup can leave one big folder out
+
+**Who this affects:** anyone using `scripts/vault-backup.sh` (macOS, Linux, Git Bash) whose vault holds a folder that should not go into the daily archive: raw video, or a copy of a shared drive that is backed up on its own.
+
+The backup skipped a fixed list of leftovers (caches and build output) and nothing else, with no way to add to it for one vault. A 36 GB media folder meant a 36 GB archive every night, or no backup at all. `setup --exclude "Raw footage"` now leaves that path out of every snapshot. It is saved in `~/.claude/.vault-backup.conf`, so the scheduled run keeps skipping it without the flag, and `status` lists what is left out. Only that exact path is skipped: a folder with the same name deeper in the vault is still backed up. `setup` refuses a path that is not in the vault, a wildcard, or a path outside the vault, so a typo cannot leave the folder in and a stray `*` cannot empty the archive.
+
+macOS and Linux only for now: `vault-backup.ps1` ignores the list.
+
+**Tested:** `scripts/test-vault-backup-roundtrip.sh` runs a real `setup --exclude` and then a flag-less `run` on a test vault, and lists both archives: the excluded paths are absent, the same-named folder deeper stays, and the three bad paths are refused. On `main` those cases fail. The test also caught a difference between the two `tar` programs: macOS `tar` matches `./Folder` at any depth, GNU `tar` only at the root. The script now anchors the path on macOS, so both behave the same.
+
+---
+
 ## 2026-10-29: five hooks that looked only in ~/dev now read your code folder setting
 
 **Who this affects:** anyone who keeps their code repos somewhere other than `~/dev` and says so with `dev_root` in `~/.claude/dev-hygiene.json`.
