@@ -142,5 +142,13 @@
       "_comment": "INTERROGATIVE about whether a close ALREADY happened — 'did you close this session?', 'have you closed the session?', 'is the session closed?'. A question ABOUT the close action's state/completion, not a request to perform it. Requires a STATE/PAST auxiliary (did/do/does/have/has/had/is/are/was/were) + subject + a close verb + a trailing '?'. Modal REQUESTS ('can/could/would/will you close this session?') carry no such auxiliary, so they still fire. Codified 2026-06-30 after 'did you close this session?' fired the full cascade via the high_confidence 'close (this|the) session' pattern; strict tier is required because false_positive_guards do NOT override a high_confidence match.",
       "pattern": "\\b(did|do|does|have|has|had|is|are|was|were)\\s+(you|we|i|it|the|this|that|everything|already)\\b[^?\\n]{0,45}\\bclos(?:e|ed|ing)\\b[^?\\n]{0,45}\\?"
     }
+  ],
+
+  "_negations_comment": "Negation words, one regex each, matched as whole words (case-insensitive). A match of a strong-tier pattern (explicit, high_confidence) or of the user's own closingSignals.custom phrases is cancelled when one of these stands within a few words before it in the same clause: \"don't close this session\", \"we're not wrapping up yet\", \"no need to close this session\". A clause ends at . ! ? ; : , a newline or \"but\", so \"don't worry, close this session\" still closes. \"do not\" and \"will not\" are covered by \"not\". Bare \"no\" is NOT listed on purpose: in English it is usually a reply (\"no thanks, that's all\"). Each pack's words apply only to that pack's own patterns; the user's custom phrases get every loaded pack's words.",
+  "negations": [
+    "(?:don|won|shouldn|wouldn)'?t",
+    "never(?!\\s*mind)",
+    "not",
+    "no\\s+need\\s+(?:to|for)"
   ]
 }

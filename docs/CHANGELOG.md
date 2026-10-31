@@ -9,6 +9,20 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-10-31: "don't close this session" no longer closes the session
+
+**Who this affects:** anyone who types a close phrase after a "don't" or a "no", and especially anyone who set their own phrases with `closingSignals.custom` in CLAUDE.md.
+
+The close detector looked for the phrase and never at the words in front of it. "Don't close this session, we keep going" holds the phrase "close this session", so it started the full close routine and pre-built an empty session file for someone who had just asked for the opposite. It happened two ways. Your own custom phrases fire first and skip every false-positive guard. The shared English and Spanish phrases (`close this session`, `wrapping up`, `es todo por hoy`) fire wherever they sit in the message, so with no custom list at all the same sentence still closed the session.
+
+Now a negation just before the phrase, in the same clause, cancels the match. English: don't, dont, do not, not, never, won't, shouldn't, wouldn't, no need to. Spanish: no, nunca, jamás ("no cerremos esta sesión", "no es todo por hoy"). A comma, a period or "but" ends the negation's reach, so "don't worry, close this session" and "we're not done but close this session" still close, and "close this session", "lets close this session" and "wrap up this session" on their own close as before. English "no" is deliberately not a negation word, because in English it is usually a reply: "no thanks, that's all" and "no I'm good" still close. The words live in each language pack under `negations`; Portuguese has no list yet.
+
+One trade-off, on purpose: a missed close costs one repeat, a close that fires by mistake ends a session you wanted to keep. So your own phrase right after "no" and a word or two, with no comma ("no worries <your phrase>"), reads as negated unless a shared pack also knows it. Add the comma or say it again.
+
+**Tested:** `tests/integration/test_detect_closing_signal_negation.sh` runs the real hook on stdin in a throwaway vault, with your own phrases and without them, in English and Spanish. Every "should not close" sentence has a "should close" twin, including the English "no" sign-offs, so a change that mutes the detector cannot pass. 20 of its assertions fail on `main` before this change. `scripts/test-closing-signals.py` gained the same cases (151 fixtures, all passing), and every other close-detector test still passes.
+
+---
+
 ## 2026-10-30: Last Session.md and the Decision Log list the newest first again
 
 **Who this affects:** anyone whose `⚙️ Meta/Sessions/` or `⚙️ Meta/Decisions/` folder holds a file whose name does not start with the usual dashed date, such as a hand-named `notes-2026-04-20.md` or an older compact `20260603-1823-….md`.

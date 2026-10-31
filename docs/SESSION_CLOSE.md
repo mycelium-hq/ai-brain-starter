@@ -129,6 +129,7 @@ Three confidence levels:
 - "listo para empezar" (readiness, not close)
 - Code blocks containing close keywords
 - Quoted close keywords ("bye" in quotes)
+- A close phrase with a negation just before it in the same clause: "don't close this session", "we're not wrapping up yet", "no need to close this session", "no cerremos esta sesión", "no es todo por hoy". This holds for your own `closingSignals.custom` phrases too. A comma, a period or "but"/"pero" ends the negation's reach, so "don't worry, close this session" still closes. Each pack lists its own negation words under `negations`
 
 ## Recovery + rollback
 
@@ -164,7 +165,7 @@ closingSignals.custom: ["k thx bai", "im out for real"]
 ---
 ```
 
-These match as **explicit** confidence (no ambiguity check, fires immediately).
+These match as **explicit** confidence (no ambiguity check, fires immediately). The one thing that still cancels them is a negation just before the phrase, see the false-positive list above.
 
 **Per-language pack (PR-worthy):** edit `templates/closing-signals/{lang}.json`, add to the appropriate level (`explicit`, `high_confidence`, `ambiguous`, `emoji_only`), run the test harness with new fixtures, open a PR.
 

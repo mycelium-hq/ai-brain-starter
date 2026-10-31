@@ -26,6 +26,9 @@ Behavior contract:
     last line, so a line ending in "listo" inside a pasted handoff is not a
     sign-off; the explicit slash-command tier and the user's custom phrases
     fire at any length
+  - A close phrase with a negation just before it in the same clause ("don't
+    close this session", "no cerremos esta sesión") is not a close, in the
+    custom, explicit and high_confidence tiers alike (see is_negated)
   - Runs FAST prep (timestamp, paths, marker file, decisions-with-empty-outcome
     list, recently-touched-files list, session-file shell pre-build)
   - Returns additionalContext that injects all of the above plus the cascade
@@ -102,6 +105,11 @@ except Exception:  # fail-open: if the lib cannot load, behave as before
 # "thanks". Only the natural-language tiers are gated by this — the `explicit`
 # slash-command tier and the user's own custom phrases fire at any length.
 SHORT_PROMPT_MAX_CHARS = 300
+
+# How many words may sit between a negation and the close phrase it cancels:
+# "I don't really want to close this session" still counts, a sentence-long gap
+# does not.
+NEGATION_WINDOW_WORDS = 4
 
 
 def log_debug(msg: str) -> None:
@@ -180,6 +188,13 @@ def load_language_packs(langs: list[str]) -> dict:
     (meta-discussion of close cascade, debugging, technical references)
     where false positives are very costly. The original false_positive_guards
     only suppress weak tiers (ambiguous / emoji_only).
+
+    negations (codified 2026-10-31): each pack's list of negation words. They
+    stay with the language that wrote them, because Spanish "no" is a negation
+    while English "no" is usually a reply ("no thanks, that's all"): every
+    strong-tier pattern is checked only against the cues of its own pack
+    ("negations", pattern -> cues). The user's own custom phrases carry no
+    language, so they get every loaded pack's cues ("all_negations").
     """
     repo = find_repo_root()
     pack_dir = repo / "templates" / "closing-signals"
@@ -191,6 +206,8 @@ def load_language_packs(langs: list[str]) -> dict:
         "false_positive_guards": [],
         "strict_guards": [],
     }
+    cues_by_pattern: dict[str, list[str]] = {}
+    all_cues: list[str] = []
     for lang in langs:
         path = pack_dir / f"{lang.strip()}.json"
         if not path.is_file():
@@ -203,6 +220,13 @@ def load_language_packs(langs: list[str]) -> dict:
             continue
         for key in merged:
             merged[key].extend(data.get(key, []))
+        cues = data.get("negations", [])
+        all_cues.extend(cues)
+        for tier in ("explicit", "high_confidence"):
+            for pattern in data.get(tier, []):
+                cues_by_pattern.setdefault(pattern, []).extend(cues)
+    merged["negations"] = cues_by_pattern
+    merged["all_negations"] = all_cues
     return merged
 
 
@@ -350,6 +374,50 @@ def _without_quoted_content(text: str) -> str:
     return "".join(chars).strip()
 
 
+# A negation reaches only as far as the clause it stands in: the text since the
+# last sentence mark, comma, newline or "but". "don't worry, close this session"
+# and "we're not done but close this session" are real closes.
+_CLAUSE_END_RE = re.compile(r"[.!?;:,\n—]|\b(?:but|pero)\b", re.IGNORECASE)
+
+
+def is_negated(text: str, start: int, cues: list[str]) -> bool:
+    """True when a negation cue stands just before text[start:] in its clause.
+
+    "don't close this session" holds the literal close phrase and asks for the
+    opposite. Until 2026-10-31 nothing looked at the words in front of a phrase,
+    so it started the full close cascade. A cue counts only inside the phrase's
+    own clause and at most NEGATION_WINDOW_WORDS words back. `cues` are regexes
+    from the packs' "negations" lists, matched as whole words.
+    """
+    if not cues:
+        return False
+    before = text[max(0, start - 100):start].replace("’", "'")
+    clause = _CLAUSE_END_RE.split(before)[-1]
+    gap = rf"(?:\s+\S+){{0,{NEGATION_WINDOW_WORDS}}}\s*$"
+    for cue in cues:
+        try:
+            if re.search(rf"(?<![\w'])(?:{cue})(?![\w'])" + gap, clause, re.IGNORECASE):
+                return True
+        except re.error as e:
+            log_debug(f"bad negation regex '{cue}': {e}")
+    return False
+
+
+def _live_match(
+    pattern: str, text: str, cues: list[str], flags: int = re.IGNORECASE
+) -> bool:
+    """True when `pattern` matches `text` somewhere no negation cancels it.
+
+    Looks at every match, not just the first, so "don't close this session yet.
+    OK, close this session now." still closes on the second one.
+    """
+    for m in re.finditer(pattern, text, flags):
+        if not is_negated(text, m.start(), cues):
+            return True
+        log_debug(f"negated, skipping match of {pattern!r} at {m.start()}")
+    return False
+
+
 def classify_signal(
     prompt: str,
     packs: dict,
@@ -402,10 +470,16 @@ def classify_signal(
     # Quoted phrases are content; a custom close elsewhere still participates.
     signal_text = _without_quoted_content(text)
 
-    # User custom patterns are highest authority — always win, FP guard skipped
+    # User custom patterns are highest authority — always win, FP guard skipped.
+    # The one thing that still cancels them is a negation just before the phrase
+    # ("don't close this session" holds the literal phrase and asks for the
+    # opposite). A custom phrase has no language, so every pack's cues apply.
+    custom_cues = packs.get("all_negations", [])
     for pattern in custom:
         try:
-            if re.search(pattern, signal_text, re.IGNORECASE | re.MULTILINE):
+            if _live_match(
+                pattern, signal_text, custom_cues, re.IGNORECASE | re.MULTILINE
+            ):
                 return ("explicit", pattern)
         except re.error:
             continue
@@ -438,10 +512,17 @@ def classify_signal(
     is_short = len(text) <= SHORT_PROMPT_MAX_CHARS
     last_line = signal_text.splitlines()[-1].strip() if "\n" in signal_text else signal_text
 
+    # A negation cancels a pack match the same way ("don't close this session",
+    # "we're not wrapping up yet", "no es todo por hoy"). Each pattern is checked
+    # against the cues of the pack it came from only: English "no thanks, that's
+    # all" must not be read through Spanish "no".
+    cues_by_pattern = packs.get("negations", {})
+
     def _pack_match(pattern: str) -> bool:
-        if re.search(pattern, signal_text, re.IGNORECASE):
+        cues = cues_by_pattern.get(pattern, [])
+        if _live_match(pattern, signal_text, cues):
             return True
-        return last_line != signal_text and bool(re.search(pattern, last_line, re.IGNORECASE))
+        return last_line != signal_text and _live_match(pattern, last_line, cues)
 
     # Strong tiers (explicit, high_confidence) override FP guards
     for level in ("explicit", "high_confidence"):
