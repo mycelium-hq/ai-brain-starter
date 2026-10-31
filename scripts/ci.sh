@@ -604,6 +604,14 @@ INTEGRATION_TESTS=(
   # must-fire twin (same words, last line / short prompt), so a change that
   # mutes the detector cannot pass; 13 assertions fail on the pre-fix hook.
   test_detect_closing_signal_length_gate
+  # Close detector, negation (2026-10-31): the detector matched the close PHRASE
+  # and never looked at the words in front of it, so "don't close this session"
+  # (a custom phrase, or the shared `close (this|the) session` pattern) fired the
+  # full cascade for someone who had just said the opposite. Every must-not-fire
+  # assertion has a must-fire twin, including the English "no thanks, that's
+  # all" that the Spanish "no" must never swallow; 20 assertions fail on the
+  # pre-fix hook.
+  test_detect_closing_signal_negation
   test_team_broadcast_install_gap
   # Floor name -> number map (2026-08-16): the journal extractor hand-kept the
   # pre-expansion 17-level English map while the framework has 34 floors with

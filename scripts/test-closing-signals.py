@@ -181,6 +181,29 @@ FIXTURES: list[tuple[str, str, str | None]] = [
     ("neg-es-creo-que-ya-entendi", "creo que ya entendí", None),
     ("neg-es-creo-que-ya-lo-tengo", "creo que ya lo tengo", None),
     ("neg-es-creo-que-ya-quedo-el-informe", "creo que ya quedó el informe", None),
+
+    # === Negated close phrases — MUST NOT fire ===
+    # The detector matched the phrase and ignored the words in front of it, so
+    # "don't close this session" (which holds the literal phrase) started the
+    # whole close cascade for someone who had just said the opposite. A negation
+    # just before the phrase, in the same sentence, now cancels the match.
+    ("neg-dont-close-session", "don't close this session, we keep going", None),
+    ("neg-do-not-close-session", "do not close this session", None),
+    ("neg-not-wrapping-up", "we're not wrapping up yet", None),
+    ("neg-es-no-cerremos", "no cerremos esta sesión", None),
+    ("neg-es-no-es-todo-por-hoy", "no es todo por hoy", None),
+    ("neg-es-no-vamos-a-cerrar", "no vamos a cerrar la sesión", None),
+
+    # ...while the same phrases without the negation, with the negation cut off
+    # by a comma or "but", and English sign-offs that start with "no" (Spanish
+    # "no" is a negation, English "no" is usually just a reply) must STILL close.
+    ("en-close-this-session", "close this session", "high_confidence"),
+    ("en-dont-worry-close", "don't worry, close this session", "high_confidence"),
+    ("en-not-done-but-close", "we're not done but close this session", "high_confidence"),
+    ("en-no-thanks-thats-all", "no thanks, that's all", "high_confidence"),
+    ("en-no-im-good", "no I'm good", "high_confidence"),
+    ("es-cerremos-sesion", "cerremos esta sesión", "high_confidence"),
+    ("es-no-comma-cerremos", "no, cerremos esta sesión", "high_confidence"),
 ]
 
 
@@ -200,6 +223,11 @@ _SUPPRESS_MD = (
 _CUSTOM_ES_MD = (
     'closingSignals.custom: ["es todo por hoy", "ya es todo", '
     '"cierra la sesión", "ciérrame la sesión"]\n'
+)
+
+_CUSTOM_EN_MD = (
+    'closingSignals.custom: ["close this session", "lets close this session", '
+    '"wrap up this session"]\n'
 )
 
 CONFIG_FIXTURES: list[tuple[str, str, str | None, str]] = [
@@ -257,6 +285,25 @@ CONFIG_FIXTURES: list[tuple[str, str, str | None, str]] = [
     ("cq-curly-quote", 'Prueba “es todo por hoy” aquí', None, _CUSTOM_ES_MD),
     ("cq-multiline-code", 'Prueba este ejemplo:\n```\nes todo por hoy\n```',
      None, _CUSTOM_ES_MD),
+
+    # === Custom phrase NEGATED — MUST NOT fire ===
+    # The same bug one tier up. Custom phrases are literals at the highest tier
+    # and skip the false-positive guards, so the phrase inside "don't close this
+    # session" fired the full cascade and pre-built an empty session file.
+    ("cn-reported-sentence",
+     "don't close this session, you can compact it but we keep going until we finish.",
+     None, _CUSTOM_EN_MD),
+    ("cn-please-dont-wrap", "please don't wrap up this session", None, _CUSTOM_EN_MD),
+    ("cn-no-need-to", "no need to close this session", None, _CUSTOM_EN_MD),
+    ("cn-es-no-es-todo", "no es todo por hoy", None, _CUSTOM_ES_MD),
+
+    # ...while the SAME phrases without the negation must still close.
+    ("cn-close", "close this session", "explicit", _CUSTOM_EN_MD),
+    ("cn-lets-close", "lets close this session", "explicit", _CUSTOM_EN_MD),
+    ("cn-ok-close", "ok close this session", "explicit", _CUSTOM_EN_MD),
+    ("cn-wrap-up", "wrap up this session", "explicit", _CUSTOM_EN_MD),
+    ("cn-dont-worry-close", "don't worry, close this session", "explicit", _CUSTOM_EN_MD),
+    ("cn-es-es-todo-por-hoy", "es todo por hoy", "explicit", _CUSTOM_ES_MD),
 
     # suppress (customOnly off): named phrases never fire; others still do.
     ("sup-im-done-off", "i'm done", None, _SUPPRESS_MD),

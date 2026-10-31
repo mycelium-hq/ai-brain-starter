@@ -127,5 +127,12 @@
       "_comment": "RELAYED SPEECH — the user asks Claude to TELL SOMEONE ELSE a phrase that happens to be a close signal ('dile a Ana que ya quedó', 'avísale que listo', 'contéstale que hasta luego'). The close phrase is message CONTENT addressed to a third party, not a sign-off to Claude. Strict because 'ya quedó' and bare 'listo' are high_confidence, so a weak-tier guard cannot override them. Requires a reporting verb BEFORE 'que' AND a close phrase right after it, so a bare 'ya quedó' still fires.",
       "pattern": "\\b(d[íi]le|d[íi]gale|d[íi]les|dices|digas|diga|av[íi]sale|av[íi]sele|escr[íi]bele|escr[íi]bale|cu[ée]ntale|com[ée]ntale|resp[óo]ndele|cont[ée]stale|recu[ée]rdale|advi[ée]rtele|m[áa]ndale|env[íi]ale|diciendo|dici[ée]ndole)\\b[^\\n]{0,50}\\bque\\b\\s*(ya\\s+qued[óo]|ya\\s+est[áa]|ya\\s+es\\s+todo|es\\s+todo|listo|gracias|chao|chau|nos\\s+vemos|hasta\\s+luego|hasta\\s+ma[ñn]ana|buenas\\s+noches|me\\s+voy)\\b"
     }
+  ],
+
+  "_negations_comment": "Negation words, one regex each, matched as whole words (case-insensitive). A match of a strong-tier pattern (explicit, high_confidence) or of the user's own closingSignals.custom phrases is cancelled when one of these stands within a few words before it in the same clause: 'no cerremos esta sesión', 'no es todo por hoy', 'no vamos a cerrar la sesión', 'nunca cerramos la sesión sin guardar'. A clause ends at . ! ? ; : , a newline or 'pero', so 'no, cerremos esta sesión' still closes. Spanish 'no' negates the verb that follows it, so it is listed here; the English pack leaves bare 'no' out because in English it is usually a reply. Each pack's words apply only to that pack's own patterns; the user's custom phrases get every loaded pack's words.",
+  "negations": [
+    "no",
+    "nunca",
+    "jam[aá]s"
   ]
 }
