@@ -381,6 +381,10 @@ def leg_git_push() -> None:
     try:
         heavy = _repo_with_hook(tmp, "#!/bin/sh\nexec pnpm verify\n")
         light = _repo_with_hook(tmp, "#!/bin/sh\necho ok\n")
+        # tickets#5661: a hook that only MENTIONS a marker in comments is light; one that runs it,
+        # even with a trailing comment, is heavy.
+        commented = _repo_with_hook(tmp, "#!/bin/sh\n# this hook used to run the full `pnpm verify` here\n  # tsc too\necho ok\n")
+        trailing = _repo_with_hook(tmp, "#!/bin/sh\npnpm verify  # the quality bar\n")
         none_ = _repo_with_hook(tmp, None)
 
         mod._count_running = lambda cls, snap: 1  # "a verify" already at cap
@@ -409,6 +413,10 @@ def leg_git_push() -> None:
               mod.admit(f"git -C {heavy} push && pnpm build", str(nonrepo)) == 2)
         mod.read_signal = old_signal
         check("G a light pre-push hook admits", mod.admit("git push", light) == 0)
+        check("G a hook that names pnpm verify only in comments admits (tickets#5661)",
+              mod.admit("git push", commented) == 0)
+        check("G a hook that runs pnpm verify before a trailing comment, at cap, denies",
+              mod.admit("git push", trailing) == 2)
         check("G no pre-push hook admits", mod.admit("git push", none_) == 0)
         check("G --no-verify admits regardless of the hook", mod.admit("git push --no-verify", heavy) == 0)
         check("G an unresolvable repo (no cwd) admits", mod.admit("git push", None) == 0)

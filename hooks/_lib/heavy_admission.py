@@ -324,7 +324,11 @@ def _repo_push_is_heavy(prefix: list[str], cwd: str) -> bool:
     if not stat.S_ISREG(os.stat(hook).st_mode):  # a dir/FIFO: never open() it; admit WITH the note
         raise OSError(f"pre-push hook is not a regular file: {hook}")
     with open(hook, encoding="utf-8", errors="replace") as fh:  # unreadable -> raises, same note
-        return any(marker in fh.read(65536) for marker in _HEAVY_HOOK_MARKERS)
+        text = fh.read(65536)
+    # Only lines that run something count: a light hook that EXPLAINS why it no longer runs
+    # `pnpm verify` (studio #13375) is still light (mycelium-hq/tickets#5661).
+    code = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+    return any(marker in code for marker in _HEAVY_HOOK_MARKERS)
 
 def _shell_scope_segs(segs, idx):
     """SEGS up to IDX, re-rooted at the `(` opening idx's own subshell, so
