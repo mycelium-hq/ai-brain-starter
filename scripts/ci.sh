@@ -1737,6 +1737,11 @@ PY_DIRECT=(
   # (A's own run passes; a no-id session and a legacy runner fall back to the
   # shared report instead of blocking every close forever).
   hooks/test_close_gate_runner_per_session.py
+  # The close's Phase 2b follows the vault: a git vault keeps the vault-safe-commit step,
+  # a plain-folder vault runs its session-close-offsite.sh (or is told there is no
+  # commit step) instead of being told to commit what git cannot see. Drives the real
+  # build_injected_context over three throwaway vaults. Plain script, stdlib only.
+  hooks/test_close_offsite_step.py
   # check-zsh-silent-idioms.py: bash idioms that silently do the wrong thing under
   # zsh (an unbraced $VAR:path in a git read; an unsplit $VAR in `set --` / `for`).
   # Drives the real hook over real stdin and asserts the PARSED decision, because
