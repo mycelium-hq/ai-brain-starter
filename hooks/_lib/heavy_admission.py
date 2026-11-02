@@ -508,8 +508,9 @@ def _memory_critical(sig: dict) -> tuple[bool, str]:
 
 def _load_critical(sig: dict) -> tuple[bool, str]:
     load, cpus = sig["load1"], sig["cpus"]
-    limit = max(float(os.environ.get(LOAD_FLOOR_ENV) or LOAD_FLOOR_DEFAULT),
-                float(os.environ.get(LOAD_RATIO_ENV) or LOAD_RATIO_DEFAULT) * cpus)
+    # A user in a comma locale may type "12,5"; read it like sysctl's numbers.
+    limit = max(_locale_float(str(os.environ.get(LOAD_FLOOR_ENV) or LOAD_FLOOR_DEFAULT)),
+                _locale_float(str(os.environ.get(LOAD_RATIO_ENV) or LOAD_RATIO_DEFAULT)) * cpus)
     return load >= limit, f"1-minute load {load:.0f} (limit {limit:.0f} on {cpus} CPUs)"
 
 

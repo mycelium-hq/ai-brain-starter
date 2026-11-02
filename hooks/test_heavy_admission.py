@@ -278,6 +278,13 @@ def leg_load() -> None:
         check("O ci-test's CI_PARITY_LOAD_RATIO moves this limit too", _admit(mod, "next build")[0] == 2)
     finally:
         os.environ.pop("CI_PARITY_LOAD_RATIO", None)
+    os.environ["CI_PARITY_LOAD_RATIO"] = "1,5"  # typed by a user in a comma locale
+    try:
+        mod.read_signal = at(15.0)
+        rc, out, _fires = _admit(mod, "next build")
+        check("O a comma-decimal ratio (1,5) is read as 1.5, not an error", rc == 2 and "limit 15 on 10 CPUs" in out, out)
+    finally:
+        os.environ.pop("CI_PARITY_LOAD_RATIO", None)
     mod.read_signal = at(400.0)
     check("O a light command is never load-gated", _admit(mod, "ls -la")[0] == 0)
     for cmd in ("npm ci", "npm install", "npm i", "pnpm install --offline", "yarn install"):
