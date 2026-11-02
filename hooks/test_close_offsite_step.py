@@ -51,7 +51,7 @@ def make_vault(root: Path, git: bool, offsite: bool) -> Path:
     if git:
         (vault / ".git").mkdir()
     if offsite:
-        (vault / "Meta" / "scripts" / "session-close-offsite.sh").write_text("#!/bin/sh\n")
+        (vault / "Meta" / "scripts" / "session-close-offsite.sh").write_text("#!/bin/sh\n", encoding="utf-8")
     return vault
 
 
