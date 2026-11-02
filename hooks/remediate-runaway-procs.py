@@ -90,6 +90,22 @@ def _emit(ctx: str | None) -> int:
     return 0
 
 
+def _ps_env() -> dict:
+    """The environment for every `ps` call: LC_NUMERIC=C, so macOS prints pcpu
+    as '98.7', not the locale's '98,7' (float() rejected that, so no stuck hook
+    ever reached the CPU gate on comma-decimal Macs). Only LC_NUMERIC: LC_ALL=C
+    would make ps rewrite non-ASCII command text ('/Users/josé' came back as
+    '/Users/josM-CM-)'), and the path-scoped matches would silently stop.
+    A user-set LC_ALL still wins over this, which is why _parse_decimal takes
+    a comma too."""
+    return {**os.environ, "LC_NUMERIC": "C"}
+
+
+def _parse_decimal(text: str) -> float:
+    """A ps pcpu figure or an env threshold in either decimal spelling: '98.7' or '98,7'."""
+    return float(text.strip().replace(",", "."))
+
+
 def _etime_to_min(etime: str) -> float:
     """Parse `ps` etime ([[dd-]hh:]mm:ss) into minutes."""
     etime = etime.strip()
@@ -257,7 +273,7 @@ def main() -> int:
         if n.strip()
     }
     try:
-        min_age = float(os.environ.get("RUNAWAY_MIN_AGE_MIN", "5"))
+        min_age = _parse_decimal(os.environ.get("RUNAWAY_MIN_AGE_MIN", "5"))
     except ValueError:
         min_age = 5.0
 
@@ -268,7 +284,7 @@ def main() -> int:
             out = subprocess.run(
                 ["ps", "-axo", "pid=,ppid=,etime=,comm="],
                 capture_output=True, text=True,
-                encoding="utf-8", errors="replace", timeout=15,
+                encoding="utf-8", errors="replace", timeout=15, env=_ps_env(),
             )
         except (subprocess.TimeoutExpired, OSError):
             out = None
@@ -303,11 +319,11 @@ def main() -> int:
     # with a dual age AND cpu gate so a normal fast hook is never touched.
     hooks_dir = os.path.expanduser("~/.claude/hooks/")
     try:
-        hook_age = float(os.environ.get("RUNAWAY_HOOK_MIN_AGE_MIN", "12"))
+        hook_age = _parse_decimal(os.environ.get("RUNAWAY_HOOK_MIN_AGE_MIN", "12"))
     except ValueError:
         hook_age = 12.0
     try:
-        hook_cpu = float(os.environ.get("RUNAWAY_HOOK_MIN_CPU", "50"))
+        hook_cpu = _parse_decimal(os.environ.get("RUNAWAY_HOOK_MIN_CPU", "50"))
     except ValueError:
         hook_cpu = 50.0
     hook_reaped: list[tuple[int, str, float]] = []
@@ -315,7 +331,7 @@ def main() -> int:
         out2 = subprocess.run(
             ["ps", "-axww", "-o", "pid=,etime=,pcpu=,command="],
             capture_output=True, text=True,
-            encoding="utf-8", errors="replace", timeout=15,
+            encoding="utf-8", errors="replace", timeout=15, env=_ps_env(),
         )
     except (subprocess.TimeoutExpired, OSError):
         out2 = None
@@ -327,7 +343,7 @@ def main() -> int:
                 continue
             pid_s, etime, cpu_s, command = parts
             try:
-                pid, cpu = int(pid_s), float(cpu_s)
+                pid, cpu = int(pid_s), _parse_decimal(cpu_s)
             except ValueError:
                 continue
             try:
@@ -357,7 +373,7 @@ def main() -> int:
     # every interpreter start ~10x and the box stopped making progress.
     claude_dir = os.path.expanduser("~/.claude/")
     try:
-        helper_age = float(os.environ.get("RUNAWAY_HELPER_MIN_AGE_MIN", "15"))
+        helper_age = _parse_decimal(os.environ.get("RUNAWAY_HELPER_MIN_AGE_MIN", "15"))
     except ValueError:
         helper_age = 15.0
     helper_reaped: list[tuple[int, str, float]] = []
@@ -365,7 +381,7 @@ def main() -> int:
         out3 = subprocess.run(
             ["ps", "-axww", "-o", "pid=,ppid=,etime=,command="],
             capture_output=True, text=True,
-            encoding="utf-8", errors="replace", timeout=15,
+            encoding="utf-8", errors="replace", timeout=15, env=_ps_env(),
         )
     except (subprocess.TimeoutExpired, OSError):
         out3 = None

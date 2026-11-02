@@ -44,17 +44,26 @@ close_ncpu() {
   echo "$n"
 }
 
+_close_norm_num() {
+  # Echoes $1 as a plain dot-decimal number, or nothing. Comma-decimal locales
+  # make macOS sysctl print "1,88"; before this, such a load was thrown away
+  # and read as 0, so the gate never deferred on those machines.
+  local v="${1/,/.}"
+  case "$v" in ''|*[!0-9.]*|*.*.*) v="" ;; esac
+  echo "$v"
+}
+
 close_load_1min() {
-  # Echoes the raw 1-min load average, cross-platform. Empty on any read error.
-  local one=""
-  if [ -r /proc/loadavg ]; then
-    one=$(awk '{print $1}' /proc/loadavg 2>/dev/null)          # Linux
+  # Echoes the raw 1-min load average (dot decimal), cross-platform. Empty on any read error.
+  # CLOSE_LOADAVG_FILE is a test seam (point it at a missing path to force the sysctl branch).
+  local one="" f="${CLOSE_LOADAVG_FILE:-/proc/loadavg}"
+  if [ -f "$f" ] && [ -r "$f" ]; then   # -f: a FIFO passes -r and would block awk
+    one=$(awk '{print $1}' "$f" 2>/dev/null)                   # Linux
   else
     # macOS/BSD: `sysctl -n vm.loadavg` -> "{ 4.90 6.59 11.53 }" (field 2 = 1-min)
     one=$(sysctl -n vm.loadavg 2>/dev/null | awk '{print $2}')
   fi
-  case "$one" in ''|*[!0-9.]*) one="" ;; esac      # keep only a plain number
-  echo "$one"
+  _close_norm_num "$one"                              # keep only a plain number
 }
 
 close_load_per_core() {
@@ -64,14 +73,28 @@ close_load_per_core() {
   one=$(close_load_1min)
   [ -z "$one" ] && { echo "0"; return; }
   ncpu=$(close_ncpu)
-  awk -v o="$one" -v n="$ncpu" 'BEGIN{ if (n < 1) n = 1; printf "%.2f", o / n }'
+  # LC_ALL=C: awk reads and prints numbers in the locale, so "%.2f" would print "0,19".
+  LC_ALL=C awk -v o="$one" -v n="$ncpu" 'BEGIN{ if (n < 1) n = 1; printf "%.2f", o / n }'
 }
 
 close_resource_high() {
   # Returns 0 (true) when normalized 1-min load >= CLOSE_MAX_LOAD_PER_CORE.
-  local per_core
+  local per_core raw t=""
   per_core=$(close_load_per_core)
-  awk -v p="$per_core" -v t="$CLOSE_MAX_LOAD_PER_CORE" 'BEGIN{ exit !((p + 0) >= (t + 0)) }'
+  # Only a comma decimal ("3,5", " 3,5 ") is changed: it is read as 3.5 in every
+  # locale. Any other spelling runs the original awk command below unchanged, so
+  # it decides exactly as before ("1e9" huge, "" or "abc" 0, garbage as it was).
+  raw="$CLOSE_MAX_LOAD_PER_CORE"
+  case "$raw" in
+    *,*)
+      raw="${raw#"${raw%%[![:space:]]*}"}"; raw="${raw%"${raw##*[![:space:]]}"}"  # trim the ends
+      t=$(_close_norm_num "$raw") ;;
+  esac
+  if [ -n "$t" ]; then
+    LC_ALL=C awk -v p="$per_core" -v t="$t" 'BEGIN{ exit !((p + 0) >= (t + 0)) }'
+  else
+    awk -v p="$per_core" -v t="$CLOSE_MAX_LOAD_PER_CORE" 'BEGIN{ exit !((p + 0) >= (t + 0)) }'
+  fi
 }
 
 # --- close-cascade mutex ---------------------------------------------------
