@@ -109,8 +109,11 @@ for txt, want in (("98,7", 98.7), ("98.7", 98.7), (" 50 ", 50.0)):
     got = mod._parse_decimal(txt)
     if got != want:
         bad.append(f"_parse_decimal({txt!r}) = {got}, want {want}")
-if mod._ps_env().get("LC_ALL") != "C":
-    bad.append("_ps_env() does not set LC_ALL=C")
+env = mod._ps_env()
+if env.get("LC_NUMERIC") != "C":
+    bad.append("_ps_env() does not set LC_NUMERIC=C")
+if env.get("LC_ALL") not in (None, os.environ.get("LC_ALL")):
+    bad.append("_ps_env() sets LC_ALL (ps would rewrite non-ASCII command text)")
 # Every subprocess.run whose argv starts with "ps" must pass env=_ps_env().
 tree = ast.parse(open(os.environ["HOOK"], encoding="utf-8").read())
 ps_calls = 0
@@ -119,20 +122,40 @@ for node in ast.walk(tree):
             and isinstance(node.args[0], ast.List) and node.args[0].elts \
             and getattr(node.args[0].elts[0], "value", None) == "ps":
         ps_calls += 1
-        env = [k for k in node.keywords if k.arg == "env"]
-        if not env or ast.unparse(env[0].value) != "_ps_env()":
+        env_kw = [k for k in node.keywords if k.arg == "env"]
+        if not env_kw or ast.unparse(env_kw[0].value) != "_ps_env()":
             bad.append(f"ps call at line {node.lineno} does not pass env=_ps_env()")
 if ps_calls == 0:
     bad.append("found no ps calls at all (the scan itself is broken)")
-# On a Mac, the real ps under _ps_env() must give pcpu figures that all parse.
-if sys.platform == "darwin":
-    out = subprocess.run(["ps", "-axo", "pcpu="], capture_output=True, text=True, env=mod._ps_env()).stdout
-    rows = [r for r in out.split() if r]
-    if not rows or any("," in r for r in rows):
-        bad.append(f"real ps under LC_ALL=C still printed commas or nothing: {rows[:5]}")
+# The real ps under _ps_env(): every pcpu row parses, and non-ASCII command text
+# comes back unchanged (LC_ALL=C turned '/Users/josé' into '/Users/josM-CM-)').
+import tempfile, time
+out = subprocess.run(["ps", "-axo", "pcpu="], capture_output=True, text=True,
+                     encoding="utf-8", errors="replace", env=env).stdout
+rows = [r for r in out.split() if r]
+try:
+    [mod._parse_decimal(r) for r in rows]
+    if not rows:
+        bad.append("real ps printed no pcpu rows")
+except ValueError as exc:
+    bad.append(f"a real ps pcpu row did not parse: {exc}")
+if sys.platform == "darwin" or sys.platform.startswith("linux"):
+    # `sleep 30; :` keeps sh alive (no exec), so its argv still carries the marker.
+    marker = "/tmp/josé-probe/x"
+    probe = subprocess.Popen(["/bin/sh", "-c", "sleep 30; :", marker])
+    try:
+        time.sleep(0.3)
+        cmd = subprocess.run(["ps", "-ww", "-o", "command=", "-p", str(probe.pid)], capture_output=True,
+                             text=True, encoding="utf-8", errors="replace", env=env).stdout
+    finally:
+        probe.kill(); probe.wait()
+    if "sleep 30" not in cmd:
+        bad.append(f"non-ASCII probe: ps did not show the probe at all ({cmd!r}); the check proves nothing")
+    elif marker not in cmd:
+        bad.append(f"ps under _ps_env() rewrote non-ASCII command text: {cmd.strip()!r}")
 if bad:
     print("\n".join(bad), file=sys.stderr); sys.exit(1)
-print(f"PASS: pcpu parses in both spellings; all {ps_calls} ps calls run under LC_ALL=C")
+print(f"PASS: pcpu parses in both spellings; all {ps_calls} ps calls run under LC_NUMERIC=C; non-ASCII command text intact")
 PY3
 
 # --- Assertions 9-19: CLASS 3 orphaned-session-helper pos/neg control -----

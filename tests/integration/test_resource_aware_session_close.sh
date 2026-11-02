@@ -88,7 +88,7 @@ comma_leg() {
     pc=$(close_load_per_core)
     [ "$pc" = "3.15" ] || { echo "[$1] per-core printed '$pc', want 3.15" >&2; exit 1; }
     # Thresholds: comma, padded and exponent spellings must decide like the plain number.
-    for t in "3.0" "3,0" " 3.0" "0"; do
+    for t in "3.0" "3,0" " 3.0" "0" "2 0" "abc"; do  # last two: decide as before the fix (2, and 0)
       # shellcheck disable=SC2034  # read by close_resource_high in the sourced $GUARD
       CLOSE_MAX_LOAD_PER_CORE="$t"
       close_resource_high || { echo "[$1] 3.15/core should be HIGH at threshold '$t'" >&2; exit 1; }

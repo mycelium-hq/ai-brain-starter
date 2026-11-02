@@ -91,10 +91,14 @@ def _emit(ctx: str | None) -> int:
 
 
 def _ps_env() -> dict:
-    """The environment for every `ps` call: LC_ALL=C, so macOS prints pcpu as
-    '98.7', never the locale's '98,7' (which float() rejected, so no stuck hook
-    ever reached the CPU gate on comma-decimal Macs)."""
-    return {**os.environ, "LC_ALL": "C"}
+    """The environment for every `ps` call: LC_NUMERIC=C, so macOS prints pcpu
+    as '98.7', not the locale's '98,7' (float() rejected that, so no stuck hook
+    ever reached the CPU gate on comma-decimal Macs). Only LC_NUMERIC: LC_ALL=C
+    would make ps rewrite non-ASCII command text ('/Users/josé' came back as
+    '/Users/josM-CM-)'), and the path-scoped matches would silently stop.
+    A user-set LC_ALL still wins over this, which is why _parse_decimal takes
+    a comma too."""
+    return {**os.environ, "LC_NUMERIC": "C"}
 
 
 def _parse_decimal(text: str) -> float:
@@ -269,7 +273,7 @@ def main() -> int:
         if n.strip()
     }
     try:
-        min_age = float(os.environ.get("RUNAWAY_MIN_AGE_MIN", "5"))
+        min_age = _parse_decimal(os.environ.get("RUNAWAY_MIN_AGE_MIN", "5"))
     except ValueError:
         min_age = 5.0
 
@@ -369,7 +373,7 @@ def main() -> int:
     # every interpreter start ~10x and the box stopped making progress.
     claude_dir = os.path.expanduser("~/.claude/")
     try:
-        helper_age = float(os.environ.get("RUNAWAY_HELPER_MIN_AGE_MIN", "15"))
+        helper_age = _parse_decimal(os.environ.get("RUNAWAY_HELPER_MIN_AGE_MIN", "15"))
     except ValueError:
         helper_age = 15.0
     helper_reaped: list[tuple[int, str, float]] = []

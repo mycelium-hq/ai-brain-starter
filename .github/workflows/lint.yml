@@ -780,7 +780,9 @@ jobs:
         # ubuntu-latest has no fr/de/es locale, so there this test prints SKIP for the
         # comma-locale leg. A Mac ships them; fail if the leg did not actually run here.
         run: |
-          out="$(/bin/bash tests/integration/test_resource_aware_session_close.sh 2>&1)"; rc=$?
+          # `|| rc=$?`: under the runner's bash -e a bare failing capture would exit
+          # before the printf, and the FAIL text would never reach the log.
+          rc=0; out="$(/bin/bash tests/integration/test_resource_aware_session_close.sh 2>&1)" || rc=$?
           printf '%s\n' "$out"
           [ $rc -eq 0 ] || exit $rc
           if printf '%s\n' "$out" | grep -q '^SKIP: no comma-decimal locale'; then
