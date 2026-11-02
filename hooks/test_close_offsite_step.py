@@ -14,8 +14,11 @@ Assertions, each on the REAL cascade text build_injected_context() returns:
      told to run that script after the writes, and is NOT told to commit.
   3. A plain-folder vault without that script is told there is no commit step,
      and is NOT told to commit or to run a script it does not have.
+  4. A vault reached through a symlink into a git repo counts as a git vault,
+     the way `git -C` (and so the close gate) sees it.
 """
 import importlib.util
+import shlex
 import sys
 import tempfile
 from pathlib import Path
@@ -71,7 +74,7 @@ with tempfile.TemporaryDirectory() as tmp:
         script = vault / "Meta" / "scripts" / "session-close-offsite.sh"
         if COMMIT in text:
             failures.append("a plain-folder vault was told to run vault-safe-commit.sh")
-        if f'bash "{script}"' not in text:
+        if f"bash {shlex.quote(str(script))}" not in text:
             failures.append("a plain-folder vault with session-close-offsite.sh was not told to run it")
 
     # 3. Plain folder without one.
@@ -83,6 +86,17 @@ with tempfile.TemporaryDirectory() as tmp:
             failures.append("a vault without session-close-offsite.sh was told to run it")
         if "NO COMMIT STEP" not in text:
             failures.append("a plain-folder vault was not told there is no commit step")
+
+    # 4. A vault reached through a symlink into a git repo is a git vault, as `git -C` sees it.
+    with tempfile.TemporaryDirectory(dir=tmp) as t:
+        repo = Path(t) / "repo"
+        (repo / ".git").mkdir(parents=True)
+        real = repo / "sub" / "vault"
+        (real / "Meta" / "scripts").mkdir(parents=True)
+        link = Path(t) / "link"
+        link.symlink_to(real)
+        if COMMIT not in cascade(link):
+            failures.append("a vault reached through a symlink into a git repo was not told to commit")
 
 if failures:
     print("FAILED — the close's Phase 2b does not match the vault:")

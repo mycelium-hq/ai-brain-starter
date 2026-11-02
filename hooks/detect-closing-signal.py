@@ -79,6 +79,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import sys
 import time
 from pathlib import Path
@@ -1195,8 +1196,13 @@ the one case the harness explicitly rules out."""
 
 def vault_in_git_repo(vault_root: Path) -> bool:
     """True when the vault sits inside a git work tree (a `.git` folder or file in
-    it or in a folder above it). A vault kept as a plain folder returns False."""
-    return any((d / ".git").exists() for d in (vault_root, *vault_root.parents))
+    it or in a folder above it), after following symlinks the way `git -C` does,
+    so this agrees with the close gate. A vault kept as a plain folder returns False."""
+    try:
+        root = vault_root.resolve()
+    except OSError:
+        root = vault_root.absolute()
+    return any((d / ".git").exists() for d in (root, *root.parents))
 
 
 def _full_cascade_block(
@@ -1302,8 +1308,8 @@ Then walk Phases 0b -> 1 -> 2 -> 2b -> 3 below."""
     # writes instead of leaving them on this machine until the next backup.
     offsite = meta_dir / "scripts" / "session-close-offsite.sh"
     if vault_in_git_repo(vault_root):
-        phase_2b = """PHASE 2b — vault-safe-commit IS YOUR MANUAL JOB (codified 2026-05-25
-after the cascade double-fire incident). You MUST run vault-safe-commit.sh
+        phase_2b = """This vault is a git repository: vault-safe-commit IS YOUR MANUAL JOB
+(codified 2026-05-25 after the cascade double-fire incident). You MUST run vault-safe-commit.sh
 with explicit paths for every session-close artifact you wrote (session
 file + decisions + captures + time-tracking + any rule/inventory edits)
 BEFORE drafting the goodbye. The verify-session-close-cascade Stop hook
@@ -1317,12 +1323,12 @@ aggregate-decisions.py), retention cleanup (stubs >7d), worktree-archive
 preparation. It does NOT auto-commit; that is Phase 2b above and it is
 your job before goodbye."""
     elif offsite.is_file():
-        phase_2b = f"""PHASE 2b — OFF-MACHINE COPY. This vault is not a git repository, so there
-is nothing to commit and vault-safe-commit.sh does not apply. After the Phase 2
-writes, run the vault's own off-machine copy so this session's notes leave this
+        phase_2b = f"""OFF-MACHINE COPY. This vault is not a git repository, so there is nothing
+to commit and vault-safe-commit.sh does not apply. After the Phase 2 writes,
+run the vault's own off-machine copy so this session's notes leave this
 machine now, not at the next scheduled backup:
 
-  bash "{offsite}"
+  bash {shlex.quote(str(offsite))}
 
 Quote its last line in the close summary. If it fails, or says another run is
 still going, say so there too; the vault's scheduled backup still runs.
@@ -1330,8 +1336,8 @@ still going, say so there too; the vault's scheduled backup still runs.
 The post-Stop hook handles ONLY: aggregators, retention cleanup (stubs >7d)
 and worktree-archive preparation."""
     else:
-        phase_2b = """PHASE 2b — NO COMMIT STEP. This vault is not a git repository, so there is
-nothing to commit and vault-safe-commit.sh does not apply. Move on.
+        phase_2b = """NO COMMIT STEP. This vault is not a git repository, so there is nothing to
+commit and vault-safe-commit.sh does not apply. Move on.
 
 The post-Stop hook handles ONLY: aggregators, retention cleanup (stubs >7d)
 and worktree-archive preparation."""
@@ -1396,6 +1402,7 @@ PHASE 2 — Batch writes (one tool-call block, append never overwrite):
   • Append journal seeds to Captures.
   • Personal vs team firewall: never let personal content leak to a team vault.
 
+PHASE 2b — vault-safe-commit, or the off-machine copy in a vault with no git:
 {phase_2b}
 
 Phases 0c/0d/0e and the Phase 3 audit are MODEL-SIDE. The post-Stop hook

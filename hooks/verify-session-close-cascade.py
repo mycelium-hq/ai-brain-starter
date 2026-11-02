@@ -760,7 +760,8 @@ def main() -> int:
         f"Manual phases (not in runner — still your job): Phase 0b\n"
         f"(incomplete-work gate), Phase 1 (conversation scan + Pending\n"
         f"Signals), Phase 2 (session file authorship), Phase 2b\n"
-        f"(vault-safe-commit), Phase 3 (functional audit on public ships).\n\n"
+        f"(vault-safe-commit, or the off-machine step in a vault with no git),\n"
+        f"Phase 3 (functional audit on public ships).\n\n"
         f"Bypass (use sparingly): VERIFY_CASCADE_BYPASS=1 (skip) or\n"
         f"VERIFY_CASCADE_SOFT=1 (advisory, never block).\n"
     )
