@@ -90,7 +90,7 @@ bash "<vault>/scripts/vault-safe-commit.sh" "session: <slug> — <summary>" "<pa
 
 This is yours to do, not the Stop hook's. `verify-session-close-cascade.py` runs BEFORE the Stop hook and blocks the close while session-close artifacts are still uncommitted, so waiting for the automatic snapshot in the final step costs you a hard block and a forced re-run.
 
-*Skip if the vault is not git-tracked* — the captures are already on disk.
+**A vault that is not git-tracked has no commit step.** If it keeps its off-machine copy some other way (a nightly mirror or backup), name that step in `<Meta>/scripts/session-close-offsite.sh`: the close then runs it right after the writes, so this session's notes leave the machine now instead of at the next scheduled backup. Without that script, skip this phase.
 
 ## Phase 3 — Functional audit (you, code sessions only)
 

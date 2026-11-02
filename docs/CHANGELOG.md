@@ -9,6 +9,18 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-11-02: a vault without git is no longer told to commit at close
+
+**Who this affects:** anyone whose vault is a plain folder (no `.git`), with its off-machine copy made some other way, such as a nightly mirror or backup.
+
+Every close told the model "You MUST run vault-safe-commit.sh", whatever the vault. In a vault with no git there is nothing to commit, so the step could not run, and the session's notes stayed only on this machine until the next scheduled backup.
+
+Now the close checks first. A vault inside a git repo keeps the commit step exactly as before. A plain-folder vault can name its own off-machine step in `<Meta>/scripts/session-close-offsite.sh`: the close then runs it right after the writes, so the notes leave the machine at close. A plain-folder vault without that script is told there is no commit step.
+
+**Tested:** `hooks/test_close_offsite_step.py` builds the real close text for a git vault, a plain-folder vault with the script and one without. Four of its checks fail on `main` before this change, and the git vault's text is unchanged. The other close tests still pass.
+
+---
+
 ## 2026-10-31: "don't close this session" no longer closes the session
 
 **Who this affects:** anyone who types a close phrase after a "don't" or a "no", and especially anyone who set their own phrases with `closingSignals.custom` in CLAUDE.md.
