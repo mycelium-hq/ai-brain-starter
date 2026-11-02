@@ -445,7 +445,8 @@ def _count_running(cls: str, snapshot: dict) -> int:
 
 
 # ---- memory: critical denies WITHOUT counting --------------------------------
-_SWAP_USED_RE = re.compile(r"used\s*=\s*([\d.]+)([MG])")
+# sysctl prints decimals in the user's locale: "3999.94M" or "3999,94M".
+_SWAP_USED_RE = re.compile(r"used\s*=\s*(\d+(?:[.,]\d+)?)([MG])")
 _MEMINFO_RE = re.compile(r"^(MemTotal|MemAvailable):\s*(\d+)", re.MULTILINE)
 
 def _run(argv: list[str], timeout: float = 2) -> str:
@@ -462,7 +463,15 @@ def _parse_swap_used(text: str) -> float:
     m = _SWAP_USED_RE.search(text)
     if not m:
         raise ValueError("unrecognized vm.swapusage output")
-    return float(m.group(1)) * (2 ** 30 if m.group(2) == "G" else 2 ** 20)
+    return _locale_float(m.group(1)) * (2 ** 30 if m.group(2) == "G" else 2 ** 20)
+
+def _locale_float(s: str) -> float:
+    """A sysctl decimal in either spelling: '3,23' (comma locales) or '3.23'."""
+    return float(s.replace(",", "."))
+
+def _parse_load1(text: str) -> float:
+    """vm.loadavg's 1-minute figure, e.g. '{ 3,23 2,39 1,76 }' or '{ 3.23 2.39 1.76 }'."""
+    return _locale_float(text.strip("{} ").split()[0])
 
 def read_signal() -> dict:
     if sys.platform == "darwin":
@@ -471,7 +480,7 @@ def read_signal() -> dict:
             "vm.swapusage", "hw.memsize", "vm.loadavg", "hw.logicalcpu"]).splitlines()
         return {"platform": "darwin", "pressure_level": int(level),
                 "memorystatus_level": int(ms), "swap_used": _parse_swap_used(swap_txt),
-                "ram": float(ram), "load1": float(load.strip("{} ").split()[0]), "cpus": int(cpus)}
+                "ram": float(ram), "load1": _parse_load1(load), "cpus": int(cpus)}
     if sys.platform.startswith("linux"):
         with open("/proc/meminfo", encoding="utf-8", errors="replace") as fh:
             mem = {k: int(v) for k, v in _MEMINFO_RE.findall(fh.read())}

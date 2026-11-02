@@ -236,6 +236,20 @@ def leg_decision() -> None:
     check("A swap alone never denies at pressure level 1", not crit(swap_used=12 * 2 ** 30))
     linux = lambda avail: mod._memory_critical({"platform": "linux", "MemTotal": 100, "MemAvailable": avail})[0]  # noqa: E731
     check("A the Linux arm: MemAvailable under 10% denies, 50% does not", linux(9) and not linux(50))
+    # A comma-decimal locale prints sysctl numbers with commas; both spellings must read the same.
+    dot = "total = 5120.00M  used = 3999.94M  free = 1120.06M  (encrypted)"
+    comma = "total = 5120,00M  used = 3999,94M  free = 1120,06M  (encrypted)"
+    try:
+        same = mod._parse_swap_used(comma) == mod._parse_swap_used(dot) == 3999.94 * 2 ** 20
+    except ValueError as exc:
+        same = False
+        dot = f"{dot} -> {exc}"
+    check("A swap parses with a comma or a dot decimal, to the same bytes", same, dot)
+    try:
+        loads = (mod._parse_load1("{ 3,23 2,39 1,76 }"), mod._parse_load1("{ 3.23 2.39 1.76 }"))
+    except (AttributeError, ValueError) as exc:
+        loads = (str(exc),)
+    check("A load1 parses with a comma or a dot decimal", loads == (3.23, 3.23), str(loads))
     sig = _load("heavy_admission_a_reader").read_signal()  # the REAL reader, on this host
     check("A the real memory reader parses this host", sig["platform"] != "darwin" or sig["ram"] > 0, str(sig))
     check("A the real reader parses this host's load and CPUs",
