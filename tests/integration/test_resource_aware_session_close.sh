@@ -68,27 +68,46 @@ ALL_LOCALES="$(locale -a 2>/dev/null || true)"
 for l in fr_CH.UTF-8 fr_FR.UTF-8 de_DE.UTF-8 es_ES.UTF-8; do
   if printf '%s\n' "$ALL_LOCALES" | grep -iE "^${l%%.*}\.utf-?8$" >/dev/null; then COMMA_LOCALE="$l"; break; fi
 done
-# Whether a comma locale exists is the runner's business; this Mac has one, so the leg runs here.
-# shellcheck source=/dev/null
-( . "$GUARD"
-  [ "$(_close_norm_num '1,88')" = "1.88" ] || { echo "comma load not normalized: '$(_close_norm_num '1,88')'" >&2; exit 1; }
-  [ "$(_close_norm_num '4.90')" = "4.90" ] || { echo "dot load changed" >&2; exit 1; }
-  [ -z "$(_close_norm_num '1,2,3')" ] || { echo "garbage accepted" >&2; exit 1; }
-  # shellcheck disable=SC2329  # overrides, called by close_load_per_core in the sourced $GUARD
-  close_load_1min() { echo "31.50"; }
-  # shellcheck disable=SC2329
-  close_ncpu() { echo "10"; }
-  if [ -n "$COMMA_LOCALE" ]; then export LC_ALL="$COMMA_LOCALE"; fi
-  pc=$(close_load_per_core)
-  [ "$pc" = "3.15" ] || { echo "per-core under ${COMMA_LOCALE:-C} printed '$pc', want 3.15" >&2; exit 1; }
-  # shellcheck disable=SC2034
-  CLOSE_MAX_LOAD_PER_CORE=3.0
-  close_resource_high || { echo "3.15/core should be HIGH at 3.0 under ${COMMA_LOCALE:-C}" >&2; exit 1; }
-  # shellcheck disable=SC2034
-  CLOSE_MAX_LOAD_PER_CORE=3.5
-  close_resource_high && { echo "3.15/core should be low at 3.5" >&2; exit 1; }
-  exit 0 ) || fail "load gate wrong for comma-decimal locales"
-echo "PASS: load gate reads comma decimals and compares in a fixed locale (${COMMA_LOCALE:-no comma locale installed; C only})"
+# A fake sysctl prints the comma form, and CLOSE_LOADAVG_FILE points at a missing
+# path, so the REAL close_load_1min takes its macOS branch on any runner, Linux included.
+FAKEBIN="$TMP/fakebin"; mkdir -p "$FAKEBIN"
+cat > "$FAKEBIN/sysctl" <<'SH'
+#!/bin/sh
+case "$*" in *vm.loadavg*) echo "{ 31,50 2,00 1,00 }" ;; *hw.ncpu*) echo 10 ;; *) exit 1 ;; esac
+SH
+chmod +x "$FAKEBIN/sysctl"
+# leg: $1 = LC_ALL to run under. Per-core load is 31.50 / 10 = 3.15.
+comma_leg() {
+  # shellcheck source=/dev/null
+  ( . "$GUARD"
+    export PATH="$FAKEBIN:$PATH" CLOSE_LOADAVG_FILE="$TMP/no-such-loadavg" LC_ALL="$1"
+    # shellcheck disable=SC2329  # override: ncpu is not under test; called by the sourced $GUARD
+    close_ncpu() { echo "10"; }
+    one=$(close_load_1min)
+    [ "$one" = "31.50" ] || { echo "[$1] close_load_1min read '{ 31,50 ... }' as '$one', want 31.50" >&2; exit 1; }
+    pc=$(close_load_per_core)
+    [ "$pc" = "3.15" ] || { echo "[$1] per-core printed '$pc', want 3.15" >&2; exit 1; }
+    # Thresholds: comma, padded and exponent spellings must decide like the plain number.
+    for t in "3.0" "3,0" " 3.0" "0"; do
+      # shellcheck disable=SC2034  # read by close_resource_high in the sourced $GUARD
+      CLOSE_MAX_LOAD_PER_CORE="$t"
+      close_resource_high || { echo "[$1] 3.15/core should be HIGH at threshold '$t'" >&2; exit 1; }
+    done
+    for t in "3.5" "3,5" " 3.5" "3.5 " "1e9"; do
+      # shellcheck disable=SC2034  # read by close_resource_high in the sourced $GUARD
+      CLOSE_MAX_LOAD_PER_CORE="$t"
+      close_resource_high && { echo "[$1] 3.15/core should be low at threshold '$t'" >&2; exit 1; }
+    done
+    exit 0 )
+}
+comma_leg C || fail "load gate wrong for a comma-decimal sysctl (C locale)"
+echo "PASS: load gate reads a comma-decimal sysctl load and every threshold spelling (C locale)"
+if [ -n "$COMMA_LOCALE" ]; then
+  comma_leg "$COMMA_LOCALE" || fail "load gate wrong under $COMMA_LOCALE (awk reads and prints in the locale)"
+  echo "PASS: same under $COMMA_LOCALE"
+else
+  echo "SKIP: no comma-decimal locale installed on this runner; the comma-locale awk leg did not run"
+fi
 
 # ─── Assertion 3: mutex acquire / contend / release / stale-reclaim ─────────
 # shellcheck source=/dev/null

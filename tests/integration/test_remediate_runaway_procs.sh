@@ -96,6 +96,45 @@ PY
 
 echo "PASS: _should_reap_hook pos+neg control (assertions 1-6)"
 
+# --- Comma-decimal locales (tickets#5686) -----------------------------------
+# macOS `ps` prints pcpu in the locale ("98,7"); float() rejected it, so no stuck
+# hook ever reached the CPU gate on those Macs. Every ps call now runs under
+# LC_ALL=C, and the parser takes either spelling.
+HOOK="$HOOK" python3 - <<'PY3' || { echo "FAIL: comma-decimal pcpu / ps locale" >&2; exit 1; }
+import ast, importlib.util, os, subprocess, sys
+spec = importlib.util.spec_from_file_location("reaper_comma", os.environ["HOOK"])
+mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+bad = []
+for txt, want in (("98,7", 98.7), ("98.7", 98.7), (" 50 ", 50.0)):
+    got = mod._parse_decimal(txt)
+    if got != want:
+        bad.append(f"_parse_decimal({txt!r}) = {got}, want {want}")
+if mod._ps_env().get("LC_ALL") != "C":
+    bad.append("_ps_env() does not set LC_ALL=C")
+# Every subprocess.run whose argv starts with "ps" must pass env=_ps_env().
+tree = ast.parse(open(os.environ["HOOK"], encoding="utf-8").read())
+ps_calls = 0
+for node in ast.walk(tree):
+    if isinstance(node, ast.Call) and getattr(node.func, "attr", "") == "run" and node.args \
+            and isinstance(node.args[0], ast.List) and node.args[0].elts \
+            and getattr(node.args[0].elts[0], "value", None) == "ps":
+        ps_calls += 1
+        env = [k for k in node.keywords if k.arg == "env"]
+        if not env or ast.unparse(env[0].value) != "_ps_env()":
+            bad.append(f"ps call at line {node.lineno} does not pass env=_ps_env()")
+if ps_calls == 0:
+    bad.append("found no ps calls at all (the scan itself is broken)")
+# On a Mac, the real ps under _ps_env() must give pcpu figures that all parse.
+if sys.platform == "darwin":
+    out = subprocess.run(["ps", "-axo", "pcpu="], capture_output=True, text=True, env=mod._ps_env()).stdout
+    rows = [r for r in out.split() if r]
+    if not rows or any("," in r for r in rows):
+        bad.append(f"real ps under LC_ALL=C still printed commas or nothing: {rows[:5]}")
+if bad:
+    print("\n".join(bad), file=sys.stderr); sys.exit(1)
+print(f"PASS: pcpu parses in both spellings; all {ps_calls} ps calls run under LC_ALL=C")
+PY3
+
 # --- Assertions 9-19: CLASS 3 orphaned-session-helper pos/neg control -----
 # Bug class: the 2026-09-09 melt (load 172 on 10 cores, swap 97.8% full).
 # Helpers whose session had died sat at PPID 1 holding hundreds of MB. CLASS 1

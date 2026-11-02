@@ -776,6 +776,17 @@ jobs:
             exit 1
           fi
           /bin/bash tests/integration/test_bootstrap_log_rotation_stat.sh
+      - name: session-close load gate under a comma-decimal locale (macOS sysctl + awk)
+        # ubuntu-latest has no fr/de/es locale, so there this test prints SKIP for the
+        # comma-locale leg. A Mac ships them; fail if the leg did not actually run here.
+        run: |
+          out="$(/bin/bash tests/integration/test_resource_aware_session_close.sh 2>&1)"; rc=$?
+          printf '%s\n' "$out"
+          [ $rc -eq 0 ] || exit $rc
+          if printf '%s\n' "$out" | grep -q '^SKIP: no comma-decimal locale'; then
+            echo "::error::the comma-locale leg was skipped on macOS, so it proves nothing here."
+            exit 1
+          fi
 
   ci:
     name: ci gate (py_compile + unit + integration tests)

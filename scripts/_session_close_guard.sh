@@ -55,9 +55,10 @@ _close_norm_num() {
 
 close_load_1min() {
   # Echoes the raw 1-min load average (dot decimal), cross-platform. Empty on any read error.
-  local one=""
-  if [ -r /proc/loadavg ]; then
-    one=$(awk '{print $1}' /proc/loadavg 2>/dev/null)          # Linux
+  # CLOSE_LOADAVG_FILE is a test seam (point it at a missing path to force the sysctl branch).
+  local one="" f="${CLOSE_LOADAVG_FILE:-/proc/loadavg}"
+  if [ -r "$f" ]; then
+    one=$(awk '{print $1}' "$f" 2>/dev/null)                   # Linux
   else
     # macOS/BSD: `sysctl -n vm.loadavg` -> "{ 4.90 6.59 11.53 }" (field 2 = 1-min)
     one=$(sysctl -n vm.loadavg 2>/dev/null | awk '{print $2}')
@@ -78,9 +79,15 @@ close_load_per_core() {
 
 close_resource_high() {
   # Returns 0 (true) when normalized 1-min load >= CLOSE_MAX_LOAD_PER_CORE.
-  local per_core
+  local per_core raw t
   per_core=$(close_load_per_core)
-  LC_ALL=C awk -v p="$per_core" -v t="$(_close_norm_num "$CLOSE_MAX_LOAD_PER_CORE")" 'BEGIN{ exit !((p + 0) >= (t + 0)) }'
+  # Trim, turn a comma decimal into a dot, and otherwise hand awk the value as
+  # before (it reads the leading number: "1e9" stays huge, "" or "abc" stays 0).
+  # LC_ALL=C here is belt-and-braces: both inputs are dot decimals by now, and
+  # macOS awk reads a dot even in a comma locale (no test can pin it on macOS).
+  raw="${CLOSE_MAX_LOAD_PER_CORE//[[:space:]]/}"
+  t=$(_close_norm_num "$raw")
+  LC_ALL=C awk -v p="$per_core" -v t="${t:-$raw}" 'BEGIN{ exit !((p + 0) >= (t + 0)) }'
 }
 
 # --- close-cascade mutex ---------------------------------------------------
