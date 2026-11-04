@@ -525,7 +525,7 @@ def find_contexts(vault: Path, search_term: str, max_results: int = 2) -> list[t
 def _write_note(path: Path, text: str) -> None:
     # newline="" keeps CRLF bytes intact: Windows text-mode writes translate
     # \n to \r\n, turning existing CRLF endings into \r\r\n.
-    with path.open("w", encoding="utf-8", newline="") as f:
+    with open(path, "w", encoding="utf-8", newline="") as f:
         f.write(text)
 
 
