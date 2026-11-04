@@ -522,6 +522,13 @@ def find_contexts(vault: Path, search_term: str, max_results: int = 2) -> list[t
     return results
 
 
+def _write_note(path: Path, text: str) -> None:
+    # newline="" keeps CRLF bytes intact: Windows text-mode writes translate
+    # \n to \r\n, turning existing CRLF endings into \r\r\n.
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        f.write(text)
+
+
 def apply_wikilink(vault: Path, search_term: str, link_target: str, display: str, dry_run: bool) -> int:
     # Hard guard: never write path-form wikilinks. They break Obsidian alias
     # resolution and require a separate audit pass to clean up. Strip slashes
@@ -567,7 +574,7 @@ def apply_wikilink(vault: Path, search_term: str, link_target: str, display: str
             if dry_run:
                 print(f"  [DRY RUN] {md.name}: '{m.group()}' → {replacement}")
             else:
-                md.write_text(new_text, encoding="utf-8")
+                _write_note(md, new_text)
             modified += 1
             break
 
@@ -647,7 +654,7 @@ def create_stub(
         print(f"  [DRY RUN] Context preview:\n{context_bullets}")
         return note_path
     folder.mkdir(parents=True, exist_ok=True)
-    note_path.write_text(content, encoding="utf-8")
+    _write_note(note_path, content)
     return note_path
 
 
