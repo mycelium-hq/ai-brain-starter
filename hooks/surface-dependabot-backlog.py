@@ -97,6 +97,13 @@ class GhError(Exception):
     """gh could not answer: a reason a person can read."""
 
 
+def reason(exc: BaseException) -> str:
+    """Why one source could not be read, in words a person can use."""
+    if isinstance(exc, GhError):
+        return str(exc)
+    return f"unexpected answer ({exc.__class__.__name__})"
+
+
 def gh_json(args: list[str], deadline: float):
     remaining = deadline - time.monotonic()
     if remaining <= 1:
@@ -250,9 +257,9 @@ def check() -> str:
         org_names = pool.submit(org_list)
         try:
             orgs = org_names.result()
-        except GhError as exc:
+        except Exception as exc:  # one bad source must not drop the others
             orgs = []
-            skipped.append(f"organization list ({exc})")
+            skipped.append(f"organization list ({reason(exc)})")
         if len(orgs) > MAX_ORGS:
             skipped.append(f"{len(orgs) - MAX_ORGS} organizations past the first {MAX_ORGS}")
         per_org = [(org, pool.submit(org_counts, org, deadline)) for org in orgs[:MAX_ORGS]]
@@ -260,13 +267,13 @@ def check() -> str:
             own_counts, own_partial = own.result()
             counts.update(own_counts)
             partial.extend(own_partial)
-        except GhError as exc:
-            skipped.append(f"{login}'s repos ({exc})")
+        except Exception as exc:
+            skipped.append(f"{login}'s repos ({reason(exc)})")
         for org, fut in per_org:
             try:
                 found, truncated = fut.result()
-            except GhError as exc:
-                skipped.append(f"{org} ({exc})")
+            except Exception as exc:
+                skipped.append(f"{org} ({reason(exc)})")
                 continue
             counts.update(found)
             if truncated:
@@ -302,6 +309,7 @@ def main() -> int:
                 message = check()
     except Exception as exc:  # never let a crash look like zero alerts
         message = f"Dependabot alert check skipped for: unexpected error ({exc.__class__.__name__})."
+        write_cache(message, SKIP_CACHE_MINUTES)
     if message:
         print(json.dumps({"systemMessage": message}))
     return 0

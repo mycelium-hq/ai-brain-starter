@@ -51,7 +51,13 @@ if args[:2] == ["api", "graphql"]:
         "nodes": [{"nameWithOwner": "example-user/notes",
                    "vulnerabilityAlerts": {"totalCount": total_alerts, "nodes": alerts}}]}}}})
 if args[:2] == ["api", "user/orgs?per_page=100"]:
-    out([{"login": "example-org"}, {"login": "locked-org"}] if mode == "forbidden" else [{"login": "example-org"}])
+    if mode == "forbidden":
+        out([{"login": "example-org"}, {"login": "locked-org"}])
+    if mode == "one-bad-org":
+        out([{"login": "example-org"}, {"login": "broken-org"}])
+    out([{"login": "example-org"}])
+if len(args) >= 2 and args[1].startswith("orgs/broken-org/"):
+    out([None, "not an alert", {"security_advisory": "oops"}])
 if len(args) >= 2 and args[1].startswith("orgs/locked-org/"):
     fail("gh: Resource not accessible by integration (HTTP 403)")
 if len(args) >= 2 and args[1].startswith("orgs/example-org/dependabot/alerts"):
@@ -101,7 +107,13 @@ out="$(run truncated)"
 expect_has "more than one page says not read" "$out" "example-user/notes alerts past the first 100"
 expect_has "a truncated total is a lower bound" "$out" "at least 1 critical"
 
-expect_has "a crash says skipped, not silence" "$(run crash)" "skipped for: unexpected error"
+out="$(run crash)"
+expect_has "a bad answer from one source says skipped" "$out" "example-user's repos (unexpected answer"
+expect_has "other sources still shown beside a bad one" "$out" "example-org/app: 2 critical"
+
+out="$(run one-bad-org)"
+expect_has "a malformed org answer skips only that org" "$out" "skipped for: broken-org (unexpected answer"
+expect_has "good org alerts survive a malformed org" "$out" "example-org/app: 2 critical"
 
 expect_empty "no gh and no gh sign-in is silent" "$(run_without_gh "$TMP/ghconf")"
 touch "$TMP/ghconf/hosts.yml"
