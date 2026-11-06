@@ -87,8 +87,15 @@ from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 try:
-    from _lib.vault_root import collapse_worktree, resolve_vault_root  # noqa: E402
+    from _lib.vault_root import (  # noqa: E402
+        collapse_worktree,
+        find_repo_vault_root,
+        resolve_vault_root,
+    )
 except Exception:  # fail-open: if the lib cannot load, behave as before
+    def find_repo_vault_root(start: Path) -> Path | None:  # type: ignore
+        return None
+
     def collapse_worktree(path: Path) -> Path:  # type: ignore
         norm = str(path).replace("\\", "/")  # marker must match Windows paths too
         marker = "/.claude/worktrees/"
@@ -884,6 +891,7 @@ def pre_build_session_shell(
     worktree: str,
     timestamp_human: str,
     session_id: str | None = None,
+    seeds_elsewhere: bool = False,
 ) -> Path:
     """Pre-create session file with frontmatter + section headers.
 
@@ -899,6 +907,12 @@ def pre_build_session_shell(
     known = _known_session_id(session_id)
     stem = session_file_stem(timestamp_file, worktree, session_id)
     owner = f"session_id: {json.dumps(known)}\n" if known else ""
+    captures_hint = (
+        "Writing notes, actionable content. Nothing personal: this vault is "
+        "shared, journal seeds go to the member's personal vault."
+        if seeds_elsewhere
+        else "Journal seeds (verbatim), writing notes, actionable content."
+    )
     shell = f"""---
 creationDate: {timestamp_human}
 type: session
@@ -919,7 +933,7 @@ session_label: "update pending"
 
 ## Captures
 
-<!-- Journal seeds (verbatim), writing notes, actionable content. -->
+<!-- {captures_hint} -->
 
 ## To-dos filed
 
@@ -1024,6 +1038,111 @@ def offsite_vault_warning(vault_root: Path, cwd: Path) -> str:
     )
 
 
+# Where this member's journal seeds go (tickets#5721).
+#
+# Journal seeds are the member's own words: feelings, beliefs, reflections on
+# their life or work. The cascade used to append them to THIS vault's Session
+# Captures, so a session run inside a shared company vault filed teammates-
+# readable personal reflections into the company brain, and /journal (which
+# reads the PERSONAL vault's Session Captures) never saw them.
+#
+# The signal that a vault is the member's own: it holds the journal config the
+# daily-journal skill keeps in its Meta folder. A shared work vault has none.
+_JOURNAL_CONFIG = "journal-config.md"
+# Same shallow search space scripts/heal-journal-guard.py uses for vaults.
+_PERSONAL_VAULT_PARENTS = ("Documents", "OneDrive", "Notes", "Obsidian")
+
+SEEDS_HERE = "here"          # this vault is the member's own: unchanged behavior
+SEEDS_PERSONAL = "personal"  # shared vault: seeds go to the member's personal vault
+SEEDS_HELD = "held"          # shared vault, no personal vault found: write nowhere
+
+
+def _journal_meta(vault: Path) -> Path | None:
+    """The Meta folder of `vault` that holds the daily-journal config, else None.
+
+    That Meta is the one /journal reads Session Captures from. Stat-only on the two standard Meta names: this runs over every folder in
+    the home directory, and listing them (Desktop, Downloads, ...) is slow and
+    can raise privacy prompts.
+    """
+    for meta in ("⚙️ Meta", "Meta"):
+        try:
+            if (vault / meta / _JOURNAL_CONFIG).is_file():
+                return vault / meta
+        except OSError:
+            continue
+    return None
+
+
+def _journals_in(vault: Path) -> bool:
+    """True iff the member journals in `vault`."""
+    return _journal_meta(vault) is not None
+
+
+def _same_dir(a: Path, b: Path) -> bool:
+    try:
+        return a.resolve() == b.resolve()
+    except (OSError, RuntimeError):
+        return False
+
+
+def _journal_vaults() -> list[Path]:
+    """Every vault in the shallow search space that holds a journal config."""
+    roots = [Path.home()] + [Path.home() / p for p in _PERSONAL_VAULT_PARENTS]
+    found: dict[str, Path] = {}
+    for root in roots:
+        try:
+            children = sorted(root.iterdir())
+        except (OSError, RuntimeError):
+            continue
+        for child in children:
+            try:
+                if child.name.startswith(".") or not child.is_dir():
+                    continue
+                if _journals_in(child):
+                    found.setdefault(str(child.resolve()).casefold(), child)
+            except (OSError, RuntimeError):
+                continue
+    return list(found.values())
+
+
+def journal_seeds_destination(
+    cwd: Path, vault_root: Path, env_vault_root: str | None
+) -> tuple[str, Path | None]:
+    """Where this close writes journal seeds: (kind, Session Captures path or None).
+
+    The ONLY proof that a vault is the member's own is the journal config the
+    daily-journal skill keeps in it. A Meta folder, $VAULT_ROOT or the lack of
+    a team declaration proves nothing: a client vault has all three.
+
+    - The session vault holds the journal config: SEEDS_HERE, unchanged.
+    - A personal vault exists elsewhere ($VAULT_ROOT if it holds the config,
+      else the ONE vault on the machine that does): SEEDS_PERSONAL.
+    - Several candidates, or none while this vault owns its own close (a
+      team or client vault): SEEDS_HELD. Never this vault.
+    - No journal config anywhere and this vault was reached through the usual
+      fallback: the member has not journaled yet and this is their default
+      vault, so SEEDS_HERE, as before.
+    """
+    if _journals_in(vault_root):
+        return SEEDS_HERE, None
+    personal: Path | None = None
+    if env_vault_root:
+        env_path = Path(env_vault_root)
+        if _journals_in(env_path) and not _same_dir(env_path, vault_root):
+            personal = env_path
+    candidates: list[Path] = []
+    if personal is None:
+        candidates = _journal_vaults()
+        if len(candidates) == 1 and not _same_dir(candidates[0], vault_root):
+            personal = candidates[0]
+    meta = _journal_meta(personal) if personal is not None else None
+    if meta is not None:
+        return SEEDS_PERSONAL, meta / "Session Captures.md"
+    if not candidates and find_repo_vault_root(collapse_worktree(cwd)) is None:
+        return SEEDS_HERE, None
+    return SEEDS_HELD, None
+
+
 def build_crashed_after_signal_notice(matched: str, err: str) -> str:
     """Fail LOUD when the hook dies AFTER deciding the user is closing.
 
@@ -1111,6 +1230,7 @@ def build_injected_context(
     todo_files: list[Path] | None = None,
     offsite_warning: str = "",
     session_id: str | None = None,
+    journal_seeds: tuple[str, Path | None] = (SEEDS_HERE, None),
 ) -> str:
     """Compose the system block injected into the model's context.
 
@@ -1142,6 +1262,7 @@ def build_injected_context(
                 meta_dir, session_file, decisions_dir, captures_file,
                 pending_outcomes, goal_condition=None, todo_files=todo_files,
                 offsite_warning=offsite_warning, session_id=session_id,
+                journal_seeds=journal_seeds,
             )
         )
 
@@ -1153,6 +1274,7 @@ def build_injected_context(
             meta_dir, session_file, decisions_dir, captures_file,
             pending_outcomes, goal_condition, todo_files=todo_files,
             offsite_warning=offsite_warning, session_id=session_id,
+            journal_seeds=journal_seeds,
         )
     )
 
@@ -1205,6 +1327,51 @@ def vault_in_git_repo(vault_root: Path) -> bool:
     return any((d / ".git").exists() for d in (root, *root.parents))
 
 
+_SHARED_VAULT_SEEDS_RULE = """    THIS VAULT IS SHARED (a team or client brain), so it never holds them.
+    A journal seed here is anything personal the member said: a feeling,
+    their health, family or relationships, their own life or career, a
+    reflection on themselves. Split a mixed message: the work part is filed
+    in this vault as usual, the personal sentence goes, word for word, ONLY
+    where the journal seeds line above says. When unsure whether something
+    is personal, treat it as a journal seed. None of it goes into this
+    vault's session file, Captures, Decisions or to-dos, not even reworded.
+"""
+
+
+def _journal_seeds_block(
+    journal_seeds: tuple[str, Path | None], vault_root: Path, timestamp_human: str
+) -> tuple[str, str, str]:
+    """(pre-resolved line, Phase 1 rule, Phase 2 step) for journal seeds.
+
+    SEEDS_HERE returns the text the cascade always had, so a member's own
+    vault closes exactly as before.
+    """
+    kind, path = journal_seeds
+    if kind == SEEDS_PERSONAL and path is not None:
+        return (
+            f"  Journal seeds:    {path}  (the member's personal vault)\n",
+            _SHARED_VAULT_SEEDS_RULE,
+            f"""  • Append journal seeds to the journal seeds file above, under
+    "## {timestamp_human[:10]} — from a session in {vault_root.name}", one
+    bullet each: their exact words in quotes, tagged [emotional], so their
+    next journal entry picks them up. Nothing personal goes into this vault.
+""",
+        )
+    if kind == SEEDS_HELD:
+        return (
+            "  Journal seeds:    (held: no personal vault found on this machine)\n",
+            _SHARED_VAULT_SEEDS_RULE,
+            """  • Write journal seeds NOWHERE: not in this vault, not in any other file.
+    Show them to the member in the close summary, word for word, and say
+    plainly: "These are yours, so I kept them out of the shared brain. I
+    couldn't find your personal brain on this computer. Tell me which
+    folder it is and I'll set VAULT_ROOT to it, so next time they go
+    straight to your journal."
+""",
+        )
+    return "", "", "  • Append journal seeds to Captures.\n"
+
+
 def _full_cascade_block(
     timestamp_human: str,
     timestamp_file: str,
@@ -1219,9 +1386,13 @@ def _full_cascade_block(
     todo_files: list[Path] | None = None,
     offsite_warning: str = "",
     session_id: str | None = None,
+    journal_seeds: tuple[str, Path | None] = (SEEDS_HERE, None),
 ) -> str:
     """The reusable cascade-instruction block."""
     pending = ", ".join(pending_outcomes) if pending_outcomes else "(none)"
+    seeds_line, seeds_rule, seeds_phase2 = _journal_seeds_block(
+        journal_seeds, vault_root, timestamp_human
+    )
     # A decision file names no session in its filename, so on a shared checkout
     # the close commit (session-end-hook.sh) and the close gate
     # (verify-session-close-cascade.py) can only tell this session's decisions
@@ -1349,7 +1520,7 @@ and worktree-archive preparation."""
   Session file:     {session_file}  (already pre-built with frontmatter + headers; fill in the body)
   Decisions dir:    {decisions_dir}  (write per-decision files here, slug-named{decision_owner})
   Captures file:    {captures_file}
-{todo_line}
+{seeds_line}{todo_line}
 {tt_line}
   Decisions with empty Outcome (review for backfill): {pending}
 
@@ -1371,7 +1542,7 @@ PHASE 1 — Single-pass conversation scan (compose all in memory before writing)
   • Belief shifts: did the user end the session believing something different?
   • Journal seeds: VERBATIM quotes where they revealed a belief, observation,
     or change of mind. Tag emotional ones [emotional]. Never reword.
-  • Writing note candidates (if user has a Substack/blog setup): apply kill
+{seeds_rule}  • Writing note candidates (if user has a Substack/blog setup): apply kill
     conditions before drafting (no "I did today", no LinkedIn-thought-leader
     tone, no diary, must read as universal observation). Bilingual pair if
     configured.
@@ -1399,8 +1570,7 @@ PHASE 2 — Batch writes (one tool-call block, append never overwrite):
   • Fill in the pre-built session file (paths above).
 {todo_phase2}
   • Create per-decision files in Decisions/ as needed.
-  • Append journal seeds to Captures.
-  • Personal vs team firewall: never let personal content leak to a team vault.
+{seeds_phase2}  • Personal vs team firewall: never let personal content leak to a team vault.
 
 PHASE 2b — vault-safe-commit, or the off-machine copy in a vault with no git:
 {phase_2b}
@@ -1595,6 +1765,10 @@ def main() -> int:
         decisions_dir = meta_dir / "Decisions"
         captures_file = meta_dir / "Session Captures.md"
         todo_files = resolve_todo_files(vault_root, meta_dir)
+        journal_seeds = journal_seeds_destination(
+            # vault-root-ok: names the member's PERSONAL vault, not this session's root; trusted only when it holds a journal config
+            cwd, vault_root, os.environ.get("VAULT_ROOT")
+        )
 
         worktree = derive_worktree(cwd)
         now = datetime.now()
@@ -1615,7 +1789,7 @@ def main() -> int:
         if not is_trivial:
             session_file = pre_build_session_shell(
                 sessions_dir, timestamp_file, worktree, timestamp_human,
-                session_id,
+                session_id, seeds_elsewhere=journal_seeds[0] != SEEDS_HERE,
             )
 
         # Pre-fetch decisions with empty outcomes
@@ -1658,6 +1832,7 @@ def main() -> int:
             todo_files=todo_files,
             offsite_warning=offsite_vault_warning(vault_root, cwd),
             session_id=session_id,
+            journal_seeds=journal_seeds,
         )
         emit_context(context)
         log_debug(f"injected context for {confidence} signal in {int((time.time() - start) * 1000)}ms")
