@@ -1746,6 +1746,11 @@ PY_DIRECT=(
   # seeds there: they go to the personal vault (VAULT_ROOT, else the one vault with
   # a journal config) or are held and shown. Own vault is the negative control.
   hooks/test_close_journal_seeds_stay_personal.py
+  # A close files each thing in the workspace it belongs to: the member's own life in
+  # their personal vault, another workspace's work held in the personal vault and
+  # asked about ("Add these to X?"), unclear items held and asked. Two copies of one
+  # workspace are never written into. One vault in use is the negative control.
+  hooks/test_close_files_each_thing_in_its_workspace.py
   # check-zsh-silent-idioms.py: bash idioms that silently do the wrong thing under
   # zsh (an unbraced $VAR:path in a git read; an unsplit $VAR in `set --` / `for`).
   # Drives the real hook over real stdin and asserts the PARSED decision, because
