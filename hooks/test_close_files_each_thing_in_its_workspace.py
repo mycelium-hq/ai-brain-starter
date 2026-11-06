@@ -15,8 +15,14 @@ reached the company. Assertions, each on the REAL text the hook builds:
      listed, held items stay in the personal vault, and the member is asked.
   4. Two copies of one workspace (same git origin): never written into, and
      both folders are named so the member can remove one.
-  5. A second copy of the session's own vault is not "another workspace".
+     The same holds when one copy's remote is https and the other's ssh, and
+     when a copy has no git remote but the same workspace name.
+  5. A second copy of the session's own vault is not "another workspace",
+     whether it shares the remote or only the workspace name.
   6. `workspace:` in a vault's CLAUDE.md frontmatter names its workspace.
+  9. The member is asked BEFORE anything is written, and the team broadcast
+     never posts to another workspace without a yes.
+  10. A vault with an unreadable git pointer never breaks the close.
   7. No personal vault found: held items go nowhere but the close summary.
   8. main() end to end: the injected close carries the routing rule.
 """
@@ -40,7 +46,7 @@ mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
 
 failures = []
-RULE = "Where each thing goes (tickets#964)"
+RULE = "Where each thing goes."
 
 
 def make_vault(root: Path, name: str, *, team: bool, origin: str = "",
@@ -113,6 +119,13 @@ try:
             failures.append(f"team vault: held items do not go to the personal vault ({needs_a_home(text)})")
         if "Add these to <name>?" not in text or "Where does this go?" not in text:
             failures.append("team vault: the member is never asked")
+        # 9. Asked before the writes, and no broadcast elsewhere without a yes.
+        if "ASK BEFORE PHASE 2" not in text or "WAIT for the answer" not in text:
+            failures.append("team vault: the question is not asked before the writes")
+        if "Phase 1.8 posts only to this workspace" not in text:
+            failures.append("team vault: the team broadcast can still post to another workspace")
+        if "committed in ITS vault" not in text:
+            failures.append("team vault: writes outside this vault are left uncommitted")
 
         # 3. A personal vault session.
         text = close(personal)
@@ -124,17 +137,31 @@ try:
             failures.append("personal vault: company work is still filed here")
 
         # 4. Two copies of one workspace.
-        alpha2 = make_vault(home, "alpha-copy", team=True, origin="https://example.com/a/alpha")
+        alpha2 = make_vault(home, "alpha-copy", team=True, origin="git@example.com:a/alpha.git")
+        alpha3 = make_vault(home, "alpha-old", team=True, workspace="alpha")  # no remote
         text = close(personal)
-        if f"its Captures:   {alpha / 'Meta'}" in text or "never" not in text.split("Other workspace:  alpha", 1)[-1][:120]:
+        line = next((l for l in text.splitlines() if l.startswith("  Other workspace:  alpha")), "")
+        if "its Captures:" in text.split("Other workspace:  Beta Co", 1)[0] or "never" not in line:
             failures.append("two copies: a copy was still offered as a place to write")
-        if str(alpha) not in text or str(alpha2) not in text:
+        if not all(str(v) in text for v in (alpha, alpha2, alpha3)):
             failures.append("two copies: the member is not told which folders they are")
 
         # 5. A copy of the session's own vault.
         text = close(alpha)
         if "Other workspace:  alpha" in text:
             failures.append("own copy: a second copy of this vault was listed as another workspace")
+
+        # 10. An unreadable git pointer.
+        odd = make_vault(home, "odd", team=True)
+        gitdir = home / "odd-gitdir"
+        gitdir.mkdir()
+        (gitdir / "commondir").write_bytes(b"\xff\xfe..\n")  # not UTF-8
+        (odd / ".git").write_text(f"gitdir: {gitdir}\n", encoding="utf-8")
+        try:
+            mod.other_workspaces(personal)
+            close(personal)
+        except Exception as exc:
+            failures.append(f"odd git pointer: the close crashed ({exc!r})")
 
         # 6. `workspace:` names it (checked in 2: "Beta Co", not "beta").
 

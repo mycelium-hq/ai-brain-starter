@@ -1186,16 +1186,27 @@ def _vault_origin(vault: Path) -> str:
                 git = (vault / pointer[7:].strip()).resolve()
                 common = git / "commondir"
                 if common.is_file():
-                    git = (git / common.read_text(encoding="utf-8").strip()).resolve()
+                    common_dir = common.read_text(encoding="utf-8", errors="replace").strip()
+                    git = (git / common_dir).resolve()
         config = git / "config"
         if not config.is_file():
             return ""
         text = config.read_text(encoding="utf-8", errors="replace")
-    except OSError:
+    except (OSError, RuntimeError, ValueError):
         return ""
     section = re.search(r'\[remote "origin"\](.*?)(?:\n\[|\Z)', text, re.DOTALL)
     url = _GIT_URL_RE.search(section.group(1)) if section else None
-    return url.group(1).removesuffix(".git").rstrip("/").casefold() if url else ""
+    return _normalize_origin(url.group(1)) if url else ""
+
+
+def _normalize_origin(url: str) -> str:
+    """host/path of a git remote, so https and ssh spellings of one repo match."""
+    url = url.strip().casefold()
+    url = re.sub(r"^[a-z+]+://", "", url)          # https://, ssh://, git+ssh://
+    url = re.sub(r"^[^@/]+@", "", url)              # git@, user:token@
+    url = re.sub(r"^([^/:]+):(?!\d+/)", r"\1/", url)  # host:path (scp form) -> host/path
+    url = re.sub(r"^([^/:]+):\d+/", r"\1/", url)     # host:port/path -> host/path
+    return url.removesuffix("/").removesuffix(".git").rstrip("/")
 
 
 def _shared_vaults() -> list[Path]:
@@ -1230,16 +1241,24 @@ def other_workspaces(vault_root: Path) -> list[tuple[str, Path | None, list[Path
     nothing is written into either and the item is held.
     """
     own_origin = _vault_origin(vault_root)
-    groups: dict[str, list[Path]] = {}
+    own_name = _workspace_name(vault_root).casefold()
+    groups: list[tuple[set[str], list[Path]]] = []
     for vault in _shared_vaults():
         if _same_dir(vault, vault_root):
             continue
         origin = _vault_origin(vault)
-        if own_origin and origin == own_origin:
-            continue
-        groups.setdefault(origin or str(vault.resolve()).casefold(), []).append(vault)
+        name = _workspace_name(vault).casefold()
+        if (own_origin and origin == own_origin) or name == own_name:
+            continue  # a copy of the vault this session is in
+        keys = {f"name:{name}"} | ({f"origin:{origin}"} if origin else set())
+        hit = next((g for g in groups if g[0] & keys), None)
+        if hit is None:
+            groups.append((keys, [vault]))
+        else:
+            hit[0].update(keys)
+            hit[1].append(vault)
     result: list[tuple[str, Path | None, list[Path]]] = []
-    for copies in groups.values():
+    for _keys, copies in groups:
         copies.sort(key=lambda p: str(p))
         single = copies[0] if len(copies) == 1 else None
         result.append((_workspace_name(copies[0]), single, copies))
@@ -1545,36 +1564,45 @@ def _workspace_routing_block(
         f"Only {here}'s own work is filed in this vault." if shared
         else "Only the member's own things are filed in this personal vault."
     )
-    rule = f"""  • Where each thing goes (tickets#964). Before filing anything, decide whose
-    it is. {only}
+    rule = f"""  • Where each thing goes. Before filing anything, decide whose it is,
+    in this order. First: is it the member's own life, or work? (The journal
+    seeds rule decides that, and an unsure one is theirs.) Then, for work:
+    which workspace? {only}
     - The member's own life (feelings, health, family, their own to-dos and
       errands, facts about them, people in their life):
 {personal_rule}
     - Work for ANOTHER workspace (one listed above, or one they belong to that
-      is not on this computer): never write it straight into that vault and
-      never into this one. Hold it under Needs a home, tagged with the
-      workspace it seems to belong to, and ask at close: "Add these to <name>?"
-    - Not sure whose it is: hold it untagged and ask "Where does this go?",
-      naming the workspaces above as the choices. A wrong guess into a shared
-      vault cannot be taken back; a held item can always be placed later.
-    If everything belongs here, say nothing about this.
+      is not on this computer): never write it into that vault or this one
+      without the member's yes. Hold it, tagged with the workspace it seems
+      to belong to, and ask "Add these to <name>?"
+    - Work, and not sure which workspace: hold it untagged and ask
+      "Where does this go?", naming the workspaces above as the choices.
+      A wrong guess into a shared vault cannot be taken back.
+    ASK BEFORE PHASE 2, in one message listing every held item word for word,
+    and WAIT for the answer, as in Phase 0b. If everything belongs here, say
+    nothing about this. This vault's to-do file and Captures take only what
+    belongs here. Phase 1.8 posts only to this workspace, never another one,
+    unless the member said yes to it here.
 """
     if personal is not None:
-        hold = (f"""  • Write held items under "## Needs a home — {timestamp_human[:10]} (from a
-    session in {here})" in the Needs a home file, one bullet each, word for
-    word, ending with [for: <workspace>] or [unsure].""")
+        hold = (f"""  • Write the items the member did not place under "## Needs a home —
+    {timestamp_human[:10]} (from a session in {here})" in the Needs a home
+    file, one bullet each, word for word, ending with [for: <workspace>] or
+    [unsure].""")
     else:
-        hold = """  • Held items are written NOWHERE: list them in the close summary, word
-    for word, with the question."""
+        hold = """  • Items the member did not place are written NOWHERE: list them in the
+    close summary, word for word."""
     step = hold + """
-    When the member answers during the close:
+    For each answer the member gave before Phase 2:
     - yes to a workspace listed above with a path: append the items to that
-      workspace's to-do file (to-dos) or Captures (the rest), remove them from
-      Needs a home, and if that vault is a git repository commit just those
-      files there with explicit paths, as in Phase 2b;
-    - a workspace not on this computer: leave them held and tell the member
+      workspace's to-do file (to-dos) or Captures (the rest);
+    - a workspace not on this computer: keep them held and tell the member
       to add them there;
-    - no, or no answer: they stay held in the personal brain.
+    - no, or no answer: keep them held.
+    Every file written outside this vault (the personal brain, another
+    workspace) is committed in ITS vault, if that vault is a git
+    repository, with explicit paths only, the same way as Phase 2b.
+    Phase 4 adds "Held N for you to place." when any are held.
 """
     return pre, rule, step
 
@@ -1601,9 +1629,13 @@ def _full_cascade_block(
     seeds_line, seeds_rule, seeds_phase2 = _journal_seeds_block(
         journal_seeds, vault_root, timestamp_human
     )
-    routing_lines, routing_rule, routing_phase2 = _workspace_routing_block(
-        vault_root, journal_seeds, others or [], timestamp_human
-    )
+    try:
+        routing_lines, routing_rule, routing_phase2 = _workspace_routing_block(
+            vault_root, journal_seeds, others or [], timestamp_human
+        )
+    except Exception as exc:  # never lose the close over the routing block
+        log_debug(f"workspace routing block failed: {exc!r}")
+        routing_lines, routing_rule, routing_phase2 = "", "", ""
     # A decision file names no session in its filename, so on a shared checkout
     # the close commit (session-end-hook.sh) and the close gate
     # (verify-session-close-cascade.py) can only tell this session's decisions
@@ -1980,7 +2012,11 @@ def main() -> int:
             # vault-root-ok: names the member's PERSONAL vault, not this session's root; trusted only when it holds a journal config
             cwd, vault_root, os.environ.get("VAULT_ROOT")
         )
-        others = other_workspaces(vault_root)
+        try:
+            others = other_workspaces(vault_root)
+        except Exception as exc:  # a strange folder never costs the member their close
+            log_debug(f"workspace scan failed, routing to other vaults skipped: {exc!r}")
+            others = []
 
         worktree = derive_worktree(cwd)
         now = datetime.now()
