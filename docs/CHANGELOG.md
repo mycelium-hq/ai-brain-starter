@@ -9,6 +9,18 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-11-06: something personal you say in a team vault goes to your journal, not the team's brain
+
+**Who this affects:** anyone who works in a shared team or client vault (one with its own `## Session End` section) as well as their own personal vault.
+
+At close, Claude collects "journal seeds": your own words when you shared a feeling, a belief or a reflection on your life or work. It used to save them in the Captures file of whatever vault the session ran in. In a shared vault, that put your personal reflections where your teammates read, and your next `/journal`, which reads your personal vault, never saw them.
+
+Now the close checks where you are. In your own vault nothing changes. In a shared vault, your journal seeds go to your personal vault's Session Captures, so your next journal entry picks them up, and nothing personal is written into the shared vault. When a message mixes work and feelings, the work part is filed as usual and only the personal sentence goes to your journal. When Claude is unsure, it treats it as personal. Your personal vault is the one `VAULT_ROOT` points to, or else the one vault on this computer that has a journal config. If neither exists, the seeds are shown to you at close and saved nowhere.
+
+**Tested:** `hooks/test_close_journal_seeds_stay_personal.py` builds the real close text for your own vault (unchanged) and for a shared vault with and without `VAULT_ROOT` and with no personal vault at all. With the new routing switched off, every shared-vault check fails. The other close tests still pass.
+
+---
+
 ## 2026-11-02: a vault without git is no longer told to commit at close
 
 **Who this affects:** anyone whose vault is a plain folder (no `.git`), with its off-machine copy made some other way, such as a nightly mirror or backup.
