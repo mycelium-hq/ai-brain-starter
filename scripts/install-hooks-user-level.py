@@ -140,6 +140,7 @@ ABS_FINGERPRINTS = [
     "ai-brain-starter/hooks/log-skill-usage.py",
     "ai-brain-starter/hooks/first-week-checkin.py",
     "ai-brain-starter/hooks/migrate-to-user-level.py",
+    "ai-brain-starter/hooks/surface-dependabot-backlog.py",
     "ai-brain-starter/hooks/inject-love-language-context.py",
     "ai-brain-starter/hooks/inject-meeting-workflow-on-trigger.py",
     "ai-brain-starter/scripts/session-end-hook.sh",
@@ -293,6 +294,7 @@ ABS_OWNED_BASENAMES = {
     "detect-closing-signal.py", "verify-session-close-cascade.py",
     "lint-vault-frontmatter.py", "log-skill-usage.py", "validate-skill-frontmatter.py",
     "first-week-checkin.py", "migrate-to-user-level.py",
+    "surface-dependabot-backlog.py",
     "inject-love-language-context.py", "inject-meeting-workflow-on-trigger.py",
     "session-end-hook.sh", "email-gate-hook.py", "graph-context-hook.sh",
     "post-update-email-ask.py", "ai-brain-auto-update.sh", "ai-brain-auto-update.py",
@@ -479,9 +481,17 @@ ABS_RETIRED_FINGERPRINTS = [
     # the .sh file on disk survives as a thin delegator so a not-yet-migrated
     # settings.json entry keeps working until this retirement removes it.
     "ai-brain-starter/scripts/ai-brain-auto-update.sh",
+    # Retired 2026-11-06 (tickets#5988): wired at USER level it can never fire.
+    # It speaks only when user-level settings lack every ai-brain-starter
+    # fingerprint, and the same install that wires it also wires
+    # first-week-checkin.py, one of those fingerprints. Its SessionStart slot
+    # went to surface-dependabot-backlog.py. The file stays for old
+    # project-level installs that still call it from their own settings.
+    "ai-brain-starter/hooks/migrate-to-user-level.py",
 ]
 ABS_RETIRED_BASENAMES = {
     "email-gate-hook.py",
+    "migrate-to-user-level.py",
     "ai-brain-auto-update.sh",
 }
 

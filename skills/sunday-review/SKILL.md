@@ -172,7 +172,7 @@ The Claude pass surfaces signals INTO the /sunday-review synthesis under a "Secu
 - **Layer 2** — weekly meta-audit (this Step 4g via security-cadence-report.py).
 - **Layer 3** — event-driven full code-security review (new endpoint, new agentic surface, new CVE class, drift escalation from Layer 2). Not calendar. Not shipped here: `/security-snapshot` is passive and external-only, `/secret-warn` is edit-time guardrails, and both disclaim deep review. Bring your own reviewer.
 
-Source: panel synthesis (Schneier + Charity Majors + Patrick Collison + DHH-dissent, 2026-05-27) on cadence-vs-event-driven security. Bug class prevented: `ARTIFACT-WITH-OVER-STRICT-VERIFICATION` applied to time — over-scheduled verification trains a bypass habit; real fires get ignored. Skip silently if the script is missing.
+Source: panel synthesis (Schneier + Charity Majors + Patrick Collison + DHH-dissent, 2026-05-27) on cadence-vs-event-driven security. Bug class prevented: `ARTIFACT-WITH-OVER-STRICT-VERIFICATION` applied to time — over-scheduled verification trains a bypass habit; real fires get ignored. If the script is missing, say so in the review in one line ("Security cadence check did not run: security-cadence-report.py is not installed"). Never skip it silently: a missing security check and a clean one must not look the same.
 
 ### Step 5 — Decision retrospective
 
