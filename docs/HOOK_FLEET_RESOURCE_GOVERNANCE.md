@@ -70,7 +70,7 @@ below to confirm on any later revision):
 | `lint-claude-settings.py` (+ `--test`) | parse + lint one JSON file | single small file |
 | `check-claude-code-version.sh` | find the `claude` process above the hook (a few `ps` / `/proc` reads), read one cached banner; on a cache miss only, make up to two `gh api` calls, ask that binary `--version`, and list the `claude` installs | cached per binary; the `--version` probes (10 s each) and the install scan (30 s) run under a perl alarm (or `timeout`); the `gh api` calls are not time-bounded; one directory level of `~/Library/LaunchAgents`, no recursion |
 | `first-week-checkin.py` | read an install-date marker | marker read + budget guard |
-| `migrate-to-user-level.py` | one-shot settings migration check | idempotent, no walk |
+| `surface-dependabot-backlog.py` | one `gh api user`, one GraphQL call for the user's repos, one REST call per org (up to 30), run in parallel | every `gh` call under a 10 s timeout and a 25 s total deadline; result cached 30 min (10 min when something was skipped); no filesystem walk |
 | `surface-orphan-claude-branches.py` | `git for-each-ref` + one `iterdir` | bounded git op + 1 dir level |
 | `surface-stranded-session-artifacts.py` | `iterdir` of `.claude/worktrees/` | 1 dir level + subprocess `timeout=15` |
 | `surface-orphan-worktree-snapshots.py` | `rglob` under the small snapshots dir | snapshot tree only, results capped |

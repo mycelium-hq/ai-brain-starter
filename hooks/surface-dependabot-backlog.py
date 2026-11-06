@@ -18,14 +18,22 @@ What it says:
     bad JSON)                         -> says "skipped" for what it could not
                                          read. Never silent, so a failure can
                                          never look like a clean pass.
+  * more alerts or repos than one page
+    holds                             -> the totals say "at least" and name
+                                         what was not read.
   * `gh` is not installed             -> silent. There is no GitHub tooling to
                                          check with, and nagging every session
                                          of a user who does not use GitHub is
-                                         noise, not a finding.
+                                         noise, not a finding. If a gh sign-in
+                                         exists but gh is not on this session's
+                                         PATH (or a usual install path), it
+                                         says "skipped".
+  * anything unexpected crashes       -> "skipped", never silence.
 
-Cost: many sessions start at once on a busy machine, so a successful result is
-cached for CACHE_MINUTES and reused. A skipped result is not cached, so the
-next session tries again.
+Cost: many sessions start at once on a busy machine, so a clean result is
+cached for CACHE_MINUTES and reused. A result that skipped or cut something off
+is cached for SKIP_CACHE_MINUTES, so it retries soon without re-querying on
+every session.
 
 Bypass: SURFACE_DEPENDABOT_BACKLOG_BYPASS=1
 """
@@ -45,14 +53,37 @@ CALL_TIMEOUT_S = 10
 TOTAL_DEADLINE_S = 25
 MAX_ORGS = 30
 CACHE_MINUTES = 30
+# A result that skipped something is kept for less time, so the check retries
+# soon, but a member without access to an org is not re-queried every session.
+SKIP_CACHE_MINUTES = 10
 MAX_REPOS_SHOWN = 8
 SEVERITIES = ("critical", "high")
 
 USER_REPOS_QUERY = (
     "query{viewer{repositories(first:100,ownerAffiliations:OWNER,isArchived:false)"
-    "{nodes{nameWithOwner vulnerabilityAlerts(first:100,states:OPEN)"
-    "{nodes{securityVulnerability{severity}}}}}}}"
+    "{totalCount nodes{nameWithOwner vulnerabilityAlerts(first:100,states:OPEN)"
+    "{totalCount nodes{securityVulnerability{severity}}}}}}}"
 )
+# Where gh usually lives when a GUI-launched session's PATH does not include it.
+GH_FALLBACK_PATHS = ("/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/usr/bin/gh")
+GH = "gh"
+
+
+def find_gh() -> str | None:
+    found = shutil.which("gh")
+    if found:
+        return found
+    fallbacks = os.environ.get("DEPENDABOT_GH_FALLBACK_PATHS")  # tests only
+    for candidate in fallbacks.split(os.pathsep) if fallbacks is not None else GH_FALLBACK_PATHS:
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+
+def gh_configured() -> bool:
+    """A gh sign-in exists on this machine, even if the binary was not found."""
+    base = os.environ.get("GH_CONFIG_DIR") or os.path.join(Path.home(), ".config", "gh")
+    return os.path.isfile(os.path.join(base, "hosts.yml"))
 
 
 def cache_path() -> Path:
@@ -72,7 +103,7 @@ def gh_json(args: list[str], deadline: float):
         raise GhError("ran out of time")
     try:
         out = subprocess.run(
-            ["gh", *args],
+            [GH, *args],
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -92,23 +123,32 @@ def gh_json(args: list[str], deadline: float):
         raise GhError("gh returned something that is not JSON")
 
 
-def user_repo_counts(deadline: float) -> dict[str, dict[str, int]]:
+def user_repo_counts(deadline: float) -> tuple[dict[str, dict[str, int]], list[str]]:
+    """Counts for the user's own repos, plus what could not be read in one page."""
     data = gh_json(["api", "graphql", "-f", f"query={USER_REPOS_QUERY}"], deadline)
     try:
-        nodes = data["data"]["viewer"]["repositories"]["nodes"]
+        repos = data["data"]["viewer"]["repositories"]
+        nodes = repos["nodes"]
     except (KeyError, TypeError):
         raise GhError("unexpected answer from GitHub")
+    partial: list[str] = []
+    if int(repos.get("totalCount") or 0) > len(nodes or []):
+        partial.append(f"your repos past the first {len(nodes or [])}")
     counts: dict[str, dict[str, int]] = {}
     for repo in nodes or []:
-        for alert in ((repo or {}).get("vulnerabilityAlerts") or {}).get("nodes") or []:
+        alerts = (repo or {}).get("vulnerabilityAlerts") or {}
+        if int(alerts.get("totalCount") or 0) > len(alerts.get("nodes") or []):
+            partial.append(f"{repo['nameWithOwner']} alerts past the first 100")
+        for alert in alerts.get("nodes") or []:
             sev = str(((alert or {}).get("securityVulnerability") or {}).get("severity", "")).lower()
             if sev in SEVERITIES:
                 bucket = counts.setdefault(repo["nameWithOwner"], {s: 0 for s in SEVERITIES})
                 bucket[sev] += 1
-    return counts
+    return counts, partial
 
 
-def org_counts(org: str, deadline: float) -> dict[str, dict[str, int]]:
+def org_counts(org: str, deadline: float) -> tuple[dict[str, dict[str, int]], bool]:
+    """Counts for one org, and whether the single page may have cut some off."""
     data = gh_json(
         [
             "api",
@@ -127,15 +167,20 @@ def org_counts(org: str, deadline: float) -> dict[str, dict[str, int]]:
         if repo and sev in SEVERITIES:
             bucket = counts.setdefault(repo, {s: 0 for s in SEVERITIES})
             bucket[sev] += 1
-    return counts
+    return counts, len(data) >= 100
 
 
-def build_message(counts: dict[str, dict[str, int]], skipped: list[str]) -> str:
+def build_message(
+    counts: dict[str, dict[str, int]], skipped: list[str], partial: list[str] | None = None
+) -> str:
     lines: list[str] = []
+    partial = partial or []
     if counts:
         total = {s: sum(c[s] for c in counts.values()) for s in SEVERITIES}
+        at_least = "at least " if partial else ""
         lines.append(
-            f"Open Dependabot alerts: {total['critical']} critical, {total['high']} high."
+            f"Open Dependabot alerts: {at_least}{total['critical']} critical, "
+            f"{at_least}{total['high']} high."
         )
         ranked = sorted(counts.items(), key=lambda kv: (-kv[1]["critical"], -kv[1]["high"], kv[0]))
         for repo, c in ranked[:MAX_REPOS_SHOWN]:
@@ -146,6 +191,8 @@ def build_message(counts: dict[str, dict[str, int]], skipped: list[str]) -> str:
         if len(ranked) > MAX_REPOS_SHOWN:
             lines.append(f"  - and {len(ranked) - MAX_REPOS_SHOWN} more repos")
         lines.append("Fix the ones that reach your app, or dismiss them with a written reason.")
+    if partial:
+        lines.append("Some alerts were not read (only one page per source): " + "; ".join(partial) + ".")
     if skipped:
         lines.append("Dependabot alert check skipped for: " + "; ".join(skipped) + ".")
     return "\n".join(lines)
@@ -154,19 +201,23 @@ def build_message(counts: dict[str, dict[str, int]], skipped: list[str]) -> str:
 def read_cache() -> str | None:
     try:
         data = json.loads(cache_path().read_text(encoding="utf-8"))
-        if time.time() - float(data["at"]) < CACHE_MINUTES * 60:
+        age = time.time() - float(data["at"])
+        if 0 <= age < float(data["minutes"]) * 60:
             return str(data["message"])
     except (OSError, ValueError, KeyError, TypeError):
         pass
     return None
 
 
-def write_cache(message: str) -> None:
+def write_cache(message: str, minutes: int) -> None:
     path = cache_path()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".tmp")
-        tmp.write_text(json.dumps({"at": time.time(), "message": message}), encoding="utf-8")
+        tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+        tmp.write_text(
+            json.dumps({"at": time.time(), "minutes": minutes, "message": message}),
+            encoding="utf-8",
+        )
         os.replace(tmp, path)
     except OSError:
         pass
@@ -177,11 +228,14 @@ def check() -> str:
     deadline = time.monotonic() + TOTAL_DEADLINE_S
     counts: dict[str, dict[str, int]] = {}
     skipped: list[str] = []
+    partial: list[str] = []
 
     try:
         login = gh_json(["api", "user"], deadline).get("login")
     except (GhError, AttributeError) as exc:
-        return build_message({}, [f"GitHub sign-in ({exc or 'no login'}). Run: gh auth status"])
+        message = build_message({}, [f"GitHub sign-in ({exc or 'no login'}). Run: gh auth status"])
+        write_cache(message, SKIP_CACHE_MINUTES)
+        return message
 
     def org_list() -> list[str]:
         data = gh_json(["api", "user/orgs?per_page=100"], deadline)
@@ -203,22 +257,23 @@ def check() -> str:
             skipped.append(f"{len(orgs) - MAX_ORGS} organizations past the first {MAX_ORGS}")
         per_org = [(org, pool.submit(org_counts, org, deadline)) for org in orgs[:MAX_ORGS]]
         try:
-            counts.update(own.result())
+            own_counts, own_partial = own.result()
+            counts.update(own_counts)
+            partial.extend(own_partial)
         except GhError as exc:
             skipped.append(f"{login}'s repos ({exc})")
         for org, fut in per_org:
             try:
-                found = fut.result()
+                found, truncated = fut.result()
             except GhError as exc:
                 skipped.append(f"{org} ({exc})")
                 continue
             counts.update(found)
-            if sum(sum(c.values()) for c in found.values()) >= 100:
-                skipped.append(f"{org} alerts past the first 100")
+            if truncated:
+                partial.append(f"{org} alerts past the first 100")
 
-    message = build_message(counts, skipped)
-    if not skipped:
-        write_cache(message)
+    message = build_message(counts, skipped, partial)
+    write_cache(message, SKIP_CACHE_MINUTES if (skipped or partial) else CACHE_MINUTES)
     return message
 
 
@@ -229,11 +284,24 @@ def main() -> int:
         sys.stdin.read()
     except Exception:
         pass
-    if shutil.which("gh") is None:
-        return 0
-    message = read_cache()
-    if message is None:
-        message = check()
+    global GH
+    try:
+        gh = find_gh()
+        if gh is None:
+            # No gh anywhere: this person does not use GitHub tooling, so there
+            # is nothing to check. If a gh sign-in exists, gh is installed
+            # somewhere this session cannot see, and silence would read as clean.
+            if gh_configured():
+                message = "Dependabot alert check skipped for: gh is signed in but not on this session's PATH."
+            else:
+                return 0
+        else:
+            GH = gh
+            message = read_cache()
+            if message is None:
+                message = check()
+    except Exception as exc:  # never let a crash look like zero alerts
+        message = f"Dependabot alert check skipped for: unexpected error ({exc.__class__.__name__})."
     if message:
         print(json.dumps({"systemMessage": message}))
     return 0

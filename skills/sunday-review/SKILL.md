@@ -148,7 +148,7 @@ python3 "{SKILL_DIR}/../../scripts/closed-loop-week-report.py" \
 
 Reports the previous week's automatic activity in the episodic→procedural memory loop: how many promotion candidates landed in `Meta/Promotion-Candidates/` awaiting human ratification, how many got auto-promoted into `Meta/Workflows/` / `Meta/Exceptions/` / `Meta/Facts/`, how many rules were demoted to `status: superseded`, and the current resolver conflict count. Inline the script's output into the synthesis under "Closed-loop activity." If candidates are pending, the user's "One thing to do this week" should be reviewing them. The closed-loop runs hourly (promote) and weekly (demote/conflicts), but the human ratification gate only fires once a week, here. Skip silently if the script is missing.
 
-### Step 4g — Security cadence check (if the script exists in this vault)
+### Step 4g — Security cadence check
 
 Run:
 ```bash
@@ -162,7 +162,7 @@ After the script lands the report, inline a 5-minute Claude pass answering the 6
 1. Did any cron-layer fail silently this week? (Baselines missing days, gh-harden log gap > 24h, scanner returning identical lines for multiple days)
 2. Did any hookify rule fire zero times in 30d? (Rule earning its slot, or drifted off the actual risk surface — candidate for deletion)
 3. Did secret-detection or permission-denied counts spike? (Spike = new risk surface OR false-positive class needing carve-out; investigate)
-4. Any production-tier repo with >5 open Dependabot PRs? (Tier-protected prod repos cannot accumulate unreviewed vuln PRs)
+4. Any open critical or high Dependabot alert older than a week? (An alert can sit with no PR at all, e.g. a git-pinned or version-locked dependency, so count alerts, not PRs: `gh api orgs/<org>/dependabot/alerts?state=open&severity=critical,high`)
 5. Has the threat landscape shifted since last check? (Read 2-3 CISA + OWASP + vendor advisories — does any layer need a new pattern?)
 6. Any new public repo / endpoint / agentic surface shipped this week not classified into the 4-layer detection model? (CI-publish workflow-injection / post-publish Dependabot / outbound SSRF / endpoint-installed-state inventory)
 

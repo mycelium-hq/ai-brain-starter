@@ -133,7 +133,6 @@ NO_TEST_BASELINE: Set[str] = {
     # -- session-stop / worktree surfacers --
     "warn-uncommitted-builds-on-stop",
     "surface-orphan-worktree-snapshots",
-    "surface-dependabot-backlog",
     # -- lifecycle / nudges --
     "install-ping",
     "sunday-review-nudge",

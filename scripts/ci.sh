@@ -368,6 +368,7 @@ INTEGRATION_TESTS=(
   test_context_budget_measure
   test_connector_liveness_watchdog
   test_connector_liveness_surface
+  test_dependabot_alert_surface
   test_granola_sync_offline
   test_granola_core_shared
   test_agent_memory_link
