@@ -194,7 +194,7 @@ def main() -> int:
     else:
         dev_root = (Path(DEV_ROOT_OVERRIDE).expanduser() if DEV_ROOT_OVERRIDE
                     else resolve_dev_root())
-        if not dev_root.is_dir() and not dev_root_configured():
+        if not dev_root.is_dir() and not (DEV_ROOT_OVERRIDE or dev_root_configured()):
             # Nothing configured and no ~/dev: most members keep no code repos
             # at all. That is not a failure, and a daily red here would be noise.
             if not args.quiet:
