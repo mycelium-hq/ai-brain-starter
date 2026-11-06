@@ -112,10 +112,11 @@ def run_main(cwd: Path, env_vault: Path) -> str:
         sys.stdin = old_stdin
 
 
-saved_env = {k: os.environ.get(k) for k in ("HOME", "VAULT_ROOT")}
+saved_env = dict(os.environ)
 with tempfile.TemporaryDirectory() as tmp:
     home = Path(tmp).resolve()
     os.environ["HOME"] = str(home)  # Path.home() bounds the walk-up and the search
+    os.environ["USERPROFILE"] = str(home)  # Path.home() on Windows
     os.environ.pop("VAULT_ROOT", None)
     try:
         personal = make_vault(home, "notes", declares=False, journals=True)
@@ -164,11 +165,8 @@ with tempfile.TemporaryDirectory() as tmp:
         if OLD_STEP not in text:
             failures.append("new member's own default vault: seeds no longer saved there")
     finally:
-        for k, v in saved_env.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = v
+        os.environ.clear()
+        os.environ.update(saved_env)
 
 if failures:
     print("FAILED — a close can file a member's personal reflections in a shared vault:")
