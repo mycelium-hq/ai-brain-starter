@@ -24,6 +24,8 @@ Now the close looks at every vault on this computer and decides, for each thing,
 
 The optional team broadcast at close posts only to the workspace you're in, unless you said yes to another one.
 
+Anything left waiting is also dropped, one small file per item, in `~/.ai-brain/needs-a-home/` (by `scripts/needs-a-home.py`), so a desktop app can ask you later where it goes and file your answer. Your personal vault keeps the real copy; if no personal vault is found, nothing is dropped there either.
+
 A team vault's name is the `workspace:` line in its `CLAUDE.md` frontmatter, or else its folder name. If two folders are copies of the same workspace (the same git remote, written as https or ssh, or the same workspace name), Claude never writes into either and tells you which folders they are, so you can remove the extra one. If no personal vault can be found, held items are only shown at close. If you have just one vault and work in it, nothing changes.
 
 **Tested:** `hooks/test_close_files_each_thing_in_its_workspace.py` builds the real close text, and runs the real hook end to end, for one vault (unchanged), a team vault next to a personal vault and a second team vault, the personal vault next to a team vault, two copies of one workspace, a second copy of the vault you're in, a `workspace:` name, no personal vault, the question coming before any write, and a folder whose git pointer can't be read. It fails when the routing is switched off, when https and ssh remotes stop matching, when copies stop being matched by name, and when an unreadable git pointer is allowed to crash the close. The other close tests still pass.

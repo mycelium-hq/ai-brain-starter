@@ -1584,11 +1584,18 @@ def _workspace_routing_block(
     belongs here. Phase 1.8 posts only to this workspace, never another one,
     unless the member said yes to it here.
 """
+    inbox_script = Path(__file__).resolve().parent.parent / "scripts" / "needs-a-home.py"
     if personal is not None:
         hold = (f"""  • Write the items the member did not place under "## Needs a home —
     {timestamp_human[:10]} (from a session in {here})" in the Needs a home
     file, one bullet each, word for word, ending with [for: <workspace>] or
     [unsure].""")
+        if inbox_script.is_file():
+            hold += f"""
+    Then, for each of them, run this (one call per item, the words in single
+    quotes with any ' written as '\\'', and no --for when unsure), so the
+    member can also place it from their desktop app:
+      python3 {shlex.quote(str(inbox_script))} add --kind <todo|note> --text '<their words>' --for '<workspace>' --from {shlex.quote(here)}"""
     else:
         hold = """  • Items the member did not place are written NOWHERE: list them in the
     close summary, word for word."""
@@ -1596,8 +1603,8 @@ def _workspace_routing_block(
     For each answer the member gave before Phase 2:
     - yes to a workspace listed above with a path: append the items to that
       workspace's to-do file (to-dos) or Captures (the rest);
-    - a workspace not on this computer: keep them held and tell the member
-      to add them there;
+    - a workspace not on this computer: keep them held; the member places
+      them from their desktop app or by hand;
     - no, or no answer: keep them held.
     Every file written outside this vault (the personal brain, another
     workspace) is committed in ITS vault, if that vault is a git

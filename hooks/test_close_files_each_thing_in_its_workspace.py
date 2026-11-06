@@ -23,6 +23,11 @@ reached the company. Assertions, each on the REAL text the hook builds:
   9. The member is asked BEFORE anything is written, and the team broadcast
      never posts to another workspace without a yes.
   10. A vault with an unreadable git pointer never breaks the close.
+  11. Each held item is also dropped in ~/.ai-brain/needs-a-home/ by
+      scripts/needs-a-home.py, so a desktop app can ask where it goes: the
+      close says to run it when there is a personal vault (and never when
+      there is none, since the vault keeps the durable copy), and the script
+      writes the file the app reads, once per item.
   7. No personal vault found: held items go nowhere but the close summary.
   8. main() end to end: the injected close carries the routing rule.
 """
@@ -128,6 +133,8 @@ try:
             failures.append("team vault: the team broadcast can still post to another workspace")
         if "committed in ITS vault" not in text:
             failures.append("team vault: writes outside this vault are left uncommitted")
+        if "needs-a-home.py" not in text or "add --kind" not in text:
+            failures.append("team vault: held items never reach the needs-a-home inbox")
 
         # 3. A personal vault session.
         text = close(personal)
@@ -194,6 +201,32 @@ try:
             failures.append("no personal vault: held items were given somewhere to be written")
         if str(alpha) in needs_a_home(text):
             failures.append("no personal vault: held items were put in the team vault")
+        if "needs-a-home.py" in text:
+            failures.append("no personal vault: the inbox would hold the only copy")
+
+        # 11. The inbox script writes the file a desktop app reads, once per item.
+        script_spec = importlib.util.spec_from_file_location(
+            "needs_a_home", HOOKS.parent / "scripts" / "needs-a-home.py")
+        inbox_mod = importlib.util.module_from_spec(script_spec)
+        script_spec.loader.exec_module(inbox_mod)
+        first = inbox_mod.add("todo", "  Send the  pricing page ", "Acme", "team-vault")
+        again = inbox_mod.add("todo", "Send the pricing page", "Acme", "team-vault")
+        unsure = inbox_mod.add("note", "Clients ask for invoices in Spanish", None, "team-vault")
+        record = json.loads(first.read_text(encoding="utf-8"))
+        files = sorted((home / ".ai-brain" / "needs-a-home").glob("*.json"))
+        if first != again or len(files) != 2:
+            failures.append(f"inbox: the same item was written twice ({[f.name for f in files]})")
+        if (record.get("version"), record.get("kind"), record.get("text"), record.get("for"), record.get("from")) != (
+                1, "todo", "Send the pricing page", "Acme", "team-vault") or first.name != f"{record.get('id')}.json":
+            failures.append(f"inbox: the file is not what the app reads: {record}")
+        if "for" in json.loads(unsure.read_text(encoding="utf-8")):
+            failures.append("inbox: an unsure item names a workspace")
+        for bad in (("todo", "x" * 301), ("todo", "   ")):
+            try:
+                inbox_mod.add(bad[0], bad[1], None, "v")
+                failures.append(f"inbox: accepted a {bad[0]} the app would refuse")
+            except ValueError:
+                pass
 finally:
     os.environ.clear()
     os.environ.update(saved_env)
