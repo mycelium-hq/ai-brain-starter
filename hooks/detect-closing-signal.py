@@ -1057,12 +1057,25 @@ SEEDS_PERSONAL = "personal"  # shared vault: seeds go to the member's personal v
 SEEDS_HELD = "held"          # shared vault, no personal vault found: write nowhere
 
 
+def _journal_meta(vault: Path) -> Path | None:
+    """The Meta folder of `vault` that holds the daily-journal config, else None.
+
+    That Meta is the one /journal reads Session Captures from. Stat-only on the two standard Meta names: this runs over every folder in
+    the home directory, and listing them (Desktop, Downloads, ...) is slow and
+    can raise privacy prompts.
+    """
+    for meta in ("⚙️ Meta", "Meta"):
+        try:
+            if (vault / meta / _JOURNAL_CONFIG).is_file():
+                return vault / meta
+        except OSError:
+            continue
+    return None
+
+
 def _journals_in(vault: Path) -> bool:
-    """True iff `vault` holds the daily-journal config, i.e. the member journals there."""
-    try:
-        return (find_meta_dir(vault) / _JOURNAL_CONFIG).is_file()
-    except OSError:
-        return False
+    """True iff the member journals in `vault`."""
+    return _journal_meta(vault) is not None
 
 
 def _same_dir(a: Path, b: Path) -> bool:
@@ -1072,12 +1085,8 @@ def _same_dir(a: Path, b: Path) -> bool:
         return False
 
 
-def _the_one_journal_vault() -> Path | None:
-    """The single vault in the shallow search space that holds a journal config.
-
-    Zero or several → None: picking the wrong vault would file one person's
-    reflections in another place, which is worse than holding them.
-    """
+def _journal_vaults() -> list[Path]:
+    """Every vault in the shallow search space that holds a journal config."""
     roots = [Path.home()] + [Path.home() / p for p in _PERSONAL_VAULT_PARENTS]
     found: dict[str, Path] = {}
     for root in roots:
@@ -1093,7 +1102,7 @@ def _the_one_journal_vault() -> Path | None:
                     found.setdefault(str(child.resolve()).casefold(), child)
             except (OSError, RuntimeError):
                 continue
-    return next(iter(found.values())) if len(found) == 1 else None
+    return list(found.values())
 
 
 def journal_seeds_destination(
@@ -1101,31 +1110,37 @@ def journal_seeds_destination(
 ) -> tuple[str, Path | None]:
     """Where this close writes journal seeds: (kind, Session Captures path or None).
 
-    - The member journals in this vault, or the vault was reached through the
-      ordinary fallback ($VAULT_ROOT / cwd, i.e. their own default vault):
-      SEEDS_HERE, unchanged.
-    - The session runs inside a separate vault that declares its own cascade
-      (a team or client vault) and is not where the member journals: seeds go
-      to the personal vault ($VAULT_ROOT if it is another vault, else the one
-      vault on the machine with a journal config) — SEEDS_PERSONAL.
-    - No personal vault can be identified: SEEDS_HELD. Never this vault.
+    The ONLY proof that a vault is the member's own is the journal config the
+    daily-journal skill keeps in it. A Meta folder, $VAULT_ROOT or the lack of
+    a team declaration proves nothing: a client vault has all three.
+
+    - The session vault holds the journal config: SEEDS_HERE, unchanged.
+    - A personal vault exists elsewhere ($VAULT_ROOT if it holds the config,
+      else the ONE vault on the machine that does): SEEDS_PERSONAL.
+    - Several candidates, or none while this vault owns its own close (a
+      team or client vault): SEEDS_HELD. Never this vault.
+    - No journal config anywhere and this vault was reached through the usual
+      fallback: the member has not journaled yet and this is their default
+      vault, so SEEDS_HERE, as before.
     """
     if _journals_in(vault_root):
         return SEEDS_HERE, None
-    if find_repo_vault_root(collapse_worktree(cwd)) is None:
-        return SEEDS_HERE, None
     personal: Path | None = None
-    if env_vault_root and Path(env_vault_root).is_dir():
+    if env_vault_root:
         env_path = Path(env_vault_root)
-        if _same_dir(env_path, vault_root):
-            return SEEDS_HERE, None
-        if find_meta_dir(env_path).is_dir():
+        if _journals_in(env_path) and not _same_dir(env_path, vault_root):
             personal = env_path
+    candidates: list[Path] = []
     if personal is None:
-        personal = _the_one_journal_vault()
-    if personal is None or _same_dir(personal, vault_root):
-        return SEEDS_HELD, None
-    return SEEDS_PERSONAL, find_meta_dir(personal) / "Session Captures.md"
+        candidates = _journal_vaults()
+        if len(candidates) == 1 and not _same_dir(candidates[0], vault_root):
+            personal = candidates[0]
+    meta = _journal_meta(personal) if personal is not None else None
+    if meta is not None:
+        return SEEDS_PERSONAL, meta / "Session Captures.md"
+    if not candidates and find_repo_vault_root(collapse_worktree(cwd)) is None:
+        return SEEDS_HERE, None
+    return SEEDS_HELD, None
 
 
 def build_crashed_after_signal_notice(matched: str, err: str) -> str:
