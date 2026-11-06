@@ -43,7 +43,7 @@ If you installed ai-brain-starter before this fix, your hooks live at project le
 
 ### Automatic detection
 
-The `migrate-to-user-level.py` SessionStart hook detects this and prompts you:
+Older installs ran the `migrate-to-user-level.py` SessionStart hook, which detects this and prompts you. It is no longer wired by the user-level installer (it could never fire from there), so a project-level install that re-syncs its settings from `hooks.json` stops getting the prompt. If your hooks live at project level, use the manual migration below. The prompt looked like this:
 
 > **Heads up: your ai-brain-starter hooks are installed at project level, which means they don't fire when you work inside a git worktree. To migrate to user-level (universal): run `python3 ~/.claude/skills/ai-brain-starter/scripts/install-hooks-user-level.py`. This is additive — your existing hooks stay, and there's a backup. Want me to run it now?**
 
@@ -89,7 +89,7 @@ The hooks shipped by ai-brain-starter (per [`hooks.json`](../hooks.json) source-
 | `Stop` | `session-end-hook.sh` | Aggregators, retention cleanup, git snapshot, Haiku fallback |
 | `PreToolUse:Write\|Edit\|MultiEdit` | `lint-vault-frontmatter.py` | Blocks malformed YAML in vault frontmatter at write boundary |
 | `SessionStart` | `first-week-checkin.py` | Day 3 / 7 / 14 stewardship prompts |
-| `SessionStart` | `migrate-to-user-level.py` | Detects project-level installs and offers migration |
+| `SessionStart` | `surface-dependabot-backlog.py` | Shows open critical and high Dependabot alerts across your repos and orgs (silent when there are none) |
 | `PreCompact` | (inline systemMessage) | Reminds the model to preserve context before compaction |
 
 ### Opt-in: sibling-session coordination lock
