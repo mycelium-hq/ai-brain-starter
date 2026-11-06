@@ -1592,10 +1592,13 @@ def _workspace_routing_block(
     [unsure].""")
         if inbox_script.is_file():
             hold += f"""
-    Then, for each of them, run this (one call per item, the words in single
-    quotes with any ' written as '\\'', and no --for when unsure), so the
-    member can also place it from their desktop app:
-      python3 {shlex.quote(str(inbox_script))} add --kind <todo|note> --text '<their words>' --for '<workspace>' --from {shlex.quote(here)}"""
+    Then, for each of them, run this once (the item as one JSON object on
+    stdin, never on the command line; leave out "for" when unsure), so the
+    member can also place it from their desktop app (exactly these three
+    lines, each starting at the left edge, the last one alone on its line):
+python3 {shlex.quote(str(inbox_script))} add <<'NEEDS_A_HOME_ITEM'
+{{"kind": "todo or note", "text": "<their words>", "for": "<workspace>", "from": {json.dumps(here)}}}
+NEEDS_A_HOME_ITEM"""
     else:
         hold = """  • Items the member did not place are written NOWHERE: list them in the
     close summary, word for word."""

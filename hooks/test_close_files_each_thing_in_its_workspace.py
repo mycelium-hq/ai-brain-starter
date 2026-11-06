@@ -133,8 +133,10 @@ try:
             failures.append("team vault: the team broadcast can still post to another workspace")
         if "committed in ITS vault" not in text:
             failures.append("team vault: writes outside this vault are left uncommitted")
-        if "needs-a-home.py" not in text or "add --kind" not in text:
+        if "needs-a-home.py" not in text or "\nNEEDS_A_HOME_ITEM\n" not in text + "\n":
             failures.append("team vault: held items never reach the needs-a-home inbox")
+        if "--text" in text:
+            failures.append("team vault: the member's words would be put on a shell command line")
 
         # 3. A personal vault session.
         text = close(personal)
@@ -210,6 +212,13 @@ try:
         inbox_mod = importlib.util.module_from_spec(script_spec)
         script_spec.loader.exec_module(inbox_mod)
         first = inbox_mod.add("todo", "  Send the  pricing page ", "Acme", "team-vault")
+        # Golden: the line Studio's needs_a_home.rs test reads, byte for byte but for id and day.
+        golden = ('{"version": 1, "id": "ID", "kind": "todo", "text": "Send the pricing page", '
+                  '"from": "team-vault", "created": "DAY", "for": "Acme"}')
+        on_disk = first.read_text(encoding="utf-8")
+        fields = json.loads(on_disk)
+        if on_disk.replace(fields["id"], "ID").replace(fields["created"], "DAY") != golden:
+            failures.append(f"inbox: the file no longer matches the shape Studio reads: {on_disk}")
         again = inbox_mod.add("todo", "Send the pricing page", "Acme", "team-vault")
         unsure = inbox_mod.add("note", "Clients ask for invoices in Spanish", None, "team-vault")
         record = json.loads(first.read_text(encoding="utf-8"))
@@ -221,6 +230,26 @@ try:
             failures.append(f"inbox: the file is not what the app reads: {record}")
         if "for" in json.loads(unsure.read_text(encoding="utf-8")):
             failures.append("inbox: an unsure item names a workspace")
+        # A placed item is never asked again.
+        placed = home / ".ai-brain" / "needs-a-home" / "placed"
+        placed.mkdir()
+        first.rename(placed / first.name)
+        if inbox_mod.add("todo", "Send the pricing page", "Acme", "team-vault") is not None:
+            failures.append("inbox: an item the member already placed was asked again")
+        # The command reads one JSON object on stdin, and refuses anything else.
+        import subprocess
+        script = str(HOOKS.parent / "scripts" / "needs-a-home.py")
+        env = dict(os.environ)
+        ok = subprocess.run([sys.executable, script, "add"], input=json.dumps(
+            {"kind": "note", "text": "It's $HOME `and` 'quotes'", "from": "team-vault"}),
+            capture_output=True, text=True, env=env)
+        wrote = Path(ok.stdout.strip()) if ok.returncode == 0 and ok.stdout.strip() else None
+        if wrote is None or json.loads(wrote.read_text(encoding="utf-8"))["text"] != "It's $HOME `and` 'quotes'":
+            failures.append(f"inbox: words with shell characters were not kept as said ({ok.stderr.strip()})")
+        bad_in = subprocess.run([sys.executable, script, "add"], input="not json",
+                                capture_output=True, text=True, env=env)
+        if bad_in.returncode == 0:
+            failures.append("inbox: a malformed item was accepted")
         for bad in (("todo", "x" * 301), ("todo", "   ")):
             try:
                 inbox_mod.add(bad[0], bad[1], None, "v")

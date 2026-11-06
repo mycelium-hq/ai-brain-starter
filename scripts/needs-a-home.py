@@ -7,12 +7,16 @@ whose workspace was unclear, is kept in the member's personal vault under
 ~/.ai-brain/needs-a-home/, so a desktop app can ask the member where it goes
 and file their answer. The vault keeps the durable copy; the inbox is the ask.
 
-    python3 needs-a-home.py add --kind todo --text "Send the pricing page" \
-        --for "Acme" --from "team-vault"
+    python3 needs-a-home.py add <<'NEEDS_A_HOME_ITEM'
+    {"kind": "todo", "text": "Send the pricing page", "for": "Acme", "from": "team-vault"}
+    NEEDS_A_HOME_ITEM
 
---for is the workspace it seems to belong to; leave it out when unsure.
-The id is a hash of where it was said and its words, so adding the same thing
-twice writes one file. Prints the file it wrote. Stdlib only.
+The item is read as JSON on stdin, never from the command line, so no word
+of it is ever read by a shell. "for" is the workspace it seems to belong to;
+leave it out when unsure. The id is a hash of where it was said and its
+words, so adding the same thing twice writes one file, and a thing already
+placed (in placed/) is never asked again. Prints the file it wrote, or
+nothing when it was already placed. Stdlib only.
 """
 from __future__ import annotations
 
@@ -32,7 +36,7 @@ def inbox() -> Path:
     return Path.home() / ".ai-brain" / "needs-a-home"
 
 
-def add(kind: str, text: str, suggested: str | None, source: str) -> Path:
+def add(kind: str, text: str, suggested: str | None, source: str) -> Path | None:
     text = " ".join(text.split()) if kind == "todo" else text.strip()
     if not text:
         raise ValueError("nothing to add: the text is empty")
@@ -42,8 +46,10 @@ def add(kind: str, text: str, suggested: str | None, source: str) -> Path:
     record = {"version": 1, "id": item_id, "kind": kind, "text": text,
               "from": source.strip()[:120], "created": date.today().isoformat()}
     if suggested and suggested.strip():
-        record["for"] = suggested.strip()[:80]
+        record["for"] = suggested.strip()[:120]
     folder = inbox()
+    if (folder / "placed" / f"{item_id}.json").exists():
+        return None  # the member already said where it goes
     folder.mkdir(parents=True, exist_ok=True)
     target = folder / f"{item_id}.json"
     # Write then rename, so a reader never sees half a file.
@@ -64,14 +70,21 @@ def add(kind: str, text: str, suggested: str | None, source: str) -> Path:
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
-    one = sub.add_parser("add", help="leave one thing in the inbox")
-    one.add_argument("--kind", choices=sorted(LIMITS), required=True)
-    one.add_argument("--text", required=True)
-    one.add_argument("--for", dest="suggested", default=None)
-    one.add_argument("--from", dest="source", required=True)
-    args = parser.parse_args(argv)
+    sub.add_parser("add", help="leave one thing in the inbox, read as JSON on stdin")
+    parser.parse_args(argv)
     try:
-        print(add(args.kind, args.text, args.suggested, args.source))
+        item = json.loads(sys.stdin.read())
+        if not isinstance(item, dict):
+            raise ValueError("stdin must be one JSON object")
+        kind, text, source = item.get("kind"), item.get("text"), item.get("from")
+        suggested = item.get("for")
+        if kind not in LIMITS or not isinstance(text, str) or not isinstance(source, str):
+            raise ValueError('needs "kind" (todo or note), "text" and "from"')
+        if suggested is not None and not isinstance(suggested, str):
+            raise ValueError('"for" must be text')
+        written = add(kind, text, suggested, source)
+        if written is not None:
+            print(written)
     except (OSError, ValueError) as exc:
         print(f"needs-a-home: not added: {exc}", file=sys.stderr)
         return 1
