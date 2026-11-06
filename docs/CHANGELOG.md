@@ -15,9 +15,16 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 The daily refresh that keeps each repo's main folder current had `~/dev` written into it, while every other tool reads your configured code folder. On a machine whose code lives elsewhere it checked nothing and reported success, so main folders fell hundreds of commits behind. A folder left on a branch whose pull request had merged also stayed there for good, because the refresh only ever moved folders already on main. Pushing from such a folder runs that old branch's git hooks, not main's.
 
-Now the refresh reads your configured code folder, and says so when that folder is missing instead of reporting nothing to do. It also returns a main folder to its default branch and brings it up to date when the folder is clean, every commit on its branch is pushed, and the branch is merged or deleted on GitHub. The branch itself is kept. A folder with uncommitted work, an open branch, unpushed commits, or a main that cannot fast-forward is left exactly where it is and listed for you.
+Now the refresh reads your configured code folder, and says so when that folder is missing instead of reporting nothing to do. It also returns a main folder to its default branch and brings it up to date when the folder is clean, its branch was pushed to GitHub and nothing has been added since, and the branch is merged or deleted on GitHub. The branch itself is kept. A folder is left exactly where it is, and listed for you, if any of these is true:
 
-**Tested:** `scripts/test_dev_hub_refresh.py` builds throwaway repos for each case. Fifteen of its checks fail on `main` before this change; the other related suites still pass.
+- it has uncommitted work;
+- the switch would overwrite an ignored local file such as a `.env`;
+- its branch is still open, tracks another remote, or was never pushed;
+- its main can't fast-forward.
+
+If a switch fails, the daily pass reports it as a failed step.
+
+**Tested:** `scripts/test_dev_hub_refresh.py` builds throwaway repos for each case. 34 of its checks fail on `main` before this change; the other related suites still pass.
 
 ---
 

@@ -16,6 +16,13 @@ merge on GitHub.
   * finished branch but an untracked file         -> SURFACE (stays put)
   * finished branch but a commit on no remote     -> SURFACE (stays put)
   * finished branch but local main has own commits -> SURFACE (stays put)
+  * finished branch, but an IGNORED local file sits where main tracks a file
+    (git switch would overwrite it silently)       -> SURFACE (stays put)
+  * branch tracking a fork remote, pushed under another name without -u, a
+    fresh branch tracking main, or no upstream      -> SURFACE (stays put)
+  * squash-merged but its tracking ref was pruned  -> SURFACE (cannot prove pushed)
+  * a switch that fails                            -> listed as FAILED, exit 1
+  * a configured dev root that is ~/dev and missing -> exit 1, not "unconfigured"
   * dry-run                                       -> moves nothing at all
 
 Run: python3 scripts/test_dev_hub_refresh.py
@@ -151,17 +158,74 @@ def main() -> int:
         # so only main itself holds something origin/main lacks.
         squash_merge_and_delete(gh, "claude/done")
 
+        # SURFACE: a branch that moved a config file out of git; the local copy
+        # is now ignored, and main still tracks it.
+        _, gh, ign = make_hub(tmp, dev, "ignored")
+        commit(gh, "settings.json", '{"default":1}'); git(gh, "push", "-q", "origin", "main")
+        git(ign, "pull", "-q", "--ff-only")
+        git(ign, "switch", "-q", "-c", "claude/untrack")
+        git(ign, "rm", "-q", "--cached", "settings.json")
+        (ign / ".gitignore").write_text("settings.json\n"); git(ign, "add", ".gitignore")
+        git(ign, "commit", "-q", "-m", "untrack settings")
+        git(ign, "push", "-q", "-u", "origin", "claude/untrack")
+        (ign / "settings.json").write_text('{"MY_LOCAL":"precious"}')
+        # The PR is closed and its branch deleted; main still tracks the file.
+        git(gh, "push", "-q", "origin", "--delete", "claude/untrack")
+
+        # SURFACE: tracking a fork remote; origin never had the branch.
+        fork_origin, gh, frk = make_hub(tmp, dev, "forked")
+        fork = tmp / "fork.git"; git(tmp, "init", "-q", "--bare", "-b", "main", str(fork))
+        git(frk, "remote", "add", "fork", str(fork))
+        git(frk, "switch", "-q", "-c", "feat"); commit(frk, "f.txt")
+        git(frk, "push", "-q", "-u", "fork", "feat")
+
+        # SURFACE: pushed to origin under another name, no tracking.
+        _, gh, ren = make_hub(tmp, dev, "renamed")
+        git(ren, "switch", "-q", "-c", "local-name"); commit(ren, "r.txt")
+        git(ren, "push", "-q", "origin", "local-name:pr-branch")
+
+        # SURFACE: fresh branch tracking origin/main (no commits of its own).
+        _, gh, fresh = make_hub(tmp, dev, "fresh")
+        git(fresh, "switch", "-q", "-c", "feat", "--track", "origin/main")
+
+        # SURFACE: squash-merged and deleted, but the tracking ref was pruned,
+        # so nothing here proves the branch's tip was ever pushed.
+        _, gh, prn = make_hub(tmp, dev, "pruned")
+        feature(prn, "claude/done")
+        squash_merge_and_delete(gh, "claude/done")
+        git(prn, "fetch", "-q", "--prune", "origin")
+
+        # FAILED: finished, but a live index.lock makes the switch itself fail.
+        _, gh, lck = make_hub(tmp, dev, "locked")
+        feature(lck, "claude/done")
+        squash_merge_and_delete(gh, "claude/done")
+
         def branch(repo):
             return git(repo, "rev-parse", "--abbrev-ref", "HEAD")
 
-        before = {p.name: (branch(p), git(p, "rev-parse", "HEAD"))
-                  for p in (ff, sq, anc, opn, dirty, unp, div)}
+        stays = (opn, dirty, unp, div, ign, frk, ren, fresh, prn)
+        everyone = (ff, sq, anc, lck) + stays
+        before = {p.name: (branch(p), git(p, "rev-parse", "HEAD")) for p in everyone}
 
         # --- missing dev root is an error, not an empty fleet ---------------
         r = run(dev, tmp, root=tmp / "nope")
         check(r.returncode == 1 and "does not exist" in r.stderr,
               f"missing dev root must exit 1 with a reason, got rc={r.returncode} "
               f"stderr={r.stderr[-300:]}")
+
+        # --- a CONFIGURED ~/dev that is missing is an error ------------------
+        r = subprocess.run(
+            [sys.executable, str(REFRESH)], capture_output=True, text=True,
+            env=dict({k: v for k, v in os.environ.items()
+                      if k != "DEV_HUB_REFRESH_ROOT"},
+                     HOME=str(tmp / "emptyhome"),
+                     ABS_DEV_ROOT=str(tmp / "emptyhome" / "dev"),
+                     DEV_REPO_SCAN_DIR=str(SCRIPTS.parent / "hooks"),
+                     DEV_HUB_REFRESH_STATE=str(tmp / "state-cfg.json"),
+                     DEV_HUB_REFRESH_LOG_DIR=str(tmp / "logs-cfg")))
+        check(r.returncode == 1 and "does not exist" in r.stderr,
+              f"a configured ~/dev that is missing must exit 1, got rc={r.returncode} "
+              f"out={r.stdout[-200:]}")
 
         # --- no code folder at all (most members): quiet success -----------
         r = subprocess.run(
@@ -180,24 +244,44 @@ def main() -> int:
         r = run(dev, tmp, via_resolver=True)
         check(r.returncode == 0, f"dry-run failed: {r.stderr[-500:]}")
         state = json.loads((tmp / "state.json").read_text())
-        check(len(state["hubs"]) == 7,
-              f"the shared dev-root resolver must find all 7 hubs, found "
+        check(len(state["hubs"]) == len(everyone),
+              f"the shared dev-root resolver must find all {len(everyone)} hubs, found "
               f"{len(state['hubs'])} (the ~/dev hard-code scanned none)")
         actions = {h["repo"]: h["action"] for h in state["hubs"]}
+        reasons = {h["repo"]: h.get("reason", "") for h in state["hubs"]}
         expect = {"ffhub": "ff", "squashed": "return", "merged": "return",
-                  "open": "surface:off-default", "dirty": "surface:off-default",
-                  "unpushed": "surface:off-default", "diverged": "surface:off-default"}
+                  "locked": "return"}
+        # Each stay-put hub must stay for ITS reason, not because a probe errored.
+        why = {"open": "still open", "dirty": "uncommitted", "unpushed": "not pushed",
+               "diverged": "local main has commits", "ignored": "ignored local file",
+               "forked": "tracks fork", "renamed": "no upstream",
+               "fresh": "tracks main itself", "pruned": "pruned"}
+        for name in why:
+            expect[name] = "surface:off-default"
         for name, want in expect.items():
             check(actions.get(name) == want,
-                  f"{name}: expected {want}, got {actions.get(name)} "
-                  f"({next((h.get('reason', '') for h in state['hubs'] if h['repo'] == name), '')})")
-        after_dry = {p.name: (branch(p), git(p, "rev-parse", "HEAD"))
-                     for p in (ff, sq, anc, opn, dirty, unp, div)}
+                  f"{name}: expected {want}, got {actions.get(name)} ({reasons.get(name)})")
+        for name, frag in why.items():
+            check(frag in reasons.get(name, ""),
+                  f"{name}: surfaced for the wrong reason: {reasons.get(name)!r}")
+        after_dry = {p.name: (branch(p), git(p, "rev-parse", "HEAD")) for p in everyone}
         check(after_dry == before, f"dry-run moved something: {before} -> {after_dry}")
 
         # --- apply ----------------------------------------------------------
+        (lck / ".git" / "index.lock").write_text("")  # a git running right now
         r = run(dev, tmp, "--apply")
-        check(r.returncode == 0, f"apply failed: {r.stderr[-500:]}")
+        (lck / ".git" / "index.lock").unlink()
+        check(r.returncode == 1, f"a failed switch must fail the run, got rc={r.returncode}")
+        try:
+            doc = json.loads(r.stdout)
+        except ValueError:
+            doc = {}
+        check([f["repo"] for f in doc.get("failed", [])] == ["locked"],
+              f"the failed switch must be listed, got {doc.get('failed')}")
+        check(doc.get("summary", {}).get("returned") == 2,
+              f"returned count must be what actually returned (2), got "
+              f"{doc.get('summary', {}).get('returned')}")
+        check(branch(lck) == "claude/done", "locked: must still be on its branch")
         for hub in (sq, anc):
             check(branch(hub) == "main", f"{hub.name}: not returned to main ({branch(hub)})")
             check(git(hub, "rev-parse", "HEAD") == git(hub, "rev-parse", "origin/main"),
@@ -206,11 +290,13 @@ def main() -> int:
               "squashed: the finished branch must be kept, not deleted")
         check(git(ff, "rev-parse", "HEAD") == git(ff, "rev-parse", "origin/main"),
               "ffhub: not fast-forwarded")
-        for hub in (opn, dirty, unp, div):
+        for hub in stays:
             check((branch(hub), git(hub, "rev-parse", "HEAD")) == before[hub.name],
                   f"{hub.name}: must stay put, moved to {branch(hub)}")
         check((dirty / "scratch.txt").read_text() == "unsaved",
               "dirty: the untracked file must be untouched")
+        check((ign / "settings.json").read_text() == '{"MY_LOCAL":"precious"}',
+              "ignored: the ignored local file must not be overwritten")
         check(any((tmp / "logs").glob("refresh-*.json")),
               "apply must write its log to the overridden log dir")
 

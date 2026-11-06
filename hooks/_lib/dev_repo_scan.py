@@ -2329,66 +2329,107 @@ def _ahead_behind(repo: Path, upstream: str) -> tuple[int, int]:
     return ahead, behind
 
 
-def _branch_finished(repo: Path, branch: str, upstream: str) -> tuple[Optional[bool], str]:
-    """Is `branch` done with? (True/False/None=unknown, why).
+def _ignored_overlap(repo: Path, targets: list) -> list:
+    """Ignored local files the switch would OVERWRITE.
 
-    Finished means merged into the default branch, or deleted on the remote — the
-    two ways a PR ends. A squash merge leaves the branch out of main's history, so
-    ancestry alone misses most real merges; the remote branch being gone is what
-    marks those. Asked of the remote itself (`ls-remote`), not a remote-tracking
-    ref, because the fetch here does not prune and a stale `origin/<branch>` would
-    read as "still open" forever.
+    `git status` hides ignored files and `git switch` treats them as expendable:
+    when the target commit tracks the same path, the local file is replaced with
+    no error and no reflog. A branch that moved `.env` or a local config out of
+    git is exactly that shape, so any overlap blocks the return.
     """
-    rc, _, _ = _git(repo, "merge-base", "--is-ancestor", branch, upstream)
-    if rc == 0:
-        return True, f"merged into {upstream}"
-    rc, remote_ref, _ = _git(repo, "for-each-ref", "--format=%(upstream:lstrip=3)",
-                             f"refs/heads/{branch}")
-    remote_branch = remote_ref.strip() or branch
-    try:
-        r = subprocess.run(
-            ["git", "-C", str(repo), "ls-remote", "--exit-code", "--heads",
-             "origin", remote_branch],
-            capture_output=True, text=True, timeout=20,
-        )
-    except (subprocess.TimeoutExpired, OSError):
-        return None, "could not ask origin whether the branch still exists"
-    if r.returncode == 2:  # --exit-code: no matching ref on the remote
-        return True, "deleted on origin"
-    if r.returncode == 0:
-        return False, "still open on origin and not merged"
-    return None, "could not ask origin whether the branch still exists"
+    rc, out, _ = _git(repo, "ls-files", "--others", "--ignored", "--exclude-standard",
+                      "--directory", "-z", timeout=60)
+    if rc != 0:
+        return ["<could not list ignored files>"]
+    ignored = [x for x in out.split("\0") if x]
+    if not ignored:
+        return []
+    hits = []
+    for target in targets:
+        rc, tracked, _ = _git(repo, "ls-tree", "-r", "-z", "--name-only", target, timeout=60)
+        if rc != 0:
+            return [f"<could not list {target}>"]
+        paths = [x for x in tracked.split("\0") if x]
+        tracked_set = set(paths)
+        for ig in ignored:
+            if ig.endswith("/"):
+                if any(t.startswith(ig) for t in paths):
+                    hits.append(ig)
+            elif ig in tracked_set:
+                hits.append(ig)
+    return sorted(set(hits))
 
 
 def _return_blocker(repo: Path, st: "HubState", upstream: str) -> Optional[str]:
     """None when an off-default hub can go back to its default branch with nothing
     at risk; otherwise the reason it stays put (surfaced for a human).
 
-    Switching a CLEAN checkout loses nothing: the branch ref and its commits stay
-    exactly where they are. The checks below are about intent, not data — only a
-    branch whose work is pushed AND finished is left behind.
+    The branch ref is never touched, so its commits stay put. What is checked:
+      * clean tree, and no ignored local file the switch would overwrite;
+      * the branch was pushed to origin under a tracked upstream (a fork remote,
+        a push under another name, or no upstream at all cannot be judged here);
+      * nothing on it beyond what was last pushed (its tip is inside its
+        upstream's last-known tip, or already inside the default branch);
+      * finished: merged into the default branch, or its upstream is gone from
+        origin (asked of origin itself, since the fetch does not prune);
+      * the local default can still fast-forward.
+    Anything git or the network cannot answer is a blocker, never a pass.
     """
-    if st.current_branch is None:
+    branch = st.current_branch
+    if branch is None:
         return "detached HEAD"
     if st.dirty:
         return "uncommitted changes"
-    rc, out, _ = _git(repo, "rev-list", "--count", st.current_branch, "--not", "--remotes")
-    if rc != 0:
-        return "could not tell whether its commits are pushed"
-    if out.strip() != "0":
-        return f"{out.strip()} commit(s) on no remote"
-    finished, why = _branch_finished(repo, st.current_branch, upstream)
-    if finished is not True:
-        return why
+    rc, out, _ = _git(repo, "for-each-ref",
+                      "--format=%(upstream:remotename)%00%(upstream:remoteref)",
+                      f"refs/heads/{branch}")
+    remote, _, remote_ref = (out if rc == 0 else "").partition("\0")
+    if not remote_ref:
+        return "no upstream: never pushed, or pushed without tracking"
+    if remote != "origin":
+        return f"tracks {remote}, not origin: cannot tell whether its PR is open"
+    if remote_ref == f"refs/heads/{st.default_branch}":
+        return f"tracks {st.default_branch} itself (a fresh local branch)"
+    tracking = "refs/remotes/origin/" + remote_ref[len("refs/heads/"):]
+
+    merged = _git(repo, "merge-base", "--is-ancestor", branch, upstream)[0] == 0
+    rc_t, _, _ = _git(repo, "rev-parse", "--verify", "--quiet", tracking)
+    if rc_t == 0:
+        if _git(repo, "merge-base", "--is-ancestor", branch, tracking)[0] != 0:
+            return "commits not pushed since its last push"
+    elif not merged:
+        return "its last-pushed tip is unknown here (pruned), so unpushed work cannot be ruled out"
+
+    if merged:
+        why = f"merged into {upstream}"
+    else:
+        try:
+            r = subprocess.run(
+                ["git", "-C", str(repo), "ls-remote", "--exit-code", "origin", remote_ref],
+                capture_output=True, text=True, timeout=20,
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            return "could not ask origin whether the branch still exists"
+        if r.returncode == 0:
+            return "still open on origin and not merged"
+        if r.returncode != 2:  # --exit-code: 2 = no such ref on origin
+            return "could not ask origin whether the branch still exists"
+        why = "deleted on origin"
+
     # The default branch must be able to fast-forward afterwards: a local
     # default carrying its own commits is a human's call, not ours.
-    rc, _, _ = _git(repo, "rev-parse", "--verify", "--quiet",
-                    f"refs/heads/{st.default_branch}")
-    if rc == 0:
-        rc, _, _ = _git(repo, "merge-base", "--is-ancestor",
-                        f"refs/heads/{st.default_branch}", upstream)
-        if rc != 0:
+    targets = [upstream]
+    local_default = f"refs/heads/{st.default_branch}"
+    if _git(repo, "rev-parse", "--verify", "--quiet", local_default)[0] == 0:
+        if _git(repo, "merge-base", "--is-ancestor", local_default, upstream)[0] != 0:
             return f"local {st.default_branch} has commits {upstream} lacks"
+        targets.append(local_default)
+
+    overlap = _ignored_overlap(repo, targets)
+    if overlap:
+        shown = ", ".join(overlap[:3]) + (" ..." if len(overlap) > 3 else "")
+        return f"ignored local file(s) the switch would overwrite: {shown}"
+
     st.reason = why
     return None
 
@@ -2510,7 +2551,13 @@ def execute_hub_refresh(
     if fresh.action == HubAction.RETURN:
         # Plain `git switch` refuses to overwrite anything, and the tree was just
         # re-proven clean. The finished branch is kept, never deleted.
-        rc, _out, err = _git(state.repo, "switch", "--quiet", fresh.default_branch)
+        if _git(state.repo, "rev-parse", "--verify", "--quiet",
+                f"refs/heads/{fresh.default_branch}")[0] == 0:
+            switch = ["switch", "--quiet", fresh.default_branch]
+        else:  # no local default: create it from origin, never guess a remote
+            switch = ["switch", "--quiet", "--no-guess", "-c", fresh.default_branch,
+                      "--track", upstream]
+        rc, _out, err = _git(state.repo, *switch)
         if rc != 0:
             res["ok"] = False
             res["error"] = err[:200]

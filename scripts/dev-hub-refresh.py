@@ -96,6 +96,7 @@ from _lib.dev_repo_scan import (  # noqa: E402
     resolve_dev_root,
     summarize_hub_states,
 )
+from _lib.dev_root import dev_root_configured  # noqa: E402
 
 
 def _utcnow() -> str:
@@ -154,6 +155,11 @@ def _state_payload(states, results, applied: bool) -> dict:
         ],
         "summary": summarize_hub_states(states),
         "ff_applied": [Path(r["repo"]).name for r in results if r.get("applied")],
+        "failed": [
+            {"repo": Path(r["repo"]).name, "action": r["action"],
+             "error": r.get("error", "")}
+            for r in results if r.get("ok") is False
+        ],
         "returned": [
             {"repo": Path(r["repo"]).name, "from": r["returned_from"]}
             for r in results if r.get("applied") and r.get("returned_from")
@@ -188,7 +194,7 @@ def main() -> int:
     else:
         dev_root = (Path(DEV_ROOT_OVERRIDE).expanduser() if DEV_ROOT_OVERRIDE
                     else resolve_dev_root())
-        if not dev_root.is_dir() and dev_root == Path.home() / "dev":
+        if not dev_root.is_dir() and not dev_root_configured():
             # Nothing configured and no ~/dev: most members keep no code repos
             # at all. That is not a failure, and a daily red here would be noise.
             if not args.quiet:
@@ -213,10 +219,15 @@ def main() -> int:
 
     ff_done = payload["ff_applied"]
     summary = payload["summary"]
+    failed = payload["failed"]
+    if args.apply:
+        # Post-apply states are re-classified, so a counted "return" there would
+        # be one that FAILED. Report what actually happened.
+        summary["returned"] = len(payload["returned"])
 
     if args.json:
         print(json.dumps(
-            {"applied": args.apply, "ff_applied": ff_done,
+            {"applied": args.apply, "ff_applied": ff_done, "failed": failed,
              "results": results, "summary": summary}, indent=2))
     elif not args.quiet:
         mode = "APPLY" if args.apply else "DRY-RUN"
@@ -228,6 +239,8 @@ def main() -> int:
             print(f"  fast-forwarded: {', '.join(ff_done)}")
         for r in payload["returned"]:
             print(f"  RETURNED {r['repo']}  from finished branch {r['from']} (branch kept)")
+        for r in failed:
+            print(f"  FAILED   {r['repo']}  [{r['action']}]: {r['error']}")
         for s in states:
             if s.action in HUB_SURFACE_ACTIONS:
                 br = s.current_branch or "DETACHED"
@@ -246,7 +259,9 @@ def main() -> int:
             LOG_DIR / f"refresh-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.json",
             payload,
         )
-    return 0
+    # A switch or fast-forward that failed is a red step for the daily pass,
+    # never a quiet "0 returned".
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
