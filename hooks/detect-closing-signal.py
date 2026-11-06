@@ -1766,6 +1766,7 @@ def main() -> int:
         captures_file = meta_dir / "Session Captures.md"
         todo_files = resolve_todo_files(vault_root, meta_dir)
         journal_seeds = journal_seeds_destination(
+            # vault-root-ok: names the member's PERSONAL vault, not this session's root; trusted only when it holds a journal config
             cwd, vault_root, os.environ.get("VAULT_ROOT")
         )
 
