@@ -87,12 +87,13 @@ def needs_a_home(text: str) -> str:
     return line.split(":", 1)[1].strip() if line else ""
 
 
-saved_env = {k: os.environ.get(k) for k in ("HOME", "VAULT_ROOT")}
+saved_env = dict(os.environ)
 try:
     # 1. One vault, working in it.
     with tempfile.TemporaryDirectory() as tmp:
         home = Path(tmp).resolve()
         os.environ["HOME"] = str(home)
+        os.environ["USERPROFILE"] = str(home)  # Path.home() on Windows
         os.environ.pop("VAULT_ROOT", None)
         solo = make_vault(home, "notes", team=False)
         text = close(solo)
@@ -102,6 +103,7 @@ try:
     with tempfile.TemporaryDirectory() as tmp:
         home = Path(tmp).resolve()
         os.environ["HOME"] = str(home)
+        os.environ["USERPROFILE"] = str(home)  # Path.home() on Windows
         personal = make_vault(home, "notes", team=False)
         alpha = make_vault(home, "alpha", team=True, origin="https://example.com/a/alpha.git")
         beta = make_vault(home, "beta", team=True, origin="git@example.com:b/beta",
@@ -185,6 +187,7 @@ try:
     with tempfile.TemporaryDirectory() as tmp:
         home = Path(tmp).resolve()
         os.environ["HOME"] = str(home)
+        os.environ["USERPROFILE"] = str(home)  # Path.home() on Windows
         alpha = make_vault(home, "alpha", team=True)
         text = close(alpha)
         if "hold in the close summary only" not in text or "written NOWHERE" not in text:
@@ -192,11 +195,8 @@ try:
         if str(alpha) in needs_a_home(text):
             failures.append("no personal vault: held items were put in the team vault")
 finally:
-    for key, value in saved_env.items():
-        if value is None:
-            os.environ.pop(key, None)
-        else:
-            os.environ[key] = value
+    os.environ.clear()
+    os.environ.update(saved_env)
 
 if failures:
     print("FAIL")
