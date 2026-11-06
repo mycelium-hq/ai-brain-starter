@@ -24,3 +24,18 @@ def resolve_dev_root(config_path: Path | None = None) -> Path:
     except (OSError, ValueError, AttributeError, RuntimeError):  # absent, malformed, ~nobody
         pass
     return Path.home() / "dev"
+
+
+def dev_root_configured(config_path: Path | None = None) -> bool:
+    """True when the dev root was set ($ABS_DEV_ROOT or `dev_root` in the config),
+    False when resolve_dev_root() fell back to the ~/dev default. A configured
+    root that is missing is a broken setup; an unconfigured one usually just
+    means this person keeps no code repos."""
+    if os.environ.get("ABS_DEV_ROOT", "").strip():
+        return True
+    path = config_path or Path.home() / ".claude" / "dev-hygiene.json"
+    try:
+        configured = json.loads(path.read_text(encoding="utf-8")).get("dev_root")
+        return isinstance(configured, str) and bool(configured.strip())
+    except (OSError, ValueError, AttributeError, RuntimeError):
+        return False

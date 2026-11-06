@@ -79,7 +79,7 @@ the same load + battery + user-idle gates):
 | `graphify_prune_stale_cache.py` | graph-cache entries matching no current file |
 | `dev-repo-reaper.py --apply` | merged branches / worktrees / checkpoint stashes |
 | `dev-worktree-prune.py --apply` | orphaned `<dev-root>/<repo>-<slug>` session worktrees |
-| `dev-hub-refresh.py --apply` | fast-forwards clean bare hubs so a recon read is never weeks stale |
+| `dev-hub-refresh.py --apply` | fast-forwards clean main checkouts in your code folder, and returns a clean one left on a finished branch (merged, or deleted on origin, every commit pushed) to its default branch; the branch is kept |
 | `dev-drift-report.py --write-state` | measures un-backed-up drift for the SessionStart surface |
 
 Everything reaped is provably preserved elsewhere: a branch is reaped only when
