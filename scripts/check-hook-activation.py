@@ -130,12 +130,14 @@ TEMPLATE_ONLY: Dict[str, str] = {
         "Substrate-clean otherwise (root via $SUNDAY_NUDGE_VAULT, no-ops "
         "when unset). Checkable: python3 scripts/footprint-sla-check.py "
         "--gate",
-    "surface-dependabot-backlog.py":
-        "two blockers. SessionStart 19/19; and OWNER is the unsubstituted "
-        "placeholder 'github-username' that no installer rewrites, so a "
-        "stranger's cold start would shell out to `gh repo list` against "
-        "whoever owns that handle, then up to 100 further `gh pr list` "
-        "calls. Checkable: git grep -n github-username",
+    "migrate-to-user-level.py":
+        "retired at user level (tickets#5988). Wired there it can never "
+        "fire: it speaks only when user-level settings lack every "
+        "ai-brain-starter fingerprint, and the install that wires it also "
+        "wires first-week-checkin.py, one of them. Its SessionStart slot went "
+        "to surface-dependabot-backlog.py. Kept on disk for old project-level "
+        "installs that still call it. Checkable: grep migrate-to-user-level "
+        "scripts/install-hooks-user-level.py",
     "surface-stale-automation-failures.py":
         "budget: SessionStart 19/19, and this is the heaviest candidate on "
         "that event -- a launchctl subprocess per job plus several log "

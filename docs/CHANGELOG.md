@@ -27,6 +27,22 @@ Now Claude writes the panel into the entry and then puts the full panel in the l
 
 ---
 
+## 2026-11-07: open critical and high Dependabot alerts show at session start
+
+**Who this affects:** anyone signed in to GitHub CLI (`gh`). If you don't use `gh`, nothing changes.
+
+When Dependabot can't open a fix pull request (for example a dependency pinned to a git revision, or one held back by another package), its security alert just sits there. Nothing in the setup looked at alerts, so a critical one could stay open for days without anyone noticing.
+
+Now each session start checks your own repos and the organizations you belong to (up to 30), and shows open critical and high alerts with a link to each repo's alert page. It says nothing when there are none. If it can't read something (you're not signed in, you can't see an organization's alerts, GitHub doesn't answer), it says "skipped" for that part instead of staying quiet. Only an organization's owners and security managers can read its alerts, so other members see that organization as skipped. A clean result is reused for 30 minutes, so starting many sessions doesn't repeat the calls.
+
+To make room, the old project-level migration prompt (`migrate-to-user-level.py`) is no longer wired: from user-level settings it could never fire. If your hooks still live in your vault's own `.claude/settings.json` or `.claude/settings.local.json`, see "Manual migration" in `docs/HOOKS_INSTALL.md`.
+
+`/sunday-review` Step 4g now says so in the review when its security script is missing, instead of skipping it silently.
+
+**Tested:** `tests/integration/test_dependabot_alert_surface.sh` runs the hook against a fake `gh`: alerts shown, silence at zero, "skipped" for a locked org, a signed-out user and a malformed answer from one source, more alerts than one page holds, `gh` off PATH, and the cache.
+
+---
+
 ## 2026-11-06: something personal you say in a team vault goes to your journal, not the team's brain
 
 **Who this affects:** anyone who works in a shared team or client vault (one with its own `## Session End` section) as well as their own personal vault.

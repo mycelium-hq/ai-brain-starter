@@ -313,8 +313,8 @@
           },
           {
             "type": "command",
-            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/migrate-to-user-level.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
-            "statusMessage": "Checking for project-level hook migration..."
+            "command": "[PYTHON] ~/.claude/skills/ai-brain-starter/hooks/surface-dependabot-backlog.py 2>/dev/null || echo '{\"continue\":true,\"suppressOutput\":true}'",
+            "statusMessage": "Checking open Dependabot alerts..."
           },
           {
             "type": "command",
