@@ -2269,7 +2269,8 @@ def discover_hubs(dev_root: Optional[Path] = None) -> list[Path]:
 class HubAction:
     """String enum (plain constants for json/log friendliness)."""
 
-    FF = "ff"                                  # clean + on default + behind>0 + ahead==0 → ff (only auto action)
+    FF = "ff"                                  # clean + on default + behind>0 + ahead==0 → ff
+    RETURN = "return"                          # clean, on a FINISHED branch, nothing unpushed → back to default + ff
     SURFACE_DIRTY = "surface:dirty"            # uncommitted changes → never touch
     SURFACE_OFF_DEFAULT = "surface:off-default"  # detached or on a feature branch → never switch
     SURFACE_DIVERGED = "surface:diverged"      # on default but carries unpushed local commits
@@ -2279,8 +2280,9 @@ class HubAction:
     SKIP_WORKTREE = "skip:worktree"            # a linked worktree, not a primary bare hub
 
 
-# A hub is only ever AUTO-advanced (ff); every other non-skip action is surfaced.
-HUB_AUTO_ACTIONS = frozenset({HubAction.FF})
+# A hub is only ever AUTO-advanced (ff) or AUTO-returned from a finished branch;
+# every other non-skip action is surfaced.
+HUB_AUTO_ACTIONS = frozenset({HubAction.FF, HubAction.RETURN})
 HUB_SURFACE_ACTIONS = frozenset({
     HubAction.SURFACE_DIRTY,
     HubAction.SURFACE_OFF_DEFAULT,
@@ -2298,6 +2300,8 @@ class HubState:
     ahead: int = 0
     dirty: bool = False
     head: str = ""
+    # Why an off-default hub was or was not returned to its default branch.
+    reason: str = ""
 
 
 def _current_branch(repo: Path) -> Optional[str]:
@@ -2325,6 +2329,112 @@ def _ahead_behind(repo: Path, upstream: str) -> tuple[int, int]:
     return ahead, behind
 
 
+def _ignored_overlap(repo: Path, targets: list) -> list:
+    """Ignored local files the switch would OVERWRITE.
+
+    `git status` hides ignored files and `git switch` treats them as expendable:
+    when the target commit tracks the same path, the local file is replaced with
+    no error and no reflog. A branch that moved `.env` or a local config out of
+    git is exactly that shape, so any overlap blocks the return.
+    """
+    rc, out, _ = _git(repo, "ls-files", "--others", "--ignored", "--exclude-standard",
+                      "--directory", "-z", timeout=60)
+    if rc != 0:
+        return ["<could not list ignored files>"]
+    ignored = [x for x in out.split("\0") if x]
+    if not ignored:
+        return []
+    hits = []
+    for target in targets:
+        rc, tracked, _ = _git(repo, "ls-tree", "-r", "-z", "--name-only", target, timeout=60)
+        if rc != 0:
+            return [f"<could not list {target}>"]
+        paths = [x for x in tracked.split("\0") if x]
+        tracked_set = set(paths)
+        for ig in ignored:
+            if ig.endswith("/"):
+                if any(t.startswith(ig) for t in paths):
+                    hits.append(ig)
+            elif ig in tracked_set:
+                hits.append(ig)
+    return sorted(set(hits))
+
+
+def _return_blocker(repo: Path, st: "HubState", upstream: str) -> Optional[str]:
+    """None when an off-default hub can go back to its default branch with nothing
+    at risk; otherwise the reason it stays put (surfaced for a human).
+
+    The branch ref is never touched, so its commits stay put. What is checked:
+      * clean tree, and no ignored local file the switch would overwrite;
+      * the branch was pushed to origin under a tracked upstream (a fork remote,
+        a push under another name, or no upstream at all cannot be judged here);
+      * nothing on it beyond what was last pushed (its tip is inside its
+        upstream's last-known tip, or already inside the default branch);
+      * finished: merged into the default branch, or its upstream is gone from
+        origin (asked of origin itself, since the fetch does not prune);
+      * the local default can still fast-forward.
+    Anything git or the network cannot answer is a blocker, never a pass.
+    """
+    branch = st.current_branch
+    if branch is None:
+        return "detached HEAD"
+    if st.dirty:
+        return "uncommitted changes"
+    rc, out, _ = _git(repo, "for-each-ref",
+                      "--format=%(upstream:remotename)%00%(upstream:remoteref)",
+                      f"refs/heads/{branch}")
+    remote, _, remote_ref = (out if rc == 0 else "").partition("\0")
+    if not remote_ref:
+        return "no upstream: never pushed, or pushed without tracking"
+    if remote != "origin":
+        return f"tracks {remote}, not origin: cannot tell whether its PR is open"
+    if remote_ref == f"refs/heads/{st.default_branch}":
+        return f"tracks {st.default_branch} itself (a fresh local branch)"
+    tracking = "refs/remotes/origin/" + remote_ref[len("refs/heads/"):]
+
+    merged = _git(repo, "merge-base", "--is-ancestor", branch, upstream)[0] == 0
+    rc_t, _, _ = _git(repo, "rev-parse", "--verify", "--quiet", tracking)
+    if rc_t == 0:
+        if _git(repo, "merge-base", "--is-ancestor", branch, tracking)[0] != 0:
+            return "commits not pushed since its last push"
+    elif not merged:
+        return "its last-pushed tip is unknown here (pruned), so unpushed work cannot be ruled out"
+
+    if merged:
+        why = f"merged into {upstream}"
+    else:
+        try:
+            r = subprocess.run(
+                ["git", "-C", str(repo), "ls-remote", "--exit-code", "origin", remote_ref],
+                capture_output=True, text=True, encoding="utf-8",
+                errors="replace", timeout=20,
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            return "could not ask origin whether the branch still exists"
+        if r.returncode == 0:
+            return "still open on origin and not merged"
+        if r.returncode != 2:  # --exit-code: 2 = no such ref on origin
+            return "could not ask origin whether the branch still exists"
+        why = "deleted on origin"
+
+    # The default branch must be able to fast-forward afterwards: a local
+    # default carrying its own commits is a human's call, not ours.
+    targets = [upstream]
+    local_default = f"refs/heads/{st.default_branch}"
+    if _git(repo, "rev-parse", "--verify", "--quiet", local_default)[0] == 0:
+        if _git(repo, "merge-base", "--is-ancestor", local_default, upstream)[0] != 0:
+            return f"local {st.default_branch} has commits {upstream} lacks"
+        targets.append(local_default)
+
+    overlap = _ignored_overlap(repo, targets)
+    if overlap:
+        shown = ", ".join(overlap[:3]) + (" ..." if len(overlap) > 3 else "")
+        return f"ignored local file(s) the switch would overwrite: {shown}"
+
+    st.reason = why
+    return None
+
+
 def classify_hub_action(
     repo: Path,
     *,
@@ -2337,7 +2447,10 @@ def classify_hub_action(
     Decision order (first match wins):
       1. live .session-lock        → SKIP_SESSION_LOCK (don't fight a session)
       2. no origin default branch  → SKIP_NO_ORIGIN
-      3. off the default branch    → SURFACE_OFF_DEFAULT (detached / feature branch)
+      3. off the default branch    → RETURN when clean, every commit pushed, the
+                                     branch merged or deleted on origin, and the
+                                     local default can still ff; otherwise
+                                     SURFACE_OFF_DEFAULT (detached / feature branch)
       4. dirty working tree        → SURFACE_DIRTY
       5. unpushed local commits    → SURFACE_DIVERGED (ahead > 0)
       6. clean, on default, behind → FF   (the only auto action; a guaranteed ff)
@@ -2363,10 +2476,18 @@ def classify_hub_action(
     st.dirty = _is_dirty(repo)
     st.ahead, st.behind = _ahead_behind(repo, upstream)
 
-    # Off the default branch (detached or a feature branch) → SURFACE, never
-    # auto-switch. ff-only is only meaningful while sitting on the default.
+    # Off the default branch. A main folder left on a finished branch is how it
+    # silently falls hundreds of commits behind (2026-11-06: a product repo sat
+    # 384 behind on a branch merged 11 days earlier, and pushing from it ran a
+    # pre-push hook main had removed). Return it when nothing is at risk;
+    # everything else is surfaced, never switched.
     if st.current_branch != default_branch:
-        st.action = HubAction.SURFACE_OFF_DEFAULT
+        blocker = _return_blocker(repo, st, upstream)
+        if blocker is None:
+            st.action = HubAction.RETURN
+        else:
+            st.action = HubAction.SURFACE_OFF_DEFAULT
+            st.reason = blocker
         return st
 
     # On the default branch from here down.
@@ -2405,14 +2526,16 @@ def execute_hub_refresh(
         "ff_to": None,
         "ok": None,
     }
-    if state.action != HubAction.FF:
+    if state.action not in HUB_AUTO_ACTIONS:
         return res
     if not apply:
         res["ff_to"] = f"origin/{state.default_branch}"
+        if state.action == HubAction.RETURN:
+            res["returned_from"] = state.current_branch
         return res
 
     fresh = classify_hub_action(state.repo, now_ts=now_ts)
-    if fresh.action != HubAction.FF:
+    if fresh.action != state.action:
         res["action"] = fresh.action
         res["skipped"] = "state-changed-since-plan"
         return res
@@ -2426,6 +2549,21 @@ def execute_hub_refresh(
         res["reclaimed_locks"] = reclaimed
 
     upstream = f"origin/{fresh.default_branch}"
+    if fresh.action == HubAction.RETURN:
+        # Plain `git switch` refuses to overwrite anything, and the tree was just
+        # re-proven clean. The finished branch is kept, never deleted.
+        if _git(state.repo, "rev-parse", "--verify", "--quiet",
+                f"refs/heads/{fresh.default_branch}")[0] == 0:
+            switch = ["switch", "--quiet", fresh.default_branch]
+        else:  # no local default: create it from origin, never guess a remote
+            switch = ["switch", "--quiet", "--no-guess", "-c", fresh.default_branch,
+                      "--track", upstream]
+        rc, _out, err = _git(state.repo, *switch)
+        if rc != 0:
+            res["ok"] = False
+            res["error"] = err[:200]
+            return res
+        res["returned_from"] = fresh.current_branch
     rc, _out, err = _git(state.repo, "merge", "--ff-only", upstream)
     res["ok"] = rc == 0
     res["applied"] = rc == 0
@@ -2443,6 +2581,7 @@ def summarize_hub_states(states) -> dict:
     sorted by commits-behind descending."""
     states = list(states)
     ff = sum(1 for s in states if s.action == HubAction.FF)
+    returned = sum(1 for s in states if s.action == HubAction.RETURN)
     surfaced = sum(1 for s in states if s.action in HUB_SURFACE_ACTIONS)
     skipped = sum(1 for s in states if s.action.startswith("skip:"))
     max_behind = max((s.behind for s in states), default=0)
@@ -2457,6 +2596,7 @@ def summarize_hub_states(states) -> dict:
     )
     return {
         "ff": ff,
+        "returned": returned,
         "surfaced": surfaced,
         "skipped": skipped,
         "max_behind": max_behind,
@@ -2469,6 +2609,7 @@ _HUB_ACTION_LABEL = {
     HubAction.SURFACE_OFF_DEFAULT: "off the default branch",
     HubAction.SURFACE_DIVERGED: "unpushed local commits",
     HubAction.FF: "behind (auto-ff pending)",
+    HubAction.RETURN: "on a finished branch (auto-return pending)",
 }
 
 
