@@ -36,6 +36,13 @@ import sys
 import tempfile
 from pathlib import Path
 
+# Windows cp1252-console safety (#313): this prints non-ASCII.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")  # Python 3.7+
+    except (AttributeError, ValueError):
+        pass
+
 SCRIPTS = Path(__file__).resolve().parent
 REFRESH = SCRIPTS / "dev-hub-refresh.py"
 
@@ -48,14 +55,15 @@ GIT_ENV = {
 
 def git(repo, *args):
     r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True,
-                       text=True, env=dict(os.environ, **GIT_ENV))
+                       text=True, encoding="utf-8", errors="replace",
+                       env=dict(os.environ, **GIT_ENV))
     if r.returncode != 0:
         raise RuntimeError(f"git {' '.join(args)} in {repo}: {r.stderr}")
     return r.stdout.strip()
 
 
 def commit(repo, name, text="x"):
-    (Path(repo) / name).write_text(text)
+    (Path(repo) / name).write_text(text, encoding="utf-8")
     git(repo, "add", name)
     git(repo, "commit", "-q", "-m", f"add {name}")
 
@@ -103,7 +111,7 @@ def run(dev: Path, tmp: Path, *extra, root=None, via_resolver=False):
     else:
         env["DEV_HUB_REFRESH_ROOT"] = str(root or dev)
     return subprocess.run([sys.executable, str(REFRESH), "--json", *extra],
-                          capture_output=True, text=True, env=env)
+                          capture_output=True, text=True, encoding="utf-8", errors="replace", env=env)
 
 
 def main() -> int:
@@ -142,7 +150,7 @@ def main() -> int:
         _, gh, dirty = make_hub(tmp, dev, "dirty")
         feature(dirty, "claude/done")
         squash_merge_and_delete(gh, "claude/done")
-        (dirty / "scratch.txt").write_text("unsaved")
+        (dirty / "scratch.txt").write_text("unsaved", encoding="utf-8")
 
         # SURFACE: finished but a commit on no remote.
         _, gh, unp = make_hub(tmp, dev, "unpushed")
@@ -165,10 +173,10 @@ def main() -> int:
         git(ign, "pull", "-q", "--ff-only")
         git(ign, "switch", "-q", "-c", "claude/untrack")
         git(ign, "rm", "-q", "--cached", "settings.json")
-        (ign / ".gitignore").write_text("settings.json\n"); git(ign, "add", ".gitignore")
+        (ign / ".gitignore").write_text("settings.json\n", encoding="utf-8"); git(ign, "add", ".gitignore")
         git(ign, "commit", "-q", "-m", "untrack settings")
         git(ign, "push", "-q", "-u", "origin", "claude/untrack")
-        (ign / "settings.json").write_text('{"MY_LOCAL":"precious"}')
+        (ign / "settings.json").write_text('{"MY_LOCAL":"precious"}', encoding="utf-8")
         # The PR is closed and its branch deleted; main still tracks the file.
         git(gh, "push", "-q", "origin", "--delete", "claude/untrack")
 
@@ -215,7 +223,7 @@ def main() -> int:
 
         # --- a CONFIGURED ~/dev that is missing is an error ------------------
         r = subprocess.run(
-            [sys.executable, str(REFRESH)], capture_output=True, text=True,
+            [sys.executable, str(REFRESH)], capture_output=True, text=True, encoding="utf-8", errors="replace",
             env=dict({k: v for k, v in os.environ.items()
                       if k != "DEV_HUB_REFRESH_ROOT"},
                      HOME=str(tmp / "emptyhome"),
@@ -229,7 +237,7 @@ def main() -> int:
 
         # --- no code folder at all (most members): quiet success -----------
         r = subprocess.run(
-            [sys.executable, str(REFRESH)], capture_output=True, text=True,
+            [sys.executable, str(REFRESH)], capture_output=True, text=True, encoding="utf-8", errors="replace",
             env=dict({k: v for k, v in os.environ.items()
                       if k not in ("DEV_HUB_REFRESH_ROOT", "ABS_DEV_ROOT")},
                      HOME=str(tmp / "emptyhome"),
@@ -243,7 +251,7 @@ def main() -> int:
         # --- dry run: classifies, moves nothing ------------------------------
         r = run(dev, tmp, via_resolver=True)
         check(r.returncode == 0, f"dry-run failed: {r.stderr[-500:]}")
-        state = json.loads((tmp / "state.json").read_text())
+        state = json.loads((tmp / "state.json").read_text(encoding="utf-8"))
         check(len(state["hubs"]) == len(everyone),
               f"the shared dev-root resolver must find all {len(everyone)} hubs, found "
               f"{len(state['hubs'])} (the ~/dev hard-code scanned none)")
@@ -268,7 +276,7 @@ def main() -> int:
         check(after_dry == before, f"dry-run moved something: {before} -> {after_dry}")
 
         # --- apply ----------------------------------------------------------
-        (lck / ".git" / "index.lock").write_text("")  # a git running right now
+        (lck / ".git" / "index.lock").write_text("", encoding="utf-8")  # a git running right now
         r = run(dev, tmp, "--apply")
         (lck / ".git" / "index.lock").unlink()
         check(r.returncode == 1, f"a failed switch must fail the run, got rc={r.returncode}")
@@ -293,9 +301,9 @@ def main() -> int:
         for hub in stays:
             check((branch(hub), git(hub, "rev-parse", "HEAD")) == before[hub.name],
                   f"{hub.name}: must stay put, moved to {branch(hub)}")
-        check((dirty / "scratch.txt").read_text() == "unsaved",
+        check((dirty / "scratch.txt").read_text(encoding="utf-8") == "unsaved",
               "dirty: the untracked file must be untouched")
-        check((ign / "settings.json").read_text() == '{"MY_LOCAL":"precious"}',
+        check((ign / "settings.json").read_text(encoding="utf-8") == '{"MY_LOCAL":"precious"}',
               "ignored: the ignored local file must not be overwritten")
         check(any((tmp / "logs").glob("refresh-*.json")),
               "apply must write its log to the overridden log dir")

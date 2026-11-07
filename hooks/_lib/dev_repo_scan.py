@@ -2406,7 +2406,8 @@ def _return_blocker(repo: Path, st: "HubState", upstream: str) -> Optional[str]:
         try:
             r = subprocess.run(
                 ["git", "-C", str(repo), "ls-remote", "--exit-code", "origin", remote_ref],
-                capture_output=True, text=True, timeout=20,
+                capture_output=True, text=True, encoding="utf-8",
+                errors="replace", timeout=20,
             )
         except (subprocess.TimeoutExpired, OSError):
             return "could not ask origin whether the branch still exists"
