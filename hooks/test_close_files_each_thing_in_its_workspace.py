@@ -256,6 +256,8 @@ try:
                 failures.append(f"inbox: accepted a {bad[0]} the app would refuse")
             except ValueError:
                 pass
+except UnicodeDecodeError as exc:  # a file the close or the inbox wrote is not UTF-8
+    failures.append(f"a file the test reads is not UTF-8: {exc}")
 finally:
     os.environ.clear()
     os.environ.update(saved_env)

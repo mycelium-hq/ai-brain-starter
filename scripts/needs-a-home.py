@@ -18,6 +18,8 @@ words, so adding the same thing twice writes one file, and a thing already
 placed (in placed/) is never asked again. Prints the file it wrote, or
 nothing when it was already placed. Stdlib only.
 """
+# exit-contract: NOT-A-CHECKER -- writes one held item to the needs-a-home
+#   inbox; it finds nothing, so it has no findings to fail on
 from __future__ import annotations
 
 import argparse
