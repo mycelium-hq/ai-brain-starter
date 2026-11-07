@@ -70,12 +70,21 @@ def add(kind: str, text: str, suggested: str | None, source: str) -> Path | None
 
 
 def main(argv: list[str]) -> int:
+    # The path and any error can carry the member's words; a Windows console's
+    # code page would crash printing them.
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8")  # Python 3.7+
+        except (AttributeError, ValueError):
+            pass
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("add", help="leave one thing in the inbox, read as JSON on stdin")
     parser.parse_args(argv)
     try:
-        item = json.loads(sys.stdin.read())
+        # Bytes, decoded as UTF-8: the close writes the heredoc in UTF-8, and a
+        # Windows console's code page would turn "español" into mojibake.
+        item = json.loads(sys.stdin.buffer.read().decode("utf-8"))
         if not isinstance(item, dict):
             raise ValueError("stdin must be one JSON object")
         kind, text, source = item.get("kind"), item.get("text"), item.get("from")
@@ -87,7 +96,7 @@ def main(argv: list[str]) -> int:
         written = add(kind, text, suggested, source)
         if written is not None:
             print(written)
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError) as exc:  # UnicodeDecodeError is a ValueError
         print(f"needs-a-home: not added: {exc}", file=sys.stderr)
         return 1
     return 0

@@ -239,15 +239,17 @@ try:
         # The command reads one JSON object on stdin, and refuses anything else.
         import subprocess
         script = str(HOOKS.parent / "scripts" / "needs-a-home.py")
-        env = dict(os.environ)
+        # A Windows console's code page, so UTF-8 words must still arrive as said.
+        env = dict(os.environ, PYTHONIOENCODING="cp1252")
+        said = "It's $HOME `and` 'quotes', en español"
         ok = subprocess.run([sys.executable, script, "add"], input=json.dumps(
-            {"kind": "note", "text": "It's $HOME `and` 'quotes'", "from": "team-vault"}),
-            capture_output=True, text=True, env=env)
+            {"kind": "note", "text": said, "from": "team-vault"}, ensure_ascii=False),
+            capture_output=True, text=True, encoding="utf-8", errors="replace", env=env)
         wrote = Path(ok.stdout.strip()) if ok.returncode == 0 and ok.stdout.strip() else None
-        if wrote is None or json.loads(wrote.read_text(encoding="utf-8"))["text"] != "It's $HOME `and` 'quotes'":
-            failures.append(f"inbox: words with shell characters were not kept as said ({ok.stderr.strip()})")
-        bad_in = subprocess.run([sys.executable, script, "add"], input="not json",
-                                capture_output=True, text=True, env=env)
+        if wrote is None or json.loads(wrote.read_text(encoding="utf-8"))["text"] != said:
+            failures.append(f"inbox: words with shell characters or accents were not kept as said ({ok.stderr.strip()})")
+        bad_in = subprocess.run([sys.executable, script, "add"], input="not json", capture_output=True, text=True,
+                                encoding="utf-8", errors="replace", env=env)
         if bad_in.returncode == 0:
             failures.append("inbox: a malformed item was accepted")
         for bad in (("todo", "x" * 301), ("todo", "   ")):
