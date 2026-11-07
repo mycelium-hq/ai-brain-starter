@@ -6,11 +6,11 @@ Run the full panel setup as written below. Every user gets the advisory panel �
 
 ---
 
-#### Step 6: Show the panel, then write it (the entry is already saved)
+#### Step 6: Write the panel, then show it in the final message (the entry is already saved)
 
-By now the entry was already written to disk at Step 1.5 (capture-first — see Phase 10a's Capture-First Contract), with its first-take panel. This step shows the full panel before it lands in the file.
+By now the entry was already written to disk at Step 1.5 (capture-first — see Phase 10a's Capture-First Contract), with its first-take panel. This step writes the full panel into the file and shows it.
 
-Show the full panel section inline, exactly as it will appear, then UPDATE the saved file in the same turn (Step 7) and say: "Here's the panel, and I'd tag this [Floor]. Edit, swap or add a voice?" Show any edited or added panel text before writing it, too. Never wait for approval before writing.
+UPDATE the saved file with the full panel in the same turn (Step 7), then put the full panel section, exactly as written, in the turn's final message, after all tool calls, and say: "Here's the panel, and I'd tag this [Floor]. Edit, swap or add a voice?" The Claude desktop app's Code tab folds text written between tool calls, so only the final message reliably reaches the user. Do the same for any edited or added panel text. Never wait for approval before writing.
 
 Skip the panel only when the user explicitly declines it this session or the crisis protocol is active; that session's block is then a one-line note saying so. Earlier sessions' blocks are never edited. Disengaging is not a decline: the first-take panel written at capture stands. Never hold the capture until after the panel; it already happened.
 
