@@ -9,6 +9,16 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-11-07: `/journal` puts the panel in its last message, where you can see it
+
+**Who this affects:** anyone who runs `/journal` in the Claude desktop app's Code tab.
+
+The journal skill told Claude to show each panel in chat first and then write it into your entry. The Code tab folds text Claude writes between its tool calls, so the panel landed in your entry but you never saw it.
+
+Now Claude writes the panel into the entry and then puts the full panel in the last message of its turn, after all its tool calls, which always reaches you. The panel is still in the entry, and you can still edit it, swap a voice or add one afterward. The setup guide for the journal skill (phases 10a and 10b) says the same, so a journal skill it builds behaves the same way.
+
+---
+
 ## 2026-11-06: something personal you say in a team vault goes to your journal, not the team's brain
 
 **Who this affects:** anyone who works in a shared team or client vault (one with its own `## Session End` section) as well as their own personal vault.
