@@ -227,6 +227,7 @@ def main() -> int:
             env=dict({k: v for k, v in os.environ.items()
                       if k != "DEV_HUB_REFRESH_ROOT"},
                      HOME=str(tmp / "emptyhome"),
+                     USERPROFILE=str(tmp / "emptyhome"),
                      ABS_DEV_ROOT=str(tmp / "emptyhome" / "dev"),
                      DEV_REPO_SCAN_DIR=str(SCRIPTS.parent / "hooks"),
                      DEV_HUB_REFRESH_STATE=str(tmp / "state-cfg.json"),
@@ -241,6 +242,7 @@ def main() -> int:
             env=dict({k: v for k, v in os.environ.items()
                       if k not in ("DEV_HUB_REFRESH_ROOT", "ABS_DEV_ROOT")},
                      HOME=str(tmp / "emptyhome"),
+                     USERPROFILE=str(tmp / "emptyhome"),
                      DEV_REPO_SCAN_DIR=str(SCRIPTS.parent / "hooks"),
                      DEV_HUB_REFRESH_STATE=str(tmp / "state-empty.json"),
                      DEV_HUB_REFRESH_LOG_DIR=str(tmp / "logs-empty")))
