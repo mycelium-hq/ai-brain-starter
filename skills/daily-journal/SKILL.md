@@ -30,11 +30,11 @@ Why: most people open `/journal`, type what happened, and leave. If the entry on
 
 **The two phases:**
 
-1. **Capture (mandatory, immediate).** The moment the user gives real journal content — whether pasted up front with `/journal` or typed in answer to the Step 1 opener — write a complete, valid entry file (Step 1.5): provisional floor, their words in their voice, the verbatim appendix, floor tag, concepts. If the session ends one second later, this file is still a real journal entry. Then, still in the SAME reply and before any follow-up question, run the first-take panel (Step 1.5b): show it in chat, then write it into the file. An entry that leaves the first reply has its words AND its panel.
+1. **Capture (mandatory, immediate).** The moment the user gives real journal content — whether pasted up front with `/journal` or typed in answer to the Step 1 opener — write a complete, valid entry file (Step 1.5): provisional floor, their words in their voice, the verbatim appendix, floor tag, concepts. If the session ends one second later, this file is still a real journal entry. Then, still in the SAME reply and before any follow-up question, run the first-take panel (Step 1.5b): write it into the file, and put its full text in the reply's final message, after all tool calls (Step 6). An entry that leaves the first reply has its words AND its panel.
 
 2. **Enrich (opt-in, in place).** If the user keeps going, run Steps 2–9 as usual — follow-ups, gratitude, accountability, finalize the floor, run the full panel (it replaces the first take) — and **update the same file** (Step 7 is now an in-place update, not a fresh create). Never create a second file.
 
-**Graceful exit — applies at every step after the first save.** If the user signals done ("that's it," "save it," "I'm good"), goes quiet, or declines to continue at any point: **finalize the existing file in place and stop.** Flush any messages they typed since the last save into the verbatim appendix, do a quick floor re-check on the fuller picture, run the light idea/to-do scans (Steps 8/8.5) and Step 9 (index rebuild, panel dissent log) on whatever exists, and confirm what you saved. Never hold the entry hostage to any later step. This session's first take is already in the file; if it somehow is not, show it and write it before you stop, unless the user declined the panel this session or the crisis protocol is active. Re-prompt at most once. The entry already exists — your job from here is only to keep it current and let them go.
+**Graceful exit — applies at every step after the first save.** If the user signals done ("that's it," "save it," "I'm good"), goes quiet, or declines to continue at any point: **finalize the existing file in place and stop.** Flush any messages they typed since the last save into the verbatim appendix, do a quick floor re-check on the fuller picture, run the light idea/to-do scans (Steps 8/8.5) and Step 9 (index rebuild, panel dissent log) on whatever exists, and confirm what you saved. Never hold the entry hostage to any later step. This session's first take is already in the file; if it somehow is not, write it into the file and put its full text in your final message (Step 6), unless the user declined the panel this session or the crisis protocol is active. Re-prompt at most once. The entry already exists — your job from here is only to keep it current and let them go.
 
 **Panel-Always Rule.** Every entry carries a `## Panel dialogue` section, and every session that saves to the entry adds its own block there.
 - **Blocks are append-only.** A session writes and edits only its own block, never an earlier session's. On a resumed day each new block opens with an italic session label in the entry's language (`*Later session, HH:MM:*`), and the label stays when the full panel replaces the first take.
@@ -334,10 +334,9 @@ Right after the capture save, in the same reply, before any follow-up question:
 1. Run the omission pass on what you have so far.
 2. Pick **3 voices** with the Trigger → Voice routing table (full roster in Step 5). Triggers that fired in their first message are the obvious picks.
 3. Use Step 5's format, shorter: one paragraph per panelist, **2–3 sentences**, bolded name + concrete-proof credential, optional `*[Pullback: ...]*`. **At least one dissents.** End with the `**Dissent:**` line, plus `**Omission flagged:**` when the pass found something.
-4. **Show it in chat first**, complete and exactly as it will appear in the file, first-take note included (Step 6).
-5. **Then write it into the file**, replacing this session's placeholder line under `## Panel dialogue` (between the accountability line and the floor tag). The block opens with the session label on a resumed day, then a one-line note in the entry's language (English: `*First take. The full panel runs once the floor is named.*`).
-6. Append its Dissent and Omission lines to the Panel Feedback Log now (Step 9's format), so a session that ends here still logs them.
-7. Then ask the Step 2 follow-ups. Step 6's one-line invitation covers edits. Never wait for approval before writing the panel.
+4. **Write it into the file**, replacing this session's placeholder line under `## Panel dialogue` (between the accountability line and the floor tag). The block opens with the session label on a resumed day, then a one-line note in the entry's language (English: `*First take. The full panel runs once the floor is named.*`).
+5. Append its Dissent and Omission lines to the Panel Feedback Log now (Step 9's format), so a session that ends here still logs them.
+6. **Put its full text in the reply's final message**, after all tool calls (Step 6): complete and exactly as written in the file, first-take note included. Follow it with Step 6's one-line invitation (it covers edits), then ask the Step 2 follow-ups, all in that same final message. Never wait for approval before writing the panel.
 
 **Resumed entry (Step 0.0):** append this session's block beneath the earlier ones, opening with its session label, and never edit an earlier block. A later Step 5 replaces only this session's first take. A decline or the crisis protocol follows the Panel-Always Rule for this session only.
 
@@ -361,13 +360,17 @@ Based on their answer, ask follow-up questions. Be curious, not clinical. Push g
 - Celebrate wins they'd normally skip over
 - Keep it conversational, not therapeutic — you're a smart friend who knows them well
 
-### Step 2.5: Gratitude check (MANDATORY — ask, capture, and optionally stage to a gratitude group)
+### Step 2.5: Gratitude check (MANDATORY — take from the entry or ask, capture, and optionally stage to a gratitude group)
 
-**Codified 2026-05-18.** Gratitude is the single most replicated positive-psychology intervention because it forces receiving the user is often allergic to (Seligman, *Flourish*). Ask for three every session, fold them into the entry, and optionally stage them as a message draft to the user's chosen gratitude group (iMessage, WhatsApp, or any other channel they have configured).
+**Codified 2026-05-18, revised 2026-11-07.** Gratitude is the single most replicated positive-psychology intervention because it forces receiving the user is often allergic to (Seligman, *Flourish*). Every entry gets up to three gratitudes, folded in and optionally staged as a message draft to the user's chosen gratitude group (iMessage, WhatsApp, or any other channel they have configured). Take them from what the user already wrote; ask only when they wrote none.
 
-**Ask:** "Three things you're grateful for today — anything. Financial, relational, body, small. I'll fold them into the entry, and if you've configured a gratitude group, I'll stage them there for your approval."
+**Take (when the entry already shows gratitude):** Read what the user has written today, this session and earlier ones, and today's `gratitudes:` array if the file has one. If it shows gratitude they expressed (thanks, appreciation, being glad of someone or something, a gift or a blessing in their own words; a neutral "it went well" does not count), take three from it: the most specific ones, in their own words, never one they did not write. If they named only one or two, take those and do not pad. Fold them in (Capture, below) and say so in one line in the turn's final message, in the entry's language, naming them so they can swap one: "Took these gratitudes from what you wrote: [a], [b], [c]. Say if you'd swap one." Do not ask. If today's `gratitudes:` array already has them, keep them: neither ask nor repeat the line.
 
-**Capture:** Include the three verbatim in the `## Journal` body in the user's voice AND in a `gratitudes:` frontmatter array (queryable for weekly/monthly reviews and pattern analysis).
+**While the crisis protocol is active:** take them the same way, but silently: no one-line announcement (it is a mechanic, and the protocol stops the mechanics).
+
+**Ask (only when they named none):** "Three things you're grateful for today — anything. Financial, relational, body, small. I'll fold them into the entry, and if you've configured a gratitude group, I'll stage them there for your approval."
+
+**Capture:** Put them in a `gratitudes:` frontmatter array, in the user's own words (queryable for weekly/monthly reviews and pattern analysis). When you asked, also include them verbatim in the `## Journal` body in the user's voice. When you took them from the entry, they are already in it (body and verbatim appendix): add nothing there.
 
 **Stage to gratitude group (configurable per vault):**
 - Look for `gratitude_group:` in `Meta/journal-config.md` (or your vault's equivalent). Expected schema:
@@ -388,9 +391,9 @@ Based on their answer, ask follow-up questions. Be curious, not clinical. Push g
 
 **Edge case — only one or two gratitudes given:** capture what was given, don't insist on three. The ritual aims at receiving, not at hitting a quota.
 
-**Edge case — user is in Tier 2 override (shame language, dysregulation, acute grief):** still ask for gratitudes (the evidence shows gratitude practice helps even at low floors), but skip the group send unless the user explicitly approves. Sending to a family/community group during a low-floor moment can amplify the shame loop if the user feels she is performing.
+**Edge case — user is in Tier 2 override (shame language, dysregulation, acute grief):** still ask for gratitudes if none were named (the evidence shows gratitude practice helps even at low floors), but skip the group send unless the user explicitly approves. Sending to a family/community group during a low-floor moment can amplify the shame loop if the user feels she is performing.
 
-**Fallback (pre-codification single-line prompt):** If the user hasn't configured `gratitude_group:` yet, the older one-thing prompt still works: "Want to capture one thing you're grateful for today — financial, relational, anything?" Capture it in the entry without staging. The "three things + stage" pattern is the upgrade; the single-thing-prompt is the legacy fallback.
+**Fallback (pre-codification single-line prompt):** If they named none and haven't configured `gratitude_group:` yet, the older one-thing prompt still works: "Want to capture one thing you're grateful for today — financial, relational, anything?" Capture it in the entry without staging. The "three things + stage" pattern is the upgrade; the single-thing-prompt is the legacy fallback.
 
 ### Step 3: Behavior Accountability Check
 
@@ -554,7 +557,7 @@ The arc is the point: the elevators are the lesson, the floors are just where th
 
 ### Step 5: Full Advisory Panel (replaces the first take)
 
-**Timing: never defer the full panel past the reply that names the floor (Step 4); run it in that same reply.** It replaces this session's first take (drop the first-take note, keep the session label); earlier sessions' blocks stay exactly as they were. If the user corrects the floor, show the adjusted lines before writing them (Step 6). If the session ends before Step 4, the first take stands. No full panel while the crisis protocol is active. After a decline this session, none unless the user asks for one.
+**Timing: never defer the full panel past the reply that names the floor (Step 4); run it in that same reply.** It replaces this session's first take (drop the first-take note, keep the session label); earlier sessions' blocks stay exactly as they were. If the user corrects the floor, write the adjusted lines and show them in the final message (Step 6). If the session ends before Step 4, the first take stands. No full panel while the crisis protocol is active. After a decline this session, none unless the user asks for one.
 
 Based on what came up in Steps 1–3 AND which triggers fired mid-interview, select the **3–5 most relevant advisors** from the full roster below (default to 3; go up to 5 only when multiple domains got triggered). Do NOT re-interview them — Steps 1–3 already did the interviewing. Use what's already on the table.
 
@@ -612,13 +615,15 @@ Jane Goodall (planetary compassion, stewardship, humility with action) · Charle
 *Creativity:*
 Rick Rubin (creativity via presence, subtractive genius, trust the muse) · Elizabeth Gilbert (creative courage, fear alchemy, permission to play) · Twyla Tharp (creative discipline, daily craft, choreographing excellence)
 
-### Step 6: Show every panel before it lands, then write it (never wait)
+### Step 6: Write every panel, then show it in the turn's final message (never wait)
 
 Applies to both the Step 1.5b first take and the Step 5 full panel.
 
-**Show it in chat first:** the complete panel section exactly as it will appear in the file — the `**Panel:**` line, every panelist's paragraph, the Dissent line, the Omission line. Never a 1-line summary. The user sees synthetic voices before they are saved next to their own words; that part is non-negotiable.
+**Write it into the file in the same turn**, without waiting for approval.
 
-**Then write it in the same turn** and say, for the full panel:
+**Then put the full panel in the turn's final message, after the last tool call:** the complete panel section exactly as written in the file — the `**Panel:**` line, every panelist's paragraph, the Dissent line, the Omission line. Never a 1-line summary, and never only a note that the panel is in the entry. The Claude desktop app's Code tab folds text written between tool calls, so only the final message reliably reaches the user. The user must always see the synthetic voices that sit next to their own words; that part is non-negotiable.
+
+Right after the panel, say, for the full panel:
 
 > "Panel's in the entry. Floor: [Floor]. Edit a voice, swap a panelist, or add one?"
 
@@ -626,7 +631,7 @@ For a first take, leave the floor out: "Panel's in the entry. Swap or cut a voic
 
 After writing the full panel, update this session's Panel Feedback Log entry (or append one if none exists yet) with its Dissent and Omission lines right away (Step 9), so a session that ends here logs the full panel, not the first take.
 
-Edits follow the same rule: show any changed or added panel text in chat, then write it. A cut voice can be written straight away; if it was the panel's only dissent, show the replacement dissent before writing it. Do NOT wait for approval before writing: showing first is the protection, and holding the write for a reply is how sessions ended with no panel saved.
+Edits follow the same rule: write any changed or added panel text into the file, then show it in the final message. A cut voice can be written straight away; if it was the panel's only dissent, add a replacement dissent and show it in the final message. Do NOT wait for approval before writing: holding the write for a reply is how sessions ended with no panel saved.
 
 **No panel only in the two Panel-Always Rule cases** (an explicit decline this session, or the crisis protocol), each leaving its one-line note. The capture itself is still never held hostage to the panel: Step 1.5 saves first.
 

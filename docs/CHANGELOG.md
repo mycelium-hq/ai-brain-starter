@@ -9,6 +9,24 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-11-07: `/journal` takes your gratitudes from what you wrote
+
+**Who this affects:** anyone who runs `/journal`.
+
+`/journal` used to ask for three things you're grateful for every time, even when you had just written some. Now, when your entry already shows gratitude, it takes up to three from your own words, adds them to the entry, and tells you in one line which ones it took, so you can swap one. It asks only when you haven't named any. A gratitude group works the same as before: if you set one up, the three are still shown to you for approval before anything is sent. The setup guide for the journal skill (phase 10a) says the same.
+
+---
+
+## 2026-11-07: `/journal` puts the panel in its last message, where you can see it
+
+**Who this affects:** anyone who runs `/journal` in the Claude desktop app's Code tab.
+
+The journal skill told Claude to show each panel in chat first and then write it into your entry. The Code tab folds text Claude writes between its tool calls, so the panel landed in your entry but you never saw it.
+
+Now Claude writes the panel into the entry and then puts the full panel in the last message of its turn, after all its tool calls, which always reaches you. The panel is still in the entry, and you can still edit it, swap a voice or add one afterward. The setup guide for the journal skill (phases 10a and 10b) says the same, so a journal skill it builds behaves the same way.
+
+---
+
 ## 2026-11-06: what you say at close goes to the workspace it belongs to, and Claude asks when it's not sure
 
 **Who this affects:** anyone with more than one vault on this computer: a personal vault plus one or more team or client vaults (each with its own `## Session End` section).
@@ -29,6 +47,8 @@ Anything left waiting is also dropped, one small file per item, in `~/.ai-brain/
 A team vault's name is the `workspace:` line in its `CLAUDE.md` frontmatter, or else its folder name. If two folders are copies of the same workspace (the same git remote, written as https or ssh, or the same workspace name), Claude never writes into either and tells you which folders they are, so you can remove the extra one. If no personal vault can be found, held items are only shown at close. If you have just one vault and work in it, nothing changes.
 
 **Tested:** `hooks/test_close_files_each_thing_in_its_workspace.py` builds the real close text, and runs the real hook end to end, for one vault (unchanged), a team vault next to a personal vault and a second team vault, the personal vault next to a team vault, two copies of one workspace, a second copy of the vault you're in, a `workspace:` name, no personal vault, the question coming before any write, and a folder whose git pointer can't be read. It fails when the routing is switched off, when https and ssh remotes stop matching, when copies stop being matched by name, and when an unreadable git pointer is allowed to crash the close. The other close tests still pass.
+
+---
 
 ## 2026-11-06: something personal you say in a team vault goes to your journal, not the team's brain
 
