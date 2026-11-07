@@ -1143,6 +1143,129 @@ def journal_seeds_destination(
     return SEEDS_HELD, None
 
 
+# Every other workspace's vault on this computer (tickets#964).
+#
+# A close used to file everything said in a session into the vault the session
+# ran in. Work for another company said in one company's vault went into that
+# company's brain, and a company's work said in the member's personal vault
+# never reached the company. The rule: each thing goes to the workspace it
+# belongs to. Something for another workspace leaves only on the member's yes,
+# and anything unclear is held in the member's personal vault and asked about.
+#
+# A shared vault is found the way the close finds its own root: a folder that
+# declares its own close (find_repo_vault_root) and keeps no journal config.
+# Its name is `workspace:` in its CLAUDE.md frontmatter, else the folder name.
+_WORKSPACE_KEY_RE = re.compile(
+    r"^\s*workspace\s*:\s*[\"']?([^\"'\n]{1,80}?)[\"']?\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+_GIT_URL_RE = re.compile(r"^\s*url\s*=\s*(\S+)\s*$", re.MULTILINE)
+
+
+def _workspace_name(vault: Path) -> str:
+    """The name a vault gives its workspace, else its folder name."""
+    try:
+        text = (vault / "CLAUDE.md").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        text = ""
+    match = re.match(r"\A---\s*\n(.*?)\n---", text, re.DOTALL)
+    if match:
+        key = _WORKSPACE_KEY_RE.search(match.group(1))
+        if key and key.group(1).strip():
+            return key.group(1).strip()
+    return vault.name
+
+
+def _vault_origin(vault: Path) -> str:
+    """The vault's git origin URL, so two copies of one vault count once."""
+    git = vault / ".git"
+    try:
+        if git.is_file():  # a worktree or submodule points at its real git dir
+            pointer = git.read_text(encoding="utf-8", errors="replace").strip()
+            if pointer.startswith("gitdir:"):
+                git = (vault / pointer[7:].strip()).resolve()
+                common = git / "commondir"
+                if common.is_file():
+                    common_dir = common.read_text(encoding="utf-8", errors="replace").strip()
+                    git = (git / common_dir).resolve()
+        config = git / "config"
+        if not config.is_file():
+            return ""
+        text = config.read_text(encoding="utf-8", errors="replace")
+    except (OSError, RuntimeError, ValueError):
+        return ""
+    section = re.search(r'\[remote "origin"\](.*?)(?:\n\[|\Z)', text, re.DOTALL)
+    url = _GIT_URL_RE.search(section.group(1)) if section else None
+    return _normalize_origin(url.group(1)) if url else ""
+
+
+def _normalize_origin(url: str) -> str:
+    """host/path of a git remote, so https and ssh spellings of one repo match."""
+    url = url.strip().casefold()
+    url = re.sub(r"^[a-z+]+://", "", url)          # https://, ssh://, git+ssh://
+    url = re.sub(r"^[^@/]+@", "", url)              # git@, user:token@
+    url = re.sub(r"^([^/:]+):(?!\d+/)", r"\1/", url)  # host:path (scp form) -> host/path
+    url = re.sub(r"^([^/:]+):\d+/", r"\1/", url)     # host:port/path -> host/path
+    return url.removesuffix("/").removesuffix(".git").rstrip("/")
+
+
+def _shared_vaults() -> list[Path]:
+    """Every folder in the shallow search space that is a shared vault."""
+    roots = [Path.home()] + [Path.home() / p for p in _PERSONAL_VAULT_PARENTS]
+    found: dict[str, Path] = {}
+    for root in roots:
+        try:
+            children = sorted(root.iterdir())
+        except (OSError, RuntimeError):
+            continue
+        for child in children:
+            try:
+                if child.name.startswith(".") or not child.is_dir():
+                    continue
+                if not (child / "CLAUDE.md").is_file() or _journals_in(child):
+                    continue
+                found_root = find_repo_vault_root(child)
+                if found_root is not None and _same_dir(found_root, child):
+                    found.setdefault(str(child.resolve()).casefold(), child)
+            except (OSError, RuntimeError):
+                continue
+    return list(found.values())
+
+
+def other_workspaces(vault_root: Path) -> list[tuple[str, Path | None, list[Path]]]:
+    """(name, vault or None, copies) for each other shared vault on this computer.
+
+    The session's own vault is left out, and so is any copy of it. Two copies
+    of one workspace (same git origin) with neither being the session's vault
+    give (name, None, copies): the close cannot tell which copy is live, so
+    nothing is written into either and the item is held.
+    """
+    own_origin = _vault_origin(vault_root)
+    own_name = _workspace_name(vault_root).casefold()
+    groups: list[tuple[set[str], list[Path]]] = []
+    for vault in _shared_vaults():
+        if _same_dir(vault, vault_root):
+            continue
+        origin = _vault_origin(vault)
+        name = _workspace_name(vault).casefold()
+        if (own_origin and origin == own_origin) or name == own_name:
+            continue  # a copy of the vault this session is in
+        keys = {f"name:{name}"} | ({f"origin:{origin}"} if origin else set())
+        hit = next((g for g in groups if g[0] & keys), None)
+        if hit is None:
+            groups.append((keys, [vault]))
+        else:
+            hit[0].update(keys)
+            hit[1].append(vault)
+    result: list[tuple[str, Path | None, list[Path]]] = []
+    for _keys, copies in groups:
+        copies.sort(key=lambda p: str(p))
+        single = copies[0] if len(copies) == 1 else None
+        result.append((_workspace_name(copies[0]), single, copies))
+    result.sort(key=lambda item: item[0].casefold())
+    return result
+
+
 def build_crashed_after_signal_notice(matched: str, err: str) -> str:
     """Fail LOUD when the hook dies AFTER deciding the user is closing.
 
@@ -1231,6 +1354,7 @@ def build_injected_context(
     offsite_warning: str = "",
     session_id: str | None = None,
     journal_seeds: tuple[str, Path | None] = (SEEDS_HERE, None),
+    others: list[tuple[str, Path | None, list[Path]]] | None = None,
 ) -> str:
     """Compose the system block injected into the model's context.
 
@@ -1262,7 +1386,7 @@ def build_injected_context(
                 meta_dir, session_file, decisions_dir, captures_file,
                 pending_outcomes, goal_condition=None, todo_files=todo_files,
                 offsite_warning=offsite_warning, session_id=session_id,
-                journal_seeds=journal_seeds,
+                journal_seeds=journal_seeds, others=others,
             )
         )
 
@@ -1274,7 +1398,7 @@ def build_injected_context(
             meta_dir, session_file, decisions_dir, captures_file,
             pending_outcomes, goal_condition, todo_files=todo_files,
             offsite_warning=offsite_warning, session_id=session_id,
-            journal_seeds=journal_seeds,
+            journal_seeds=journal_seeds, others=others,
         )
     )
 
@@ -1372,6 +1496,127 @@ def _journal_seeds_block(
     return "", "", "  • Append journal seeds to Captures.\n"
 
 
+def _personal_vault(vault_root: Path, journal_seeds: tuple[str, Path | None]) -> Path | None:
+    """The member's personal vault for this close, or None when none was found."""
+    kind, path = journal_seeds
+    if kind == SEEDS_HERE:
+        return vault_root
+    if kind == SEEDS_PERSONAL and path is not None:
+        return path.parent.parent
+    return None
+
+
+def _workspace_routing_block(
+    vault_root: Path,
+    journal_seeds: tuple[str, Path | None],
+    others: list[tuple[str, Path | None, list[Path]]],
+    timestamp_human: str,
+) -> tuple[str, str, str]:
+    """(pre-resolved lines, Phase 1 rule, Phase 2 step) for tickets#964.
+
+    Empty for a member with one vault, working in it: their close is unchanged.
+    """
+    shared = journal_seeds[0] != SEEDS_HERE
+    if not shared and not others:
+        return "", "", ""
+    here = _workspace_name(vault_root)
+    personal = _personal_vault(vault_root, journal_seeds)
+    lines = [f"  This workspace:   {here}  ({'shared' if shared else 'personal'}): {vault_root}"]
+    personal_meta = _journal_meta(personal) if personal is not None else None
+    if personal is not None and shared:
+        meta = personal_meta or find_meta_dir(personal)
+        todos = resolve_todo_files(personal, meta)
+        lines.append(f"  Personal brain:   {personal}")
+        if todos:
+            lines.append(f"    its to-dos:     {todos[0]}")
+        about = meta / "About Me.md"
+        if about.is_file():
+            lines.append(f"    About Me:       {about}")
+    elif personal is None:
+        lines.append("  Personal brain:   (not found on this computer)")
+    for name, vault, copies in others:
+        if vault is None:
+            where = ", ".join(str(c) for c in copies)
+            lines.append(f"  Other workspace:  {name}  (several copies on this computer, so never")
+            lines.append(f"                    written into; tell the member which to remove: {where})")
+            continue
+        meta = find_meta_dir(vault)
+        todos = resolve_todo_files(vault, meta)
+        lines.append(f"  Other workspace:  {name}: {vault}")
+        lines.append(f"    its Captures:   {meta / 'Session Captures.md'}")
+        if todos:
+            lines.append(f"    its to-dos:     {todos[0]}")
+    if personal is not None:
+        holding = (personal_meta or find_meta_dir(personal)) / "Session Captures.md"
+        lines.append(f"  Needs a home:     {holding}  (under \"## Needs a home\")")
+    else:
+        lines.append("  Needs a home:     (no personal brain found: hold in the close summary only)")
+    pre = "\n".join(lines) + "\n"
+
+    personal_rule = (
+        "      file it in the personal brain above: their to-dos and errands in its\n"
+        "      to-do file, facts about them in About Me, never in this vault."
+        if shared and personal is not None else
+        "      it stays out of every shared vault." if shared else
+        "      it stays here, as usual."
+    )
+    only = (
+        f"Only {here}'s own work is filed in this vault." if shared
+        else "Only the member's own things are filed in this personal vault."
+    )
+    rule = f"""  • Where each thing goes. Before filing anything, decide whose it is,
+    in this order. First: is it the member's own life, or work? (The journal
+    seeds rule decides that, and an unsure one is theirs.) Then, for work:
+    which workspace? {only}
+    - The member's own life (feelings, health, family, their own to-dos and
+      errands, facts about them, people in their life):
+{personal_rule}
+    - Work for ANOTHER workspace (one listed above, or one they belong to that
+      is not on this computer): never write it into that vault or this one
+      without the member's yes. Hold it, tagged with the workspace it seems
+      to belong to, and ask "Add these to <name>?"
+    - Work, and not sure which workspace: hold it untagged and ask
+      "Where does this go?", naming the workspaces above as the choices.
+      A wrong guess into a shared vault cannot be taken back.
+    ASK BEFORE PHASE 2, in one message listing every held item word for word,
+    and WAIT for the answer, as in Phase 0b. If everything belongs here, say
+    nothing about this. This vault's to-do file and Captures take only what
+    belongs here. Phase 1.8 posts only to this workspace, never another one,
+    unless the member said yes to it here.
+"""
+    inbox_script = Path(__file__).resolve().parent.parent / "scripts" / "needs-a-home.py"
+    if personal is not None:
+        hold = (f"""  • Write the items the member did not place under "## Needs a home —
+    {timestamp_human[:10]} (from a session in {here})" in the Needs a home
+    file, one bullet each, word for word, ending with [for: <workspace>] or
+    [unsure].""")
+        if inbox_script.is_file():
+            hold += f"""
+    Then, for each of them, run this once (the item as one JSON object on
+    stdin, never on the command line; leave out "for" when unsure), so the
+    member can also place it from their desktop app (exactly these three
+    lines, each starting at the left edge, the last one alone on its line):
+python3 {shlex.quote(str(inbox_script))} add <<'NEEDS_A_HOME_ITEM'
+{{"kind": "todo or note", "text": "<their words>", "for": "<workspace>", "from": {json.dumps(here)}}}
+NEEDS_A_HOME_ITEM"""
+    else:
+        hold = """  • Items the member did not place are written NOWHERE: list them in the
+    close summary, word for word."""
+    step = hold + """
+    For each answer the member gave before Phase 2:
+    - yes to a workspace listed above with a path: append the items to that
+      workspace's to-do file (to-dos) or Captures (the rest);
+    - a workspace not on this computer: keep them held; the member places
+      them from their desktop app or by hand;
+    - no, or no answer: keep them held.
+    Every file written outside this vault (the personal brain, another
+    workspace) is committed in ITS vault, if that vault is a git
+    repository, with explicit paths only, the same way as Phase 2b.
+    Phase 4 adds "Held N for you to place." when any are held.
+"""
+    return pre, rule, step
+
+
 def _full_cascade_block(
     timestamp_human: str,
     timestamp_file: str,
@@ -1387,12 +1632,20 @@ def _full_cascade_block(
     offsite_warning: str = "",
     session_id: str | None = None,
     journal_seeds: tuple[str, Path | None] = (SEEDS_HERE, None),
+    others: list[tuple[str, Path | None, list[Path]]] | None = None,
 ) -> str:
     """The reusable cascade-instruction block."""
     pending = ", ".join(pending_outcomes) if pending_outcomes else "(none)"
     seeds_line, seeds_rule, seeds_phase2 = _journal_seeds_block(
         journal_seeds, vault_root, timestamp_human
     )
+    try:
+        routing_lines, routing_rule, routing_phase2 = _workspace_routing_block(
+            vault_root, journal_seeds, others or [], timestamp_human
+        )
+    except Exception as exc:  # never lose the close over the routing block
+        log_debug(f"workspace routing block failed: {exc!r}")
+        routing_lines, routing_rule, routing_phase2 = "", "", ""
     # A decision file names no session in its filename, so on a shared checkout
     # the close commit (session-end-hook.sh) and the close gate
     # (verify-session-close-cascade.py) can only tell this session's decisions
@@ -1520,7 +1773,7 @@ and worktree-archive preparation."""
   Session file:     {session_file}  (already pre-built with frontmatter + headers; fill in the body)
   Decisions dir:    {decisions_dir}  (write per-decision files here, slug-named{decision_owner})
   Captures file:    {captures_file}
-{seeds_line}{todo_line}
+{seeds_line}{routing_lines}{todo_line}
 {tt_line}
   Decisions with empty Outcome (review for backfill): {pending}
 
@@ -1542,7 +1795,7 @@ PHASE 1 — Single-pass conversation scan (compose all in memory before writing)
   • Belief shifts: did the user end the session believing something different?
   • Journal seeds: VERBATIM quotes where they revealed a belief, observation,
     or change of mind. Tag emotional ones [emotional]. Never reword.
-{seeds_rule}  • Writing note candidates (if user has a Substack/blog setup): apply kill
+{seeds_rule}{routing_rule}  • Writing note candidates (if user has a Substack/blog setup): apply kill
     conditions before drafting (no "I did today", no LinkedIn-thought-leader
     tone, no diary, must read as universal observation). Bilingual pair if
     configured.
@@ -1570,7 +1823,7 @@ PHASE 2 — Batch writes (one tool-call block, append never overwrite):
   • Fill in the pre-built session file (paths above).
 {todo_phase2}
   • Create per-decision files in Decisions/ as needed.
-{seeds_phase2}  • Personal vs team firewall: never let personal content leak to a team vault.
+{seeds_phase2}{routing_phase2}  • Personal vs team firewall: never let personal content leak to a team vault.
 
 PHASE 2b — vault-safe-commit, or the off-machine copy in a vault with no git:
 {phase_2b}
@@ -1769,6 +2022,11 @@ def main() -> int:
             # vault-root-ok: names the member's PERSONAL vault, not this session's root; trusted only when it holds a journal config
             cwd, vault_root, os.environ.get("VAULT_ROOT")
         )
+        try:
+            others = other_workspaces(vault_root)
+        except Exception as exc:  # a strange folder never costs the member their close
+            log_debug(f"workspace scan failed, routing to other vaults skipped: {exc!r}")
+            others = []
 
         worktree = derive_worktree(cwd)
         now = datetime.now()
@@ -1833,6 +2091,7 @@ def main() -> int:
             offsite_warning=offsite_vault_warning(vault_root, cwd),
             session_id=session_id,
             journal_seeds=journal_seeds,
+            others=others,
         )
         emit_context(context)
         log_debug(f"injected context for {confidence} signal in {int((time.time() - start) * 1000)}ms")
