@@ -792,7 +792,8 @@ jobs:
 
   ci:
     name: ci gate (py_compile + unit + integration tests)
-    runs-on: ubuntu-latest
+    # Pinned: setup-python has no Python 3.9 for Ubuntu 26.04, which ubuntu-latest became on 2026-11-07 (tickets#6030).
+    runs-on: ubuntu-24.04
     # The repo's unit/type gate, consolidated into ONE command - scripts/ci.sh -
     # so this workflow and the local pre-push gate (~/.local/bin/ci-test, which
     # resolves this repo to mode=canon) run the EXACT same thing and cannot drift.

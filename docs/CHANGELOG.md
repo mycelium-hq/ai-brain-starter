@@ -9,7 +9,25 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
-## 2026-11-06: open critical and high Dependabot alerts show at session start
+## 2026-11-07: `/journal` takes your gratitudes from what you wrote
+
+**Who this affects:** anyone who runs `/journal`.
+
+`/journal` used to ask for three things you're grateful for every time, even when you had just written some. Now, when your entry already shows gratitude, it takes up to three from your own words, adds them to the entry, and tells you in one line which ones it took, so you can swap one. It asks only when you haven't named any. A gratitude group works the same as before: if you set one up, the three are still shown to you for approval before anything is sent. The setup guide for the journal skill (phase 10a) says the same.
+
+---
+
+## 2026-11-07: `/journal` puts the panel in its last message, where you can see it
+
+**Who this affects:** anyone who runs `/journal` in the Claude desktop app's Code tab.
+
+The journal skill told Claude to show each panel in chat first and then write it into your entry. The Code tab folds text Claude writes between its tool calls, so the panel landed in your entry but you never saw it.
+
+Now Claude writes the panel into the entry and then puts the full panel in the last message of its turn, after all its tool calls, which always reaches you. The panel is still in the entry, and you can still edit it, swap a voice or add one afterward. The setup guide for the journal skill (phases 10a and 10b) says the same, so a journal skill it builds behaves the same way.
+
+---
+
+## 2026-11-07: open critical and high Dependabot alerts show at session start
 
 **Who this affects:** anyone signed in to GitHub CLI (`gh`). If you don't use `gh`, nothing changes.
 
@@ -22,6 +40,18 @@ To make room, the old project-level migration prompt (`migrate-to-user-level.py`
 `/sunday-review` Step 4g now says so in the review when its security script is missing, instead of skipping it silently.
 
 **Tested:** `tests/integration/test_dependabot_alert_surface.sh` runs the hook against a fake `gh`: alerts shown, silence at zero, "skipped" for a locked org, a signed-out user and a malformed answer from one source, more alerts than one page holds, `gh` off PATH, and the cache.
+
+---
+
+## 2026-11-06: something personal you say in a team vault goes to your journal, not the team's brain
+
+**Who this affects:** anyone who works in a shared team or client vault (one with its own `## Session End` section) as well as their own personal vault.
+
+At close, Claude collects "journal seeds": your own words when you shared a feeling, a belief or a reflection on your life or work. It used to save them in the Captures file of whatever vault the session ran in. In a shared vault, that put your personal reflections where your teammates read, and your next `/journal`, which reads your personal vault, never saw them.
+
+Now the close checks where you are. In your own vault nothing changes. In a shared vault, your journal seeds go to your personal vault's Session Captures, so your next journal entry picks them up, and nothing personal is written into the shared vault. When a message mixes work and feelings, the work part is filed as usual and only the personal sentence goes to your journal. When Claude is unsure, it treats it as personal. Your personal vault is the one you journal in: it holds the journal config `/journal` keeps in its Meta folder. Claude uses `VAULT_ROOT` if it points there, or else the one vault on this computer with a journal config. A `VAULT_ROOT` that points at another shared vault is never trusted. If no personal vault can be found, or there are two, the seeds are shown to you at close and saved nowhere. If you have never journaled, your own vault keeps them as before.
+
+**Tested:** `hooks/test_close_journal_seeds_stay_personal.py` builds the real close text, and runs the real hook end to end, for your own vault (unchanged), a team vault with and without `VAULT_ROOT`, a `VAULT_ROOT` pointing at another client's vault, a shared vault that doesn't declare its own close, two journaling vaults, and none. It fails when the routing is switched off, when `VAULT_ROOT` is trusted without a journal config, and when the hook stops passing the routing to the close. The other close tests still pass.
 
 ---
 
