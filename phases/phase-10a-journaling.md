@@ -379,7 +379,7 @@ Based on their answer, dig deeper. Be curious, not clinical. Include these speci
 - Celebrate wins they'd normally skip over.
 
 #### Step 2.5: Abundance / gratitude check (only if they opted in — question 6 from setup)
-If the user said yes to the gratitude check-in, ask ONE quick question about present abundance:
+If the user said yes to the gratitude check-in, look at what they already wrote today first. If it shows gratitude, take it from their own words (up to three, the most specific), put it in the entry, and say so in one line in the turn's final message; do not ask. Only when they named none, ask ONE quick question about present abundance:
 - "What's one thing you have right now — financially, personally, anything — that you're grateful for?"
 - Even "I had a great dinner" or "I can pay my rent" counts.
 - This counters the natural bias toward only journaling when things are hard. The good stuff is there — it just doesn't get written down. Include the answer naturally in the entry.
