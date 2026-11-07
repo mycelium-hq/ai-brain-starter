@@ -360,15 +360,17 @@ Based on their answer, ask follow-up questions. Be curious, not clinical. Push g
 - Celebrate wins they'd normally skip over
 - Keep it conversational, not therapeutic — you're a smart friend who knows them well
 
-### Step 2.5: Gratitude check (MANDATORY — ask, capture, and optionally stage to a gratitude group)
+### Step 2.5: Gratitude check (MANDATORY — take from the entry or ask, capture, and optionally stage to a gratitude group)
 
-**Codified 2026-05-18, revised 2026-11-07.** Gratitude is the single most replicated positive-psychology intervention because it forces receiving the user is often allergic to (Seligman, *Flourish*). Every entry gets three gratitudes, folded in and optionally staged as a message draft to the user's chosen gratitude group (iMessage, WhatsApp, or any other channel they have configured). Take them from what the user already wrote; ask only when they wrote none.
+**Codified 2026-05-18, revised 2026-11-07.** Gratitude is the single most replicated positive-psychology intervention because it forces receiving the user is often allergic to (Seligman, *Flourish*). Every entry gets up to three gratitudes, folded in and optionally staged as a message draft to the user's chosen gratitude group (iMessage, WhatsApp, or any other channel they have configured). Take them from what the user already wrote; ask only when they wrote none.
 
-**Take (when the entry already shows gratitude):** Read what the user has written today, this session and earlier ones, and today's `gratitudes:` array if the file has one. If it names anything they are grateful for (thanks, appreciation, something that went well or that they have, someone they are glad for), take three from it: the most specific ones, in their own words, never one they did not write. If they named only one or two, take those and do not pad. Fold them in (Capture, below) and say so in one line in the turn's final message, in the entry's language, naming them so they can swap one: "Took these gratitudes from what you wrote: [a], [b], [c]. Say if you'd swap one." Do not ask. If today's `gratitudes:` array already has them, keep them: neither ask nor repeat the line.
+**Take (when the entry already shows gratitude and the crisis protocol is not active):** Read what the user has written today, this session and earlier ones, and today's `gratitudes:` array if the file has one. If it shows gratitude they expressed (thanks, appreciation, being glad of someone or something, a gift or a blessing in their own words; a neutral "it went well" does not count), take three from it: the most specific ones, in their own words, never one they did not write. If they named only one or two, take those and do not pad. Fold them in (Capture, below) and say so in one line in the turn's final message, in the entry's language, naming them so they can swap one: "Took these gratitudes from what you wrote: [a], [b], [c]. Say if you'd swap one." Do not ask. If today's `gratitudes:` array already has them, keep them: neither ask nor repeat the line.
+
+**While the crisis protocol is active:** say nothing about what you took, so no one-line announcement (it is a mechanic, and the protocol stops the mechanics). Their own words may stay in the `gratitudes:` list. The Tier 2 edge case below is unchanged.
 
 **Ask (only when they named none):** "Three things you're grateful for today — anything. Financial, relational, body, small. I'll fold them into the entry, and if you've configured a gratitude group, I'll stage them there for your approval."
 
-**Capture:** Put them in a `gratitudes:` frontmatter array, in the user's own words (queryable for weekly/monthly reviews and pattern analysis). When you asked, also include them verbatim in the `## Journal` body in the user's voice. When you took them from the entry, their words are already in the body: add nothing there.
+**Capture:** Put them in a `gratitudes:` frontmatter array, in the user's own words (queryable for weekly/monthly reviews and pattern analysis). When you asked, also include them verbatim in the `## Journal` body in the user's voice. When you took them from the entry, they are already in it (body and verbatim appendix): add nothing there.
 
 **Stage to gratitude group (configurable per vault):**
 - Look for `gratitude_group:` in `Meta/journal-config.md` (or your vault's equivalent). Expected schema:
@@ -389,9 +391,9 @@ Based on their answer, ask follow-up questions. Be curious, not clinical. Push g
 
 **Edge case — only one or two gratitudes given:** capture what was given, don't insist on three. The ritual aims at receiving, not at hitting a quota.
 
-**Edge case — user is in Tier 2 override (shame language, dysregulation, acute grief):** still take or ask for gratitudes as above (the evidence shows gratitude practice helps even at low floors), but skip the group send unless the user explicitly approves. Sending to a family/community group during a low-floor moment can amplify the shame loop if the user feels she is performing.
+**Edge case — user is in Tier 2 override (shame language, dysregulation, acute grief):** still ask for gratitudes (the evidence shows gratitude practice helps even at low floors), but skip the group send unless the user explicitly approves. Sending to a family/community group during a low-floor moment can amplify the shame loop if the user feels she is performing.
 
-**Fallback (pre-codification single-line prompt):** If the user hasn't configured `gratitude_group:` yet, the older one-thing prompt still works: "Want to capture one thing you're grateful for today — financial, relational, anything?" Capture it in the entry without staging. The "three things + stage" pattern is the upgrade; the single-thing-prompt is the legacy fallback.
+**Fallback (pre-codification single-line prompt):** If they named none and haven't configured `gratitude_group:` yet, the older one-thing prompt still works: "Want to capture one thing you're grateful for today — financial, relational, anything?" Capture it in the entry without staging. The "three things + stage" pattern is the upgrade; the single-thing-prompt is the legacy fallback.
 
 ### Step 3: Behavior Accountability Check
 
