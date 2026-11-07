@@ -13,7 +13,7 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 **Who this affects:** anyone who runs `/journal`.
 
-`/journal` used to ask for three things you're grateful for every time, even when you had just written some. Now, when your entry already shows gratitude, it takes three from your own words, adds them to the entry, and tells you in one line which ones it took, so you can swap one. It asks only when you haven't named any. A gratitude group works the same as before: if you set one up, the three are still shown to you for approval before anything is sent. The setup guide for the journal skill (phase 10a) says the same.
+`/journal` used to ask for three things you're grateful for every time, even when you had just written some. Now, when your entry already shows gratitude, it takes up to three from your own words, adds them to the entry, and tells you in one line which ones it took, so you can swap one. It asks only when you haven't named any. A gratitude group works the same as before: if you set one up, the three are still shown to you for approval before anything is sent. The setup guide for the journal skill (phase 10a) says the same.
 
 ---
 
