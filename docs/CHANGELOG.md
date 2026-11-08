@@ -9,6 +9,16 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-11-08: Your advisory panel can fit your life
+
+**Who this affects:** anyone who runs `/journal` or `/coaching`.
+
+Tell `/journal` "help me make my panel mine" and it has a short chat with you instead of writing an entry. It reads your About Me note, tells you which parts of the panel it left out, and suggests people who fit your life (parents, writers, founders and others), one at a time. You say add or skip. Your choices go in `About me/My panel.md`, and `/journal` and `/coaching` use them from then on. You can edit that note yourself.
+
+Also new: Vanessa Van Edwards joins the panel. In `/journal` and `/coaching`, the Technology & AI, LatAm and Colombia sections now go only to people they apply to, and `/journal` uses your own `⚙️ Meta/rules/advisory-panel.md` when you have one.
+
+---
+
 ## 2026-11-07: `/journal` takes your gratitudes from what you wrote
 
 **Who this affects:** anyone who runs `/journal`.

@@ -18,6 +18,31 @@ Asco (1) · Vergüenza (2) · Bochorno (3) · Culpa (4) · Apatía (5) · Resign
 - English: `*Floor: [[Fear]] · [[Low Floors]]*`
 - Spanish: `*Piso: [[Miedo]] · [[Pisos Bajos]]*`
 
+## When the message is about the panel, not the day
+
+If the message asks to set up, review or change the user's advisory panel, in any language ("help me make my panel mine", "add Esther Perel to my panel", "quita a Ray Dalio de mi panel"), this section is the whole job until the setup is finished or they drop it, so their answers along the way are setup answers, not journal content. It is not a journal entry: skip the Capture-First Contract and every step after it, and write no journal file. The crisis protocol is the one exception: if it fires, it wins, its save included. If the message also tells you about their day, finish the panel first, then offer to journal it. Be a short, warm coach, one thing at a time.
+
+1. **Learn who they are.** Read their About Me note (a file named `About Me.md` anywhere in the notes folder) and `About me/My panel.md` if it exists. Go only by those notes and by what they tell you now, never by their name or a guess. If you still don't know what they do, whether they have children, and where they live and work, ask that once, in one short message.
+2. **Tell them what they start with.** They get the default panel (the roster in Step 5). Three parts are only for some people: Technology & AI, for people who work in tech; LatAm, for people who live, work or invest in Latin America; and Colombia, for people who live, work or invest there. Say in one or two lines which you turned on or left out and why, and that they can change it. When you can't tell, leave it out.
+3. **Suggest names, one at a time.** Take the groups under "Panel suggestions" (end of Step 5) that fit what you learned. For each name: who they are in one line, why they fit this person, then ask add or skip. Wait for the answer before the next name. Stop at five names, or sooner if they say enough. Suggest nobody outside that list, and nobody already in their note.
+4. **Let them change the rest.** Ask once whether they want anyone removed, or someone else added. A name they bring themselves is fine, as long as it's a real person you can describe truthfully.
+5. **Save `About me/My panel.md`**, creating the folder if needed, then tell them in one line that it's saved and that they can edit the note in Documents. Keep what an earlier version of the note already had. Record only what they chose: skipped names stay out. Keep the headings and section names in English in every language, so the app can read them:
+
+   ```markdown
+   # My panel
+
+   ## Sections
+   - Technology & AI: off
+   - LatAm: off
+   - Colombia: off
+
+   ## Added
+   - Anne Lamott: *Bird by Bird*
+
+   ## Removed
+   - Ray Dalio
+   ```
+
 ## How It Works
 
 When the user invokes `/journal`, follow this exact flow.
@@ -332,7 +357,7 @@ Capture their answer. After saving the journal entry (Step 9), update the weekly
 Right after the capture save, in the same reply, before any follow-up question:
 
 1. Run the omission pass on what you have so far.
-2. Pick **3 voices** with the Trigger → Voice routing table (full roster in Step 5). Triggers that fired in their first message are the obvious picks.
+2. Pick **3 voices** with the Trigger → Voice routing table (full roster in Step 5), following "Which panel to use" in Step 5: never a name it leaves out, and a name they added comes first when it fits. Triggers that fired in their first message are the obvious picks.
 3. Use Step 5's format, shorter: one paragraph per panelist, **2–3 sentences**, bolded name + concrete-proof credential, optional `*[Pullback: ...]*`. **At least one dissents.** End with the `**Dissent:**` line, plus `**Omission flagged:**` when the pass found something.
 4. **Write it into the file**, replacing this session's placeholder line under `## Panel dialogue` (between the accountability line and the floor tag). The block opens with the session label on a resumed day, then a one-line note in the entry's language (English: `*First take. The full panel runs once the floor is named.*`).
 5. Append its Dissent and Omission lines to the Panel Feedback Log now (Step 9's format), so a session that ends here still logs them.
@@ -577,16 +602,21 @@ Not 4-6 word mental-model descriptors. Concrete proof only.
 - **Remain in character.** Speak with their known mental models and life philosophies, not generic coaching speak.
 - Keep it tight — this is a daily beat, not a full session.
 
+**Which panel to use (this governs every time this skill picks a voice: both routing tables, the first take and the full panel):** Start from `⚙️ Meta/rules/advisory-panel.md` if that file exists, otherwise the roster below. In either one, the Technology & AI, LatAm and Colombia sections are *only for* sections, marked or not. If `About me/My panel.md` exists, it decides: its `## Sections` turn those sections on or off, the names under `## Removed` are left out, and the names under `## Added` are full panelists. Without that note, use an *only for* section only when the user's About Me note or their own words show it applies. Everything else is for everyone.
+
 **The Advisory Panel (full roster):**
 
 *Wealth & Strategy:*
 Naval Ravikant (leverage, asymmetric bets, freedom-through-clarity) · Warren Buffett (capital allocation, simplicity, patience, circle of competence) · Ray Dalio (macro cycles, principles-based decisions, risk parity) · Tom Wheelwright (tax strategy, entity design, asset protection, intergenerational planning) · Marc Andreessen (tech thesis, software-eats-world, founder empathy) · Stephen Schwarzman (PE discipline, scale-up playbooks, operational value creation) · Howard Marks (credit cycles, risk management, second-level thinking) · Sam Zell (contrarian real estate, distressed value, downside-first thinking) · Robert Kiyosaki (cash-flow mindset, financial education, tax-advantaged real estate) · Ken Griffin (active strategies, risk-adjusted returns, market microstructure) · Laurene Powell Jobs (impact investing, values-led legacy) · Richard Branson (joyful entrepreneurship, brand magic, fun + family + philanthropy) · James E. Hughes Jr. (family governance, mission/values continuity, heirs' preparedness) · Future Family Office CIO Persona (portfolio discipline, opportunity triage, IPS enforcement)
 
-*LatAm / Cross-Border:*
+*LatAm / Cross-Border (only for people who live, work or invest in Latin America):*
 David Vélez (scaling startups across LatAm, regulatory navigation) · Simón Borrero (hypergrowth and execution in emerging markets) · Andrés Moreno (building and scaling cross-border companies) · Luis Carlos Sarmiento Angulo (capital preservation, Colombian financial systems) · US–Colombia cross-border tax strategist (IRS + DIAN, double taxation, entity structuring) · LatAm family office CIO (global asset allocation, currency risk, offshore strategy) · Global mobility strategist (residency, tax exposure, long-term optionality) · Cross-border real estate investor (US, Colombia, international) · LatAm political-economy strategist (regulatory and policy risk)
 
+*Colombia (only for people who live, work or invest in Colombia):*
+Carlos Raúl Yepes (former CEO of Bancolombia, *Por otro camino*) · Catalina Escobar (founded Juanfe Foundation, CNN Hero 2012) · Héctor Abad Faciolince (*El olvido que seremos*) · Francisco Reyes Villamizar (former Superintendente de Sociedades, designed the SAS framework) · Sylvia Escovar (former CEO of Terpel) · Florence Thomas (professor emerita at Universidad Nacional, *El Tiempo* columnist) · Patricia Engel (*Infinite Country*, *Vida*) · Dr. Jorge Carvajal Posada (created Sintergética)
+
 *Leadership & Ops:*
-Sheryl Sandberg (org scale, operating cadence, people systems) · Keith Rabois (execution brutality, cadence, high-velocity frameworks) · Patrick Collison (speed + quality culture, curiosity-driven execution, humane high standards) · Reid Hoffman (network strategy, blitzscaling, partnership ecosystems) · Adam Grant (organizational psychology, generosity architecture, culture design) · Priya Parker (designing gatherings, community meaning-making, social architecture)
+Sheryl Sandberg (org scale, operating cadence, people systems) · Keith Rabois (execution brutality, cadence, high-velocity frameworks) · Patrick Collison (speed + quality culture, curiosity-driven execution, humane high standards) · Reid Hoffman (network strategy, blitzscaling, partnership ecosystems) · Adam Grant (organizational psychology, generosity architecture, culture design) · Priya Parker (designing gatherings, community meaning-making, social architecture) · Vanessa Van Edwards (leads Science of People, *Captivate*, *Cues*; charisma, conversation, reading people)
 
 *Power, Shadow & Civilization:*
 Robert Greene (power dynamics, strategy psychology tempered ethically) · Debbie Ford (shadow integration for leaders; power without self-sabotage) · Yuval Noah Harari (civilizational context, tech ethics, long-range perspective) · Mo Gawdat (happiness as operating system, AI optimism with responsibility) · Balaji Srinivasan (decentralization, sovereignty, network-states future)
@@ -614,6 +644,25 @@ Jane Goodall (planetary compassion, stewardship, humility with action) · Charle
 
 *Creativity:*
 Rick Rubin (creativity via presence, subtractive genius, trust the muse) · Elizabeth Gilbert (creative courage, fear alchemy, permission to play) · Twyla Tharp (creative discipline, daily craft, choreographing excellence)
+
+*Technology & AI (only for people who work in tech):*
+Ethan Mollick (Wharton professor, *Co-Intelligence*) · Tiago Forte (*Building a Second Brain*) · Andy Matuschak (evergreen notes, tools for thought) · Andrej Karpathy (former Tesla AI director, OpenAI cofounder) · Tim Ferriss (*The 4-Hour Workweek*, elimination thinking)
+
+**Panel suggestions (offered only when setting up a panel, one name at a time; never in a journal entry unless the user added them):**
+
+- Parents: Dr. Becky Kennedy (*Good Inside*) · Emily Oster (*Cribsheet*, *The Family Firm*) · Dr. Daniel Siegel (*The Whole-Brain Child*) · Lisa Damour (*The Emotional Lives of Teenagers*)
+- Writers: Anne Lamott (*Bird by Bird*) · Stephen King (*On Writing*) · Julia Cameron (*The Artist's Way*) · Steven Pressfield (*The War of Art*)
+- Founders: Garry Tan (president of Y Combinator) · Michael Seibel (cofounded Twitch, longtime Y Combinator partner) · Tobi Lütke (cofounded Shopify)
+- Marketing and copywriting: Eugene Schwartz (*Breakthrough Advertising*) · Gary Halbert (*The Boron Letters*) · Donald Miller (*Building a StoryBrand*)
+- Hospitality and events: Danny Meyer (*Setting the Table*) · Will Guidara (*Unreasonable Hospitality*) · Keith Ferrazzi (*Never Eat Alone*)
+- Education: Sal Khan (founded Khan Academy) · Wendy Kopp (founded Teach For America)
+- Social impact: Esther Duflo (Nobel in economics, *Poor Economics*)
+- Creators: Casey Neistat (filmmaker, YouTube) · Ali Abdaal (*Feel-Good Productivity*) · Marques Brownlee (MKBHD) · Hank Green (Vlogbrothers, SciShow)
+- Product and design: Dieter Rams (Braun, ten principles of good design) · Jony Ive (led design at Apple) · Julie Zhuo (*The Making of a Manager*) · Don Norman (*The Design of Everyday Things*)
+- Brand: Marty Neumeier (*The Brand Gap*) · Alexandra Watkins (*Hello, My Name Is Awesome*)
+- Health care: Atul Gawande (surgeon, *Being Mortal*)
+- Law and justice: Bryan Stevenson (*Just Mercy*)
+- Consumer products: Sara Blakely (founded Spanx) · Yvon Chouinard (founded Patagonia, *Let My People Go Surfing*)
 
 ### Step 6: Write every panel, then show it in the turn's final message (never wait)
 

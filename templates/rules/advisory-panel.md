@@ -6,6 +6,8 @@
 
 **Customization:** Add, remove, or swap panelists to fit your life. The framework matters more than the specific names.
 
+**My panel:** If `About me/My panel.md` exists, it decides: its `## Sections` turn the *only for* sections on or off, the names under `## Removed` are left out, and the names under `## Added` count as named panelists. Without that note, use an *only for* section only when the person's About Me note or their own words show it applies.
+
 ---
 
 ## Wealth & Strategy
@@ -26,6 +28,8 @@
 
 ## LatAm & Cross-Border
 
+*Only for people who live, work or invest in Latin America.*
+
 - **David Velez** — Founded Nubank (largest digital bank in LatAm, 90M+ customers). Pick when: Colombia-specific startup strategy, LatAm fintech, regulatory navigation
 - **Simon Borrero** — Founded Rappi (LatAm super-app, $5B+ valuation). Pick when: hypergrowth execution in emerging markets, scrappy ops decisions
 - **Andres Moreno** — Founded Open English (scaled across 20+ countries). Pick when: US-LatAm bridge, fundraising as a Latino/a founder, cross-border companies
@@ -35,6 +39,8 @@
 - **Global mobility strategist** — Visa, residency, tax exposure. Pick when: travel logistics, residency planning
 
 ## Colombia: Life & Business
+
+*Only for people who live, work or invest in Colombia.*
 
 *Localization voices for building a life and business in Colombia. Covers corporate culture, brand building, identity, law, gender dynamics, relationships, bicultural experience, and wellness from a Colombian perspective.*
 
@@ -59,6 +65,7 @@
 ## Gatherings & Connection
 
 - **Priya Parker** — Author of *The Art of Gathering*, conflict resolution facilitator. Pick when: events strategy, community design, making gatherings meaningful
+- **Vanessa Van Edwards** — Leads Science of People, wrote *Captivate* (2017) and *Cues* (2022). Pick when: charisma, first impressions, reading a room, how you come across in a conversation
 
 ## Psychology & Inner Work
 
@@ -140,11 +147,13 @@ Prescriptive voices for monthly insight reviews. Where Psychology & Inner Work o
 - **Jackie Kennedy Onassis** — Defined American elegance, fierce privacy protector. Pick when: public image, how to carry yourself
 - **Layla Martin** — Embodied feminine leadership teacher. Pick when: body, sensuality, feminine power
 - **Kasja Urbaniak** — Power & receptivity specialist, trained under Regena Thomashauer. Pick when: asking for what you want, sales as receptivity
-- **Cross-border real estate investor** — Pick when: property decisions (US, Colombia, international)
-- **LatAm political-economy strategist** — Pick when: macro Colombia/LatAm context, regulatory risk
+- **Cross-border real estate investor** — *Only for people who live, work or invest in Latin America.* Pick when: property decisions (US, Colombia, international)
+- **LatAm political-economy strategist** — *Only for people who live, work or invest in Latin America.* Pick when: macro Colombia/LatAm context, regulatory risk
 - **James E. Hughes Jr.** — Family wealth governance author (*Family Wealth*, now in 3rd edition). Pick when: family money dynamics, legacy planning
 
 ## Technology & AI
+
+*Only for people who work in tech.*
 
 - **Ethan Mollick** — Wharton professor, *Co-Intelligence*. Evidence-based on how humans actually integrate AI. Pick when: delegate to AI vs. own it, workflow design, is this tool changing your thinking or just your output
 - **Tiago Forte** — Created PARA + Building a Second Brain, PKM pioneer. Pick when: vault architecture, whether a system helps you think or just produces more files, long-term knowledge compounding
@@ -163,7 +172,7 @@ Prescriptive voices for monthly insight reviews. Where Psychology & Inner Work o
 5. Keep it tight. Not a seminar.
 6. Challenge assumptions, don't manufacture consensus.
 7. For high-stakes decisions, auto-offer `/deconstruct` before committing.
-8. **ONLY use named panelists from this file.** No archetypes, no invented experts. If none fit: say so, offer to add one. Never improvise.
+8. **ONLY use named panelists from this file, plus anyone under `## Added` in `About me/My panel.md`.** No archetypes, no invented experts. If none fit: say so, offer to add one. Never improvise.
 9. **Peer-review round (the step that turns N opinions into blind-spot detection).** After the 3-5 panelists have spoken but BEFORE you synthesize, run one peer-review pass with a 5-bucket taxonomy:
    - **consensus** — where the panelists independently converged. Treat as higher-confidence.
    - **contradictions** — where they genuinely clash. Present both sides. Do NOT smooth over.
