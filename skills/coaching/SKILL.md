@@ -65,7 +65,7 @@ If the user has a transcript already, link to it. If not, capture what they say 
 
 ### Step 3: Initial panel pass
 
-Read `⚙️ Meta/rules/advisory-panel.md`, then `About me/My panel.md` if it exists: that file's "My panel" paragraph says how it changes who sits on the panel. Convene 3-5 voices most relevant to the triggering event. Apply the rules:
+Read `⚙️ Meta/rules/advisory-panel.md`. The Technology & AI, LatAm and Colombia sections only count for people they apply to. If `About me/My panel.md` exists, it decides: its `## Sections` turn those sections on or off, the names under `## Removed` are left out, and the names under `## Added` are full panelists. Convene 3-5 voices most relevant to the triggering event. Apply the rules:
 
 - 3-5 voices, each 1-2 sentences in their authentic voice
 - At least one MUST dissent

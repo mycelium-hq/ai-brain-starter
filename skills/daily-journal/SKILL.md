@@ -20,10 +20,10 @@ Asco (1) · Vergüenza (2) · Bochorno (3) · Culpa (4) · Apatía (5) · Resign
 
 ## When the message is about the panel, not the day
 
-If the message asks to set up, review or change the user's advisory panel, in any language ("help me make my panel mine", "add Esther Perel to my panel", "quita a Ray Dalio de mi panel"), this section is the whole job. It is not a journal entry: skip the Capture-First Contract and every step after it, and write no journal file. If the message also tells you about their day, finish the panel first, then offer to journal it. Be a short, warm coach, one thing at a time.
+If the message asks to set up, review or change the user's advisory panel, in any language ("help me make my panel mine", "add Esther Perel to my panel", "quita a Ray Dalio de mi panel"), this section is the whole job until the setup is finished or they drop it, so their answers along the way are setup answers, not journal content. It is not a journal entry: skip the Capture-First Contract and every step after it except the crisis protocol, and write no journal file. If the message also tells you about their day, finish the panel first, then offer to journal it. Be a short, warm coach, one thing at a time.
 
 1. **Learn who they are.** Read their About Me note (a file named `About Me.md` anywhere in the notes folder) and `About me/My panel.md` if it exists. Go only by those notes and by what they tell you now, never by their name or a guess. If you still don't know what they do, whether they have children, and where they live and work, ask that once, in one short message.
-2. **Tell them what they start with.** They get the default panel (the roster in Step 5). Two parts are only for some people: Technology & AI, for people who work in tech, and LatAm and Colombia, for people who live, work or invest there. Say in one or two lines which you turned on or left out and why, and that they can change it. When you can't tell, leave it out.
+2. **Tell them what they start with.** They get the default panel (the roster in Step 5). Three parts are only for some people: Technology & AI, for people who work in tech; LatAm, for people who live, work or invest in Latin America; and Colombia, for people who live, work or invest there. Say in one or two lines which you turned on or left out and why, and that they can change it. When you can't tell, leave it out.
 3. **Suggest names, one at a time.** Take the groups under "Panel suggestions" (end of Step 5) that fit what you learned. For each name: who they are in one line, why they fit this person, then ask add or skip. Wait for the answer before the next name. Stop at five names, or sooner if they say enough. Suggest nobody outside that list, and nobody already in their note.
 4. **Let them change the rest.** Ask once whether they want anyone removed, or someone else added. A name they bring themselves is fine, as long as it's a real person you can describe truthfully.
 5. **Save `About me/My panel.md`**, creating the folder if needed, then tell them in one line that it's saved and that they can edit the note in Documents. Keep what an earlier version of the note already had. Record only what they chose: skipped names stay out. Keep the headings and section names in English in every language, so the app can read them:
@@ -33,7 +33,8 @@ If the message asks to set up, review or change the user's advisory panel, in an
 
    ## Sections
    - Technology & AI: off
-   - LatAm and Colombia: off
+   - LatAm: off
+   - Colombia: off
 
    ## Added
    - Anne Lamott: *Bird by Bird*
@@ -356,7 +357,7 @@ Capture their answer. After saving the journal entry (Step 9), update the weekly
 Right after the capture save, in the same reply, before any follow-up question:
 
 1. Run the omission pass on what you have so far.
-2. Pick **3 voices** with the Trigger → Voice routing table (full roster in Step 5). Triggers that fired in their first message are the obvious picks.
+2. Pick **3 voices** with the Trigger → Voice routing table (full roster in Step 5), following "Which panel to use" in Step 5: never a name it leaves out, and a name they added comes first when it fits. Triggers that fired in their first message are the obvious picks.
 3. Use Step 5's format, shorter: one paragraph per panelist, **2–3 sentences**, bolded name + concrete-proof credential, optional `*[Pullback: ...]*`. **At least one dissents.** End with the `**Dissent:**` line, plus `**Omission flagged:**` when the pass found something.
 4. **Write it into the file**, replacing this session's placeholder line under `## Panel dialogue` (between the accountability line and the floor tag). The block opens with the session label on a resumed day, then a one-line note in the entry's language (English: `*First take. The full panel runs once the floor is named.*`).
 5. Append its Dissent and Omission lines to the Panel Feedback Log now (Step 9's format), so a session that ends here still logs them.
@@ -601,7 +602,7 @@ Not 4-6 word mental-model descriptors. Concrete proof only.
 - **Remain in character.** Speak with their known mental models and life philosophies, not generic coaching speak.
 - Keep it tight — this is a daily beat, not a full session.
 
-**Which panel to use:** Start from `⚙️ Meta/rules/advisory-panel.md` if that file exists, otherwise the roster below. If `About me/My panel.md` exists, it decides: its `## Sections` turn the *only for* sections on or off, the names under `## Removed` are left out, and the names under `## Added` are full panelists. Without that note, use an *only for* section only when the user's About Me note or their own words show it applies. Everything else is for everyone.
+**Which panel to use (this governs every panel in this skill: the routing table, the first take and the full panel):** Start from `⚙️ Meta/rules/advisory-panel.md` if that file exists, otherwise the roster below. In either one, the Technology & AI, LatAm and Colombia sections are *only for* sections, marked or not. If `About me/My panel.md` exists, it decides: its `## Sections` turn those sections on or off, the names under `## Removed` are left out, and the names under `## Added` are full panelists. Without that note, use an *only for* section only when the user's About Me note or their own words show it applies. Everything else is for everyone.
 
 **The Advisory Panel (full roster):**
 
@@ -648,7 +649,7 @@ Ethan Mollick (Wharton professor, *Co-Intelligence*) · Tiago Forte (*Building a
 
 - Parents: Dr. Becky Kennedy (*Good Inside*) · Emily Oster (*Cribsheet*, *The Family Firm*) · Dr. Daniel Siegel (*The Whole-Brain Child*) · Lisa Damour (*The Emotional Lives of Teenagers*)
 - Writers: Anne Lamott (*Bird by Bird*) · Stephen King (*On Writing*) · Julia Cameron (*The Artist's Way*) · Steven Pressfield (*The War of Art*)
-- Founders: Garry Tan (president of Y Combinator) · Michael Seibel (cofounded Twitch, longtime Y Combinator partner) · Tobi Lütke (founded Shopify)
+- Founders: Garry Tan (president of Y Combinator) · Michael Seibel (cofounded Twitch, longtime Y Combinator partner) · Tobi Lütke (cofounded Shopify)
 - Marketing and copywriting: Eugene Schwartz (*Breakthrough Advertising*) · Gary Halbert (*The Boron Letters*) · Donald Miller (*Building a StoryBrand*)
 - Hospitality and events: Danny Meyer (*Setting the Table*) · Will Guidara (*Unreasonable Hospitality*) · Keith Ferrazzi (*Never Eat Alone*)
 - Education: Sal Khan (founded Khan Academy) · Wendy Kopp (founded Teach For America)

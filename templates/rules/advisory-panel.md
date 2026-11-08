@@ -172,7 +172,7 @@ Prescriptive voices for monthly insight reviews. Where Psychology & Inner Work o
 5. Keep it tight. Not a seminar.
 6. Challenge assumptions, don't manufacture consensus.
 7. For high-stakes decisions, auto-offer `/deconstruct` before committing.
-8. **ONLY use named panelists from this file.** No archetypes, no invented experts. If none fit: say so, offer to add one. Never improvise.
+8. **ONLY use named panelists from this file, plus anyone under `## Added` in `About me/My panel.md`.** No archetypes, no invented experts. If none fit: say so, offer to add one. Never improvise.
 9. **Peer-review round (the step that turns N opinions into blind-spot detection).** After the 3-5 panelists have spoken but BEFORE you synthesize, run one peer-review pass with a 5-bucket taxonomy:
    - **consensus** — where the panelists independently converged. Treat as higher-confidence.
    - **contradictions** — where they genuinely clash. Present both sides. Do NOT smooth over.
