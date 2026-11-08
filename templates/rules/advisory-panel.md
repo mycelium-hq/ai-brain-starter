@@ -147,8 +147,8 @@ Prescriptive voices for monthly insight reviews. Where Psychology & Inner Work o
 - **Jackie Kennedy Onassis** — Defined American elegance, fierce privacy protector. Pick when: public image, how to carry yourself
 - **Layla Martin** — Embodied feminine leadership teacher. Pick when: body, sensuality, feminine power
 - **Kasja Urbaniak** — Power & receptivity specialist, trained under Regena Thomashauer. Pick when: asking for what you want, sales as receptivity
-- **Cross-border real estate investor** — Pick when: property decisions (US, Colombia, international)
-- **LatAm political-economy strategist** — Pick when: macro Colombia/LatAm context, regulatory risk
+- **Cross-border real estate investor** — *Only for people who live, work or invest in Latin America.* Pick when: property decisions (US, Colombia, international)
+- **LatAm political-economy strategist** — *Only for people who live, work or invest in Latin America.* Pick when: macro Colombia/LatAm context, regulatory risk
 - **James E. Hughes Jr.** — Family wealth governance author (*Family Wealth*, now in 3rd edition). Pick when: family money dynamics, legacy planning
 
 ## Technology & AI

@@ -70,7 +70,7 @@ Read `⚙️ Meta/rules/advisory-panel.md`. The Technology & AI, LatAm and Colom
 - 3-5 voices, each 1-2 sentences in their authentic voice
 - At least one MUST dissent
 - Cite sources for any factual claims
-- Use only named panelists from the file (no archetypes, no invented experts)
+- Use only named panelists from the file, plus anyone under `## Added` in `About me/My panel.md` (no archetypes, no invented experts)
 - Subject-match weighting (rule 10): the panelist whose expertise matches the actual subject carries more weight than headcount
 - Output-confidence filter (rule 11): flag any recommendation below 80% conviction as low-conviction (keep for texture, not for decisions)
 - Peer-review pass (rule 9): after the 3-5 voices speak, run one chairman pass with the 5-bucket taxonomy — consensus (where they converged), contradictions (where they clashed), partial coverage (a dimension only one voice addressed), unique insights (a point only one voice raised), blind spots (what they all missed). The chairman analyzes, does not merge: surface the disagreement, never collapse it into a balanced-view paragraph
