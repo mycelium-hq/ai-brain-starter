@@ -56,7 +56,7 @@ build_harness() {
   local out="$1" dry="$2"
   {
     echo 'set -uo pipefail'
-    echo 'HOME="'"$TMP"'/home"; SHELL=/bin/bash; FAILED=(); LANG_CODE=en; CORPORATE_PROFILE=0'
+    echo 'HOME="'"$TMP"'/home"; USERPROFILE="'"$TMP"'/home"; SHELL=/bin/bash; FAILED=(); LANG_CODE=en; CORPORATE_PROFILE=0'
     echo "DRY_RUN=$dry"
     echo 't() { [ "$LANG_CODE" = es ] && echo "$2" || echo "$1"; }'
     for fn in log ok warn err hdr dry is_mac is_linux have; do extract_fn "$fn"; done
