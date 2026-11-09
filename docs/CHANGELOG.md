@@ -9,6 +9,16 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-11-09: Linux installs set up every tool, and fastmcp installs again
+
+**Who this affects:** anyone installing or updating, and most of all anyone on Linux.
+
+On most Ubuntu and Debian computers the installer skipped graphify, fastmcp and skill-seekers, because it set up their installer (pipx) in a way those systems block. Now it uses your system's own pipx package when it can, and otherwise a private copy of Python it manages itself, so all three install with no extra steps. Your system's Python stays as it was.
+
+fastmcp has also failed to install on new computers since mid-May, when its makers moved the `fastmcp` command into a companion package called fastmcp-slim. The installer now installs that package, so `fastmcp` works again on Mac, Windows and Linux.
+
+---
+
 ## 2026-11-08: Your advisory panel can fit your life
 
 **Who this affects:** anyone who runs `/journal` or `/coaching`.

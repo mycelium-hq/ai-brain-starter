@@ -30,6 +30,14 @@
 #      have_sudo`, and fall back to the same install_*_userspace() functions
 #      structurally (not behaviorally re-simulated on this runner — 4 already
 #      proves the functions themselves work; this proves Linux reaches them).
+#   7. install_pipx_userspace() (tickets#6171), run for real with only the
+#      Python download stood in: pipx lands linked at ~/.local/bin/pipx AND
+#      ~/.local/bin is saved to the shell rc (`pipx ensurepath` writes nothing
+#      once the folder is on PATH, so pipx and its tools were missing in the
+#      next terminal). It never links a pipx that pip did not write, and never
+#      replaces a ~/.local/python the installer did not make. A user's own
+#      PIP_USER=1 or require-virtualenv setting neither stops the install nor
+#      moves pipx.
 #
 # Functions are extracted from the real bootstrap.sh with awk (never
 # reimplemented), so this can't silently drift from the shipped source — same
@@ -74,7 +82,8 @@ extract_fn() {
 
 for fn in have have_sudo is_mac is_linux hdr dry ok warn err log note_gap \
           user_space_platform add_user_path_entry fetch_tarball \
-          install_node_userspace install_python_userspace; do
+          install_node_userspace fetch_python_userspace install_python_userspace \
+          install_pipx_userspace; do
   [ -n "$(extract_fn "$fn" "$BOOTSTRAP")" ] || fail "setup: $fn() not found in bootstrap.sh"
 done
 
@@ -176,7 +185,9 @@ build_harness() {
     grep '^GAPS_FILE=' "$src" | sed "s|\$HOME|$fakehome|" || true
     extract_fn note_gap "$src"
     grep -E '^(NODE_FALLBACK_VERSION|PY_FALLBACK_VERSION|PY_FALLBACK_TAG)=' "$src" || true
-    for fn in user_space_platform add_user_path_entry fetch_tarball install_node_userspace install_python_userspace; do
+    # fetch_python_userspace: absent from the pre-fix fixture, so it extracts
+    # to nothing there; install_python_userspace calls it since tickets#6171.
+    for fn in user_space_platform add_user_path_entry fetch_tarball install_node_userspace fetch_python_userspace install_python_userspace; do
       extract_fn "$fn" "$src"
     done
     echo 'DRY_RUN=0'
@@ -353,4 +364,97 @@ printf '%s' "$NODE_BLOCK" | grep -q 'is_linux && have_sudo' || fail "6: the Node
 printf '%s' "$PY_BLOCK"   | grep -q 'install_python_userspace' || fail "6: the Python section never calls install_python_userspace on the no-admin branch"
 printf '%s' "$NODE_BLOCK" | grep -q 'install_node_userspace'   || fail "6: the Node section never calls install_node_userspace on the no-admin branch"
 
-echo "PASS: test_bootstrap_userspace_fallback (6 checks, negative control on the main scenario)"
+# ── 7. install_pipx_userspace() (tickets#6171): the real function, with only
+# the Python download stood in by a stub whose `python3 -m pip install ... pipx`
+# writes bin/pipx the way pip does, reading PIP_USER and PIP_REQUIRE_VIRTUALENV
+# (or PIP_REQUIRE_VENV) from the environment as pip does. FAKE_PIP_DROPS=1 makes that pip succeed
+# without writing pipx where it is linked. ──
+build_pipx_harness() { # build_pipx_harness OUT_FILE FAKE_HOME
+  {
+    echo 'set -uo pipefail'
+    echo "HOME=\"$2\""
+    echo "USERPROFILE=\"$2\""   # paired per MYC-3536 (see build_harness above)
+    echo 'SHELL=/bin/bash'
+    echo 'PATH=/usr/bin:/bin'
+    extract_fn add_user_path_entry "$BOOTSTRAP"
+    extract_fn install_pipx_userspace "$BOOTSTRAP"
+    cat <<'HARNESS'
+fetch_python_userspace() {
+  rm -rf "$HOME/.local/python"; mkdir -p "$HOME/.local/python/bin"
+  cat > "$HOME/.local/python/bin/python3" <<'PY'
+#!/bin/sh
+case " $* " in
+  *" -m pip install "*" pipx "*)
+    if [ "${PIP_REQUIRE_VIRTUALENV:-0}" = 1 ] || [ "${PIP_REQUIRE_VENV:-0}" = 1 ]; then
+      echo "ERROR: Could not find an activated virtualenv (required)." >&2; exit 3
+    fi
+    [ "${FAKE_PIP_DROPS:-0}" = 1 ] && exit 0
+    dest="$HOME/.local/python/bin"
+    [ "${PIP_USER:-0}" = 1 ] && dest="$HOME/.local/bin"
+    mkdir -p "$dest"
+    printf '#!/bin/sh\necho pipx-ok\n' > "$dest/pipx"
+    chmod +x "$dest/pipx" ;;
+esac
+PY
+  chmod +x "$HOME/.local/python/bin/python3"
+}
+install_pipx_userspace; echo "RESULT_RC=$?"
+echo "RESULT_PIPX=$(command -v pipx || echo NONE)"
+HARNESS
+  } > "$1"
+}
+
+# 7a. A clean home: pipx works in this run AND in the next terminal.
+PX_HOME="$TMP/pipx-home"; mkdir -p "$PX_HOME"
+build_pipx_harness "$TMP/pipx.sh" "$PX_HOME"
+PX_OUT="$(bash "$TMP/pipx.sh" 2>&1)" || true
+echo "$PX_OUT" | grep -q 'RESULT_RC=0' \
+  || fail "7: install_pipx_userspace failed on a clean home. Output:
+$PX_OUT"
+echo "$PX_OUT" | grep -q "RESULT_PIPX=$PX_HOME/.local/bin/pipx" \
+  || fail "7: pipx is not on this run's PATH as ~/.local/bin/pipx. Output:
+$PX_OUT"
+[ "$("$PX_HOME/.local/bin/pipx")" = "pipx-ok" ] \
+  || fail "7: ~/.local/bin/pipx does not run the user-space pipx"
+grep -qF "$PX_HOME/.local/bin" "$PX_HOME/.bashrc" 2>/dev/null \
+  || fail "7: ~/.local/bin was never saved to the shell rc, so pipx and the tools it installs are missing in the next terminal"
+
+# 7b. pip succeeds but writes no pipx where it is linked: fail, and no broken link.
+PXB_HOME="$TMP/pipx-home-drop"; mkdir -p "$PXB_HOME"
+build_pipx_harness "$TMP/pipx-drop.sh" "$PXB_HOME"
+PXB_OUT="$(FAKE_PIP_DROPS=1 bash "$TMP/pipx-drop.sh" 2>&1)" || true
+if echo "$PXB_OUT" | grep -q 'RESULT_RC=0'; then
+  fail "7: install_pipx_userspace reported success though pip wrote no pipx where it links. Output:
+$PXB_OUT"
+fi
+if [ -e "$PXB_HOME/.local/bin/pipx" ] || [ -L "$PXB_HOME/.local/bin/pipx" ]; then
+  fail "7: install_pipx_userspace left a ~/.local/bin/pipx pointing at a file pip never wrote"
+fi
+
+# 7c. A ~/.local/python the installer did not make is left alone.
+PXC_HOME="$TMP/pipx-home-foreign"; mkdir -p "$PXC_HOME/.local/python"
+echo keep > "$PXC_HOME/.local/python/mine.txt"
+build_pipx_harness "$TMP/pipx-foreign.sh" "$PXC_HOME"
+PXC_OUT="$(bash "$TMP/pipx-foreign.sh" 2>&1)" || true
+if echo "$PXC_OUT" | grep -q 'RESULT_RC=0'; then
+  fail "7: install_pipx_userspace went ahead over a ~/.local/python it did not make. Output:
+$PXC_OUT"
+fi
+[ -f "$PXC_HOME/.local/python/mine.txt" ] \
+  || fail "7: install_pipx_userspace deleted the user's own ~/.local/python"
+
+# 7d. A user's own PIP_USER=1 and require-virtualenv settings (either spelling)
+# neither stop the install nor move pipx out of ~/.local/python. They are
+# overridden one by one rather than with --isolated, which would also drop a
+# mirror set in the user's pip.conf; that part needs real pip, so this check
+# does not cover it.
+PXD_HOME="$TMP/pipx-home-usersettings"; mkdir -p "$PXD_HOME"
+build_pipx_harness "$TMP/pipx-usersettings.sh" "$PXD_HOME"
+PXD_OUT="$(PIP_USER=1 PIP_REQUIRE_VIRTUALENV=1 PIP_REQUIRE_VENV=1 bash "$TMP/pipx-usersettings.sh" 2>&1)" || true
+echo "$PXD_OUT" | grep -q 'RESULT_RC=0' \
+  || fail "7: a user's PIP_USER=1 or require-virtualenv setting stopped the user-space pipx install. Output:
+$PXD_OUT"
+[ "$(readlink "$PXD_HOME/.local/bin/pipx")" = "$PXD_HOME/.local/python/bin/pipx" ] \
+  || fail "7: with PIP_USER=1 set, ~/.local/bin/pipx is not the pipx inside ~/.local/python"
+
+echo "PASS: test_bootstrap_userspace_fallback (7 checks, negative control on the main scenario)"

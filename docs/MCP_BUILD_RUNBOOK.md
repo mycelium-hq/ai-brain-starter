@@ -13,7 +13,7 @@
 1. **Read this whole file.** Every skipped lesson costs 15-60 minutes.
 2. **Check your tool-routing doc** before building. Does an existing paid tool already do this? (n8n, HubSpot, Apollo, etc.) Don't build custom when you can wire.
 3. **Run the Optimization Pass** (see section below). Before writing a line of code, audit the spec for over-engineering and stack redundancy. This is mandatory, not optional.
-4. **Verify FastMCP is installed:** `fastmcp version` (expect v3.2.3+). Install via `pipx install fastmcp`.
+4. **Verify FastMCP is installed:** `fastmcp version` (expect v3.2.3+). Install via `pipx install 'fastmcp-slim[client,server]'`: since fastmcp 3.3 (May 2026) the `fastmcp` command ships in fastmcp-slim, and `pipx install fastmcp` finds no app.
 5. **Check `~/.claude.json`** for existing registrations. Don't create duplicates.
 6. **Check Python dependencies:** `python3 -c "import fastmcp; print(fastmcp.__version__)"`. If import fails: `pip3 install --break-system-packages fastmcp`.
 7. **Read at least one existing MCP server** to match established patterns before writing new ones.
@@ -343,14 +343,14 @@ If you set `"type": "url"` in `.mcp.json`, Claude Code silently drops the ENTIRE
 
 ### Lesson: `fastmcp run` uses the pipx venv, not system Python
 
-`fastmcp` installed via `pipx install fastmcp` runs server scripts under its OWN isolated Python. Any import in your server file must be installed INTO that venv:
+`fastmcp` installed with pipx runs server scripts under its OWN isolated Python. Any import in your server file must be installed INTO that venv. Its pipx name is `fastmcp-slim` (installs made before fastmcp 3.3 named it `fastmcp`; `pipx list` shows which):
 
 ```bash
 # Option A: pipx inject
-pipx inject fastmcp networkx pandas
+pipx inject fastmcp-slim networkx pandas
 
-# Option B: direct pip into the venv
-~/.local/pipx/venvs/fastmcp/bin/python3 -m pip install networkx
+# Option B: pip inside that venv, wherever pipx keeps it
+pipx runpip fastmcp-slim install networkx
 ```
 
 System-wide `pip3 install` does nothing for `fastmcp run ...`-hosted servers.
