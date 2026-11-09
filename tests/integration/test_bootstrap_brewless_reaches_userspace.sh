@@ -152,7 +152,7 @@ build_harness() {
     echo 'PY="python3"'
     # The Homebrew DECISION block only (never the absolute-path brew-sourcing
     # loop above it in the real file -- see HERMETICITY NOTE at the top).
-    awk '/^if is_mac && ! have brew && \[\[ "\$CORPORATE_PROFILE" == "1" \]\]; then$/,/^fi$/' "$src"
+    awk '/^if is_mac && ! have brew && /,/^fi$/' "$src"
     # Interpreter-token-agnostic anchor (matches both "$PY" and a literal
     # python3), same reasoning as test_bootstrap_userspace_fallback.sh.
     awk '/^if ! .* -c "import sys; assert sys.version_info >= \(3,10\)" 2>\/dev\/null; then$/,/^fi$/' "$src"

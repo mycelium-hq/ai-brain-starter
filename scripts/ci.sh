@@ -305,6 +305,7 @@ INTEGRATION_TESTS=(
   test_bootstrap_omits_vault_hooks
   test_bootstrap_archive_entry
   test_bootstrap_brew_terminal_step
+  test_bootstrap_intel_no_homebrew
   test_bootstrap_optional_packs_soft_fail
   test_bootstrap_corporate_profile
   test_bootstrap_userspace_fallback

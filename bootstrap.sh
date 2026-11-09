@@ -1145,7 +1145,17 @@ if is_mac && ! have brew; then
   done
 fi
 
-if is_mac && ! have brew && [[ "$CORPORATE_PROFILE" == "1" ]]; then
+if is_mac && ! have brew && [[ "$(uname -m)" != "arm64" ]]; then
+  # Intel Mac without brew. Homebrew's own installer now aborts on any Mac
+  # whose `uname -m` is not arm64 ("only supported on Apple Silicon"), with no
+  # override, so running it (or sending the person to a Terminal step that runs
+  # it) is a dead end. An Intel Mac that already has brew was sourced above and
+  # never lands here. Skip it, in dry-run too; the user-space Python/Node
+  # installs below work on x86_64 and each brew-carried component note_gaps
+  # itself. (tickets#6174)
+  warn "$(t "Homebrew no longer installs on Intel Macs, so it is skipped. Python and Node install into your own folder instead." \
+            "Homebrew ya no se instala en Macs Intel, así que se omite. Python y Node se instalan en tu propia carpeta.")"
+elif is_mac && ! have brew && [[ "$CORPORATE_PROFILE" == "1" ]]; then
   # Corporate / user-space mode: do NOT run the sudo-gated Homebrew installer.
   warn "$(t "Corporate profile: Homebrew is missing — skipping its install (no sudo, user-space only)." \
             "Perfil corporativo: falta Homebrew — se omite su instalación (sin sudo, solo espacio de usuario).")"

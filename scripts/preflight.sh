@@ -100,7 +100,10 @@ have_working_git() { have git || return 1; run_with_timeout 15 git --version >/d
 # reading it may not be the person who ran this check. Voice matches
 # bootstrap.sh's own "exact request for IT" line (~1050).
 print_it_request() {
-  cat <<EOF
+  # Homebrew no longer installs on Intel Macs, so never ask IT for it there.
+  local drop_brew=0
+  [[ "$(uname -s)" == "Darwin" && "$(uname -m)" != "arm64" ]] && drop_brew=1
+  cat <<EOF | { if [[ $drop_brew -eq 1 ]]; then grep -v -- "- Homebrew ("; else cat; fi; }
 
 ━━━ $(t "Copy-paste request for your IT team" "Pedido para copiar y enviar a tu equipo de IT") ━━━
 
@@ -146,16 +149,15 @@ case "$OS_KIND" in
   Darwin)
     MACOS_VER="$(sw_vers -productVersion 2>/dev/null || echo unknown)"
     MACOS_MAJOR="${MACOS_VER%%.*}"
-    if [[ "$MACOS_MAJOR" =~ ^[0-9]+$ && "$MACOS_MAJOR" -ge 11 ]]; then
-      green "$(t "macOS $MACOS_VER (supported, ≥11 Big Sur)" "macOS $MACOS_VER (compatible, ≥11 Big Sur)")"
-    elif [[ "$MACOS_MAJOR" =~ ^[0-9]+$ && "$MACOS_MAJOR" -ge 10 ]]; then
-      yellow "$(t \
-        "macOS $MACOS_VER is older than Big Sur. Most things install but Homebrew may warn." \
-        "macOS $MACOS_VER es anterior a Big Sur. La mayoría se instala, pero Homebrew puede advertir.")"
-    else
+    if [[ "$MACOS_MAJOR" =~ ^[0-9]+$ && "$MACOS_MAJOR" -ge 13 ]]; then
+      green "$(t "macOS $MACOS_VER (supported, ≥13 Ventura)" "macOS $MACOS_VER (compatible, ≥13 Ventura)")"
+    elif [[ "$MACOS_MAJOR" =~ ^[0-9]+$ ]]; then
       red "$(t \
-        "macOS $MACOS_VER is too old. Upgrade to Big Sur (11) or newer. https://support.apple.com/macos/upgrade" \
-        "macOS $MACOS_VER es muy antiguo. Actualizá a Big Sur (11) o más reciente. https://support.apple.com/es-co/macos/upgrade")"
+        "macOS $MACOS_VER is too old. Claude Code needs macOS 13 (Ventura) or newer. https://support.apple.com/macos/upgrade" \
+        "macOS $MACOS_VER es muy antiguo. Claude Code necesita macOS 13 (Ventura) o más reciente. https://support.apple.com/es-co/macos/upgrade")"
+    else
+      yellow "$(t "macOS version unknown ($MACOS_VER). Claude Code needs macOS 13 (Ventura) or newer." \
+                  "Versión de macOS desconocida ($MACOS_VER). Claude Code necesita macOS 13 (Ventura) o más reciente.")"
     fi
     ARCH="$(uname -m)"
     info "$(t "Architecture: $ARCH" "Arquitectura: $ARCH")"
