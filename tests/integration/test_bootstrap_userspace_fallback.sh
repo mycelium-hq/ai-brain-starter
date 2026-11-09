@@ -367,7 +367,7 @@ printf '%s' "$NODE_BLOCK" | grep -q 'install_node_userspace'   || fail "6: the N
 # ── 7. install_pipx_userspace() (tickets#6171): the real function, with only
 # the Python download stood in by a stub whose `python3 -m pip install ... pipx`
 # writes bin/pipx the way pip does, reading PIP_USER and PIP_REQUIRE_VIRTUALENV
-# from the environment as pip does. FAKE_PIP_DROPS=1 makes that pip succeed
+# (or PIP_REQUIRE_VENV) from the environment as pip does. FAKE_PIP_DROPS=1 makes that pip succeed
 # without writing pipx where it is linked. ──
 build_pipx_harness() { # build_pipx_harness OUT_FILE FAKE_HOME
   {
@@ -385,7 +385,7 @@ fetch_python_userspace() {
 #!/bin/sh
 case " $* " in
   *" -m pip install "*" pipx "*)
-    if [ "${PIP_REQUIRE_VIRTUALENV:-0}" = 1 ]; then
+    if [ "${PIP_REQUIRE_VIRTUALENV:-0}" = 1 ] || [ "${PIP_REQUIRE_VENV:-0}" = 1 ]; then
       echo "ERROR: Could not find an activated virtualenv (required)." >&2; exit 3
     fi
     [ "${FAKE_PIP_DROPS:-0}" = 1 ] && exit 0
@@ -443,14 +443,16 @@ fi
 [ -f "$PXC_HOME/.local/python/mine.txt" ] \
   || fail "7: install_pipx_userspace deleted the user's own ~/.local/python"
 
-# 7d. A user's own PIP_USER=1 and require-virtualenv settings neither stop the
-# install nor move pipx out of ~/.local/python. They are overridden one by one,
-# not with --isolated, so a mirror set in the user's pip.conf still applies.
+# 7d. A user's own PIP_USER=1 and require-virtualenv settings (either spelling)
+# neither stop the install nor move pipx out of ~/.local/python. They are
+# overridden one by one rather than with --isolated, which would also drop a
+# mirror set in the user's pip.conf; that part needs real pip, so this check
+# does not cover it.
 PXD_HOME="$TMP/pipx-home-usersettings"; mkdir -p "$PXD_HOME"
 build_pipx_harness "$TMP/pipx-usersettings.sh" "$PXD_HOME"
-PXD_OUT="$(PIP_USER=1 PIP_REQUIRE_VIRTUALENV=1 bash "$TMP/pipx-usersettings.sh" 2>&1)" || true
+PXD_OUT="$(PIP_USER=1 PIP_REQUIRE_VIRTUALENV=1 PIP_REQUIRE_VENV=1 bash "$TMP/pipx-usersettings.sh" 2>&1)" || true
 echo "$PXD_OUT" | grep -q 'RESULT_RC=0' \
-  || fail "7: a user's PIP_USER=1 or PIP_REQUIRE_VIRTUALENV=1 stopped the user-space pipx install. Output:
+  || fail "7: a user's PIP_USER=1 or require-virtualenv setting stopped the user-space pipx install. Output:
 $PXD_OUT"
 [ "$(readlink "$PXD_HOME/.local/bin/pipx")" = "$PXD_HOME/.local/python/bin/pipx" ] \
   || fail "7: with PIP_USER=1 set, ~/.local/bin/pipx is not the pipx inside ~/.local/python"

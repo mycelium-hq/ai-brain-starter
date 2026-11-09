@@ -594,10 +594,12 @@ install_pipx_userspace() {
     [[ ! -e "$HOME/.local/python" ]] || return 1
     fetch_python_userspace || return 1
   fi
-  # Overrides only the two user pip settings that stop this install or move it
-  # (user = true sends pipx to the user site, require-virtualenv refuses it).
-  # Not --isolated: a mirror, proxy or certificate set in pip.conf still applies.
-  PIP_USER=0 PIP_REQUIRE_VIRTUALENV=0 \
+  # Overrides the user pip settings that commonly stop this install or move it:
+  # user = true sends pipx to the user site, require-virtualenv (also spelled
+  # require-venv) refuses it. Not --isolated, so a mirror, proxy or certificate
+  # set in pip.conf still applies. Anything else that moves pipx is caught by
+  # the check below and ends as an install gap, not a broken link.
+  PIP_USER=0 PIP_REQUIRE_VIRTUALENV=0 PIP_REQUIRE_VENV=0 \
     "$HOME/.local/python/bin/python3" -m pip install --quiet --disable-pip-version-check pipx || return 1
   [[ -x "$HOME/.local/python/bin/pipx" ]] || return 1
   mkdir -p "$HOME/.local/bin" || return 1
