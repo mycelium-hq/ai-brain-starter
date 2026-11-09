@@ -37,6 +37,8 @@ H=/tmp/harness-run.sh
   echo 'PY=python3; pick_python || true'
   echo 'echo "PY=$PY"'
   awk '/^if ! have pipx && \[\[ \$DRY_RUN -eq 1 \]\]; then$/,/^have pipx && ok/' "$SRC"
+  awk '/^if ! have graphify && \[\[ \$DRY_RUN -eq 1 \]\]; then$/,/^have graphify && ok/' "$SRC"
+  awk '/^if ! have fastmcp && \[\[ \$DRY_RUN -eq 1 \]\]; then$/,/^have fastmcp && ok/' "$SRC"
   echo 'echo "GAPS:"; cat "$GAPS_FILE" 2>/dev/null || echo "(none)"'
 } > "$H"
 chmod 755 "$H"
@@ -51,7 +53,7 @@ echo "== run the pipx section as $WHO ($CODE)"
 run_as "bash $H" || echo "(section exited non-zero; the verdict below is what landed)"
 
 echo "== verdict"
-CHECK='export PATH="$HOME/.local/bin:$PATH"; hash -r; command -v pipx && pipx --version && pipx install fastmcp && fastmcp --version'
+CHECK='export PATH="$HOME/.local/bin:$PATH"; hash -r; command -v pipx && command -v graphify && command -v fastmcp && pipx --version && fastmcp --version'
 if [ "$CODE" = before ]; then
   if run_as "$CHECK"; then echo "UNEXPECTED: pre-fix code produced a working pipx"; exit 1; fi
   echo "REPRODUCED: the pre-fix code leaves no working pipx"
@@ -59,5 +61,5 @@ else
   run_as "$CHECK"
   run_as 'echo "python3 is $(command -v python3)"; test "$(command -v python3)" = /usr/bin/python3' \
     || { echo "FAIL: the distro python3 is no longer the user's python3"; exit 1; }
-  echo "OK: pipx landed and installed fastmcp; python3 is still the distro's"
+  echo "OK: pipx, graphify and fastmcp landed; python3 is still the distro's"
 fi

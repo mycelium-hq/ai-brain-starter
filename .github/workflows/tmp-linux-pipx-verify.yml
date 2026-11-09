@@ -49,6 +49,8 @@ jobs:
           cp -R "$GITHUB_WORKSPACE" /home/student/.claude/skills/ai-brain-starter
           rm -rf /home/student/.claude/skills/ai-brain-starter/.git /home/student/.claude/skills/ai-brain-starter/.github/tmp-linux-pipx
           chown -R student:student /home/student
+      - name: Claude Code, which a real student already has
+        run: su - student -c 'curl -fsSL https://claude.ai/install.sh | bash' 2>&1 | tail -5
       - name: README install as a user without password-free sudo
         run: |
           set +e
