@@ -1455,7 +1455,11 @@ have gh && ok "gh $(gh --version 2>/dev/null | head -1 | awk '{print $3}')" || t
 
 if is_mac; then
   if [[ ! -d "/Applications/Obsidian.app" ]] && [[ $DRY_RUN -eq 1 ]]; then
-    dry "would: brew install --cask obsidian"
+    if ! have brew && [[ "$(uname -m)" != "arm64" ]]; then
+      dry "would: list Obsidian as a step for you (no Homebrew on Intel Macs): install it from https://obsidian.md"
+    else
+      dry "would: brew install --cask obsidian"
+    fi
   elif [[ ! -d "/Applications/Obsidian.app" ]] && have brew; then
     hdr "$(t "Installing Obsidian" "Instalando Obsidian")"
     log "$(t \

@@ -103,7 +103,7 @@ print_it_request() {
   # Homebrew no longer installs on Intel Macs, so never ask IT for it there.
   local drop_brew=0
   [[ "$(uname -s)" == "Darwin" && "$(uname -m)" != "arm64" ]] && drop_brew=1
-  cat <<EOF | { if [[ $drop_brew -eq 1 ]]; then grep -v -- "- Homebrew ("; else cat; fi; }
+  cat <<EOF | { if [[ $drop_brew -eq 1 ]]; then grep -v -- "- Homebrew (" | sed 's#Git/Homebrew#Git#'; else cat; fi; }
 
 ━━━ $(t "Copy-paste request for your IT team" "Pedido para copiar y enviar a tu equipo de IT") ━━━
 
