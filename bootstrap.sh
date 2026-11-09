@@ -594,9 +594,11 @@ install_pipx_userspace() {
     [[ ! -e "$HOME/.local/python" ]] || return 1
     fetch_python_userspace || return 1
   fi
-  # --isolated ignores the user's own pip settings: a PIP_USER=1 would put pipx
-  # somewhere other than the folder linked below.
-  "$HOME/.local/python/bin/python3" -m pip install --quiet --disable-pip-version-check --isolated pipx || return 1
+  # Overrides only the two user pip settings that stop this install or move it
+  # (user = true sends pipx to the user site, require-virtualenv refuses it).
+  # Not --isolated: a mirror, proxy or certificate set in pip.conf still applies.
+  PIP_USER=0 PIP_REQUIRE_VIRTUALENV=0 \
+    "$HOME/.local/python/bin/python3" -m pip install --quiet --disable-pip-version-check pipx || return 1
   [[ -x "$HOME/.local/python/bin/pipx" ]] || return 1
   mkdir -p "$HOME/.local/bin" || return 1
   ln -sf "$HOME/.local/python/bin/pipx" "$HOME/.local/bin/pipx" || return 1
