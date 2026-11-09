@@ -594,10 +594,16 @@ install_pipx_userspace() {
     [[ ! -e "$HOME/.local/python" ]] || return 1
     fetch_python_userspace || return 1
   fi
-  "$HOME/.local/python/bin/python3" -m pip install --quiet --disable-pip-version-check pipx || return 1
+  # --isolated ignores the user's own pip settings: a PIP_USER=1 would put pipx
+  # somewhere other than the folder linked below.
+  "$HOME/.local/python/bin/python3" -m pip install --quiet --disable-pip-version-check --isolated pipx || return 1
+  [[ -x "$HOME/.local/python/bin/pipx" ]] || return 1
   mkdir -p "$HOME/.local/bin" || return 1
   ln -sf "$HOME/.local/python/bin/pipx" "$HOME/.local/bin/pipx" || return 1
-  case ":$PATH:" in *":$HOME/.local/bin:"*) : ;; *) export PATH="$HOME/.local/bin:$PATH" ;; esac
+  # Saved to the shell rc, not only this run's PATH: `pipx ensurepath` writes
+  # nothing once ~/.local/bin is on PATH, so pipx and every tool it installs
+  # would be missing in the next terminal.
+  add_user_path_entry "$HOME/.local/bin"
 }
 
 # ───────────────────────────────────────────────────────────────────────────────
@@ -1592,9 +1598,9 @@ if ! have fastmcp && [[ $DRY_RUN -eq 1 ]]; then
 elif ! have fastmcp; then
   hdr "Installing fastmcp"
   log "fastmcp lets you build custom MCP servers in a few lines of Python."
-  # Since fastmcp 4 (2026-11) the `fastmcp` command ships in fastmcp-slim: the
-  # fastmcp package only pulls in fastmcp-slim[client,server], so pipx finds no
-  # app in it (tickets#6172). Install what it pulls in, by name.
+  # Since fastmcp 3.3 (2026-05-15) the `fastmcp` command ships in fastmcp-slim:
+  # the fastmcp package only pulls in fastmcp-slim[client,server], so pipx finds
+  # no app in it (tickets#6172). Install what it pulls in, by name.
   quiet_retry pipx install 'fastmcp-slim[client,server]' \
     || note_gap "fastmcp" "pipx install 'fastmcp-slim[client,server]'"
 fi

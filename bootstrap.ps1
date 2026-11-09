@@ -1024,8 +1024,8 @@ if (-not (Have fastmcp) -and $DryRun) {
     # EAP guard: pipx writes progress/warnings to stderr -> terminating error
     # under Stop in PS 5.1 even with 2>$null. Relaxed here; the Have-check below
     # is what decides success.
-    # Since fastmcp 4 (2026-11) the fastmcp command ships in fastmcp-slim: the
-    # fastmcp package only pulls it in, so pipx finds no app there (tickets#6172).
+    # Since fastmcp 3.3 (2026-05-15) the fastmcp command ships in fastmcp-slim:
+    # the fastmcp package only pulls it in, so pipx finds no app there (tickets#6172).
     $eapSaved = $ErrorActionPreference; $ErrorActionPreference = "SilentlyContinue"
     pipx install 'fastmcp-slim[client,server]' 2>$null
     $ErrorActionPreference = $eapSaved
