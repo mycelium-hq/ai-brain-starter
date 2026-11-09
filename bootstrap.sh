@@ -1588,11 +1588,15 @@ have graphify && ok "graphify $(graphify --version 2>/dev/null | head -1 || echo
 # ───────────────────────────────────────────────────────────────────────────────
 
 if ! have fastmcp && [[ $DRY_RUN -eq 1 ]]; then
-  dry "would: pipx install fastmcp"
+  dry "would: pipx install 'fastmcp-slim[client,server]'"
 elif ! have fastmcp; then
   hdr "Installing fastmcp"
   log "fastmcp lets you build custom MCP servers in a few lines of Python."
-  quiet_retry pipx install fastmcp || note_gap "fastmcp" "pipx install fastmcp"
+  # Since fastmcp 4 (2026-11) the `fastmcp` command ships in fastmcp-slim: the
+  # fastmcp package only pulls in fastmcp-slim[client,server], so pipx finds no
+  # app in it (tickets#6172). Install what it pulls in, by name.
+  quiet_retry pipx install 'fastmcp-slim[client,server]' \
+    || note_gap "fastmcp" "pipx install 'fastmcp-slim[client,server]'"
 fi
 have fastmcp && ok "fastmcp $(fastmcp --version 2>/dev/null | head -1 || echo installed)"
 

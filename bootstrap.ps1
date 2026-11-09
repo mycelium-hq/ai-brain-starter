@@ -1018,17 +1018,19 @@ if (Have pipx) { Ok "pipx" } else { Err "pipx install failed" }
 # Framework for building custom MCP servers in minimal Python. Needed when
 # wiring custom connectors (CRM bridges, vault sync, investor relations, etc.)
 if (-not (Have fastmcp) -and $DryRun) {
-    Dry "would: pipx install fastmcp"
+    Dry "would: pipx install 'fastmcp-slim[client,server]'"
 } elseif (-not (Have fastmcp)) {
     Hdr "Installing fastmcp"
     # EAP guard: pipx writes progress/warnings to stderr -> terminating error
     # under Stop in PS 5.1 even with 2>$null. Relaxed here; the Have-check below
     # is what decides success.
+    # Since fastmcp 4 (2026-11) the fastmcp command ships in fastmcp-slim: the
+    # fastmcp package only pulls it in, so pipx finds no app there (tickets#6172).
     $eapSaved = $ErrorActionPreference; $ErrorActionPreference = "SilentlyContinue"
-    pipx install fastmcp 2>$null
+    pipx install 'fastmcp-slim[client,server]' 2>$null
     $ErrorActionPreference = $eapSaved
 }
-if (Have fastmcp) { Ok "fastmcp" } else { Warn "fastmcp not installed (non-blocking, install later with: pipx install fastmcp)" }
+if (Have fastmcp) { Ok "fastmcp" } else { Warn "fastmcp not installed (non-blocking, install later with: pipx install 'fastmcp-slim[client,server]')" }
 
 # ─── gh (GitHub CLI) ──────────────────────────────────────────────────────────
 if (-not (Have gh) -and $DryRun) {

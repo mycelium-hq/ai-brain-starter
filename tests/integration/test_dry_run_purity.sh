@@ -116,7 +116,7 @@ tokens = [
     "brew install --cask obsidian",
     "snap install obsidian",
     "pipx install graphifyy",
-    "pipx install fastmcp",
+    "pipx install 'fastmcp-slim[client,server]'",
 ]
 bad = []
 for tok in tokens:
