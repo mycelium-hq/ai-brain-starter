@@ -74,7 +74,7 @@ extract_fn() {
 
 for fn in have have_sudo is_mac is_linux hdr dry ok warn err log note_gap \
           user_space_platform add_user_path_entry fetch_tarball \
-          install_node_userspace install_python_userspace; do
+          install_node_userspace fetch_python_userspace install_python_userspace; do
   [ -n "$(extract_fn "$fn" "$BOOTSTRAP")" ] || fail "setup: $fn() not found in bootstrap.sh"
 done
 
@@ -176,7 +176,9 @@ build_harness() {
     grep '^GAPS_FILE=' "$src" | sed "s|\$HOME|$fakehome|" || true
     extract_fn note_gap "$src"
     grep -E '^(NODE_FALLBACK_VERSION|PY_FALLBACK_VERSION|PY_FALLBACK_TAG)=' "$src" || true
-    for fn in user_space_platform add_user_path_entry fetch_tarball install_node_userspace install_python_userspace; do
+    # fetch_python_userspace: absent from the pre-fix fixture, so it extracts
+    # to nothing there; install_python_userspace calls it since tickets#6171.
+    for fn in user_space_platform add_user_path_entry fetch_tarball install_node_userspace fetch_python_userspace install_python_userspace; do
       extract_fn "$fn" "$src"
     done
     echo 'DRY_RUN=0'

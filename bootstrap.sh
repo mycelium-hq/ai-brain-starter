@@ -561,17 +561,43 @@ install_node_userspace() {
   add_user_path_entry "$HOME/.local/node/bin"
 }
 
-# install_python_userspace — land a working `python3` under ~/.local/python
-# with no brew and no sudo. Same contract as install_node_userspace above.
-install_python_userspace() {
+# fetch_python_userspace — download the pinned python-build-standalone build
+# to ~/.local/python. No brew, no sudo, and nothing added to PATH.
+fetch_python_userspace() {
   local plat os arch triple os_tag
   plat="$(user_space_platform)"; os="${plat%-*}"; arch="${plat#*-}"
   case "$os" in darwin) os_tag="apple-darwin" ;; *) os_tag="unknown-linux-gnu" ;; esac
   case "$arch" in arm64) arch="aarch64" ;; *) arch="x86_64" ;; esac
   triple="cpython-${PY_FALLBACK_VERSION}+${PY_FALLBACK_TAG}-${arch}-${os_tag}-install_only"
   fetch_tarball "https://github.com/astral-sh/python-build-standalone/releases/download/${PY_FALLBACK_TAG}/${triple}.tar.gz" \
-    "$HOME/.local/python" "python" || return 1
+    "$HOME/.local/python" "python"
+}
+
+# install_python_userspace — land a working `python3` under ~/.local/python
+# with no brew and no sudo, first on PATH. Same contract as
+# install_node_userspace above.
+install_python_userspace() {
+  fetch_python_userspace || return 1
   add_user_path_entry "$HOME/.local/python/bin"
+}
+
+# install_pipx_userspace — pipx inside that same ~/.local/python, linked as
+# ~/.local/bin/pipx, for a Linux with no pipx and no password-free sudo
+# (tickets#6171). That Python has its own pip and venv; a distro Python may
+# have no pip, refuse `pip install --user` (PEP 668), or be unable to make a
+# venv (Debian and Ubuntu without python3-venv). It does NOT go on PATH, so
+# the distro python3 stays the user's python3: only pipx, and the tool venvs
+# pipx makes, run on it.
+install_pipx_userspace() {
+  if [[ ! -x "$HOME/.local/python/bin/python3" ]]; then
+    # Never replace a ~/.local/python this installer did not put there.
+    [[ ! -e "$HOME/.local/python" ]] || return 1
+    fetch_python_userspace || return 1
+  fi
+  "$HOME/.local/python/bin/python3" -m pip install --quiet --disable-pip-version-check pipx || return 1
+  mkdir -p "$HOME/.local/bin" || return 1
+  ln -sf "$HOME/.local/python/bin/pipx" "$HOME/.local/bin/pipx" || return 1
+  case ":$PATH:" in *":$HOME/.local/bin:"*) : ;; *) export PATH="$HOME/.local/bin:$PATH" ;; esac
 }
 
 # ───────────────────────────────────────────────────────────────────────────────
@@ -1390,14 +1416,29 @@ have claude && ok "claude $(claude --version 2>/dev/null | head -1 || echo insta
 # ───────────────────────────────────────────────────────────────────────────────
 
 if ! have pipx && [[ $DRY_RUN -eq 1 ]]; then
-  dry "would: install pipx (brew on Mac; pip --user on Linux)"
+  dry "would: install pipx (brew on Mac; the distro package or a user-space Python on Linux)"
 elif ! have pipx; then
   hdr "Installing pipx"
   if is_mac && have brew; then
     brew install pipx && pipx ensurepath || err "pipx install failed"
+  elif is_linux; then
+    # Not pip --user: Ubuntu 23.04+, Debian 12+ and Arch refuse it (PEP 668),
+    # stock Ubuntu ships no pip, and a Debian or Ubuntu Python cannot make the
+    # venvs pipx needs without python3-venv (tickets#6171). The distro package
+    # brings all of that. With no password-free sudo (the usual case inside
+    # Claude Code), pipx goes into the user-space Python instead.
+    if have_sudo; then
+      { sudo apt-get update -qq && sudo apt-get install -y -qq pipx; } 2>/dev/null \
+        || sudo dnf install -y pipx 2>/dev/null \
+        || sudo pacman -S --noconfirm python-pipx 2>/dev/null \
+        || true
+    fi
+    have pipx || install_pipx_userspace \
+      || note_gap "pipx" "bash $SKILL_DIR/bootstrap.sh"
+    have pipx && { pipx ensurepath >/dev/null 2>&1 || true; }
   else
-    # No brew (brew-less Mac, same as the Homebrew section above) or Linux:
-    # pip --user needs no elevation and no brew either way.
+    # Brew-less Mac: python.org's Python and the user-space one both accept
+    # pip --user, so no elevation and no brew.
     "$PY" -m pip install --user pipx && "$PY" -m pipx ensurepath \
       || note_gap "pipx" "pip install --user pipx yourself, then re-run"
   fi
