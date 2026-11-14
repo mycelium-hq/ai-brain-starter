@@ -1,0 +1,5 @@
+{
+  "_comment": "Copy this file to ~/.claude/.vault-context-signals.json and add your own words. strategic_signals: regular expressions matched against your prompt in lowercase; a match loads Current Priorities and Open Loops into the prompt. Write each as \\bword\\b so it only matches the whole word. topic_map: a list of {\"signals\": [...], \"files\": [...]} entries that also load extra vault files (paths relative to your vault root) when their signals match. Keep personal words (a company, a city, a project title) in your own copy, never in the shipped packs.",
+  "strategic_signals": [],
+  "topic_map": []
+}

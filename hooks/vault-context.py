@@ -18,8 +18,8 @@ from the target first, $VAULT_ROOT as fallback). No vault identified → inject
 nothing, which is the honest answer.
 
 SIGNALS (2026-08-15): the trigger list used to be hardcoded English, and half of
-it was one person's vocabulary — `accenture`, `substack`, `nyc`, `high-rise`,
-`after the shock`, plus a TOPIC_MAP pointing at `🚀 team-vault/…` paths that
+it was one person's vocabulary (company names, a city, the titles of that
+person's writing projects), plus a TOPIC_MAP pointing at team-folder paths that
 exist in exactly one vault. Two separate defects wearing one coat:
 
   * A vault kept in Spanish (or any non-English language) never matched a single
@@ -36,6 +36,8 @@ detect-closing-signal.py uses), merged across VAULT_CONTEXT_LANGS (default
 `en,es`), plus an optional per-user override at
 `~/.claude/.vault-context-signals.json` for personal vocabulary and topic→file
 maps — which is where anything naming YOUR company, city, or vault paths goes.
+`templates/vault-context-signals.json.example` shows the shape: copy it to that
+path and fill in your own words. Nobody's own words ship in the kit.
 BUILTIN_STRATEGIC_SIGNALS remains as a floor so a partial install (hook copied
 without templates/) still fires on the obvious English cases.
 """

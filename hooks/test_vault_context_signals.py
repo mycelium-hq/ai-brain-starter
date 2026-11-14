@@ -2,9 +2,9 @@
 """Negative control for the vault-context trigger list.
 
 THE DEFECT. `STRATEGIC_SIGNALS` was a hardcoded English list, and roughly a
-third of it was one person's vocabulary (`accenture`, `substack`, `nyc`,
-`high-rise`, `after the shock`) beside a TOPIC_MAP pointing at
-`🚀 team-vault/…` paths that exist in exactly one vault on earth.
+third of it was one person's vocabulary (company names, a city, the titles of
+that person's writing projects) beside a TOPIC_MAP pointing at team-folder
+paths that exist in exactly one vault on earth.
 
 On a vault kept in Spanish the hook resolved the vault correctly, matched zero
 signals, and exited 0 — indistinguishable from "no strategic question was
@@ -15,10 +15,12 @@ to kill, reached by a different road, which is why the guard here is a NEGATIVE
 CONTROL and not a smoke test: it hands the hook the exact input it claims to
 catch and asserts it fires.
 
-The last case is the CLASS guard. Fixing today's list does nothing if personal
-vocabulary can be re-added to a shipped pack tomorrow, so the shipped packs are
-asserted to contain none of it. Personal terms belong in the per-user override
-(`~/.claude/.vault-context-signals.json`), which is per-user by construction.
+The last case runs the real hook on a made-up personal word: quiet on a fresh
+install, firing once the person's own file lists it. Personal terms belong in
+the per-user override (`~/.claude/.vault-context-signals.json`), which is
+per-user by construction. (It replaces a class guard that kept one person's
+words in this file; the list itself was the leak, and the repo's personal-data
+scrub already reads every line added to a pack.)
 
 Run: python3 hooks/test_vault_context_signals.py
 """
@@ -197,17 +199,36 @@ with tempfile.TemporaryDirectory() as tmp:
 check("end to end: spanish prompt injects Current Priorities", "ZTE" in injected,
       f"stdout={proc.stdout[:200]!r} stderr={proc.stderr[:200]!r}")
 
-# 10. CLASS GUARD — no personal vocabulary in a pack every install loads.
-PERSONAL = ["accenture", "substack", "nyc", "high-rise", "high.rise",
-            "after the shock", "onde", "team-vault", "venue tool"]
-for pack in sorted(PACK_DIR.glob("*.json")):
-    raw = pack.read_text(encoding="utf-8").lower()
-    hits = [term for term in PERSONAL if term in raw]
-    check(f"{pack.name} ships no personal vocabulary", not hits, f"found {hits}")
+# 10. PERSONAL WORDS LIVE ON THE PERSON'S MACHINE, NOT IN THE KIT. A made-up word
+#     that no shipped pack contains is quiet on a fresh install and fires, through
+#     the real hook, once the person's own file lists it.
+with tempfile.TemporaryDirectory() as tmp:
+    vault = Path(tmp) / "Brain"
+    meta = vault / "⚙️ Meta"
+    meta.mkdir(parents=True)
+    (meta / "Current Priorities.md").write_text("- ship the thing\n", encoding="utf-8")
+    mine = Path(tmp) / "mine.json"
+    mine.write_text(json.dumps({"strategic_signals": [r"\bwiqqu\b"]}), encoding="utf-8")
+    stdin = json.dumps({"cwd": str(vault), "prompt": "so tell me about wiqqu"})
+
+    def run_hook(signals_file: Path) -> str:
+        env = dict(os.environ, VAULT_CONTEXT_SIGNALS_FILE=str(signals_file))
+        proc = subprocess.run(
+            [sys.executable, str(HOOK)], input=stdin, capture_output=True, text=True,
+            env=env, encoding="utf-8", errors="replace",
+        )
+        return proc.stdout
+
+    fresh = run_hook(Path(tmp) / "none.json")
+    personal = run_hook(mine)
+check("a made-up personal word is quiet on a fresh install", not fresh.strip(),
+      f"stdout={fresh[:120]!r}")
+check("the same word fires once the person's own file lists it", "ship the thing" in personal,
+      f"stdout={personal[:120]!r}")
 
 print()
 if failures:
     print(f"FAILED: {len(failures)} check(s): {failures}")
     sys.exit(1)
 print("ALL PASS: vault-context fires in Spanish, stays quiet on ordinary prompts, "
-      "and ships no personal vocabulary.")
+      "and takes personal vocabulary only from the person's own file.")

@@ -191,13 +191,13 @@ def main():
     # - Personal vault: <vault>/⚙️ Meta/graphify-out/ for cache + chunks + graph
     # - Team vault layout: <vault>/graphify-out/cache/ at vault root (sibling of content folder),
     #   <vault>/<corpus_folder>/⚙️ Meta/graphify-out/ for chunks + graph
-    onde_team_cache = vault / "graphify-out" / "cache"
-    onde_team_out = folders[0] / "⚙️ Meta" / "graphify-out"
+    team_cache = vault / "graphify-out" / "cache"
+    team_out = folders[0] / "⚙️ Meta" / "graphify-out"
     personal_out = vault / "⚙️ Meta" / "graphify-out"
-    if onde_team_cache.exists() and onde_team_out.exists():
-        cache_dir = onde_team_cache
-        out_dir = onde_team_out
-        layout = "onde-team"
+    if team_cache.exists() and team_out.exists():
+        cache_dir = team_cache
+        out_dir = team_out
+        layout = "team-vault"
     else:
         cache_dir = personal_out / "cache"
         out_dir = personal_out

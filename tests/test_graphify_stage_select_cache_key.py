@@ -38,6 +38,7 @@ that actually encode the four bugs.
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -152,6 +153,40 @@ def test_find_cache_entry_searches_prompt_fingerprint_subdirs() -> None:
                 f"[{name}] missed an entry nested under a p{{fingerprint}}/ subdirectory"
             )
             assert gss.find_cache_entry(base, "0000none") is None, f"[{name}] invented a hit"
+
+
+def _run_sizer(script: Path, vault: Path, folder: str) -> str:
+    proc = subprocess.run(
+        [sys.executable, str(script), "--vault-root", str(vault), folder],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    assert proc.returncode == 0, f"sizer exited {proc.returncode}: {proc.stderr[:300]!r}"
+    return proc.stdout
+
+
+def test_team_vault_layout_is_detected_and_named_for_what_it_is() -> None:
+    """The sizer runs on a personal vault or on a team vault and prints which one.
+
+    Team vault = graphify-out/cache at the vault root AND the content folder carries
+    its own Meta/graphify-out. The label is printed for the operator, so it describes
+    the layout (the sibling scripts already call it team-vault); it must not name the
+    one company whose vault this layout was first written for.
+    """
+    script = _COPIES["scripts"]
+    with tempfile.TemporaryDirectory() as td:
+        vault = Path(td)
+        (vault / "Team Notes" / "⚙️ Meta" / "graphify-out").mkdir(parents=True)
+        (vault / "graphify-out" / "cache").mkdir(parents=True)
+        out = _run_sizer(script, vault, "Team Notes")
+        assert "Layout: team-vault" in out, f"team layout label: {out[:200]!r}"
+        assert f"cache_dir: {vault / 'graphify-out' / 'cache'}" in out, out[:300]
+        assert f"out_dir:   {vault / 'Team Notes' / '⚙️ Meta' / 'graphify-out'}" in out, out[:300]
+    with tempfile.TemporaryDirectory() as td:
+        vault = Path(td)
+        (vault / "Notes").mkdir()
+        out = _run_sizer(script, vault, "Notes")
+        assert "Layout: personal" in out, f"personal layout label: {out[:200]!r}"
+        assert f"cache_dir: {vault / '⚙️ Meta' / 'graphify-out' / 'cache'}" in out, out[:300]
 
 
 def _main() -> int:
