@@ -768,6 +768,68 @@ def main() -> int:  # noqa: C901
         ok("[22] the no-pressure path never reclaims a whole folder",
            (wt / "node_modules").is_dir())
 
+    # The four safety branches around the trim, each on its own.
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        wt = rust_copy(root, "safety-wt")
+        lay = layout(wt)
+        ns = mod.argparse.Namespace(apply=True, apply_trim=True, auto_gc=False, json=True)
+        with mock.patch.dict(os.environ, {"DEV_BUILD_RECLAIM_LOG_DIR": str(root / "_logs")}):
+            # (a) rebuilt between the plan and the delete -> kept
+            planned = mod.trim_plan(root, time.time())
+            for f in lay["old_a"]:
+                os.utime(f, None)
+            with mock.patch.object(mod, "trim_plan", return_value=planned), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                t = mod.trim(ns, root, time.time())
+            ok("[22] a variant rebuilt since the plan is kept at delete time",
+               alive(lay["old_a"]) and gone(lay["old_b"]))
+            ok("[22] and that is reported", any("rebuilt since the plan" in x for x in t["skipped"]))
+            # (b) no process probe on this platform -> a live session lock skips the copy
+            layout(rust_copy(root / "b", "locked-wt"))
+            with mock.patch.object(mod._worktree_safety, "probe_supported", return_value=False), \
+                 mock.patch.object(mod, "worktree_busy", return_value=None), \
+                 mock.patch.object(mod, "has_live_session_lock", return_value=True):
+                items, skipped = mod.trim_plan(root / "b", time.time())
+            ok("[22] without a process probe, a live session lock skips the copy",
+               not items and any("live session lock" in x for x in skipped))
+
+    # (c) main() turns a day-old trim report into a trim, under --auto-gc
+    with tempfile.TemporaryDirectory() as td:
+        home = Path(td)
+        wt = rust_copy(home / "code", "auto-wt")
+        lay = layout(wt)
+        marker = home / ".claude" / ".build-trim-first-report"
+        marker.parent.mkdir(parents=True)
+        marker.touch()
+        two_days = time.time() - 2 * 86400
+        os.utime(marker, (two_days, two_days))
+        env = dict(os.environ, HOME=td, USERPROFILE=td,
+                   DEV_BUILD_RECLAIM_LOG_DIR=str(home / "_logs"))
+        subprocess.run([sys.executable, str(TOOL), "--auto-gc", "--min-idle-days", "9999",
+                        "--dev-root", str(home / "code")],
+                       capture_output=True, text=True, encoding="utf-8", env=env, timeout=120)
+        ok("[22] --auto-gc trims once the trim's own report is a day old",
+           gone(lay["old_a"]) and alive(lay["newest"]))
+
+    # (d) the ladder reads free space after the trim
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        rust = rust_copy(root, "rust-wt")
+        layout(rust)
+        idle = mkwt(root, "idle-wt")
+        backdate(idle, 30)
+        full = shutil._ntuple_diskusage(1000 * 1024 ** 3, 970 * 1024 ** 3, 30 * 1024 ** 3)
+        roomy = shutil._ntuple_diskusage(1000 * 1024 ** 3, 100 * 1024 ** 3, 900 * 1024 ** 3)
+        ns = mod.argparse.Namespace(apply=True, apply_trim=True, auto_gc=False,
+                                    min_idle_days=None, min_free_gb=None, json=True)
+        with mock.patch.object(mod, "disk", side_effect=[full, roomy, roomy, roomy]), \
+             mock.patch.dict(os.environ, {"DEV_BUILD_RECLAIM_LOG_DIR": str(root / "_logs")}), \
+             contextlib.redirect_stdout(io.StringIO()):
+            mod.reclaim(ns, root)
+        ok("[22] a trim that freed the disk keeps the 0-day rung from reclaiming whole folders",
+           (idle / "node_modules").is_dir())
+
     if os.name != "nt" and shutil.which("lsof"):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

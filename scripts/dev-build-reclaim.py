@@ -727,7 +727,7 @@ def print_trim(t: dict) -> None:
     verb = "TRIMMED" if t["applied"] else "WOULD TRIM"
     print(f"{verb}: {t['variants']} stale build variant(s), {t['size_gb']:.1f} GB "
           f"across {t['worktrees']} copy(ies) (not built in {t['stale_hours']:.0f} h; "
-          f"each crate's newest kept)")
+          f"each name's {KEEP_NEWEST} newest kept)")
     for line in t["skipped"][:5]:
         print(f"    {line}")
     if t["failed"]:
