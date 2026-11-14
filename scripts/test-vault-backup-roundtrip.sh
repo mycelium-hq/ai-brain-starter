@@ -170,10 +170,10 @@ na=$(ls -1 "$DA"/vault-backup-* 2>/dev/null | wc -l | tr -d ' ')
   || fail "a bad keep deleted snapshots: $na left"
 perms=""; nrec=0
 for r in "$VAULT_BACKUP_CONF".snapshots.*; do [ -f "$r" ] || continue; nrec=$((nrec+1))
-  perms="$perms $(stat -c %a "$r" 2>/dev/null || stat -f %Lp "$r" 2>/dev/null)"; done
-[ "$nrec" -ge 2 ] && [ -z "$(echo "$perms" | tr ' ' '\n' | grep -v -e '^$' -e '^600$')" ] \
+  perms="$perms $(ls -ln "$r" | cut -c1-10)"; done   # same string on GNU and BSD ls
+[ "$nrec" -ge 2 ] && [ -z "$(echo "$perms" | tr ' ' '\n' | grep -v -e '^$' -e '^-rw-------$')" ] \
   && pass "each folder's snapshot record stays private (0600)" \
-  || fail "snapshot records: $nrec found, modes:$perms (want 600 each)"
+  || fail "snapshot records: $nrec found, modes:$perms (want -rw------- each)"
 
 # ---- 6e. jobs that fire at the same minute do not lose each other's record lines ----
 PAR="C D E F G H I J"
@@ -183,7 +183,7 @@ for v in $PAR; do mkdir -p "$RROOT/Brain$v"; printf '%s\n' "$v" > "$RROOT/Brain$
 if ls "$RROOT/destC"/ >/dev/null 2>&1; then
   echo "SKIP  6e: this user can list a 0300 folder (root?)"
 else
-  for round in 1 2 3 4; do
+  for _ in 1 2 3 4; do
     sleep 1
     for v in $PAR; do bash "$BACKUP" run --vault "$RROOT/Brain$v" >/dev/null 2>&1 & done
     wait
