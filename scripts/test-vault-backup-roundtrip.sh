@@ -132,6 +132,67 @@ else
 fi
 chmod 0700 "$D6" 2>/dev/null
 
+setkeep() { # <vault> <keep>
+  python3 - "$VAULT_BACKUP_CONF" "$(python3 -c "import os,sys;print(os.path.realpath(sys.argv[1]))" "$1")" "$2" <<'PY2'
+import json,sys
+c=json.load(open(sys.argv[1])); c['vaults'][sys.argv[2]]['keep']=sys.argv[3] if not sys.argv[3].isdigit() else int(sys.argv[3]); json.dump(c,open(sys.argv[1],'w'))
+PY2
+}
+
+# ---- 6c. a folder whose path ENDS with another folder's path keeps its snapshots ----
+# The record is shared, so rotate must match a destination exactly, not as a
+# substring: /backup must never claim /mnt/usb/backup's snapshots.
+# Resolved path: the script stores real paths (macOS /var is /private/var).
+RROOT="$(cd "$ROOT" && pwd -P)"
+VA="$RROOT/BrainA"; VB="$RROOT/BrainB"; mkdir -p "$VA" "$VB"
+printf 'a\n' > "$VA/a.md"; printf 'b\n' > "$VB/b.md"
+DA="$RROOT/Users/ade/Backups"; DB="$RROOT/Volumes/Mirror$RROOT/Users/ade/Backups"
+bash "$BACKUP" setup --vault "$VB" --dest "$DB" --schedule none >/dev/null 2>&1
+sleep 1; bash "$BACKUP" run --vault "$VB" >/dev/null 2>&1
+bash "$BACKUP" setup --vault "$VA" --dest "$DA" --keep 1 --schedule none >/dev/null 2>&1
+sleep 1; bash "$BACKUP" run --vault "$VA" >/dev/null 2>&1
+nb=$(ls -1 "$DB"/vault-backup-* 2>/dev/null | wc -l | tr -d ' ')
+na=$(ls -1 "$DA"/vault-backup-* 2>/dev/null | wc -l | tr -d ' ')
+[ "$nb" = "2" ] && [ "$na" = "1" ] \
+  && pass "rotation never touches a destination whose path merely contains this one" \
+  || fail "prefix collision: $DB has $nb (want 2), $DA has $na (want 1)"
+
+# ---- 6d. a keep that is not a whole number >= 1 deletes nothing ----
+if bash "$BACKUP" setup --vault "$VA" --dest "$DA" --keep seven --schedule none >/dev/null 2>&1; then
+  fail "setup accepted --keep seven"
+else
+  pass "setup refuses --keep that is not a whole number"
+fi
+setkeep "$VA" seven
+sleep 1; bash "$BACKUP" run --vault "$VA" >/dev/null 2>&1
+na=$(ls -1 "$DA"/vault-backup-* 2>/dev/null | wc -l | tr -d ' ')
+[ "$na" -ge 2 ] && pass "a bad keep in the config deletes nothing ($na kept)" \
+  || fail "a bad keep deleted snapshots: $na left"
+perm=$(stat -c %a "$VAULT_BACKUP_CONF.snapshots" 2>/dev/null || stat -f %Lp "$VAULT_BACKUP_CONF.snapshots" 2>/dev/null)
+[ "$perm" = "600" ] && pass "the snapshot record stays private (0600)" || fail "snapshot record mode is $perm, want 600"
+
+# ---- 6e. jobs that fire at the same minute do not lose each other's record lines ----
+PAR="C D E F G H I J"
+for v in $PAR; do mkdir -p "$RROOT/Brain$v"; printf '%s\n' "$v" > "$RROOT/Brain$v/n.md"
+  bash "$BACKUP" setup --vault "$RROOT/Brain$v" --dest "$RROOT/dest$v" --keep 1 --schedule none >/dev/null 2>&1
+  chmod 0300 "$RROOT/dest$v"; done
+if ls "$RROOT/destC"/ >/dev/null 2>&1; then
+  echo "SKIP  6e: this user can list a 0300 folder (root?)"
+else
+  for round in 1 2 3 4; do
+    sleep 1
+    for v in $PAR; do bash "$BACKUP" run --vault "$RROOT/Brain$v" >/dev/null 2>&1 & done
+    wait
+  done
+  bad=""
+  for v in $PAR; do chmod 0700 "$RROOT/dest$v"
+    c=$(ls -1 "$RROOT/dest$v"/vault-backup-* 2>/dev/null | wc -l | tr -d ' ')
+    [ "$c" = "1" ] || bad="$bad dest$v=$c"; done
+  [ -z "$bad" ] && pass "eight jobs at once each keep exactly keep (=1)" \
+    || fail "concurrent runs left extra snapshots:$bad"
+fi
+for v in $PAR; do chmod 0700 "$RROOT/dest$v" 2>/dev/null; done
+
 # ---- 7. encrypted round-trip (only if gpg or openssl is available) ----
 if command -v gpg >/dev/null 2>&1 || command -v openssl >/dev/null 2>&1; then
   V2="$ROOT/Brain2"; DEST2="$ROOT/dest2"

@@ -333,8 +333,40 @@ mtime_of() { # <file> -> epoch seconds, or 0. GNU first, then BSD (PORTABILITY.m
   echo "$t"
 }
 
+valid_keep() { # <n> -> 0 when a whole number >= 1
+  case "$1" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$1" -ge 1 ]
+}
+
+is_our_snapshot() { # <dest> <path> -> 0 when <path> is <dest>/vault-backup-<name> exactly
+  # A prefix test, not a substring one: /backup must never claim the snapshots
+  # of /mnt/usb/backup, and the name part may hold no further "/".
+  local rest
+  case "$2" in "$1/$ARCHIVE_STEM-"*) ;; *) return 1 ;; esac
+  rest="${2#"$1/$ARCHIVE_STEM-"}"
+  case "$rest" in ''|*/*) return 1 ;; esac
+  return 0
+}
+
+record_lock() { # mkdir is atomic; a lock older than 10 minutes is a crashed run's
+  local i=0
+  until mkdir "$RECORD.lock" 2>/dev/null; do
+    i=$((i+1))
+    if [ "$i" -ge 120 ]; then
+      if [ $(( $(date +%s) - $(mtime_of "$RECORD.lock") )) -ge 600 ]; then
+        rmdir "$RECORD.lock" 2>/dev/null; i=0; continue
+      fi
+      return 1
+    fi
+    sleep 1
+  done
+}
+record_unlock() { rmdir "$RECORD.lock" 2>/dev/null || true; }
+
 record_snapshot() { # <path>
+  record_lock || { warn "snapshot record is busy; not recorded: $1"; return 0; }
   ( umask 077; printf '%s\n' "$1" >> "$RECORD" ) 2>/dev/null || true
+  record_unlock
 }
 
 rotate() { # <dest> <keep>
@@ -343,13 +375,19 @@ rotate() { # <dest> <keep>
   # nothing, silently) but can stat and delete a file by its exact path, so
   # without the record a scheduled run kept every snapshot: 18 of keep=7,
   # 62 GB, on 2026-11-14 (tickets#6500). Newest first by mtime; delete past
-  # $keep by exact path; rewrite the record with what is left.
-  local dest="$1" keep="$2"
+  # $keep by exact path; rewrite the record with what is left. The whole pass
+  # holds the record lock: every vault's job fires at the same minute.
+  local dest="$1" keep="$2" tmp
+  valid_keep "$keep" || { warn "keep must be a whole number of at least 1 (got '$keep'); nothing deleted"; return 0; }
+  record_lock || { warn "snapshot record is busy; old snapshots not rotated this run"; return 0; }
+  tmp="$RECORD.tmp.$$"
   {
     ls -1 "$dest"/$ARCHIVE_STEM-* 2>/dev/null
     if [ -f "$RECORD" ]; then cat "$RECORD"; fi
-  } | grep -F "$dest/$ARCHIVE_STEM-" | sort -u | while IFS= read -r f; do
-    if [ -e "$f" ]; then printf '%s\t%s\n' "$(mtime_of "$f")" "$f"; fi
+  } | sort -u | while IFS= read -r f; do
+    if is_our_snapshot "$dest" "$f" && [ -e "$f" ]; then
+      printf '%s\t%s\n' "$(mtime_of "$f")" "$f"
+    fi
   done | sort -rn | cut -f2- | {
     n=0; kept=""
     while IFS= read -r f; do
@@ -363,11 +401,20 @@ rotate() { # <dest> <keep>
 "
       fi
     done
-    {
-      if [ -f "$RECORD" ]; then grep -vF "$dest/$ARCHIVE_STEM-" "$RECORD" || true; fi
-      printf '%s' "$kept"
-    } > "$RECORD.tmp" 2>/dev/null && ( umask 077; mv -f "$RECORD.tmp" "$RECORD" ) 2>/dev/null
+    (
+      umask 077
+      {
+        if [ -f "$RECORD" ]; then
+          while IFS= read -r line; do
+            is_our_snapshot "$dest" "$line" || printf '%s\n' "$line"
+          done < "$RECORD"
+        fi
+        printf '%s' "$kept"
+      } > "$tmp"
+    ) 2>/dev/null && mv -f "$tmp" "$RECORD" 2>/dev/null
+    rm -f "$tmp" 2>/dev/null
   }
+  record_unlock
   return 0
 }
 
@@ -394,7 +441,8 @@ cmd_setup() {
       --vault) vault="$2"; shift 2;;
       --dest) dest="$2"; shift 2;;
       --encrypt) encrypt=1; shift;;
-      --keep) keep="$2"; shift 2;;
+      --keep) keep="$2"; shift 2
+              valid_keep "$keep" || die "--keep needs a whole number of at least 1 (got '$keep')";;
       --schedule) schedule="$2"; shift 2;;
       --exclude) ex_given+=("$2"); shift 2;;
       *) die "unknown setup arg: $1";;

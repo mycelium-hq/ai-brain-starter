@@ -13,7 +13,7 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 **Who this affects:** anyone on a Mac whose daily vault snapshot goes to iCloud Drive.
 
-The nightly snapshot is meant to keep your last 7 copies and delete older ones. When it ran on its own schedule, macOS didn't let it see the list of files in iCloud Drive, so it never found the old copies, deleted none, and still reported success. One vault had 18 copies (62 GB) where it should have had 7. It now keeps its own list of the copies it made and deletes the extras by name, which works in the background too. Copies made before this update are cleared the first time you run a backup by hand (`bash scripts/vault-backup.sh run`), since a run you start can see the whole folder.
+The nightly snapshot is meant to keep your last 7 copies and delete older ones. When it ran on its own schedule, macOS didn't let it see the list of files in iCloud Drive, so it never found the old copies, deleted none, and still reported success. One vault had 18 copies (62 GB) where it should have had 7. It now keeps its own list of the copies it made and deletes the extras by name, which works in the background too. Copies made before this update are cleared the first time you run a backup by hand (`bash scripts/vault-backup.sh run`), since a run you start can see the whole folder. Setup now also refuses a `--keep` that isn't a whole number, and a bad value in the config deletes nothing.
 
 ---
 
