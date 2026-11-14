@@ -57,6 +57,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 CONF="${VAULT_BACKUP_CONF:-$HOME/.claude/.vault-backup.conf}"
 MARKER="${VAULT_BACKUP_MARKER:-$HOME/.claude/.vault-backup-last}"
+# Every snapshot this tool wrote, one path per line, kept OUTSIDE the backup
+# folder. rotate() reads it because a scheduled run may not be able to list
+# that folder (tickets#6500); next to the config so a test's CONF isolates it.
+# One file per backup folder (record_file), so jobs for different vaults that
+# fire at the same minute never write the same file and need no lock.
+RECORD="${VAULT_BACKUP_RECORD:-$CONF.snapshots}"
 KEYCHAIN_SERVICE="ai-brain-starter-vault-backup"
 ARCHIVE_STEM="vault-backup"
 
@@ -321,12 +327,82 @@ make_archive() { # <vault> <out-base-no-ext> <encrypt 0|1> <slug> <store-kind> -
   fi
 }
 
+mtime_of() { # <file> -> epoch seconds, or 0. GNU first, then BSD (PORTABILITY.md #1)
+  local t
+  t=$(stat -c %Y "$1" 2>/dev/null)
+  case "$t" in ''|*[!0-9]*) t=$(stat -f %m "$1" 2>/dev/null) ;; esac
+  case "$t" in ''|*[!0-9]*) t=0 ;; esac
+  echo "$t"
+}
+
+valid_keep() { # <n> -> 0 when a whole number >= 1
+  case "$1" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$1" -ge 1 ]
+}
+
+is_our_snapshot() { # <dest> <path> -> 0 when <path> is <dest>/vault-backup-<name> exactly
+  # A prefix test, not a substring one: /backup must never claim the snapshots
+  # of /mnt/usb/backup, and the name part may hold no further "/".
+  local rest
+  case "$2" in "$1/$ARCHIVE_STEM-"*) ;; *) return 1 ;; esac
+  rest="${2#"$1/$ARCHIVE_STEM-"}"
+  case "$rest" in ''|*/*) return 1 ;; esac
+  return 0
+}
+
+record_file() { # <dest> -> this backup folder's own record file
+  printf '%s.%s' "$RECORD" "$(printf '%s' "$1" | cksum | cut -d' ' -f1)"
+}
+
+record_snapshot() { # <dest> <path>
+  ( umask 077; printf '%s\n' "$2" >> "$(record_file "$1")" ) 2>/dev/null || true
+}
+
 rotate() { # <dest> <keep>
-  local dest="$1" keep="$2" f
-  # newest-first; delete everything past $keep
-  ls -1t "$dest"/$ARCHIVE_STEM-* 2>/dev/null | tail -n +"$((keep+1))" | while IFS= read -r f; do
-    [ -n "$f" ] && rm -f "$f"
-  done
+  # Candidates: what a listing of $dest can see PLUS every snapshot this tool
+  # recorded. A launchd job on macOS cannot list iCloud Drive (the glob matches
+  # nothing, silently) but can stat and delete a file by its exact path, so
+  # without the record a scheduled run kept every snapshot: 18 of keep=7,
+  # 62 GB, on 2026-11-14 (tickets#6500). Newest first by mtime; delete past
+  # $keep by exact path; rewrite this folder's record with what is left.
+  local dest="$1" keep="$2" rec tmp
+  valid_keep "$keep" || { warn "keep must be a whole number of at least 1 (got '$keep'); nothing deleted"; return 0; }
+  rec="$(record_file "$dest")"
+  tmp="$rec.tmp.$$"
+  {
+    ls -1 "$dest"/$ARCHIVE_STEM-* 2>/dev/null
+    if [ -f "$rec" ]; then cat "$rec"; fi
+  } | sort -u | while IFS= read -r f; do
+    if is_our_snapshot "$dest" "$f" && [ -e "$f" ]; then
+      printf '%s\t%s\n' "$(mtime_of "$f")" "$f"
+    fi
+  done | sort -rn | cut -f2- | {
+    n=0; kept=""
+    while IFS= read -r f; do
+      n=$((n+1))
+      if [ "$n" -le "$keep" ]; then
+        kept="$kept$f
+"
+      elif ! rm -f "$f" 2>/dev/null || [ -e "$f" ]; then
+        warn "could not delete old snapshot: $f"
+        kept="$kept$f
+"
+      fi
+    done
+    (
+      umask 077
+      {
+        if [ -f "$rec" ]; then  # another folder's lines, should two names collide
+          while IFS= read -r line; do
+            is_our_snapshot "$dest" "$line" || printf '%s\n' "$line"
+          done < "$rec"
+        fi
+        printf '%s' "$kept"
+      } > "$tmp"
+    ) 2>/dev/null && mv -f "$tmp" "$rec" 2>/dev/null
+    rm -f "$tmp" 2>/dev/null
+  }
+  return 0
 }
 
 human_size() { # <file>
@@ -352,7 +428,8 @@ cmd_setup() {
       --vault) vault="$2"; shift 2;;
       --dest) dest="$2"; shift 2;;
       --encrypt) encrypt=1; shift;;
-      --keep) keep="$2"; shift 2;;
+      --keep) keep="$2"; shift 2
+              valid_keep "$keep" || die "--keep needs a whole number of at least 1 (got '$keep')";;
       --schedule) schedule="$2"; shift 2;;
       --exclude) ex_given+=("$2"); shift 2;;
       *) die "unknown setup arg: $1";;
@@ -493,6 +570,7 @@ cmd_run() {
     [ "${bytes:-0}" -gt 256 ] || { rm -f "$out"; die "encrypted archive is suspiciously small"; }
   fi
 
+  record_snapshot "$dest" "$out"
   rotate "$dest" "$keep"
   conf_set "$vault" "last=$(iso_now)"
   ( umask 077; iso_now > "$MARKER" ) 2>/dev/null || true

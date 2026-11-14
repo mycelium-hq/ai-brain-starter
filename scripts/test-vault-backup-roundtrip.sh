@@ -108,6 +108,106 @@ bash "$BACKUP" run --vault "$V" >/dev/null 2>&1
 left=$(ls -1 "$DEST"/vault-backup-* 2>/dev/null | wc -l | tr -d ' ')
 [ "$left" -le 2 ] && pass "rotation kept <= keep (=2): $left remain" || fail "rotation kept too many: $left"
 
+# ---- 6b. rotation still honors --keep when the folder cannot be LISTED ----
+# A launchd job on macOS cannot list iCloud Drive but can write, stat and delete
+# a file by its exact path; rotate() then found nothing and kept every snapshot
+# (18 of keep=7, 62 GB, tickets#6500). A write+search-only folder (0300)
+# reproduces that: create and delete by path work, listing fails.
+V6="$ROOT/Brain6"; D6="$ROOT/dest6"
+mkdir -p "$V6"; printf 'note\n' > "$V6/n.md"
+bash "$BACKUP" setup --vault "$V6" --dest "$D6" --schedule none >/dev/null 2>&1
+python3 - "$VAULT_BACKUP_CONF" "$(python3 -c "import os;print(os.path.realpath('$V6'))")" <<'PY2'
+import json,sys
+c=json.load(open(sys.argv[1])); c['vaults'][sys.argv[2]]['keep']=2; json.dump(c,open(sys.argv[1],'w'))
+PY2
+chmod 0300 "$D6"
+if ls "$D6"/ >/dev/null 2>&1; then
+  echo "SKIP  6b: this user can list a 0300 folder (root?), so the unlistable case cannot be reproduced"
+else
+  for i in 1 2 3; do sleep 1; bash "$BACKUP" run --vault "$V6" >/dev/null 2>&1; done
+  chmod 0700 "$D6"
+  left6=$(ls -1 "$D6"/vault-backup-* 2>/dev/null | wc -l | tr -d ' ')
+  [ "$left6" = "2" ] && pass "rotation keeps exactly keep (=2) when the folder cannot be listed" \
+    || fail "unlistable folder: expected 2 snapshots, found $left6"
+fi
+chmod 0700 "$D6" 2>/dev/null
+
+setkeep() { # <vault> <keep>
+  python3 - "$VAULT_BACKUP_CONF" "$(python3 -c "import os,sys;print(os.path.realpath(sys.argv[1]))" "$1")" "$2" <<'PY2'
+import json,sys
+c=json.load(open(sys.argv[1])); c['vaults'][sys.argv[2]]['keep']=sys.argv[3] if not sys.argv[3].isdigit() else int(sys.argv[3]); json.dump(c,open(sys.argv[1],'w'))
+PY2
+}
+
+# ---- 6c. a folder whose path ENDS with another folder's path keeps its snapshots ----
+# The record is shared, so rotate must match a destination exactly, not as a
+# substring: /backup must never claim /mnt/usb/backup's snapshots.
+# Resolved path: the script stores real paths (macOS /var is /private/var).
+RROOT="$(cd "$ROOT" && pwd -P)"
+VA="$RROOT/BrainA"; VB="$RROOT/BrainB"; mkdir -p "$VA" "$VB"
+printf 'a\n' > "$VA/a.md"; printf 'b\n' > "$VB/b.md"
+DA="$RROOT/Users/ade/Backups"; DB="$RROOT/Volumes/Mirror$RROOT/Users/ade/Backups"
+bash "$BACKUP" setup --vault "$VB" --dest "$DB" --schedule none >/dev/null 2>&1
+sleep 1; bash "$BACKUP" run --vault "$VB" >/dev/null 2>&1
+bash "$BACKUP" setup --vault "$VA" --dest "$DA" --keep 1 --schedule none >/dev/null 2>&1
+sleep 1; bash "$BACKUP" run --vault "$VA" >/dev/null 2>&1
+nb=$(ls -1 "$DB"/vault-backup-* 2>/dev/null | wc -l | tr -d ' ')
+na=$(ls -1 "$DA"/vault-backup-* 2>/dev/null | wc -l | tr -d ' ')
+[ "$nb" = "2" ] && [ "$na" = "1" ] \
+  && pass "rotation never touches a destination whose path merely contains this one" \
+  || fail "prefix collision: $DB has $nb (want 2), $DA has $na (want 1)"
+
+# ---- 6d. a keep that is not a whole number >= 1 deletes nothing ----
+if bash "$BACKUP" setup --vault "$VA" --dest "$DA" --keep seven --schedule none >/dev/null 2>&1; then
+  fail "setup accepted --keep seven"
+else
+  pass "setup refuses --keep that is not a whole number"
+fi
+setkeep "$VA" seven
+sleep 1; bash "$BACKUP" run --vault "$VA" >/dev/null 2>&1
+na=$(ls -1 "$DA"/vault-backup-* 2>/dev/null | wc -l | tr -d ' ')
+[ "$na" -ge 2 ] && pass "a bad keep in the config deletes nothing ($na kept)" \
+  || fail "a bad keep deleted snapshots: $na left"
+perms=""; nrec=0
+for r in "$VAULT_BACKUP_CONF".snapshots.*; do [ -f "$r" ] || continue; nrec=$((nrec+1))
+  perms="$perms $(ls -ln "$r" | cut -c1-10)"; done   # same string on GNU and BSD ls
+[ "$nrec" -ge 2 ] && [ -z "$(echo "$perms" | tr ' ' '\n' | grep -v -e '^$' -e '^-rw-------$')" ] \
+  && pass "each folder's snapshot record stays private (0600)" \
+  || fail "snapshot records: $nrec found, modes:$perms (want -rw------- each)"
+
+# ---- 6e. jobs that fire at the same minute do not lose each other's record lines ----
+PAR="C D E F G H I J"
+for v in $PAR; do mkdir -p "$RROOT/Brain$v"; printf '%s\n' "$v" > "$RROOT/Brain$v/n.md"
+  bash "$BACKUP" setup --vault "$RROOT/Brain$v" --dest "$RROOT/dest$v" --keep 1 --schedule none >/dev/null 2>&1
+  chmod 0300 "$RROOT/dest$v"; done
+if ls "$RROOT/destC"/ >/dev/null 2>&1; then
+  echo "SKIP  6e: this user can list a 0300 folder (root?)"
+else
+  for _ in 1 2 3 4; do
+    sleep 1
+    for v in $PAR; do bash "$BACKUP" run --vault "$RROOT/Brain$v" >/dev/null 2>&1 & done
+    wait
+  done
+  bad=""
+  for v in $PAR; do chmod 0700 "$RROOT/dest$v"
+    c=$(ls -1 "$RROOT/dest$v"/vault-backup-* 2>/dev/null | wc -l | tr -d ' ')
+    [ "$c" = "1" ] || bad="$bad dest$v=$c"; done
+  [ -z "$bad" ] && pass "eight jobs at once each keep exactly keep (=1)" \
+    || fail "concurrent runs left extra snapshots:$bad"
+fi
+for v in $PAR; do chmod 0700 "$RROOT/dest$v" 2>/dev/null; done
+
+# ---- 6f. a record that cannot be written never blocks the backup ----
+mkdir -p "$RROOT/ro"; chmod 0500 "$RROOT/ro"
+sleep 1
+( VAULT_BACKUP_RECORD="$RROOT/ro/rec" bash "$BACKUP" run --vault "$VA" >/dev/null 2>&1 ) & rpid=$!
+w=0; while kill -0 "$rpid" 2>/dev/null && [ "$w" -lt 90 ]; do sleep 1; w=$((w+1)); done
+if kill -0 "$rpid" 2>/dev/null; then kill "$rpid" 2>/dev/null; fail "run hung for 90s when its snapshot record could not be written"
+else wait "$rpid"; rc6f=$?
+  [ "$rc6f" = 0 ] && pass "a run finishes when its snapshot record cannot be written (${w}s)" \
+    || fail "run exited $rc6f when its snapshot record could not be written"; fi
+chmod 0700 "$RROOT/ro"
+
 # ---- 7. encrypted round-trip (only if gpg or openssl is available) ----
 if command -v gpg >/dev/null 2>&1 || command -v openssl >/dev/null 2>&1; then
   V2="$ROOT/Brain2"; DEST2="$ROOT/dest2"
