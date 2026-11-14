@@ -40,9 +40,9 @@ Ported to the substrate with four controls the private original never had:
                                   cap overran under load, failed closed, and
                                   reclaimed nothing while the disk filled);
                                   hooks importing the module keep 15 s
- [20] roots                    -> without --dev-root, ~/dev and ~/code too (one
-                                  machine filled ~/code while only ~/dev was
-                                  ever looked at)
+ [20] roots                    -> without --dev-root, ~/dev, ~/code and
+                                  ~/.codex/worktrees too (one machine filled
+                                  ~/code while only ~/dev was ever looked at)
  [21] --auto-gc                -> the 30-minute check deletes nothing until
                                   its first report is a day old, and is a
                                   no-op on a disk with room
@@ -53,6 +53,18 @@ Ported to the substrate with four controls the private original never had:
                                   active member must not shield idle siblings),
                                   and a git dependency in node_modules is never
                                   taken for a checkout
+ [22] stale build variants     -> trimmed in a copy that is IN USE, pressure or
+                                  not: a linked-binary variant not built in 24 h
+                                  goes whole (binary, .d, .rcgu.o), each name's
+                                  two newest stay whatever their age, libraries
+                                  (and their loose objects) and build-script
+                                  caches are never touched, an incremental
+                                  cache's age is rustc's own session files, a
+                                  symlinked target/ is never followed, a copy
+                                  with a live process in it is preserved, the
+                                  no-pressure path trims too, and --auto-gc
+                                  banks the trim's own first-report day (one
+                                  copy held 15 variants, 200 GB, 2026-11-14)
 
 Run: python3 scripts/test_dev_build_reclaim.py
 """
@@ -63,6 +75,7 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -400,6 +413,8 @@ def main() -> int:  # noqa: C901
         (home / ".claude" / "dev-hygiene.json").write_text(
             json.dumps({"dev_root": str(home / "work")}), encoding="utf-8")
         wts = {name: mkwt(home / name, "idle-wt") for name in ("work", "dev", "code")}
+        # Codex keeps its copies as ~/.codex/worktrees/<task>/<repo>.
+        wts[".codex/worktrees"] = mkwt(home / ".codex" / "worktrees" / "task-1", "repo")
         (home / "elsewhere").mkdir()
         backdate(home, 30)
         env = {k: v for k, v in os.environ.items() if k != "ABS_DEV_ROOT"}
@@ -583,6 +598,257 @@ def main() -> int:  # noqa: C901
                (outside / "node_modules").is_dir())
         else:
             print("  skip [19] symlinks unavailable on this platform")
+
+    # ---- [22] stale build variants are trimmed in copies that are in use ----
+    def rust_copy(root: Path, name: str) -> Path:
+        wt = mkwt(root, name)                       # NOT backdated: in use
+        (wt / "Cargo.toml").write_text("[package]", encoding="utf-8")
+        return wt
+
+    def variant(deps: Path, crate: str, hsh: str, hours_old: float) -> list:
+        deps.mkdir(parents=True, exist_ok=True)
+        stem = f"{crate}-{hsh * 16}"
+        files = [deps / stem, deps / f"{stem}.d", deps / f"{stem}.x1.rcgu.o",
+                 deps / f"{stem}.x2.rcgu.o"]
+        for f in files:
+            f.write_bytes(b"x" * 1024)
+        os.chmod(files[0], 0o755)
+        old = time.time() - hours_old * 3600
+        for f in files:
+            os.utime(f, (old, old))
+        return files
+
+    def aged(path: Path, hours_old: float) -> Path:
+        """An incremental cache whose rustc session files are `hours_old`, while
+        its dirs read NOW, as after a copy of target/: the age must come from
+        rustc's own files."""
+        sess = path / "s-session"
+        sess.mkdir(parents=True, exist_ok=True)
+        old = time.time() - hours_old * 3600
+        for f in ("dep-graph.bin", "work-products.bin"):
+            (sess / f).write_bytes(b"x")
+            os.utime(sess / f, (old, old))
+        return path
+
+    def library(deps: Path, crate: str, hsh: str, hours_old: float) -> list:
+        """The real macOS layout: loose objects beside the .rlib."""
+        stem = f"lib{crate}-{hsh * 16}"
+        files = [deps / f"{stem}.rlib", deps / f"{stem}.rmeta", deps / f"{stem}.d",
+                 deps / f"{crate}-{hsh * 16}.y1.rcgu.o", deps / f"{crate}-{hsh * 16}.d"]
+        old = time.time() - hours_old * 3600
+        for f in files:
+            f.write_bytes(b"x")
+            os.utime(f, (old, old))
+        return files
+
+    def layout(wt: Path) -> dict:
+        deps = wt / "target" / "debug" / "deps"
+        incr = wt / "target" / "debug" / "incremental"
+        triple = wt / "target" / "aarch64-apple-darwin" / "debug" / "deps"
+        return {
+            "old_a": variant(deps, "app_lib", "a", 72),
+            "old_b": variant(deps, "app_lib", "b", 48),
+            "recent": variant(deps, "app_lib", "c", 2),
+            "newest": variant(deps, "app_lib", "d", 0),
+            "solo": variant(deps, "smoke", "e", 240),
+            "pair_old": variant(deps, "bench", "5", 240),   # a name's two newest
+            "pair_new": variant(deps, "bench", "6", 120),   # stay whatever their age
+            "dash_old": variant(deps, "my-app", "7", 72),
+            "dash_mid": variant(deps, "my-app", "8", 1),
+            "dash_new": variant(deps, "my-app", "9", 0),
+            "lib_old": library(deps, "dep", "1", 240),
+            "lib_mid": library(deps, "dep", "3", 100),
+            "lib_new": library(deps, "dep", "2", 0),
+            "incr_old": [aged(incr / "app_lib-0abc", 72)],
+            "incr_mid": [aged(incr / "app_lib-2mid", 1)],
+            "incr_new": [aged(incr / "app_lib-1xyz", 0)],
+            "bs_old": [aged(incr / "build_script_build-9zz", 72)],
+            "bs_mid": [aged(incr / "build_script_build-7xx", 50)],
+            "bs_new": [aged(incr / "build_script_build-8yy", 0)],
+            "triple_old": variant(triple, "app_lib", "f", 72),
+            "triple_mid": variant(triple, "app_lib", "b", 1),
+            "triple_new": variant(triple, "app_lib", "0", 0),
+        }
+
+    def alive(paths: list) -> bool:
+        return all(q.exists() for q in paths)
+
+    def gone(paths: list) -> bool:
+        return not any(q.exists() for q in paths)
+
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        wt = rust_copy(root, "studio-wt")
+        lay = layout(wt)
+        r = run(root, "--min-idle-days", "9999")       # dry-run
+        ok("[22] dry-run trims nothing", alive(lay["old_a"]) and alive(lay["incr_old"]))
+        ok("[22] dry-run reports what it would trim", "WOULD TRIM: 5 stale" in r.stdout)
+        r = run(root, "--apply", "--min-idle-days", "9999")
+        ok("[22] a variant not built in 24 h goes whole (binary, .d, .rcgu.o)",
+           gone(lay["old_a"]) and gone(lay["old_b"]))
+        ok("[22] a variant built within 24 h stays", alive(lay["recent"]))
+        ok("[22] the crate's newest variant stays", alive(lay["newest"]))
+        ok("[22] a crate's only variant stays however old", alive(lay["solo"]))
+        ok("[22] a name's two newest stay however old",
+           alive(lay["pair_old"]) and alive(lay["pair_new"]))
+        ok("[22] a binary name with dashes is covered",
+           gone(lay["dash_old"]) and alive(lay["dash_mid"]) and alive(lay["dash_new"]))
+        ok("[22] libraries and their loose objects are never touched",
+           alive(lay["lib_old"]) and alive(lay["lib_mid"]) and alive(lay["lib_new"]))
+        ok("[22] a stale incremental cache goes (aged by rustc's files, not its dir)",
+           gone(lay["incr_old"]) and alive(lay["incr_mid"]) and alive(lay["incr_new"]))
+        ok("[22] build-script caches are left alone",
+           alive(lay["bs_old"]) and alive(lay["bs_mid"]) and alive(lay["bs_new"]))
+        ok("[22] target/<triple>/<profile> is covered",
+           gone(lay["triple_old"]) and alive(lay["triple_mid"]) and alive(lay["triple_new"]))
+        ok("[22] the copy itself is in use and keeps its node_modules",
+           (wt / "node_modules").is_dir())
+        ok("[22] source and .git survive",
+           (wt / "src" / "main.ts").is_file() and (wt / ".git" / "HEAD").is_file())
+        ok("[22] the apply is reported", "TRIMMED: 5 stale" in r.stdout)
+        mf = list((root / "_logs").glob("build-reclaim-*.jsonl"))
+        kinds = [json.loads(line).get("kind") for m in mf
+                 for line in (safe_read_text(m).text or "").splitlines() if line.strip()]
+        check("[22] every trimmed variant is in the manifest",
+              kinds.count("stale-build-variant"), 5)
+        r = run(root, "--json", "--min-idle-days", "9999")
+        check("[22] --json carries the trim summary", json.loads(r.stdout)["trim"]["variants"], 0)
+
+    # A symlinked target/ is never followed: other copies may share it.
+    with tempfile.TemporaryDirectory() as td, tempfile.TemporaryDirectory() as td2:
+        root = Path(td)
+        wt = rust_copy(root, "linked-wt")
+        shared = Path(td2) / "shared-target"
+        lay = layout(Path(td2) / "holder")
+        os.rename(Path(td2) / "holder" / "target", shared)
+        try:
+            (wt / "target").symlink_to(shared, target_is_directory=True)
+            linked = True
+        except (OSError, NotImplementedError):
+            linked = False
+        if linked:
+            run(root, "--apply", "--min-idle-days", "9999")
+            ok("[22] a symlinked target/ is never followed",
+               (shared / "debug" / "deps" / ("app_lib-" + "a" * 16)).is_file())
+        else:
+            print("  skip [22] symlinks unavailable on this platform")
+
+    # The no-pressure path trims too, and --auto-gc banks the trim's own day.
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        wt = rust_copy(root, "roomy-wt")
+        lay = layout(wt)
+        roomy = shutil._ntuple_diskusage(1000 * 1024 ** 3, 100 * 1024 ** 3, 900 * 1024 ** 3)
+        whole = root / "_markers" / "whole"
+        trimm = root / "_markers" / "trim"
+        env = {"DEV_BUILD_RECLAIM_LOG_DIR": str(root / "_logs")}
+
+        def call(**kw):
+            ns = mod.argparse.Namespace(apply=False, auto_gc=False, min_idle_days=None,
+                                        min_free_gb=None, json=True, dev_root=str(root))
+            for k, v in kw.items():
+                setattr(ns, k, v)
+            out = io.StringIO()
+            with mock.patch.object(mod, "disk", return_value=roomy), \
+                 mock.patch.object(mod, "FIRST_REPORT_MARKER", whole), \
+                 mock.patch.object(mod, "TRIM_FIRST_REPORT_MARKER", trimm), \
+                 mock.patch.dict(os.environ, env), contextlib.redirect_stdout(out):
+                mod.reclaim(ns, root)
+            return out.getvalue()
+
+        out = call(auto_gc=True, apply_trim=False)
+        ok("[22] --auto-gc's first trim finding only reports", alive(lay["old_a"]))
+        ok("[22] and banks the trim's own day, not the whole-folder one",
+           trimm.is_file() and not whole.exists())
+        out = call(apply=True, apply_trim=True)
+        body = json.loads(out)
+        ok("[22] the no-pressure path trims", gone(lay["old_a"]) and alive(lay["newest"]))
+        ok("[22] and prints ONE json object carrying the trim",
+           "no pressure" in body.get("skipped", "") and body["trim"]["deleted"] == 5)
+        ok("[22] the no-pressure path never reclaims a whole folder",
+           (wt / "node_modules").is_dir())
+
+    # The four safety branches around the trim, each on its own.
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        wt = rust_copy(root, "safety-wt")
+        lay = layout(wt)
+        ns = mod.argparse.Namespace(apply=True, apply_trim=True, auto_gc=False, json=True)
+        with mock.patch.dict(os.environ, {"DEV_BUILD_RECLAIM_LOG_DIR": str(root / "_logs")}):
+            # (a) rebuilt between the plan and the delete -> kept
+            planned = mod.trim_plan(root, time.time())
+            for f in lay["old_a"]:
+                os.utime(f, None)
+            with mock.patch.object(mod, "trim_plan", return_value=planned), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                t = mod.trim(ns, root, time.time())
+            ok("[22] a variant rebuilt since the plan is kept at delete time",
+               alive(lay["old_a"]) and gone(lay["old_b"]))
+            ok("[22] and that is reported", any("rebuilt since the plan" in x for x in t["skipped"]))
+            # (b) no process probe on this platform -> a live session lock skips the copy
+            layout(rust_copy(root / "b", "locked-wt"))
+            with mock.patch.object(mod._worktree_safety, "probe_supported", return_value=False), \
+                 mock.patch.object(mod, "worktree_busy", return_value=None), \
+                 mock.patch.object(mod, "has_live_session_lock", return_value=True):
+                items, skipped = mod.trim_plan(root / "b", time.time())
+            ok("[22] without a process probe, a live session lock skips the copy",
+               not items and any("live session lock" in x for x in skipped))
+
+    # (c) main() turns a day-old trim report into a trim, under --auto-gc
+    with tempfile.TemporaryDirectory() as td:
+        home = Path(td)
+        wt = rust_copy(home / "code", "auto-wt")
+        lay = layout(wt)
+        marker = home / ".claude" / ".build-trim-first-report"
+        marker.parent.mkdir(parents=True)
+        marker.touch()
+        two_days = time.time() - 2 * 86400
+        os.utime(marker, (two_days, two_days))
+        env = dict(os.environ, HOME=td, USERPROFILE=td,
+                   DEV_BUILD_RECLAIM_LOG_DIR=str(home / "_logs"))
+        subprocess.run([sys.executable, str(TOOL), "--auto-gc", "--min-idle-days", "9999",
+                        "--dev-root", str(home / "code")],
+                       capture_output=True, text=True, encoding="utf-8", env=env, timeout=120)
+        ok("[22] --auto-gc trims once the trim's own report is a day old",
+           gone(lay["old_a"]) and alive(lay["newest"]))
+
+    # (d) the ladder reads free space after the trim
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        rust = rust_copy(root, "rust-wt")
+        layout(rust)
+        idle = mkwt(root, "idle-wt")
+        backdate(idle, 30)
+        full = shutil._ntuple_diskusage(1000 * 1024 ** 3, 970 * 1024 ** 3, 30 * 1024 ** 3)
+        roomy = shutil._ntuple_diskusage(1000 * 1024 ** 3, 100 * 1024 ** 3, 900 * 1024 ** 3)
+        ns = mod.argparse.Namespace(apply=True, apply_trim=True, auto_gc=False,
+                                    min_idle_days=None, min_free_gb=None, json=True)
+        with mock.patch.object(mod, "disk", side_effect=[full, roomy, roomy, roomy]), \
+             mock.patch.dict(os.environ, {"DEV_BUILD_RECLAIM_LOG_DIR": str(root / "_logs")}), \
+             contextlib.redirect_stdout(io.StringIO()):
+            mod.reclaim(ns, root)
+        ok("[22] a trim that freed the disk keeps the 0-day rung from reclaiming whole folders",
+           (idle / "node_modules").is_dir())
+
+    if os.name != "nt" and shutil.which("lsof"):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            wt = rust_copy(root, "busy-wt")
+            lay = layout(wt)
+            sleeper = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"],
+                                       cwd=str(wt))
+            try:
+                time.sleep(0.5)
+                r = run(root, "--apply", "--min-idle-days", "9999")
+            finally:
+                sleeper.kill()
+                sleeper.wait()
+            ok("[22] a copy with a live process in it keeps its stale variants",
+               alive(lay["old_a"]) and alive(lay["incr_old"]))
+            ok("[22] that preservation is reported",
+               "stale build variants preserved" in r.stdout)
+    else:
+        print("  skip [22] busy copy: no process-cwd probe on this platform")
 
     if FAILED:
         print(f"\nFAILED — dev-build-reclaim (MYC-3727): {len(FAILED)} control(s)")

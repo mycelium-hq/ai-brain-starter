@@ -54,14 +54,18 @@ hand.
 The same installer adds a disk check that runs every 30 minutes
 (`com.abs.dev-build-reclaim` on macOS, a cron line ending in
 `# ai-brain-starter: dev-build-reclaim` elsewhere). It runs only
-`dev-build-reclaim.py --auto-gc`: while the disk has room it reads the free
-space and exits, and when space runs low it deletes build output
-(`node_modules`, `.venv`, Rust `target/`) from checkouts no session or build is
-using, under the dev root, `~/dev` and `~/code`. Once a day was too slow: Rust
-worktrees were measured arriving at about 60 GB a day. It skips the load,
-battery and idle gates below, since on a disk with room it only reads the free
-space and a running build or live session still protects its checkout. Like the
-daily pass, it reports first and deletes nothing until that report is a day old.
+`dev-build-reclaim.py --auto-gc`, under the dev root, `~/dev`, `~/code` and
+Codex's `~/.codex/worktrees`. Every run, it deletes old Rust build variants
+(linked test and app binaries not built in 24 hours, beyond each name's two
+newest, and their incremental caches) from every checkout, including ones in
+use, skipping any checkout where a process is running. When space runs low it
+also deletes whole build folders (`node_modules`, `.venv`, Rust `target/`) from
+checkouts no session or build is using. Once a day was too slow: Rust worktrees
+were measured arriving at about 60 GB a day, and one checkout in use grew to
+200 GB of old build variants. It skips the load, battery and idle gates below,
+since it only deletes rebuildable output and a running build still protects its
+checkout. Like the daily pass, each kind of deletion reports first and deletes
+nothing until that report is a day old.
 
 Re-point or re-install it by hand with:
 
