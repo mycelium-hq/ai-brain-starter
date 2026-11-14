@@ -55,11 +55,16 @@ Ported to the substrate with four controls the private original never had:
                                   taken for a checkout
  [22] stale build variants     -> trimmed in a copy that is IN USE, pressure or
                                   not: a linked-binary variant not built in 24 h
-                                  goes whole (binary, .d, .rcgu.o), each crate's
-                                  newest stays whatever its age, libraries and
-                                  build-script caches are never touched, and a
-                                  copy with a live process in it is preserved
-                                  (one copy held 15 variants, 200 GB, 2026-11-14)
+                                  goes whole (binary, .d, .rcgu.o), each name's
+                                  two newest stay whatever their age, libraries
+                                  (and their loose objects) and build-script
+                                  caches are never touched, an incremental
+                                  cache's age is rustc's own session files, a
+                                  symlinked target/ is never followed, a copy
+                                  with a live process in it is preserved, the
+                                  no-pressure path trims too, and --auto-gc
+                                  banks the trim's own first-report day (one
+                                  copy held 15 variants, 200 GB, 2026-11-14)
 
 Run: python3 scripts/test_dev_build_reclaim.py
 """
@@ -614,16 +619,22 @@ def main() -> int:  # noqa: C901
         return files
 
     def aged(path: Path, hours_old: float) -> Path:
-        path.mkdir(parents=True, exist_ok=True)
-        (path / "s-session").mkdir(exist_ok=True)
+        """An incremental cache whose rustc session files are `hours_old`, while
+        its dirs read NOW, as after a copy of target/: the age must come from
+        rustc's own files."""
+        sess = path / "s-session"
+        sess.mkdir(parents=True, exist_ok=True)
         old = time.time() - hours_old * 3600
-        for q in (path / "s-session", path):
-            os.utime(q, (old, old))
+        for f in ("dep-graph.bin", "work-products.bin"):
+            (sess / f).write_bytes(b"x")
+            os.utime(sess / f, (old, old))
         return path
 
     def library(deps: Path, crate: str, hsh: str, hours_old: float) -> list:
+        """The real macOS layout: loose objects beside the .rlib."""
         stem = f"lib{crate}-{hsh * 16}"
-        files = [deps / f"{stem}.rlib", deps / f"{stem}.rmeta", deps / f"{stem}.d"]
+        files = [deps / f"{stem}.rlib", deps / f"{stem}.rmeta", deps / f"{stem}.d",
+                 deps / f"{crate}-{hsh * 16}.y1.rcgu.o", deps / f"{crate}-{hsh * 16}.d"]
         old = time.time() - hours_old * 3600
         for f in files:
             f.write_bytes(b"x")
@@ -640,13 +651,22 @@ def main() -> int:  # noqa: C901
             "recent": variant(deps, "app_lib", "c", 2),
             "newest": variant(deps, "app_lib", "d", 0),
             "solo": variant(deps, "smoke", "e", 240),
+            "pair_old": variant(deps, "bench", "5", 240),   # a name's two newest
+            "pair_new": variant(deps, "bench", "6", 120),   # stay whatever their age
+            "dash_old": variant(deps, "my-app", "7", 72),
+            "dash_mid": variant(deps, "my-app", "8", 1),
+            "dash_new": variant(deps, "my-app", "9", 0),
             "lib_old": library(deps, "dep", "1", 240),
+            "lib_mid": library(deps, "dep", "3", 100),
             "lib_new": library(deps, "dep", "2", 0),
             "incr_old": [aged(incr / "app_lib-0abc", 72)],
+            "incr_mid": [aged(incr / "app_lib-2mid", 1)],
             "incr_new": [aged(incr / "app_lib-1xyz", 0)],
             "bs_old": [aged(incr / "build_script_build-9zz", 72)],
+            "bs_mid": [aged(incr / "build_script_build-7xx", 50)],
             "bs_new": [aged(incr / "build_script_build-8yy", 0)],
             "triple_old": variant(triple, "app_lib", "f", 72),
+            "triple_mid": variant(triple, "app_lib", "b", 1),
             "triple_new": variant(triple, "app_lib", "0", 0),
         }
 
@@ -662,32 +682,91 @@ def main() -> int:  # noqa: C901
         lay = layout(wt)
         r = run(root, "--min-idle-days", "9999")       # dry-run
         ok("[22] dry-run trims nothing", alive(lay["old_a"]) and alive(lay["incr_old"]))
-        ok("[22] dry-run reports what it would trim", "WOULD TRIM: 4 stale" in r.stdout)
+        ok("[22] dry-run reports what it would trim", "WOULD TRIM: 5 stale" in r.stdout)
         r = run(root, "--apply", "--min-idle-days", "9999")
         ok("[22] a variant not built in 24 h goes whole (binary, .d, .rcgu.o)",
            gone(lay["old_a"]) and gone(lay["old_b"]))
         ok("[22] a variant built within 24 h stays", alive(lay["recent"]))
         ok("[22] the crate's newest variant stays", alive(lay["newest"]))
         ok("[22] a crate's only variant stays however old", alive(lay["solo"]))
-        ok("[22] libraries are never touched", alive(lay["lib_old"]) and alive(lay["lib_new"]))
-        ok("[22] a stale incremental cache goes, the newest stays",
-           gone(lay["incr_old"]) and alive(lay["incr_new"]))
+        ok("[22] a name's two newest stay however old",
+           alive(lay["pair_old"]) and alive(lay["pair_new"]))
+        ok("[22] a binary name with dashes is covered",
+           gone(lay["dash_old"]) and alive(lay["dash_mid"]) and alive(lay["dash_new"]))
+        ok("[22] libraries and their loose objects are never touched",
+           alive(lay["lib_old"]) and alive(lay["lib_mid"]) and alive(lay["lib_new"]))
+        ok("[22] a stale incremental cache goes (aged by rustc's files, not its dir)",
+           gone(lay["incr_old"]) and alive(lay["incr_mid"]) and alive(lay["incr_new"]))
         ok("[22] build-script caches are left alone",
-           alive(lay["bs_old"]) and alive(lay["bs_new"]))
+           alive(lay["bs_old"]) and alive(lay["bs_mid"]) and alive(lay["bs_new"]))
         ok("[22] target/<triple>/<profile> is covered",
-           gone(lay["triple_old"]) and alive(lay["triple_new"]))
+           gone(lay["triple_old"]) and alive(lay["triple_mid"]) and alive(lay["triple_new"]))
         ok("[22] the copy itself is in use and keeps its node_modules",
            (wt / "node_modules").is_dir())
         ok("[22] source and .git survive",
            (wt / "src" / "main.ts").is_file() and (wt / ".git" / "HEAD").is_file())
-        ok("[22] the apply is reported", "TRIMMED: 4 stale" in r.stdout)
+        ok("[22] the apply is reported", "TRIMMED: 5 stale" in r.stdout)
         mf = list((root / "_logs").glob("build-reclaim-*.jsonl"))
         kinds = [json.loads(line).get("kind") for m in mf
                  for line in (safe_read_text(m).text or "").splitlines() if line.strip()]
         check("[22] every trimmed variant is in the manifest",
-              kinds.count("stale-build-variant"), 4)
+              kinds.count("stale-build-variant"), 5)
         r = run(root, "--json", "--min-idle-days", "9999")
         check("[22] --json carries the trim summary", json.loads(r.stdout)["trim"]["variants"], 0)
+
+    # A symlinked target/ is never followed: other copies may share it.
+    with tempfile.TemporaryDirectory() as td, tempfile.TemporaryDirectory() as td2:
+        root = Path(td)
+        wt = rust_copy(root, "linked-wt")
+        shared = Path(td2) / "shared-target"
+        lay = layout(Path(td2) / "holder")
+        os.rename(Path(td2) / "holder" / "target", shared)
+        try:
+            (wt / "target").symlink_to(shared, target_is_directory=True)
+            linked = True
+        except (OSError, NotImplementedError):
+            linked = False
+        if linked:
+            run(root, "--apply", "--min-idle-days", "9999")
+            ok("[22] a symlinked target/ is never followed",
+               (shared / "debug" / "deps" / ("app_lib-" + "a" * 16)).is_file())
+        else:
+            print("  skip [22] symlinks unavailable on this platform")
+
+    # The no-pressure path trims too, and --auto-gc banks the trim's own day.
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        wt = rust_copy(root, "roomy-wt")
+        lay = layout(wt)
+        roomy = shutil._ntuple_diskusage(1000 * 1024 ** 3, 100 * 1024 ** 3, 900 * 1024 ** 3)
+        whole = root / "_markers" / "whole"
+        trimm = root / "_markers" / "trim"
+        env = {"DEV_BUILD_RECLAIM_LOG_DIR": str(root / "_logs")}
+
+        def call(**kw):
+            ns = mod.argparse.Namespace(apply=False, auto_gc=False, min_idle_days=None,
+                                        min_free_gb=None, json=True, dev_root=str(root))
+            for k, v in kw.items():
+                setattr(ns, k, v)
+            out = io.StringIO()
+            with mock.patch.object(mod, "disk", return_value=roomy), \
+                 mock.patch.object(mod, "FIRST_REPORT_MARKER", whole), \
+                 mock.patch.object(mod, "TRIM_FIRST_REPORT_MARKER", trimm), \
+                 mock.patch.dict(os.environ, env), contextlib.redirect_stdout(out):
+                mod.reclaim(ns, root)
+            return out.getvalue()
+
+        out = call(auto_gc=True, apply_trim=False)
+        ok("[22] --auto-gc's first trim finding only reports", alive(lay["old_a"]))
+        ok("[22] and banks the trim's own day, not the whole-folder one",
+           trimm.is_file() and not whole.exists())
+        out = call(apply=True, apply_trim=True)
+        body = json.loads(out)
+        ok("[22] the no-pressure path trims", gone(lay["old_a"]) and alive(lay["newest"]))
+        ok("[22] and prints ONE json object carrying the trim",
+           "no pressure" in body.get("skipped", "") and body["trim"]["deleted"] == 5)
+        ok("[22] the no-pressure path never reclaims a whole folder",
+           (wt / "node_modules").is_dir())
 
     if os.name != "nt" and shutil.which("lsof"):
         with tempfile.TemporaryDirectory() as td:

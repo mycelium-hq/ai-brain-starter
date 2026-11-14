@@ -75,10 +75,12 @@ in use at ~210 GB each, with the disk at 14% free.
 
 So every run (with --apply) also deletes, in each copy's `target/*/deps`, the
 linked-binary variants not built for STALE_VARIANT_HOURS, always keeping each
-crate's newest one, and the matching stale `incremental` caches. Libraries
-(`.rlib`, `.rmeta`, `.dylib`) are never touched. A copy where any process has its
-cwd is skipped. Cargo sees the missing binary and rebuilds it if that variant is
-ever wanted again.
+name's KEEP_NEWEST newest, and the matching stale `incremental` caches. Libraries
+(`.rlib`, `.rmeta`, `.dylib`, their loose objects) are never touched, and a
+symlinked `target`, `deps` or `incremental` is never followed. A copy where any
+process has its cwd is skipped (where no process probe exists, a live session
+lock skips it). Cargo sees the missing binary and rebuilds it if that variant is
+ever wanted again. Under --auto-gc the trim keeps its own first-report day.
 
 Usage:
   dev-build-reclaim.py                      # dry-run over the whole dev root
@@ -454,14 +456,20 @@ def plan(dev_root: Path, min_idle: float, now: float) -> tuple[list, list]:
     return out, skipped
 
 
-# A variant not built for this long is stale, unless it is its crate's newest.
+# A variant not built for this long is stale, unless it is among its name's
+# KEEP_NEWEST newest. Two, not one: a library's unit tests, a same-named binary
+# and its benches all share one name, so "newest only" would trim the test
+# binary of a copy that last ran `cargo build`.
 STALE_VARIANT_HOURS = 24.0
-# `<crate>-<16 hex>` then the end or a dot: `foo-0123456789abcdef`, `.d`, `.exe`,
-# `.pdb`, `.dSYM`, `.<cgu>.rcgu.o`. Libraries carry a `lib` prefix and a library
-# extension and are never treated as a linked binary below.
-_DEPS_RE = re.compile(r"^(?P<crate>[A-Za-z0-9_]+)-(?P<hash>[0-9a-f]{16})(?:\.|$)")
+KEEP_NEWEST = 2
+# `<name>-<16 hex>` then the end or a dot: `foo-0123456789abcdef`, `.d`, `.exe`,
+# `.pdb`, `.dSYM`, `.<cgu>.rcgu.o`. Binary names may carry dashes.
+_DEPS_RE = re.compile(r"^(?P<crate>[A-Za-z0-9_-]+)-(?P<hash>[0-9a-f]{16})(?:\.|$)")
 # `incremental/<crate>-<id>`: one cache per crate variant.
-_INCR_RE = re.compile(r"^(?P<crate>[A-Za-z0-9_]+)-(?P<id>[0-9a-z]+)$")
+_INCR_RE = re.compile(r"^(?P<crate>[A-Za-z0-9_-]+)-(?P<id>[0-9a-z]+)$")
+# rustc writes these at the end of every incremental session. Their mtime is the
+# real build time; a session dir's own mtime is not (copying a target/ resets it).
+_INCR_SESSION_FILES = ("dep-graph.bin", "query-cache.bin", "work-products.bin")
 
 
 def _mtime(p: Path) -> float:
@@ -496,8 +504,12 @@ def _paths_size_mb(paths, seen: set) -> float:
 
 
 def profile_dirs(target: Path) -> list:
-    """`target/<profile>` and `target/<triple>/<profile>` dirs that hold builds."""
+    """`target/<profile>` and `target/<triple>/<profile>` dirs that hold builds.
+    A symlinked `target` is never followed: it may be shared with copies this
+    pass never probed."""
     out = []
+    if is_link(target):
+        return out
     try:
         level1 = [c for c in target.iterdir() if c.is_dir() and not is_link(c)]
     except OSError:
@@ -514,13 +526,31 @@ def profile_dirs(target: Path) -> list:
     return out
 
 
+def _is_executable(p: Path) -> bool:
+    try:
+        st = os.lstat(p)
+    except OSError:
+        return False
+    if not stat.S_ISREG(st.st_mode):
+        return False
+    return p.suffix == ".exe" or os.name == "nt" or bool(st.st_mode & stat.S_IXUSR)
+
+
+def _group_newest(paths) -> float:
+    return max(_mtime(p) for p in paths)
+
+
 def stale_binary_variants(deps: Path, now: float, hours: float) -> list:
     """Groups of paths, one per stale linked-binary variant in `deps`.
 
-    A variant is a linked binary when its group has the executable itself
-    (`<crate>-<hash>` or `.exe`), its kept debug objects (`.rcgu.o`) or a
-    `.dSYM`. Each crate's newest variant is kept whatever its age.
+    A variant counts only when its group holds the linked executable itself
+    (`<name>-<hash>`, or `.exe`); libraries and their loose objects never do.
+    Each name keeps its KEEP_NEWEST newest variants whatever their age. The
+    executable comes first in each group, so a failed delete (a running `.exe`
+    on Windows) leaves the group whole.
     """
+    if is_link(deps):
+        return []
     try:
         names = os.listdir(deps)
     except OSError:
@@ -533,27 +563,47 @@ def stale_binary_variants(deps: Path, now: float, hours: float) -> list:
     by_crate: dict = {}
     for (crate, hsh), members in groups.items():
         stem = f"{crate}-{hsh}"
-        binary = any(
-            n == stem or n == stem + ".exe" or n == stem + ".dSYM"
-            or n.endswith(".rcgu.o") for n in members)
-        if not binary:
+        exes = [n for n in members if n in (stem, stem + ".exe")
+                and _is_executable(deps / n)]
+        if not exes:
             continue
-        paths = [deps / n for n in members]
+        paths = [deps / n for n in exes] + [deps / n for n in members if n not in exes]
         if any(is_link(p) for p in paths):
             continue
-        newest = max(_mtime(p) for p in paths)
-        by_crate.setdefault(crate, []).append((newest, paths))
+        by_crate.setdefault(crate, []).append((_group_newest(paths), paths))
     out = []
     for variants in by_crate.values():
         variants.sort(key=lambda v: -v[0])
-        for newest, paths in variants[1:]:
+        for newest, paths in variants[KEEP_NEWEST:]:
             if now - newest >= hours * 3600:
                 out.append(paths)
     return out
 
 
+def incremental_newest(d: Path) -> float:
+    """When rustc last finished a session in this cache: the newest of its lock
+    files and each session's own files (the session dir's mtime as a fallback,
+    e.g. a session still running)."""
+    newest = 0.0
+    try:
+        children = list(d.iterdir())
+    except OSError:
+        return _mtime(d)
+    for c in children:
+        if is_link(c):
+            continue
+        if c.is_dir():
+            marks = [_mtime(c / f) for f in _INCR_SESSION_FILES if (c / f).exists()]
+            newest = max([newest] + (marks or [_mtime(c)]))
+        else:
+            newest = max(newest, _mtime(c))
+    return newest or _mtime(d)
+
+
 def stale_incremental(incr: Path, now: float, hours: float) -> list:
-    """Stale per-variant incremental caches, keeping each crate's newest."""
+    """Stale per-variant incremental caches, keeping each name's newest."""
+    if is_link(incr):
+        return []
     try:
         names = os.listdir(incr)
     except OSError:
@@ -566,16 +616,32 @@ def stale_incremental(incr: Path, now: float, hours: float) -> list:
         # per crate" cannot tell them apart; they are small, so leave them.
         if not m or m["crate"].startswith("build_script_") or is_link(d) or not d.is_dir():
             continue
-        try:
-            newest = max([_mtime(d)] + [_mtime(c) for c in d.iterdir()])
-        except OSError:
-            continue
-        by_crate.setdefault(m["crate"], []).append((newest, d))
+        by_crate.setdefault(m["crate"], []).append((incremental_newest(d), d))
     out = []
     for caches in by_crate.values():
         caches.sort(key=lambda c: -c[0])
-        out.extend([d] for newest, d in caches[1:] if now - newest >= hours * 3600)
+        out.extend([d] for newest, d in caches[KEEP_NEWEST:] if now - newest >= hours * 3600)
     return out
+
+
+def _variant_newest(paths) -> float:
+    """Re-read at apply time: a copy in use may have rebuilt it since the plan."""
+    first = Path(paths[0])
+    if first.is_dir() and first.parent.name == "incremental":
+        return incremental_newest(first)
+    return _group_newest(map(Path, paths))
+
+
+def _trim_busy(wt: Path, now: float, cache: dict) -> str | None:
+    """worktree_busy, plus the session lock where no process probe exists (the
+    probe answers None there, and the trim works inside copies in use)."""
+    busy = worktree_busy(wt, cache)
+    if busy:
+        return busy
+    supported = getattr(_worktree_safety, "probe_supported", None)
+    if supported is not None and not supported() and has_live_session_lock(wt, now):
+        return "live session lock (no process probe on this platform)"
+    return None
 
 
 def trim_plan(dev_root: Path, now: float, hours: float = STALE_VARIANT_HOURS):
@@ -585,7 +651,8 @@ def trim_plan(dev_root: Path, now: float, hours: float = STALE_VARIANT_HOURS):
     probe_cache: dict = {}
     seen_inodes: set = set()
     for wt in discover_units(dev_root, skipped):
-        targets = [t for t in find_artifacts(wt) if t.name in CONDITIONAL]
+        targets = [t for t in find_artifacts(wt)
+                   if t.name in CONDITIONAL and not is_link(t)]
         if not targets:
             continue
         found = []
@@ -595,7 +662,7 @@ def trim_plan(dev_root: Path, now: float, hours: float = STALE_VARIANT_HOURS):
                 found += stale_incremental(prof / "incremental", now, hours)
         if not found:
             continue
-        busy = worktree_busy(wt, probe_cache)
+        busy = _trim_busy(wt, now, probe_cache)
         if busy:
             skipped.append(f"{os.path.relpath(wt, dev_root)}: {busy}, "
                            f"its stale build variants preserved")
@@ -609,8 +676,9 @@ def trim_plan(dev_root: Path, now: float, hours: float = STALE_VARIANT_HOURS):
 def trim(a: argparse.Namespace, dev_root: Path, now: float) -> dict:
     """Plan and, with --apply, delete stale build variants. Returns a summary."""
     items, skipped = trim_plan(dev_root, now)
-    deleted, failed = 0, []
-    if a.apply and items:
+    apply = getattr(a, "apply_trim", a.apply)
+    deleted, failed, fresh = 0, [], 0
+    if apply and items:
         ldir = log_dir()
         ldir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -622,11 +690,14 @@ def trim(a: argparse.Namespace, dev_root: Path, now: float) -> dict:
                 wt = it["worktree"]
                 if wt in refused:
                     continue
-                busy = worktree_busy(Path(wt), apply_probe_cache)
+                busy = _trim_busy(Path(wt), time.time(), apply_probe_cache)
                 if busy:
                     refused.add(wt)
                     skipped.append(f"{os.path.relpath(wt, dev_root)}: {busy} at "
                                    f"apply time, its stale build variants preserved")
+                    continue
+                if time.time() - _variant_newest(it["paths"]) < STALE_VARIANT_HOURS * 3600:
+                    fresh += 1          # rebuilt since the plan: keep it
                     continue
                 try:
                     for p in map(Path, it["paths"]):
@@ -640,8 +711,11 @@ def trim(a: argparse.Namespace, dev_root: Path, now: float) -> dict:
                              + "\n")
                 except OSError as e:
                     failed.append(f"{it['paths'][0]}: {e}")
+    if fresh:
+        skipped.append(f"{fresh} variant(s) rebuilt since the plan, preserved")
+    _bank_first_report(a, len(items), marker=TRIM_FIRST_REPORT_MARKER, applying=apply)
     return {"variants": len(items), "deleted": deleted, "failed": failed,
-            "skipped": skipped, "applied": a.apply,
+            "skipped": skipped, "applied": apply,
             "worktrees": len({i["worktree"] for i in items}),
             "size_gb": round(sum(i["size_mb"] for i in items) / 1024, 1),
             "stale_hours": STALE_VARIANT_HOURS}
@@ -709,6 +783,9 @@ def log_dir() -> Path:
 # daily pass banks one only after its idle gate, which a laptop that sleeps
 # through 04:30 and wakes to someone typing can defer for good.
 FIRST_REPORT_MARKER = Path.home() / ".claude" / ".build-reclaim-first-report"
+# The trim keeps its own day: a trim finding on a healthy disk must not arm the
+# whole-folder reclaim, which has not reported anything yet.
+TRIM_FIRST_REPORT_MARKER = Path.home() / ".claude" / ".build-trim-first-report"
 
 
 def reclaim_roots() -> list:
@@ -740,20 +817,27 @@ def main() -> int:
     ap.add_argument("--json", action="store_true", help="machine-readable plan, one per root")
     a = ap.parse_args()
 
+    a.apply_trim = a.apply
     if a.auto_gc:
-        try:
-            a.apply = a.apply or time.time() - FIRST_REPORT_MARKER.stat().st_mtime >= 86400
-        except OSError:  # no first report yet
-            pass
+        def day_old(marker: Path) -> bool:
+            try:
+                return time.time() - marker.stat().st_mtime >= 86400
+            except OSError:  # no first report yet
+                return False
+        a.apply = a.apply or day_old(FIRST_REPORT_MARKER)
+        a.apply_trim = a.apply_trim or day_old(TRIM_FIRST_REPORT_MARKER)
     roots = [Path(a.dev_root).expanduser()] if a.dev_root else reclaim_roots()
     return max(reclaim(a, root) for root in roots)
 
 
-def _bank_first_report(a: argparse.Namespace, found: int) -> None:
+def _bank_first_report(a: argparse.Namespace, found: int, marker: Path | None = None,
+                       applying: bool | None = None) -> None:
     """--auto-gc: the first run that finds something only reports, and banks the date."""
-    if a.auto_gc and not a.apply and found and not FIRST_REPORT_MARKER.exists():
-        FIRST_REPORT_MARKER.parent.mkdir(parents=True, exist_ok=True)
-        FIRST_REPORT_MARKER.touch()
+    marker = marker or FIRST_REPORT_MARKER
+    applying = a.apply if applying is None else applying
+    if getattr(a, "auto_gc", False) and not applying and found and not marker.exists():
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.touch()
 
 
 def reclaim(a: argparse.Namespace, dev_root: Path) -> int:
@@ -777,16 +861,20 @@ def reclaim(a: argparse.Namespace, dev_root: Path) -> int:
     # copies that are in use, which the idle-gated reclaim below never touches.
     now = time.time()
     trimmed = trim(a, dev_root, now)
+    # The ladder reads the free space AFTER the trim: a trim that freed 150 GB
+    # must not leave the 0-day rung deleting whole target/ folders for nothing.
+    ladder_free = before
+    if trimmed["deleted"]:
+        ladder_free = (disk(dev_root) or usage).free / (1024 ** 3)
 
     if a.min_idle_days is not None:
         min_idle, tier = a.min_idle_days, "pinned by --min-idle-days"
     else:
-        laddered = ladder_idle_days(before, total)
+        laddered = ladder_idle_days(ladder_free, total)
         if laddered is None:
             top = ladder_caps(total)[-1]
-            msg = (f"free {before:.0f} GB >= {top:.0f} GB "
+            msg = (f"free {ladder_free:.0f} GB >= {top:.0f} GB "
                    f"({total:.0f} GB volume) — no pressure, whole-folder reclaim is a no-op")
-            _bank_first_report(a, trimmed["variants"])
             if a.json:
                 print(json.dumps({"skipped": msg, "trim": trimmed}))
             else:
@@ -794,7 +882,7 @@ def reclaim(a: argparse.Namespace, dev_root: Path) -> int:
                 print(msg)
             return 0
         min_idle = laddered
-        tier = f"pressure ladder @ {before:.0f} GB free of {total:.0f} GB"
+        tier = f"pressure ladder @ {ladder_free:.0f} GB free of {total:.0f} GB"
 
     items, skipped = plan(dev_root, min_idle, now)
     for it in items:
@@ -834,7 +922,7 @@ def reclaim(a: argparse.Namespace, dev_root: Path) -> int:
                     mf.write(json.dumps({**it, "ts": datetime.now(timezone.utc).isoformat()}) + "\n")
                 except OSError as e:
                     failed.append(f"{it['path']}: {e}")
-    _bank_first_report(a, len(items) + trimmed["variants"])
+    _bank_first_report(a, len(items))
 
     after = (disk(dev_root) or usage).free / (1024 ** 3)
     result = {

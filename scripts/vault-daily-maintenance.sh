@@ -408,9 +408,11 @@ else
   #    unmerged, in-flight, long-lived worktree keeps its multi-GB target/ and
   #    node_modules forever, which is the majority case. Measured 2026-08-05:
   #    ~130 worktrees holding 438 GB while every leg above ran green daily and
-  #    the volume fell to 2.3 GB free. No-ops on a healthy disk (the pressure
-  #    ladder); never touches a worktree whose SOURCE is recent, whose session
-  #    lock is live, or whose source is too large to measure.
+  #    the volume fell to 2.3 GB free. Whole folders: no-op on a healthy disk
+  #    (the pressure ladder); never a worktree whose SOURCE is recent, whose
+  #    session lock is live, or whose source is too large to measure. Every run
+  #    it also trims old Rust build variants inside worktrees in use (not built
+  #    in 24 h, beyond each name's two newest), skipping any with a live process.
   BUILDRECLAIM="$SCRIPT_DIR/dev-build-reclaim.py"
   [ -f "$BUILDRECLAIM" ] && run "dev-build-reclaim" /usr/bin/env python3 "$BUILDRECLAIM" $DESTRUCTIVE_MODE
 
