@@ -578,7 +578,7 @@ If what you need is agent federation, swarm topologies, or a 300-tool MCP server
 
 ## Background
 
-This system was built by [Adelaida Diaz-Roa](https://adelaidadiazroa.substack.com), founder of [Onde](https://www.planwithonde.com), across weeks of intensive optimization with Claude Code. 5,000+ notes, 12 years of journals, two books in progress, a startup to raise for, all connected, compressed, and navigable.
+This system was built by its maintainer across weeks of intensive optimization with Claude Code. 5,000+ notes, 12 years of journals, two books in progress, all connected, compressed, and navigable.
 
 Read the full story: [How I Built a Second Brain That Actually Works With AI](https://adelaidadiazroa.substack.com/p/how-i-built-a-second-brain-that-actually)
 

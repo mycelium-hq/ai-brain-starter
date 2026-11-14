@@ -9,6 +9,18 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-11-15: No more false "hook missing" warning, and your private names stay on your machine
+
+**Who this affects:** anyone who sees "SessionStart hook(s) missing since last snapshot" at the start of every session, and anyone who shares a pack with `instinct.py export --shareable`.
+
+When an update retired a hook on purpose, the start-of-session check kept telling you it had gone missing, every session, until you ran its refresh command by hand. It now reads the installer's list of retired hooks and stays quiet about them. A hook that disappears for any other reason still warns.
+
+`export --shareable` refuses to write a pack that mentions a private name, but the list of names it checked was one person's own and sat in this public project. That list is gone. The names to keep out now come from a file on your own machine, `~/.claude/instinct/disclosure-patterns.txt`; `templates/instinct-disclosure-patterns.txt.example` shows the format and ships with no names in it. With no file the export still works and tells you it only checked for private session links, so copy the example there and list your own names before your next shared export. Keep each comment in that file on its own line: the export stops with an error, instead of quietly never matching, if a `#` follows a pattern or a pattern matches everything.
+
+The same export now also checks each instinct's name and description, not only its text. Before, a private name that appeared only there went into the shared pack. A few older changelog lines, the README's background paragraph and one internal document reference also stop naming one person's company, vault and documents.
+
+---
+
 ## 2026-11-14: Vault snapshots keep only the number you chose
 
 **Who this affects:** anyone on a Mac whose daily vault snapshot goes to iCloud Drive.
@@ -2722,8 +2734,6 @@ Two alternatives considered and rejected:
 Per the operator's `Build Standards.md` + `MCP Build Runbook.md` runbooks (vault-internal). Today's build pass codified two new lessons in those runbooks (Lesson #22: read both runbooks BEFORE briefing parallel agents; Lesson #23: shared utils + integration test as Day-1 deliverables, not follow-up).
 
 Applied during this build: shared utilities extracted (`skills/_shared/connector_utils.py` saved 321 net lines across six skills); idempotent connectors verified; schema validation hooks at write time; personal-data scrub gate clean across all 56 new files; no em dashes; cross-type frontmatter contract populated on every connector write; integration test shipped as a deliverable.
-
-PRD: ChatPRD UUID `97b2c7ad-4c31-46d5-aa49-457006b47ba3`.
 
 ### What's preserved
 

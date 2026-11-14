@@ -297,6 +297,70 @@ python3 -c "import json;d=json.load(open('$SF7'));assert sorted(d['identities'])
   && ok "rewire leaves one identity per hook" \
   || bad "rewire leaves one identity per hook" "$(cat "$SF7" 2>/dev/null)"
 
+echo "=== scenario 12: a hook the INSTALLER retired is not 'missing' ==="
+# The installer retires hooks on purpose (ABS_RETIRED_* in
+# install-hooks-user-level.py) and un-wires them from settings.json, but the
+# snapshot still names them. The guard used to report that planned removal as a
+# disappearance at every session start until the person ran --refresh by hand
+# (tickets#5988 retired one on a live machine; tickets#6534 is this fix). It now
+# reads the installer's own retired list, so retiring a hook there silences it
+# here too.
+#
+# The retired hook is READ from the installer's list, not named here: the test
+# then follows the installer, and it does not pose as a test of a hook it never
+# runs (scripts/check-hook-negative-control.py counts a mention as a test surface).
+RETIRED_HOOK="$(python3 - "$REPO_ROOT/scripts/install-hooks-user-level.py" <<'PY'
+import ast, sys
+for node in ast.parse(open(sys.argv[1], encoding="utf-8").read()).body:
+    if isinstance(node, ast.Assign) and getattr(node.targets[0], "id", "") == "ABS_RETIRED_BASENAMES":
+        print(sorted(n for n in ast.literal_eval(node.value) if n.endswith(".py"))[0])
+PY
+)"
+if [ -n "$RETIRED_HOOK" ]; then ok "the installer names a retired .py hook"; else bad "the installer names a retired .py hook" "none read"; fi
+H8="$(newhome)"
+# literal ~ is the raw settings.json command text under test, not a path to expand
+# shellcheck disable=SC2088
+write_settings "$H8" \
+  "python3 ~/.claude/skills/ai-brain-starter/hooks/$RETIRED_HOOK" \
+  'python3 ~/.claude/hooks/foo.py'
+run_guard "$H8"                         # baseline: both hooks wired
+assert_silent "retired-hook baseline is silent"
+# shellcheck disable=SC2088
+write_settings "$H8" 'python3 ~/.claude/hooks/foo.py'    # the installer retired the first one
+run_guard "$H8"
+assert_rc     "retired-hook run exits 0" 0
+assert_silent "installer-retired hook -> no false 'missing'"
+# The planned removal is absorbed: the retired hook leaves the snapshot, so later
+# starts do not read the installer again just to excuse it.
+case "$(cat "$(state_file "$H8")")" in
+  *"$RETIRED_HOOK"*) bad "retired hook leaves the snapshot" "still listed" ;;
+  *) ok "retired hook leaves the snapshot" ;;
+esac
+run_guard "$H8"
+assert_silent "the run after the retirement is silent too"
+# The exemption covers retired hooks ONLY: a hook that vanished for any other
+# reason must still warn in the same run, and the warning must not list the
+# retired one.
+H9="$(newhome)"
+# shellcheck disable=SC2088
+write_settings "$H9" \
+  "python3 ~/.claude/skills/ai-brain-starter/hooks/$RETIRED_HOOK" \
+  'python3 ~/.claude/hooks/foo.py'
+run_guard "$H9"                         # baseline: both hooks wired
+# shellcheck disable=SC2088
+write_settings "$H9" 'python3 ~/.claude/hooks/other.py'   # the retired one is gone as planned; foo.py dropped, nobody retired it
+run_guard "$H9"
+assert_warns "a non-retired drop still warns alongside a retired one"
+assert_has   "names the real drop" "foo.py"
+case "$OUT" in
+  *"$RETIRED_HOOK"*) bad "retired hook not named in the warning" "listed it: ${OUT:0:160}" ;;
+  *) ok "retired hook not named in the warning" ;;
+esac
+case "$(cat "$(state_file "$H9")")" in
+  *"$RETIRED_HOOK"*) ok "a warning leaves the snapshot untouched" ;;
+  *) bad "a warning leaves the snapshot untouched" "the retired hook was pruned during a warning" ;;
+esac
+
 echo ""
 echo "=== SUMMARY: $PASS passed, $FAIL failed ==="
 [ "$FAIL" = 0 ]

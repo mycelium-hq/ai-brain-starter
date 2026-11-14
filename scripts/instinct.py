@@ -55,6 +55,13 @@ PROMOTE_STATE_PATH = Path(os.environ.get(
     "INSTINCT_PROMOTE_STATE",
     str(Path.home() / ".claude" / "instinct" / "promote-state.json"),
 ))
+# The person's own private names for `export --shareable`, one regex per line.
+# It lives on their machine, never in this public repo: see
+# templates/instinct-disclosure-patterns.txt.example.
+DISCLOSURE_PATH = Path(os.environ.get(
+    "INSTINCT_DISCLOSURE_PATTERNS",
+    str(Path.home() / ".claude" / "instinct" / "disclosure-patterns.txt"),
+))
 # A session still running when `promote` fires would be credited for the
 # instincts it has injected SO FAR and then never revisited, silently losing
 # every later segment. Leave recent sessions alone; the next run takes them.
@@ -706,54 +713,84 @@ def cmd_report(args, memory_dir: Path) -> int:
 SHAREABLE_TYPES = frozenset({"feedback", "discovery"})
 
 # Deliberately conservative. A false positive here costs a re-run; a missed
-# one ships a disclosure. Two matching STYLES on purpose:
-#   substring     catches a compound brand token wherever it appears, even
-#                 inside a longer word (see the ondeplan note below).
-#   word_boundary catches a short bare name/word WITHOUT matching it as a
-#                 substring of something unrelated.
-# CRITICAL: `\bonde\b` does NOT match inside "ondeplan" (no word boundary
-# between "e" and "p"), which is exactly why the compound names
-# (ondeplan/onde-platform/onde_team) are their own substring entries instead
-# of being folded into the bare `\bonde\b` word-boundary pattern. Merging
-# them back into one word-boundary pattern reopens the exact leak this gate
-# exists to close. All patterns are matched case-insensitively -- these are
+# one ships a disclosure. Every pattern is matched case-insensitively -- these are
 # names and tickets, and there is no safe casing to assume away.
-DISCLOSURE_PATTERNS: dict[str, tuple[str, ...]] = {
-    "substring": (
-        "ondeplan", "onde-platform", "onde_team", "mycelium", "myceliumai", "diazroa",
-    ),
-    "word_boundary": (
-        r"\bonde\b", r"\badelaida\b", r"\bdiaz-roa\b", r"\bsergio\b", r"\bnelly\b",
-        r"\bcolombia\b", r"\bbogot[aá]\b", r"\baccenture\b", r"\bpanorama\b",
-    ),
-    "regex": (
-        r"MYC-\d+", r"OND-\d+", r"claude\.ai/code/artifact",
-    ),
-}
+#
+# The checks that hold for EVERYONE live here: a link to a private session
+# artifact must never ship in a shared pack. The people, companies, places and
+# ticket prefixes one person wants kept out are theirs alone, so they are read
+# from DISCLOSURE_PATH on that person's machine, never published in this repo.
+BUILTIN_DISCLOSURE_PATTERNS: tuple[str, ...] = (r"claude\.ai/code/artifact",)
 
 
-def _compile_disclosure_patterns() -> list[tuple[str, re.Pattern]]:
+def _load_disclosure_patterns() -> tuple[list[tuple[str, re.Pattern]], int]:
+    """(compiled patterns, how many came from the person's file).
+
+    The built-ins plus one regex per line from DISCLOSURE_PATH, matched
+    case-insensitively; a line that starts with `#` and a blank line are skipped.
+    A missing file is fine (the caller says so). A file that exists but cannot be
+    read, a line that is not a valid regex, a `#` after a pattern, or a pattern
+    that matches the empty string raises ValueError so the caller refuses to
+    export: a scan that quietly skipped or weakened a list would ship the very
+    names it was asked to keep out."""
+    try:
+        # utf-8-sig: Windows Notepad saves a byte-order mark, which would otherwise
+        # stick to the first line and quietly stop that pattern matching.
+        lines = DISCLOSURE_PATH.read_text(encoding="utf-8-sig").splitlines()
+    except FileNotFoundError:
+        lines = []
+    except (OSError, UnicodeDecodeError) as e:
+        raise ValueError(f"cannot read {DISCLOSURE_PATH}: {e}") from e
+    personal = []
+    for number, line in enumerate(lines, 1):
+        text = line.strip()
+        if not text or text.startswith("#"):
+            continue
+        if re.search(r"\s#", text):
+            # `\bacme\b   # a client` compiles, but as a pattern that needs the
+            # literal text "   # a client": it would match nothing and let the name
+            # through without a word.
+            raise ValueError(f"{DISCLOSURE_PATH} line {number}: a `#` after a pattern is "
+                             "read as part of the pattern, not as a comment. Put the "
+                             "comment on its own line (write [ ]# to match a space and a hash).")
+        personal.append(text)
     compiled = []
-    for raw in DISCLOSURE_PATTERNS["substring"]:
-        compiled.append((raw, re.compile(re.escape(raw), re.IGNORECASE)))
-    for raw in DISCLOSURE_PATTERNS["word_boundary"] + DISCLOSURE_PATTERNS["regex"]:
-        compiled.append((raw, re.compile(raw, re.IGNORECASE)))
-    return compiled
+    for raw in (*BUILTIN_DISCLOSURE_PATTERNS, *personal):
+        try:
+            rx = re.compile(raw, re.IGNORECASE)
+        except re.error as e:
+            raise ValueError(f"{DISCLOSURE_PATH}: {raw!r} is not a valid pattern ({e})") from e
+        if rx.search(""):
+            raise ValueError(f"{DISCLOSURE_PATH}: {raw!r} matches everything (an empty "
+                             "alternative, as in 'acme|'?)")
+        compiled.append((raw, rx))
+    return compiled, len(personal)
 
 
-_DISCLOSURE_COMPILED = _compile_disclosure_patterns()
+# What a pack record's keys are called in the memory file, so a hit says where to look.
+_PACK_FIELD_LABELS = {"trigger": "name", "action": "description", "source_repo": "project_id"}
 
 
-def _disclosure_hits(filename: str, body: str) -> list[str]:
-    """Scan `filename` and `body` against every DISCLOSURE_PATTERNS entry.
+def _disclosure_hits(filename: str, body: str, record: dict,
+                     patterns: list[tuple[str, re.Pattern]]) -> list[str]:
+    """Scan everything an exported instinct carries against every disclosure pattern.
 
-    Returns one human-readable line per hit (empty list = clean). Checks
-    ALL patterns against BOTH surfaces rather than stopping at the first hit,
-    so a single failing run can report everything that needs fixing at once.
+    That is the file name, the whole body, and each text field of its pack record:
+    the frontmatter `name` is exported as `trigger` and `description` as `action`,
+    so a name that lives only there ships just as surely as one in the body. The
+    record's `evidence` is a cut of the body, already scanned whole.
+
+    Returns one human-readable line per hit (empty list = clean). Checks ALL
+    patterns against EVERY surface rather than stopping at the first hit, so a
+    single failing run can report everything that needs fixing at once.
     """
+    surfaces = [("filename", filename), ("body", body)]
+    surfaces += [(_PACK_FIELD_LABELS.get(key, key), value)
+                 for key, value in record.items()
+                 if isinstance(value, str) and key != "evidence"]
     hits: list[str] = []
-    for surface, text in (("filename", filename), ("body", body)):
-        for raw, rx in _DISCLOSURE_COMPILED:
+    for surface, text in surfaces:
+        for raw, rx in patterns:
             m = rx.search(text)
             if m:
                 hits.append(f"{surface} matched {raw!r} -> {m.group(0)!r}")
@@ -800,6 +837,20 @@ def cmd_export(args, memory_dir: Path) -> int:
         print("ERROR: export needs PyYAML (pip install pyyaml).", file=sys.stderr)
         return 2
     shareable = getattr(args, "shareable", False)
+    patterns: list[tuple[str, re.Pattern]] = []
+    if shareable:
+        try:
+            patterns, personal = _load_disclosure_patterns()
+        except ValueError as e:
+            # Fail closed, same as a disclosure hit: no scan, no pack.
+            print(f"ERROR: --shareable cannot run its disclosure scan: {e}", file=sys.stderr)
+            return 2
+        if not personal:
+            print(f"note: no patterns found in {DISCLOSURE_PATH} (missing or empty), so "
+                  "--shareable only checked for private session links. List the names, "
+                  "companies and places to keep out of a shared pack there, one regex per "
+                  "line (example: templates/instinct-disclosure-patterns.txt.example).",
+                  file=sys.stderr)
     today = _today()
     proj = args.project or il.current_project_id()
     out = []
@@ -819,11 +870,7 @@ def cmd_export(args, memory_dir: Path) -> int:
             if itype not in SHAREABLE_TYPES:
                 excluded_type += 1
                 continue
-            hits = _disclosure_hits(path.name, inst.body)
-            if hits:
-                disclosure_report.extend(f"{path.name}: {h}" for h in hits)
-                continue
-        out.append({
+        record = {
             "id": inst.slug,
             "trigger": fm.get("name", inst.slug),
             "confidence": eff,
@@ -836,7 +883,15 @@ def cmd_export(args, memory_dir: Path) -> int:
             "exposures": il.parse_int(fm.get("exposures"), 0),
             "action": (fm.get("description", "") or "").strip(),
             "evidence": inst.body.strip()[:1200],
-        })
+        }
+        if shareable:
+            # Scan the record that would be written, not just the body: the name
+            # and description travel in the pack too.
+            hits = _disclosure_hits(path.name, inst.body, record, patterns)
+            if hits:
+                disclosure_report.extend(f"{path.name}: {h}" for h in hits)
+                continue
+        out.append(record)
 
     if disclosure_report:
         # FAIL CLOSED, always -- never write a partial pack with only the
@@ -1081,8 +1136,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--all", action="store_true"); sp.add_argument("--out")
     sp.add_argument("--shareable", action="store_true",
                     help="exclude reference/project-type (and untyped) instincts, and fail "
-                         "closed -- writing nothing -- if any surviving instinct's filename "
-                         "or body matches a private brand/name/ticket disclosure pattern")
+                         "closed -- writing nothing -- if any surviving instinct's filename, "
+                         "name, description or body matches a disclosure pattern (private session links, plus "
+                         "the names you list in ~/.claude/instinct/disclosure-patterns.txt)")
 
     sp = sub.add_parser("import", parents=[common]); sp.add_argument("file"); sp.add_argument("--dry-run", action="store_true")
 

@@ -237,7 +237,7 @@ Three things this is not.
 
 ## Architecture coverage
 
-We did not invent these primitives. The catalect "company brain" framing names them. Below is what we shipped versus what is deliberate roadmap. The full build entry, including optimizations applied and acceptance criteria, lives in PRD UUID `97b2c7ad-4c31-46d5-aa49-457006b47ba3`.
+We did not invent these primitives. The catalect "company brain" framing names them. Below is what we shipped versus what is deliberate roadmap.
 
 | Catalect primitive | Shipped today | File paths | Roadmap | Score / 10 |
 |---|---|---|---|---|
