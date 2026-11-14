@@ -147,6 +147,21 @@ higher-confidence incoming instinct updates the local one, an equal-or-lower
 one is skipped, and a brand-new one lands in `inherited/` (tagged
 `inherited: true`, `observations: 0`).
 
+**Sharing a pack with someone else.** `export --shareable` keeps only the
+instincts that carry over (`feedback` and `discovery` types) and refuses to
+write anything if one of them mentions a private name. The names to keep out are
+yours, so they live in a file on your own machine and never in this repo:
+
+```bash
+cp templates/instinct-disclosure-patterns.txt.example ~/.claude/instinct/disclosure-patterns.txt
+# replace the examples with your own people, companies, places and ticket prefixes
+python3 scripts/instinct.py export --shareable --out pack.yaml
+```
+
+One regex per line. A link to a private session artifact is always checked, with
+no file needed. With no file the export still works and tells you only that check
+ran; a line that is not a valid regex stops the export.
+
 ---
 
 ## 6. CLI reference
@@ -160,7 +175,7 @@ python3 scripts/instinct.py decay     [--dry-run]
 python3 scripts/instinct.py promote   [--dry-run] [--every N] [--min-session-calls N] [--no-decay] [--reset-state]
 python3 scripts/instinct.py recompute [--limit N]      # decay + report
 python3 scripts/instinct.py report    [--project P] [--min-confidence F] [--stale] [--json] [--limit N]
-python3 scripts/instinct.py export    [--project P] [--min-confidence F] [--all] [--out FILE]
+python3 scripts/instinct.py export    [--project P] [--min-confidence F] [--all] [--shareable] [--out FILE]
 python3 scripts/instinct.py import    FILE [--dry-run]
 python3 scripts/instinct.py evolve    [--out DIR]
 ```

@@ -459,7 +459,7 @@ The audit found 5 high-value gaps. All five are now fixed.
 
 ## April 11, 2026 (thirteenth session — meeting workflow, CRM structure preservation, personal↔team to-do separation, session-close repo-update check)
 
-Four new hard rules baked into the Obsidian Rules section + Session Protocol. All four came from a real-world failure cascade during Adelaida's pitch-feedback session with an advisor: Claude skimmed a Granola transcript summary instead of reading the full Gemini Google Doc verbatim, then replaced a standard CRM dataview block with a custom History section (breaking the user's normal flow), then nearly mixed personal and team to-dos. We shipped the fixes to Adelaida's vault that day. These rules now ship to every user who builds their vault from this starter so the same failures can't recur.
+Four new hard rules baked into the Obsidian Rules section + Session Protocol. All four came from a real-world failure cascade during a user's pitch-feedback session with an advisor: Claude skimmed a Granola transcript summary instead of reading the full Gemini Google Doc verbatim, then replaced a standard CRM dataview block with a custom History section (breaking the user's normal flow), then nearly mixed personal and team to-dos. We shipped the fixes to that user's vault that day. These rules now ship to every user who builds their vault from this starter so the same failures can't recur.
 
 ### 1. Meeting workflow — "I just had a meeting" trigger (new Rule 15)
 
@@ -552,7 +552,7 @@ Added a helper script at `scripts/sync-skills.sh` that handles the repo → inst
 5. Writes a summary to `~/.claude/skills/ai-brain-starter/.sync.log` and prints it to stdout.
 6. Exits non-zero if any write failed, so the hook can surface it (NEVER fail silently).
 
-**Why backup + overwrite (instead of skip-on-customization):** Adelaida's call. Safer default — users never silently lose updates, but they also never silently lose their customizations. Recovery is a one-line `mv SKILL.md.bak-2026-04-10-HHMM SKILL.md`. No diff logic to get wrong.
+**Why backup + overwrite (instead of skip-on-customization):** The maintainer's call. Safer default — users never silently lose updates, but they also never silently lose their customizations. Recovery is a one-line `mv SKILL.md.bak-2026-04-10-HHMM SKILL.md`. No diff logic to get wrong.
 
 ### 4. Auto-update hook now calls `sync-skills.sh`
 
@@ -718,7 +718,7 @@ If your setup has a similar multi-vault structure (personal Obsidian vault + sym
 
 ## April 10, 2026 (seventh session — graphify exclude flags + team vault support)
 
-Ran the optimized graphify pipeline on Adelaida's Onde Team vault (a separate Google Drive-synced team vault with Archive folders). This surfaced four new issues that needed fixes:
+Ran the optimized graphify pipeline on a user's team vault (a separate Google Drive-synced vault with Archive folders). This surfaced four new issues that needed fixes:
 
 1. **`--exclude` flag** on `graphify_prep.py` and `graphify_chunk.py`. Team vaults have `Archive/` folders that should not be indexed (per vault convention, archived content is historical only). Also useful for `.obsidian/`, `_review_alternate_drafts/`, etc. Multi-value flag: `--exclude Archive --exclude .obsidian`.
 

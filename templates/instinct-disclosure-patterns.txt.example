@@ -1,0 +1,37 @@
+# Instinct disclosure patterns: the private names to keep out of a shared pack.
+#
+# Copy this file to ~/.claude/instinct/disclosure-patterns.txt (or point the
+# INSTINCT_DISCLOSURE_PATTERNS environment variable at another file) and list YOUR
+# names below. `python3 scripts/instinct.py export --shareable` refuses to write a
+# pack if any instinct's file name or text matches a line here, and tells you which
+# file and which pattern. Nothing is read from this repo: a list of the names you
+# want kept private does not belong in a public project, so it stays on your
+# machine.
+#
+# Format:
+#   - One regular expression per line, matched case-insensitively.
+#   - Lines starting with # and blank lines are ignored.
+#   - Already built in for everyone, so do not list it: links to private session
+#     artifacts (claude.ai/code/artifact).
+#
+# Tips:
+#   - A word-boundary pattern such as \bacme\b does NOT match inside a longer word,
+#     so "acmeplan" slips past it. Give each compound form its own line.
+#   - Wrap short names in \b...\b so they do not match inside unrelated words.
+#
+# This file ships with no active patterns, so a fresh install checks only for
+# private session links. Remove the leading # from the examples below and replace
+# them with your own.
+#
+# People:
+# \b(Jane Doe|Janey)\b
+#
+# Companies, clients and products:
+# \bacme\b
+# acmeplan
+#
+# Places:
+# \bspringfield\b
+#
+# Ticket prefixes:
+# ACME-\d+
