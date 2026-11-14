@@ -60,6 +60,8 @@ MARKER="${VAULT_BACKUP_MARKER:-$HOME/.claude/.vault-backup-last}"
 # Every snapshot this tool wrote, one path per line, kept OUTSIDE the backup
 # folder. rotate() reads it because a scheduled run may not be able to list
 # that folder (tickets#6500); next to the config so a test's CONF isolates it.
+# One file per backup folder (record_file), so jobs for different vaults that
+# fire at the same minute never write the same file and need no lock.
 RECORD="${VAULT_BACKUP_RECORD:-$CONF.snapshots}"
 KEYCHAIN_SERVICE="ai-brain-starter-vault-backup"
 ARCHIVE_STEM="vault-backup"
@@ -348,25 +350,12 @@ is_our_snapshot() { # <dest> <path> -> 0 when <path> is <dest>/vault-backup-<nam
   return 0
 }
 
-record_lock() { # mkdir is atomic; a lock older than 10 minutes is a crashed run's
-  local i=0
-  until mkdir "$RECORD.lock" 2>/dev/null; do
-    i=$((i+1))
-    if [ "$i" -ge 120 ]; then
-      if [ $(( $(date +%s) - $(mtime_of "$RECORD.lock") )) -ge 600 ]; then
-        rmdir "$RECORD.lock" 2>/dev/null; i=0; continue
-      fi
-      return 1
-    fi
-    sleep 1
-  done
+record_file() { # <dest> -> this backup folder's own record file
+  printf '%s.%s' "$RECORD" "$(printf '%s' "$1" | cksum | cut -d' ' -f1)"
 }
-record_unlock() { rmdir "$RECORD.lock" 2>/dev/null || true; }
 
-record_snapshot() { # <path>
-  record_lock || { warn "snapshot record is busy; not recorded: $1"; return 0; }
-  ( umask 077; printf '%s\n' "$1" >> "$RECORD" ) 2>/dev/null || true
-  record_unlock
+record_snapshot() { # <dest> <path>
+  ( umask 077; printf '%s\n' "$2" >> "$(record_file "$1")" ) 2>/dev/null || true
 }
 
 rotate() { # <dest> <keep>
@@ -375,15 +364,14 @@ rotate() { # <dest> <keep>
   # nothing, silently) but can stat and delete a file by its exact path, so
   # without the record a scheduled run kept every snapshot: 18 of keep=7,
   # 62 GB, on 2026-11-14 (tickets#6500). Newest first by mtime; delete past
-  # $keep by exact path; rewrite the record with what is left. The whole pass
-  # holds the record lock: every vault's job fires at the same minute.
-  local dest="$1" keep="$2" tmp
+  # $keep by exact path; rewrite this folder's record with what is left.
+  local dest="$1" keep="$2" rec tmp
   valid_keep "$keep" || { warn "keep must be a whole number of at least 1 (got '$keep'); nothing deleted"; return 0; }
-  record_lock || { warn "snapshot record is busy; old snapshots not rotated this run"; return 0; }
-  tmp="$RECORD.tmp.$$"
+  rec="$(record_file "$dest")"
+  tmp="$rec.tmp.$$"
   {
     ls -1 "$dest"/$ARCHIVE_STEM-* 2>/dev/null
-    if [ -f "$RECORD" ]; then cat "$RECORD"; fi
+    if [ -f "$rec" ]; then cat "$rec"; fi
   } | sort -u | while IFS= read -r f; do
     if is_our_snapshot "$dest" "$f" && [ -e "$f" ]; then
       printf '%s\t%s\n' "$(mtime_of "$f")" "$f"
@@ -404,17 +392,16 @@ rotate() { # <dest> <keep>
     (
       umask 077
       {
-        if [ -f "$RECORD" ]; then
+        if [ -f "$rec" ]; then  # another folder's lines, should two names collide
           while IFS= read -r line; do
             is_our_snapshot "$dest" "$line" || printf '%s\n' "$line"
-          done < "$RECORD"
+          done < "$rec"
         fi
         printf '%s' "$kept"
       } > "$tmp"
-    ) 2>/dev/null && mv -f "$tmp" "$RECORD" 2>/dev/null
+    ) 2>/dev/null && mv -f "$tmp" "$rec" 2>/dev/null
     rm -f "$tmp" 2>/dev/null
   }
-  record_unlock
   return 0
 }
 
@@ -583,7 +570,7 @@ cmd_run() {
     [ "${bytes:-0}" -gt 256 ] || { rm -f "$out"; die "encrypted archive is suspiciously small"; }
   fi
 
-  record_snapshot "$out"
+  record_snapshot "$dest" "$out"
   rotate "$dest" "$keep"
   conf_set "$vault" "last=$(iso_now)"
   ( umask 077; iso_now > "$MARKER" ) 2>/dev/null || true

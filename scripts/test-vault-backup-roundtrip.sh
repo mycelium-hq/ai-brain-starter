@@ -168,8 +168,12 @@ sleep 1; bash "$BACKUP" run --vault "$VA" >/dev/null 2>&1
 na=$(ls -1 "$DA"/vault-backup-* 2>/dev/null | wc -l | tr -d ' ')
 [ "$na" -ge 2 ] && pass "a bad keep in the config deletes nothing ($na kept)" \
   || fail "a bad keep deleted snapshots: $na left"
-perm=$(stat -c %a "$VAULT_BACKUP_CONF.snapshots" 2>/dev/null || stat -f %Lp "$VAULT_BACKUP_CONF.snapshots" 2>/dev/null)
-[ "$perm" = "600" ] && pass "the snapshot record stays private (0600)" || fail "snapshot record mode is $perm, want 600"
+perms=""; nrec=0
+for r in "$VAULT_BACKUP_CONF".snapshots.*; do [ -f "$r" ] || continue; nrec=$((nrec+1))
+  perms="$perms $(stat -c %a "$r" 2>/dev/null || stat -f %Lp "$r" 2>/dev/null)"; done
+[ "$nrec" -ge 2 ] && [ -z "$(echo "$perms" | tr ' ' '\n' | grep -v -e '^$' -e '^600$')" ] \
+  && pass "each folder's snapshot record stays private (0600)" \
+  || fail "snapshot records: $nrec found, modes:$perms (want 600 each)"
 
 # ---- 6e. jobs that fire at the same minute do not lose each other's record lines ----
 PAR="C D E F G H I J"
@@ -192,6 +196,17 @@ else
     || fail "concurrent runs left extra snapshots:$bad"
 fi
 for v in $PAR; do chmod 0700 "$RROOT/dest$v" 2>/dev/null; done
+
+# ---- 6f. a record that cannot be written never blocks the backup ----
+mkdir -p "$RROOT/ro"; chmod 0500 "$RROOT/ro"
+sleep 1
+( VAULT_BACKUP_RECORD="$RROOT/ro/rec" bash "$BACKUP" run --vault "$VA" >/dev/null 2>&1 ) & rpid=$!
+w=0; while kill -0 "$rpid" 2>/dev/null && [ "$w" -lt 90 ]; do sleep 1; w=$((w+1)); done
+if kill -0 "$rpid" 2>/dev/null; then kill "$rpid" 2>/dev/null; fail "run hung for 90s when its snapshot record could not be written"
+else wait "$rpid"; rc6f=$?
+  [ "$rc6f" = 0 ] && pass "a run finishes when its snapshot record cannot be written (${w}s)" \
+    || fail "run exited $rc6f when its snapshot record could not be written"; fi
+chmod 0700 "$RROOT/ro"
 
 # ---- 7. encrypted round-trip (only if gpg or openssl is available) ----
 if command -v gpg >/dev/null 2>&1 || command -v openssl >/dev/null 2>&1; then
