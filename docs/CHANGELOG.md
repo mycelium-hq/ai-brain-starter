@@ -9,6 +9,14 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-11-14: Rust builds stop filling your disk
+
+**Who this affects:** anyone who builds Rust projects with Claude Code or Codex, most of all on a Mac.
+
+Each time a Rust project's dependencies or build settings change, its next build is a new copy that sits beside the old ones, and nothing deleted the old ones. On a Mac every copy also keeps its debug files, so one large project could grow to 200 GB per folder in a couple of days. The cleanup only cleared folders nobody had used for a day or more, so the folders you were working in kept growing.
+
+Now the cleanup also removes old build copies from folders that are in use, every time it runs: anything not built in the last 24 hours, always keeping the newest one. It never touches a folder while something is running in it, and Rust rebuilds a removed copy if you need it again. It also cleans Codex's copies in `~/.codex/worktrees`, which it never looked at before.
+
 ## 2026-11-09: Linux installs set up every tool, and fastmcp installs again
 
 **Who this affects:** anyone installing or updating, and most of all anyone on Linux.
