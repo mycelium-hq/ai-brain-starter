@@ -219,8 +219,8 @@ def _run_shareable(t: str, md: Path, patterns: str | None):
 
 def test_shareable_export():
     """`export --shareable`: type-filters reference/project/untyped instincts
-    and fails closed (writes NOTHING) if any surviving instinct's filename or
-    body matches a disclosure pattern.
+    and fails closed (writes NOTHING) if any surviving instinct's filename,
+    name, description or body matches a disclosure pattern.
 
     The reference-type fixture uses the NESTED `metadata: {type: ...}`
     frontmatter shape -- the shape real memory files actually carry (measured
@@ -242,12 +242,12 @@ def test_shareable_export():
     # word-boundary name and a ticket-prefix regex.
     MADE_UP = "# made-up names for this test\n\\bacme\\b\nACME-\\d+\n"
 
-    def leaky_dir(t, filename, body):
+    def leaky_dir(t, filename, body, name="some rule", description="a normal feedback rule"):
         md = Path(t) / "Agent Memory"
         md.mkdir(parents=True)
         leak = _write_shareable_fixture(
             md, filename,
-            "name: some rule\ndescription: a normal feedback rule\n"
+            f"name: {name}\ndescription: {description}\n"
             "type: feedback\nstrength: explicit", body)
         cli.cmd_backfill(Args(no_backup=True), md)
         return md, leak
@@ -339,6 +339,46 @@ def test_shareable_export():
               f"CONTROL 6: an invalid pattern line -> exit 2, nothing written (rc={rc})")
         check("disclosure-patterns.txt" in err and "(unclosed" in err,
               "CONTROL 6: the error names the file and the bad line")
+
+    # --- CONTROL 7: the pack carries more than the body -------------------------
+    # The pack writes the frontmatter `name` (as `trigger`) and `description` (as
+    # `action`) too, so a listed name that lives ONLY there must block as well.
+    with tempfile.TemporaryDirectory() as t:
+        md, leak = leaky_dir(t, "feedback_description_leak.md", "A perfectly ordinary instinct body.",
+                             description="talk to acme first")
+        rc, err, wrote = _run_shareable(t, md, MADE_UP)
+        check(rc == 1 and not wrote,
+              f"CONTROL 7: a listed name only in the description blocks the pack (rc={rc})")
+        check(f"{leak.name}: description matched" in err,
+              "CONTROL 7: stderr names the file and says it was the description")
+    with tempfile.TemporaryDirectory() as t:
+        md, leak = leaky_dir(t, "feedback_name_leak.md", "A perfectly ordinary instinct body.",
+                             name="acme rule")
+        rc, err, wrote = _run_shareable(t, md, MADE_UP)
+        check(rc == 1 and not wrote,
+              f"CONTROL 7: a listed name only in the frontmatter name blocks the pack (rc={rc})")
+        check(f"{leak.name}: name matched" in err,
+              "CONTROL 7: stderr names the file and says it was the name")
+
+    # --- CONTROL 8: a comment after a pattern is refused, never read as regex ----
+    # `\bacme\b   # client` compiles, but as a pattern that needs the literal text
+    # "   # client", so it would match nothing and let the name through unannounced.
+    with tempfile.TemporaryDirectory() as t:
+        md, _ = leaky_dir(t, "feedback_trailing_comment.md", "Ship the acme runtime pattern here.")
+        rc, err, wrote = _run_shareable(t, md, "\\bacme\\b   # a client\n")
+        check(rc == 2 and not wrote,
+              f"CONTROL 8: a `#` after a pattern -> exit 2, nothing written (rc={rc})")
+        check("line 1" in err, "CONTROL 8: the error names the line")
+
+    # --- CONTROL 9: a pattern that matches everything is refused ----------------
+    # `acme|` has an empty alternative, so it matches every text and every
+    # instinct would be reported as a hit on ''.
+    with tempfile.TemporaryDirectory() as t:
+        md, _ = leaky_dir(t, "feedback_plain.md", "A perfectly ordinary instinct body.")
+        rc, err, wrote = _run_shareable(t, md, "acme|\n")
+        check(rc == 2 and not wrote,
+              f"CONTROL 9: a pattern matching the empty string -> exit 2, nothing written (rc={rc})")
+        check("matches everything" in err, "CONTROL 9: the error says why")
 
 
 def test_evolve():

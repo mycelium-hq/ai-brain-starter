@@ -727,11 +727,12 @@ def _load_disclosure_patterns() -> tuple[list[tuple[str, re.Pattern]], int]:
     """(compiled patterns, how many came from the person's file).
 
     The built-ins plus one regex per line from DISCLOSURE_PATH, matched
-    case-insensitively; `#` lines and blank lines are skipped. A missing file is
-    fine (the caller says so). A file that exists but cannot be read, or a line
-    that is not a valid regex, raises ValueError so the caller refuses to export:
-    a scan that quietly skipped a broken list would ship the very names it was
-    asked to keep out."""
+    case-insensitively; a line that starts with `#` and a blank line are skipped.
+    A missing file is fine (the caller says so). A file that exists but cannot be
+    read, a line that is not a valid regex, a `#` after a pattern, or a pattern
+    that matches the empty string raises ValueError so the caller refuses to
+    export: a scan that quietly skipped or weakened a list would ship the very
+    names it was asked to keep out."""
     try:
         # utf-8-sig: Windows Notepad saves a byte-order mark, which would otherwise
         # stick to the first line and quietly stop that pattern matching.
@@ -740,26 +741,55 @@ def _load_disclosure_patterns() -> tuple[list[tuple[str, re.Pattern]], int]:
         lines = []
     except (OSError, UnicodeDecodeError) as e:
         raise ValueError(f"cannot read {DISCLOSURE_PATH}: {e}") from e
-    personal = [s for s in (ln.strip() for ln in lines) if s and not s.startswith("#")]
+    personal = []
+    for number, line in enumerate(lines, 1):
+        text = line.strip()
+        if not text or text.startswith("#"):
+            continue
+        if re.search(r"\s#", text):
+            # `\bacme\b   # a client` compiles, but as a pattern that needs the
+            # literal text "   # a client": it would match nothing and let the name
+            # through without a word.
+            raise ValueError(f"{DISCLOSURE_PATH} line {number}: a `#` after a pattern is "
+                             "read as part of the pattern, not as a comment. Put the "
+                             "comment on its own line (write [ ]# to match a space and a hash).")
+        personal.append(text)
     compiled = []
     for raw in (*BUILTIN_DISCLOSURE_PATTERNS, *personal):
         try:
-            compiled.append((raw, re.compile(raw, re.IGNORECASE)))
+            rx = re.compile(raw, re.IGNORECASE)
         except re.error as e:
             raise ValueError(f"{DISCLOSURE_PATH}: {raw!r} is not a valid pattern ({e})") from e
+        if rx.search(""):
+            raise ValueError(f"{DISCLOSURE_PATH}: {raw!r} matches everything (an empty "
+                             "alternative, as in 'acme|'?)")
+        compiled.append((raw, rx))
     return compiled, len(personal)
 
 
-def _disclosure_hits(filename: str, body: str,
-                     patterns: list[tuple[str, re.Pattern]]) -> list[str]:
-    """Scan `filename` and `body` against every disclosure pattern.
+# What a pack record's keys are called in the memory file, so a hit says where to look.
+_PACK_FIELD_LABELS = {"trigger": "name", "action": "description", "source_repo": "project_id"}
 
-    Returns one human-readable line per hit (empty list = clean). Checks
-    ALL patterns against BOTH surfaces rather than stopping at the first hit,
-    so a single failing run can report everything that needs fixing at once.
+
+def _disclosure_hits(filename: str, body: str, record: dict,
+                     patterns: list[tuple[str, re.Pattern]]) -> list[str]:
+    """Scan everything an exported instinct carries against every disclosure pattern.
+
+    That is the file name, the whole body, and each text field of its pack record:
+    the frontmatter `name` is exported as `trigger` and `description` as `action`,
+    so a name that lives only there ships just as surely as one in the body. The
+    record's `evidence` is a cut of the body, already scanned whole.
+
+    Returns one human-readable line per hit (empty list = clean). Checks ALL
+    patterns against EVERY surface rather than stopping at the first hit, so a
+    single failing run can report everything that needs fixing at once.
     """
+    surfaces = [("filename", filename), ("body", body)]
+    surfaces += [(_PACK_FIELD_LABELS.get(key, key), value)
+                 for key, value in record.items()
+                 if isinstance(value, str) and key != "evidence"]
     hits: list[str] = []
-    for surface, text in (("filename", filename), ("body", body)):
+    for surface, text in surfaces:
         for raw, rx in patterns:
             m = rx.search(text)
             if m:
@@ -840,11 +870,7 @@ def cmd_export(args, memory_dir: Path) -> int:
             if itype not in SHAREABLE_TYPES:
                 excluded_type += 1
                 continue
-            hits = _disclosure_hits(path.name, inst.body, patterns)
-            if hits:
-                disclosure_report.extend(f"{path.name}: {h}" for h in hits)
-                continue
-        out.append({
+        record = {
             "id": inst.slug,
             "trigger": fm.get("name", inst.slug),
             "confidence": eff,
@@ -857,7 +883,15 @@ def cmd_export(args, memory_dir: Path) -> int:
             "exposures": il.parse_int(fm.get("exposures"), 0),
             "action": (fm.get("description", "") or "").strip(),
             "evidence": inst.body.strip()[:1200],
-        })
+        }
+        if shareable:
+            # Scan the record that would be written, not just the body: the name
+            # and description travel in the pack too.
+            hits = _disclosure_hits(path.name, inst.body, record, patterns)
+            if hits:
+                disclosure_report.extend(f"{path.name}: {h}" for h in hits)
+                continue
+        out.append(record)
 
     if disclosure_report:
         # FAIL CLOSED, always -- never write a partial pack with only the
@@ -1102,8 +1136,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--all", action="store_true"); sp.add_argument("--out")
     sp.add_argument("--shareable", action="store_true",
                     help="exclude reference/project-type (and untyped) instincts, and fail "
-                         "closed -- writing nothing -- if any surviving instinct's filename "
-                         "or body matches a disclosure pattern (private session links, plus "
+                         "closed -- writing nothing -- if any surviving instinct's filename, "
+                         "name, description or body matches a disclosure pattern (private session links, plus "
                          "the names you list in ~/.claude/instinct/disclosure-patterns.txt)")
 
     sp = sub.add_parser("import", parents=[common]); sp.add_argument("file"); sp.add_argument("--dry-run", action="store_true")

@@ -15,7 +15,9 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 When an update retired a hook on purpose, the start-of-session check kept telling you it had gone missing, every session, until you ran its refresh command by hand. It now reads the installer's list of retired hooks and stays quiet about them. A hook that disappears for any other reason still warns.
 
-`export --shareable` refuses to write a pack that mentions a private name, but the list of names it checked was one person's own and sat in this public project. That list is gone. The names to keep out now come from a file on your own machine, `~/.claude/instinct/disclosure-patterns.txt`; `templates/instinct-disclosure-patterns.txt.example` shows the format and ships with no names in it. With no file the export still works and tells you it only checked for private session links, so copy the example there and list your own names before your next shared export. A few older changelog lines and the README's background paragraph also stop naming one person's company and vault.
+`export --shareable` refuses to write a pack that mentions a private name, but the list of names it checked was one person's own and sat in this public project. That list is gone. The names to keep out now come from a file on your own machine, `~/.claude/instinct/disclosure-patterns.txt`; `templates/instinct-disclosure-patterns.txt.example` shows the format and ships with no names in it. With no file the export still works and tells you it only checked for private session links, so copy the example there and list your own names before your next shared export. Keep each comment in that file on its own line: the export stops with an error, instead of quietly never matching, if a `#` follows a pattern or a pattern matches everything.
+
+The same export now also checks each instinct's name and description, not only its text. Before, a private name that appeared only there went into the shared pack. A few older changelog lines, the README's background paragraph and one internal document reference also stop naming one person's company, vault and documents.
 
 ---
 

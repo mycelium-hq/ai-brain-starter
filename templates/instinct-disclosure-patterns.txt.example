@@ -3,14 +3,18 @@
 # Copy this file to ~/.claude/instinct/disclosure-patterns.txt (or point the
 # INSTINCT_DISCLOSURE_PATTERNS environment variable at another file) and list YOUR
 # names below. `python3 scripts/instinct.py export --shareable` refuses to write a
-# pack if any instinct's file name or text matches a line here, and tells you which
-# file and which pattern. Nothing is read from this repo: a list of the names you
-# want kept private does not belong in a public project, so it stays on your
-# machine.
+# pack if any instinct's file name, name, description or text matches a line here,
+# and tells you which file and which pattern. Nothing is read from this repo: a
+# list of the names you want kept private does not belong in a public project, so
+# it stays on your machine.
 #
 # Format:
 #   - One regular expression per line, matched case-insensitively.
-#   - Lines starting with # and blank lines are ignored.
+#   - Lines starting with # and blank lines are ignored. Put every comment on its
+#     own line: a # after a pattern would be read as part of the pattern, so the
+#     export stops with an error instead of quietly never matching.
+#   - A pattern that matches everything, such as one with an empty alternative
+#     (acme|), is refused too.
 #   - Already built in for everyone, so do not list it: links to private session
 #     artifacts (claude.ai/code/artifact).
 #

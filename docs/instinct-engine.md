@@ -149,18 +149,23 @@ one is skipped, and a brand-new one lands in `inherited/` (tagged
 
 **Sharing a pack with someone else.** `export --shareable` keeps only the
 instincts that carry over (`feedback` and `discovery` types) and refuses to
-write anything if one of them mentions a private name. The names to keep out are
-yours, so they live in a file on your own machine and never in this repo:
+write anything if one of them mentions a private name in its file name, name,
+description or text. The names to keep out are yours, so they live in a file on
+your own machine and never in this repo:
 
 ```bash
-cp templates/instinct-disclosure-patterns.txt.example ~/.claude/instinct/disclosure-patterns.txt
+mkdir -p ~/.claude/instinct
+cp ~/.claude/skills/ai-brain-starter/templates/instinct-disclosure-patterns.txt.example ~/.claude/instinct/disclosure-patterns.txt
 # replace the examples with your own people, companies, places and ticket prefixes
-python3 scripts/instinct.py export --shareable --out pack.yaml
+python3 ~/.claude/skills/ai-brain-starter/scripts/instinct.py export --shareable --out pack.yaml
 ```
 
-One regex per line. A link to a private session artifact is always checked, with
-no file needed. With no file the export still works and tells you only that check
-ran; a line that is not a valid regex stops the export.
+One regex per line; put each comment on its own line. A link to a private session
+artifact is always checked, with no file needed. With no file the export still
+works and tells you only that check ran. The export stops with an error, and
+writes nothing, for a line that is not a valid regex, a `#` after a pattern (it
+would be read as part of the pattern and quietly never match), or a pattern that
+matches everything (an empty alternative such as `acme|`).
 
 ---
 

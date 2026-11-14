@@ -58,7 +58,9 @@ Behavior:
     a drop, and it used to warn at every session start until someone ran
     --refresh by hand (tickets#6534). The list is read from the installer's
     source, never imported, so it has one home.
-  - New identities only -> update snapshot silently (additions are fine).
+  - New identities only, or only retired hooks gone -> update snapshot silently
+    (additions are fine, and a retired hook leaves the snapshot for good, so the
+    installer is read once and not at every start).
   - First run / corrupt / OLDER-VERSION snapshot -> (re)baseline silently.
   - `--refresh` -> force-rewrite the snapshot to current and exit 0 (this is what
     "if intentional, refresh" means; the old in-band rerun never refreshed
@@ -218,6 +220,17 @@ def _save(identities: set[str]) -> None:
                      encoding="utf-8")
 
 
+def _plain_strings(value: object) -> tuple[str, ...] | None:
+    """VALUE as a tuple of non-empty strings, or None unless it is a list, tuple or
+    set of them. A bare string would read as one-character fingerprints, and a
+    one-character fingerprint sits inside nearly every identity: it would excuse
+    every real drop."""
+    if isinstance(value, (list, tuple, set, frozenset)) and all(
+            isinstance(item, str) and item for item in value):
+        return tuple(value)
+    return None
+
+
 def _installer_retired() -> tuple[frozenset[str], tuple[str, ...]]:
     """(basenames, fingerprints) of the hooks the installer retired ON PURPOSE.
 
@@ -229,10 +242,10 @@ def _installer_retired() -> tuple[frozenset[str], tuple[str, ...]]:
     guard too and there is no second list to keep in step. Parsed with ast, never
     imported or run.
 
-    No installer next to this hook (a standalone copy) or a list that stopped
-    being a plain literal gives empty sets, so the guard warns exactly as it did
-    before. The self-test fails loud on that second case instead of letting the
-    exemption quietly stop working."""
+    No installer next to this hook (a standalone copy), or a list that stopped
+    being a plain literal list, tuple or set of strings, gives empty sets, so the
+    guard warns exactly as it did before. The self-test fails loud on that second
+    case instead of letting the exemption quietly stop working."""
     found: dict[str, object] = {}
     try:
         for node in ast.parse(INSTALLER.read_text(encoding="utf-8")).body:
@@ -241,10 +254,10 @@ def _installer_retired() -> tuple[frozenset[str], tuple[str, ...]]:
                     and node.targets[0].id in ("ABS_RETIRED_BASENAMES",
                                                "ABS_RETIRED_FINGERPRINTS")):
                 found[node.targets[0].id] = ast.literal_eval(node.value)
-    except (OSError, SyntaxError, ValueError):
+    except (OSError, SyntaxError, ValueError, TypeError, RecursionError):
         return frozenset(), ()
-    return (frozenset(found.get("ABS_RETIRED_BASENAMES", ())),
-            tuple(found.get("ABS_RETIRED_FINGERPRINTS", ())))
+    return (frozenset(_plain_strings(found.get("ABS_RETIRED_BASENAMES")) or ()),
+            _plain_strings(found.get("ABS_RETIRED_FINGERPRINTS")) or ())
 
 
 def _is_retired(identity: str, retired: tuple[frozenset[str], tuple[str, ...]]) -> bool:
@@ -441,6 +454,21 @@ def _self_test() -> int:
         got = _is_retired(ident, retired)
         if got is not want:
             fails.append(f"retired[{label}]: wanted {want!r}, got {got!r}  identity={ident!r}")
+    # The installer's lists are read as a list, tuple or set of non-empty strings and
+    # nothing else: a bare string would read as one-character fingerprints that
+    # excuse every real drop.
+    for label, value, want in (
+        ("a tuple of strings", ("a.py", "b"), ("a.py", "b")),
+        ("an empty tuple", (), ()),
+        ("a bare string", "abc", None),
+        ("a list holding an empty string", ["a", ""], None),
+        ("a list holding a non-string", ["a", 3], None),
+        ("a number", 7, None),
+        ("nothing", None, None),
+    ):
+        got = _plain_strings(value)
+        if got != want:
+            fails.append(f"plain_strings[{label}]: wanted {want!r}, got {got!r}")
     # Premise on the REAL installer: the reader must still find its lists. If the
     # installer reshapes them (an annotated assignment, a computed value), the
     # exemption would go blind while everything above reads healthy -- every
@@ -523,12 +551,13 @@ def main() -> int:
         _save(current)                       # baseline / migrate / repair, silent
         return 0
 
-    missing = prior - current
-    if missing:
-        # Read the installer only when something is missing, so a healthy start
-        # pays nothing for it.
+    gone = prior - current
+    missing = gone
+    if gone:
+        # Read the installer only when something is gone, so a healthy start pays
+        # nothing for it.
         retired = _installer_retired()
-        missing = {i for i in missing if not _is_retired(i, retired)}
+        missing = {i for i in gone if not _is_retired(i, retired)}
     if missing:
         print(f"[sessionstart-hook-guard] WARNING: {len(missing)} SessionStart hook(s) missing since last snapshot:")
         for ident in sorted(missing):
@@ -537,9 +566,11 @@ def main() -> int:
         # Do NOT update snapshot - leave it so the warning persists until reconciled.
         return 0
 
-    additions = current - prior
-    if additions:
-        _save(current)                       # additions are fine - absorb silently
+    if current != prior:
+        # Only additions and/or hooks the installer retired on purpose are different.
+        # Additions are fine. Saving also drops a retired hook from the snapshot for
+        # good, so the next starts do not read the installer again to excuse it.
+        _save(current)
     return 0
 
 
