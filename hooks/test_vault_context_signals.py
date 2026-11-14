@@ -19,8 +19,9 @@ The last case runs the real hook on a made-up personal word: quiet on a fresh
 install, firing once the person's own file lists it. Personal terms belong in
 the per-user override (`~/.claude/.vault-context-signals.json`), which is
 per-user by construction. (It replaces a class guard that kept one person's
-words in this file; the list itself was the leak, and the repo's personal-data
-scrub already reads every line added to a pack.)
+words in this file: the list itself was the leak. This case checks the
+mechanism with a made-up word, so it cannot tell you that a real personal word
+was added to a pack.)
 
 Run: python3 hooks/test_vault_context_signals.py
 """

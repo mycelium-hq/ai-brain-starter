@@ -187,6 +187,18 @@ def test_team_vault_layout_is_detected_and_named_for_what_it_is() -> None:
         out = _run_sizer(script, vault, "Notes")
         assert "Layout: personal" in out, f"personal layout label: {out[:200]!r}"
         assert f"cache_dir: {vault / '⚙️ Meta' / 'graphify-out' / 'cache'}" in out, out[:300]
+    # Half a team layout is not a team vault: both the root cache AND the content
+    # folder's own Meta/graphify-out must exist.
+    for half in ("cache", "meta"):
+        with tempfile.TemporaryDirectory() as td:
+            vault = Path(td)
+            (vault / "Notes").mkdir()
+            if half == "cache":
+                (vault / "graphify-out" / "cache").mkdir(parents=True)
+            else:
+                (vault / "Notes" / "⚙️ Meta" / "graphify-out").mkdir(parents=True)
+            out = _run_sizer(script, vault, "Notes")
+            assert "Layout: personal" in out, f"only the {half} half of a team layout: {out[:200]!r}"
 
 
 def _main() -> int:
