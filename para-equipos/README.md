@@ -14,7 +14,7 @@ Si todavía no leíste el [README principal](../README.md), empieza ahí. Esta c
 
 - **[Por qué los equipos son distintos](por-que-los-equipos-son-distintos.md)** enumera los cuatro problemas que la versión personal nunca tuvo que resolver, en el orden en que suelen romper las cosas.
 - **[Flujos de trabajo en equipo](flujos-de-trabajo-en-equipo.md)** recorre los flujos que un vault de equipo corre y uno personal no puede. Concreto, específico, del tipo que puedes mapear directamente a cosas que tu equipo ya está haciendo mal.
-- **[Trabajar conmigo](trabajar-conmigo.md)** es el menú si quieres que te instale y customice la versión de equipo en vez de construirla tú mismo. Tres paquetes, founding rate, garantía de reversibilidad, y el link directo a un diagnóstico gratuito de 20 minutos.
+- **[Trabajar conmigo](trabajar-conmigo.md)** es el menú si quieres que te instale y customice la versión de equipo en vez de construirla tú mismo. Cuatro paquetes, garantía de reversibilidad, y el link directo a un diagnóstico gratuito de 20 minutos.
 
 ## Cómo usar esta carpeta
 

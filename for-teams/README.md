@@ -14,7 +14,7 @@ If you have not read the root [README](../README.md) yet, start there. This fold
 
 - **[Why Teams Are Different](why-teams-are-different.md)** lists the four problems the personal version never had to solve, in the order they usually break things.
 - **[Team Workflows](team-workflows.md)** walks through four workflows a team vault runs that a personal vault cannot. Concrete, specific, the kind you can map directly to things your team is already doing badly.
-- **[Working With Me](working-with-me.md)** is the menu if you want the team version installed and customized instead of building it yourself. Three packages, founding rate, risk reversal, and the one-link path to a free 20-minute diagnostic.
+- **[Working With Me](working-with-me.md)** is the menu if you want the team version installed and customized instead of building it yourself. Four packages, risk reversal, and the one-link path to a free 20-minute diagnostic.
 
 ## How to use this folder
 
