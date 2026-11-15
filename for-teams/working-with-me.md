@@ -1,6 +1,6 @@
 # Working With Me
 
-If you want this installed and customized instead of building it yourself, here is the menu. Four packages, founding rate, risk reversal.
+If you want this installed and customized instead of building it yourself, here is the menu. Four packages, risk reversal.
 
 ## Background
 
@@ -10,7 +10,7 @@ I built this repo to run my own startup. Open-sourced the core because the patte
 
 ### Personal Install
 
-**$1,500 one-time, founding rate.** Post-founding price: $2,500.
+**$1,500 one-time.**
 
 For solo founders, writers (Substack, books, longform), product managers, consultants, and anyone whose work is decision-heavy and context-rich. If your notes, decisions, and patterns matter beyond the day you wrote them, this is for you. Installed within 5 business days.
 
@@ -22,13 +22,11 @@ For solo founders, writers (Substack, books, longform), product managers, consul
 
 Not for teams, not for businesses, not for anyone who will need to add a co-founder or operator inside the next 12 months. If any of those describe you, the team Brain Setup below is the right starting point and saves you a migration later.
 
-Founding rate cap: 5 slots per quarter.
-
 **Upgrade path:** if you add a team within 12 months and move up to the team Brain Setup, the full $1,500 credits toward it. No double-paying for the foundation.
 
 ### AI Brain Setup
 
-**$3,500 one-time, founding rate.** Post-founding price: $5,000.
+**$3,500 one-time.**
 
 Your team's AI operating system, installed and customized, in one week.
 
@@ -38,11 +36,9 @@ Your team's AI operating system, installed and customized, in one week.
 - 1 week of async training with Loom walkthroughs plus a live Q&A session.
 - Private GitHub repo access for ongoing updates.
 
-Founding rate cap: 5 slots total across all founding clients. When those fill, prices rise and do not come back.
-
 ### AI Implementation Sprint
 
-**$10,000, 2 to 4 weeks, founding rate.** Post-founding price: $15,000.
+**$10,000, 2 to 4 weeks.**
 
 A sprint to find and build your team's highest-ROI AI workflows end-to-end.
 
@@ -52,11 +48,11 @@ A sprint to find and build your team's highest-ROI AI workflows end-to-end.
 - Handoff documentation so your team maintains everything after the sprint closes.
 - 2 weeks of post-sprint support.
 
-Payment: 50% on signature, 50% before handoff. Founding rate cap: 5 slots total.
+Payment: 50% on signature, 50% before handoff.
 
 ### Fractional AI Officer
 
-**$4,000/month, 3-month minimum, founding rate.** Post-founding price: $5,000/month.
+**$4,000/month, 3-month minimum.**
 
 Ongoing AI strategy, optimization, and team training. Up to 6 hours a month.
 
@@ -66,7 +62,7 @@ Ongoing AI strategy, optimization, and team training. Up to 6 hours a month.
 - Async Slack access for questions under 10 minutes.
 - Monthly ROI report: what we built, what it saved.
 
-Month-to-month after the first 3 months with 30-day cancellation. Founding rate cap: 3 slots total.
+Month-to-month after the first 3 months with 30-day cancellation.
 
 ## Risk reversal
 

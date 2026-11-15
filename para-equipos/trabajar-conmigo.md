@@ -2,17 +2,33 @@
 
 *English: [working-with-me.md](../for-teams/working-with-me.md)*
 
-Si quieres la versión de equipo instalada y customizada en vez de construirla tú mismo, acá está el menú. Tres paquetes, founding rate, garantía de reversibilidad.
+Si quieres esto instalado y customizado en vez de construirlo tú mismo, acá está el menú. Cuatro paquetes, garantía de reversibilidad.
 
 ## Contexto
 
-Construí este repo para correr mi propia startup. Liberé el core como open-source porque el patrón debería ser gratis. Instalo la versión completa para un número pequeño de equipos cada trimestre. Bio completa, credenciales, y casos de estudio en [diazroa.com](https://diazroa.com).
+Construí este repo para correr mi propia startup. Liberé el core como open-source porque el patrón debería ser gratis. Instalo la versión completa para un número pequeño de fundadores y equipos cada trimestre. Bio completa, credenciales, y casos de estudio en [diazroa.com](https://diazroa.com).
 
-## Los tres paquetes
+## Los cuatro paquetes
+
+### Personal Install
+
+**$1,500 one-time.**
+
+Para fundadores solos, escritores (Substack, libros, formatos largos), product managers, consultores, y cualquiera cuyo trabajo sea pesado en decisiones y rico en contexto. Si tus notas, decisiones y patrones importan más allá del día en que los escribiste, esto es para ti. Instalado dentro de 5 días hábiles.
+
+- Deep-dive de 90 minutos para mapear tu trabajo, tus decisiones, tu arquitectura de conocimiento, tu stack.
+- Instalación completa de Claude Code más Obsidian, vault estructurado para ti, skills customizadas a cómo realmente trabajas, knowledge graph, integraciones MCP con tus herramientas personales (Substack, calendario, journal, RescueTime, lo que realmente uses).
+- Densificación del knowledge graph sobre las notas que ya tengas. Notion, Apple Notes, Markdown disperso, exports viejos de Roam. Las referencias que escribiste hace tres años empiezan a aparecer cuando son relevantes para hoy.
+- Entrenamiento asíncrono: walkthroughs de Loom pensados para una persona, no para un rollout de equipo.
+- Acceso a repo privado de GitHub para actualizaciones continuas.
+
+No es para equipos, ni para negocios, ni para nadie que vaya a necesitar sumar un cofundador u operador en los próximos 12 meses. Si alguna de esas te describe, el Brain Setup de equipo de abajo es el mejor punto de partida y te ahorra una migración después.
+
+**Ruta de upgrade:** si sumas un equipo dentro de 12 meses y pasas al Brain Setup de equipo, los $1,500 completos se acreditan a ese paquete. Sin pagar dos veces por la base.
 
 ### AI Brain Setup
 
-**$3,500 one-time, founding rate.** Precio post-founding: $5,000.
+**$3,500 one-time.**
 
 El sistema operativo de IA de tu equipo, instalado y customizado, en una semana.
 
@@ -22,11 +38,9 @@ El sistema operativo de IA de tu equipo, instalado y customizado, en una semana.
 - 1 semana de entrenamiento asíncrono con walkthroughs de Loom más una sesión de Q&A en vivo.
 - Acceso a repo privado de GitHub para actualizaciones continuas.
 
-Cap del founding rate: 5 cupos en total entre todos los clientes founding. Cuando se llenen, los precios suben y no vuelven.
-
 ### AI Implementation Sprint
 
-**$10,000, 2 a 4 semanas, founding rate.** Precio post-founding: $15,000.
+**$10,000, 2 a 4 semanas.**
 
 Un sprint para encontrar y construir los flujos de IA de mayor ROI de tu equipo, de punta a punta.
 
@@ -36,11 +50,11 @@ Un sprint para encontrar y construir los flujos de IA de mayor ROI de tu equipo,
 - Documentación de handoff para que tu equipo mantenga todo después de que cierre el sprint.
 - 2 semanas de soporte post-sprint.
 
-Pago: 50% al firmar, 50% antes del handoff. Cap del founding rate: 5 cupos en total.
+Pago: 50% al firmar, 50% antes del handoff.
 
 ### Fractional AI Officer
 
-**$4,000/mes, 3 meses mínimo, founding rate.** Precio post-founding: $5,000/mes.
+**$4,000/mes, 3 meses mínimo.**
 
 Estrategia continua de IA, optimización, y entrenamiento del equipo. Hasta 6 horas al mes.
 
@@ -50,13 +64,13 @@ Estrategia continua de IA, optimización, y entrenamiento del equipo. Hasta 6 ho
 - Acceso asíncrono por Slack para preguntas de menos de 10 minutos.
 - Reporte mensual de ROI: qué construimos, qué ahorró.
 
-Mes a mes después de los primeros 3 meses con 30 días de cancelación. Cap del founding rate: 3 cupos en total.
+Mes a mes después de los primeros 3 meses con 30 días de cancelación.
 
 ## Garantía de reversibilidad
 
-Empezamos con el deep-dive de 2 horas. Si después de esa sesión no ves por lo menos 10 horas al mes volviendo a ti y a tu equipo, no pagas nada. Yo me quedo con las notas, tú te quedas con la claridad, y nos vamos como amigos.
+Empezamos con el deep-dive (90 minutos para el Personal, 2 horas para los paquetes de equipo). Si después de esa sesión no ves por lo menos 10 horas al mes volviendo a ti (o a ti y a tu equipo), no pagas nada. Yo me quedo con las notas, tú te quedas con la claridad, y nos vamos como amigos.
 
-Aplica al Brain Setup y al Sprint. El Fractional no lo necesita porque ya viste el sistema funcionando.
+Aplica al Personal Install, al Brain Setup y al Sprint. El Fractional no lo necesita porque ya viste el sistema funcionando.
 
 ## No incluido
 
@@ -64,7 +78,7 @@ Los paquetes no incluyen desarrollo de software custom, migración de datos desd
 
 ## Para quién no es esto
 
-- Equipos de menos de 10 personas donde una persona todavía puede sostener todo el contexto en la cabeza. La versión personal en el resto del repo es suficiente.
+- Equipos de menos de 5 personas donde una persona todavía puede sostener todo el contexto en la cabeza. El repo open-source o el Personal Install te alcanza.
 - Empresas pre-ingresos o pre-seed sin un runway claro.
 - Cualquiera que necesite "hablar con el equipo" antes de una decisión de $3,500. O el deal está muerto o la persona equivocada está en la sala.
 - Equipos que quieren un chatbot custom, un wrapper de GPT, o una librería de prompts. Ese es un tipo distinto de trabajo.
