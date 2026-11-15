@@ -9,6 +9,16 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-11-15: Your own words for the context hook live on your machine, not in the kit
+
+**Who this affects:** anyone who wants the start-of-prompt context hook (`vault-context`) to load your priorities when you mention your own words: a company, a city, a project title.
+
+The hook has only ever shipped generic trigger words, in English and Spanish, and it still does. Your own words go in a file on your machine, `~/.claude/.vault-context-signals.json`; `templates/vault-context-signals.json.example` shows the format and ships with none. Nothing changes for you if you already have that file, and nothing changes in how the hook behaves.
+
+In the same change, a test and two comments stop carrying one person's words, the graphify sizer prints `Layout: team-vault` for a team vault (it used to print a company's name), and one archived changelog line no longer lists the contents of a vault.
+
+---
+
 ## 2026-11-15: No more false "hook missing" warning, and your private names stay on your machine
 
 **Who this affects:** anyone who sees "SessionStart hook(s) missing since last snapshot" at the start of every session, and anyone who shares a pack with `instinct.py export --shareable`.

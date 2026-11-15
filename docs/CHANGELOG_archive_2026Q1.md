@@ -733,7 +733,7 @@ Team vault run results (177 files, 4 chunks of ~30K words each, 3/4 succeeded):
 - LLM extraction: 342 nodes, 294 edges, 9 hyperedges (3 chunks)
 - After canonicalize: 669 nodes, 1,308 edges, 113 communities
 - Cache populated: 163 per-file entries
-- Top god nodes: Onde (61), Pitch deck (46), Colombia (30), Pitch Narrative (27), Sales Coach (27), Strategy Index (27), Raise Sprint (26), Onde Summary (26) — exactly the right central business docs
+- Top god nodes: the vault's central business documents (26 to 61 connections each), exactly the right ones
 
 ---
 
