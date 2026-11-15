@@ -9,6 +9,16 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-11-15: An out-of-date skill is no longer reported as "ahead" of the kit
+
+**Who this affects:** anyone who saw "installed skill is AHEAD of canonical" at the start of a session for a skill they never changed.
+
+The start-of-session check decides whether your copy of a skill is older or newer than the kit's by comparing section headings. When the kit moved a long section out of a skill into its own reference file, as it did for the daily journal, your older copy still had that section. The check read that as "ahead", told you to send an improvement upstream, and told you not to update, so the copy stayed old and nothing was ahead.
+
+The check now also looks at the kit's history. If your copy is exactly a version the kit once shipped, it is reported as behind, with the one command that updates it (your copy is backed up first). A copy with changes of your own is still reported as ahead, so your own improvements keep getting flagged.
+
+---
+
 ## 2026-11-15: Your own words for the context hook live on your machine, not in the kit
 
 **Who this affects:** anyone who wants the start-of-prompt context hook (`vault-context`) to load your priorities when you mention your own words: a company, a city, a project title.

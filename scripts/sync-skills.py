@@ -161,6 +161,75 @@ def _dedup(items: list[str]) -> list[str]:
     return list(dict.fromkeys(items))
 
 
+# Headings alone cannot tell a LOCAL ADDITION from an UPSTREAM DELETION. When
+# canonical slims a skill (detail moved out of SKILL.md into references/), a
+# copy that was simply never updated still has the old headings, so the
+# heading comparison read it as AHEAD and told the member not to sync it: the
+# copy never updated (tickets#6612). The clone's git history settles it. A copy
+# whose bytes equal a version canonical itself committed carries nothing of its
+# own: it is only older.
+
+_GIT_TIMEOUT = 15  # seconds per git call; this runs at SessionStart, so stay bounded
+
+# Variables that point git at a different repository than `-C` names. A caller
+# running inside a git hook has them set; left in, they would make `-C` a lie.
+_GIT_REPO_ENV = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR",
+                 "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+                 "GIT_NAMESPACE", "GIT_PREFIX")
+
+
+def _git_run(repo: Path, args: list[str], data: bytes | None = None) -> bytes | None:
+    """stdout of `git -C <repo> <args>`, or None when git is missing, times out
+    or exits non-zero. Bytes in and out, so no locale decode can go wrong."""
+    env = {k: v for k, v in os.environ.items() if k not in _GIT_REPO_ENV}
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(repo), *args],
+            input=data, capture_output=True, timeout=_GIT_TIMEOUT, check=False,
+            env=env,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return proc.stdout if proc.returncode == 0 else None
+
+
+def _past_blob_ids(repo: Path, rel_path: str) -> set[str]:
+    """Blob ids of every version of `rel_path` committed in `repo`'s history.
+    Empty when there is no usable history (not a git checkout, git unavailable)."""
+    if not (repo / ".git").exists():
+        return set()
+    out = _git_run(repo, ["log", "--format=", "--raw", "--no-abbrev",
+                          "--no-renames", "--", rel_path])
+    if out is None:
+        return set()
+    ids: set[str] = set()
+    for line in out.decode("utf-8", errors="replace").splitlines():
+        # ":100644 100644 <old blob> <new blob> M<TAB>path"
+        fields = line.split()
+        if line.startswith(":") and len(fields) >= 5 and fields[3].strip("0"):
+            ids.add(fields[3])  # all zeros = the file was deleted in that commit
+    return ids
+
+
+def _is_earlier_canonical(repo: Path, rel_path: str, data: bytes) -> bool:
+    """True when `data` is byte-identical to a version of `rel_path` that the
+    clone's own history committed. A CRLF copy (a Windows checkout) is retried
+    as LF, the form git stores. False whenever the answer cannot be proven, so
+    the caller keeps the heading logic."""
+    past = _past_blob_ids(repo, rel_path)
+    if not past:
+        return False
+    candidates = [data]
+    as_lf = data.replace(b"\r\n", b"\n")
+    if as_lf != data:
+        candidates.append(as_lf)
+    for candidate in candidates:
+        out = _git_run(repo, ["hash-object", "--stdin"], candidate)
+        if out is not None and out.decode("ascii", errors="replace").strip() in past:
+            return True
+    return False
+
+
 def classify_drift(clone_skills_root: Path, install_root: Path) -> list[dict]:
     """Compare each bundled skill's SKILL.md in the clone against the installed
     bare copy. Returns a sorted list of dicts for skills that DIFFER and are not
@@ -170,6 +239,10 @@ def classify_drift(clone_skills_root: Path, install_root: Path) -> list[dict]:
       behind    - the clone has section(s) the bare copy lacks, and none the
                   other way (the clean upstream-ahead case; the headline signal).
       content   - same section set, different body (upstream text improved).
+      stale     - the bare copy is byte-identical to an EARLIER committed version
+                  of canonical's file: nothing in it is local, it is only older.
+                  Reported even when the headings say leads/diverged (canonical
+                  moved or removed sections), so it is applied, never "upstreamed".
       diverged  - both sides have unique sections (a local fork AND upstream
                   moved; needs a human merge, never a blind overwrite).
       leads     - the bare copy has section(s) the clone lacks and none the
@@ -223,6 +296,16 @@ def classify_drift(clone_skills_root: Path, install_root: Path) -> list[dict]:
             status = "diverged"
         else:
             status = "content"  # same heading set, body changed
+        # Only the leads / diverged readings can be wrong this way: a copy that
+        # simply never updated shows headings canonical has since moved out.
+        if status in ("leads", "diverged"):
+            repo = clone_skills_root.parent
+            try:
+                if _is_earlier_canonical(repo, src.relative_to(repo).as_posix(),
+                                         dest.read_bytes()):
+                    status = "stale"
+            except (OSError, ValueError):
+                pass  # unreadable, or an odd layout: keep the heading reading
         results.append({
             "name": name,
             "status": status,
@@ -242,6 +325,8 @@ def drift_message(drifts: list[dict]) -> str | None:
 
       behind / content -> the copy is OLDER than canonical: apply canonical
                           (sync-skills.py, backup-first).
+      stale            -> the copy is exactly an earlier canonical version, so it
+                          is OLDER too, however its headings compare: same apply.
       leads            -> the copy is AHEAD of canonical: an improvement is
                           trapped locally where clients can't get it. Upstream
                           it (PR to ai-brain-starter) — or, if it is a personal
@@ -250,7 +335,7 @@ def drift_message(drifts: list[dict]) -> str | None:
       diverged         -> both moved: reconcile by hand (upstream the local part,
                           THEN apply canonical), never a blind overwrite.
     """
-    behind = sorted([d for d in drifts if d["status"] in ("behind", "content")],
+    behind = sorted([d for d in drifts if d["status"] in ("behind", "content", "stale")],
                     key=lambda d: d["name"])
     leads = sorted([d for d in drifts if d["status"] == "leads"], key=lambda d: d["name"])
     diverged = sorted([d for d in drifts if d["status"] == "diverged"], key=lambda d: d["name"])
@@ -274,6 +359,11 @@ def drift_message(drifts: list[dict]) -> str | None:
         for d in behind:
             if d["status"] == "content":
                 lines.append(f"- `{d['name']}` — updated content (same sections, newer text)")
+            elif d["status"] == "stale":
+                new = ", ".join(d["missing_sections"][:6])
+                tail = f"; new upstream section(s): {new}" if new else ""
+                lines.append(f"- `{d['name']}` — an earlier canonical version, nothing of "
+                             f"your own in it{tail}")
             else:
                 secs = ", ".join(d["missing_sections"][:6]) or "(body changes)"
                 lines.append(f"- `{d['name']}` — missing new section(s): {secs}")
