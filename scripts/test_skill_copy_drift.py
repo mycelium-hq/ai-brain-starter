@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -207,6 +209,174 @@ class ClassifyDriftTests(unittest.TestCase):
         _skill(self.clone, "daily-journal", BARE_JOURNAL)
         _skill(self.install, "daily-journal", BARE_JOURNAL)
         self.assertIsNone(SS.drift_message(SS.classify_drift(self.clone, self.install)))
+
+
+# A skill that canonical later SLIMMED: the template that used to sit inside
+# SKILL.md moved into references/, so the old headings left SKILL.md. A copy that
+# never updated still has them (tickets#6612).
+UNSLIMMED = """---
+name: daily-journal
+---
+## Setup
+Body.
+## Floor note template
+Use this when the floor has no note yet:
+```
+# [[FloorName|FloorName]]
+## How it shows up
+```
+### Step 7: Save the entry
+Save it.
+"""
+
+SLIMMED = """---
+name: daily-journal
+---
+## Setup
+Body.
+### Step 7: Save the entry
+Save it. The floor note template lives in references/floor-note-template.md.
+"""
+
+SLIMMED_WITH_NEW_SECTION = SLIMMED + "## Crisis protocol\nSafety override.\n"
+
+_GIT_REPO_ENV = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR",
+                 "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+                 "GIT_NAMESPACE", "GIT_PREFIX")
+
+
+@unittest.skipUnless(shutil.which("git"), "git is not installed")
+class StaleCopyHistoryTests(unittest.TestCase):
+    """The clone's git history tells a copy that is only OLDER from one that is
+    AHEAD. Headings alone cannot: when canonical removes or moves sections, a
+    never-updated copy still has them and used to read as "ahead of canonical"
+    with the advice not to sync it (tickets#6612)."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        base = Path(self._tmp.name)
+        self.repo = base / "clone"          # the ai-brain-starter checkout
+        self.skills = self.repo / "skills"
+        self.install = base / "install"     # ~/.claude/skills
+        self.repo.mkdir()
+        self.install.mkdir()
+        self._git("init", "-q")
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def _git(self, *args: str) -> None:
+        # Hermetic: no inherited repo variables (this suite can run inside a git
+        # hook), no signing, no line-ending rewrite, a fixed identity.
+        env = {k: v for k, v in os.environ.items() if k not in _GIT_REPO_ENV}
+        subprocess.run(
+            ["git", "-C", str(self.repo),
+             "-c", "user.name=Test", "-c", "user.email=test@example.com",
+             "-c", "commit.gpgsign=false", "-c", "core.autocrlf=false",
+             *args],
+            check=True, capture_output=True, env=env,
+        )
+
+    def _commit_skill(self, name: str, text: str) -> None:
+        rel = f"skills/{name}/SKILL.md"
+        path = self.repo / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(text.encode("utf-8"))
+        self._git("add", rel)
+        self._git("commit", "-q", "--no-verify", "-m", f"{name} update")
+
+    def _install_skill(self, name: str, text: str, newline: str = "\n") -> None:
+        path = self.install / name / "SKILL.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(text.replace("\n", newline).encode("utf-8"))
+
+    def _drift(self, name: str = "daily-journal") -> dict:
+        drifts = SS.classify_drift(self.skills, self.install)
+        return {d["name"]: d for d in drifts}[name]
+
+    # --- the reported incident: a slimmed skill, an untouched older copy -----
+    def test_untouched_older_copy_of_a_slimmed_skill_is_stale_not_ahead(self):
+        self._commit_skill("daily-journal", UNSLIMMED)
+        self._commit_skill("daily-journal", SLIMMED)
+        self._install_skill("daily-journal", UNSLIMMED)
+        d = self._drift()
+        self.assertEqual(d["status"], "stale")
+        self.assertEqual(d["missing_sections"], [])
+        self.assertIn("How it shows up", d["extra_sections"])
+
+    # --- negative control: a genuine local addition is still AHEAD ----------
+    def test_a_real_local_addition_still_reads_as_ahead(self):
+        self._commit_skill("daily-journal", UNSLIMMED)
+        self._commit_skill("daily-journal", SLIMMED)
+        self._install_skill("daily-journal", UNSLIMMED + "## My local improvement\nx\n")
+        self.assertEqual(self._drift()["status"], "leads")
+
+    def test_an_older_copy_with_a_local_edit_is_not_stale(self):
+        self._commit_skill("daily-journal", UNSLIMMED)
+        self._commit_skill("daily-journal", SLIMMED_WITH_NEW_SECTION)
+        self._install_skill("daily-journal", UNSLIMMED + "## My local improvement\nx\n")
+        self.assertEqual(self._drift()["status"], "diverged")
+
+    # --- canonical both removed AND added sections: still just older --------
+    def test_older_copy_is_stale_even_when_upstream_added_a_section(self):
+        self._commit_skill("daily-journal", UNSLIMMED)
+        self._commit_skill("daily-journal", SLIMMED_WITH_NEW_SECTION)
+        self._install_skill("daily-journal", UNSLIMMED)
+        d = self._drift()
+        self.assertEqual(d["status"], "stale")          # not "diverged"
+        self.assertEqual(d["missing_sections"], ["Crisis protocol"])
+
+    # --- a Windows checkout stores CRLF; git stores LF ----------------------
+    def test_crlf_copy_of_an_earlier_version_is_stale(self):
+        self._commit_skill("daily-journal", UNSLIMMED)
+        self._commit_skill("daily-journal", SLIMMED)
+        self._install_skill("daily-journal", UNSLIMMED, newline="\r\n")
+        self.assertEqual(self._drift()["status"], "stale")
+
+    # --- fail safe: whenever history cannot prove it, keep the old reading ---
+    def test_a_clone_without_history_keeps_the_heading_reading(self):
+        _skill(self.skills, "daily-journal", SLIMMED)       # files only, no commits
+        self._install_skill("daily-journal", UNSLIMMED)
+        self.assertEqual(self._drift()["status"], "leads")
+
+    def test_git_failing_keeps_the_heading_reading(self):
+        self._commit_skill("daily-journal", UNSLIMMED)
+        self._commit_skill("daily-journal", SLIMMED)
+        self._install_skill("daily-journal", UNSLIMMED)
+        real = SS._git_run
+        SS._git_run = lambda *a, **k: None
+        try:
+            self.assertEqual(self._drift()["status"], "leads")
+        finally:
+            SS._git_run = real
+
+    # --- the member-facing message ------------------------------------------
+    def test_message_says_behind_and_apply_never_ahead(self):
+        self._commit_skill("daily-journal", UNSLIMMED)
+        self._commit_skill("daily-journal", SLIMMED)
+        self._install_skill("daily-journal", UNSLIMMED)
+        msg = SS.drift_message(SS.classify_drift(self.skills, self.install))
+        self.assertIsNotNone(msg)
+        self.assertIn("Behind canonical", msg)
+        self.assertIn("`daily-journal` — an earlier canonical version", msg)
+        self.assertIn("sync-skills.py", msg)             # the apply command
+        self.assertNotIn("Ahead of canonical", msg)
+        self.assertNotIn("Do NOT run sync-skills.py", msg)
+
+    def test_message_keeps_a_real_improvement_in_the_ahead_group(self):
+        # One skill is just older, another really has a local improvement: both
+        # are reported, each under its own action.
+        self._commit_skill("daily-journal", UNSLIMMED)
+        self._commit_skill("daily-journal", SLIMMED)
+        self._install_skill("daily-journal", UNSLIMMED)
+        self._commit_skill("insights", SLIMMED)
+        self._install_skill("insights", SLIMMED + "## My local improvement\nx\n")
+        msg = SS.drift_message(SS.classify_drift(self.skills, self.install))
+        behind_part, _, ahead_part = msg.partition("Ahead of canonical")
+        self.assertIn("daily-journal", behind_part)
+        self.assertNotIn("insights", behind_part)
+        self.assertIn("insights", ahead_part)
+        self.assertNotIn("daily-journal", ahead_part)
 
 
 if __name__ == "__main__":
