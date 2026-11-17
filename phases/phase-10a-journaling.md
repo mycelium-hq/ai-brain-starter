@@ -319,6 +319,7 @@ Bake these into the generated skill verbatim:
 - **Graceful exit at every later step.** If the user says "that's it" / goes quiet / wants to wrap, finalize the existing file as-is (its first-take panel is already there), do a quick floor re-check, and let them go. Never hold the entry hostage to any later step.
 - **Panel-Always Rule.** Every entry has a `## Panel dialogue` section, and every session that saves to it adds its own block there. Blocks are append-only: a session edits only its own block. Only two cases leave a session without a panel: an explicit decline this session and the crisis protocol. Each leaves a one-line block saying so (a decline replaces whatever this session's block holds and stops panel work for the session unless the user asks for one; in a crisis, a panel already written stays). A run with no one to answer (a scheduled headless one) saves no entry at all, because an entry needs the user's own words. The capture save writes this session's block as a one-line placeholder that the first take replaces, so a cut-off reply still leaves a marker; a decline or crisis capture writes its note there instead. Leaving early is not a decline. The full panel runs no later than the reply that names the floor and replaces that session's first take. Write every panel, and every edited or added panel line, in the same turn, then put its full text in the turn's final message, after all tool calls (the Claude desktop app's Code tab folds text written between tool calls, so only the final message reliably reaches the user); never wait for approval to write. Reason: when the panel was the last, optional step, sessions that ended early saved entries with no panel.
 - **Crisis protocol (overrides every other step, the panel included).** If the user's language flips to total-self statements ("I'm worthless," "I hate myself"), somatic dysregulation ("can't breathe," "drowning"), acute grief, or crisis ideation ("I want to disappear," not wanting to be alive): stop the mechanics (no panel, no accountability, no gratitude staging, no door) and stay with them in plain, warm language, witness first; ask gently, "Who or what would you get up for right now, even if you can't get up for yourself?" and don't push past a non-answer; surface support once: "If you're in real danger, please tell one person or reach a crisis line — in the US call or text 988, any hour," adapted to their country; still save their words verbatim with the floor you heard, and run no further panel this session. When in doubt, apply it.
+- **Conversation, not checklist (sets the order of every later step).** The journal is a thinking conversation; Steps 2–9 are beats for natural pauses, not a sequence to march through. When the user asks something, pushes back on a voice or brings a new idea, answer their questions fully in that reply and run a panel round: the voices they addressed respond (agree, push back, build, or ask a sharper question), at least one dissents, and the round is added to this session's block as `**Round N:** <what they raised>` and shown in full in the final message. Keep going while they are engaged; only the user ends it. Gratitude, accountability, the floor, the full panel and the door wait for a natural pause and never close an active thread. Brevity is for each reply's prose, not for the depth or length of the conversation. If they are going down a black hole instead (the same point again with nothing new, distress rising reply over reply, global statements about themselves, replaying one scene late at night), pause the panel, say what you see in one warm sentence and offer one body move that fits the hour (a few slow breaths together, a walk, water, sleep); the crisis protocol above sits over this.
 
 #### Standing Rules — Panel Behavior (applies throughout the interview)
 
@@ -367,8 +368,8 @@ Warm, casual, matched to time of day. ONE question, don't overwhelm.
 - Afternoon: "How's the day going so far? Anything standing out?"
 - Evening: "How was today? What's sitting with you right now?"
 
-#### Step 2: Follow the thread (2-4 follow-up questions)
-Based on their answer, dig deeper. Be curious, not clinical. Include these specific behaviors in the skill:
+#### Step 2: Follow the thread
+Based on their answer, dig deeper, and keep going while they keep answering: the user sets the length. Be curious, not clinical. Include these specific behaviors in the skill:
 - If they mention **work**: "How does that make you feel about where things are headed?" or "Is that exciting or stressful or both?"
 - If they mention **a person**: "What floor did that interaction put you on?" or "How did you feel after?"
 - If they mention **feeling good**: "What specifically made it good? I want to capture this one." (Most people document bad days in detail but skip over good ones — push here.)
@@ -466,9 +467,9 @@ Based on everything they said, identify the PRIMARY floor:
 
 **Timing:** never defer it past the reply that names the floor. It replaces this session's first-take panel; earlier sessions' blocks stay as they were. No full panel while the crisis protocol is active. After a decline this session, none unless the user asks for one.
 
-Based on what came up in Steps 1–3 AND which triggers fired mid-interview (see Standing Rules), select the **3–5 most relevant advisors** from the full roster below. Default to 3; go up to 5 only when multiple domains got triggered. **Do NOT re-interview the user** — Steps 1–3 already did the interviewing. Work from what's already on the table.
+Based on what came up in Steps 1–3 AND which triggers fired mid-interview (see Standing Rules), select the **3–5 most relevant advisors** from the full roster below. Default to 3; go up to 5 only when multiple domains got triggered. Don't re-ask what the user has already answered; work from what's already on the table.
 
-**Format:** Stage a short in-character **dialogue** among the selected panelists. **Not parallel bullets** — an actual exchange where they can challenge each other AND the user's assumptions. Each speaks in their authentic voice with minimal fluff, using their known mental models and life philosophies. Panelists can ask the user questions back if needed.
+**Format:** Stage a short in-character **dialogue** among the selected panelists. **Not parallel bullets** — an actual exchange where they can challenge each other AND the user's assumptions. Each speaks in their authentic voice with minimal fluff, using their known mental models and life philosophies. Panelists can ask the user questions back if needed. When the user answers the panel, run another round in the same way (see Conversation, not checklist) instead of moving on.
 
 **Integration goal:** The panel integrates their expertise toward the user's goals across wealth, health, love, spirituality, leadership, and legacy (or whichever domains are relevant to this user — adapt during setup to what the user said they want the panel to cover). Pull the voice the moment most needs, not the voice most comfortable to hear.
 
@@ -478,7 +479,7 @@ Based on what came up in Steps 1–3 AND which triggers fired mid-interview (see
 - **If any facts or studies are mentioned, include the source. Don't make those up.** Hallucinated citations are disqualifying — a fabricated study is worse than no citation.
 - **Remain in character.** Speak with their known mental models and life philosophies, not generic coaching speak. If you cannot hear the panelist's voice in your head, pick a different panelist.
 - **Robust disagreement where useful, not consensus for its own sake.**
-- Keep it tight — this is a daily beat, not a full session.
+- Keep each panel's prose tight. How long the conversation runs is up to the user.
 
 **The Advisory Panel roster:**
 

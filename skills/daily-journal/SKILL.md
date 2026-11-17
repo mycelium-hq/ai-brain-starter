@@ -47,7 +47,7 @@ If the message asks to set up, review or change the user's advisory panel, in an
 
 ## How It Works
 
-When the user invokes `/journal`, follow this exact flow.
+When the user invokes `/journal`, follow this flow. The capture comes first and always; after it, the conversation sets the order (see "Conversation, not checklist").
 
 ## The Capture-First Contract (the spine — read before everything else)
 
@@ -59,13 +59,13 @@ Why: most people open `/journal`, type what happened, and leave. If the entry on
 
 1. **Capture (mandatory, immediate).** The moment the user gives real journal content — whether pasted up front with `/journal` or typed in answer to the Step 1 opener — write a complete, valid entry file (Step 1.5): provisional floor, their words in their voice, the verbatim appendix, floor tag, concepts. If the session ends one second later, this file is still a real journal entry. Then, still in the SAME reply and before any follow-up question, run the first-take panel (Step 1.5b): write it into the file, and put its full text in the reply's final message, after all tool calls (Step 6). An entry that leaves the first reply has its words AND its panel.
 
-2. **Enrich (opt-in, in place).** If the user keeps going, run Steps 2–9 as usual — follow-ups, gratitude, accountability, finalize the floor, run the full panel (it replaces the first take) — and **update the same file** (Step 7 is now an in-place update, not a fresh create). Never create a second file.
+2. **Enrich (opt-in, in place).** If the user keeps going, run Steps 2–9 at the natural pauses of the conversation (see "Conversation, not checklist") — follow-ups, gratitude, accountability, finalize the floor, run the full panel (it replaces the first take) — and **update the same file** (Step 7 is now an in-place update, not a fresh create). Never create a second file.
 
 **Graceful exit — applies at every step after the first save.** If the user signals done ("that's it," "save it," "I'm good"), goes quiet, or declines to continue at any point: **finalize the existing file in place and stop.** Flush any messages they typed since the last save into the verbatim appendix, do a quick floor re-check on the fuller picture, run the light idea/to-do scans (Steps 8/8.5) and Step 9 (index rebuild, panel dissent log) on whatever exists, and confirm what you saved. Never hold the entry hostage to any later step. This session's first take is already in the file; if it somehow is not, write it into the file and put its full text in your final message (Step 6), unless the user declined the panel this session or the crisis protocol is active. Re-prompt at most once. The entry already exists — your job from here is only to keep it current and let them go.
 
 **Panel-Always Rule.** Every entry carries a `## Panel dialogue` section, and every session that saves to the entry adds its own block there.
 - **Blocks are append-only.** A session writes and edits only its own block, never an earlier session's. On a resumed day each new block opens with an italic session label in the entry's language (`*Later session, HH:MM:*`), and the label stays when the full panel replaces the first take.
-- **Only two cases leave a session without a panel**: an explicit decline and the crisis protocol. Each writes a one-line note as this session's block, in the entry's language (after the session label on a resumed day), so the absence is never silent. If the user explicitly declines the panel, this session's block is written as `*Panel declined this session.*` (replacing whatever this session's block holds: placeholder, first take, or full panel; never an earlier block) and panel work stops for the session; if they later ask for one, run the full panel (Step 5) as this session's block. If the crisis protocol is active, no further panel runs this session; a first take or full panel already written stays, otherwise the block is `*No panel this session: crisis protocol.*` A run with no one to answer (a scheduled headless one) saves no entry at all: an entry needs the user's own words (Step 1.5).
+- **Only two cases leave a session without a panel**: an explicit decline and the crisis protocol. Each writes a one-line note as this session's block, in the entry's language (after the session label on a resumed day), so the absence is never silent. If the user explicitly declines the panel, this session's block is written as `*Panel declined this session.*` (replacing whatever this session's block holds: placeholder, first take, full panel or rounds; never an earlier block) and panel work stops for the session; if they later ask for one, run the full panel (Step 5) as this session's block. If the crisis protocol is active, no further panel runs this session; a first take or full panel already written stays, otherwise the block is `*No panel this session: crisis protocol.*` A run with no one to answer (a scheduled headless one) saves no entry at all: an entry needs the user's own words (Step 1.5).
 - Leaving early, going quiet, or wrapping up is not a decline; the first take already covers it.
 
 Why: when the panel was the last, optional step, sessions that ended early saved entries with no panel, and nobody noticed until the user asked where it went.
@@ -82,6 +82,19 @@ This is the full definition of the "crisis-tier override" / "hold-voice protocol
 4. **The capture-first save still happens** — their words verbatim, floor tagged from what you heard, and no further panel this session (a first take or full panel already written stays; otherwise this session's block is the one-line crisis line from the Panel-Always Rule). Tell them it's saved. Enrichment can wait for another day.
 
 When in doubt about whether this applies, err toward applying it.
+
+## Conversation, not checklist (standing rule: it sets the order of Steps 2–6.5)
+
+The journal is a thinking conversation. Steps 2–6.5 are beats for natural pauses, not a sequence to march through; wherever one says "next" or "after," read it as "at the next natural pause."
+
+**When they engage the panel, run a round.** If the user asks something, pushes back on a voice, or brings a new idea or plan, answer every question they asked, fully, in that same reply, and run a panel round (Step 5): the voices they addressed respond to what they raised, or the best-fit voices if they addressed none. Each one agrees, pushes back, builds, or asks a sharper question, and at least one dissents. Write the round into the file and show it in full in the final message (Step 6).
+
+**Keep going while they are engaged. Only the user ends it.** Gratitude, accountability, the floor, the full panel and the door wait for a natural pause, meaning they have stopped asking, pushing back and building, and they never close a thread the user is still working. Brevity is for each reply's prose, not for the depth or length of the conversation.
+
+**Spiral versus thinking.** The test is whether their last reply added something new.
+- **Thinking it through:** a new angle, idea or plan, a question, pushback on a voice, building on one. Keep the panel going.
+- **Going down a black hole:** the same point again with nothing new, distress rising reply over reply, global statements about themselves or their life ("I always ruin things"), replaying one scene late at night. Pause the panel and bring them to the body: say what you see in one warm sentence, then offer one thing that fits the hour (a few slow breaths together right now, a walk, water, or sleep). No lecture, no list of options. Their words are already saved. When they come back with something new, the panel is back on.
+- If you can't tell, run the round and read the next reply. If their words reach the crisis protocol's language, that protocol runs instead of everything here.
 
 ## Standing Rules — Panel Behavior (applies throughout the interview)
 
@@ -125,7 +138,7 @@ When the user uses certain language or surfaces certain situations during Steps 
 | Following a playbook they didn't write: "that's how it's done," "best practice," "everyone does it this way," "the industry standard," copying a competitor's approach without questioning why | Naval Ravikant OR Marc Andreessen | First-principles check. Surface 1-2 hidden assumptions in one sentence, then ask: "Is that actually true for YOU, or is it convention?" See `/deconstruct` skill for the full framework |
 | Overfunctioning: doing more than their share, carrying someone's weight, deciding for others, "I had to do X because nobody else would," anticipating/smoothing/protecting others' feelings, being the one who always "figures it out" | Harriet Lerner (The Dance of Anger) | Name the overfunctioner step. One sentence: "You're doing [specific thing] again. Which ONE step in this dance are you going to change? Name the specific thing you'll stop doing. Expect a countermove." |
 
-Pull in ONE voice per trigger, mid-interview. Save stacking for Step 5.
+Pull in ONE voice per trigger, mid-interview. Save stacking for rounds and Step 5.
 
 ### Omission pass (before every panel: the Step 1.5b first take and Step 5)
 
@@ -293,9 +306,9 @@ Right after the capture save, in the same reply, before any follow-up question:
 
 The separation and verbatim rules apply unchanged: panel lines never enter the `## Journal` body.
 
-### Step 2: Follow the thread (2-4 follow-up questions)
+### Step 2: Follow the thread
 
-Based on their answer, ask follow-up questions. Be curious, not clinical. Push gently into areas they might not go on their own:
+Based on their answer, ask follow-up questions, and keep asking while they keep answering: the user sets the length. Be curious, not clinical. Push gently into areas they might not go on their own:
 
 - If they mention **work/startup**: "How does that make you feel about where things are headed?" or "Is that exciting or stressful or both?"
 - If they mention **a person**: "What floor did that interaction put you on?" or "How did you feel after?"
@@ -510,9 +523,11 @@ The arc is the point: the elevators are the lesson, the floors are just where th
 
 **Timing: never defer the full panel past the reply that names the floor (Step 4); run it in that same reply.** It replaces this session's first take (drop the first-take note, keep the session label); earlier sessions' blocks stay exactly as they were. If the user corrects the floor, write the adjusted lines and show them in the final message (Step 6). If the session ends before Step 4, the first take stands. No full panel while the crisis protocol is active. After a decline this session, none unless the user asks for one.
 
-Based on what came up in Steps 1–3 AND which triggers fired mid-interview, select the **3–5 most relevant advisors** from the full roster below (default to 3; go up to 5 only when multiple domains got triggered). Do NOT re-interview them — Steps 1–3 already did the interviewing. Use what's already on the table.
+Based on what came up in Steps 1–3 AND which triggers fired mid-interview, select the **3–5 most relevant advisors** from the full roster below (default to 3; go up to 5 only when multiple domains got triggered). Don't re-ask what they have already answered; use what's already on the table.
 
-**Format (strict):** Parallel single paragraphs, 3-5 sentences each. NOT a back-and-forth dialogue. Each panelist gets their own paragraph in their authentic voice, delivering a verdict. Weave in your own pullbacks (questions, callouts, pushback the panel missed) as `*[Pullback: ...]*` inline at the end of the relevant panelist's paragraph.
+**Format (strict, for the full panel and for every round):** Parallel single paragraphs, 3-5 sentences each. One panelist per paragraph, in their authentic voice, taking a position; the back-and-forth is between rounds, with the user. Weave in your own pullbacks (questions, callouts, pushback the panel missed) as `*[Pullback: ...]*` inline at the end of the relevant panelist's paragraph.
+
+**Rounds (whenever they engage the panel, before or after the full panel).** A round uses this format with 2–4 sentences per voice, no omission pass and no `**Panel:**` line. It answers what they just raised: the voices they addressed respond (or the best fit, if they addressed none), and at least one dissents. Write each round into this session's block under `## Panel dialogue`, after the first take or full panel and any earlier rounds, as `**Round N:** <a few words on what they raised>`, then the paragraphs, then a `**Dissent:**` line. The full panel replaces only this session's first take; rounds stay.
 
 **Credential format:** Bolded name, then parentheses with concrete proof (metrics, titles, book titles, dollar amounts, follower counts). Examples:
 - `**Howard Marks** (co-founded Oaktree, $190B AUM, the memos)`
@@ -526,7 +541,7 @@ Not 4-6 word mental-model descriptors. Concrete proof only.
 - **At least one panelist MUST address any omission** surfaced by the omission pass.
 - **If any facts or studies are mentioned, include the source. Don't make those up.**
 - **Remain in character.** Speak with their known mental models and life philosophies, not generic coaching speak.
-- Keep it tight — this is a daily beat, not a full session.
+- Keep each panel's prose tight and in character. How long the conversation runs is up to the user.
 
 **Which panel to use (this governs every time this skill picks a voice: both routing tables, the first take and the full panel):** Start from `⚙️ Meta/rules/advisory-panel.md` if that file exists, otherwise the roster below. In either one, the Technology & AI, LatAm and Colombia sections are *only for* sections, marked or not. If `About me/My panel.md` exists, it decides: its `## Sections` turn those sections on or off, the names under `## Removed` are left out, and the names under `## Added` are full panelists. Without that note, use an *only for* section only when the user's About Me note or their own words show it applies. Everything else is for everyone.
 
@@ -592,7 +607,7 @@ Ethan Mollick (Wharton professor, *Co-Intelligence*) · Tiago Forte (*Building a
 
 ### Step 6: Write every panel, then show it in the turn's final message (never wait)
 
-Applies to both the Step 1.5b first take and the Step 5 full panel.
+Applies to the Step 1.5b first take, the Step 5 full panel and every Step 5 round.
 
 **Write it into the file in the same turn**, without waiting for approval.
 
@@ -602,9 +617,9 @@ Right after the panel, say, for the full panel:
 
 > "Panel's in the entry. Floor: [Floor]. Edit a voice, swap a panelist, or add one?"
 
-For a first take, leave the floor out: "Panel's in the entry. Swap or cut a voice anytime."
+For a first take, leave the floor out: "Panel's in the entry. Swap or cut a voice anytime." A round needs no invitation line.
 
-After writing the full panel, update this session's Panel Feedback Log entry (or append one if none exists yet) with its Dissent and Omission lines right away (Step 9), so a session that ends here logs the full panel, not the first take.
+After writing the full panel or a round, update this session's Panel Feedback Log entry (or append one if none exists yet) with its Dissent (and Omission) lines right away (Step 9), so a session that ends here logs what was said, not only the first take.
 
 Edits follow the same rule: write any changed or added panel text into the file, then show it in the final message. A cut voice can be written straight away; if it was the panel's only dissent, add a replacement dissent and show it in the final message. Do NOT wait for approval before writing: holding the write for a reply is how sessions ended with no panel saved.
 
@@ -624,7 +639,7 @@ One door only. Write it to frontmatter as `door:` (action + when). Tomorrow's se
 
 ### Step 7: Finalize the entry (in-place update of the file from Step 1.5)
 
-**This is an UPDATE, not a fresh create.** The file already exists from the capture-first save. Rewrite it in place with the finalized floor, the enriched body, the full verbatim appendix (every message to date), the accountability line, the `## Today` section, and the `## Panel dialogue` section (always present per the Panel-Always Rule: one block per session, each a panel or its one-line note; the full panel replaces this session's first take). Never create a second file for the same session. If you refined the filename to match the day's theme, rename in place (e.g. `mv`) rather than leaving a stale duplicate. Everything below is the finalized shape the file should end up in.
+**This is an UPDATE, not a fresh create.** The file already exists from the capture-first save. Rewrite it in place with the finalized floor, the enriched body, the full verbatim appendix (every message to date), the accountability line, the `## Today` section, and the `## Panel dialogue` section (always present per the Panel-Always Rule: one block per session, each a panel or its one-line note; the full panel replaces this session's first take; rounds, if any, stay). Never create a second file for the same session. If you refined the filename to match the day's theme, rename in place (e.g. `mv`) rather than leaving a stale duplicate. Everything below is the finalized shape the file should end up in.
 
 **File location:** Journal files go in the **monthly subfolder**, not the root. Pattern: `[VAULT_PATH]/Journals/[Month YYYY]/filename.md` (e.g. `Journals/April 2026/filename.md`). Check your vault's journal folder structure and match it.
 
@@ -723,10 +738,16 @@ deep_work: X                # blocks completed today
 **[Name]** ([concrete proof: titles, books, metrics — not a mental-model descriptor])
 [One paragraph in their voice, 3–5 sentences (2–3 for a first take), optionally ending with `*[Pullback: ...]*`.]
 
-[One paragraph per panelist, same shape: parallel verdicts, not a back-and-forth (Step 5 format). At least one panelist dissents.]
+[One paragraph per panelist, same shape: parallel positions (Step 5 format). At least one panelist dissents.]
 
 **Dissent:** [One line naming who pushed back and what they challenged]
 **Omission flagged:** [One line, only if the omission pass surfaced something — otherwise remove this line entirely]
+
+[Rounds, only if the user engaged the panel: they stay in this session's block, in order, each as below. A round has no Panel line.]
+
+**Round N:** [a few words on what they raised]
+[One paragraph per voice that answered, same shape (2–4 sentences).]
+**Dissent:** [One line naming who pushed back and what they challenged]
 
 ---
 
@@ -824,7 +845,7 @@ Tell them the file name and floor. If relevant, connect it to a pattern from the
 - Gym count: "You're at [X]/4 this week. [Encouragement or push as appropriate.]"
 
 **Auto-log panel dissents and omissions:**
-Log only this session's panel, one log entry per session: Step 1.5b appends the first take's lines, and the full panel updates that same entry in place right after it is written (Step 6). Whenever this session's panel changes after it was logged (a swap, an added or cut voice, a decline), update this session's log entry to match; if nothing was logged yet, append one only when there is a dissent or omission to log. If CLAUDE.md names no log path, use `Home/Panel Feedback Log.md` under the vault root (`🏠 Home/` in an emoji-folder vault), creating the folder and the file, with a one-line header saying it collects synthetic panel reactions, if they are missing. If this session's panel surfaced a dissent or an omission flag that is not logged yet, automatically append it to the Panel Feedback Log (check CLAUDE.md for the path, e.g. `🏠 Home/Panel Feedback Log.md`) under the synthetic panel reactions section. Use this format:
+Log only this session's panel, one log entry per session: Step 1.5b appends the first take's lines, and the full panel updates that same entry in place right after it is written (Step 6), and each round adds its Dissent line to it as `**Round N dissent:**`. Whenever this session's panel changes after it was logged (a swap, an added or cut voice, a decline), update this session's log entry to match; if nothing was logged yet, append one only when there is a dissent or omission to log. If CLAUDE.md names no log path, use `Home/Panel Feedback Log.md` under the vault root (`🏠 Home/` in an emoji-folder vault), creating the folder and the file, with a one-line header saying it collects synthetic panel reactions, if they are missing. If this session's panel surfaced a dissent or an omission flag that is not logged yet, automatically append it to the Panel Feedback Log (check CLAUDE.md for the path, e.g. `🏠 Home/Panel Feedback Log.md`) under the synthetic panel reactions section. Use this format:
 
 ```markdown
 ### YYYY-MM-DD — Daily journal dissent / omission
@@ -848,7 +869,7 @@ After the entry first persists (the capture-first save in Step 1.5, or here if t
 
 - **Capture beats completeness.** If the user just wants a quick check-in (1-2 sentences), save it immediately per the Capture-First Contract and let them go. Even "Good day. Worked on the product. Felt productive." is a valid, complete entry — most people have detailed bad-day entries and almost no good-day snapshots. Never make a quick entry wait on the interview. It still gets its first-take panel in the same reply (Step 1.5b): the panel is part of the entry, not a reward for finishing the interview.
 - The goal is to make journaling feel like a conversation, not homework.
-- Don't make this feel like a big production. Quick is fine. Deep is also fine. Match their energy.
+- Keep the mechanics light (saving, logging, filing); let the conversation go as deep and as long as they take it. Quick is fine. Deep is also fine. Match their depth.
 - Push on behavior change but don't be annoying about it. Coach energy, not parent energy.
-- The panel is a daily micro-dose, not a full session. Keep it sharp.
+- The panel is a thinking partner, not a verdict: a quick entry gets the first take, and when they engage it runs round after round. Keep every round sharp.
 - **NEVER fail silently.** After saving any file, verify it exists. If the save fails (wrong path, permissions, missing folder), TELL THE USER IMMEDIATELY. Say what failed and offer to retry. Never let a journal entry be lost.
