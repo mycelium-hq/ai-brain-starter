@@ -9,6 +9,16 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-11-17: `/journal` keeps the panel conversation going while you are thinking
+
+**Who this affects:** anyone who runs `/journal` and answers the panel back: pushes back on a voice, asks a question or brings a new idea.
+
+`/journal` used to take your reply to the panel, log it and move on to its checklist (gratitude, accountability, your floor). Now, when you answer the panel, Claude answers your questions in full and the panel runs another round: the voices you addressed respond, build on your idea or push back, and at least one disagrees. It keeps going for as long as you do, and you decide when it ends. The checklist waits for a natural pause. Each round is saved in your entry under the panel dialogue as "Round 1", "Round 2" and so on, and its dissent is logged like the first panel's.
+
+If you are going around the same point again and it is getting heavier, the panel pauses instead: Claude says what it sees and suggests a few slow breaths, a walk, water or sleep. The crisis protocol is unchanged and still comes first. The setup guide for the journal skill (phases 10a and 10b) says the same, so a journal skill it builds behaves the same way.
+
+---
+
 ## 2026-11-15: An out-of-date skill is no longer reported as "ahead" of the kit
 
 **Who this affects:** anyone who saw "installed skill is AHEAD of canonical" at the start of a session for a skill they never changed.

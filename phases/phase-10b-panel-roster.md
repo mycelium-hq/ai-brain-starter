@@ -48,7 +48,7 @@ floor_level: [low/middle/high]
 
 ## Panel dialogue
 
-[Short staged exchange among the 3–5 selected panelists — actual dialogue, not parallel bullets. Panelists talk to each other and to the user. At least one dissent must be clearly visible. Keep it tight.]
+[Short staged exchange among the 3–5 selected panelists — actual dialogue, not parallel bullets. Panelists talk to each other and to the user. At least one dissent must be clearly visible. Keep the prose tight. If the user answers the panel, later rounds are added to this block as `**Round N:** <what they raised>`, each with its own `**Dissent:**` line.]
 
 **Dissent:** [One line naming who pushed back and what they challenged. Always present in a panel — this is not optional.]
 **Omission flagged:** [One line, only if the omission pass surfaced something — otherwise remove this line entirely]
