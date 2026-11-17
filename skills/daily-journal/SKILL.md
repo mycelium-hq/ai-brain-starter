@@ -93,8 +93,8 @@ The journal is a thinking conversation. Steps 2–6.5 are beats for natural paus
 
 **Spiral versus thinking.** The test is whether their last reply added something new.
 - **Thinking it through:** a new angle, idea or plan, a question, pushback on a voice, building on one. Keep the panel going.
-- **Going down a black hole:** the same point again with nothing new, distress rising reply over reply, global statements about themselves or their life ("I always ruin things"), replaying one scene late at night. Pause the panel and bring them to the body: say what you see in one warm sentence, then offer one thing that fits the hour (a few slow breaths together right now, a walk, water, or sleep). No lecture, no list of options. Their words are already saved. When they come back with something new, the panel is back on.
-- If you can't tell, run the round and read the next reply. If their words reach the crisis protocol's language, that protocol runs instead of everything here.
+- **Going down a black hole:** the same point again with nothing new, distress rising reply over reply, global statements about themselves or their life ("I always ruin things"), replaying one scene late at night. Save their latest words to the entry as usual (verbatim appendix, no new panel lines), pause the panel and every other beat (gratitude, accountability, the floor, the door), and bring them to the body: say what you see in one warm sentence, then offer one thing that fits the hour (a few slow breaths together right now, a walk, water, or sleep). No lecture, no list of options. When they come back with something new, the panel is back on; if they say they're done, take the graceful exit.
+- If you can't tell thinking from a spiral, run the round and read the next reply. If their words reach the crisis protocol's language, or you can't tell a spiral from it, that protocol runs instead of everything here.
 
 ## Standing Rules — Panel Behavior (applies throughout the interview)
 
@@ -527,7 +527,7 @@ Based on what came up in Steps 1–3 AND which triggers fired mid-interview, sel
 
 **Format (strict, for the full panel and for every round):** Parallel single paragraphs, 3-5 sentences each. One panelist per paragraph, in their authentic voice, taking a position; the back-and-forth is between rounds, with the user. Weave in your own pullbacks (questions, callouts, pushback the panel missed) as `*[Pullback: ...]*` inline at the end of the relevant panelist's paragraph.
 
-**Rounds (whenever they engage the panel, before or after the full panel).** A round uses this format with 2–4 sentences per voice, no omission pass and no `**Panel:**` line. It answers what they just raised: the voices they addressed respond (or the best fit, if they addressed none), and at least one dissents. Write each round into this session's block under `## Panel dialogue`, after the first take or full panel and any earlier rounds, as `**Round N:** <a few words on what they raised>`, then the paragraphs, then a `**Dissent:**` line. The full panel replaces only this session's first take; rounds stay.
+**Rounds (whenever they engage the panel, before or after the full panel).** A round uses this format with 2–4 sentences per voice, no omission pass and no `**Panel:**` line. It answers what they just raised: the voices they addressed respond (or the best fit, if they addressed none), and at least one dissents. Write each round into this session's block under `## Panel dialogue`, after the first take or full panel and any earlier rounds, as `**Round N:** <a few words on what they raised>` (N counts from 1 within this session's block), then the paragraphs, then a `**Dissent:**` line. The full panel replaces only this session's first take; rounds stay.
 
 **Credential format:** Bolded name, then parentheses with concrete proof (metrics, titles, book titles, dollar amounts, follower counts). Examples:
 - `**Howard Marks** (co-founded Oaktree, $190B AUM, the memos)`
@@ -611,7 +611,7 @@ Applies to the Step 1.5b first take, the Step 5 full panel and every Step 5 roun
 
 **Write it into the file in the same turn**, without waiting for approval.
 
-**Then put the full panel in the turn's final message, after the last tool call:** the complete panel section exactly as written in the file — the `**Panel:**` line, every panelist's paragraph, the Dissent line, the Omission line. Never a 1-line summary, and never only a note that the panel is in the entry. The Claude desktop app's Code tab folds text written between tool calls, so only the final message reliably reaches the user. The user must always see the synthetic voices that sit next to their own words; that part is non-negotiable.
+**Then put the full panel in the turn's final message, after the last tool call:** the complete panel section exactly as written in the file — the `**Panel:**` line, every panelist's paragraph, the Dissent line, the Omission line. For a round, show that round in full (its `**Round N:**` line, every paragraph, its Dissent line), not the earlier ones again. Never a 1-line summary, and never only a note that the panel is in the entry. The Claude desktop app's Code tab folds text written between tool calls, so only the final message reliably reaches the user. The user must always see the synthetic voices that sit next to their own words; that part is non-negotiable.
 
 Right after the panel, say, for the full panel:
 
@@ -782,7 +782,7 @@ Before saving, scan the conversation for any **new business ideas, project ideas
 2. Format: `- **[YYYY-MM-DD]** — [the idea, 1-2 sentences] *(from journal check-in)*`
 3. Tell the user: "I also caught an idea in there — parked it in Idea Quarantine so it doesn't distract but doesn't get lost."
 
-This is critical. New ideas need to cool off before getting attention. Whatever the main priority is stays the priority. Ideas are welcome — but they go in quarantine, not into action.
+This is critical. New ideas need to cool off before getting attention. Whatever the main priority is stays the priority. Ideas are welcome — but they go in quarantine, not into action. Parking an idea doesn't stop the panel from discussing it with them: if they want to think it through, run a round.
 
 ### Step 8.5: To-Do Extraction
 
