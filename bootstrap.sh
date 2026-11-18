@@ -2248,7 +2248,9 @@ for plug in plugins:
 # The short copies installed above are the ones people use: turn the
 # prefixed copies off. setdefault keeps a choice the user already made.
 for plug in ("ai-brain-starter@skills-dir", "humanizer@skills-dir"):
-    s["enabledPlugins"].setdefault(plug, False)
+    folder = os.path.expanduser("~/.claude/skills/" + plug.split("@")[0])
+    if os.path.isfile(os.path.join(folder, ".claude-plugin", "plugin.json")):
+        s["enabledPlugins"].setdefault(plug, False)
 if corporate:
     # ENFORCE (overwrite) telemetry-off + version-pin env. settings.json is
     # backed up above; enforcing these IS the corporate profile's job, so we

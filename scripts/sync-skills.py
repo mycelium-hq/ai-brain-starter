@@ -437,25 +437,38 @@ def hide_prefixed_copies(starter: Path, install: Path) -> str | None:
     script installs are the ones people use. Only edits enabledPlugins, keeps
     every other key, and keeps a choice the user already made (tickets#6817).
     """
-    if starter.parent.resolve() != install.resolve():
-        return None  # not a clone install: nothing is loaded twice
-    settings = install.parent / "settings.json"
+    # Best effort: nothing here may break the sync or its exit code.
     try:
-        data = json.loads(settings.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None  # no settings or unreadable: never write a fresh one
-    plugins = data.setdefault("enabledPlugins", {})
-    added = [p for p in SKILLS_DIR_PLUGINS if p not in plugins]
-    if not added:
+        if starter.parent.resolve() != install.resolve():
+            return None  # not a clone install: nothing is loaded twice
+        wanted = [p for p in SKILLS_DIR_PLUGINS
+                  if (install / p.split("@")[0] / ".claude-plugin" / "plugin.json").is_file()]
+        settings = (install.parent / "settings.json").resolve()
+        try:
+            before = settings.stat().st_mtime_ns
+            data = json.loads(settings.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError):
+            return None  # no settings or unreadable: never write a fresh one
+        if not isinstance(data, dict):
+            return None
+        plugins = data.setdefault("enabledPlugins", {})
+        if not isinstance(plugins, dict):
+            return None
+        added = [p for p in wanted if p not in plugins]
+        if not added:
+            return None
+        for p in added:
+            plugins[p] = False
+        tmp = settings.with_name(settings.name + ".sync-skills.tmp")
+        tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+                       encoding="utf-8")
+        if settings.stat().st_mtime_ns != before:
+            tmp.unlink()  # someone else just wrote it: try again next sync
+            return None
+        os.replace(tmp, settings)
+        return "Turned off duplicate prefixed skills: " + ", ".join(added)
+    except Exception:  # noqa: BLE001 - see the comment above
         return None
-    for p in added:
-        plugins[p] = False
-    try:
-        settings.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n",
-                            encoding="utf-8")
-    except OSError:
-        return None
-    return "Turned off duplicate prefixed skills: " + ", ".join(added)
 
 
 def main() -> int:
