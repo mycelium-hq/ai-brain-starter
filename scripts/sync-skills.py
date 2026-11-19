@@ -30,6 +30,7 @@ Exit:  0 clean, 2 if any file operation errored (so the hook can surface it).
 from __future__ import annotations
 
 import filecmp
+import json
 import os
 import re
 import shutil
@@ -424,6 +425,52 @@ def check_mode() -> int:
     return 0
 
 
+SKILLS_DIR_PLUGINS = ("ai-brain-starter@skills-dir", "humanizer@skills-dir")
+
+
+def hide_prefixed_copies(starter: Path, install: Path) -> str | None:
+    """Turn off the second, prefixed copy of every skill.
+
+    A checkout in ~/.claude/skills with a .claude-plugin manifest is also
+    loaded by Claude Code as a "skills-dir" plugin, so each skill shows twice
+    in the slash menu (cierre + ai-brain-starter:cierre). The short copies this
+    script installs are the ones people use. Only edits enabledPlugins, keeps
+    every other key, and keeps a choice the user already made (tickets#6817).
+    """
+    # Best effort: nothing here may break the sync or its exit code.
+    try:
+        if starter.parent.resolve() != install.resolve():
+            return None  # not a clone install: nothing is loaded twice
+        wanted = [p for p in SKILLS_DIR_PLUGINS
+                  if (install / p.split("@")[0] / ".claude-plugin" / "plugin.json").is_file()]
+        settings = (install.parent / "settings.json").resolve()
+        try:
+            before = settings.stat().st_mtime_ns
+            data = json.loads(settings.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError):
+            return None  # no settings or unreadable: never write a fresh one
+        if not isinstance(data, dict):
+            return None
+        plugins = data.setdefault("enabledPlugins", {})
+        if not isinstance(plugins, dict):
+            return None
+        added = [p for p in wanted if p not in plugins]
+        if not added:
+            return None
+        for p in added:
+            plugins[p] = False
+        tmp = settings.with_name(settings.name + ".sync-skills.tmp")
+        tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+                       encoding="utf-8")
+        if settings.stat().st_mtime_ns != before:
+            tmp.unlink()  # someone else just wrote it: try again next sync
+            return None
+        os.replace(tmp, settings)
+        return "Turned off duplicate prefixed skills: " + ", ".join(added)
+    except Exception:  # noqa: BLE001 - see the comment above
+        return None
+
+
 def main() -> int:
     starter = _starter_dir()
     install = _install_dir()
@@ -459,6 +506,9 @@ def main() -> int:
         *[f"  ! {f}" for f in r.errors],
         "",
     ]
+    note = hide_prefixed_copies(starter, install)
+    if note:
+        lines.insert(-1, note)
     summary = "\n".join(lines)
     print(summary)
     try:
