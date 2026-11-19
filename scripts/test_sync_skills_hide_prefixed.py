@@ -23,7 +23,7 @@ def home(settings_text, plugins=("ai-brain-starter", "humanizer")):
     skills = root / ".claude" / "skills"
     for name in plugins:
         (skills / name / ".claude-plugin").mkdir(parents=True)
-        (skills / name / ".claude-plugin" / "plugin.json").write_text("{}")
+        (skills / name / ".claude-plugin" / "plugin.json").write_text("{}", encoding="utf-8")
     (skills / "ai-brain-starter").mkdir(parents=True, exist_ok=True)
     if settings_text is not None:
         (root / ".claude" / "settings.json").write_text(settings_text, encoding="utf-8")
@@ -67,7 +67,7 @@ for label, text in [("missing", None), ("malformed", "{nope"), ("list", "[]"),
     check(label + " returns quietly", mod.hide_prefixed_copies(starter, skills) is None)
     path = root / ".claude" / "settings.json"
     check(label + " left as it was",
-          (not path.exists()) if text is None else path.read_text() == text)
+          (not path.exists()) if text is None else path.read_text(encoding="utf-8") == text)
 
 # BOM file still works.
 root, starter, skills = home("﻿{}")
