@@ -13,7 +13,7 @@ commits — those live in the shared object store. The ONLY thing a `git worktre
 remove` can destroy is uncommitted working-tree state. So the classifier turns
 on exactly that, plus whether the branch's work is preserved somewhere:
 
-  REAP     : idle, branch merged-or-gone, working tree CLEAN.
+  REAP     : idle (or its PR merged/closed), branch backed up, working tree CLEAN.
   SNAPSHOT : idle, branch merged-or-gone, working tree DIRTY → copy the
              divergence out FIRST (git diff + untracked files), then remove.
              An abandoned session may hold real work; a blind remove is the
@@ -203,6 +203,27 @@ def unpushed_commits(worktree: Path, branch: str) -> int:
     return len([x for x in out.splitlines() if x.strip()])
 
 
+def finished_pr(worktree: Path, branch: str | None) -> str | None:
+    """'merged' or 'closed' when the branch's newest PR is done, else None.
+
+    A finished PR means the session's work is over, so the idle floor (an mtime
+    proxy for "still in use") no longer protects anything. Every other gate still
+    runs. No gh, no network or no PR all return None, which keeps the floor.
+    """
+    if not branch or shutil.which("gh") is None:
+        return None
+    try:
+        r = subprocess.run(
+            ["gh", "pr", "list", "--head", branch, "--state", "all", "--limit", "1",
+             "--json", "state"],
+            cwd=worktree, capture_output=True, text=True, timeout=20)
+        prs = json.loads(r.stdout or "[]") if r.returncode == 0 else []
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    state = (prs[0].get("state") or "").lower() if prs else ""
+    return state if state in ("merged", "closed") else None
+
+
 def idle_days(path: Path, now_ts: float) -> float:
     """Days since the worktree was last touched. Uses the newest of the dir's own
     mtime and its .git pointer's — a dir mtime alone misses in-file edits."""
@@ -226,8 +247,12 @@ def classify(worktree: Path, idle_floor: float, now_ts: float) -> dict:
         v["reason"] = "a session is live in this worktree"
         return v
     if v["idle_days"] < idle_floor:
-        v["reason"] = f"touched {v['idle_days']}d ago (floor {idle_floor}d)"
-        return v
+        done = finished_pr(worktree, branch_of(worktree))
+        if done is None:
+            v["reason"] = f"touched {v['idle_days']}d ago (floor {idle_floor}d)"
+            return v
+        # Its PR is merged or closed: the floor no longer applies (tickets#7016).
+        v["pr"] = done
 
     main = main_checkout_of(worktree)
     if main is None or not main.exists():
