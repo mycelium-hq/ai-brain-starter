@@ -223,7 +223,8 @@ def finished_pr(worktree: Path, branch: str | None) -> str | None:
         r = subprocess.run(
             ["gh", "pr", "list", "--head", branch, "--state", "all", "--limit", "1",
              "--json", "state,headRefOid"],
-            cwd=worktree, capture_output=True, text=True, timeout=20)
+            cwd=worktree, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=20)
         prs = json.loads(r.stdout or "[]") if r.returncode == 0 else []
     except (OSError, subprocess.SubprocessError, ValueError):
         _GH_DOWN = True  # one hang is enough: keep the floor for the rest of the run
