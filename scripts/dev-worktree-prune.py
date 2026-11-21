@@ -203,6 +203,9 @@ def unpushed_commits(worktree: Path, branch: str) -> int:
     return len([x for x in out.splitlines() if x.strip()])
 
 
+_GH_DOWN = False
+
+
 def finished_pr(worktree: Path, branch: str | None) -> str | None:
     """'merged' or 'closed' when the branch's newest PR is done, else None.
 
@@ -210,17 +213,28 @@ def finished_pr(worktree: Path, branch: str | None) -> str | None:
     proxy for "still in use") no longer protects anything. Every other gate still
     runs. No gh, no network or no PR all return None, which keeps the floor.
     """
-    if not branch or shutil.which("gh") is None:
+    global _GH_DOWN
+    if not branch or _GH_DOWN or shutil.which("gh") is None:
+        return None
+    rc, head, _ = _git(worktree, "rev-parse", "HEAD")
+    if rc != 0 or not head:
         return None
     try:
         r = subprocess.run(
             ["gh", "pr", "list", "--head", branch, "--state", "all", "--limit", "1",
-             "--json", "state"],
+             "--json", "state,headRefOid"],
             cwd=worktree, capture_output=True, text=True, timeout=20)
         prs = json.loads(r.stdout or "[]") if r.returncode == 0 else []
     except (OSError, subprocess.SubprocessError, ValueError):
+        _GH_DOWN = True  # one hang is enough: keep the floor for the rest of the run
         return None
-    state = (prs[0].get("state") or "").lower() if prs else ""
+    if not prs:
+        return None
+    # The PR must end at exactly this worktree's commit. A fork PR that shares the
+    # branch name, or a reused branch with newer commits, does not match.
+    if prs[0].get("headRefOid") != head:
+        return None
+    state = (prs[0].get("state") or "").lower()
     return state if state in ("merged", "closed") else None
 
 
@@ -299,7 +313,8 @@ def classify(worktree: Path, idle_floor: float, now_ts: float) -> dict:
         return v
 
     v["verdict"] = REAP
-    v["reason"] = "clean, idle, and its commits are on a remote"
+    v["reason"] = (f"clean, its PR is {v['pr']}, and its commits are on a remote"
+                   if v.get("pr") else "clean, idle, and its commits are on a remote")
     return v
 
 
