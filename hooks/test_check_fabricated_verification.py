@@ -339,8 +339,10 @@ else:
 for _label, _text, _want_block in [
     ("32. a panel Dissent line 'pushed back on' is not a git claim",
      "Keith Rabois pushed back on thinking as clear action.", False),
-    ("33. other idioms ('pushed for', 'pushed ahead') are not git claims",
-     "She pushed for a smaller launch, and the team pushed ahead anyway.", False),
+    ("33. 'pushed back against' / 'pushed back hard' are not git claims",
+     "Ray pushed back against the timeline, and Ana pushed back hard too.", False),
+    ("33b. 'pushed back on the main idea' is still an idiom",
+     "Keith pushed back on the main idea and the commit message.", False),
     ("34. 'I pushed the branch' with no remote read still blocks",
      "I pushed the branch.", True),
     ("35. 'pushed back to origin' IS a git target, so it still blocks",
@@ -351,6 +353,14 @@ for _label, _text, _want_block in [
      "I pushed forward to origin.", True),
     ("35d. 'pushed for review' still blocks",
      "I pushed for review.", True),
+    ("35e. 'pushed back up' still blocks", "Pushed back up after the rebase.", True),
+    ("35f. 'pushed back the latest changes' still blocks",
+     "I pushed back the latest changes.", True),
+    ("35g. a git target far away or on the next line still blocks",
+     "I pushed back\nto origin.", True),
+    ("35h. 'pushed back on origin' still blocks", "I pushed back on origin.", True),
+    ("35i. 'pushed ahead' with no git word still blocks",
+     "I pushed ahead and the changes are up.", True),
 ]:
     _blocked, _ = run(_text, commands=["rg -n 'pattern' ."], results=["3 matches"])
     if _blocked == _want_block:

@@ -152,14 +152,14 @@ PUSHED_CLAIM = re.compile(
     r"(?:latest|commit)",
     re.IGNORECASE,
 )
-# "pushed" used as an English idiom, not a git push: a panel's Dissent line
-# reads "X pushed back on Y" (tickets#6729). Fails closed: if the rest of the
-# clause names any git target ("pushed back the fix to main", "pushed forward
-# to origin", "pushed for review"), it is still a claim.
+# "pushed back on/against ..." used as an English idiom, not a git push: a
+# panel's Dissent line reads "X pushed back on Y" (tickets#6729). An ALLOWLIST
+# of idiom continuations, so it fails closed: "pushed back up", "pushed back the
+# fix", "pushed forward", "pushed for review" all stay claims, and so does
+# "pushed back on origin/main".
 PUSH_NON_CLAIM = re.compile(
-    r"pushed\s+(?:back|for|forward|ahead|against|harder?|aside|away)\b"
-    r"(?![^.;!?\n]*\b(?:origin|github|gitlab|remote|main|master|branch|commits?"
-    r"|repo|review|pr|upstream)\b)",
+    r"pushed\s+back\s+(?:on|against|at|hard(?:er)?|a\s+bit|too|when|because)\b"
+    r"(?!\s+(?:origin|github|gitlab|upstream|main|master|(?:the\s+)?remote)\b)",
     re.IGNORECASE,
 )
 PUSHED_EVIDENCE = re.compile(
