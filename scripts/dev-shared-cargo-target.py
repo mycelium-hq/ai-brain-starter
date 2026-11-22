@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# exit-contract: NOT-A-CHECKER -- edits a cargo config on request; it never reports findings
 """dev-shared-cargo-target: one cargo target dir for every worktree (tickets#7084).
 
 Every session worktree used to compile Rust from scratch (8m47s, 418 crates,
