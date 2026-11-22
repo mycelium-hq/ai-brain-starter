@@ -333,6 +333,38 @@ else:
     FAIL += 1
     print("FAIL  31. idiom laundered an adjacent real claim")
 
+# --- REGRESSION (tickets#6729): "pushed back" is a panel idiom, not a push --
+# The daily-journal Dissent line names "who pushed back"; the bare \bpushed\b
+# alternative blocked those journal replies at Stop.
+for _label, _text, _want_block in [
+    ("32. a panel Dissent line 'pushed back on' is not a git claim",
+     "Keith Rabois pushed back on thinking as clear action.", False),
+    ("33. other idioms ('pushed for', 'pushed ahead') are not git claims",
+     "She pushed for a smaller launch, and the team pushed ahead anyway.", False),
+    ("34. 'I pushed the branch' with no remote read still blocks",
+     "I pushed the branch.", True),
+    ("35. 'pushed back to origin' IS a git target, so it still blocks",
+     "I pushed back to origin after the rebase.", True),
+]:
+    _blocked, _ = run(_text, commands=["rg -n 'pattern' ."], results=["3 matches"])
+    if _blocked == _want_block:
+        PASS += 1
+        print(f"PASS  {_label}")
+    else:
+        FAIL += 1
+        print(f"FAIL  {_label} :: blocked={_blocked}, expected {_want_block}")
+
+_blocked, _ = run(
+    "Keith Rabois pushed back on the plan. I pushed the branch.",
+    commands=["ls -la"], results=["ok"],
+)
+if _blocked:
+    PASS += 1
+    print("PASS  36. a 'pushed back' idiom next to a real push claim does not launder it")
+else:
+    FAIL += 1
+    print("FAIL  36. idiom laundered an adjacent real push claim")
+
 print()
 print(f"=== summary: {PASS} passed, {FAIL} failed ===")
 sys.exit(1 if FAIL else 0)

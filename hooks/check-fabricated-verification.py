@@ -152,6 +152,15 @@ PUSHED_CLAIM = re.compile(
     r"(?:latest|commit)",
     re.IGNORECASE,
 )
+# "pushed" used as an English idiom, not a git push: a panel's Dissent line
+# reads "X pushed back on Y" (tickets#6729). "pushed back to origin/the remote"
+# is still a git claim, so the lookahead keeps it. Checked on the match tail
+# only (see _claim_exempt), so a nearby idiom cannot launder a real claim.
+PUSH_NON_CLAIM = re.compile(
+    r"pushed\s+(?:back(?!\s+(?:up\s+)?(?:to|onto)\s+(?:origin|github|the\s+remote|remote|main|master)\b)"
+    r"|for\b|forward\b|ahead\b|against\b|harder?\b|aside\b|away\b)",
+    re.IGNORECASE,
+)
 PUSHED_EVIDENCE = re.compile(
     r"git\s+ls-remote\b|git\s+fetch\b|git\s+rev-parse\s+origin/"
     r"|git\s+log\s+origin/|git\s+diff\s+origin/|git\s+branch\s+-r\b"
@@ -282,7 +291,7 @@ def main() -> None:
                     "`git rev-parse HEAD` ran this session — run `git log -1` and cite it, "
                     "or drop the claim"
                 )
-        if PUSHED_CLAIM.search(last) and not _claim_exempt(last, PUSHED_CLAIM):
+        if PUSHED_CLAIM.search(last) and not _claim_exempt(last, PUSHED_CLAIM, PUSH_NON_CLAIM):
             if not PUSHED_EVIDENCE.search(command_blob):
                 findings.append(
                     "the branch is claimed PUSHED/on origin, but no read of the remote "
