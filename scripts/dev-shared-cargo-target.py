@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""dev-shared-cargo-target — one cargo target dir for every worktree (tickets#7084).
+"""dev-shared-cargo-target: one cargo target dir for every worktree (tickets#7084).
 
 Every session worktree used to compile Rust from scratch (8m47s, 418 crates,
 892 s of CPU measured on a 10-core Mac). With one shared target dir the second
