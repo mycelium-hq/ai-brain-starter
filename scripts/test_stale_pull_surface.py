@@ -230,6 +230,27 @@ elif abs(stamp2.stat().st_mtime - frozen_t) < 60:
 else:
     bad("9. no-advance", "stamp advanced despite a blocked pull (signal is worthless)")
 
+# 11. a local edit that is ALREADY upstream must not freeze the install
+# (tickets#7084: an in-place edit byte-identical to main kept the Mac's
+# install 3 commits behind). Same edit as upstream -> the update applies.
+origin3 = mkrepo(TMP / "o3")
+clone3 = SKILLS_ROOT / "c3"
+subprocess.run(["git", "clone", "-q", str(origin3), str(clone3)], check=True, env=env0)
+st3 = TMP / "s3"
+st3.mkdir()
+run_updater(clone3, st3)  # seed
+(origin3 / "f.txt").write_text("fixed upstream", encoding="utf-8")
+(origin3 / "v.txt").write_text("v", encoding="utf-8")
+subprocess.run(["git", "-C", str(origin3), "add", "f.txt", "v.txt"], check=True, env=env0)
+subprocess.run(["git", "-C", str(origin3), "commit", "-qm", "upstreamed fix"], check=True, env=env0)
+(clone3 / "f.txt").write_text("fixed upstream", encoding="utf-8")  # same edit, made in place
+run_updater(clone3, st3, session_id="stage-11")
+run_updater(clone3, st3, session_id="resolve-11")
+if (clone3 / "v.txt").exists() and (clone3 / "f.txt").read_text(encoding="utf-8") == "fixed upstream":
+    ok("11. an in-place edit already upstream no longer blocks the update")
+else:
+    bad("11. upstreamed edit", f"pulled={(clone3/'v.txt').exists()}")
+
 # --- 10: one implementation, not a copy ------------------------------------
 def _load(name: str, path: Path):
     """Register in sys.modules BEFORE exec: @dataclass resolves its class's

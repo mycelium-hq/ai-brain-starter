@@ -227,6 +227,30 @@ def _git(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
     )
 
 
+def _drop_edits_already_upstream(skill: Path, target: str) -> None:
+    """Restore local edits that are already in `target`, so they stop
+    blocking the fast-forward.
+
+    Any local edit to a tracked file blocks every update. When each edited
+    file already matches `target` byte for byte (the same change landed
+    upstream; tickets#7084 found the install stuck 3 commits behind this
+    way), the edit holds nothing the update will not bring back, so those
+    files go back to HEAD and the update proceeds. If any edited file
+    differs from `target`, nothing is touched and the block stays.
+    """
+    try:
+        changed = _git(["diff", "--name-only", "-z", "HEAD"], skill)
+        paths = [p for p in (changed.stdout or "").split("\0") if p]
+        if changed.returncode != 0 or not paths:
+            return
+        same = _git(["--literal-pathspecs", "diff", "--quiet", target, "--", *paths], skill)
+        if same.returncode != 0:
+            return
+        _git(["--literal-pathspecs", "checkout", "HEAD", "--", *paths], skill)
+    except (subprocess.TimeoutExpired, OSError):
+        return
+
+
 def _reclaim_stale_lock(lock: Path) -> None:
     """A SIGKILL mid-run strands the lock and would silently disable updates
     forever — reclaim one older than any run could take (60 min >> timeouts)."""
@@ -740,6 +764,7 @@ def _resolve_pending_deploy(pending: Path, session_id: str, skill: Path,
     # `origin/main` -- deploying whatever origin has become BY NOW would
     # activate a second batch of commits that were never staged or delayed
     # at all, reopening this same bug for that batch.
+    _drop_edits_already_upstream(skill, new_head)
     try:
         status = _git(["status", "--porcelain", "--untracked-files=no"], skill)
     except (subprocess.TimeoutExpired, OSError):
@@ -1063,6 +1088,7 @@ def run() -> None:
         # to stage a deploy that can never apply -- surface it now, the same
         # way this always has, rather than silently staging something dead.
         # Neither check below touches the working tree.
+        _drop_edits_already_upstream(skill, origin)
         try:
             status = _git(["status", "--porcelain", "--untracked-files=no"], skill)
         except (subprocess.TimeoutExpired, OSError):
