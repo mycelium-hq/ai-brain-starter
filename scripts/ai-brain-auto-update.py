@@ -227,6 +227,33 @@ def _git(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
     )
 
 
+def _edits_already_in(skill: Path, target: str) -> "list[str] | None":
+    """Paths of local tracked-file edits when ALL of them already match
+    `target` byte for byte (index and working tree), else None. Read-only.
+
+    Any local edit to a tracked file blocks every update. tickets#7084 found
+    the install stuck 3 commits behind on an in-place edit that had already
+    landed on main: an edit like that holds nothing the update will not
+    bring, so it should not block it. An edit that differs from `target`,
+    even in one file, still blocks as before.
+    """
+    try:
+        changed = _git(["diff", "--name-only", "-z", "HEAD"], skill)
+        paths = [p for p in (changed.stdout or "").split("\0") if p]
+        if changed.returncode != 0 or not paths:
+            return None
+        def same(*args: str) -> bool:
+            return _git(["--literal-pathspecs", "diff", "--quiet", *args,
+                         "--", *paths], skill).returncode == 0
+        # Working tree equals target; the index holds nothing else (it is
+        # still HEAD, or the edit was staged as-is).
+        if same(target) and (same("--cached", "HEAD") or same("--cached", target)):
+            return paths
+        return None
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+
+
 def _reclaim_stale_lock(lock: Path) -> None:
     """A SIGKILL mid-run strands the lock and would silently disable updates
     forever — reclaim one older than any run could take (60 min >> timeouts)."""
@@ -744,6 +771,21 @@ def _resolve_pending_deploy(pending: Path, session_id: str, skill: Path,
         status = _git(["status", "--porcelain", "--untracked-files=no"], skill)
     except (subprocess.TimeoutExpired, OSError):
         silent()
+    # Edits already in new_head (tickets#7084): git still refuses to
+    # fast-forward over them, so put them back to HEAD right before a merge
+    # that can fast-forward, and restore them if the merge fails anyway.
+    upstreamed = _edits_already_in(skill, new_head) if status.stdout.strip() else None
+    if upstreamed:
+        try:
+            can_ff = _git(["merge-base", "--is-ancestor", "HEAD", new_head], skill)
+            if can_ff.returncode == 0 and _git(
+                    ["--literal-pathspecs", "checkout", "HEAD", "--", *upstreamed],
+                    skill).returncode == 0:
+                status = _git(["status", "--porcelain", "--untracked-files=no"], skill)
+            else:
+                upstreamed = None
+        except (subprocess.TimeoutExpired, OSError):
+            silent()
     if status.stdout.strip():
         # Tree went dirty between staging and now. Leave `pending` in
         # place (do not unlink) -- a later invocation may find it clean.
@@ -759,6 +801,14 @@ def _resolve_pending_deploy(pending: Path, session_id: str, skill: Path,
     try:
         merge = _git(["merge", "--ff-only", new_head, "--quiet"], skill)
     except (subprocess.TimeoutExpired, OSError):
+        merge = None
+    if (merge is None or merge.returncode != 0) and upstreamed:
+        # Put the reverted edits back exactly (they equal new_head).
+        try:
+            _git(["--literal-pathspecs", "checkout", new_head, "--", *upstreamed], skill)
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+    if merge is None:
         silent()
     if merge.returncode != 0:
         # Leave `pending` in place either way -- a held lock or a
@@ -1067,7 +1117,9 @@ def run() -> None:
             status = _git(["status", "--porcelain", "--untracked-files=no"], skill)
         except (subprocess.TimeoutExpired, OSError):
             silent()
-        if status.stdout.strip():
+        # Edits already on origin do not block staging (tickets#7084);
+        # they are only touched at merge time, right before the merge.
+        if status.stdout.strip() and not _edits_already_in(skill, origin):
             emit_ctx(
                 "AI Brain Starter auto-update is BLOCKED (safely): your copy at "
                 f"{_redact_text(str(skill))} has local edits to tracked files, so "
