@@ -6,8 +6,9 @@ Every session worktree used to compile Rust from scratch (8m47s, 418 crates,
 worktree rebuilds only the app crate (4m08s, 242 s of CPU), and new worktrees
 stop adding GBs of `target/`.
 
-Writes `[build] target-dir` into the user-level cargo config. It never replaces
-an existing `target-dir` or a CARGO_TARGET_DIR env var (CI sets its own and wins).
+Writes `[build] target-dir` into the user-level cargo config only when that file
+has no `build` or `target-dir` text at all; otherwise it prints the line to add
+by hand. CARGO_TARGET_DIR (CI sets its own) wins over the config at cargo run time.
 
   dev-shared-cargo-target.py            # show what is set
   dev-shared-cargo-target.py --apply    # add the line if missing
@@ -21,21 +22,18 @@ import re
 import sys
 from pathlib import Path
 
-HAS_TARGET_DIR = re.compile(r"^\s*target-dir\s*=", re.M)
-HAS_BUILD = re.compile(r"^\s*\[build\]\s*$", re.M)
+TOUCHY = re.compile(r"target-dir|\bbuild\b")
 
 
 def plan(text: str, target: str) -> str | None:
-    """New file text, or None when a target-dir is already set."""
-    if HAS_TARGET_DIR.search(text):
+    """New file text, or None when the file already mentions `build` or
+    `target-dir` in any spelling (table, dotted key, inline table, comment).
+    TOML has too many ways to write those to edit safely, so a human adds the
+    line; a wrong edit would make cargo reject the whole config."""
+    if TOUCHY.search(text):
         return None
-    line = f'target-dir = "{target}"\n'
-    m = HAS_BUILD.search(text)
-    if m:
-        return text[: m.end()] + "\n" + line + text[m.end():]
-    sep = "" if not text or text.endswith("\n") else "\n"
-    gap = "\n" if text else ""
-    return f"{text}{sep}{gap}[build]\n{line}"
+    gap = "" if not text else ("\n" if text.endswith("\n") else "\n\n")
+    return f'{text}{gap}[build]\ntarget-dir = "{target}"\n'
 
 
 def main() -> int:
@@ -48,7 +46,8 @@ def main() -> int:
     text = cfg.read_text(encoding="utf-8") if cfg.exists() else ""
     new = plan(text, a.dir)
     if new is None:
-        print(f"already set in {cfg}: nothing to do")
+        print(f"{cfg} already mentions build/target-dir, so it is left alone.")
+        print(f'Add by hand under [build]:  target-dir = "{a.dir}"')
         return 0
     if not a.apply:
         print(f"would add target-dir = {a.dir} to {cfg} (re-run with --apply)")

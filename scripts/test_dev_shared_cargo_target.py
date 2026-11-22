@@ -26,18 +26,25 @@ def main() -> int:
         run(cfg, "--apply")
         assert 'target-dir = "/x/t"' in cfg.read_text()
         before = cfg.read_text()
-        assert "already set" in run(cfg, "--apply")
+        assert "by hand" in run(cfg, "--apply")
         assert cfg.read_text() == before, "second apply must change nothing"
 
-        other = d / "other.toml"  # existing [build] keeps its keys; a set target-dir wins
-        other.write_text('[net]\nretry = 3\n\n[build]\njobs = 4\n')
-        run(other, "--apply")
-        t = other.read_text()
-        assert 'jobs = 4' in t and 'retry = 3' in t and t.count("[build]") == 1 and 'target-dir = "/x/t"' in t
-        mine = d / "mine.toml"
-        mine.write_text('[build]\ntarget-dir = "/mine"\n')
-        run(mine, "--apply")
-        assert mine.read_text() == '[build]\ntarget-dir = "/mine"\n', "never replace the user's own target-dir"
+        for name, body in {
+            "plain-build": '[build]\njobs = 4\n',
+            "comment-header": '[build] # hi\njobs = 1\n',
+            "dotted": 'build.target-dir = "q"\n',
+            "inline": 'build = { target-dir = "q" }\n',
+            "quoted": '[build]\n"target-dir" = "q"\n',
+        }.items():
+            f = d / f"{name}.toml"
+            f.write_text(body)
+            out = run(f, "--apply")
+            assert f.read_text() == body, f"{name}: must be left alone"
+            assert "by hand" in out
+        net = d / "net.toml"  # no build text: appended, existing table kept
+        net.write_text('[net]\nretry = 3')
+        run(net, "--apply")
+        assert net.read_text() == '[net]\nretry = 3\n\n[build]\ntarget-dir = "/x/t"\n'
     print("ok")
     return 0
 
