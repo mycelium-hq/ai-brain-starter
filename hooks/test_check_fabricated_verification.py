@@ -345,6 +345,12 @@ for _label, _text, _want_block in [
      "I pushed the branch.", True),
     ("35. 'pushed back to origin' IS a git target, so it still blocks",
      "I pushed back to origin after the rebase.", True),
+    ("35b. object between 'back' and the target still blocks",
+     "I pushed back the fix to main.", True),
+    ("35c. 'pushed forward to origin' still blocks",
+     "I pushed forward to origin.", True),
+    ("35d. 'pushed for review' still blocks",
+     "I pushed for review.", True),
 ]:
     _blocked, _ = run(_text, commands=["rg -n 'pattern' ."], results=["3 matches"])
     if _blocked == _want_block:
@@ -364,6 +370,22 @@ if _blocked:
 else:
     FAIL += 1
     print("FAIL  36. idiom laundered an adjacent real push claim")
+
+for _label, _text in [
+    ("37. a later 'pushed back' does not launder an earlier real push claim",
+     "I pushed the branch. She pushed back on it."),
+    ("38. a later 'pushed back' does not launder an earlier 'on origin' claim",
+     "Done, branch is on origin. Keith pushed back on this."),
+    ("39. a later 'committed to' idiom does not launder an earlier commit claim",
+     "The four files are committed. We stay committed to the plan."),
+]:
+    _blocked, _ = run(_text, commands=["ls -la"], results=["ok"])
+    if _blocked:
+        PASS += 1
+        print(f"PASS  {_label}")
+    else:
+        FAIL += 1
+        print(f"FAIL  {_label}")
 
 print()
 print(f"=== summary: {PASS} passed, {FAIL} failed ===")

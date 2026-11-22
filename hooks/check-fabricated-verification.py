@@ -153,12 +153,13 @@ PUSHED_CLAIM = re.compile(
     re.IGNORECASE,
 )
 # "pushed" used as an English idiom, not a git push: a panel's Dissent line
-# reads "X pushed back on Y" (tickets#6729). "pushed back to origin/the remote"
-# is still a git claim, so the lookahead keeps it. Checked on the match tail
-# only (see _claim_exempt), so a nearby idiom cannot launder a real claim.
+# reads "X pushed back on Y" (tickets#6729). Fails closed: if the rest of the
+# clause names any git target ("pushed back the fix to main", "pushed forward
+# to origin", "pushed for review"), it is still a claim.
 PUSH_NON_CLAIM = re.compile(
-    r"pushed\s+(?:back(?!\s+(?:up\s+)?(?:to|onto)\s+(?:origin|github|the\s+remote|remote|main|master)\b)"
-    r"|for\b|forward\b|ahead\b|against\b|harder?\b|aside\b|away\b)",
+    r"pushed\s+(?:back|for|forward|ahead|against|harder?|aside|away)\b"
+    r"(?![^.;!?\n]*\b(?:origin|github|gitlab|remote|main|master|branch|commits?"
+    r"|repo|review|pr|upstream)\b)",
     re.IGNORECASE,
 )
 PUSHED_EVIDENCE = re.compile(
@@ -374,7 +375,13 @@ def _claim_exempt(text: str, claim_re: "re.Pattern", non_claim: "re.Pattern | No
         window = text[max(0, m.start() - 110): m.end() + 110]
         if FORENSIC.search(window) or NOT_YET.search(window):
             continue
-        if non_claim is not None and non_claim.search(text[m.start(): m.end() + 60]):
+        if non_claim is not None and any(
+            n.start() < m.end() - m.start()
+            for n in non_claim.finditer(text[m.start(): m.end() + 60])
+        ):
+            # The non-claim reading must start INSIDE this claim's own span; a
+            # later idiom ("I pushed the branch. She pushed back.") must not
+            # launder an earlier real claim.
             continue
         return False
     return True
