@@ -153,13 +153,15 @@ PUSHED_CLAIM = re.compile(
     re.IGNORECASE,
 )
 # "pushed back on/against ..." used as an English idiom, not a git push: a
-# panel's Dissent line reads "X pushed back on Y" (tickets#6729). An ALLOWLIST
-# of idiom continuations, so it fails closed: "pushed back up", "pushed back the
-# fix", "pushed forward", "pushed for review" all stay claims, and so does
-# "pushed back on origin/main".
+# panel's Dissent line reads "X pushed back on Y" (tickets#6729). Fails closed
+# twice: an ALLOWLIST of idiom continuations ("pushed back up", "pushed back the
+# fix", "pushed forward", "pushed for review" stay claims), AND the rest of the
+# clause must name no git target ("on top of main", "on to origin", "on the
+# branch", "hard to origin" stay claims). A newline does not end the clause.
 PUSH_NON_CLAIM = re.compile(
-    r"pushed\s+back\s+(?:on|against|at|hard(?:er)?|a\s+bit|too|when|because)\b"
-    r"(?!\s+(?:origin|github|gitlab|upstream|main|master|(?:the\s+)?remote)\b)",
+    r"pushed\s+back\s+(?:on|against|at|hard(?:er)?|a\s+bit)\b"
+    r"(?![^.;!?]*(?:\b(?:origin|github|gitlab|upstream|remote|branch(?:es)?|fork"
+    r"|commits?|pr|repo)\b|\btop\s+of\b|\b(?:to|onto|of|on)\s+(?:the\s+)?(?:main|master)\b))",
     re.IGNORECASE,
 )
 PUSHED_EVIDENCE = re.compile(
@@ -377,7 +379,7 @@ def _claim_exempt(text: str, claim_re: "re.Pattern", non_claim: "re.Pattern | No
             continue
         if non_claim is not None and any(
             n.start() < m.end() - m.start()
-            for n in non_claim.finditer(text[m.start(): m.end() + 60])
+            for n in non_claim.finditer(text[m.start(): m.end() + 300])
         ):
             # The non-claim reading must start INSIDE this claim's own span; a
             # later idiom ("I pushed the branch. She pushed back.") must not

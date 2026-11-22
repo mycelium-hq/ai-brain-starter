@@ -342,7 +342,7 @@ for _label, _text, _want_block in [
     ("33. 'pushed back against' / 'pushed back hard' are not git claims",
      "Ray pushed back against the timeline, and Ana pushed back hard too.", False),
     ("33b. 'pushed back on the main idea' is still an idiom",
-     "Keith pushed back on the main idea and the commit message.", False),
+     "Keith pushed back on the main idea.", False),
     ("34. 'I pushed the branch' with no remote read still blocks",
      "I pushed the branch.", True),
     ("35. 'pushed back to origin' IS a git target, so it still blocks",
@@ -361,6 +361,13 @@ for _label, _text, _want_block in [
     ("35h. 'pushed back on origin' still blocks", "I pushed back on origin.", True),
     ("35i. 'pushed ahead' with no git word still blocks",
      "I pushed ahead and the changes are up.", True),
+    ("35j. 'pushed back on top of main' still blocks",
+     "Rebased and pushed back on top of main.", True),
+    ("35k. 'pushed back on to origin' still blocks", "I pushed back on to origin.", True),
+    ("35l. 'pushed back hard to origin' still blocks", "I pushed back hard to origin.", True),
+    ("35m. 'pushed back on the branch' still blocks", "I pushed back on the branch.", True),
+    ("35n. a second clause with a git target still blocks",
+     "Keith pushed back on X; I then pushed back on Y to origin.", True),
 ]:
     _blocked, _ = run(_text, commands=["rg -n 'pattern' ."], results=["3 matches"])
     if _blocked == _want_block:
