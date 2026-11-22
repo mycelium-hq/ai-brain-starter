@@ -152,6 +152,18 @@ PUSHED_CLAIM = re.compile(
     r"(?:latest|commit)",
     re.IGNORECASE,
 )
+# "pushed back on/against ..." used as an English idiom, not a git push: a
+# panel's Dissent line reads "X pushed back on Y" (tickets#6729). Fails closed
+# twice: an ALLOWLIST of idiom continuations ("pushed back up", "pushed back the
+# fix", "pushed forward", "pushed for review" stay claims), AND the rest of the
+# clause must name no git target ("on top of main", "on to origin", "on the
+# branch", "hard to origin" stay claims). A newline does not end the clause.
+PUSH_NON_CLAIM = re.compile(
+    r"pushed\s+back\s+(?:on|against|at|hard(?:er)?|a\s+bit)\b"
+    r"(?![^.;!?]*(?:\b(?:origin|github|gitlab|upstream|remote|branch(?:es)?|fork"
+    r"|commits?|pr|repo)\b|\btop\s+of\b|\b(?:to|onto|of|on)\s+(?:the\s+)?(?:main|master)\b))",
+    re.IGNORECASE,
+)
 PUSHED_EVIDENCE = re.compile(
     r"git\s+ls-remote\b|git\s+fetch\b|git\s+rev-parse\s+origin/"
     r"|git\s+log\s+origin/|git\s+diff\s+origin/|git\s+branch\s+-r\b"
@@ -282,7 +294,7 @@ def main() -> None:
                     "`git rev-parse HEAD` ran this session — run `git log -1` and cite it, "
                     "or drop the claim"
                 )
-        if PUSHED_CLAIM.search(last) and not _claim_exempt(last, PUSHED_CLAIM):
+        if PUSHED_CLAIM.search(last) and not _claim_exempt(last, PUSHED_CLAIM, PUSH_NON_CLAIM):
             if not PUSHED_EVIDENCE.search(command_blob):
                 findings.append(
                     "the branch is claimed PUSHED/on origin, but no read of the remote "
@@ -365,7 +377,13 @@ def _claim_exempt(text: str, claim_re: "re.Pattern", non_claim: "re.Pattern | No
         window = text[max(0, m.start() - 110): m.end() + 110]
         if FORENSIC.search(window) or NOT_YET.search(window):
             continue
-        if non_claim is not None and non_claim.search(text[m.start(): m.end() + 60]):
+        if non_claim is not None and any(
+            n.start() < m.end() - m.start()
+            for n in non_claim.finditer(text[m.start(): m.end() + 300])
+        ):
+            # The non-claim reading must start INSIDE this claim's own span; a
+            # later idiom ("I pushed the branch. She pushed back.") must not
+            # launder an earlier real claim.
             continue
         return False
     return True

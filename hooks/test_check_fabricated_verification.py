@@ -333,6 +333,77 @@ else:
     FAIL += 1
     print("FAIL  31. idiom laundered an adjacent real claim")
 
+# --- REGRESSION (tickets#6729): "pushed back" is a panel idiom, not a push --
+# The daily-journal Dissent line names "who pushed back"; the bare \bpushed\b
+# alternative blocked those journal replies at Stop.
+for _label, _text, _want_block in [
+    ("32. a panel Dissent line 'pushed back on' is not a git claim",
+     "Keith Rabois pushed back on thinking as clear action.", False),
+    ("33. 'pushed back against' / 'pushed back hard' are not git claims",
+     "Ray pushed back against the timeline, and Ana pushed back hard too.", False),
+    ("33b. 'pushed back on the main idea' is still an idiom",
+     "Keith pushed back on the main idea.", False),
+    ("34. 'I pushed the branch' with no remote read still blocks",
+     "I pushed the branch.", True),
+    ("35. 'pushed back to origin' IS a git target, so it still blocks",
+     "I pushed back to origin after the rebase.", True),
+    ("35b. object between 'back' and the target still blocks",
+     "I pushed back the fix to main.", True),
+    ("35c. 'pushed forward to origin' still blocks",
+     "I pushed forward to origin.", True),
+    ("35d. 'pushed for review' still blocks",
+     "I pushed for review.", True),
+    ("35e. 'pushed back up' still blocks", "Pushed back up after the rebase.", True),
+    ("35f. 'pushed back the latest changes' still blocks",
+     "I pushed back the latest changes.", True),
+    ("35g. a git target far away or on the next line still blocks",
+     "I pushed back\nto origin.", True),
+    ("35h. 'pushed back on origin' still blocks", "I pushed back on origin.", True),
+    ("35i. 'pushed ahead' with no git word still blocks",
+     "I pushed ahead and the changes are up.", True),
+    ("35j. 'pushed back on top of main' still blocks",
+     "Rebased and pushed back on top of main.", True),
+    ("35k. 'pushed back on to origin' still blocks", "I pushed back on to origin.", True),
+    ("35l. 'pushed back hard to origin' still blocks", "I pushed back hard to origin.", True),
+    ("35m. 'pushed back on the branch' still blocks", "I pushed back on the branch.", True),
+    ("35n. a second clause with a git target still blocks",
+     "Keith pushed back on X; I then pushed back on Y to origin.", True),
+]:
+    _blocked, _ = run(_text, commands=["rg -n 'pattern' ."], results=["3 matches"])
+    if _blocked == _want_block:
+        PASS += 1
+        print(f"PASS  {_label}")
+    else:
+        FAIL += 1
+        print(f"FAIL  {_label} :: blocked={_blocked}, expected {_want_block}")
+
+_blocked, _ = run(
+    "Keith Rabois pushed back on the plan. I pushed the branch.",
+    commands=["ls -la"], results=["ok"],
+)
+if _blocked:
+    PASS += 1
+    print("PASS  36. a 'pushed back' idiom next to a real push claim does not launder it")
+else:
+    FAIL += 1
+    print("FAIL  36. idiom laundered an adjacent real push claim")
+
+for _label, _text in [
+    ("37. a later 'pushed back' does not launder an earlier real push claim",
+     "I pushed the branch. She pushed back on it."),
+    ("38. a later 'pushed back' does not launder an earlier 'on origin' claim",
+     "Done, branch is on origin. Keith pushed back on this."),
+    ("39. a later 'committed to' idiom does not launder an earlier commit claim",
+     "The four files are committed. We stay committed to the plan."),
+]:
+    _blocked, _ = run(_text, commands=["ls -la"], results=["ok"])
+    if _blocked:
+        PASS += 1
+        print(f"PASS  {_label}")
+    else:
+        FAIL += 1
+        print(f"FAIL  {_label}")
+
 print()
 print(f"=== summary: {PASS} passed, {FAIL} failed ===")
 sys.exit(1 if FAIL else 0)
