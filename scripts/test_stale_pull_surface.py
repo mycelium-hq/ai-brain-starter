@@ -251,6 +251,46 @@ if (clone3 / "v.txt").exists() and (clone3 / "f.txt").read_text(encoding="utf-8"
 else:
     bad("11. upstreamed edit", f"pulled={(clone3/'v.txt').exists()}")
 
+# 12. a diverged fork keeps an uncommitted edit, even one equal to origin
+origin4 = mkrepo(TMP / "o4")
+clone4 = SKILLS_ROOT / "c4"
+subprocess.run(["git", "clone", "-q", str(origin4), str(clone4)], check=True, env=env0)
+st4 = TMP / "s4"
+st4.mkdir()
+run_updater(clone4, st4)  # seed
+(origin4 / "f.txt").write_text("fixed upstream", encoding="utf-8")
+subprocess.run(["git", "-C", str(origin4), "commit", "-qam", "upstream"], check=True, env=env0)
+(clone4 / "g.txt").write_text("fork", encoding="utf-8")
+subprocess.run(["git", "-C", str(clone4), "add", "g.txt"], check=True, env=env0)
+subprocess.run(["git", "-C", str(clone4), "-c", "user.name=t", "-c", "user.email=t@t",
+                "commit", "-qm", "fork"], check=True, env=env0)
+(clone4 / "f.txt").write_text("fixed upstream", encoding="utf-8")
+run_updater(clone4, st4, session_id="stage-12")
+run_updater(clone4, st4, session_id="resolve-12")
+if (clone4 / "f.txt").read_text(encoding="utf-8") == "fixed upstream":
+    ok("12. a diverged fork keeps its uncommitted edit")
+else:
+    bad("12. fork edit", "edit equal to origin was reverted on a fork that cannot update")
+
+# 13. one differing edit among upstreamed ones: nothing is touched
+origin5 = mkrepo(TMP / "o5")
+clone5 = SKILLS_ROOT / "c5"
+subprocess.run(["git", "clone", "-q", str(origin5), str(clone5)], check=True, env=env0)
+st5 = TMP / "s5"
+st5.mkdir()
+run_updater(clone5, st5)  # seed
+(origin5 / "f.txt").write_text("fixed upstream", encoding="utf-8")
+subprocess.run(["git", "-C", str(origin5), "commit", "-qam", "upstream"], check=True, env=env0)
+(clone5 / "f.txt").write_text("fixed upstream", encoding="utf-8")
+(clone5 / "scripts" / "ai-brain-auto-update.py").write_text("# mine", encoding="utf-8")
+run_updater(clone5, st5, session_id="stage-13")
+run_updater(clone5, st5, session_id="resolve-13")
+if (clone5 / "f.txt").read_text(encoding="utf-8") == "fixed upstream" and \
+        (clone5 / "scripts" / "ai-brain-auto-update.py").read_text(encoding="utf-8") == "# mine":
+    ok("13. a mixed set of edits is left untouched")
+else:
+    bad("13. mixed edits", "an edit was lost")
+
 # --- 10: one implementation, not a copy ------------------------------------
 def _load(name: str, path: Path):
     """Register in sys.modules BEFORE exec: @dataclass resolves its class's
