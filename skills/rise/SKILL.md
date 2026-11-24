@@ -449,7 +449,7 @@ If no morning `/rise` entry exists for today: `/journal` runs its normal flow wi
 | Morning anchors skipped 5+ days in a row | Surface: "You've skipped [anchor] 6 days running. Want to talk about it in tonight's /journal?" — note the streak, don't lecture |
 | Body movement HRV critically low (>30% below baseline) | Scale to mobility-only regardless of cycle phase. Note in frontmatter |
 | Priority recommendation returns no high-scoring tasks (all <2.0) | Surface: "Your queue is light today. Top 3 by recency:" — fall through to date-sorted recommendation |
-| Config file missing | Copy template, ask 3 setup questions, write answers into the file, continue |
+| Config file missing | Create it (Step 0), ask 3 setup questions, write answers into the file, continue |
 | Sessions folder missing, or no session since the last Rise | Step 4.7 says "Nothing new since the last Rise" in one line and continues. Never invent carry-forward items |
 | A session note says a to-do was filed but the to-do file has no trace of it | The close failed. Append it at Step 4.7 and tell the user in one line that the close missed it, so the gap is visible instead of silent |
 

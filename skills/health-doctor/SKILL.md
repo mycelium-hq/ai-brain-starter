@@ -5,7 +5,7 @@ description: Use when the user runs /health doctor or /health status, asks wheth
 
 # health-doctor
 
-The substrate has 41 tools + 5 skills + 2 auto-trigger hooks. None of it matters if the chain breaks silently. This skill is the surface for verifying the system is actually running.
+The substrate has 41 tools + 5 skills<!-- vault-only --> + 2 auto-trigger hooks<!-- /vault-only -->. None of it matters if the chain breaks silently. This skill is the surface for verifying the system is actually running.
 
 Run `/health doctor` whenever:
 - It's been a few days since you saw a workout in your calendar
@@ -137,12 +137,13 @@ Example:
 - `health_sleep_regularity(today-14, today)` — bed/wake variance
 
 Plus:
-- Read `~/.claude/settings.json` to verify hooks are registered
 <!-- vault-only -->
+- Read `~/.claude/settings.json` to verify hooks are registered
 - Read `~/.claude/hookify-blocks.log` to verify hooks have fired recently
 <!-- /vault-only -->
 - Read `<VAULT_ROOT>/Meta/coach-profile.yaml` to verify profile state
 
+<!-- vault-only -->
 ## When to surface unprompted
 
 The hook system can surface specific flags WITHOUT the user running `/health doctor` explicitly:
@@ -152,6 +153,7 @@ The hook system can surface specific flags WITHOUT the user running `/health doc
 - **Stop on coach-auto-prescribe**: if today's prescription was created, surface the why_today line
 
 These are hookify nudges, configured separately. The skill is the comprehensive surface; the nudges are the targeted catches.
+<!-- /vault-only -->
 
 ## Graceful failure
 
