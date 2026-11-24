@@ -75,7 +75,7 @@ Skip 0g silently if health-mcp has no data or no Health Pattern Report exists ye
 **Why some sources are opt-in:** iMessage, WhatsApp, and Calendar see private conversations and meetings. The user should consent explicitly per vault, not by default. The other three (RescueTime, Session Captures, Today's activity) read your own data and are on by default in a vault install's config. Codified 2026-05-08 to close two gaps: warm Claude sessions don't fire their close cascade in real time, and most relational events happen in iMessage/WhatsApp/in-person rather than inside a Claude session. The journal must see the whole day, but the user opts in per vault to the cross-platform pulls.
 
 
-**Show them the seeds at the very top of the conversation** before asking the check-in question:
+**Only if `session_captures: on`: show them the seeds at the very top of the conversation** before asking the check-in question:
 
 > "Before we start — here's what you said today across your sessions. I don't want you to forget any of it:
 > [bullet list of verbatim quotes, grouped by session context, in their original words]
@@ -83,4 +83,4 @@ Skip 0g silently if health-mcp has no data or no Health Pattern Report exists ye
 
 This surfaces themes they might not otherwise bring up and gives them a chance to add context or react. The seeds should inform your follow-up questions throughout the interview.
 
-**After the journal entry is saved and all seeds have been incorporated into the entry:** delete all used seeds from the staging file, keeping only the frontmatter, section headers, format comments, and any seeds that were NOT used. Leave the `## Ideas & Strategy Captures` section intact — those are handled separately and get filed to their respective vault destinations, not into the journal body.
+**After the journal entry is saved and all seeds have been incorporated into the entry (only if `session_captures: on`):** delete all used seeds from the staging file, keeping only the frontmatter, section headers, format comments, and any seeds that were NOT used. Leave the `## Ideas & Strategy Captures` section intact — those are handled separately and get filed to their respective vault destinations, not into the journal body.

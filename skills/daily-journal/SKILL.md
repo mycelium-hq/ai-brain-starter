@@ -230,7 +230,7 @@ Do NOT ask the opener until every pull above that is on is done.
 
 **0-pre. Read the journal config (mandatory).** Look for `⚙️ Meta/journal-config.md` (or `Meta/journal-config.md` if the vault doesn't use emoji-prefixed Meta). Parse the `data_sources:` frontmatter block, and read `filename_format:` (`descriptive` | `date` | `date-title`; default `descriptive` when absent or the file doesn't exist yet) — apply it at every save (Steps 1.5 and 7).
 
-If the file does not exist, create it.<!-- vault-only --> In a vault install, copy `templates/journal-config.md` from this skill's repo into the vault; otherwise:<!-- /vault-only --> Write a `journal-config.md` whose `data_sources:` block turns every cross-platform pull (calendar, iMessage, WhatsApp, email, Slack, body health) `off` and every vault-only source (rescuetime, session_captures, todays_activity) `off`, with `filename_format: descriptive`. Then ask the user once:
+If the file does not exist, create it.<!-- vault-only --> In a vault install, copy `templates/journal-config.md` from this skill's repo into the vault; otherwise:<!-- /vault-only --> Write a `journal-config.md` whose `data_sources:` block turns every cross-platform pull (calendar, iMessage, WhatsApp, email, Slack, body health) `off` (keys: `calendar`, `imessage_24h`, `whatsapp_24h`, `self_chat_voice_notes`, `email`, `slack`, `body_health`), plus `rescuetime`, `session_captures` and `todays_activity` `off`, with `filename_format: descriptive`. Then ask the user once:
 
 > "I created `journal-config.md`. Cross-platform pulls (iMessage, WhatsApp, Calendar, email, Slack, body health) are off by default for privacy. Want to turn any on for richer context? You can change later by editing that file."
 
@@ -238,7 +238,7 @@ If they opt in, set the toggles in the file in-session AND continue with those s
 
 **0a to 0g, per-source pulls (read `{SKILL_DIR}/references/step-0-data-sources.md` now, before acting on Step 0).** It holds the exact pull for each source: 0a RescueTime, 0b Session Captures, 0c today's activity (these three on by default in a vault install's config), 0d-PRIMARY self-chat voice notes, 0d WhatsApp + iMessage since the last entry, 0f calendar (cross-platform sources, opt-in per vault, off unless the toggle is on), and 0g body coaching (only if `body_health: on` and health data exists, silently skipped otherwise). Do not skip a source whose toggle is on. Bindings that live there and still apply: if the WhatsApp bridge is unlinked, tell the user to re-link instead of presenting stale data as current; quote load-bearing threads verbatim; 0g opens the interview with ONE body coaching prompt, and during Steps 1-3, if the user mentions fatigue, sleep, cycle, HRV, somatic symptoms or labs, pull ONE health panelist from the 0g table (their voice, then return).
 
-**Seeds.** Before the check-in question, show the user the verbatim quotes from Session Captures (their own words from the day, grouped by session) and ask which they want to talk about. After the entry is saved, delete the used seeds from the staging file, keeping its frontmatter, headers, format comments, unused seeds, and the `## Ideas & Strategy Captures` section intact (exact wording in the reference).
+**Seeds** (only if `session_captures: on`). Before the check-in question, show the user the verbatim quotes from Session Captures (their own words from the day, grouped by session) and ask which they want to talk about. After the entry is saved, delete the used seeds from the staging file, keeping its frontmatter, headers, format comments, unused seeds, and the `## Ideas & Strategy Captures` section intact (exact wording in the reference).
 
 **Day boundary is 3:45 AM, not midnight.** Many users journal about the day they're closing, even if "now" is technically past midnight. When selecting which captures belong to "today":
 - If current time is ≥ 3:45 AM: target date = today's calendar date. Include captures from 3:45 AM today through now.
@@ -406,7 +406,7 @@ After the emotional check-in, run through these accountability items. Be direct 
 - If 2+ blocks inferred: "That's [X] blocks per RescueTime. The chain continues." Mark today in the Deep Work Chain file (check CLAUDE.md for the path, e.g. `Home/Deep Work Chain.md`).
 - If 1: "One block per RescueTime. Better than zero. Anything you wanted to push deeper on?"
 - If 0: "RescueTime shows no sustained focus stretches. Meeting-heavy day, or scattered?"
-- ONLY fall back to the manual question if RescueTime MCP is disconnected.
+- ONLY fall back to the manual question if `rescuetime` is off or the RescueTime MCP is disconnected.
 - After saving the journal entry, auto-update the Deep Work Chain file by checking the appropriate boxes for today and updating the streak counter and week total.
 - General principle: any accountability metric with a data source should be inferred, not asked.
 
