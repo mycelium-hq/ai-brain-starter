@@ -1,6 +1,6 @@
 # Daily journal: Step 0 data sources (details)
 
-Read this when SKILL.md Step 0 sends you here: after the preflight, for each per-source pull (0a through 0g), the opt-in rationale, and the seeds display.
+Read this when SKILL.md Step 0 sends you here<!-- vault-only -->: after the preflight<!-- /vault-only -->, for each per-source pull (0a through 0g), the opt-in rationale, and the seeds display.
 
 **0a. RescueTime** (gated on `data_sources.rescuetime: on`). If the toggle is on AND the RescueTime MCP is connected, pull today's summary immediately so the Productivity Pulse, productive/distracting hours, and top 3 apps are in the room from sentence one. Otherwise skip silently.
 

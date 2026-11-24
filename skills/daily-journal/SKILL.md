@@ -211,14 +211,14 @@ python3 "⚙️ Meta/scripts/journal-preflight.py"
 (or `Meta/scripts/journal-preflight.py` if the vault doesn't use emoji-prefixed Meta.) It auto-spans since the last entry, pulls every SCRIPT source into ONE digest — messages (WhatsApp direct + groups + iMessage, whole gap, FAMILY/PARTNER threads surfaced first with ⭐), RescueTime (per day), close-cascade journal seeds (Session Captures), today's activity, the email triage digest, and the on-disk Slack export — and writes a marker at `⚙️ Meta/.journal-context/<date>.json`. It cannot call MCP, so it prints the exact MCP pulls you MUST make yourself right after.
 <!-- /vault-only -->
 
-**Pull every source below yourself, for the whole window since the last entry — make EVERY one:**
+**Pull each source below whose toggle is on in `journal-config.md` (read it first: 0-pre), for the whole window since the last entry — make EVERY one that is on:**
 
-1. **Calendar** — `cal_list_events(time_min, time_max)` for the window; fold meetings + attendees into `## Today`.
-2. **Email (fresh, relational)** — `gmail_search` each account since the last entry; surface FAMILY / friends / commitments, not just an (often stale) triage digest.
-3. **Slack (fresh)** — `slack` search/read recent DMs + #daily-updates since the last entry.
-4. **Health** (only if `body_health: on`) — the health data the member's tools give (latest health pattern report + yesterday's `## Body track` where the vault keeps them).
+1. **Calendar** (only if `calendar: on`) — `cal_list_events(time_min, time_max)` for the window; fold meetings + attendees into `## Today`.
+2. **Email (fresh, relational)** (only if `email: on`) — `gmail_search` each account since the last entry; surface FAMILY / friends / commitments, not just the (often stale) triage digest<!-- vault-only --> the preflight already read<!-- /vault-only -->.
+3. **Slack (fresh)** (only if `slack: on`) — `slack` search/read recent DMs + #daily-updates since the last entry.
+4. **Health** (only if `body_health: on`) — latest `🏠 Home/Health Pattern Report *.md` + yesterday's `## Body track`, or what the member's health tools give<!-- vault-only -->; or run `regenerate-health-pattern-report.py` if the phone synced<!-- /vault-only -->.
 
-Do NOT ask the opener until every pull above is done.
+Do NOT ask the opener until every pull above that is on is done.
 
 <!-- vault-only -->
 Read the ⭐ FAMILY / PARTNER threads BEFORE the work chatter — that is the part most worth journaling (2026-07-07: the model buried the user's sister flying in under dev messages).
@@ -297,7 +297,9 @@ Capture their answer. After saving the journal entry (Step 9), update the weekly
 
 **Every later save is an UPDATE to this file**, not a new write. On each update, regenerate the verbatim appendix to include all messages to date and keep the body, floor, and frontmatter current. (If Step 0.0 found an existing entry for today, the very first save this session is already an update to that file — resume and capture-first are the same write path.)
 
+<!-- vault-only -->
 **First-ever entry → fire telemetry now.** If this is the user's first journal save in this vault, run the snippet in `{SKILL_DIR}/references/first-journal-telemetry.md` at this capture (it is sentinel-idempotent — safe to run here). A capture-and-bail still counts as the funnel's first-journal event; don't wait for the end of the flow that may never come.
+<!-- /vault-only -->
 
 ### Step 1.5b: First-take panel (mandatory, same reply as the capture)
 
@@ -871,9 +873,11 @@ Log only this session's panel, one log entry per session: Step 1.5b appends the 
 
 This is automatic — never ask the user to approve the log append. If there's no dissent or omission from the entry (every panel requires a dissent; a one-line declined or crisis block has nothing to log), skip the log append silently.
 
+<!-- vault-only -->
 ### Step 9.5: Fire first-journal-saved telemetry (one-time, fail-open)
 
 After the entry first persists (the capture-first save in Step 1.5, or here if the session reaches the end first), check whether this is the user's FIRST journal save in this vault. If it is, run the one-time, sentinel-guarded snippet in `{SKILL_DIR}/references/first-journal-telemetry.md`. Subsequent saves do not re-fire. Hard rules that stay binding: it sends nothing unless the local install-token marker holds a real 32-char hex token (a `declined` or `recorded` marker, or no file, means skip the call entirely); failures are silent and never block journaling; never ask the user for an email here, journaling is not a capture surface.
+<!-- /vault-only -->
 
 ## Notes
 

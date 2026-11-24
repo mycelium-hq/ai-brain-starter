@@ -45,7 +45,7 @@ By default that's one hook:
 
 `health-auto-sync.py` (SessionStart wearable refresh) is opt-in, power-user only, and deliberately NOT wired by default — firing it on every SessionStart is wasteful for users with many sessions/day. Its absence from settings.json is expected, not a fault.
 
-Red if the Stop hook (`coach-auto-prescribe-on-journal.py`) is not in settings.json. Yellow if the hook script file exists but isn't registered. Green if registered AND firing recently<!-- vault-only --> (check `~/.claude/hookify-blocks.log` for the hook name in the last 48h)<!-- /vault-only -->. If `health-auto-sync.py` IS registered (the user opted in), report its freshness the same way, but never red for its absence.
+Red if the Stop hook (`coach-auto-prescribe-on-journal.py`) is not in settings.json. Yellow if the hook script file exists but isn't registered. Green if registered<!-- vault-only --> AND firing recently (check `~/.claude/hookify-blocks.log` for the hook name in the last 48h)<!-- /vault-only -->. If `health-auto-sync.py` IS registered (the user opted in), report its freshness the same way, but never red for its absence.
 
 ### 4. Coach profile status
 

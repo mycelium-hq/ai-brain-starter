@@ -26,7 +26,7 @@ Look for `Meta/rise-config.md` (or `⚙️ Meta/rise-config.md` for emoji-prefix
 - `save_path: "Journals"` — where to save morning entries
 - `carry_forward: { sessions, monitor, decisions, calendar_lookback }` — sources swept at Step 4.7 so work done since the last Rise arrives on its own. Omitted keys default to on.
 
-**If the file doesn't exist:** create it.<!-- vault-only --> In a vault install, copy `templates/rise-config.md` into the vault; otherwise:<!-- /vault-only --> Write a `rise-config.md` with a `settings:` block holding the keys above, `cycle_phase_aware: off` and `morning_anchors: []`. Then ask the user once:
+**If the file doesn't exist:** create it.<!-- vault-only --> In a vault install, copy `templates/rise-config.md` into the vault; otherwise:<!-- /vault-only --> Write a `rise-config.md` with a `settings:` block holding every key above at its safest value (`cycle_phase_aware: off`, `morning_anchors: []`, no to-do paths, every other on/off key `off`, `carry_forward` left out so it defaults on), then fill it from the answers below. Then ask the user once:
 
 > "I created `rise-config.md`. Quick setup:
 > 1. Do you have a menstrual cycle you'd like the body movement to scale to? (yes/no)
@@ -95,7 +95,7 @@ Wait for their answer. They'll respond in plain language — feelings, energy, w
 
 If signals are ambiguous, default to Willingness (22) and note `floor_confidence: low` in frontmatter.
 
-**Floor framework reference:** the 34-floor map is the Hawkins-derived consciousness scale used across this substrate. See `skills/daily-journal/SKILL.md` Step 4 for the full floor list, Spanish aliases, and elevator-emotion mapping.
+**Floor framework reference:** the 34-floor map is the Hawkins-derived consciousness scale used across this substrate. See the daily-journal skill's Step 4 for the full floor list, Spanish aliases, and elevator-emotion mapping.
 
 **Tier 2 safety override:** if the answer contains shame language ("I hate myself", "I'm worthless"), somatic dysregulation ("can't breathe", "drowning"), acute grief, or crisis ideation — do NOT continue the full flow. Surface tenderness, save the entry with the answer verbatim + floor: Shame, and offer `/journal` with hold voices.
 
