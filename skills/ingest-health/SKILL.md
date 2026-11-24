@@ -5,7 +5,7 @@ description: Use when the user says /ingest-health, asks to import, sync, ingest
 
 # ingest-health, Apple Health to DuckDB connector
 
-Loads Apple Health data into `~/.claude/health-mcp/health.duckdb` so the rest of the substrate (daily-journal, coaching, advisory-panel, patterns, insights) can read biometrics through health-mcp tools.
+Loads Apple Health data into health-mcp's local DuckDB store (`health.duckdb`, in health-mcp's own folder) so the rest of the substrate (daily-journal, coaching, advisory-panel, patterns, insights) can read biometrics through health-mcp tools.
 
 This is one of the substrate's ingestion connectors (slack, gmail, linear, github, notion, whatsapp, health). Each owns a single source.
 
@@ -25,7 +25,7 @@ Do NOT use for:
 
 Apple Health data is among the most sensitive content the user owns. Read this before running:
 
-1. **Storage stays local.** The DuckDB file lives at `~/.claude/health-mcp/health.duckdb`. Treat it as a medical record.
+1. **Storage stays local.** The DuckDB file lives in health-mcp's own folder on this machine. Treat it as a medical record.
 2. **Export files are sensitive too.** Apple's `export.zip` contains every metric ever recorded on the device. Don't commit it to git, don't sync it through cloud storage you don't trust, and delete the staging copy after import if you don't need to re-import.
 3. **Live mode is local Wi-Fi only.** The Health Auto Export TCP server is unauthenticated. Run it only on a trusted network.
 4. **The MCP never writes the vault.** This skill imports into DuckDB. Vault-aware tools READ frontmatter; they never write.

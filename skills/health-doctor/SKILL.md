@@ -5,7 +5,7 @@ description: Use when the user runs /health doctor or /health status, asks wheth
 
 # health-doctor
 
-The substrate has 41 tools + 5 skills + 2 auto-trigger hooks. None of it matters if the chain breaks silently. This skill is the surface for verifying the system is actually running.
+The substrate has 41 tools + 5 skills<!-- vault-only --> + 2 auto-trigger hooks<!-- /vault-only -->. None of it matters if the chain breaks silently. This skill is the surface for verifying the system is actually running.
 
 Run `/health doctor` whenever:
 - It's been a few days since you saw a workout in your calendar
@@ -36,6 +36,7 @@ Pulled from the `imports` table via `health_status()`.
 
 Yellow if completion rate < 60%. Red if completion rate < 40% or no prescriptions in 7 days.
 
+<!-- vault-only -->
 ### 3. Auto-trigger hooks installed
 
 The default wired set is defined by `hooks.json` at the repo root (the file the installer actually writes into `~/.claude/settings.json`, tested by `services/health-mcp/tests/test_v05_hooks.py`) — read it rather than assuming a fixed list, so this check can't drift from what installs. See `docs/AUTOMATION.md` for the full chain.
@@ -46,6 +47,7 @@ By default that's one hook:
 `health-auto-sync.py` (SessionStart wearable refresh) is opt-in, power-user only, and deliberately NOT wired by default — firing it on every SessionStart is wasteful for users with many sessions/day. Its absence from settings.json is expected, not a fault.
 
 Red if the Stop hook (`coach-auto-prescribe-on-journal.py`) is not in settings.json. Yellow if the hook script file exists but isn't registered. Green if registered AND firing recently (check `~/.claude/hookify-blocks.log` for the hook name in the last 48h). If `health-auto-sync.py` IS registered (the user opted in), report its freshness the same way, but never red for its absence.
+<!-- /vault-only -->
 
 ### 4. Coach profile status
 
@@ -101,9 +103,11 @@ Example:
 - 7-day streak: 0 (missed yesterday's log)
 - Action: /coach log yesterday's session to keep the progression chain accurate
 
+<!-- vault-only -->
 ## 🟢 Auto-trigger hooks
 - SessionStart: health-auto-sync.py ✓ registered, last fired 4h ago
 - Stop: coach-auto-prescribe-on-journal.py ✓ registered, last fired 14h ago
+<!-- /vault-only -->
 
 ## 🟢 Coach profile
 - /vault/Meta/coach-profile.yaml updated 2026-05-09
@@ -133,10 +137,13 @@ Example:
 - `health_sleep_regularity(today-14, today)` — bed/wake variance
 
 Plus:
+<!-- vault-only -->
 - Read `~/.claude/settings.json` to verify hooks are registered
 - Read `~/.claude/hookify-blocks.log` to verify hooks have fired recently
+<!-- /vault-only -->
 - Read `<VAULT_ROOT>/Meta/coach-profile.yaml` to verify profile state
 
+<!-- vault-only -->
 ## When to surface unprompted
 
 The hook system can surface specific flags WITHOUT the user running `/health doctor` explicitly:
@@ -146,6 +153,7 @@ The hook system can surface specific flags WITHOUT the user running `/health doc
 - **Stop on coach-auto-prescribe**: if today's prescription was created, surface the why_today line
 
 These are hookify nudges, configured separately. The skill is the comprehensive surface; the nudges are the targeted catches.
+<!-- /vault-only -->
 
 ## Graceful failure
 

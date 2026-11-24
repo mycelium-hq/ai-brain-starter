@@ -61,7 +61,7 @@ Why: most people open `/journal`, type what happened, and leave. If the entry on
 
 2. **Enrich (opt-in, in place).** If the user keeps going, run Steps 2–9 at the natural pauses of the conversation (see "Conversation, not checklist") — follow-ups, gratitude, accountability, finalize the floor, run the full panel (it replaces the first take) — and **update the same file** (Step 7 is now an in-place update, not a fresh create). Never create a second file.
 
-**Graceful exit — applies at every step after the first save.** If the user signals done ("that's it," "save it," "I'm good"), goes quiet, or declines to continue at any point: **finalize the existing file in place and stop.** Flush any messages they typed since the last save into the verbatim appendix, do a quick floor re-check on the fuller picture, run the light idea/to-do scans (Steps 8/8.5) and Step 9 (index rebuild, panel dissent log) on whatever exists, and confirm what you saved. Never hold the entry hostage to any later step. This session's first take is already in the file; if it somehow is not, write it into the file and put its full text in your final message (Step 6), unless the user declined the panel this session or the crisis protocol is active. Re-prompt at most once. The entry already exists — your job from here is only to keep it current and let them go.
+**Graceful exit — applies at every step after the first save.** If the user signals done ("that's it," "save it," "I'm good"), goes quiet, or declines to continue at any point: **finalize the existing file in place and stop.** Flush any messages they typed since the last save into the verbatim appendix, do a quick floor re-check on the fuller picture, run the light idea/to-do scans (Steps 8/8.5) and Step 9 (<!-- vault-only -->index rebuild, <!-- /vault-only -->panel dissent log) on whatever exists, and confirm what you saved. Never hold the entry hostage to any later step. This session's first take is already in the file; if it somehow is not, write it into the file and put its full text in your final message (Step 6), unless the user declined the panel this session or the crisis protocol is active. Re-prompt at most once. The entry already exists — your job from here is only to keep it current and let them go.
 
 **Panel-Always Rule.** Every entry carries a `## Panel dialogue` section, and every session that saves to the entry adds its own block there.
 - **Blocks are append-only.** A session writes and edits only its own block, never an earlier session's. On a resumed day each new block opens with an italic session label in the entry's language (`*Later session, HH:MM:*`), and the label stays when the full panel replaces the first take.
@@ -201,36 +201,44 @@ One calendar day = ONE journal entry that grows across sessions (an afternoon ch
 
 ### Step 0: Pull data sources per opt-in config (ALWAYS — config-gated)
 
+<!-- vault-only -->
 **0-RUN. Run the preflight FIRST — this is the literal first tool call of every `/journal`, before the opener. Non-negotiable.**
 
 ```
 python3 "⚙️ Meta/scripts/journal-preflight.py"
 ```
 
-(or `Meta/scripts/journal-preflight.py` if the vault doesn't use emoji-prefixed Meta.) It auto-spans since the last entry, pulls every SCRIPT source into ONE digest — messages (WhatsApp direct + groups + iMessage, whole gap, FAMILY/PARTNER threads surfaced first with ⭐), RescueTime (per day), close-cascade journal seeds (Session Captures), today's activity, the email triage digest, and the on-disk Slack export — and writes a marker at `⚙️ Meta/.journal-context/<date>.json`. It cannot call MCP, so it prints the exact MCP pulls you MUST make yourself right after — make EVERY one it lists:
+(or `Meta/scripts/journal-preflight.py` if the vault doesn't use emoji-prefixed Meta.) It auto-spans since the last entry, pulls every SCRIPT source into ONE digest — messages (WhatsApp direct + groups + iMessage, whole gap, FAMILY/PARTNER threads surfaced first with ⭐), RescueTime (per day), close-cascade journal seeds (Session Captures), today's activity, the email triage digest, and the on-disk Slack export — and writes a marker at `⚙️ Meta/.journal-context/<date>.json`. It cannot call MCP, so it prints the exact MCP pulls you MUST make yourself right after.
+<!-- /vault-only -->
 
-1. **Calendar** — `cal_list_events(time_min, time_max)` for the window; fold meetings + attendees into `## Today`.
-2. **Email (fresh, relational)** — `gmail_search` each account since the last entry; surface FAMILY / friends / commitments, not just the (often stale) triage digest the preflight already read.
-3. **Slack (fresh)** — `slack` search/read recent DMs + #daily-updates since the last entry.
-4. **Health** (only if `body_health: on`) — latest `🏠 Home/Health Pattern Report *.md` + yesterday's `## Body track`; or run `regenerate-health-pattern-report.py` if the phone synced.
+**Pull each source below whose toggle is on in `journal-config.md` (read it first: 0-pre), for the whole window since the last entry — make EVERY one that is on:**
 
+1. **Calendar** (only if `calendar: on`) — `cal_list_events(time_min, time_max)` for the window; fold meetings + attendees into `## Today`.
+2. **Email (fresh, relational)** (only if `email: on`) — `gmail_search` each account since the last entry; surface FAMILY / friends / commitments, not just the (often stale) triage digest<!-- vault-only --> the preflight already read<!-- /vault-only -->.
+3. **Slack (fresh)** (only if `slack: on`) — `slack` search/read recent DMs + #daily-updates since the last entry.
+4. **Health** (only if `body_health: on`) — latest `🏠 Home/Health Pattern Report *.md` + yesterday's `## Body track`, or what the member's health tools give<!-- vault-only -->; or run `regenerate-health-pattern-report.py` if the phone synced<!-- /vault-only -->.
+
+<!-- vault-only -->
 Read the ⭐ FAMILY / PARTNER threads BEFORE the work chatter — that is the part most worth journaling (2026-07-07: the model buried the user's sister flying in under dev messages).
 
 **Be the executive assistant, not a transcriber.** The preflight prints a `★ PROBE` list — threads with relational or emotional weight the user may NOT bring up on their own. During the interview (Step 2), actively draw those out: *"You haven't mentioned [X] — tell me about that,"* *"What happened with [Y]?"* You have all their context across every account; use it to ask the question they didn't know they needed. The preflight also drops dev/CI/ticket noise from the close-cascade seeds (kept: `[emotional]` + brainstorm/belief/writing) — the user does not want engineering chatter in their journal. Compressed threads keep only family/partner + heavy-emotion in full; the rest are one-liners with the raw on disk — drill into a specific raw thread file ONLY if the interview goes deep on it (lazy depth = token-cheap).
 
 Do NOT ask the opener until the preflight ran AND every MCP pull it listed is done. A contextless journal — no calendar, no messages, no activity — is the exact failure this kills (2026-07-07 incident: the model skipped Step 0 and the user had to ask "why didn't you pull everything?"). If a fetcher isn't installed on this vault, the preflight says so and you proceed honestly with what it got — but you STILL run it. At save time the entry frontmatter MUST carry a `context_sources:` block naming every source folded in; `warn-journal-saved-without-context.py` fires if a journal is written for a day whose preflight marker is missing.
+<!-- /vault-only -->
+
+Do NOT ask the opener until every pull above that is on is done.
 
 **0-pre. Read the journal config (mandatory).** Look for `⚙️ Meta/journal-config.md` (or `Meta/journal-config.md` if the vault doesn't use emoji-prefixed Meta). Parse the `data_sources:` frontmatter block, and read `filename_format:` (`descriptive` | `date` | `date-title`; default `descriptive` when absent or the file doesn't exist yet) — apply it at every save (Steps 1.5 and 7).
 
-If the file does not exist, copy `templates/journal-config.md` from this skill's repo into the vault and ask the user once:
+If the file does not exist, create it.<!-- vault-only --> In a vault install, copy `templates/journal-config.md` from this skill's repo into the vault; otherwise:<!-- /vault-only --> Write a `journal-config.md` whose `data_sources:` block turns every cross-platform pull (calendar, iMessage, WhatsApp, email, Slack, body health) `off` (keys: `calendar`, `imessage_24h`, `whatsapp_24h`, `self_chat_voice_notes`, `email`, `slack`, `body_health`), plus `rescuetime`, `session_captures` and `todays_activity` `off`, with `filename_format: descriptive`. Then ask the user once:
 
-> "I created `journal-config.md`. Cross-platform pulls (iMessage, WhatsApp, Calendar) are off by default for privacy. Want to turn any on for richer context? You can change later by editing that file."
+> "I created `journal-config.md`. Cross-platform pulls (iMessage, WhatsApp, Calendar, email, Slack, body health) are off by default for privacy. Want to turn any on for richer context? You can change later by editing that file."
 
 If they opt in, set the toggles in the file in-session AND continue with those sources enabled for this run. If they pass, proceed with safe defaults. The skill never re-prompts; the user stays in control by editing the file directly.
 
-**0a to 0g, per-source pulls (read `{SKILL_DIR}/references/step-0-data-sources.md` now, before acting on Step 0).** It holds the exact pull for each source: 0a RescueTime, 0b Session Captures, 0c today's activity (these three on by default), 0d-PRIMARY self-chat voice notes, 0d WhatsApp + iMessage since the last entry, 0f calendar (cross-platform sources, opt-in per vault, off unless the toggle is on), and 0g body coaching (auto-on when health data exists, silently skipped otherwise). Do not skip a source whose toggle is on. Bindings that live there and still apply: if the WhatsApp bridge is unlinked, tell the user to re-link instead of presenting stale data as current; quote load-bearing threads verbatim; 0g opens the interview with ONE body coaching prompt, and during Steps 1-3, if the user mentions fatigue, sleep, cycle, HRV, somatic symptoms or labs, pull ONE health panelist from the 0g table (their voice, then return).
+**0a to 0g, per-source pulls (read `{SKILL_DIR}/references/step-0-data-sources.md` now, before acting on Step 0).** It holds the exact pull for each source: 0a RescueTime, 0b Session Captures, 0c today's activity (these three on by default in a vault install's config), 0d-PRIMARY self-chat voice notes, 0d WhatsApp + iMessage since the last entry, 0f calendar (cross-platform sources, opt-in per vault, off unless the toggle is on), and 0g body coaching (only if `body_health: on` and health data exists, silently skipped otherwise). Do not skip a source whose toggle is on. Bindings that live there and still apply: if the WhatsApp bridge is unlinked, tell the user to re-link instead of presenting stale data as current; quote load-bearing threads verbatim; 0g opens the interview with ONE body coaching prompt, and during Steps 1-3, if the user mentions fatigue, sleep, cycle, HRV, somatic symptoms or labs, pull ONE health panelist from the 0g table (their voice, then return).
 
-**Seeds.** Before the check-in question, show the user the verbatim quotes from Session Captures (their own words from the day, grouped by session) and ask which they want to talk about. After the entry is saved, delete the used seeds from the staging file, keeping its frontmatter, headers, format comments, unused seeds, and the `## Ideas & Strategy Captures` section intact (exact wording in the reference).
+**Seeds** (only if `session_captures: on`). Before the check-in question, show the user the verbatim quotes from Session Captures (their own words from the day, grouped by session) and ask which they want to talk about. After the entry is saved, delete the used seeds from the staging file, keeping its frontmatter, headers, format comments, unused seeds, and the `## Ideas & Strategy Captures` section intact (exact wording in the reference).
 
 **Day boundary is 3:45 AM, not midnight.** Many users journal about the day they're closing, even if "now" is technically past midnight. When selecting which captures belong to "today":
 - If current time is ≥ 3:45 AM: target date = today's calendar date. Include captures from 3:45 AM today through now.
@@ -289,7 +297,9 @@ Capture their answer. After saving the journal entry (Step 9), update the weekly
 
 **Every later save is an UPDATE to this file**, not a new write. On each update, regenerate the verbatim appendix to include all messages to date and keep the body, floor, and frontmatter current. (If Step 0.0 found an existing entry for today, the very first save this session is already an update to that file — resume and capture-first are the same write path.)
 
+<!-- vault-only -->
 **First-ever entry → fire telemetry now.** If this is the user's first journal save in this vault, run the snippet in `{SKILL_DIR}/references/first-journal-telemetry.md` at this capture (it is sentinel-idempotent — safe to run here). A capture-and-bail still counts as the funnel's first-journal event; don't wait for the end of the flow that may never come.
+<!-- /vault-only -->
 
 ### Step 1.5b: First-take panel (mandatory, same reply as the capture)
 
@@ -375,7 +385,7 @@ After the emotional check-in, run through these accountability items. Be direct 
 - If reasonable: Note it positively.
 
 **Scrolling/Focus check (RescueTime-powered):**
-- If the RescueTime MCP is connected, pull today's data automatically using `mcp__rescuetime__get_daily_summary` and `mcp__rescuetime__get_top_activities`. Present the key numbers:
+- If `rescuetime: on` in the config and the RescueTime MCP is connected, pull today's data automatically using `mcp__rescuetime__get_daily_summary` and `mcp__rescuetime__get_top_activities`. Present the key numbers:
   - Productivity Pulse (0-100)
   - Productive hours vs. Distracting hours
   - Top 3 apps by time
@@ -391,12 +401,12 @@ After the emotional check-in, run through these accountability items. Be direct 
 - Track in the entry line alongside gym/sleep.
 
 **Deep Work blocks (INFER FROM RESCUETIME — do NOT ask):**
-- If RescueTime MCP is connected, derive block count from `very_productive_hours` in the daily summary. Heuristic: `blocks = round(very_productive_hours / 1.5)`, capped at `total_hours / 1.5`. A day with 8.4 productive hours and 0 distracting reads as ~5 blocks of sustained focus.
+- If `rescuetime: on` in the config and the RescueTime MCP is connected, derive block count from `very_productive_hours` in the daily summary. Heuristic: `blocks = round(very_productive_hours / 1.5)`, capped at `total_hours / 1.5`. A day with 8.4 productive hours and 0 distracting reads as ~5 blocks of sustained focus.
 - Log into the entry as "X blocks (estimated from RT — Yh productive, Zh distracting, sustained focus)". Cite the data source so the user knows it's inferred, not asked.
 - If 2+ blocks inferred: "That's [X] blocks per RescueTime. The chain continues." Mark today in the Deep Work Chain file (check CLAUDE.md for the path, e.g. `Home/Deep Work Chain.md`).
 - If 1: "One block per RescueTime. Better than zero. Anything you wanted to push deeper on?"
 - If 0: "RescueTime shows no sustained focus stretches. Meeting-heavy day, or scattered?"
-- ONLY fall back to the manual question if RescueTime MCP is disconnected.
+- ONLY fall back to the manual question if `rescuetime` is off or the RescueTime MCP is disconnected.
 - After saving the journal entry, auto-update the Deep Work Chain file by checking the appropriate boxes for today and updating the streak counter and week total.
 - General principle: any accountability metric with a data source should be inferred, not asked.
 
@@ -643,7 +653,7 @@ One door only. Write it to frontmatter as `door:` (action + when). Tomorrow's se
 
 **File location:** Journal files go in the **monthly subfolder**, not the root. Pattern: `[VAULT_PATH]/Journals/[Month YYYY]/filename.md` (e.g. `Journals/April 2026/filename.md`). Check your vault's journal folder structure and match it.
 
-**`__SKIP` lines never land.** Before writing, strip every line whose first token is `__SKIP` — that is something the user said to you but does not want recorded. Then emit one line per dropped item so the drop is never silent: `Dropped __SKIP line 2 (token preview: <first 6 words>)`. Do not paraphrase the dropped content back into the entry, and do not copy it anywhere else. A PreToolUse hook (`block-skip-prefix-in-vault-write.py`) blocks the write if a `__SKIP` line survives, so this is enforced, not advisory. Full rule: `templates/rules/skip-prefix-convention.md`.
+**`__SKIP` lines never land.** Before writing, strip every line whose first token is `__SKIP` — that is something the user said to you but does not want recorded. Then emit one line per dropped item so the drop is never silent: `Dropped __SKIP line 2 (token preview: <first 6 words>)`. Do not paraphrase the dropped content back into the entry, and do not copy it anywhere else.<!-- vault-only --> A PreToolUse hook (`block-skip-prefix-in-vault-write.py`) blocks the write if a `__SKIP` line survives, so this is enforced, not advisory. Full rule: `templates/rules/skip-prefix-convention.md`.<!-- /vault-only -->
 
 **Always use Bash (`cat`) to read and write journal files — do NOT use the Read tool.** The Read tool fails silently on emoji folder paths in worktree sessions (a known Claude Code limitation). Use:
 - Write: `cat > "/full/path/file.md" << 'EOF' ... EOF`
@@ -666,7 +676,7 @@ floor: Primary              # single floor name — where the entry LANDED (this
 floor_level: Low | Middle | High
 # floor_arc: [FloorA, FloorB, Primary]   # OPTIONAL — ordered path through the day, last element = floor. Add ONLY when the day moved; omit on a still day.
 entry_status: captured | enriched   # captured = saved at first touch (Step 1.5); enriched = the interview continued past capture
-context_sources: [messages, rescuetime, session_captures, todays_activity, calendar, body_health]   # REQUIRED — every Step-0 source actually folded into this entry (drop any that were off/unavailable, but name what you pulled). Absent => warn-journal-saved-without-context.py fires.
+context_sources: [messages, rescuetime, session_captures, todays_activity, calendar, body_health]   # REQUIRED — every Step-0 source actually folded into this entry (drop any that were off/unavailable, but name what you pulled).<!-- vault-only --> Absent => warn-journal-saved-without-context.py fires.<!-- /vault-only -->
 people: ["[[Full Name]]", "[[Other Name]]"]   # people who showed up today. EVERY wikilink MUST be inside double quotes.
 # ^ YAML HARD RULE: `people: [[A]], [[B]]` is INVALID YAML — the parser reads `[[A]]`
 #   as a nested flow sequence and dies on the comma. A file whose frontmatter fails to
@@ -810,6 +820,7 @@ If no clear action items came up, skip silently — don't force it.
 
 ### Step 9: After saving
 
+<!-- vault-only -->
 **FIRST, before you tell them anything: rebuild the journal index.**
 
 The entry you just saved does not exist for `/weekly`, `/monthly` or `/sunday-review` until this
@@ -835,6 +846,7 @@ wrong.
 > **seven weeks without generating a single weekly or monthly report** — silently, because the index
 > was never "old", just incomplete. The index is derived from the journals, so it has to be refreshed
 > when one is *written*, not when someone remembers to check.
+<!-- /vault-only -->
 
 
 Tell them the file name and floor. If relevant, connect it to a pattern from their data:
@@ -861,9 +873,11 @@ Log only this session's panel, one log entry per session: Step 1.5b appends the 
 
 This is automatic — never ask the user to approve the log append. If there's no dissent or omission from the entry (every panel requires a dissent; a one-line declined or crisis block has nothing to log), skip the log append silently.
 
+<!-- vault-only -->
 ### Step 9.5: Fire first-journal-saved telemetry (one-time, fail-open)
 
 After the entry first persists (the capture-first save in Step 1.5, or here if the session reaches the end first), check whether this is the user's FIRST journal save in this vault. If it is, run the one-time, sentinel-guarded snippet in `{SKILL_DIR}/references/first-journal-telemetry.md`. Subsequent saves do not re-fire. Hard rules that stay binding: it sends nothing unless the local install-token marker holds a real 32-char hex token (a `declined` or `recorded` marker, or no file, means skip the call entirely); failures are silent and never block journaling; never ask the user for an email here, journaling is not a capture surface.
+<!-- /vault-only -->
 
 ## Notes
 

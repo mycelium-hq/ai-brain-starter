@@ -1,6 +1,6 @@
 # Daily journal: Step 0 data sources (details)
 
-Read this when SKILL.md Step 0 sends you here: after the preflight, for each per-source pull (0a through 0g), the opt-in rationale, and the seeds display.
+Read this when SKILL.md Step 0 sends you here<!-- vault-only -->: after the preflight<!-- /vault-only -->, for each per-source pull (0a through 0g), the opt-in rationale, and the seeds display.
 
 **0a. RescueTime** (gated on `data_sources.rescuetime: on`). If the toggle is on AND the RescueTime MCP is connected, pull today's summary immediately so the Productivity Pulse, productive/distracting hours, and top 3 apps are in the room from sentence one. Otherwise skip silently.
 
@@ -24,19 +24,20 @@ Synthesize these into ONE dense paragraph that lands at the top of the saved ent
 
 If the self-chat has no voice notes since the last entry, say so plainly and run the normal opener. Never skip this pull silently: with the toggle on, a `/journal` that didn't check the self-chat is broken.
 
-**0d. WhatsApp + iMessage since your last journal (gated on `data_sources.whatsapp_24h` / `imessage_24h`).** Prefer an MCP-INDEPENDENT on-demand reader over the live MCPs — a per-session stdio MCP for every channel adds memory pressure, and the journal should still get message context when those MCPs are not loaded. If a reader script exists in the vault (e.g. `Meta/scripts/journal-messages-fetch.py`), run it for the WHOLE gap since the last entry, not just 24h:
+**0d. WhatsApp + iMessage since your last journal (gated on `data_sources.whatsapp_24h` / `imessage_24h`).** <!-- vault-only -->Prefer an MCP-INDEPENDENT on-demand reader over the live MCPs — a per-session stdio MCP for every channel adds memory pressure, and the journal should still get message context when those MCPs are not loaded. If a reader script exists in the vault (e.g. `Meta/scripts/journal-messages-fetch.py`), run it for the WHOLE gap since the last entry, not just 24h:
 
 ```
 python3 "Meta/scripts/journal-messages-fetch.py" --since <last_journal_date> --until <target_date>
 ```
 
 `--since` should default to the most recent journal entry's creationDate (scan the last two monthly folders; `journal-index.json` may be a stale cache) so it spans EVERY un-journaled day. The reader reads the on-disk channel exports (kept fresh by a scheduled export job), prints a per-contact, per-day digest grouped by channel, applies `whatsapp_filters.exclude_chats` / `imessage_filters.exclude_chats`, and ends with an HONEST freshness footer: the newest message actually on disk per channel, plus a warning if the WhatsApp bridge looks unlinked or iMessage looks stale. Read the digest and surface load-bearing threads (family, co-founder, partner, vendor commitments, conflict/repair, emotionally-loaded exchanges) into the interview and the `## Today` section. Quote verbatim what the user already lived through; never paraphrase the painful stuff away. If the footer flags the bridge unlinked, TELL the user to re-link rather than silently presenting stale data as current.
+<!-- /vault-only -->
 
-**Fallback:** if no reader script exists but a WhatsApp/iMessage MCP IS connected this session, use the legacy same-day path (`mcp__whatsapp__list_chats` / `mcp__imessage__list_chats`, `limit: 15`, read load-bearing threads, `[Voice note] <transcript>` inline). The reader is preferred because it is MCP-independent and covers the full gap, not just 24h.
+**Fallback:** if no message-reader script is installed (none is outside a vault install) but a WhatsApp/iMessage MCP IS connected this session, use the legacy same-day path (`mcp__whatsapp__list_chats` / `mcp__imessage__list_chats`, `limit: 15`, read load-bearing threads, `[Voice note] <transcript>` inline).<!-- vault-only --> The reader is preferred because it is MCP-independent and covers the full gap, not just 24h.<!-- /vault-only -->
 
 **0f. Calendar** (gated on `data_sources.calendar: on`). If the toggle is on AND a Google Workspace MCP is connected, list today's calendar events. Apply `calendar_filters.include_calendars` (empty list = all calendars). Note who was met, when, and any block titles that name commitments. Otherwise skip silently.
 
-**0g. Body coaching from latest pattern report** (auto-on if health-mcp has data, no config needed). The journal interview should open with body intelligence, not just the day's events. Two-part fetch:
+**0g. Body coaching from latest pattern report** (gated on `data_sources.body_health: on`, and only when health-mcp has data). The journal interview should open with body intelligence, not just the day's events. Two-part fetch:
 
 1. **Yesterday's body track.** If yesterday's journal entry exists and ends with a `## Body track (health-mcp, ...)` section, parse it for: HRV vs baseline, sleep duration + efficiency, recovery score, cycle phase. Also note yesterday's Floor.
 2. **Latest Health Pattern Report.** Find the most recent `🏠 Home/Health Pattern Report YYYY-MM-DD.md` (or `Home/Health Pattern Report ...` for non-emoji vaults). Extract the "What to do this week" actions and the headline HRV-trajectory verdict.
@@ -71,10 +72,10 @@ This makes the journal open WITH the body, the longitudinal pattern, and the com
 
 Skip 0g silently if health-mcp has no data or no Health Pattern Report exists yet. Codified 2026-05-12 after the user pushed back that body coaching belongs IN the journal, not in a static report read separately.
 
-**Why some sources are opt-in:** iMessage, WhatsApp, and Calendar see private conversations and meetings. The user should consent explicitly per vault, not by default. The other three (RescueTime, Session Captures, Today's activity) read your own data and are on by default. Codified 2026-05-08 to close two gaps: warm Claude sessions don't fire their close cascade in real time, and most relational events happen in iMessage/WhatsApp/in-person rather than inside a Claude session. The journal must see the whole day, but the user opts in per vault to the cross-platform pulls.
+**Why some sources are opt-in:** iMessage, WhatsApp, and Calendar see private conversations and meetings. The user should consent explicitly per vault, not by default. The other three (RescueTime, Session Captures, Today's activity) read your own data and are on by default in a vault install's config. Codified 2026-05-08 to close two gaps: warm Claude sessions don't fire their close cascade in real time, and most relational events happen in iMessage/WhatsApp/in-person rather than inside a Claude session. The journal must see the whole day, but the user opts in per vault to the cross-platform pulls.
 
 
-**Show them the seeds at the very top of the conversation** before asking the check-in question:
+**Only if `session_captures: on`: show them the seeds at the very top of the conversation** before asking the check-in question:
 
 > "Before we start — here's what you said today across your sessions. I don't want you to forget any of it:
 > [bullet list of verbatim quotes, grouped by session context, in their original words]
@@ -82,4 +83,4 @@ Skip 0g silently if health-mcp has no data or no Health Pattern Report exists ye
 
 This surfaces themes they might not otherwise bring up and gives them a chance to add context or react. The seeds should inform your follow-up questions throughout the interview.
 
-**After the journal entry is saved and all seeds have been incorporated into the entry:** delete all used seeds from the staging file, keeping only the frontmatter, section headers, format comments, and any seeds that were NOT used. Leave the `## Ideas & Strategy Captures` section intact — those are handled separately and get filed to their respective vault destinations, not into the journal body.
+**After the journal entry is saved and all seeds have been incorporated into the entry (only if `session_captures: on`):** delete all used seeds from the staging file, keeping only the frontmatter, section headers, format comments, and any seeds that were NOT used. Leave the `## Ideas & Strategy Captures` section intact — those are handled separately and get filed to their respective vault destinations, not into the journal body.

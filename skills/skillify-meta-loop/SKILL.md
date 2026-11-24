@@ -22,9 +22,9 @@ If the trigger is a one-off accident with no pattern signal, skip skillify. The 
 
 ### 1. Scaffold
 Pick the skill's home:
-- Private skills repo → `~/dev/<your>-skills/<name>/`
+- Private skills repo → `<your-skills-repo>/<name>/`
 - Public substrate → `<repo>/skills/<name>/` (if generic + no personal data)
-- Team repo → `~/dev/<team>-skills/<name>/`
+- Team repo → `<team-skills-repo>/<name>/`
 
 `mkdir <path> && touch <path>/SKILL.md`. Don't symlink yet.
 
@@ -47,7 +47,7 @@ Pick ONE: top-level SKILL.md (auto-loads metadata); plugin marketplace registrat
 Every behavior-changing skill ships a check that proves it works. Forms: pytest in `tests/` if Python; a "good vs bad" example pair; a scheduled verification script (cron/launchd) if the skill prevents drift. If documentation-only, skip.
 
 ### 8. Audit for personal-data leakage (if public)
-For skills landing in any public repo: run a personal-data scrub — word-boundary regex on real names, company names, private paths. Example patterns: `\bYourName\b`, `\bYourCompany\b`, `/Users/youruser/`. Any match → scrub or move to private repo.
+For skills landing in any public repo: run a personal-data scrub — word-boundary regex on real names, company names, private paths. Example patterns: `\bYourName\b`, `\bYourCompany\b`, `/Users/<you>/`. Any match → scrub or move to private repo.
 
 ### 9. Commit + push
 Commit with explicit paths. Public: scrub → commit → push → auto-merge own PR when CI green. Private: commit + push.

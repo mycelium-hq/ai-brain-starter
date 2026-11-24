@@ -26,7 +26,7 @@ Look for `Meta/rise-config.md` (or `⚙️ Meta/rise-config.md` for emoji-prefix
 - `save_path: "Journals"` — where to save morning entries
 - `carry_forward: { sessions, monitor, decisions, calendar_lookback }` — sources swept at Step 4.7 so work done since the last Rise arrives on its own. Omitted keys default to on.
 
-**If the file doesn't exist:** copy `templates/rise-config.md` into the vault, then ask the user once:
+**If the file doesn't exist:** create it.<!-- vault-only --> In a vault install, copy `templates/rise-config.md` into the vault; otherwise:<!-- /vault-only --> Write a `rise-config.md` with a `settings:` block holding every key above at its safest value (`cycle_phase_aware: off`, `morning_anchors: []`, no to-do paths, every other on/off key `off`, `carry_forward` left out so it defaults on), then fill it from the answers below. Then ask the user once:
 
 > "I created `rise-config.md`. Quick setup:
 > 1. Do you have a menstrual cycle you'd like the body movement to scale to? (yes/no)
@@ -95,7 +95,7 @@ Wait for their answer. They'll respond in plain language — feelings, energy, w
 
 If signals are ambiguous, default to Willingness (22) and note `floor_confidence: low` in frontmatter.
 
-**Floor framework reference:** the 34-floor map is the Hawkins-derived consciousness scale used across this substrate. See `skills/daily-journal/SKILL.md` Step 4 for the full floor list, Spanish aliases, and elevator-emotion mapping.
+**Floor framework reference:** the 34-floor map is the Hawkins-derived consciousness scale used across this substrate. See the daily-journal skill's Step 4 for the full floor list, Spanish aliases, and elevator-emotion mapping.
 
 **Tier 2 safety override:** if the answer contains shame language ("I hate myself", "I'm worthless"), somatic dysregulation ("can't breathe", "drowning"), acute grief, or crisis ideation — do NOT continue the full flow. Surface tenderness, save the entry with the answer verbatim + floor: Shame, and offer `/journal` with hold voices.
 
@@ -449,7 +449,7 @@ If no morning `/rise` entry exists for today: `/journal` runs its normal flow wi
 | Morning anchors skipped 5+ days in a row | Surface: "You've skipped [anchor] 6 days running. Want to talk about it in tonight's /journal?" — note the streak, don't lecture |
 | Body movement HRV critically low (>30% below baseline) | Scale to mobility-only regardless of cycle phase. Note in frontmatter |
 | Priority recommendation returns no high-scoring tasks (all <2.0) | Surface: "Your queue is light today. Top 3 by recency:" — fall through to date-sorted recommendation |
-| Config file missing | Copy template, ask 3 setup questions, write answers into the file, continue |
+| Config file missing | Create it (Step 0), ask 3 setup questions, write answers into the file, continue |
 | Sessions folder missing, or no session since the last Rise | Step 4.7 says "Nothing new since the last Rise" in one line and continues. Never invent carry-forward items |
 | A session note says a to-do was filed but the to-do file has no trace of it | The close failed. Append it at Step 4.7 and tell the user in one line that the close missed it, so the gap is visible instead of silent |
 
