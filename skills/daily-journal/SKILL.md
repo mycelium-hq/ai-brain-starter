@@ -61,7 +61,7 @@ Why: most people open `/journal`, type what happened, and leave. If the entry on
 
 2. **Enrich (opt-in, in place).** If the user keeps going, run Steps 2–9 at the natural pauses of the conversation (see "Conversation, not checklist") — follow-ups, gratitude, accountability, finalize the floor, run the full panel (it replaces the first take) — and **update the same file** (Step 7 is now an in-place update, not a fresh create). Never create a second file.
 
-**Graceful exit — applies at every step after the first save.** If the user signals done ("that's it," "save it," "I'm good"), goes quiet, or declines to continue at any point: **finalize the existing file in place and stop.** Flush any messages they typed since the last save into the verbatim appendix, do a quick floor re-check on the fuller picture, run the light idea/to-do scans (Steps 8/8.5) and Step 9 (index rebuild, panel dissent log) on whatever exists, and confirm what you saved. Never hold the entry hostage to any later step. This session's first take is already in the file; if it somehow is not, write it into the file and put its full text in your final message (Step 6), unless the user declined the panel this session or the crisis protocol is active. Re-prompt at most once. The entry already exists — your job from here is only to keep it current and let them go.
+**Graceful exit — applies at every step after the first save.** If the user signals done ("that's it," "save it," "I'm good"), goes quiet, or declines to continue at any point: **finalize the existing file in place and stop.** Flush any messages they typed since the last save into the verbatim appendix, do a quick floor re-check on the fuller picture, run the light idea/to-do scans (Steps 8/8.5) and Step 9 (<!-- vault-only -->index rebuild, <!-- /vault-only -->panel dissent log) on whatever exists, and confirm what you saved. Never hold the entry hostage to any later step. This session's first take is already in the file; if it somehow is not, write it into the file and put its full text in your final message (Step 6), unless the user declined the panel this session or the crisis protocol is active. Re-prompt at most once. The entry already exists — your job from here is only to keep it current and let them go.
 
 **Panel-Always Rule.** Every entry carries a `## Panel dialogue` section, and every session that saves to the entry adds its own block there.
 - **Blocks are append-only.** A session writes and edits only its own block, never an earlier session's. On a resumed day each new block opens with an italic session label in the entry's language (`*Later session, HH:MM:*`), and the label stays when the full panel replaces the first take.
@@ -218,8 +218,6 @@ python3 "⚙️ Meta/scripts/journal-preflight.py"
 3. **Slack (fresh)** (only if `slack: on`) — `slack` search/read recent DMs + #daily-updates since the last entry.
 4. **Health** (only if `body_health: on`) — latest `🏠 Home/Health Pattern Report *.md` + yesterday's `## Body track`, or what the member's health tools give<!-- vault-only -->; or run `regenerate-health-pattern-report.py` if the phone synced<!-- /vault-only -->.
 
-Do NOT ask the opener until every pull above that is on is done.
-
 <!-- vault-only -->
 Read the ⭐ FAMILY / PARTNER threads BEFORE the work chatter — that is the part most worth journaling (2026-07-07: the model buried the user's sister flying in under dev messages).
 
@@ -228,15 +226,17 @@ Read the ⭐ FAMILY / PARTNER threads BEFORE the work chatter — that is the pa
 Do NOT ask the opener until the preflight ran AND every MCP pull it listed is done. A contextless journal — no calendar, no messages, no activity — is the exact failure this kills (2026-07-07 incident: the model skipped Step 0 and the user had to ask "why didn't you pull everything?"). If a fetcher isn't installed on this vault, the preflight says so and you proceed honestly with what it got — but you STILL run it. At save time the entry frontmatter MUST carry a `context_sources:` block naming every source folded in; `warn-journal-saved-without-context.py` fires if a journal is written for a day whose preflight marker is missing.
 <!-- /vault-only -->
 
+Do NOT ask the opener until every pull above that is on is done.
+
 **0-pre. Read the journal config (mandatory).** Look for `⚙️ Meta/journal-config.md` (or `Meta/journal-config.md` if the vault doesn't use emoji-prefixed Meta). Parse the `data_sources:` frontmatter block, and read `filename_format:` (`descriptive` | `date` | `date-title`; default `descriptive` when absent or the file doesn't exist yet) — apply it at every save (Steps 1.5 and 7).
 
-If the file does not exist, create it.<!-- vault-only --> In a vault install, copy `templates/journal-config.md` from this skill's repo into the vault; otherwise:<!-- /vault-only --> Write a `journal-config.md` whose `data_sources:` block turns every cross-platform pull (calendar, iMessage, WhatsApp, email, Slack, body health) `off`, with `filename_format: descriptive`. Then ask the user once:
+If the file does not exist, create it.<!-- vault-only --> In a vault install, copy `templates/journal-config.md` from this skill's repo into the vault; otherwise:<!-- /vault-only --> Write a `journal-config.md` whose `data_sources:` block turns every cross-platform pull (calendar, iMessage, WhatsApp, email, Slack, body health) `off` and every vault-only source (rescuetime, session_captures, todays_activity) `off`, with `filename_format: descriptive`. Then ask the user once:
 
-> "I created `journal-config.md`. Cross-platform pulls (iMessage, WhatsApp, Calendar) are off by default for privacy. Want to turn any on for richer context? You can change later by editing that file."
+> "I created `journal-config.md`. Cross-platform pulls (iMessage, WhatsApp, Calendar, email, Slack, body health) are off by default for privacy. Want to turn any on for richer context? You can change later by editing that file."
 
 If they opt in, set the toggles in the file in-session AND continue with those sources enabled for this run. If they pass, proceed with safe defaults. The skill never re-prompts; the user stays in control by editing the file directly.
 
-**0a to 0g, per-source pulls (read `{SKILL_DIR}/references/step-0-data-sources.md` now, before acting on Step 0).** It holds the exact pull for each source: 0a RescueTime, 0b Session Captures, 0c today's activity (these three on by default), 0d-PRIMARY self-chat voice notes, 0d WhatsApp + iMessage since the last entry, 0f calendar (cross-platform sources, opt-in per vault, off unless the toggle is on), and 0g body coaching (auto-on when health data exists, silently skipped otherwise). Do not skip a source whose toggle is on. Bindings that live there and still apply: if the WhatsApp bridge is unlinked, tell the user to re-link instead of presenting stale data as current; quote load-bearing threads verbatim; 0g opens the interview with ONE body coaching prompt, and during Steps 1-3, if the user mentions fatigue, sleep, cycle, HRV, somatic symptoms or labs, pull ONE health panelist from the 0g table (their voice, then return).
+**0a to 0g, per-source pulls (read `{SKILL_DIR}/references/step-0-data-sources.md` now, before acting on Step 0).** It holds the exact pull for each source: 0a RescueTime, 0b Session Captures, 0c today's activity (these three on by default), 0d-PRIMARY self-chat voice notes, 0d WhatsApp + iMessage since the last entry, 0f calendar (cross-platform sources, opt-in per vault, off unless the toggle is on), and 0g body coaching (only if `body_health: on` and health data exists, silently skipped otherwise). Do not skip a source whose toggle is on. Bindings that live there and still apply: if the WhatsApp bridge is unlinked, tell the user to re-link instead of presenting stale data as current; quote load-bearing threads verbatim; 0g opens the interview with ONE body coaching prompt, and during Steps 1-3, if the user mentions fatigue, sleep, cycle, HRV, somatic symptoms or labs, pull ONE health panelist from the 0g table (their voice, then return).
 
 **Seeds.** Before the check-in question, show the user the verbatim quotes from Session Captures (their own words from the day, grouped by session) and ask which they want to talk about. After the entry is saved, delete the used seeds from the staging file, keeping its frontmatter, headers, format comments, unused seeds, and the `## Ideas & Strategy Captures` section intact (exact wording in the reference).
 
@@ -385,7 +385,7 @@ After the emotional check-in, run through these accountability items. Be direct 
 - If reasonable: Note it positively.
 
 **Scrolling/Focus check (RescueTime-powered):**
-- If the RescueTime MCP is connected, pull today's data automatically using `mcp__rescuetime__get_daily_summary` and `mcp__rescuetime__get_top_activities`. Present the key numbers:
+- If `rescuetime: on` in the config and the RescueTime MCP is connected, pull today's data automatically using `mcp__rescuetime__get_daily_summary` and `mcp__rescuetime__get_top_activities`. Present the key numbers:
   - Productivity Pulse (0-100)
   - Productive hours vs. Distracting hours
   - Top 3 apps by time
@@ -676,7 +676,7 @@ floor: Primary              # single floor name — where the entry LANDED (this
 floor_level: Low | Middle | High
 # floor_arc: [FloorA, FloorB, Primary]   # OPTIONAL — ordered path through the day, last element = floor. Add ONLY when the day moved; omit on a still day.
 entry_status: captured | enriched   # captured = saved at first touch (Step 1.5); enriched = the interview continued past capture
-context_sources: [messages, rescuetime, session_captures, todays_activity, calendar, body_health]   # REQUIRED — every Step-0 source actually folded into this entry (drop any that were off/unavailable, but name what you pulled). Absent => warn-journal-saved-without-context.py fires.
+context_sources: [messages, rescuetime, session_captures, todays_activity, calendar, body_health]   # REQUIRED — every Step-0 source actually folded into this entry (drop any that were off/unavailable, but name what you pulled).<!-- vault-only --> Absent => warn-journal-saved-without-context.py fires.<!-- /vault-only -->
 people: ["[[Full Name]]", "[[Other Name]]"]   # people who showed up today. EVERY wikilink MUST be inside double quotes.
 # ^ YAML HARD RULE: `people: [[A]], [[B]]` is INVALID YAML — the parser reads `[[A]]`
 #   as a nested flow sequence and dies on the comma. A file whose frontmatter fails to

@@ -36,16 +36,18 @@ Pulled from the `imports` table via `health_status()`.
 
 Yellow if completion rate < 60%. Red if completion rate < 40% or no prescriptions in 7 days.
 
+<!-- vault-only -->
 ### 3. Auto-trigger hooks installed
 
-The default wired set is what is registered in `~/.claude/settings.json` — read it rather than assuming a fixed list, so this check can't drift from what installs.<!-- vault-only --> In a starter install it comes from `hooks.json` at the repo root (tested by `services/health-mcp/tests/test_v05_hooks.py`); see `docs/AUTOMATION.md` for the full chain.<!-- /vault-only -->
+The default wired set is defined by `hooks.json` at the repo root (the file the installer actually writes into `~/.claude/settings.json`, tested by `services/health-mcp/tests/test_v05_hooks.py`) — read it rather than assuming a fixed list, so this check can't drift from what installs. See `docs/AUTOMATION.md` for the full chain.
 
 By default that's one hook:
 - `coach-auto-prescribe-on-journal.py` on Stop (prescribes + backfills after /journal)
 
 `health-auto-sync.py` (SessionStart wearable refresh) is opt-in, power-user only, and deliberately NOT wired by default — firing it on every SessionStart is wasteful for users with many sessions/day. Its absence from settings.json is expected, not a fault.
 
-Red if the Stop hook (`coach-auto-prescribe-on-journal.py`) is not in settings.json. Yellow if the hook script file exists but isn't registered. Green if registered<!-- vault-only --> AND firing recently (check `~/.claude/hookify-blocks.log` for the hook name in the last 48h)<!-- /vault-only -->. If `health-auto-sync.py` IS registered (the user opted in), report its freshness the same way, but never red for its absence.
+Red if the Stop hook (`coach-auto-prescribe-on-journal.py`) is not in settings.json. Yellow if the hook script file exists but isn't registered. Green if registered AND firing recently (check `~/.claude/hookify-blocks.log` for the hook name in the last 48h). If `health-auto-sync.py` IS registered (the user opted in), report its freshness the same way, but never red for its absence.
+<!-- /vault-only -->
 
 ### 4. Coach profile status
 
@@ -101,9 +103,11 @@ Example:
 - 7-day streak: 0 (missed yesterday's log)
 - Action: /coach log yesterday's session to keep the progression chain accurate
 
+<!-- vault-only -->
 ## 🟢 Auto-trigger hooks
 - SessionStart: health-auto-sync.py ✓ registered, last fired 4h ago
 - Stop: coach-auto-prescribe-on-journal.py ✓ registered, last fired 14h ago
+<!-- /vault-only -->
 
 ## 🟢 Coach profile
 - /vault/Meta/coach-profile.yaml updated 2026-05-09

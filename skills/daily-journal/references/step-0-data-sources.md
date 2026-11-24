@@ -24,7 +24,7 @@ Synthesize these into ONE dense paragraph that lands at the top of the saved ent
 
 If the self-chat has no voice notes since the last entry, say so plainly and run the normal opener. Never skip this pull silently: with the toggle on, a `/journal` that didn't check the self-chat is broken.
 
-**0d. WhatsApp + iMessage since your last journal (gated on `data_sources.whatsapp_24h` / `imessage_24h`).** Prefer an MCP-INDEPENDENT on-demand reader over the live MCPs — a per-session stdio MCP for every channel adds memory pressure, and the journal should still get message context when those MCPs are not loaded. <!-- vault-only -->If a reader script exists in the vault (e.g. `Meta/scripts/journal-messages-fetch.py`), run it for the WHOLE gap since the last entry, not just 24h:
+**0d. WhatsApp + iMessage since your last journal (gated on `data_sources.whatsapp_24h` / `imessage_24h`).** <!-- vault-only -->Prefer an MCP-INDEPENDENT on-demand reader over the live MCPs — a per-session stdio MCP for every channel adds memory pressure, and the journal should still get message context when those MCPs are not loaded. If a reader script exists in the vault (e.g. `Meta/scripts/journal-messages-fetch.py`), run it for the WHOLE gap since the last entry, not just 24h:
 
 ```
 python3 "Meta/scripts/journal-messages-fetch.py" --since <last_journal_date> --until <target_date>
@@ -33,11 +33,11 @@ python3 "Meta/scripts/journal-messages-fetch.py" --since <last_journal_date> --u
 `--since` should default to the most recent journal entry's creationDate (scan the last two monthly folders; `journal-index.json` may be a stale cache) so it spans EVERY un-journaled day. The reader reads the on-disk channel exports (kept fresh by a scheduled export job), prints a per-contact, per-day digest grouped by channel, applies `whatsapp_filters.exclude_chats` / `imessage_filters.exclude_chats`, and ends with an HONEST freshness footer: the newest message actually on disk per channel, plus a warning if the WhatsApp bridge looks unlinked or iMessage looks stale. Read the digest and surface load-bearing threads (family, co-founder, partner, vendor commitments, conflict/repair, emotionally-loaded exchanges) into the interview and the `## Today` section. Quote verbatim what the user already lived through; never paraphrase the painful stuff away. If the footer flags the bridge unlinked, TELL the user to re-link rather than silently presenting stale data as current.
 <!-- /vault-only -->
 
-**Fallback:** if no reader script exists but a WhatsApp/iMessage MCP IS connected this session, use the legacy same-day path (`mcp__whatsapp__list_chats` / `mcp__imessage__list_chats`, `limit: 15`, read load-bearing threads, `[Voice note] <transcript>` inline). The reader is preferred because it is MCP-independent and covers the full gap, not just 24h.
+**Fallback:** if no reader script exists but a WhatsApp/iMessage MCP IS connected this session, use the legacy same-day path (`mcp__whatsapp__list_chats` / `mcp__imessage__list_chats`, `limit: 15`, read load-bearing threads, `[Voice note] <transcript>` inline).<!-- vault-only --> The reader is preferred because it is MCP-independent and covers the full gap, not just 24h.<!-- /vault-only -->
 
 **0f. Calendar** (gated on `data_sources.calendar: on`). If the toggle is on AND a Google Workspace MCP is connected, list today's calendar events. Apply `calendar_filters.include_calendars` (empty list = all calendars). Note who was met, when, and any block titles that name commitments. Otherwise skip silently.
 
-**0g. Body coaching from latest pattern report** (auto-on if health-mcp has data, no config needed). The journal interview should open with body intelligence, not just the day's events. Two-part fetch:
+**0g. Body coaching from latest pattern report** (gated on `data_sources.body_health: on`, and only when health-mcp has data). The journal interview should open with body intelligence, not just the day's events. Two-part fetch:
 
 1. **Yesterday's body track.** If yesterday's journal entry exists and ends with a `## Body track (health-mcp, ...)` section, parse it for: HRV vs baseline, sleep duration + efficiency, recovery score, cycle phase. Also note yesterday's Floor.
 2. **Latest Health Pattern Report.** Find the most recent `🏠 Home/Health Pattern Report YYYY-MM-DD.md` (or `Home/Health Pattern Report ...` for non-emoji vaults). Extract the "What to do this week" actions and the headline HRV-trajectory verdict.
