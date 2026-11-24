@@ -24,13 +24,14 @@ Synthesize these into ONE dense paragraph that lands at the top of the saved ent
 
 If the self-chat has no voice notes since the last entry, say so plainly and run the normal opener. Never skip this pull silently: with the toggle on, a `/journal` that didn't check the self-chat is broken.
 
-**0d. WhatsApp + iMessage since your last journal (gated on `data_sources.whatsapp_24h` / `imessage_24h`).** Prefer an MCP-INDEPENDENT on-demand reader over the live MCPs — a per-session stdio MCP for every channel adds memory pressure, and the journal should still get message context when those MCPs are not loaded. If a reader script exists in the vault (e.g. `Meta/scripts/journal-messages-fetch.py`), run it for the WHOLE gap since the last entry, not just 24h:
+**0d. WhatsApp + iMessage since your last journal (gated on `data_sources.whatsapp_24h` / `imessage_24h`).** Prefer an MCP-INDEPENDENT on-demand reader over the live MCPs — a per-session stdio MCP for every channel adds memory pressure, and the journal should still get message context when those MCPs are not loaded. <!-- vault-only -->If a reader script exists in the vault (e.g. `Meta/scripts/journal-messages-fetch.py`), run it for the WHOLE gap since the last entry, not just 24h:
 
 ```
 python3 "Meta/scripts/journal-messages-fetch.py" --since <last_journal_date> --until <target_date>
 ```
 
 `--since` should default to the most recent journal entry's creationDate (scan the last two monthly folders; `journal-index.json` may be a stale cache) so it spans EVERY un-journaled day. The reader reads the on-disk channel exports (kept fresh by a scheduled export job), prints a per-contact, per-day digest grouped by channel, applies `whatsapp_filters.exclude_chats` / `imessage_filters.exclude_chats`, and ends with an HONEST freshness footer: the newest message actually on disk per channel, plus a warning if the WhatsApp bridge looks unlinked or iMessage looks stale. Read the digest and surface load-bearing threads (family, co-founder, partner, vendor commitments, conflict/repair, emotionally-loaded exchanges) into the interview and the `## Today` section. Quote verbatim what the user already lived through; never paraphrase the painful stuff away. If the footer flags the bridge unlinked, TELL the user to re-link rather than silently presenting stale data as current.
+<!-- /vault-only -->
 
 **Fallback:** if no reader script exists but a WhatsApp/iMessage MCP IS connected this session, use the legacy same-day path (`mcp__whatsapp__list_chats` / `mcp__imessage__list_chats`, `limit: 15`, read load-bearing threads, `[Voice note] <transcript>` inline). The reader is preferred because it is MCP-independent and covers the full gap, not just 24h.
 

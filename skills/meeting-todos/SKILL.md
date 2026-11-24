@@ -49,7 +49,7 @@ Cache the resolved to-do path mentally for Step 5 — don't re-search the filesy
 Check these locations for the most recent (or matching) meeting note:
 - `$AI_BRAIN_MEETING_NOTES_DIR` if it is set — a colon-separated list of folder
   names the user has already told the substrate about. When it is set it is
-  AUTHORITATIVE: `scripts/write-hook.sh` matches on exactly these and ignores the
+  AUTHORITATIVE: the substrate's write hook matches on exactly these and ignores the
   English defaults, so honoring it here keeps the two halves of the cascade
   pointed at the same folder.
 - `[VAULT]/Meeting Notes/` or `[VAULT]/Meeting-Notes/` (the English defaults)

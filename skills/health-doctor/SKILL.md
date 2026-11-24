@@ -38,14 +38,14 @@ Yellow if completion rate < 60%. Red if completion rate < 40% or no prescription
 
 ### 3. Auto-trigger hooks installed
 
-The default wired set is defined by `hooks.json` at the repo root (the file the installer actually writes into `~/.claude/settings.json`, tested by `services/health-mcp/tests/test_v05_hooks.py`) — read it rather than assuming a fixed list, so this check can't drift from what installs. See `docs/AUTOMATION.md` for the full chain.
+The default wired set is what is registered in `~/.claude/settings.json` — read it rather than assuming a fixed list, so this check can't drift from what installs.<!-- vault-only --> In a starter install it comes from `hooks.json` at the repo root (tested by `services/health-mcp/tests/test_v05_hooks.py`); see `docs/AUTOMATION.md` for the full chain.<!-- /vault-only -->
 
 By default that's one hook:
 - `coach-auto-prescribe-on-journal.py` on Stop (prescribes + backfills after /journal)
 
 `health-auto-sync.py` (SessionStart wearable refresh) is opt-in, power-user only, and deliberately NOT wired by default — firing it on every SessionStart is wasteful for users with many sessions/day. Its absence from settings.json is expected, not a fault.
 
-Red if the Stop hook (`coach-auto-prescribe-on-journal.py`) is not in settings.json. Yellow if the hook script file exists but isn't registered. Green if registered AND firing recently (check `~/.claude/hookify-blocks.log` for the hook name in the last 48h). If `health-auto-sync.py` IS registered (the user opted in), report its freshness the same way, but never red for its absence.
+Red if the Stop hook (`coach-auto-prescribe-on-journal.py`) is not in settings.json. Yellow if the hook script file exists but isn't registered. Green if registered AND firing recently<!-- vault-only --> (check `~/.claude/hookify-blocks.log` for the hook name in the last 48h)<!-- /vault-only -->. If `health-auto-sync.py` IS registered (the user opted in), report its freshness the same way, but never red for its absence.
 
 ### 4. Coach profile status
 
@@ -134,7 +134,9 @@ Example:
 
 Plus:
 - Read `~/.claude/settings.json` to verify hooks are registered
+<!-- vault-only -->
 - Read `~/.claude/hookify-blocks.log` to verify hooks have fired recently
+<!-- /vault-only -->
 - Read `<VAULT_ROOT>/Meta/coach-profile.yaml` to verify profile state
 
 ## When to surface unprompted

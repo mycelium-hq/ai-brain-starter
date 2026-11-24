@@ -7,7 +7,7 @@ description: Use when the user says /coach (today, week, month, profile, log), a
 
 Reads everything health-mcp knows (recovery, sleep score, sleep regularity, cycle phase, somatic state, longevity panel, out-of-range labs, Floor from today's journal) and issues a prescription that's specific to THIS person on THIS day. Progressive overload tracked per-lift. Deload every 4th week. Calendar drop optional.
 
-This is the substrate's coach SURFACE. The DATA + DECISION layer lives in `services/health-mcp/coach.py`. The VOICE + WORKOUT TEMPLATES + CALENDAR INTEGRATION live here.
+This is the substrate's coach SURFACE. The DATA + DECISION layer lives in health-mcp's coach tools (the `health_coach_*` calls below). The VOICE + WORKOUT TEMPLATES + CALENDAR INTEGRATION live here.
 
 ## When to use
 

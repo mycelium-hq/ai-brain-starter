@@ -26,7 +26,7 @@ Look for `Meta/rise-config.md` (or `⚙️ Meta/rise-config.md` for emoji-prefix
 - `save_path: "Journals"` — where to save morning entries
 - `carry_forward: { sessions, monitor, decisions, calendar_lookback }` — sources swept at Step 4.7 so work done since the last Rise arrives on its own. Omitted keys default to on.
 
-**If the file doesn't exist:** copy `templates/rise-config.md` into the vault, then ask the user once:
+**If the file doesn't exist:** create it.<!-- vault-only --> In a vault install, copy `templates/rise-config.md` into the vault; otherwise:<!-- /vault-only --> Write a `rise-config.md` with a `settings:` block holding the keys above, `cycle_phase_aware: off` and `morning_anchors: []`. Then ask the user once:
 
 > "I created `rise-config.md`. Quick setup:
 > 1. Do you have a menstrual cycle you'd like the body movement to scale to? (yes/no)

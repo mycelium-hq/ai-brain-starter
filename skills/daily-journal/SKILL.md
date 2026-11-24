@@ -201,28 +201,36 @@ One calendar day = ONE journal entry that grows across sessions (an afternoon ch
 
 ### Step 0: Pull data sources per opt-in config (ALWAYS — config-gated)
 
+<!-- vault-only -->
 **0-RUN. Run the preflight FIRST — this is the literal first tool call of every `/journal`, before the opener. Non-negotiable.**
 
 ```
 python3 "⚙️ Meta/scripts/journal-preflight.py"
 ```
 
-(or `Meta/scripts/journal-preflight.py` if the vault doesn't use emoji-prefixed Meta.) It auto-spans since the last entry, pulls every SCRIPT source into ONE digest — messages (WhatsApp direct + groups + iMessage, whole gap, FAMILY/PARTNER threads surfaced first with ⭐), RescueTime (per day), close-cascade journal seeds (Session Captures), today's activity, the email triage digest, and the on-disk Slack export — and writes a marker at `⚙️ Meta/.journal-context/<date>.json`. It cannot call MCP, so it prints the exact MCP pulls you MUST make yourself right after — make EVERY one it lists:
+(or `Meta/scripts/journal-preflight.py` if the vault doesn't use emoji-prefixed Meta.) It auto-spans since the last entry, pulls every SCRIPT source into ONE digest — messages (WhatsApp direct + groups + iMessage, whole gap, FAMILY/PARTNER threads surfaced first with ⭐), RescueTime (per day), close-cascade journal seeds (Session Captures), today's activity, the email triage digest, and the on-disk Slack export — and writes a marker at `⚙️ Meta/.journal-context/<date>.json`. It cannot call MCP, so it prints the exact MCP pulls you MUST make yourself right after.
+<!-- /vault-only -->
+
+**Pull every source below yourself, for the whole window since the last entry — make EVERY one:**
 
 1. **Calendar** — `cal_list_events(time_min, time_max)` for the window; fold meetings + attendees into `## Today`.
-2. **Email (fresh, relational)** — `gmail_search` each account since the last entry; surface FAMILY / friends / commitments, not just the (often stale) triage digest the preflight already read.
+2. **Email (fresh, relational)** — `gmail_search` each account since the last entry; surface FAMILY / friends / commitments, not just an (often stale) triage digest.
 3. **Slack (fresh)** — `slack` search/read recent DMs + #daily-updates since the last entry.
-4. **Health** (only if `body_health: on`) — latest `🏠 Home/Health Pattern Report *.md` + yesterday's `## Body track`; or run `regenerate-health-pattern-report.py` if the phone synced.
+4. **Health** (only if `body_health: on`) — the health data the member's tools give (latest health pattern report + yesterday's `## Body track` where the vault keeps them).
 
+Do NOT ask the opener until every pull above is done.
+
+<!-- vault-only -->
 Read the ⭐ FAMILY / PARTNER threads BEFORE the work chatter — that is the part most worth journaling (2026-07-07: the model buried the user's sister flying in under dev messages).
 
 **Be the executive assistant, not a transcriber.** The preflight prints a `★ PROBE` list — threads with relational or emotional weight the user may NOT bring up on their own. During the interview (Step 2), actively draw those out: *"You haven't mentioned [X] — tell me about that,"* *"What happened with [Y]?"* You have all their context across every account; use it to ask the question they didn't know they needed. The preflight also drops dev/CI/ticket noise from the close-cascade seeds (kept: `[emotional]` + brainstorm/belief/writing) — the user does not want engineering chatter in their journal. Compressed threads keep only family/partner + heavy-emotion in full; the rest are one-liners with the raw on disk — drill into a specific raw thread file ONLY if the interview goes deep on it (lazy depth = token-cheap).
 
 Do NOT ask the opener until the preflight ran AND every MCP pull it listed is done. A contextless journal — no calendar, no messages, no activity — is the exact failure this kills (2026-07-07 incident: the model skipped Step 0 and the user had to ask "why didn't you pull everything?"). If a fetcher isn't installed on this vault, the preflight says so and you proceed honestly with what it got — but you STILL run it. At save time the entry frontmatter MUST carry a `context_sources:` block naming every source folded in; `warn-journal-saved-without-context.py` fires if a journal is written for a day whose preflight marker is missing.
+<!-- /vault-only -->
 
 **0-pre. Read the journal config (mandatory).** Look for `⚙️ Meta/journal-config.md` (or `Meta/journal-config.md` if the vault doesn't use emoji-prefixed Meta). Parse the `data_sources:` frontmatter block, and read `filename_format:` (`descriptive` | `date` | `date-title`; default `descriptive` when absent or the file doesn't exist yet) — apply it at every save (Steps 1.5 and 7).
 
-If the file does not exist, copy `templates/journal-config.md` from this skill's repo into the vault and ask the user once:
+If the file does not exist, create it.<!-- vault-only --> In a vault install, copy `templates/journal-config.md` from this skill's repo into the vault; otherwise:<!-- /vault-only --> Write a `journal-config.md` whose `data_sources:` block turns every cross-platform pull (calendar, iMessage, WhatsApp, email, Slack, body health) `off`, with `filename_format: descriptive`. Then ask the user once:
 
 > "I created `journal-config.md`. Cross-platform pulls (iMessage, WhatsApp, Calendar) are off by default for privacy. Want to turn any on for richer context? You can change later by editing that file."
 
@@ -643,7 +651,7 @@ One door only. Write it to frontmatter as `door:` (action + when). Tomorrow's se
 
 **File location:** Journal files go in the **monthly subfolder**, not the root. Pattern: `[VAULT_PATH]/Journals/[Month YYYY]/filename.md` (e.g. `Journals/April 2026/filename.md`). Check your vault's journal folder structure and match it.
 
-**`__SKIP` lines never land.** Before writing, strip every line whose first token is `__SKIP` — that is something the user said to you but does not want recorded. Then emit one line per dropped item so the drop is never silent: `Dropped __SKIP line 2 (token preview: <first 6 words>)`. Do not paraphrase the dropped content back into the entry, and do not copy it anywhere else. A PreToolUse hook (`block-skip-prefix-in-vault-write.py`) blocks the write if a `__SKIP` line survives, so this is enforced, not advisory. Full rule: `templates/rules/skip-prefix-convention.md`.
+**`__SKIP` lines never land.** Before writing, strip every line whose first token is `__SKIP` — that is something the user said to you but does not want recorded. Then emit one line per dropped item so the drop is never silent: `Dropped __SKIP line 2 (token preview: <first 6 words>)`. Do not paraphrase the dropped content back into the entry, and do not copy it anywhere else.<!-- vault-only --> A PreToolUse hook (`block-skip-prefix-in-vault-write.py`) blocks the write if a `__SKIP` line survives, so this is enforced, not advisory. Full rule: `templates/rules/skip-prefix-convention.md`.<!-- /vault-only -->
 
 **Always use Bash (`cat`) to read and write journal files — do NOT use the Read tool.** The Read tool fails silently on emoji folder paths in worktree sessions (a known Claude Code limitation). Use:
 - Write: `cat > "/full/path/file.md" << 'EOF' ... EOF`
@@ -810,6 +818,7 @@ If no clear action items came up, skip silently — don't force it.
 
 ### Step 9: After saving
 
+<!-- vault-only -->
 **FIRST, before you tell them anything: rebuild the journal index.**
 
 The entry you just saved does not exist for `/weekly`, `/monthly` or `/sunday-review` until this
@@ -835,6 +844,7 @@ wrong.
 > **seven weeks without generating a single weekly or monthly report** — silently, because the index
 > was never "old", just incomplete. The index is derived from the journals, so it has to be refreshed
 > when one is *written*, not when someone remembers to check.
+<!-- /vault-only -->
 
 
 Tell them the file name and floor. If relevant, connect it to a pattern from their data:

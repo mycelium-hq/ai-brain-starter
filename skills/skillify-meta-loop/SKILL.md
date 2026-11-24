@@ -22,9 +22,9 @@ If the trigger is a one-off accident with no pattern signal, skip skillify. The 
 
 ### 1. Scaffold
 Pick the skill's home:
-- Private skills repo → `~/dev/<your>-skills/<name>/`
+- Private skills repo → `<your-skills-repo>/<name>/`
 - Public substrate → `<repo>/skills/<name>/` (if generic + no personal data)
-- Team repo → `~/dev/<team>-skills/<name>/`
+- Team repo → `<team-skills-repo>/<name>/`
 
 `mkdir <path> && touch <path>/SKILL.md`. Don't symlink yet.
 
