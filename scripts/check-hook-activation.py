@@ -175,12 +175,6 @@ TEMPLATE_ONLY: Dict[str, str] = {
         "thing to buy the last slot with -- it belongs on a periodic job. "
         "Reads no hook payload at all (env/argv driven). Checkable: grep -c "
         "stdin hooks/rotate-logs.sh",
-    "session-turn-counter.py":
-        "two blockers. Stop is 5/5 against a hard cap of 5; and its user- "
-        "facing message renders one operator's spend figure to every "
-        "stranger's console, so it is unshippable as written regardless of "
-        "budget. Checkable: grep -n 'last 30d burn' hooks/session-turn- "
-        "counter.py",
     "create-dev-repo-checkpoint.py":
         "budget: Stop 5/5. Note the trap -- wiring it to SubagentStop "
         "instead would APPEAR to fit, but SubagentStop is absent from "
