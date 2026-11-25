@@ -14,6 +14,7 @@ natural prompt per week to fill them in.
 Usage:
   python3 decision-outcome-check.py              # default 30 days
   python3 decision-outcome-check.py --days 14    # more aggressive
+  python3 decision-outcome-check.py --max-days 0 # also list decisions older than 60 days
   python3 decision-outcome-check.py --dry-run    # preview
   python3 decision-outcome-check.py --vault-root /path/to/vault
 """
@@ -210,6 +211,9 @@ def splice_section(content: str, new_section: str) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Surface stale Decision Log entries awaiting outcomes")
     parser.add_argument("--days", type=int, default=30, help="Decisions older than this are stale (default: 30)")
+    parser.add_argument("--max-days", type=int, default=60,
+                        help="Decisions older than this drop off the list: an outcome nobody wrote in "
+                             "two months will not be written now (default: 60; 0 = no limit)")
     parser.add_argument("--dry-run", action="store_true", help="Preview without writing")
     parser.add_argument("--vault-root", type=Path, default=None,
                         help="Path to vault root (default: auto-detected)")
@@ -233,9 +237,10 @@ def main() -> int:
     today = dt.date.today()
     threshold = today - dt.timedelta(days=args.days)
 
+    oldest = today - dt.timedelta(days=args.max_days) if args.max_days > 0 else dt.date.min
     stale = [
         d for d in decisions
-        if d["outcome_blank"] and d["date"] <= threshold
+        if d["outcome_blank"] and oldest <= d["date"] <= threshold
     ]
 
     print(f"Decision Log: {len(decisions)} entries parsed.")

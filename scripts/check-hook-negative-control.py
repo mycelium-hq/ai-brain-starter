@@ -118,7 +118,6 @@ NO_TEST_BASELINE: Set[str] = {
     # -- correctness / process guards --
     "agent-briefing-check",
     "check-rule-conflicts-on-write",
-    "session-turn-counter",
     "list-wip-stashes-on-session-start",
     "permission-denied",
     "pre-compact-context",
