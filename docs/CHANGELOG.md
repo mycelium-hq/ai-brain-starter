@@ -9,6 +9,16 @@ description: What's new in AI Brain Starter — plain English, no jargon
 
 ---
 
+## 2026-11-26: Notes in a subfolder of Decisions are no longer blocked as malformed decisions
+
+**Who this affects:** anyone who keeps supporting notes (a worked analysis, a comparison, meeting material) in a folder inside `Decisions/`.
+
+The check that runs before Claude saves a note treated every file anywhere under `Decisions/` as a decision. A note in a subfolder, with its own type, failed the decision rules and the save was blocked. The rest of the kit already reads only the files directly inside `Decisions/`: the Decision Log and the vault health check both skip subfolders. The check now does the same, so a decision directly inside `Decisions/` is still checked as before, and a note in a subfolder saves normally.
+
+A side effect people may have noticed: when you had changed this file by hand to work around the block, the automatic update stopped, because the kit's newer version of the same file could not be pulled on top of your change. With the fix in the kit, that local change is no longer needed.
+
+---
+
 ## 2026-11-17: `/journal` keeps the panel conversation going while you are thinking
 
 **Who this affects:** anyone who runs `/journal` and answers the panel back: pushes back on a voice, asks a question or brings a new idea.
