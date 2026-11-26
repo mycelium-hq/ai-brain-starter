@@ -122,6 +122,11 @@ jobs:
             Write-Host "::error::bootstrap.ps1 Python discovery suite failed (exit $LASTEXITCODE)"
             exit $LASTEXITCODE
           }
+          powershell -NoProfile -ExecutionPolicy Bypass -File "$env:GITHUB_WORKSPACE\tests\integration\test_bootstrap_ps1_long_paths.ps1"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::bootstrap.ps1 short-path suite failed (exit $LASTEXITCODE)"
+            exit $LASTEXITCODE
+          }
           exit 0
 
       # THE NO-GIT PATH (MYC-3895)
