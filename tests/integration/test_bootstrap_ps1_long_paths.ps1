@@ -47,7 +47,7 @@ try {
     $blockFile = Join-Path $TmpRoot "long-paths.ps1"
     [System.IO.File]::WriteAllText($blockFile, $block, (New-Object System.Text.UTF8Encoding($false)))
     . $blockFile
-    Check ($src -match "(?m)^\$script:LongPathsChanged = @\(Initialize-LongEnvPaths\)") "bootstrap.ps1 runs it before any TEMP use"
+    Check ($src -match '(?m)^\$script:LongPathsChanged = @\(Initialize-LongEnvPaths\)') "bootstrap.ps1 runs it before any TEMP use"
     $first = $src.IndexOf('$env:TEMP')
     $call  = $src.IndexOf("Initialize-LongEnvPaths)")
     Check ($call -ge 0 -and $call -lt $first) "the call comes before the first use of TEMP"
