@@ -1775,6 +1775,12 @@ PY_DIRECT=(
   # pre-fix revision, and the maintenance legs also pin the empty-directory, rename and
   # subdirectory-vault cases that the naive `git commit -- "${PATHS[@]}"` gets wrong.
   hooks/test_commit_only_own_paths.py
+  # lint-vault-frontmatter held every note under Decisions/, subfolders included, to the
+  # decision schema, while vault-schema-validator and aggregate-decisions read only
+  # Decisions/*.md. A worked analysis kept in a Decisions subfolder had its write denied.
+  # Stdlib only; the end-to-end cases stop before the PyYAML import. 3 of its 7 checks
+  # fail against the pre-fix revision.
+  hooks/test_lint_vault_frontmatter_decisions.py
 )
 dormant_py=()
 while IFS= read -r -d '' f; do

@@ -53,9 +53,15 @@ def emit_deny(reason: str) -> None:
 
 def detect_type(file_path: str) -> str | None:
     parts = Path(file_path).parts
+    # Only direct children of Decisions/ are decision files. That matches
+    # vault-schema-validator.py and aggregate-decisions.py, which both read
+    # Decisions/*.md and never a subfolder. A subfolder under Decisions/ holds
+    # supporting notes with their own type, so the decision schema stays off.
+    if Path(file_path).parent.name == "Decisions":
+        return "decision"
     for p in parts:
         if p == "Decisions":
-            return "decision"
+            return None
         if p == "Sessions":
             return "session"
         if "Journal" in p or "Daily Logs" in p:
