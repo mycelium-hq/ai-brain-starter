@@ -50,6 +50,68 @@ function Err($msg)  { Write-Host "  X $msg" -ForegroundColor Red; $script:Failed
 function Dry($msg)  { Write-Host "  [dry-run] $msg" -ForegroundColor Magenta }
 function Have($cmd) { return [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }
 
+# ai-brain:long-paths:start
+# 8.3 short-path aliases (tickets#7337). On an account whose profile folder has a
+# long or accented name, Windows can hand us TEMP and LOCALAPPDATA as an alias
+# (C:\Users\JUANAR~1\AppData\Local\Temp). Everything below builds paths from those
+# two variables and then compares, unzips into, or passes them to other tools; an
+# alias and the real name are the same folder to Windows but different strings to
+# anything that compares or re-quotes them. Resolve them to the real long form
+# ONCE, up front, and only keep a result that is a real folder.
+function Get-LongPath([string]$Path) {
+    # Long form of an EXISTING path via GetLongPathNameW, or $null when it cannot
+    # be resolved. Non-Windows never resolves (the paths are used as they are).
+    if ([string]::IsNullOrEmpty($Path)) { return $null }
+    if ($env:OS -ne "Windows_NT") { return $null }
+    try {
+        if (-not ("AiBrain.LongPath" -as [type])) {
+            Add-Type -Namespace "AiBrain" -Name "LongPath" -MemberDefinition @"
+[System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+public static extern uint GetLongPathNameW(string shortPath, System.Text.StringBuilder longPath, uint bufferLength);
+"@
+        }
+        $sb = New-Object System.Text.StringBuilder 1024
+        $n = [AiBrain.LongPath]::GetLongPathNameW($Path, $sb, 1024)
+        if ($n -eq 0 -or $n -ge 1024) { return $null }
+        return $sb.ToString()
+    } catch {
+        return $null
+    }
+}
+
+function Resolve-AliasedPath([string]$Path, [scriptblock]$Expand = { param($p) Get-LongPath $p }) {
+    # The long form of $Path when it resolves to an existing folder; otherwise
+    # $Path unchanged. A resolved value that is not a folder is never trusted.
+    if ([string]::IsNullOrEmpty($Path)) { return $Path }
+    $long = $null
+    try { $long = & $Expand $Path } catch { $long = $null }
+    if ([string]::IsNullOrEmpty($long)) { return $Path }
+    if (-not (Test-Path -LiteralPath $long -PathType Container)) { return $Path }
+    return $long
+}
+
+function Initialize-LongEnvPaths([scriptblock]$Expand = { param($p) Get-LongPath $p }) {
+    # Rewrites TEMP, TMP and LOCALAPPDATA of THIS process (and so of every child
+    # it starts) to their long form. Returns the names it changed.
+    $changed = @()
+    foreach ($name in @("TEMP", "TMP", "LOCALAPPDATA")) {
+        $old = [Environment]::GetEnvironmentVariable($name, "Process")
+        if ([string]::IsNullOrEmpty($old)) { continue }
+        $new = Resolve-AliasedPath $old $Expand
+        if ($new -ne $old) {
+            [Environment]::SetEnvironmentVariable($name, $new, "Process")
+            $changed += $name
+        }
+    }
+    return $changed
+}
+# ai-brain:long-paths:end
+
+$script:LongPathsChanged = @(Initialize-LongEnvPaths)
+if ($script:LongPathsChanged.Count -gt 0) {
+    Log "Resolved short-path alias for: $($script:LongPathsChanged -join ', ')"
+}
+
 # Is this process running elevated (Administrator)?
 # Decides per-MACHINE vs per-USER for every runtime we install. A per-machine
 # MSI run from a normal shell needs a UAC consent it can never obtain under

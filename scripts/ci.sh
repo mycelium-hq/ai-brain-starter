@@ -313,6 +313,8 @@ INTEGRATION_TESTS=(
   # Windows half of the same bug (#290): bootstrap.ps1 tested the single name
   # `python`, never the `py -3.x` launcher, so a box with 3.12 read as no-Python.
   test_bootstrap_ps1_python_discovery
+  # 8.3 short-path aliases of TEMP / LOCALAPPDATA (tickets#7337).
+  test_bootstrap_ps1_long_paths
   # Windows leg of ARTIFACT-WITHOUT-ACTIVATION: bootstrap.ps1 installed the
   # skills but never commands/*.md, so no slash command existed on Windows.
   test_bootstrap_ps1_slash_commands
